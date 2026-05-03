@@ -10,6 +10,9 @@ import { ManagementLayout } from "@/management/ManagementLayout";
 import { AgoraLayout } from "@/agora/AgoraLayout";
 import { ManagementOverview } from "@/management/pages/Overview";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
+import { PersonaDetail } from "@/management/pages/PersonaDetail";
+import { CapitalPoolDetail } from "@/management/pages/CapitalPoolDetail";
+import { RankingFormulaDetail } from "@/management/pages/RankingFormulaDetail";
 import {
   StrategiesList, PersonasList, CapitalPoolsList, RankingFormulasList,
   RebalancesList, DeploymentsList,
@@ -41,8 +44,11 @@ const App = () => (
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
+              <Route path="personas/:id" element={<PersonaDetail />} />
               <Route path="capital-pools" element={<CapitalPoolsList />} />
+              <Route path="capital-pools/:id" element={<CapitalPoolDetail />} />
               <Route path="ranking-formulas" element={<RankingFormulasList />} />
+              <Route path="ranking-formulas/:id" element={<RankingFormulaDetail />} />
               <Route path="rebalances" element={<RebalancesList />} />
               <Route path="evolution" element={<Placeholder title="Evolution Programs" />} />
               <Route path="research" element={<Placeholder title="Research & Experiments" />} />
