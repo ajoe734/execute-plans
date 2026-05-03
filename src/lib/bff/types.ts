@@ -122,6 +122,12 @@ export interface Alert {
   source: string;
   openedAt: string;
   acknowledged: boolean;
+  description?: string;
+  relatedTarget?: string;
+  metric?: string;
+  threshold?: string;
+  observed?: string;
+  suggestedAction?: string;
 }
 
 export interface Incident {
@@ -130,6 +136,10 @@ export interface Incident {
   title: string;
   status: "open" | "mitigating" | "resolved";
   openedAt: string;
+  description?: string;
+  affected?: string[];
+  commander?: string;
+  timeline?: { ts: string; actor: string; note: string }[];
 }
 
 export interface ApprovalRequest {
@@ -140,6 +150,9 @@ export interface ApprovalRequest {
   state: "pending" | "approved" | "rejected";
   riskLevel: RiskLevel;
   createdAt: string;
+  rationale?: string;
+  diffSummary?: string;
+  requiresStages?: string[];
 }
 
 export interface AuditEvent {
