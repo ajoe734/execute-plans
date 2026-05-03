@@ -58,6 +58,26 @@ export const bff = {
     get: (id: string) => delay(seed.approvals.find((a) => a.id === id)),
   },
   audit: { list: () => delay(seed.auditEvents) },
+  tools: {
+    list: () => delay(seed.tools),
+    get: (id: string) => delay(seed.tools.find((t) => t.id === id)),
+  },
+  mcpServers: {
+    list: () => delay(seed.mcpServers),
+    get: (id: string) => delay(seed.mcpServers.find((s) => s.id === id)),
+  },
+  mcpTools: {
+    list: () => delay(seed.mcpTools),
+    get: (id: string) => delay(seed.mcpTools.find((t) => t.id === id)),
+  },
+  skills: {
+    list: () => delay(seed.skills),
+    get: (id: string) => delay(seed.skills.find((s) => s.id === id)),
+  },
+  channels: {
+    list: () => delay(seed.channels),
+    get: (id: string) => delay(seed.channels.find((c) => c.id === id)),
+  },
   search: (q: string) => {
     const all = seed.searchableObjects();
     if (!q) return delay(all.slice(0, 8));
