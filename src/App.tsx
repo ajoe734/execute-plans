@@ -17,6 +17,8 @@ import { RebalanceDetail } from "@/management/pages/RebalanceDetail";
 import { EvolutionDetail } from "@/management/pages/EvolutionDetail";
 import { ResearchDetail } from "@/management/pages/ResearchDetail";
 import { ArtifactDetail } from "@/management/pages/ArtifactDetail";
+import { DeploymentDetail } from "@/management/pages/DeploymentDetail";
+import { RuntimesPage } from "@/management/pages/Runtimes";
 import {
   StrategiesList, PersonasList, CapitalPoolsList, RankingFormulasList,
   RebalancesList, DeploymentsList, EvolutionList, ResearchList, ArtifactsList,
@@ -62,7 +64,8 @@ const App = () => (
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="deployments" element={<DeploymentsList />} />
-              <Route path="runtimes" element={<Placeholder title="Runtimes" />} />
+              <Route path="deployments/:id" element={<DeploymentDetail />} />
+              <Route path="runtimes" element={<RuntimesPage />} />
               <Route path="jobs" element={<JobsPage />} />
               <Route path="alerts" element={<AlertsPage />} />
               <Route path="incidents" element={<IncidentsPage />} />
