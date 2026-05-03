@@ -47,16 +47,16 @@
 
 ---
 
-## Phase 13 — Management 缺漏頁面
+## Phase 13 — Management 缺漏頁面 ✅
 
 對應 spec：Part 2 / Part 3。
 
-範圍：
-- **Command Center**（`/management/command-center`）：KPI 卡 + 待辦（approvals/alerts/incidents） + Env health + 最近 audit。取代目前 Overview 為 home。
-- **Risk Center**（`/management/risk-center`）：risk budget vs utilization、open incidents、breach matrix、drill-down。
-- **Incident Detail**（`/management/incidents/:id`）：timeline、affected scope、commander、mitigation actions、postmortem 區塊。
-- **Governance Review**（`/management/governance/:id`）：policy diff、approvers、stage progress、attached evidence。
-- 將 Operations 頁面拆出 Risk/Incident 子分頁連到上述頁。
+完成範圍：
+- **Command Center**（`/management/command-center`，亦為 `/management` index）：6 KPI 卡（Live Risk / Open Incidents / Pending Approvals / Running Jobs / Runtime Health / Capital Util）+ Lifecycle bottlenecks 桶 + 待辦審批清單 + Capital exposure bar + Alerts/Incidents 列 + Persona activity + Agora 移交收件匣 + Recent state transitions + Running jobs。
+- **Risk Center**（`/management/risk-center`）：6 KPI + Breach matrix（Domain × Severity）+ 6 個分頁（Capital/Strategy/Persona/Runtime/Capability/Incidents），每個分頁可下鑽至物件詳情。
+- **Incident Detail**（`/management/incidents/:id`）：Summary card + 5 個分頁（Timeline / Affected scope / Root cause / Postmortem / Audit）+ HighRiskConfirm 包裝的 Close（高嚴重需 Postmortem ≥20 字）與 Pause Affected。
+- **Governance Review**（`/management/governance/:id`）：3 欄佈局（Summary / Evidence + Validator / Decision Panel）+ 底部 Audit timeline + 5 種決策（Approve / Reject / Request Changes / Escalate / Freeze）皆走 HighRiskConfirm，risk=critical 額外要求輸入 token。
+- IncidentsPage 列點擊改為跳轉至 IncidentDetail（保留 sheet 為快速預覽 fallback 已移除）。
 
 ---
 
