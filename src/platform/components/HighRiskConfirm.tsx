@@ -96,10 +96,10 @@ export const HighRiskConfirm = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className={destructive || risk === "critical" ? "text-destructive h-5 w-5" : "text-status-warning h-5 w-5"} />
-            {t("confirm.title")} — <span className="text-mono text-sm">{operation}</span>
+            {t("confirm.title")} — <span className="text-mono text-sm">{op}</span>
           </DialogTitle>
           <DialogDescription>
-            {t("confirm.subtitle", { target: target.name })}
+            {description ?? t("confirm.subtitle", { target: tgt.name })}
           </DialogDescription>
         </DialogHeader>
 
@@ -107,9 +107,9 @@ export const HighRiskConfirm = ({
           <div className="space-y-3">
             {/* Target */}
             <Row label={t("confirm.target")}>
-              <Badge variant="outline" className="text-mono text-[10px]">{target.type}</Badge>
-              <span className="text-sm">{target.name}</span>
-              <span className="text-mono text-xs text-muted-foreground">{target.id}</span>
+              <Badge variant="outline" className="text-mono text-[10px]">{tgt.type}</Badge>
+              <span className="text-sm">{tgt.name}</span>
+              <span className="text-mono text-xs text-muted-foreground">{tgt.id}</span>
             </Row>
 
             {/* State transition */}
