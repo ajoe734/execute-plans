@@ -245,7 +245,7 @@ export const IncidentDetail = () => {
           risk={incident.severity}
           rollbackTarget="resume after mitigation"
           requiredApproval={["risk", "ops"]}
-          onConfirm={() => toast.success(t("incident.pauseQueued"))}
+          onConfirm={() => { toast.success(t("incident.pauseQueued")); }}
         />
       </PageBody>
     </>
