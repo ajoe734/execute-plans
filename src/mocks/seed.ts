@@ -1,7 +1,7 @@
 import type {
   Strategy, Persona, CapitalPool, RankingFormula, Rebalance,
   Deployment, Job, Alert, Incident, ApprovalRequest, AuditEvent,
-  EvolutionProgram, ResearchExperiment, Artifact,
+  EvolutionProgram, ResearchExperiment, Artifact, Runtime,
 } from "@/lib/bff/types";
 
 const now = () => new Date().toISOString();
@@ -75,8 +75,18 @@ export const artifacts: Artifact[] = [
 
 
 export const deployments: Deployment[] = [
-  { id: "dp_001", name: "stg_001 → live v3.2.0", target: "live", artifactId: "art_stg001_v320", version: "3.2.0", owner: "ops", updatedAt: ago(1), state: "deployed", risk: "high" },
-  { id: "dp_002", name: "stg_002 → paper v1.0.4", target: "paper", artifactId: "art_stg002_v104", version: "1.0.4", owner: "ops", updatedAt: ago(7), state: "deployed", risk: "medium" },
+  { id: "dp_001", name: "stg_001 → live v3.2.0", target: "live", artifactId: "art_stg001_v320", version: "3.2.0", previousVersion: "3.1.4", strategyId: "stg_001", promotedAt: ago(1), rollbackAvailable: true, owner: "ops", updatedAt: ago(1), state: "deployed", risk: "high" },
+  { id: "dp_002", name: "stg_002 → paper v1.0.4", target: "paper", artifactId: "art_stg002_v104", version: "1.0.4", previousVersion: "1.0.3", strategyId: "stg_002", promotedAt: ago(7), rollbackAvailable: true, owner: "ops", updatedAt: ago(7), state: "deployed", risk: "medium" },
+  { id: "dp_003", name: "stg_003 → live v2.4.1", target: "live", artifactId: "art_stg001_v320", version: "2.4.1", previousVersion: "2.4.0", strategyId: "stg_003", promotedAt: ago(36), rollbackAvailable: true, owner: "ops", updatedAt: ago(36), state: "deployed", risk: "low" },
+];
+
+export const runtimes: Runtime[] = [
+  { id: "rt_exec_us1", name: "executor-us-east-1", kind: "executor", env: "live", status: "running", cpu: 0.62, memory: 0.71, latencyP95Ms: 142, uptimePct: 99.97, region: "us-east-1", updatedAt: ago(0.05) },
+  { id: "rt_exec_eu1", name: "executor-eu-west-1", kind: "executor", env: "paper", status: "running", cpu: 0.41, memory: 0.55, latencyP95Ms: 88, uptimePct: 99.99, region: "eu-west-1", updatedAt: ago(0.05) },
+  { id: "rt_mcp_a", name: "mcp-server-alpha", kind: "mcp", env: "live", status: "warning", cpu: 0.78, memory: 0.83, latencyP95Ms: 2150, uptimePct: 99.4, region: "us-east-1", updatedAt: ago(0.1) },
+  { id: "rt_sched", name: "scheduler-primary", kind: "scheduler", env: "live", status: "running", cpu: 0.22, memory: 0.34, latencyP95Ms: 30, uptimePct: 99.99, region: "us-east-1", updatedAt: ago(0.05) },
+  { id: "rt_ingest", name: "market-ingest", kind: "ingest", env: "live", status: "running", cpu: 0.49, memory: 0.52, latencyP95Ms: 64, uptimePct: 99.95, region: "us-east-1", updatedAt: ago(0.05) },
+  { id: "rt_research", name: "research-cluster", kind: "executor", env: "research", status: "paused", cpu: 0.05, memory: 0.10, latencyP95Ms: 0, uptimePct: 100, region: "us-west-2", updatedAt: ago(6) },
 ];
 
 export const jobs: Job[] = [
@@ -87,19 +97,23 @@ export const jobs: Job[] = [
 ];
 
 export const alerts: Alert[] = [
-  { id: "al_501", severity: "high", title: "stg_004 drawdown breach -13%", source: "risk", openedAt: ago(0.5), acknowledged: false },
-  { id: "al_500", severity: "medium", title: "MCP server tool latency p95 > 2s", source: "runtime", openedAt: ago(2), acknowledged: false },
-  { id: "al_499", severity: "low", title: "Daily ingest delayed 3m", source: "ops", openedAt: ago(6), acknowledged: true },
+  { id: "al_501", severity: "high", title: "stg_004 drawdown breach -13%", source: "risk", openedAt: ago(0.5), acknowledged: false, description: "FX Carry Tactical breached the −10% drawdown threshold defined in its risk policy.", relatedTarget: "stg_004", metric: "drawdown", threshold: "-10%", observed: "-13%", suggestedAction: "Pause strategy and trigger risk review." },
+  { id: "al_500", severity: "medium", title: "MCP server tool latency p95 > 2s", source: "runtime", openedAt: ago(2), acknowledged: false, description: "mcp-server-alpha p95 latency exceeded SLA for 5 consecutive minutes.", relatedTarget: "rt_mcp_a", metric: "latency_p95", threshold: "2000ms", observed: "2150ms", suggestedAction: "Scale MCP pool or investigate slow tools." },
+  { id: "al_499", severity: "low", title: "Daily ingest delayed 3m", source: "ops", openedAt: ago(6), acknowledged: true, description: "Market ingest completed 3 minutes after schedule.", relatedTarget: "rt_ingest", metric: "ingest_lag", threshold: "120s", observed: "180s" },
 ];
 
 export const incidents: Incident[] = [
-  { id: "in_021", severity: "critical", title: "Live order rejected by exchange", status: "mitigating", openedAt: ago(1) },
+  { id: "in_021", severity: "critical", title: "Live order rejected by exchange", status: "mitigating", openedAt: ago(1), description: "Exchange returned RATE_LIMIT errors on Live orders for stg_001 between 14:02–14:08 UTC.", affected: ["stg_001", "rt_exec_us1"], commander: "ops", timeline: [
+    { ts: ago(1), actor: "system", note: "Incident auto-opened from alert al_502" },
+    { ts: ago(0.9), actor: "ops", note: "Throttled order submission to 50%" },
+    { ts: ago(0.4), actor: "ops", note: "Engaging exchange support" },
+  ]},
 ];
 
 export const approvals: ApprovalRequest[] = [
-  { id: "ap_301", kind: "deploy.live", subject: "stg_001 v3.2.1", requester: "alice", state: "pending", riskLevel: "critical", createdAt: ago(0.3) },
-  { id: "ap_302", kind: "rebalance.apply", subject: "Q2 2026 Rebalance", requester: "capital", state: "pending", riskLevel: "high", createdAt: ago(2) },
-  { id: "ap_303", kind: "skill.publish", subject: "skill: macro_briefing v2", requester: "ai_trainer", state: "pending", riskLevel: "medium", createdAt: ago(4) },
+  { id: "ap_301", kind: "deploy.live", subject: "stg_001 v3.2.1", requester: "alice", state: "pending", riskLevel: "critical", createdAt: ago(0.3), rationale: "Hotfix for slippage estimator under high-vol regimes.", diffSummary: "+1 module, +84 LoC, model hash 9f3a→7c11", requiresStages: ["risk", "capital", "ops"] },
+  { id: "ap_302", kind: "rebalance.apply", subject: "Q2 2026 Rebalance", requester: "capital", state: "pending", riskLevel: "high", createdAt: ago(2), rationale: "Quarterly rotation per capital plan.", diffSummary: "4 strategies, max Δ −15%", requiresStages: ["risk", "ops"] },
+  { id: "ap_303", kind: "skill.publish", subject: "skill: macro_briefing v2", requester: "ai_trainer", state: "pending", riskLevel: "medium", createdAt: ago(4), rationale: "New macro briefing skill with grounded sources.", requiresStages: ["trainer-lead"] },
 ];
 
 export const auditEvents: AuditEvent[] = [

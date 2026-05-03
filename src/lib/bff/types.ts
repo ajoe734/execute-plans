@@ -62,6 +62,24 @@ export interface Deployment extends BaseObject {
   target: "research" | "paper" | "live";
   artifactId: string;
   version: string;
+  previousVersion?: string;
+  strategyId?: string;
+  promotedAt?: string;
+  rollbackAvailable?: boolean;
+}
+
+export interface Runtime {
+  id: string;
+  name: string;
+  kind: "executor" | "mcp" | "scheduler" | "ingest";
+  env: "research" | "paper" | "live";
+  status: RunState;
+  cpu: number; // 0..1
+  memory: number; // 0..1
+  latencyP95Ms: number;
+  uptimePct: number;
+  region: string;
+  updatedAt: string;
 }
 
 export interface EvolutionProgram extends BaseObject {
@@ -104,6 +122,12 @@ export interface Alert {
   source: string;
   openedAt: string;
   acknowledged: boolean;
+  description?: string;
+  relatedTarget?: string;
+  metric?: string;
+  threshold?: string;
+  observed?: string;
+  suggestedAction?: string;
 }
 
 export interface Incident {
@@ -112,6 +136,10 @@ export interface Incident {
   title: string;
   status: "open" | "mitigating" | "resolved";
   openedAt: string;
+  description?: string;
+  affected?: string[];
+  commander?: string;
+  timeline?: { ts: string; actor: string; note: string }[];
 }
 
 export interface ApprovalRequest {
@@ -122,6 +150,9 @@ export interface ApprovalRequest {
   state: "pending" | "approved" | "rejected";
   riskLevel: RiskLevel;
   createdAt: string;
+  rationale?: string;
+  diffSummary?: string;
+  requiresStages?: string[];
 }
 
 export interface AuditEvent {
