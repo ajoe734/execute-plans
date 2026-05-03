@@ -30,32 +30,35 @@ export interface HighRiskConfirmProps {
   open: boolean;
   onOpenChange: (o: boolean) => void;
 
+  // ---- Structured (preferred) ----
   /** 1. Operation name (e.g. "promote_live") */
-  operation: string;
+  operation?: string;
   /** 2. Target object summary {type, id, name} */
-  target: { type: string; id: string; name: string };
+  target?: { type: string; id: string; name: string };
   /** 3. Current lifecycle state */
   currentState?: string;
   /** 4. New / expected state after action */
   newState?: string;
-
   /** 5–8. Affected: strategies / personas / capital pools / runtimes */
   affected?: AffectedRefs;
-
   /** 9. Risk impact */
-  risk: RiskLevel;
+  risk?: RiskLevel;
   riskImpact?: string;
-
   /** 10. Rollback target */
   rollbackTarget?: string;
-  /** 11. Required approval (e.g. ["risk", "capital", "ops"]) */
+  /** 11. Required approval */
   requiredApproval?: string[];
 
-  /** Optional: token user must type to confirm (auto-required on live env / critical risk). */
+  // ---- Legacy (Phase 1–11 call sites) ----
+  /** Plain title fallback when no `operation` is provided. */
+  title?: string;
+  /** Plain description fallback when no structured fields are provided. */
+  description?: string;
+
+  /** Token user must type to confirm (auto-required on live env / critical risk). */
   confirmToken?: string;
-  /** Style variant. */
   destructive?: boolean;
-  /** Extra slot rendered before footer (e.g. validator results). */
+  /** Extra slot rendered before footer. */
   extra?: ReactNode;
 
   onConfirm: (memo: string) => void | Promise<void>;
@@ -65,8 +68,9 @@ export const HighRiskConfirm = ({
   open, onOpenChange,
   operation, target,
   currentState, newState,
-  affected, risk, riskImpact,
+  affected, risk = "high", riskImpact,
   rollbackTarget, requiredApproval,
+  title, description,
   confirmToken, destructive, extra,
   onConfirm,
 }: HighRiskConfirmProps) => {
@@ -75,8 +79,11 @@ export const HighRiskConfirm = ({
   const [memo, setMemo] = useState("");
   const [typed, setTyped] = useState("");
 
+  const op = operation ?? title ?? "action";
+  const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
+
   const tokenRequired = !!confirmToken || env === "live" || risk === "critical";
-  const token = confirmToken ?? operation.toUpperCase();
+  const token = confirmToken ?? op.toUpperCase();
   const memoOk = memo.trim().length >= 8;
   const tokenOk = !tokenRequired || typed === token;
   const ok = memoOk && tokenOk;
