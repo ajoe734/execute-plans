@@ -3,7 +3,7 @@ import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { useT } from "@/platform/hooks";
 import {
   Sun, LineChart, Activity, NotebookPen, MessageSquare, BookMarked,
-  Bell, Inbox, GraduationCap, Brain, Wand2, FlaskConical, Beaker, Radio,
+  Bell, Inbox, GraduationCap, Brain, Wand2, FlaskConical, Beaker, Radio, Users,
 } from "lucide-react";
 
 export const AgoraLayout = () => {
@@ -18,6 +18,7 @@ export const AgoraLayout = () => {
     { label: t("groups.research"), items: [
       { to: "/agora/notebook", label: t("nav.notebook"), icon: NotebookPen },
       { to: "/agora/ask", label: t("nav.askPersonas"), icon: MessageSquare },
+      { to: "/agora/committee", label: t("nav.committee"), icon: Users },
       { to: "/agora/decisions", label: t("nav.decisions"), icon: BookMarked },
       { to: "/agora/insights", label: t("nav.insights"), icon: Inbox },
     ]},

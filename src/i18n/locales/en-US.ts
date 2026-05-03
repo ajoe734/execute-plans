@@ -27,6 +27,10 @@ export default {
   nav: {
     // Management
     overview: "Overview",
+    commandCenter: "Command Center",
+    riskCenter: "Risk Center",
+    experiments: "Research & Experiments",
+    committee: "Committee Room",
     strategies: "Strategies & Alphas",
     personas: "Personas",
     capitalPools: "Capital Pools",

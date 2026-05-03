@@ -23,6 +23,10 @@ export default {
   },
   nav: {
     overview: "總覽",
+    commandCenter: "指揮中心",
+    riskCenter: "風險中心",
+    experiments: "研究與實驗",
+    committee: "Committee Room",
     strategies: "策略與 Alpha",
     personas: "Persona",
     capitalPools: "資金池",
