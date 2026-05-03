@@ -98,7 +98,7 @@ export const ResearchDetail = () => {
         description="Promoting will scaffold a new strategy from this experiment's artifact and route it for review."
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Research", id: rx.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Research", id: x.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}
       />
     </>
   );

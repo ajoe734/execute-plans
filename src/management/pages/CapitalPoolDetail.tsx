@@ -105,7 +105,7 @@ export const CapitalPoolDetail = () => {
         description="Changing the risk budget will affect every strategy assigned to this pool."
         confirmToken="ADJUST"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "CapitalPool", id: pool.id, action: "adjust_budget", memo }); toast.success("Risk budget change submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success("Risk budget change submitted for approval"); }}
       />
     </>
   );

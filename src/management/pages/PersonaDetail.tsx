@@ -108,7 +108,7 @@ export const PersonaDetail = () => {
         title={`Suspend persona — ${p.name}`}
         description="Suspending this persona will stop routing strategies through it."
         confirmToken="SUSPEND"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Persona", id: persona.id, action: "suspend", memo }); toast.success("Persona suspended"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success("Persona suspended"); }}
       />
     </>
   );
