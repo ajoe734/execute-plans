@@ -32,6 +32,10 @@ import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
 } from "@/management/pages/Operations";
 import { Placeholder } from "@/platform/components/Placeholder";
+import { CommandCenter } from "@/management/pages/CommandCenter";
+import { RiskCenter } from "@/management/pages/RiskCenter";
+import { IncidentDetail } from "@/management/pages/IncidentDetail";
+import { GovernanceReview } from "@/management/pages/GovernanceReview";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
