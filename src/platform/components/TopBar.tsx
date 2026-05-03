@@ -11,6 +11,7 @@ import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { bff } from "@/lib/bff/client";
+import { useNotificationCenter } from "./NotificationCenter";
 
 const roles: UserRole[] = [
   "admin", "research_lead", "risk_officer", "capital_manager",
