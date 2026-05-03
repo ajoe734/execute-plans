@@ -229,11 +229,8 @@ export const IncidentDetail = () => {
           riskImpact={isHighSev ? t("incident.closeRiskImpact") : undefined}
           requiredApproval={isHighSev ? ["postmortem"] : undefined}
           onConfirm={() => {
-            if (requirePostmortem) {
-              toast.error(t("incident.postmortemRequired"));
-              return;
-            }
-            close();
+            if (requirePostmortem) { toast.error(t("incident.postmortemRequired")); return; }
+            close(); return;
           }}
         />
 
