@@ -98,6 +98,29 @@ export const StrategyDetail = () => {
             ),
           },
           {
+            value: "lineage", label: "Lineage",
+            content: (() => {
+              const nodes: LineageNode[] = [
+                { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
+                { id: s.capitalPoolId, label: s.capitalPoolId, type: "CapitalPool", state: "deployed", risk: "medium" },
+                { id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk, highlight: true },
+                ...s.personaIds.map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
+                { id: `dp_${s.id}`, label: `${s.id} → live`, type: "Deployment", state: "deployed", risk: s.risk },
+              ];
+              const edges: LineageEdge[] = [
+                { from: "alpha_src", to: s.id, label: "alpha" },
+                { from: s.capitalPoolId, to: s.id, label: "capital" },
+                ...s.personaIds.map((p) => ({ from: p, to: s.id, label: "persona" })),
+                { from: s.id, to: `dp_${s.id}`, label: "deploys" },
+              ];
+              return (
+                <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
+                  id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
+                })} />
+              );
+            })(),
+          },
+          {
             value: "risk", label: "Risk",
             content: <Placeholder text="Risk dashboards & limits will appear here." />,
           },
