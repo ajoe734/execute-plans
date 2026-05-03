@@ -166,6 +166,7 @@ export interface AuditEvent {
   action: string;
   target: string;
   ts: string;
+  memo?: string;
 }
 
 export interface SearchResult {
