@@ -98,7 +98,7 @@ export const ArtifactDetail = () => {
         description="Retiring will mark this artifact as deprecated and prevent new deployments from using it."
         confirmToken="RETIRE"
         destructive
-        onConfirm={() => { toast.success("Retirement requested"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Artifact", id: a.id, action: "archive", memo }); toast.success("Retirement requested"); }}
       />
     </>
   );

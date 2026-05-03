@@ -70,7 +70,7 @@ export const SkillDetail = () => {
         title={`Publish skill — ${skill.name}`}
         description="Publishes this skill so it becomes available to assigned personas. Routes through trainer-lead approval."
         confirmToken="PUBLISH"
-        onConfirm={() => { toast.success("Publish request submitted"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Skill", id: skill!.id, action: "publish", newState: "deployed", memo }); toast.success("Publish request submitted"); }}
       />
       <HighRiskConfirm
         open={retireOpen}
@@ -79,7 +79,7 @@ export const SkillDetail = () => {
         description="Removes this skill from active personas. Existing conversations referencing it remain in audit."
         confirmToken="RETIRE"
         destructive
-        onConfirm={() => { toast.success("Retire request submitted"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Skill", id: skill!.id, action: "retire", newState: "retired", memo }); toast.success("Retire request submitted"); }}
       />
     </>
   );

@@ -71,16 +71,16 @@
 
 ---
 
-## Phase 15 — Persistence、Audit、QA 收斂
+## Phase 15 — Persistence、Audit、QA 收斂 ✅
 
 對應 spec：Part 6 §Mutations、Part 8 §QA。
 
-範圍：
-- `bff/client.ts` 加 mutation methods（`approve`、`reject`、`promote`、`pause`、`rollback`、`acknowledge` 等），實際更新 `seed.ts` 的記憶體狀態，並 emit realtime event。
-- 所有「toast-only」action 換成走 mutation → 更新 store / re-fetch。
-- 自動寫入 `auditEvents`：actor=current role、action、target、ts。
-- `QAChecklist` 頁面接真實檢查項，列出 spec Part 8 全部 QA item，狀態可 manual toggle 並持久化在 localStorage。
-- 補 vitest：state machine transitions、permission gating、mutation → audit 寫入。
+完成項目：
+- ✅ `bff/mutations.ts`：`runAction` / `approve` / `reject` / `acknowledgeAlert` / `setIncidentStatus` / `promoteLive` / `rollback` / `pause`，更新 seed 記憶體狀態並 emit `data` realtime event。
+- ✅ 自動寫入 `auditEvents`：actor=current role、action、target、ts、memo。
+- ✅ Toast-only actions 已替換：Operations (Alerts/Incidents/Approvals)、StrategyDetail、GovernanceReview、IncidentDetail、Persona/CapitalPool/RankingFormula/Rebalance/Deployment/Skill/Mcp/Evolution/Research/ArtifactDetail。
+- ✅ `QAChecklist` 重寫成 spec Part 8 §10–§14 全部 71 項，狀態持久化於 `qa-checklist-v2`。
+- ✅ Vitest 18 測試 pass：state machine transitions、permission gating、mutation → audit 寫入。
 
 ---
 

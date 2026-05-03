@@ -108,7 +108,7 @@ export const RebalanceDetail = () => {
         title={`Simulate Rebalance — ${r.name}`}
         description="Runs a full backtest simulation of this rebalance against the last 90 days. Read-only."
         confirmToken="SIMULATE"
-        onConfirm={() => { toast.success("Simulation job queued"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "simulate", memo }); toast.success("Simulation job queued"); }}
       />
       <HighRiskConfirm
         open={applyOpen}
@@ -117,7 +117,7 @@ export const RebalanceDetail = () => {
         description="Applies the proposed allocation to the target pool. This will route an approval request and, when approved, generate live orders."
         confirmToken="APPLY"
         destructive
-        onConfirm={() => { toast.success("Apply request submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "apply", newState: "deployed", memo }); toast.success("Apply request submitted for approval"); }}
       />
     </>
   );

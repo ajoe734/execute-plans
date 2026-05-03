@@ -1,9 +1,11 @@
 // Mock BFF client. Returns promises with simulated latency.
 import * as seed from "@/mocks/seed";
+import { mutations } from "./mutations";
 
 const delay = <T>(v: T, ms = 220) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
 export const bff = {
+  mutations,
   strategies: {
     list: () => delay(seed.strategies),
     get: (id: string) => delay(seed.strategies.find((s) => s.id === id)),
