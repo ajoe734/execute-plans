@@ -98,4 +98,28 @@ export default {
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All",
   },
+  inspector: {
+    metadata: "Metadata",
+    actions: "Available Actions",
+    actionsHint: "Filtered by role and object state.",
+    recentActivity: "Recent Activity",
+    openDetail: "Open detail page",
+  },
+  notifications: {
+    title: "Notification Center",
+    subtitle: "Unified view of alerts, pending approvals, and running jobs",
+    unack: "Unack'd",
+    viewAudit: "View audit log",
+  },
+  jobs: {
+    runningCount: "{{count}} jobs running",
+    tracked: "tracked",
+    expand: "Expand",
+    collapse: "Collapse",
+  },
+  lineage: {
+    title: "Data Lineage",
+    legendUpstream: "Upstream",
+    legendDownstream: "Downstream",
+  },
 };
