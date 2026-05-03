@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, BookMarked } from "lucide-react";
+import { Plus, BookMarked, Send } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
 
 interface Decision {
