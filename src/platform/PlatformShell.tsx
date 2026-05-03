@@ -1,9 +1,11 @@
 import { Outlet } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
 import { useLocaleSync } from "./hooks";
+import { useMockRealtimeTicker } from "@/lib/useMockRealtime";
 
 export const PlatformShell = () => {
   useLocaleSync();
+  useMockRealtimeTicker();
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <TopBar />

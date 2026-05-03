@@ -16,10 +16,21 @@ import { Field } from "./ObjectDetailLayout";
 export const JobsPage = () => {
   const t = useT();
   const [rows, setRows] = useState<Job[]>([]);
+  const [liveCount, setLiveCount] = useState(0);
   useEffect(() => { bff.jobs.list().then(setRows); }, []);
+  useEffect(() => {
+    import("@/lib/bff/realtime").then(({ realtime }) => {
+      const off = realtime.on("job", (p) => {
+        const e = p as { jobId: string; kind: string; status: Job["status"]; owner: string; ts: string };
+        setRows((rs) => [{ id: e.jobId, kind: e.kind, status: e.status, owner: e.owner, startedAt: e.ts }, ...rs].slice(0, 50));
+        setLiveCount((c) => c + 1);
+      });
+      return off;
+    });
+  }, []);
   return (
     <>
-      <PageHeader title={t("nav.jobs")} />
+      <PageHeader title={t("nav.jobs")} subtitle={`Live stream — ${liveCount} new event(s) since page load.`} />
       <PageBody>
         <DataTable rows={rows} columns={[
           { key: "id", header: "ID", cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
@@ -40,6 +51,14 @@ export const AlertsPage = () => {
   const [rows, setRows] = useState<Alert[]>([]);
   const [active, setActive] = useState<Alert | null>(null);
   useEffect(() => { bff.alerts.list().then(setRows); }, []);
+  useEffect(() => {
+    import("@/lib/bff/realtime").then(({ realtime }) => {
+      const off = realtime.on("alert", (p) => {
+        setRows((rs) => [p as Alert, ...rs]);
+      });
+      return off;
+    });
+  }, []);
 
   const ack = (id: string) => {
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));

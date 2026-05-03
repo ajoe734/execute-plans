@@ -46,6 +46,7 @@ import { SkillCoaching } from "@/agora/pages/SkillCoaching";
 import { PersonaLab } from "@/agora/pages/PersonaLab";
 import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
 import { AgoraChannels } from "@/agora/pages/AgoraChannels";
+import { QAChecklist } from "@/platform/pages/QAChecklist";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -115,6 +116,8 @@ const App = () => (
               <Route path="eval" element={<EvaluationSuites />} />
               <Route path="channels" element={<AgoraChannels />} />
             </Route>
+
+            <Route path="/qa" element={<QAChecklist />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
