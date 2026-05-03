@@ -65,7 +65,7 @@ export const RankingFormulaDetail = () => {
         description="Activating this formula will replace the current production ranking and may rebalance allocations."
         confirmToken="ACTIVATE"
         destructive
-        onConfirm={() => toast.success("Activation requested — pending approval")}
+        onConfirm={() => { toast.success("Activation requested — pending approval"); }}
       />
     </>
   );

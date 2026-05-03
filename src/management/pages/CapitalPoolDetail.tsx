@@ -105,7 +105,7 @@ export const CapitalPoolDetail = () => {
         description="Changing the risk budget will affect every strategy assigned to this pool."
         confirmToken="ADJUST"
         destructive
-        onConfirm={() => toast.success("Risk budget change submitted for approval")}
+        onConfirm={() => { toast.success("Risk budget change submitted for approval"); }}
       />
     </>
   );
