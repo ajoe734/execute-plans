@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, BookMarked } from "lucide-react";
+import { Plus, BookMarked, Send } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
 
 interface Decision {
@@ -48,6 +49,7 @@ const tone = (o?: string) =>
 
 export const DecisionJournal = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [decisions, setDecisions] = useState<Decision[]>(seed);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ title: "", context: "", decision: "", rationale: "", tags: "" });
@@ -123,6 +125,13 @@ export const DecisionJournal = () => {
                   {d.tags.map((tg) => <Badge key={tg} variant="outline" className="text-[10px]">{tg}</Badge>)}
                 </div>
               )}
+              <div className="mt-3 flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => openHandoff({
+                  type: "insight",
+                  source: { kind: "Decision", id: d.id, label: d.title },
+                  summary: d.title, notes: `${d.context}\n\nDecision: ${d.decision}\nRationale: ${d.rationale}`,
+                })}><Send className="h-4 w-4 mr-1" />Handoff</Button>
+              </div>
             </Card>
           ))}
         </div>

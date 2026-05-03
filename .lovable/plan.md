@@ -60,15 +60,14 @@
 
 ---
 
-## Phase 14 — Agora 缺漏頁面 + Handoff
+## Phase 14 — Agora 缺漏頁面 + Handoff ✅
 
-對應 spec：Part 4 / Part 5。
+對應 spec：Part 4 §8 / §11、Part 5 §21。
 
-範圍：
-- **Committee Room**（`/agora/committee`）：多 persona 圓桌討論、議題卡、投票、結論導出 → Decision Journal。
-- **Signal Detail**（`/agora/signals/:id`）：訊號來源、置信度、相關 strategy、回測小卡、accept/reject。
-- **Handoff 機制**：Agora 頁面任何決策可「升級」為 Management 的 Approval / Experiment / Rebalance proposal；建立 `useHandoff()`，目標頁帶 query 參數預填。
-- 在 InsightInbox / DecisionJournal / SignalReview 加上 Handoff 按鈕。
+完成範圍：
+- **Committee Room**（`/agora/committee` 列表 + `/:sessionId` 詳情）：6 種 template、persona 多選、evidence pack、分輪討論（agree/disagree/neutral）、Vote 統計、Memo 生成與儲存、Submit Memo → governance handoff、Follow-ups（research_task / insight / close session）。
+- **Signal Detail**（`/agora/signals/:id`）：Header summary + 7 個 Tabs（Explanation/Market/Similar/Persona Opinions/Feedback/Research/Audit）+ 右側動作面板（Agree/Disagree/Flag/Ask Persona/Ask Committee/Handoff to research/Open Strategy）。SignalReview 列表加上「Open Detail」連結。
+- **Handoff 機制**：`src/lib/handoff.ts`（zustand store + 8 種 HandoffType + targetRouteFor 對應）+ `HandoffDrawer`（10 欄位：type/source/summary/evidence list/priority/owner/persona/notes，summary 強制 ≥8 字），全域掛載於 PlatformShell。InsightInbox / DecisionJournal / Committee Room / Signal Detail 皆已加上 Handoff 入口；submit 後 toast 含「Open target」可帶 `?from=handoff&handoff={id}` 預填到對應管理頁。
 
 ---
 

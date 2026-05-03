@@ -3,8 +3,9 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Lightbulb, FlaskConical, Zap, Archive, Sparkles } from "lucide-react";
+import { Lightbulb, FlaskConical, Zap, Archive, Sparkles, Send } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
 
 interface Insight {
@@ -34,6 +35,7 @@ const seed: Insight[] = [
 
 export const InsightInbox = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [items, setItems] = useState<Insight[]>(seed);
   const [filter, setFilter] = useState<"all" | Insight["kind"]>("all");
 
@@ -85,7 +87,12 @@ export const InsightInbox = () => {
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{i.body}</p>
                     <div className="flex gap-2 mt-3">
                       <Button size="sm" onClick={() => promote(i)}>Promote</Button>
-                      <Button size="sm" variant="outline" onClick={() => toast.success("Pushed to Ask Personas")}>Discuss</Button>
+                      <Button size="sm" variant="outline" onClick={() => openHandoff({
+                        type: i.kind === "research_idea" ? "research_task" : i.kind === "skill_suggestion" ? "skill_draft" : "insight",
+                        source: { kind: "Insight", id: i.id, label: i.title },
+                        summary: i.title, notes: i.body, evidence: [`source:${i.source}`],
+                      })}><Send className="h-4 w-4 mr-1" />Handoff</Button>
+                      <Button size="sm" variant="ghost" onClick={() => toast.success("Pushed to Ask Personas")}>Discuss</Button>
                       <Button size="sm" variant="ghost" onClick={() => archive(i.id)}><Archive className="h-4 w-4 mr-1" />Dismiss</Button>
                     </div>
                   </div>

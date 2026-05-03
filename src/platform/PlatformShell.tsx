@@ -5,6 +5,7 @@ import { useMockRealtimeTicker } from "@/lib/useMockRealtime";
 import { RightDrawer } from "./components/RightDrawer";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { JobProgressDrawer } from "./components/JobProgressDrawer";
+import { HandoffDrawer } from "./components/HandoffDrawer";
 
 export const PlatformShell = () => {
   useLocaleSync();
@@ -18,6 +19,7 @@ export const PlatformShell = () => {
       <RightDrawer />
       <NotificationCenter />
       <JobProgressDrawer />
+      <HandoffDrawer />
     </div>
   );
 };
