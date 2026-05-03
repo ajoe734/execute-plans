@@ -67,10 +67,11 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<Placeholder title="Command Center" hint="Phase 13 — KPI、待辦、Env health、最近 audit" />} />
+              <Route index element={<CommandCenter />} />
               <Route path="overview" element={<ManagementOverview />} />
-              <Route path="command-center" element={<Placeholder title="Command Center" hint="Phase 13" />} />
-              <Route path="risk-center" element={<Placeholder title="Risk Center" hint="Phase 13 — risk budget vs utilization、breach matrix" />} />
+              <Route path="command-center" element={<CommandCenter />} />
+              <Route path="risk-center" element={<RiskCenter />} />
+              <Route path="risk" element={<Navigate to="/management/risk-center" replace />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
