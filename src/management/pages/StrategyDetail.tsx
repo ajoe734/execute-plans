@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/platform/components/StatCard";
@@ -8,24 +8,25 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest } from "@/lib/bff/types";
-import { Rocket, Pause, RotateCcw } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { usePermissions } from "@/lib/usePermissions";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useInspector } from "@/platform/components/RightDrawer";
-import { Inbox } from "lucide-react";
+import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
+import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
   const t = useT();
-  const { can, allowed } = usePermissions();
+  const { can } = usePermissions();
   const [s, setS] = useState<Strategy | undefined>();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [action, setAction] = useState<{ kind: string; token: string; destructive?: boolean } | null>(null);
+  const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -35,12 +36,22 @@ export const StrategyDetail = () => {
     bff.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject.includes(id))));
   }, [id]);
 
-  if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  // Strategy machine state derived from current state — falls back to "live" demo fixture
+  // until seed.ts is migrated to the strategy-specific lifecycle (Phase 15).
+  const machineState: StrategyState = useMemo(() => {
+    const map: Record<string, StrategyState> = {
+      draft: "discovered", review: "replicated", approved: "approved",
+      deployed: "live", paused: "paper", retired: "retired",
+    };
+    return s ? (map[s.state] ?? "live") : "discovered";
+  }, [s]);
 
-  const trigger = (kind: string, token: string, destructive = false) => {
-    setAction({ kind, token, destructive });
-    setConfirmOpen(true);
-  };
+  const transitions = useMemo(
+    () => nextTransitions(strategyMachine, machineState).filter((tr) => can(tr.action)),
+    [machineState, can],
+  );
+
+  if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
   return (
     <>
