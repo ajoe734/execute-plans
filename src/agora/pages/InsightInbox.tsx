@@ -35,6 +35,7 @@ const seed: Insight[] = [
 
 export const InsightInbox = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [items, setItems] = useState<Insight[]>(seed);
   const [filter, setFilter] = useState<"all" | Insight["kind"]>("all");
 
