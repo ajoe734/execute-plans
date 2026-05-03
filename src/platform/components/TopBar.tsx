@@ -104,7 +104,7 @@ export const TopBar = () => {
         <IndicatorButton icon={ClipboardCheck} count={counts.approvals} tooltip={t("topbar.pendingApprovals")} onClick={() => navigate("/management/approvals")} />
         <IndicatorButton icon={AlertTriangle} count={counts.alerts} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={counts.jobs} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
-        <Button variant="ghost" size="icon" title={t("topbar.notifications")}><Bell className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" title={t("topbar.notifications")} onClick={() => useNotificationCenter.getState().setOpen(true)}><Bell className="h-4 w-4" /></Button>
       </div>
 
       {/* BFF status */}
