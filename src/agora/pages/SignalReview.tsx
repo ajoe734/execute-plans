@@ -1,0 +1,152 @@
+import { useEffect, useState } from "react";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { ThumbsUp, ThumbsDown, MessageSquareWarning, ArrowRight } from "lucide-react";
+import { bff } from "@/lib/bff/client";
+import type { Strategy } from "@/lib/bff/types";
+import { useT } from "@/platform/hooks";
+import { useNavigate } from "react-router-dom";
+import { RiskBadge } from "@/platform/components/RiskBadge";
+import { toast } from "sonner";
+
+interface Signal {
+  id: string;
+  strategyId: string;
+  strategyName: string;
+  alpha: string;
+  side: "long" | "short";
+  symbol: string;
+  size: number;
+  conviction: number;
+  rationale: string;
+  generatedAt: string;
+  risk: "low" | "medium" | "high" | "critical";
+}
+
+const mockSignals = (strategies: Strategy[]): Signal[] => {
+  if (!strategies.length) return [];
+  const symbols = ["TSM", "NVDA", "AAPL", "JPM", "BTCUSD", "XOM"];
+  return strategies.slice(0, 5).map((s, i) => ({
+    id: `sig_${i}`,
+    strategyId: s.id,
+    strategyName: s.name,
+    alpha: s.alpha,
+    side: i % 2 === 0 ? "long" : "short",
+    symbol: symbols[i % symbols.length],
+    size: 0.04 + (i * 0.013),
+    conviction: 0.55 + (i * 0.07),
+    rationale: i === 0
+      ? "Momentum z-score crossed +1.8 with positive earnings drift; gross to risk budget cap."
+      : i === 1
+      ? "Mean-reversion trigger on overbought 14d RSI; expects fade into close."
+      : "Composite score in top decile; volatility within target band.",
+    generatedAt: new Date(Date.now() - i * 1800_000).toISOString(),
+    risk: s.risk,
+  }));
+};
+
+export const SignalReview = () => {
+  const t = useT();
+  const navigate = useNavigate();
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [active, setActive] = useState<Signal | null>(null);
+  const [comment, setComment] = useState("");
+  const [decided, setDecided] = useState<Record<string, "approved" | "rejected" | "flagged">>({});
+
+  useEffect(() => {
+    bff.strategies.list().then((s) => {
+      const sg = mockSignals(s);
+      setSignals(sg);
+      setActive(sg[0] ?? null);
+    });
+  }, []);
+
+  const decide = (id: string, d: "approved" | "rejected" | "flagged") => {
+    setDecided((m) => ({ ...m, [id]: d }));
+    toast.success(`signal_feedback (${d}) captured`);
+    setComment("");
+  };
+
+  return (
+    <>
+      <PageHeader title={t("nav.signals")} subtitle="Review live strategy signals before capital is committed. Every decision is captured into signal_feedback for training." />
+      <PageBody>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-2 space-y-2">
+            {signals.map((s) => {
+              const d = decided[s.id];
+              const isActive = active?.id === s.id;
+              return (
+                <Card
+                  key={s.id}
+                  onClick={() => setActive(s)}
+                  className={`p-3 cursor-pointer transition ${isActive ? "ring-2 ring-accent" : "hover:bg-muted/40"}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="outline" className={`text-[10px] uppercase ${s.side === "long" ? "bg-status-success/15 text-status-success border-status-success/30" : "bg-status-failed/15 text-status-failed border-status-failed/30"}`}>{s.side}</Badge>
+                    <span className="font-mono text-sm font-semibold">{s.symbol}</span>
+                    <RiskBadge level={s.risk} />
+                    {d && <Badge variant="outline" className="ml-auto text-[10px] uppercase">{d}</Badge>}
+                  </div>
+                  <div className="text-sm font-medium truncate">{s.strategyName}</div>
+                  <div className="text-xs text-mono text-muted-foreground">size {(s.size * 100).toFixed(2)}% · conviction {(s.conviction * 100).toFixed(0)}%</div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <Card className="lg:col-span-3 p-5">
+            {active ? (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`text-xs uppercase ${active.side === "long" ? "bg-status-success/15 text-status-success border-status-success/30" : "bg-status-failed/15 text-status-failed border-status-failed/30"}`}>{active.side}</Badge>
+                      <h2 className="text-xl font-mono font-semibold">{active.symbol}</h2>
+                      <RiskBadge level={active.risk} />
+                    </div>
+                    <button className="text-sm text-accent hover:underline mt-1" onClick={() => navigate(`/management/strategies/${active.strategyId}`)}>
+                      {active.strategyName} <ArrowRight className="h-3 w-3 inline" />
+                    </button>
+                  </div>
+                  <div className="text-right text-mono text-xs text-muted-foreground">
+                    {new Date(active.generatedAt).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Size</div><div className="text-mono text-sm">{(active.size * 100).toFixed(2)}%</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Conviction</div><div className="text-mono text-sm">{(active.conviction * 100).toFixed(0)}%</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Alpha</div><div className="text-mono text-sm">{active.alpha}</div></div>
+                </div>
+
+                <div className="rounded-md bg-muted/50 p-3 text-sm leading-relaxed mb-4">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Rationale</div>
+                  {active.rationale}
+                </div>
+
+                <Textarea
+                  placeholder="Add your reasoning (becomes part of signal_feedback)…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="min-h-[80px] mb-3"
+                />
+
+                <div className="flex gap-2">
+                  <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />Approve</Button>
+                  <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />Reject</Button>
+                  <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />Flag for review</Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-muted-foreground py-12 text-sm">Select a signal.</div>
+            )}
+          </Card>
+        </div>
+      </PageBody>
+    </>
+  );
+};
