@@ -72,7 +72,7 @@ export const RebalanceDetail = () => {
             value: "lines", label: "Allocation Lines",
             content: (
               <DataTable
-                rows={lines}
+                rows={lines.map((l) => ({ ...l, id: l.strategyId }))}
                 onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)}
                 columns={[
                   { key: "strat", header: "Strategy", cell: (row) => <div className="font-medium">{row.strategyName}</div> },
