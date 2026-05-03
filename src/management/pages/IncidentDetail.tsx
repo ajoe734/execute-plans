@@ -72,13 +72,7 @@ export const IncidentDetail = () => {
     <>
       <PageHeader
         title={incident.title}
-        subtitle={
-          <span className="flex items-center gap-2 text-mono text-xs">
-            <RiskBadge level={incident.severity} />
-            <StatusBadge state={incident.status === "resolved" ? "success" : incident.status === "mitigating" ? "running" : "warning"} />
-            <span className="text-muted-foreground">{incident.id}</span>
-          </span> as unknown as string
-        }
+        subtitle={`${incident.id} · ${incident.severity} · ${incident.status}`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
