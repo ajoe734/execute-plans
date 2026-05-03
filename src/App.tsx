@@ -117,7 +117,7 @@ const App = () => (
               <Route index element={<DailyBrief />} />
               <Route path="market" element={<MarketWatchlist />} />
               <Route path="signals" element={<SignalReview />} />
-              <Route path="signals/:id" element={<Placeholder title="Signal Detail" hint="Phase 14" />} />
+              <Route path="signals/:id" element={<SignalDetail />} />
               <Route path="triage" element={<AlertTriage />} />
               <Route path="notebook" element={<Notebook />} />
               <Route path="ask" element={<AskPersonas />} />
