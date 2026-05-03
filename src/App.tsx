@@ -32,6 +32,10 @@ import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
 } from "@/management/pages/Operations";
 import { Placeholder } from "@/platform/components/Placeholder";
+import { CommandCenter } from "@/management/pages/CommandCenter";
+import { RiskCenter } from "@/management/pages/RiskCenter";
+import { IncidentDetail } from "@/management/pages/IncidentDetail";
+import { GovernanceReview } from "@/management/pages/GovernanceReview";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
@@ -63,10 +67,11 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<Placeholder title="Command Center" hint="Phase 13 — KPI、待辦、Env health、最近 audit" />} />
+              <Route index element={<CommandCenter />} />
               <Route path="overview" element={<ManagementOverview />} />
-              <Route path="command-center" element={<Placeholder title="Command Center" hint="Phase 13" />} />
-              <Route path="risk-center" element={<Placeholder title="Risk Center" hint="Phase 13 — risk budget vs utilization、breach matrix" />} />
+              <Route path="command-center" element={<CommandCenter />} />
+              <Route path="risk-center" element={<RiskCenter />} />
+              <Route path="risk" element={<Navigate to="/management/risk-center" replace />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
@@ -85,8 +90,9 @@ const App = () => (
               <Route path="research/:id" element={<ResearchDetail />} />
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
-              <Route path="incidents/:id" element={<Placeholder title="Incident Detail" hint="Phase 13" />} />
-              <Route path="governance/:id" element={<Placeholder title="Governance Review" hint="Phase 13" />} />
+              <Route path="incidents/:id" element={<IncidentDetail />} />
+              <Route path="governance" element={<Navigate to="/management/approvals" replace />} />
+              <Route path="governance/:id" element={<GovernanceReview />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
