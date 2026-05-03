@@ -94,7 +94,7 @@ export const EvolutionDetail = () => {
         description="Stopping will halt all running generations and discard in-flight candidates."
         confirmToken="STOP"
         destructive
-        onConfirm={() => { toast.success("Stop requested"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Evolution", id: ev.id, action: "stop", memo }); toast.success("Stop requested"); }}
       />
     </>
   );

@@ -145,7 +145,7 @@ export const McpToolDetail = () => {
         description="Authorizes this destructive tool to execute against the LIVE environment. Requires dual approval (risk + ops) before taking effect."
         confirmToken="GRANT-LIVE"
         destructive
-        onConfirm={() => { toast.success("Live grant request submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "McpTool", id: tool.id, action: "grant_env", memo }); toast.success("Live grant request submitted for approval"); }}
       />
     </>
   );
