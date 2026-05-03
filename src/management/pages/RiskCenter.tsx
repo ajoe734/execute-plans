@@ -1,7 +1,7 @@
 // Risk Center — Spec Part 3 §18.5 Risk Center.
 // Panels: Capital risk, Strategy risk, Persona risk, Runtime risk, Tool/MCP/Skill risk,
 // open incidents, breach matrix, drill-downs into the offending object.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
