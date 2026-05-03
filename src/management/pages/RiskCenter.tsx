@@ -231,13 +231,13 @@ const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: Capital
       <div className="text-xs uppercase tracking-wider text-risk-high">High</div>
       <div className="text-xs uppercase tracking-wider text-risk-critical">Critical</div>
       {rows.map((r) => (
-        <>
-          <div key={r.label} className="font-medium">{r.label}</div>
+        <Fragment key={r.label}>
+          <div className="font-medium">{r.label}</div>
           <div>{cell(r.counts.low, "low")}</div>
           <div>{cell(r.counts.medium, "medium")}</div>
           <div>{cell(r.counts.high, "high")}</div>
           <div>{cell(r.counts.critical, "critical")}</div>
-        </>
+        </Fragment>
       ))}
     </div>
   );
