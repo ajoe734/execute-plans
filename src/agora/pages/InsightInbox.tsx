@@ -3,8 +3,9 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Lightbulb, FlaskConical, Zap, Archive, Sparkles } from "lucide-react";
+import { Lightbulb, FlaskConical, Zap, Archive, Sparkles, Send } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
 
 interface Insight {
