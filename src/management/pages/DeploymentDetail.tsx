@@ -85,7 +85,7 @@ export const DeploymentDetail = () => {
         description="Promotes this deployment to the LIVE environment. Generates an approval request that requires risk and ops sign-off."
         confirmToken="PROMOTE"
         destructive
-        onConfirm={() => toast.success("Promotion request submitted")}
+        onConfirm={() => { toast.success("Promotion request submitted"); }}
       />
       <HighRiskConfirm
         open={rollbackOpen}
@@ -94,7 +94,7 @@ export const DeploymentDetail = () => {
         description={`Rolls back to version ${d.previousVersion ?? "previous"}. Live orders will continue to flow through the previous artifact.`}
         confirmToken="ROLLBACK"
         destructive
-        onConfirm={() => toast.success("Rollback executed")}
+        onConfirm={() => { toast.success("Rollback executed"); }}
       />
     </>
   );
