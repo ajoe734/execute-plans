@@ -60,7 +60,8 @@ export const AlertsPage = () => {
     });
   }, []);
 
-  const ack = (id: string) => {
+  const ack = async (id: string) => {
+    await bff.mutations.acknowledgeAlert(id);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
     setActive((a) => a && a.id === id ? { ...a, acknowledged: true } : a);
     toast.success(`Alert ${id} acknowledged`);
@@ -128,7 +129,8 @@ export const IncidentsPage = () => {
   const [resolveOpen, setResolveOpen] = useState(false);
   useEffect(() => { bff.incidents.list().then(setRows); }, []);
 
-  const advance = (id: string, status: Incident["status"]) => {
+  const advance = async (id: string, status: Incident["status"], memo?: string) => {
+    await bff.mutations.setIncidentStatus(id, status, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
     setActive((a) => a && a.id === id ? { ...a, status } : a);
     toast.success(`Incident ${id} → ${status}`);
@@ -212,7 +214,9 @@ export const ApprovalsPage = () => {
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
-  const decide = (id: string, state: ApprovalRequest["state"]) => {
+  const decide = async (id: string, state: ApprovalRequest["state"], memo?: string) => {
+    if (state === "approved") await bff.mutations.approve(id, memo);
+    else if (state === "rejected") await bff.mutations.reject(id, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
     setActive((a) => a && a.id === id ? { ...a, state } : a);
     toast.success(`Approval ${id} → ${state}`);
