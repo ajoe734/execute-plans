@@ -35,6 +35,23 @@ export const TopBar = () => {
         jobs: j.filter((x) => x.status === "running").length,
       });
     });
+    let cleanup: (() => void) | undefined;
+    import("@/lib/bff/realtime").then(({ realtime }) => {
+      const offJob = realtime.on("job", (p) => {
+        const e = p as { status: string };
+        setCounts((c) => ({
+          ...c,
+          jobs: e.status === "running"
+            ? c.jobs + 1
+            : Math.max(0, c.jobs - ((e.status === "success" || e.status === "failed") ? 1 : 0)),
+        }));
+      });
+      const offAlert = realtime.on("alert", () => {
+        setCounts((c) => ({ ...c, alerts: c.alerts + 1 }));
+      });
+      cleanup = () => { offJob?.(); offAlert?.(); };
+    });
+    return () => cleanup?.();
   }, []);
 
   useEffect(() => {
