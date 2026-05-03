@@ -60,11 +60,13 @@ export const IncidentDetail = () => {
   const isHighSev = incident.severity === "high" || incident.severity === "critical";
   const requirePostmortem = isHighSev && postmortem.trim().length < 20;
 
-  const close = () => {
+  const close = async () => {
+    await bff.mutations.setIncidentStatus(incident.id, "resolved", postmortem);
     setIncident({ ...incident, status: "resolved", timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Incident closed. Postmortem: ${postmortem.slice(0, 80)}…` }] });
     toast.success(t("incident.closed"));
   };
-  const advance = (status: Incident["status"]) => {
+  const advance = async (status: Incident["status"]) => {
+    await bff.mutations.setIncidentStatus(incident.id, status);
     setIncident({ ...incident, status, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Status → ${status}` }] });
   };
 
