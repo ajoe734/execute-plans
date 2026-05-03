@@ -62,6 +62,24 @@ export interface Deployment extends BaseObject {
   target: "research" | "paper" | "live";
   artifactId: string;
   version: string;
+  previousVersion?: string;
+  strategyId?: string;
+  promotedAt?: string;
+  rollbackAvailable?: boolean;
+}
+
+export interface Runtime {
+  id: string;
+  name: string;
+  kind: "executor" | "mcp" | "scheduler" | "ingest";
+  env: "research" | "paper" | "live";
+  status: RunState;
+  cpu: number; // 0..1
+  memory: number; // 0..1
+  latencyP95Ms: number;
+  uptimePct: number;
+  region: string;
+  updatedAt: string;
 }
 
 export interface EvolutionProgram extends BaseObject {
