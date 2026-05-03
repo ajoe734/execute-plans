@@ -95,3 +95,53 @@ export const DeploymentsList = () => {
     />
   );
 };
+
+export const EvolutionList = () => {
+  const t = useT();
+  return (
+    <ObjectListPage
+      title={t("nav.evolution")}
+      loader={() => bff.evolution.list()}
+      basePath="/management/evolution"
+      extraColumns={[
+        { key: "gen", header: "Generation", cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
+        { key: "pop", header: "Population", cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
+        { key: "fit", header: "Best Fitness", cell: (r) => <span className="text-mono text-xs">{r.bestFitness.toFixed(2)}</span> },
+        { key: "prog", header: "Progress", cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
+      ]}
+    />
+  );
+};
+
+export const ResearchList = () => {
+  const t = useT();
+  return (
+    <ObjectListPage
+      title={t("nav.research")}
+      loader={() => bff.research.list()}
+      basePath="/management/research"
+      extraColumns={[
+        { key: "status", header: "Status", cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
+        { key: "metric", header: "Metric", cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
+        { key: "val", header: "Value", cell: (r) => <span className="text-mono text-xs">{r.metricValue.toFixed(2)}</span> },
+      ]}
+    />
+  );
+};
+
+export const ArtifactsList = () => {
+  const t = useT();
+  return (
+    <ObjectListPage
+      title={t("nav.artifacts")}
+      loader={() => bff.artifacts.list()}
+      basePath="/management/artifacts"
+      extraColumns={[
+        { key: "kind", header: "Kind", cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
+        { key: "ver", header: "Version", cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "size", header: "Size (MB)", cell: (r) => <span className="text-mono text-xs">{r.sizeMb.toLocaleString()}</span> },
+        { key: "hash", header: "Hash", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.hash}</span> },
+      ]}
+    />
+  );
+};

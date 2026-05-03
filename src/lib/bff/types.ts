@@ -40,16 +40,52 @@ export interface RankingFormula extends BaseObject {
   appliedTo: number;
 }
 
+export interface RebalanceLine {
+  strategyId: string;
+  strategyName: string;
+  currentWeight: number;
+  proposedWeight: number;
+  delta: number;
+}
+
 export interface Rebalance extends BaseObject {
   quarter: string;
   targetPoolId: string;
   proposedDelta: number;
+  lines?: RebalanceLine[];
+  expectedSharpe?: number;
+  expectedDrawdown?: number;
+  notes?: string;
 }
 
 export interface Deployment extends BaseObject {
   target: "research" | "paper" | "live";
   artifactId: string;
   version: string;
+}
+
+export interface EvolutionProgram extends BaseObject {
+  generation: number;
+  population: number;
+  bestFitness: number;
+  parentAlpha: string;
+  progress: number; // 0..1
+}
+
+export interface ResearchExperiment extends BaseObject {
+  hypothesis: string;
+  status: "queued" | "running" | "review" | "concluded";
+  metric: string;
+  metricValue: number;
+  artifactId?: string;
+}
+
+export interface Artifact extends BaseObject {
+  kind: "model" | "dataset" | "report" | "container";
+  version: string;
+  sourceExperimentId?: string;
+  sizeMb: number;
+  hash: string;
 }
 
 export interface Job {
