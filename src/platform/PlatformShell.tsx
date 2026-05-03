@@ -2,6 +2,9 @@ import { Outlet } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
 import { useLocaleSync } from "./hooks";
 import { useMockRealtimeTicker } from "@/lib/useMockRealtime";
+import { RightDrawer } from "./components/RightDrawer";
+import { NotificationCenter } from "./components/NotificationCenter";
+import { JobProgressDrawer } from "./components/JobProgressDrawer";
 
 export const PlatformShell = () => {
   useLocaleSync();
@@ -12,6 +15,9 @@ export const PlatformShell = () => {
       <div className="flex-1 flex">
         <Outlet />
       </div>
+      <RightDrawer />
+      <NotificationCenter />
+      <JobProgressDrawer />
     </div>
   );
 };

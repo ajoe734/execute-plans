@@ -11,6 +11,7 @@ import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { bff } from "@/lib/bff/client";
+import { useNotificationCenter } from "./NotificationCenter";
 
 const roles: UserRole[] = [
   "admin", "research_lead", "risk_officer", "capital_manager",
@@ -103,7 +104,7 @@ export const TopBar = () => {
         <IndicatorButton icon={ClipboardCheck} count={counts.approvals} tooltip={t("topbar.pendingApprovals")} onClick={() => navigate("/management/approvals")} />
         <IndicatorButton icon={AlertTriangle} count={counts.alerts} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={counts.jobs} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
-        <Button variant="ghost" size="icon" title={t("topbar.notifications")}><Bell className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" title={t("topbar.notifications")} onClick={() => useNotificationCenter.getState().setOpen(true)}><Bell className="h-4 w-4" /></Button>
       </div>
 
       {/* BFF status */}

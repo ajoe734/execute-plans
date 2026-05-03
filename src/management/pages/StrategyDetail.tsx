@@ -12,6 +12,9 @@ import { Rocket, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { usePermissions } from "@/lib/usePermissions";
+import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
+import { useInspector } from "@/platform/components/RightDrawer";
+import { Inbox } from "lucide-react";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -46,6 +49,13 @@ export const StrategyDetail = () => {
         subtitle={`${s.alpha} · ${s.id}`}
         actions={
           <>
+            <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
+              id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
+              owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
+              meta: [{ label: "Alpha", value: s.alpha }, { label: "Pool", value: s.capitalPoolId }],
+            })}>
+              <Inbox className="h-4 w-4 mr-1" />Inspect
+            </Button>
             {(() => {
               const acts = new Set(allowed(s.availableActions));
               return (
@@ -93,6 +103,29 @@ export const StrategyDetail = () => {
                 <StatCard label="Max Drawdown" value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
               </div>
             ),
+          },
+          {
+            value: "lineage", label: "Lineage",
+            content: (() => {
+              const nodes: LineageNode[] = [
+                { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
+                { id: s.capitalPoolId, label: s.capitalPoolId, type: "CapitalPool", state: "deployed", risk: "medium" },
+                { id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk, highlight: true },
+                ...s.personaIds.map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
+                { id: `dp_${s.id}`, label: `${s.id} → live`, type: "Deployment", state: "deployed", risk: s.risk },
+              ];
+              const edges: LineageEdge[] = [
+                { from: "alpha_src", to: s.id, label: "alpha" },
+                { from: s.capitalPoolId, to: s.id, label: "capital" },
+                ...s.personaIds.map((p) => ({ from: p, to: s.id, label: "persona" })),
+                { from: s.id, to: `dp_${s.id}`, label: "deploys" },
+              ];
+              return (
+                <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
+                  id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
+                })} />
+              );
+            })(),
           },
           {
             value: "risk", label: "Risk",

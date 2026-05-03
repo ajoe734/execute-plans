@@ -93,4 +93,28 @@ export default {
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部",
   },
+  inspector: {
+    metadata: "中繼資料",
+    actions: "可用動作",
+    actionsHint: "依角色與物件狀態過濾後顯示。",
+    recentActivity: "近期活動",
+    openDetail: "開啟詳細頁",
+  },
+  notifications: {
+    title: "通知中心",
+    subtitle: "告警、待審批、執行中 Job 的彙總視圖",
+    unack: "未確認",
+    viewAudit: "前往稽核日誌",
+  },
+  jobs: {
+    runningCount: "{{count}} 個 Job 執行中",
+    tracked: "追蹤中",
+    expand: "展開",
+    collapse: "收合",
+  },
+  lineage: {
+    title: "資料血緣",
+    legendUpstream: "上游",
+    legendDownstream: "下游",
+  },
 };
