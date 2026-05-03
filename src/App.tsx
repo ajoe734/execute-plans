@@ -40,6 +40,12 @@ import { SignalReview } from "@/agora/pages/SignalReview";
 import { AlertTriage } from "@/agora/pages/AlertTriage";
 import { DecisionJournal } from "@/agora/pages/DecisionJournal";
 import { InsightInbox } from "@/agora/pages/InsightInbox";
+import { TrainerStudio } from "@/agora/pages/TrainerStudio";
+import { MemoryReview } from "@/agora/pages/MemoryReview";
+import { SkillCoaching } from "@/agora/pages/SkillCoaching";
+import { PersonaLab } from "@/agora/pages/PersonaLab";
+import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
+import { AgoraChannels } from "@/agora/pages/AgoraChannels";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
