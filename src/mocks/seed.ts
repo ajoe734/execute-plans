@@ -34,8 +34,45 @@ export const rankingFormulas: RankingFormula[] = [
 ];
 
 export const rebalances: Rebalance[] = [
-  { id: "rb_q2_2026", name: "Q2 2026 Rebalance", quarter: "2026-Q2", targetPoolId: "cp_alpha", proposedDelta: 0.12, owner: "capital", updatedAt: ago(4), state: "review", risk: "high" },
+  {
+    id: "rb_q2_2026", name: "Q2 2026 Rebalance", quarter: "2026-Q2",
+    targetPoolId: "cp_alpha", proposedDelta: 0.12, owner: "capital",
+    updatedAt: ago(4), state: "review", risk: "high",
+    expectedSharpe: 1.92, expectedDrawdown: -0.038,
+    notes: "Rotates capital from FX Carry into Vol Surface Arb based on Q1 backtest.",
+    lines: [
+      { strategyId: "stg_001", strategyName: "Momentum Quant Alpha", currentWeight: 0.35, proposedWeight: 0.32, delta: -0.03 },
+      { strategyId: "stg_003", strategyName: "Asia Tech Long-Short", currentWeight: 0.20, proposedWeight: 0.28, delta: 0.08 },
+      { strategyId: "stg_004", strategyName: "FX Carry Tactical", currentWeight: 0.25, proposedWeight: 0.10, delta: -0.15 },
+      { strategyId: "stg_005", strategyName: "Vol Surface Arb", currentWeight: 0.20, proposedWeight: 0.30, delta: 0.10 },
+    ],
+  },
+  {
+    id: "rb_q1_2026", name: "Q1 2026 Rebalance", quarter: "2026-Q1",
+    targetPoolId: "cp_beta", proposedDelta: 0.04, owner: "capital",
+    updatedAt: ago(2160), state: "deployed", risk: "medium",
+    expectedSharpe: 1.4, expectedDrawdown: -0.05,
+  },
 ];
+
+export const evolutionPrograms: EvolutionProgram[] = [
+  { id: "ev_001", name: "Momentum α Evolution", generation: 14, population: 64, bestFitness: 1.83, parentAlpha: "alpha_mq_v3", progress: 0.72, owner: "ai_trainer", updatedAt: ago(0.8), state: "deployed", risk: "medium" },
+  { id: "ev_002", name: "Vol Surface Search", generation: 6, population: 32, bestFitness: 1.21, parentAlpha: "alpha_vsa_v4", progress: 0.31, owner: "ai_trainer", updatedAt: ago(3), state: "review", risk: "high" },
+];
+
+export const researchExperiments: ResearchExperiment[] = [
+  { id: "rx_201", name: "Asia Tech earnings drift", hypothesis: "Post-earnings drift > 4d on Asia Tech", status: "running", metric: "IR", metricValue: 0.68, owner: "carol", updatedAt: ago(1.5), state: "review", risk: "low" },
+  { id: "rx_202", name: "FX Carry regime gating", hypothesis: "VIX>22 should disable carry", status: "concluded", metric: "Sharpe Δ", metricValue: 0.31, artifactId: "art_rx202_v1", owner: "dan", updatedAt: ago(40), state: "approved", risk: "medium" },
+  { id: "rx_203", name: "Cross-asset momentum blend", hypothesis: "Blending bonds + equities momentum", status: "queued", metric: "Sharpe", metricValue: 0, owner: "alice", updatedAt: ago(0.4), state: "draft", risk: "low" },
+];
+
+export const artifacts: Artifact[] = [
+  { id: "art_stg001_v320", name: "stg_001 model v3.2.0", kind: "model", version: "3.2.0", sizeMb: 84.2, hash: "sha256:9f3a…b21c", owner: "ai_trainer", updatedAt: ago(2), state: "deployed", risk: "high" },
+  { id: "art_rx202_v1", name: "FX Carry gating dataset", kind: "dataset", version: "1.0.0", sourceExperimentId: "rx_202", sizeMb: 312.4, hash: "sha256:1a2b…77e0", owner: "dan", updatedAt: ago(40), state: "approved", risk: "medium" },
+  { id: "art_stg002_v104", name: "stg_002 container v1.0.4", kind: "container", version: "1.0.4", sizeMb: 1024, hash: "sha256:5d44…ff10", owner: "ops", updatedAt: ago(7), state: "deployed", risk: "medium" },
+  { id: "art_rep_q1", name: "Q1 2026 performance report", kind: "report", version: "1.0", sizeMb: 4.1, hash: "sha256:8be1…aa20", owner: "capital", updatedAt: ago(720), state: "approved", risk: "low" },
+];
+
 
 export const deployments: Deployment[] = [
   { id: "dp_001", name: "stg_001 → live v3.2.0", target: "live", artifactId: "art_stg001_v320", version: "3.2.0", owner: "ops", updatedAt: ago(1), state: "deployed", risk: "high" },
