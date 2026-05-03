@@ -13,9 +13,13 @@ import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";
 import { CapitalPoolDetail } from "@/management/pages/CapitalPoolDetail";
 import { RankingFormulaDetail } from "@/management/pages/RankingFormulaDetail";
+import { RebalanceDetail } from "@/management/pages/RebalanceDetail";
+import { EvolutionDetail } from "@/management/pages/EvolutionDetail";
+import { ResearchDetail } from "@/management/pages/ResearchDetail";
+import { ArtifactDetail } from "@/management/pages/ArtifactDetail";
 import {
   StrategiesList, PersonasList, CapitalPoolsList, RankingFormulasList,
-  RebalancesList, DeploymentsList,
+  RebalancesList, DeploymentsList, EvolutionList, ResearchList, ArtifactsList,
 } from "@/management/pages/Lists";
 import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
@@ -50,9 +54,13 @@ const App = () => (
               <Route path="ranking-formulas" element={<RankingFormulasList />} />
               <Route path="ranking-formulas/:id" element={<RankingFormulaDetail />} />
               <Route path="rebalances" element={<RebalancesList />} />
-              <Route path="evolution" element={<Placeholder title="Evolution Programs" />} />
-              <Route path="research" element={<Placeholder title="Research & Experiments" />} />
-              <Route path="artifacts" element={<Placeholder title="Artifacts & Lineage" />} />
+              <Route path="rebalances/:id" element={<RebalanceDetail />} />
+              <Route path="evolution" element={<EvolutionList />} />
+              <Route path="evolution/:id" element={<EvolutionDetail />} />
+              <Route path="research" element={<ResearchList />} />
+              <Route path="research/:id" element={<ResearchDetail />} />
+              <Route path="artifacts" element={<ArtifactsList />} />
+              <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="runtimes" element={<Placeholder title="Runtimes" />} />
               <Route path="jobs" element={<JobsPage />} />
