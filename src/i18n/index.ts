@@ -5,7 +5,7 @@ import zh from "./locales/zh-TW";
 
 void i18n.use(initReactI18next).init({
   resources: { "en-US": { translation: en }, "zh-TW": { translation: zh } },
-  lng: localStorage.getItem("pantheon.locale") || "en-US",
+  lng: localStorage.getItem("pantheon.locale") || "zh-TW",
   fallbackLng: "en-US",
   interpolation: { escapeValue: false },
 });
