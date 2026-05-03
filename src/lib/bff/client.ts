@@ -41,9 +41,22 @@ export const bff = {
     get: (id: string) => delay(seed.artifacts.find((s) => s.id === id)),
   },
   jobs: { list: () => delay(seed.jobs) },
-  alerts: { list: () => delay(seed.alerts) },
-  incidents: { list: () => delay(seed.incidents) },
-  approvals: { list: () => delay(seed.approvals) },
+  runtimes: {
+    list: () => delay(seed.runtimes),
+    get: (id: string) => delay(seed.runtimes.find((r) => r.id === id)),
+  },
+  alerts: {
+    list: () => delay(seed.alerts),
+    get: (id: string) => delay(seed.alerts.find((a) => a.id === id)),
+  },
+  incidents: {
+    list: () => delay(seed.incidents),
+    get: (id: string) => delay(seed.incidents.find((i) => i.id === id)),
+  },
+  approvals: {
+    list: () => delay(seed.approvals),
+    get: (id: string) => delay(seed.approvals.find((a) => a.id === id)),
+  },
   audit: { list: () => delay(seed.auditEvents) },
   search: (q: string) => {
     const all = seed.searchableObjects();
