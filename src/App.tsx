@@ -90,8 +90,9 @@ const App = () => (
               <Route path="research/:id" element={<ResearchDetail />} />
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
-              <Route path="incidents/:id" element={<Placeholder title="Incident Detail" hint="Phase 13" />} />
-              <Route path="governance/:id" element={<Placeholder title="Governance Review" hint="Phase 13" />} />
+              <Route path="incidents/:id" element={<IncidentDetail />} />
+              <Route path="governance" element={<Navigate to="/management/approvals" replace />} />
+              <Route path="governance/:id" element={<GovernanceReview />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
