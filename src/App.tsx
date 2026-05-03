@@ -76,10 +76,15 @@ const App = () => (
               <Route path="incidents" element={<IncidentsPage />} />
               <Route path="audit" element={<AuditPage />} />
               <Route path="approvals" element={<ApprovalsPage />} />
-              <Route path="tools" element={<Placeholder title="Tools" />} />
-              <Route path="mcp" element={<Placeholder title="MCP Servers & Tools" />} />
-              <Route path="skills" element={<Placeholder title="Skills" />} />
-              <Route path="channels" element={<Placeholder title="Channels" />} />
+              <Route path="tools" element={<ToolsList />} />
+              <Route path="tools/:id" element={<ToolDetail />} />
+              <Route path="mcp" element={<McpServersList />} />
+              <Route path="mcp/:id" element={<McpServerDetail />} />
+              <Route path="mcp-tools/:id" element={<McpToolDetail />} />
+              <Route path="skills" element={<SkillsList />} />
+              <Route path="skills/:id" element={<SkillDetail />} />
+              <Route path="channels" element={<ChannelsList />} />
+              <Route path="channels/:id" element={<ChannelDetail />} />
             </Route>
 
             {/* Agora Workbench */}
