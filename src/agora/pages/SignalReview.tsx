@@ -135,10 +135,11 @@ export const SignalReview = () => {
                   className="min-h-[80px] mb-3"
                 />
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />Approve</Button>
                   <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />Reject</Button>
                   <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />Flag for review</Button>
+                  <Button variant="outline" className="ml-auto" onClick={() => navigate(`/agora/signals/${active.id}`)}>Open Detail <ArrowRight className="h-4 w-4 ml-1" /></Button>
                 </div>
               </>
             ) : (
