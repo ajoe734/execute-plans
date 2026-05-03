@@ -49,6 +49,13 @@ export const StrategyDetail = () => {
         subtitle={`${s.alpha} · ${s.id}`}
         actions={
           <>
+            <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
+              id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
+              owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
+              meta: [{ label: "Alpha", value: s.alpha }, { label: "Pool", value: s.capitalPoolId }],
+            })}>
+              <Inbox className="h-4 w-4 mr-1" />Inspect
+            </Button>
             {(() => {
               const acts = new Set(allowed(s.availableActions));
               return (
