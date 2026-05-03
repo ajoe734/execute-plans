@@ -172,3 +172,44 @@ export interface SearchResult {
   risk: RiskLevel;
   updatedAt: string;
 }
+
+export interface Tool extends BaseObject {
+  category: "data" | "execution" | "research" | "communication" | "analysis";
+  version: string;
+  inputs: number;
+  description: string;
+  usedBy: number;
+}
+
+export interface McpServer extends BaseObject {
+  endpoint: string;
+  region: string;
+  toolCount: number;
+  envAllowed: ("research" | "paper" | "live")[];
+  health: RunState;
+}
+
+export interface McpTool extends BaseObject {
+  serverId: string;
+  description: string;
+  scope: "read" | "write" | "destructive";
+  envGrants: ("research" | "paper" | "live")[];
+  callsLast24h: number;
+}
+
+export interface Skill extends BaseObject {
+  version: string;
+  archetype: string;
+  description: string;
+  draft: boolean;
+  publishedAt?: string;
+  evalScore?: number;
+  usedByPersonas: number;
+}
+
+export interface Channel extends BaseObject {
+  kind: "slack" | "email" | "webhook" | "chat";
+  destination: string;
+  subscribers: number;
+  filters?: string;
+}
