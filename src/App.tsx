@@ -35,6 +35,11 @@ import { Placeholder } from "@/platform/components/Placeholder";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
+import { MarketWatchlist } from "@/agora/pages/MarketWatchlist";
+import { SignalReview } from "@/agora/pages/SignalReview";
+import { AlertTriage } from "@/agora/pages/AlertTriage";
+import { DecisionJournal } from "@/agora/pages/DecisionJournal";
+import { InsightInbox } from "@/agora/pages/InsightInbox";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
