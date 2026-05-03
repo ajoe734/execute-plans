@@ -19,6 +19,11 @@ import { ResearchDetail } from "@/management/pages/ResearchDetail";
 import { ArtifactDetail } from "@/management/pages/ArtifactDetail";
 import { DeploymentDetail } from "@/management/pages/DeploymentDetail";
 import { RuntimesPage } from "@/management/pages/Runtimes";
+import { ToolsList, McpServersList, SkillsList, ChannelsList } from "@/management/pages/CapabilitiesLists";
+import { ToolDetail } from "@/management/pages/ToolDetail";
+import { McpServerDetail, McpToolDetail } from "@/management/pages/McpDetail";
+import { SkillDetail } from "@/management/pages/SkillDetail";
+import { ChannelDetail } from "@/management/pages/ChannelDetail";
 import {
   StrategiesList, PersonasList, CapitalPoolsList, RankingFormulasList,
   RebalancesList, DeploymentsList, EvolutionList, ResearchList, ArtifactsList,
