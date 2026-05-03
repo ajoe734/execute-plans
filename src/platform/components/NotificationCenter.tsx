@@ -47,8 +47,8 @@ export const NotificationCenter = () => {
       setAlerts((cur) => [a, ...cur].slice(0, 50));
     });
     const offJob = realtime.on("job", (p) => {
-      const j = p as Job & { kind: string };
-      setJobs((cur) => [{ id: j.jobId ?? j.id, kind: j.kind, status: j.status, startedAt: j.ts ?? new Date().toISOString(), owner: (j as unknown as { owner: string }).owner }, ...cur].slice(0, 50));
+      const j = p as { jobId: string; kind: string; status: Job["status"]; ts: string; owner: string };
+      setJobs((cur) => [{ id: j.jobId, kind: j.kind, status: j.status, startedAt: j.ts, owner: j.owner }, ...cur].slice(0, 50));
     });
     return () => { offAlert?.(); offJob?.(); };
   }, [open]);

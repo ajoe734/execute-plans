@@ -66,14 +66,13 @@ export const JobProgressDrawer = () => {
     const off = realtime.on("job", (p) => {
       const e = p as { jobId: string; kind: string; owner: string; ts: string; status: RunningJob["status"] };
       if (e.status === "success" || e.status === "failed") {
-        // Mark complete then auto-remove after a short delay
         upsert({ id: e.jobId, kind: e.kind, owner: e.owner, startedAt: e.ts, status: e.status, progress: 1 });
         setTimeout(() => remove(e.jobId), 6000);
       } else {
         upsert({ id: e.jobId, kind: e.kind, owner: e.owner, startedAt: e.ts, status: e.status, progress: 0.1 });
       }
     });
-    return () => off?.();
+    return () => { off?.(); };
   }, [upsert, remove]);
 
   // Animate progress for running jobs
