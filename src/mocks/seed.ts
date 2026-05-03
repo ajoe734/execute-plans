@@ -1,6 +1,7 @@
 import type {
   Strategy, Persona, CapitalPool, RankingFormula, Rebalance,
   Deployment, Job, Alert, Incident, ApprovalRequest, AuditEvent,
+  EvolutionProgram, ResearchExperiment, Artifact,
 } from "@/lib/bff/types";
 
 const now = () => new Date().toISOString();
