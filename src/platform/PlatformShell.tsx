@@ -19,6 +19,7 @@ export const PlatformShell = () => {
       <RightDrawer />
       <NotificationCenter />
       <JobProgressDrawer />
+      <HandoffDrawer />
     </div>
   );
 };
