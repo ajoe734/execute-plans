@@ -11,10 +11,12 @@ import type { Strategy, Job, AuditEvent, ApprovalRequest } from "@/lib/bff/types
 import { Rocket, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { usePermissions } from "@/lib/usePermissions";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
   const t = useT();
+  const { can, allowed } = usePermissions();
   const [s, setS] = useState<Strategy | undefined>();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -44,15 +46,28 @@ export const StrategyDetail = () => {
         subtitle={`${s.alpha} · ${s.id}`}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => trigger("pause", "PAUSE")}>
-              <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => trigger("rollback", "ROLLBACK", true)}>
-              <RotateCcw className="h-4 w-4 mr-1" />{t("actions.rollback")}
-            </Button>
-            <Button size="sm" onClick={() => trigger("promote", "PROMOTE-LIVE", true)}>
-              <Rocket className="h-4 w-4 mr-1" />{t("actions.promoteLive")}
-            </Button>
+            {(() => {
+              const acts = new Set(allowed(s.availableActions));
+              return (
+                <>
+                  {acts.has("pause") && can("pause") && (
+                    <Button size="sm" variant="outline" onClick={() => trigger("pause", "PAUSE")}>
+                      <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
+                    </Button>
+                  )}
+                  {acts.has("rollback") && can("rollback") && (
+                    <Button size="sm" variant="outline" onClick={() => trigger("rollback", "ROLLBACK", true)}>
+                      <RotateCcw className="h-4 w-4 mr-1" />{t("actions.rollback")}
+                    </Button>
+                  )}
+                  {acts.has("promote_live") && can("promote_live") && (
+                    <Button size="sm" onClick={() => trigger("promote", "PROMOTE-LIVE", true)}>
+                      <Rocket className="h-4 w-4 mr-1" />{t("actions.promoteLive")}
+                    </Button>
+                  )}
+                </>
+              );
+            })()}
           </>
         }
         tabs={[
