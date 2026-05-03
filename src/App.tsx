@@ -123,7 +123,8 @@ const App = () => (
               <Route path="triage" element={<AlertTriage />} />
               <Route path="notebook" element={<Notebook />} />
               <Route path="ask" element={<AskPersonas />} />
-              <Route path="committee" element={<Placeholder title="Committee Room" hint="Phase 14 — 多 persona 圓桌討論、投票、結論" />} />
+              <Route path="committee" element={<CommitteeRoom />} />
+              <Route path="committee/:sessionId" element={<CommitteeRoom />} />
               <Route path="decisions" element={<DecisionJournal />} />
               <Route path="insights" element={<InsightInbox />} />
               <Route path="trainer" element={<TrainerStudio />} />
