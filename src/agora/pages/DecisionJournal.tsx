@@ -49,6 +49,7 @@ const tone = (o?: string) =>
 
 export const DecisionJournal = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [decisions, setDecisions] = useState<Decision[]>(seed);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ title: "", context: "", decision: "", rationale: "", tags: "" });
