@@ -11,7 +11,9 @@ export const ManagementLayout = () => {
   const t = useT();
   const groups: NavGroup[] = [
     { label: t("groups.overview"), items: [
-      { to: "/management", label: t("nav.overview"), icon: LayoutDashboard },
+      { to: "/management", label: t("nav.commandCenter"), icon: LayoutDashboard },
+      { to: "/management/overview", label: t("nav.overview"), icon: LayoutDashboard },
+      { to: "/management/risk-center", label: t("nav.riskCenter"), icon: AlertOctagon },
     ]},
     { label: t("groups.objects"), items: [
       { to: "/management/strategies", label: t("nav.strategies"), icon: Boxes },
@@ -20,7 +22,7 @@ export const ManagementLayout = () => {
       { to: "/management/ranking-formulas", label: t("nav.rankingFormulas"), icon: ListOrdered },
       { to: "/management/rebalances", label: t("nav.rebalances"), icon: Repeat },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
-      { to: "/management/research", label: t("nav.research"), icon: FlaskConical },
+      { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
     ]},
     { label: t("groups.operations"), items: [

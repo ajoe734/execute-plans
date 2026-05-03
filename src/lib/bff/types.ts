@@ -11,6 +11,11 @@ export interface BaseObject {
   updatedAt: string;
   state: LifecycleState;
   risk: RiskLevel;
+  /** i18n key for the object's display label (Part 6 contract). */
+  labelKey?: string;
+  /** Action ids the BFF declares are valid for the current state (Part 6 contract).
+   *  RBAC further filters this to what the current role may actually invoke. */
+  availableActions?: string[];
 }
 
 export interface Strategy extends BaseObject {

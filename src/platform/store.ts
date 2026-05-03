@@ -32,7 +32,7 @@ export const usePlatform = create<PlatformState>((set) => ({
     localStorage.setItem("pantheon.env", e);
     set({ env: e });
   },
-  locale: (localStorage.getItem("pantheon.locale") as Locale) || "en-US",
+  locale: (localStorage.getItem("pantheon.locale") as Locale) || "zh-TW",
   setLocale: (l) => {
     localStorage.setItem("pantheon.locale", l);
     set({ locale: l });
