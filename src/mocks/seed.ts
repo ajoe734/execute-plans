@@ -2,6 +2,7 @@ import type {
   Strategy, Persona, CapitalPool, RankingFormula, Rebalance,
   Deployment, Job, Alert, Incident, ApprovalRequest, AuditEvent,
   EvolutionProgram, ResearchExperiment, Artifact, Runtime,
+  Tool, McpServer, McpTool, Skill, Channel,
 } from "@/lib/bff/types";
 
 const now = () => new Date().toISOString();
@@ -120,6 +121,40 @@ export const auditEvents: AuditEvent[] = [
   { id: "au_1", actor: "alice", action: "strategy.update", target: "stg_001", ts: ago(0.4) },
   { id: "au_2", actor: "ops", action: "deployment.promote", target: "dp_001", ts: ago(1.2) },
   { id: "au_3", actor: "capital", action: "rebalance.propose", target: "rb_q2_2026", ts: ago(4) },
+];
+
+export const tools: Tool[] = [
+  { id: "tl_market_data", name: "market.data.fetch", category: "data", version: "2.4.0", inputs: 4, description: "Fetch normalized OHLCV data from the canonical market warehouse.", usedBy: 23, owner: "ops", updatedAt: ago(72), state: "deployed", risk: "low" },
+  { id: "tl_order_submit", name: "execution.order.submit", category: "execution", version: "1.8.2", inputs: 7, description: "Submit a parent order to the execution router. Live access requires risk-officer grant.", usedBy: 6, owner: "ops", updatedAt: ago(36), state: "deployed", risk: "critical" },
+  { id: "tl_news_search", name: "research.news.search", category: "research", version: "3.1.0", inputs: 3, description: "Semantic search across the curated news + filings index.", usedBy: 18, owner: "research", updatedAt: ago(120), state: "deployed", risk: "low" },
+  { id: "tl_slack_post", name: "communication.slack.post", category: "communication", version: "1.0.4", inputs: 2, description: "Post a message to a configured Slack channel.", usedBy: 9, owner: "ops", updatedAt: ago(200), state: "deployed", risk: "medium" },
+  { id: "tl_factor_attr", name: "analysis.factor.attribute", category: "analysis", version: "0.9.1", inputs: 5, description: "Compute factor attribution for a portfolio against a chosen factor model.", usedBy: 12, owner: "research", updatedAt: ago(50), state: "review", risk: "medium" },
+];
+
+export const mcpServers: McpServer[] = [
+  { id: "mcp_alpha", name: "mcp-server-alpha", endpoint: "https://mcp-alpha.pantheon.internal", region: "us-east-1", toolCount: 24, envAllowed: ["research", "paper", "live"], health: "warning", owner: "ops", updatedAt: ago(0.1), state: "deployed", risk: "high" },
+  { id: "mcp_beta", name: "mcp-server-beta", endpoint: "https://mcp-beta.pantheon.internal", region: "eu-west-1", toolCount: 18, envAllowed: ["research", "paper"], health: "running", owner: "ops", updatedAt: ago(2), state: "deployed", risk: "medium" },
+  { id: "mcp_research", name: "mcp-research-sandbox", endpoint: "https://mcp-rsb.pantheon.internal", region: "us-west-2", toolCount: 41, envAllowed: ["research"], health: "running", owner: "research", updatedAt: ago(5), state: "deployed", risk: "low" },
+];
+
+export const mcpTools: McpTool[] = [
+  { id: "mt_001", name: "alpha.factor.compute", serverId: "mcp_alpha", description: "Streaming factor computation across the universe.", scope: "read", envGrants: ["research", "paper", "live"], callsLast24h: 8421, owner: "research", updatedAt: ago(2), state: "deployed", risk: "low" },
+  { id: "mt_002", name: "alpha.order.preview", serverId: "mcp_alpha", description: "Preview order routing without submission.", scope: "read", envGrants: ["research", "paper", "live"], callsLast24h: 1240, owner: "ops", updatedAt: ago(2), state: "deployed", risk: "medium" },
+  { id: "mt_003", name: "alpha.order.cancel_all", serverId: "mcp_alpha", description: "Emergency cancel-all for a strategy. Live grant requires dual approval.", scope: "destructive", envGrants: ["research", "paper"], callsLast24h: 12, owner: "ops", updatedAt: ago(20), state: "review", risk: "critical" },
+  { id: "mt_004", name: "research.news.fetch", serverId: "mcp_research", description: "Fetch raw news payloads.", scope: "read", envGrants: ["research"], callsLast24h: 4500, owner: "research", updatedAt: ago(80), state: "deployed", risk: "low" },
+];
+
+export const skills: Skill[] = [
+  { id: "sk_macro_brief", name: "macro_briefing", version: "2.0", archetype: "Macro", description: "Generates a daily macro briefing with grounded citations and regime tags.", draft: true, evalScore: 0.86, usedByPersonas: 0, owner: "ai_trainer", updatedAt: ago(4), state: "review", risk: "medium" },
+  { id: "sk_signal_review", name: "signal_review", version: "1.4", archetype: "Quant", description: "Reviews a candidate signal and returns a structured critique.", draft: false, publishedAt: ago(72), evalScore: 0.91, usedByPersonas: 3, owner: "ai_trainer", updatedAt: ago(72), state: "deployed", risk: "low" },
+  { id: "sk_redteam_attack", name: "redteam_attack", version: "0.3", archetype: "RedTeam", description: "Adversarial probing of strategy assumptions. Restricted to research env.", draft: true, evalScore: 0.62, usedByPersonas: 0, owner: "ai_trainer", updatedAt: ago(20), state: "draft", risk: "high" },
+  { id: "sk_capital_summary", name: "capital_summary", version: "3.1", archetype: "Capital", description: "Summarizes capital pool utilization and risk budget consumption.", draft: false, publishedAt: ago(500), evalScore: 0.94, usedByPersonas: 2, owner: "ai_trainer", updatedAt: ago(500), state: "deployed", risk: "low" },
+];
+
+export const channels: Channel[] = [
+  { id: "ch_slack_alerts", name: "#alerts-pantheon", kind: "slack", destination: "slack://T01/C-alerts-pantheon", subscribers: 14, filters: "severity in (high, critical)", owner: "ops", updatedAt: ago(48), state: "deployed", risk: "medium" },
+  { id: "ch_email_capital", name: "Capital Daily Digest", kind: "email", destination: "capital@pantheon.internal", subscribers: 6, filters: "kind=capital.daily", owner: "capital", updatedAt: ago(120), state: "deployed", risk: "low" },
+  { id: "ch_webhook_audit", name: "Audit Forwarder", kind: "webhook", destination: "https://siem.internal/ingest", subscribers: 1, filters: "all", owner: "ops", updatedAt: ago(200), state: "deployed", risk: "low" },
 ];
 
 export const searchableObjects = () => [
