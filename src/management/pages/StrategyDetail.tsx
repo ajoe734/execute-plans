@@ -178,7 +178,20 @@ export const StrategyDetail = () => {
           rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${s.id}@previous` : undefined}
           affected={{ strategies: [s.id], capitalPools: [s.capitalPoolId], personas: s.personaIds }}
           destructive={activeTr.uiPattern === "destructive_modal"}
-          onConfirm={(memo) => { toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`); }}
+          onConfirm={async (memo) => {
+            await bff.mutations.runAction({
+              kind: "Strategy", id: s.id, action: activeTr.action,
+              newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
+                ? activeTr.to : undefined,
+              memo,
+            });
+            // refresh local state + audit
+            const fresh = await bff.strategies.get(s.id);
+            if (fresh) setS(fresh);
+            const a = await bff.audit.list();
+            setAudit(a.filter((x) => x.target === s.id));
+            toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
+          }}
         />
       )}
     </>
