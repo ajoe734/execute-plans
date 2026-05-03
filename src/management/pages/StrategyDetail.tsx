@@ -12,6 +12,9 @@ import { Rocket, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { usePermissions } from "@/lib/usePermissions";
+import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
+import { useInspector } from "@/platform/components/RightDrawer";
+import { Inbox } from "lucide-react";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
