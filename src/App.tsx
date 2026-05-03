@@ -63,7 +63,10 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<ManagementOverview />} />
+              <Route index element={<Placeholder title="Command Center" hint="Phase 13 — KPI、待辦、Env health、最近 audit" />} />
+              <Route path="overview" element={<ManagementOverview />} />
+              <Route path="command-center" element={<Placeholder title="Command Center" hint="Phase 13" />} />
+              <Route path="risk-center" element={<Placeholder title="Risk Center" hint="Phase 13 — risk budget vs utilization、breach matrix" />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
@@ -76,10 +79,14 @@ const App = () => (
               <Route path="rebalances/:id" element={<RebalanceDetail />} />
               <Route path="evolution" element={<EvolutionList />} />
               <Route path="evolution/:id" element={<EvolutionDetail />} />
-              <Route path="research" element={<ResearchList />} />
+              <Route path="experiments" element={<ResearchList />} />
+              <Route path="experiments/:id" element={<ResearchDetail />} />
+              <Route path="research" element={<Navigate to="/management/experiments" replace />} />
               <Route path="research/:id" element={<ResearchDetail />} />
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
+              <Route path="incidents/:id" element={<Placeholder title="Incident Detail" hint="Phase 13" />} />
+              <Route path="governance/:id" element={<Placeholder title="Governance Review" hint="Phase 13" />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
@@ -104,9 +111,11 @@ const App = () => (
               <Route index element={<DailyBrief />} />
               <Route path="market" element={<MarketWatchlist />} />
               <Route path="signals" element={<SignalReview />} />
+              <Route path="signals/:id" element={<Placeholder title="Signal Detail" hint="Phase 14" />} />
               <Route path="triage" element={<AlertTriage />} />
               <Route path="notebook" element={<Notebook />} />
               <Route path="ask" element={<AskPersonas />} />
+              <Route path="committee" element={<Placeholder title="Committee Room" hint="Phase 14 — 多 persona 圓桌討論、投票、結論" />} />
               <Route path="decisions" element={<DecisionJournal />} />
               <Route path="insights" element={<InsightInbox />} />
               <Route path="trainer" element={<TrainerStudio />} />
