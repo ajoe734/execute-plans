@@ -157,6 +157,85 @@ export const channels: Channel[] = [
   { id: "ch_webhook_audit", name: "Audit Forwarder", kind: "webhook", destination: "https://siem.internal/ingest", subscribers: 1, filters: "all", owner: "ops", updatedAt: ago(200), state: "deployed", risk: "low" },
 ];
 
+// ---------- Action catalog (Part 6 §availableActions) ----------
+// Drives BFF-declared availableActions per state; RBAC further filters at the UI layer.
+type ActionMap = Partial<Record<import("@/lib/bff/types").LifecycleState, string[]>>;
+const ACTIONS_BY_TYPE: Record<string, ActionMap> = {
+  Strategy: {
+    draft: ["edit", "submit_review", "delete"],
+    review: ["approve", "reject", "edit"],
+    approved: ["deploy_paper", "promote_live", "edit"],
+    deployed: ["pause", "rollback", "view_lineage"],
+    paused: ["resume", "retire"],
+    retired: [],
+  },
+  Persona: {
+    draft: ["edit", "submit_review"],
+    review: ["approve", "reject"],
+    approved: ["deploy", "edit"],
+    deployed: ["pause", "retire", "edit"],
+    paused: ["resume", "retire"],
+    retired: [],
+  },
+  CapitalPool: {
+    deployed: ["adjust_budget", "rebalance", "freeze"],
+    paused: ["unfreeze", "retire"],
+  },
+  Rebalance: {
+    draft: ["edit", "simulate", "submit_review"],
+    review: ["approve", "reject", "simulate"],
+    approved: ["apply", "rollback"],
+    deployed: ["rollback"],
+  },
+  Deployment: {
+    deployed: ["rollback", "pause", "view_logs"],
+    paused: ["resume", "retire"],
+  },
+  Evolution: { deployed: ["pause", "fork", "promote_best"], paused: ["resume", "retire"], review: ["approve", "reject"] },
+  Research: { draft: ["run", "edit"], review: ["approve", "reject"], approved: ["promote_artifact"] },
+  Artifact: { approved: ["deploy", "archive"], deployed: ["rollback"] },
+  RankingFormula: { draft: ["edit", "submit_review"], review: ["approve", "reject"], deployed: ["edit", "retire"] },
+  Tool: { deployed: ["edit", "deprecate"], review: ["approve", "reject"] },
+  McpServer: { deployed: ["restart", "drain", "edit"], paused: ["resume", "retire"] },
+  McpTool: { deployed: ["grant_env", "revoke", "edit"], review: ["approve", "reject"] },
+  Skill: { draft: ["edit", "evaluate", "submit_review"], review: ["approve", "reject"], approved: ["publish"], deployed: ["unpublish", "edit"] },
+  Channel: { deployed: ["edit", "test_send", "disable"], paused: ["enable", "retire"] },
+};
+
+const LABEL_KEY_BY_TYPE: Record<string, string> = {
+  Strategy: "object.strategy", Persona: "object.persona", CapitalPool: "object.capitalPool",
+  Rebalance: "object.rebalance", Deployment: "object.deployment", Evolution: "object.evolution",
+  Research: "object.research", Artifact: "object.artifact", RankingFormula: "object.rankingFormula",
+  Tool: "object.tool", McpServer: "object.mcpServer", McpTool: "object.mcpTool",
+  Skill: "object.skill", Channel: "object.channel",
+};
+
+function enrich<T extends { state?: string; availableActions?: string[]; labelKey?: string }>(arr: T[], type: string): T[] {
+  for (const o of arr) {
+    o.labelKey = o.labelKey ?? LABEL_KEY_BY_TYPE[type];
+    if (o.availableActions) continue;
+    const map = ACTIONS_BY_TYPE[type];
+    o.availableActions = (map && o.state ? map[o.state as keyof ActionMap] : undefined) ?? [];
+  }
+  return arr;
+}
+
+enrich(strategies, "Strategy");
+enrich(personas, "Persona");
+enrich(capitalPools, "CapitalPool");
+enrich(rebalances, "Rebalance");
+enrich(deployments, "Deployment");
+enrich(evolutionPrograms, "Evolution");
+enrich(researchExperiments, "Research");
+enrich(artifacts, "Artifact");
+enrich(rankingFormulas, "RankingFormula");
+enrich(tools, "Tool");
+enrich(mcpServers, "McpServer");
+enrich(mcpTools, "McpTool");
+enrich(skills, "Skill");
+enrich(channels, "Channel");
+
+
 export const searchableObjects = () => [
   ...strategies.map((s) => ({ id: s.id, type: "Strategy", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
   ...personas.map((s) => ({ id: s.id, type: "Persona", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
