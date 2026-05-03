@@ -95,13 +95,13 @@ const App = () => (
             {/* Agora Workbench */}
             <Route path="/agora" element={<AgoraLayout />}>
               <Route index element={<DailyBrief />} />
-              <Route path="market" element={<Placeholder title="Market & Watchlist" />} />
-              <Route path="signals" element={<Placeholder title="Signal Review" />} />
-              <Route path="triage" element={<Placeholder title="Alert Triage" />} />
+              <Route path="market" element={<MarketWatchlist />} />
+              <Route path="signals" element={<SignalReview />} />
+              <Route path="triage" element={<AlertTriage />} />
               <Route path="notebook" element={<Notebook />} />
               <Route path="ask" element={<AskPersonas />} />
-              <Route path="decisions" element={<Placeholder title="Decision Journal" />} />
-              <Route path="insights" element={<Placeholder title="Insight Inbox" />} />
+              <Route path="decisions" element={<DecisionJournal />} />
+              <Route path="insights" element={<InsightInbox />} />
               <Route path="trainer" element={<Placeholder title="AI Trainer Studio" />} />
               <Route path="memory" element={<Placeholder title="Memory Review" />} />
               <Route path="skills" element={<Placeholder title="Skill Coaching" />} />
