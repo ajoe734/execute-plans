@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
@@ -10,9 +10,12 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatCard } from "@/platform/components/StatCard";
-import { useNavigate } from "react-router-dom";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
+import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
+import { ActivityMonitor } from "../components/detail/ActivityMonitor";
+import { MemoryGovernanceQueue } from "../components/detail/MemoryGovernanceQueue";
 
 export const PersonaDetail = () => {
   const { id } = useParams();
@@ -86,23 +89,20 @@ export const PersonaDetail = () => {
             ),
           },
           {
-            value: "memory", label: t("nav.memoryReview"),
-            content: (
-              <Section title={t("nav.memoryReview")}>
-                <div className="space-y-2 text-sm">
-                  {[
-                    { id: "m_01", text: `${p.archetype} prefers low-leverage entries during high-vol regimes.`, src: "memory_review", ts: 6 },
-                    { id: "m_02", text: `Tag risk events on ${p.routedStrategies} routed strategies for follow-up review.`, src: "audit", ts: 24 },
-                    { id: "m_03", text: "Defer rebalance recommendations into the morning UTC window.", src: "operator", ts: 72 },
-                  ].map((m) => (
-                    <div key={m.id} className="p-3 rounded-md bg-muted/50 border border-border">
-                      <div className="text-sm">{m.text}</div>
-                      <div className="text-mono text-[10px] text-muted-foreground mt-1">{m.id} · from {m.src} · {m.ts}h ago</div>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            ),
+            value: "routePolicy", label: t("persona.tabs.routePolicy"),
+            content: <RoutePolicyPreview personaId={p.id} />,
+          },
+          {
+            value: "permissions", label: t("persona.tabs.toolsMcpSkills"),
+            content: <PermissionMatrixEmbed personaId={p.id} />,
+          },
+          {
+            value: "activity", label: t("persona.tabs.activity"),
+            content: <ActivityMonitor scope={p.id} />,
+          },
+          {
+            value: "memory", label: t("persona.tabs.training"),
+            content: <MemoryGovernanceQueue personaId={p.id} />,
           },
           {
             value: "audit", label: t("nav.audit"),
