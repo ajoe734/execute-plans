@@ -53,6 +53,15 @@ import { PersonaLab } from "@/agora/pages/PersonaLab";
 import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
 import { AgoraChannels } from "@/agora/pages/AgoraChannels";
 import { QAChecklist } from "@/platform/pages/QAChecklist";
+import { SettingsPage } from "@/management/pages/phase2/Settings";
+import { LineageExplorerPage } from "@/management/pages/phase2/LineageExplorer";
+import { KnowledgeInboxPage } from "@/management/pages/phase2/KnowledgeInbox";
+import { PostmortemLibraryPage } from "@/management/pages/phase2/PostmortemLibrary";
+import { GovernanceQueuePage } from "@/management/pages/phase2/GovernanceQueue";
+import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard";
+import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
+import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
+import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
