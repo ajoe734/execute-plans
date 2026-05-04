@@ -30,21 +30,19 @@ export const JobsPage = () => {
   }, []);
   return (
     <>
-      <PageHeader title={t("nav.jobs")} subtitle={`Live stream — ${liveCount} new event(s) since page load.`} />
+      <PageHeader title={t("nav.jobs")} subtitle={t("page.jobsSubtitle", { count: liveCount })} />
       <PageBody>
         <DataTable rows={rows} columns={[
-          { key: "id", header: "ID", cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-          { key: "kind", header: "Kind", cell: (r) => r.kind },
-          { key: "status", header: "Status", cell: (r) => <StatusBadge state={r.status} /> },
-          { key: "owner", header: "Owner", cell: (r) => r.owner },
-          { key: "started", header: "Started", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span> },
+          { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+          { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
+          { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+          { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
+          { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span> },
         ]} />
       </PageBody>
     </>
   );
 };
-
-// ─────────── Alerts ───────────
 
 export const AlertsPage = () => {
   const t = useT();
@@ -64,21 +62,21 @@ export const AlertsPage = () => {
     await bff.mutations.acknowledgeAlert(id);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
     setActive((a) => a && a.id === id ? { ...a, acknowledged: true } : a);
-    toast.success(`Alert ${id} acknowledged`);
+    toast.success(t("toast.alertAcknowledged", { id }));
   };
 
   return (
     <>
-      <PageHeader title={t("nav.alerts")} subtitle="Real-time risk and runtime alerts. Acknowledge to claim ownership; escalate to incident if mitigation requires coordination." />
+      <PageHeader title={t("nav.alerts")} subtitle={t("page.alertsSubtitle")} />
       <PageBody>
         <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
-          { key: "sev", header: "Severity", cell: (r) => <RiskBadge level={r.severity} /> },
-          { key: "title", header: "Title", cell: (r) => <div className="font-medium">{r.title}</div> },
-          { key: "src", header: "Source", cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-          { key: "opened", header: "Opened", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
-          { key: "ack", header: "Status", cell: (r) => r.acknowledged ? <span className="text-status-success text-xs">✓ Acknowledged</span> : <span className="text-status-warning text-xs">Open</span> },
+          { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+          { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+          { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+          { key: "ack", header: t("table.status"), cell: (r) => r.acknowledged ? <span className="text-status-success text-xs">✓ {t("table_actions.acknowledged")}</span> : <span className="text-status-warning text-xs">{t("table_actions.open")}</span> },
           { key: "act", header: "", cell: (r) => !r.acknowledged && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ack(r.id); }}>Acknowledge</Button>
+            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ack(r.id); }}>{t("table_actions.acknowledge")}</Button>
           )},
         ]} />
       </PageBody>
@@ -90,26 +88,26 @@ export const AlertsPage = () => {
               <SheetHeader>
                 <div className="flex items-center gap-2 mb-2"><RiskBadge level={active.severity} /><span className="text-mono text-xs text-muted-foreground">{active.id}</span></div>
                 <SheetTitle>{active.title}</SheetTitle>
-                <SheetDescription>{active.description ?? "No additional description."}</SheetDescription>
+                <SheetDescription>{active.description ?? t("empty.noDescription")}</SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
-                  <Field label="Source" value={active.source} mono />
-                  <Field label="Related" value={active.relatedTarget ?? "—"} mono />
-                  <Field label="Metric" value={active.metric ?? "—"} mono />
-                  <Field label="Threshold" value={active.threshold ?? "—"} mono />
-                  <Field label="Observed" value={active.observed ?? "—"} mono />
-                  <Field label="Opened" value={new Date(active.openedAt).toLocaleString()} mono />
+                  <Field label={t("table.source")} value={active.source} mono />
+                  <Field label={t("table.related")} value={active.relatedTarget ?? "—"} mono />
+                  <Field label={t("table.metric")} value={active.metric ?? "—"} mono />
+                  <Field label={t("table.threshold")} value={active.threshold ?? "—"} mono />
+                  <Field label={t("table.observed")} value={active.observed ?? "—"} mono />
+                  <Field label={t("table.opened")} value={new Date(active.openedAt).toLocaleString()} mono />
                 </Card>
                 {active.suggestedAction && (
                   <Card className="p-4">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Suggested Action</div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("section.suggestedAction")}</div>
                     <div className="text-sm">{active.suggestedAction}</div>
                   </Card>
                 )}
                 <div className="flex gap-2">
-                  {!active.acknowledged && <Button onClick={() => ack(active.id)}>Acknowledge</Button>}
-                  <Button variant="outline" onClick={() => toast("Incident escalation queued")}>Escalate to Incident</Button>
+                  {!active.acknowledged && <Button onClick={() => ack(active.id)}>{t("table_actions.acknowledge")}</Button>}
+                  <Button variant="outline" onClick={() => toast(t("table_actions.incidentEscalateQueued"))}>{t("table_actions.escalateIncident")}</Button>
                 </div>
               </div>
             </>
@@ -119,8 +117,6 @@ export const AlertsPage = () => {
     </>
   );
 };
-
-// ─────────── Incidents ───────────
 
 export const IncidentsPage = () => {
   const t = useT();
@@ -133,18 +129,18 @@ export const IncidentsPage = () => {
     await bff.mutations.setIncidentStatus(id, status, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
     setActive((a) => a && a.id === id ? { ...a, status } : a);
-    toast.success(`Incident ${id} → ${status}`);
+    toast.success(t("toast.incidentAdvanced", { id, status }));
   };
 
   return (
     <>
-      <PageHeader title={t("nav.incidents")} subtitle="Coordinated mitigation for production-impacting events. Each incident has a commander and timeline." />
+      <PageHeader title={t("nav.incidents")} subtitle={t("page.incidentsSubtitle")} />
       <PageBody>
         <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
-          { key: "sev", header: "Severity", cell: (r) => <RiskBadge level={r.severity} /> },
-          { key: "title", header: "Title", cell: (r) => <div className="font-medium">{r.title}</div> },
-          { key: "status", header: "Status", cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-          { key: "opened", header: "Opened", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+          { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+          { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+          { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
         ]} />
       </PageBody>
 
@@ -163,11 +159,11 @@ export const IncidentsPage = () => {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
-                  <Field label="Commander" value={active.commander ?? "—"} mono />
-                  <Field label="Affected" value={active.affected?.join(", ") ?? "—"} mono />
+                  <Field label={t("table.commander")} value={active.commander ?? "—"} mono />
+                  <Field label={t("table.affected")} value={active.affected?.join(", ") ?? "—"} mono />
                 </Card>
                 <Card className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Timeline</div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("section.timeline")}</div>
                   <ol className="space-y-2">
                     {(active.timeline ?? []).map((e, i) => (
                       <li key={i} className="text-sm flex gap-3">
@@ -176,20 +172,20 @@ export const IncidentsPage = () => {
                         <span>{e.note}</span>
                       </li>
                     ))}
-                    {(!active.timeline || active.timeline.length === 0) && <li className="text-xs text-muted-foreground">No events yet.</li>}
+                    {(!active.timeline || active.timeline.length === 0) && <li className="text-xs text-muted-foreground">{t("empty.noEvents")}</li>}
                   </ol>
                 </Card>
                 <div className="flex gap-2">
-                  {active.status === "open" && <Button onClick={() => advance(active.id, "mitigating")}>Start Mitigation</Button>}
-                  {active.status !== "resolved" && <Button variant="destructive" onClick={() => setResolveOpen(true)}>Resolve</Button>}
+                  {active.status === "open" && <Button onClick={() => advance(active.id, "mitigating")}>{t("table_actions.startMitigation")}</Button>}
+                  {active.status !== "resolved" && <Button variant="destructive" onClick={() => setResolveOpen(true)}>{t("table_actions.resolve")}</Button>}
                 </div>
               </div>
 
               <HighRiskConfirm
                 open={resolveOpen}
                 onOpenChange={setResolveOpen}
-                title={`Resolve incident — ${active.title}`}
-                description="Mark this incident as resolved. A post-mortem task will be filed automatically."
+                title={t("confirmDialog.resolveIncident", { title: active.title })}
+                description={t("confirmDialog.resolveIncidentDesc")}
                 confirmToken="RESOLVE"
                 onConfirm={() => { advance(active.id, "resolved"); }}
               />
@@ -200,8 +196,6 @@ export const IncidentsPage = () => {
     </>
   );
 };
-
-// ─────────── Approvals ───────────
 
 export const ApprovalsPage = () => {
   const t = useT();
@@ -219,29 +213,29 @@ export const ApprovalsPage = () => {
     else if (state === "rejected") await bff.mutations.reject(id, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
     setActive((a) => a && a.id === id ? { ...a, state } : a);
-    toast.success(`Approval ${id} → ${state}`);
+    toast.success(t("toast.approvalDecided", { id, state }));
   };
 
   return (
     <>
       <PageHeader
         title={t("nav.approvals")}
-        subtitle="Multi-stage governance inbox. High-risk actions require typed confirmation."
+        subtitle={t("page.approvalsSubtitle")}
         actions={
           <div className="flex gap-1">
-            <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>Pending</Button>
-            <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>{t("common.all")}</Button>
+            <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>{t("filter.pending")}</Button>
+            <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>{t("filter.all")}</Button>
           </div>
         }
       />
       <PageBody>
         <DataTable rows={filtered} onRowClick={(r) => setActive(r)} columns={[
-          { key: "kind", header: "Kind", cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-          { key: "subject", header: "Subject", cell: (r) => <div className="font-medium">{r.subject}</div> },
-          { key: "req", header: "Requester", cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
-          { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.riskLevel} /> },
-          { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
-          { key: "created", header: "Created", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
+          { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+          { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+          { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
+          { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+          { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+          { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
         ]} />
       </PageBody>
 
@@ -260,24 +254,24 @@ export const ApprovalsPage = () => {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
-                  <Field label="Requester" value={active.requester} mono />
-                  <Field label="Created" value={new Date(active.createdAt).toLocaleString()} mono />
+                  <Field label={t("table.requester")} value={active.requester} mono />
+                  <Field label={t("table.created")} value={new Date(active.createdAt).toLocaleString()} mono />
                 </Card>
                 {active.rationale && (
                   <Card className="p-4">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Rationale</div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("section.rationale")}</div>
                     <div className="text-sm leading-relaxed">{active.rationale}</div>
                   </Card>
                 )}
                 {active.diffSummary && (
                   <Card className="p-4">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Change Summary</div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("section.changeSummary")}</div>
                     <code className="text-mono text-xs block whitespace-pre-wrap">{active.diffSummary}</code>
                   </Card>
                 )}
                 {active.requiresStages && (
                   <Card className="p-4">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Approval Stages</div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("section.approvalStages")}</div>
                     <div className="flex flex-wrap gap-2">
                       {active.requiresStages.map((s) => (
                         <span key={s} className="text-mono text-xs px-2 py-1 rounded bg-muted">{s}</span>
@@ -296,16 +290,16 @@ export const ApprovalsPage = () => {
               <HighRiskConfirm
                 open={approveOpen}
                 onOpenChange={setApproveOpen}
-                title={`Approve — ${active.subject}`}
-                description={`Approve this ${active.kind} request. This advances to the next stage in the governance workflow.`}
+                title={t("confirmDialog.approveTitle", { subject: active.subject })}
+                description={t("confirmDialog.approveDesc", { kind: active.kind })}
                 confirmToken="APPROVE"
                 onConfirm={() => decide(active.id, "approved")}
               />
               <HighRiskConfirm
                 open={rejectOpen}
                 onOpenChange={setRejectOpen}
-                title={`Reject — ${active.subject}`}
-                description="Reject this request. The requester will be notified and the workflow halts."
+                title={t("confirmDialog.rejectTitle", { subject: active.subject })}
+                description={t("confirmDialog.rejectDesc")}
                 confirmToken="REJECT"
                 destructive
                 onConfirm={() => decide(active.id, "rejected")}
@@ -318,21 +312,19 @@ export const ApprovalsPage = () => {
   );
 };
 
-// ─────────── Audit ───────────
-
 export const AuditPage = () => {
   const t = useT();
   const [rows, setRows] = useState<AuditEvent[]>([]);
   useEffect(() => { bff.audit.list().then(setRows); }, []);
   return (
     <>
-      <PageHeader title={t("nav.audit")} subtitle="Tamper-evident log of every action taken across the platform." />
+      <PageHeader title={t("nav.audit")} subtitle={t("page.auditSubtitle")} />
       <PageBody>
         <DataTable rows={rows} columns={[
-          { key: "ts", header: "Time", cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
-          { key: "actor", header: "Actor", cell: (r) => r.actor },
-          { key: "action", header: "Action", cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-          { key: "tgt", header: "Target", cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
+          { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+          { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
+          { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
+          { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
         ]} />
       </PageBody>
     </>
