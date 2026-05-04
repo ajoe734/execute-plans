@@ -13,6 +13,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { DeploymentStagesPanel } from "@/management/components/detail/DeploymentStagesPanel";
 
 const targetTone = (t: Deployment["target"]) =>
   t === "live" ? "danger" : t === "paper" ? "warning" : "default";
