@@ -108,6 +108,7 @@ export default {
     rollback: "Rollback", suspend: "Suspend", retire: "Retire",
     cancel: "Cancel", confirm: "Confirm", save: "Save",
     reset: "Reset", proposeChange: "Propose change", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
+    back: "Back", submitForReview: "Submit for review",
   },
   confirm: {
     title: "Confirm high-risk action",
