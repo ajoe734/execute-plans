@@ -258,10 +258,11 @@ export const StrategyDetail = () => {
           // ── 6. Incidents ──
           {
             value: "incidents", label: t("nav.incidents"),
-            content: incidents.length ? (
+            content: (
               <DataTable<Incident>
                 rows={incidents}
                 onRowClick={(r) => nav(`/management/incidents/${r.id}`)}
+                empty={t("strategyDetail.noIncidents")}
                 columns={[
                   { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                   { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
@@ -270,7 +271,7 @@ export const StrategyDetail = () => {
                   { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
                 ]}
               />
-            ) : <Placeholder text={t("strategyDetail.noIncidents")} />,
+            ),
           },
 
           // ── 7. Artifacts ──
