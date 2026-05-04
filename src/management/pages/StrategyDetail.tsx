@@ -47,7 +47,7 @@ export const StrategyDetail = () => {
     Promise.all([
       bff.strategies.get(id), bff.jobs.list(), bff.audit.list(),
       bff.approvals.list(), bff.alerts.list(), bff.incidents.list(),
-      bff.artifacts.list(), bff.experiments.list(), bff.evolution.list(),
+      bff.artifacts.list(), bff.research.list(), bff.evolution.list(),
     ]).then(([strat, j, a, ap, al, inc, ar, ex, ev]) => {
       setS(strat); setJobs(j);
       setAudit(a.filter((x) => x.target === id || x.target.includes(id)));
