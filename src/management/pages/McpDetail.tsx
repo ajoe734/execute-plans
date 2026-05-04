@@ -79,8 +79,9 @@ export const McpServerDetail = () => {
             />
           ),
         },
+        { value: "registry", label: t("mcp.tab.registry"), content: <McpRegistryPanel server={s} /> },
+        { value: "activity", label: t("mcp.tab.activity"), content: <ActivityMonitor scope={s.id} /> },
         {
-          value: "health", label: "Health",
           content: (
             <Section title="Runtime health">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
