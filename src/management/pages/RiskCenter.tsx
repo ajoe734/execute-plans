@@ -86,14 +86,14 @@ export const RiskCenter = () => {
               rows={data.pools}
               onRowClick={(r) => navigate(`/management/capital-pools/${r.id}`)}
               columns={[
-                { key: "name", header: t("common.actions"), cell: (r) => <span className="font-medium">{r.name}</span> },
-                { key: "alloc", header: "Allocated", cell: (r) => <span className="text-mono text-xs">{(r.allocated / 1_000_000).toFixed(1)}M {r.currency}</span> },
-                { key: "util", header: "Utilization", cell: (r) => {
+                { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{(r.allocated / 1_000_000).toFixed(1)}M {r.currency}</span> },
+                { key: "util", header: t("table.utilization"), cell: (r) => {
                   const pct = Math.round((r.utilized / r.allocated) * 100);
                   return <span className={`text-mono text-xs ${pct > 90 ? "text-risk-critical" : pct > 75 ? "text-risk-high" : ""}`}>{pct}%</span>;
                 }},
-                { key: "budget", header: "Risk Budget", cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
-                { key: "risk", header: t("common.state"), cell: (r) => <RiskBadge level={r.risk} /> },
+                { key: "budget", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
+                { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
             />
           </TabsContent>
@@ -103,11 +103,11 @@ export const RiskCenter = () => {
               rows={[...data.strategies].sort((a, b) => RISK_WEIGHT[b.risk] - RISK_WEIGHT[a.risk])}
               onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
               columns={[
-                { key: "name", header: "Strategy", cell: (r) => <span className="font-medium">{r.name}</span> },
-                { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                { key: "dd", header: "Drawdown", cell: (r) => <span className={`text-mono text-xs ${r.drawdown < -0.1 ? "text-risk-critical" : ""}`}>{(r.drawdown * 100).toFixed(1)}%</span> },
-                { key: "sharpe", header: "Sharpe", cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
-                { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                { key: "name", header: t("nav.strategies"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className={`text-mono text-xs ${r.drawdown < -0.1 ? "text-risk-critical" : ""}`}>{(r.drawdown * 100).toFixed(1)}%</span> },
+                { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
             />
           </TabsContent>
@@ -117,11 +117,11 @@ export const RiskCenter = () => {
               rows={data.personas}
               onRowClick={(r) => navigate(`/management/personas/${r.id}`)}
               columns={[
-                { key: "name", header: "Persona", cell: (r) => <span className="font-medium">{r.name}</span> },
-                { key: "arch", header: "Archetype", cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
-                { key: "succ", header: "Success Rate", cell: (r) => <span className="text-mono text-xs">{Math.round(r.successRate * 100)}%</span> },
-                { key: "routed", header: "Routed", cell: (r) => r.routedStrategies },
-                { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                { key: "name", header: t("nav.personas"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                { key: "arch", header: t("table.type"), cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
+                { key: "succ", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{Math.round(r.successRate * 100)}%</span> },
+                { key: "routed", header: t("nav.strategies"), cell: (r) => r.routedStrategies },
+                { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
             />
           </TabsContent>
@@ -131,53 +131,53 @@ export const RiskCenter = () => {
               rows={data.runtimes}
               onRowClick={() => navigate("/management/runtimes")}
               columns={[
-                { key: "name", header: "Runtime", cell: (r) => <span className="font-medium">{r.name}</span> },
-                { key: "env", header: "Env", cell: (r) => <span className="text-mono text-xs uppercase">{r.env}</span> },
-                { key: "status", header: t("common.state"), cell: (r) => <StatusBadge state={r.status} /> },
+                { key: "name", header: t("nav.runtimes"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                { key: "env", header: t("table.env"), cell: (r) => <span className="text-mono text-xs uppercase">{r.env}</span> },
+                { key: "status", header: t("table.state"), cell: (r) => <StatusBadge state={r.status} /> },
                 { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{Math.round(r.cpu * 100)}%</span> },
                 { key: "lat", header: "p95", cell: (r) => <span className={`text-mono text-xs ${r.latencyP95Ms > 1000 ? "text-risk-high" : ""}`}>{r.latencyP95Ms}ms</span> },
-                { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{r.uptimePct.toFixed(2)}%</span> },
+                { key: "up", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{r.uptimePct.toFixed(2)}%</span> },
               ]}
             />
           </TabsContent>
 
           <TabsContent value="capability" className="mt-4 space-y-4">
             <Card className="p-3">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Tools</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.tools")}</div>
               <DataTable
                 rows={[...data.tools].sort((a, b) => RISK_WEIGHT[b.risk] - RISK_WEIGHT[a.risk])}
                 onRowClick={(r) => navigate(`/management/tools/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Name", cell: (r) => <span className="font-medium">{r.name}</span> },
-                  { key: "cat", header: "Category", cell: (r) => <span className="text-mono text-xs">{r.category}</span> },
-                  { key: "used", header: "Used By", cell: (r) => r.usedBy },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                  { key: "cat", header: t("table.type"), cell: (r) => <span className="text-mono text-xs">{r.category}</span> },
+                  { key: "used", header: t("section.relatedObjects"), cell: (r) => r.usedBy },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                 ]}
               />
             </Card>
             <Card className="p-3">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">MCP Servers</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.mcp")}</div>
               <DataTable
                 rows={data.mcp}
                 onRowClick={(r) => navigate(`/management/mcp/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Name", cell: (r) => <span className="font-medium">{r.name}</span> },
-                  { key: "health", header: "Health", cell: (r) => <StatusBadge state={r.health} /> },
-                  { key: "tc", header: "Tools", cell: (r) => r.toolCount },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                  { key: "health", header: t("table.status"), cell: (r) => <StatusBadge state={r.health} /> },
+                  { key: "tc", header: t("nav.tools"), cell: (r) => r.toolCount },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                 ]}
               />
             </Card>
             <Card className="p-3">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Skills</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.skills")}</div>
               <DataTable
                 rows={data.skills}
                 onRowClick={(r) => navigate(`/management/skills/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Name", cell: (r) => <span className="font-medium">{r.name}</span> },
-                  { key: "arch", header: "Archetype", cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
-                  { key: "score", header: "Eval", cell: (r) => <span className="text-mono text-xs">{r.evalScore?.toFixed(2) ?? "—"}</span> },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
+                  { key: "arch", header: t("table.type"), cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
+                  { key: "score", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{r.evalScore?.toFixed(2) ?? "—"}</span> },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                 ]}
               />
             </Card>
@@ -188,20 +188,20 @@ export const RiskCenter = () => {
               rows={data.incidents}
               onRowClick={(r) => navigate(`/management/incidents/${r.id}`)}
               columns={[
-                { key: "sev", header: "Severity", cell: (r) => <RiskBadge level={r.severity} /> },
-                { key: "title", header: "Title", cell: (r) => <span className="font-medium">{r.title}</span> },
-                { key: "status", header: "Status", cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-                { key: "opened", header: "Opened", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                { key: "title", header: t("table.title"), cell: (r) => <span className="font-medium">{r.title}</span> },
+                { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+                { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
               ]}
             />
             <DataTable
               rows={data.alerts.filter((a) => !a.acknowledged)}
               onRowClick={() => navigate("/management/alerts")}
               columns={[
-                { key: "sev", header: "Severity", cell: (r) => <RiskBadge level={r.severity} /> },
-                { key: "title", header: "Open Alert", cell: (r) => <span>{r.title}</span> },
-                { key: "src", header: "Source", cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-                { key: "act", header: "", cell: () => <Button size="sm" variant="outline">Open</Button> },
+                { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                { key: "title", header: t("nav.alerts"), cell: (r) => <span>{r.title}</span> },
+                { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+                { key: "act", header: "", cell: () => <Button size="sm" variant="outline">{t("table_actions.open")}</Button> },
               ]}
             />
           </TabsContent>
