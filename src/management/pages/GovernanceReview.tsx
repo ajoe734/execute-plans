@@ -17,6 +17,7 @@ import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 
 type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
@@ -91,15 +92,12 @@ export const GovernanceReview = () => {
             <Field label={t("governance.created")} value={new Date(req.createdAt).toLocaleString()} mono />
             {req.requiresStages && (
               <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("governance.stages")}</div>
-                <ol className="space-y-1">
-                  {req.requiresStages.map((s, i) => (
-                    <li key={s} className="flex items-center gap-2 text-xs">
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-mono ${i === 0 ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"}`}>{i + 1}</span>
-                      <span className={i === 0 ? "font-medium" : "text-muted-foreground"}>{s}</span>
-                    </li>
-                  ))}
-                </ol>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>
+                <ApprovalStagesStepper
+                  stages={req.requiresStages}
+                  currentIndex={req.state === "approved" ? req.requiresStages.length : req.state === "rejected" ? -1 : 0}
+                  i18nPrefix="lifecycle.approval"
+                />
               </div>
             )}
           </Card>
