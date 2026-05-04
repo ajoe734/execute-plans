@@ -46,7 +46,7 @@ export const RankingFormulaDetail = () => {
                   <Field label={t("table.owner")} value={f.owner} mono />
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Expression</div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("ranking.expression")}</div>
                   <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{f.expression}</pre>
                 </div>
               </Section>

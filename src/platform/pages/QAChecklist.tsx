@@ -157,8 +157,8 @@ export const QAChecklist = () => {
         subtitle={`Spec Part 8 acceptance: ${done} / ${total} items complete (${pct}%)`}
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={fillAll}>Mark all</Button>
-            <Button size="sm" variant="outline" onClick={reset}>Reset</Button>
+            <Button size="sm" variant="ghost" onClick={fillAll}>{t("qa.markAll")}</Button>
+            <Button size="sm" variant="outline" onClick={reset}>{t("qa.reset")}</Button>
           </div>
         }
       />

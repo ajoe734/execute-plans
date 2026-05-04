@@ -31,7 +31,7 @@ export const EvolutionDetail = () => {
         subtitle={`Parent: ${e.parentAlpha}`}
         actions={
           <>
-            <Button size="sm" variant="outline"><Play className="h-4 w-4 mr-1" />Resume</Button>
+            <Button size="sm" variant="outline"><Play className="h-4 w-4 mr-1" />{t("evolution.resume")}</Button>
             <Button size="sm" variant="destructive" onClick={() => setStopOpen(true)}>
               <Pause className="h-4 w-4 mr-1" />Stop Program
             </Button>
