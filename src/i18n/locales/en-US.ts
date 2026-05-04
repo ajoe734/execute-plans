@@ -723,7 +723,7 @@ export default {
       current: "Current",
     },
   },
-  
+  handoff: {
   evolution: {
     resume: "Resume",
     tabs: { direction: "Direction", fitness: "Fitness", mutation: "Mutation", runs: "Runs", candidates: "Candidates", promotion: "Promotion" },
