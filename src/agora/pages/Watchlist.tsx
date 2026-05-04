@@ -4,9 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, TrendingUp, TrendingDown, Activity, Eye } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, Activity, Eye, Trash2, ArrowUpDown } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface Ticker {
   symbol: string;
@@ -19,7 +20,7 @@ interface Ticker {
   note?: string;
 }
 
-const seed: Ticker[] = [
+const SEED: Ticker[] = [
   { symbol: "TSM", name: "Taiwan Semi", sector: "Tech", price: 218.42, changePct: 1.84, vol: "12.4M", signal: "bullish", note: "Earnings drift continuing day 3." },
   { symbol: "NVDA", name: "NVIDIA", sector: "Tech", price: 942.10, changePct: -0.62, vol: "48.1M", signal: "neutral" },
   { symbol: "AAPL", name: "Apple", sector: "Tech", price: 232.55, changePct: 0.24, vol: "33.2M", signal: "neutral" },
@@ -29,58 +30,105 @@ const seed: Ticker[] = [
   { symbol: "BTCUSD", name: "Bitcoin", sector: "Crypto", price: 71_240, changePct: -2.31, vol: "—", signal: "bearish", note: "Funding rates flipped negative." },
 ];
 
-export const MarketWatchlist = () => {
-  const t = useT();
-  const [q, setQ] = useState("");
-  const [active, setActive] = useState<Ticker | null>(seed[0]);
+type SortKey = "symbol" | "changePct" | "signal";
 
-  const filtered = useMemo(
-    () => seed.filter((s) => !q || s.symbol.toLowerCase().includes(q.toLowerCase()) || s.name.toLowerCase().includes(q.toLowerCase())),
-    [q]
-  );
+export const Watchlist = () => {
+  const t = useT();
+  const navigate = useNavigate();
+  const [tickers, setTickers] = useState<Ticker[]>(SEED);
+  const [q, setQ] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("changePct");
+  const [active, setActive] = useState<Ticker | null>(SEED[0]);
+
+  const sorted = useMemo(() => {
+    const f = tickers.filter((s) => !q || s.symbol.toLowerCase().includes(q.toLowerCase()) || s.name.toLowerCase().includes(q.toLowerCase()));
+    return [...f].sort((a, b) => {
+      if (sortKey === "symbol") return a.symbol.localeCompare(b.symbol);
+      if (sortKey === "signal") return (a.signal ?? "").localeCompare(b.signal ?? "");
+      return b.changePct - a.changePct;
+    });
+  }, [tickers, q, sortKey]);
 
   const sigCls = (s?: string) =>
     s === "bullish" ? "bg-status-success/15 text-status-success border-status-success/30"
     : s === "bearish" ? "bg-status-failed/15 text-status-failed border-status-failed/30"
     : "bg-muted text-muted-foreground border-border";
 
+  const removeTicker = (symbol: string) => {
+    setTickers((ts) => ts.filter((x) => x.symbol !== symbol));
+    if (active?.symbol === symbol) setActive(null);
+    toast.success(t("agora.watchlist.removed", { symbol }));
+  };
+
+  const pushToTriage = (tk: Ticker) => {
+    toast.success(t("agora.watchlist.pushedToTriage", { symbol: tk.symbol }));
+    setTimeout(() => navigate("/agora/triage"), 600);
+  };
+
   return (
     <>
       <PageHeader
-        title={t("nav.market")}
-        subtitle="Watchlist, regime tags, and qualitative observations. Notes flow into research_note."
-        actions={<Button size="sm"><Plus className="h-4 w-4 mr-1" />{t("agora.market.addTicker")}</Button>}
+        title={t("nav.watchlist")}
+        subtitle={t("agora.watchlist.subtitle")}
+        actions={
+          <Button size="sm" onClick={() => toast.info(t("agora.watchlist.addHint"))}>
+            <Plus className="h-4 w-4 mr-1" />
+            {t("agora.market.addTicker")}
+          </Button>
+        }
       />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="p-3 lg:col-span-1">
-            <div className="relative mb-3">
+            <div className="relative mb-2">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search watchlist…" className="pl-8 h-9" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("agora.watchlist.searchPh")} className="pl-8 h-9" />
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+              {(["changePct", "symbol", "signal"] as SortKey[]).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setSortKey(k)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${sortKey === k ? "bg-accent/15 text-accent" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {t(`agora.watchlist.sort.${k}`)}
+                </button>
+              ))}
             </div>
             <ul className="space-y-1 max-h-[520px] overflow-y-auto">
-              {filtered.map((tk) => (
+              {sorted.map((tk) => (
                 <li key={tk.symbol}>
-                  <button
-                    onClick={() => setActive(tk)}
-                    className={`w-full text-left px-2.5 py-2 rounded-md transition flex items-center gap-3 ${active?.symbol === tk.symbol ? "bg-accent/15 ring-1 ring-accent/30" : "hover:bg-muted"}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-sm">{tk.symbol}</span>
-                        <Badge variant="outline" className={`text-[10px] uppercase ${sigCls(tk.signal)}`}>{tk.signal ?? "—"}</Badge>
+                  <div className="flex items-center group">
+                    <button
+                      onClick={() => setActive(tk)}
+                      className={`flex-1 text-left px-2.5 py-2 rounded-md transition flex items-center gap-3 ${active?.symbol === tk.symbol ? "bg-accent/15 ring-1 ring-accent/30" : "hover:bg-muted"}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-semibold text-sm">{tk.symbol}</span>
+                          <Badge variant="outline" className={`text-[10px] uppercase ${sigCls(tk.signal)}`}>{tk.signal ?? "—"}</Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">{tk.name} · {tk.sector}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">{tk.name} · {tk.sector}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-mono text-xs">{tk.price.toLocaleString()}</div>
-                      <div className={`text-mono text-xs ${tk.changePct >= 0 ? "text-status-success" : "text-status-failed"}`}>
-                        {tk.changePct >= 0 ? "+" : ""}{tk.changePct.toFixed(2)}%
+                      <div className="text-right">
+                        <div className="text-mono text-xs">{tk.price.toLocaleString()}</div>
+                        <div className={`text-mono text-xs ${tk.changePct >= 0 ? "text-status-success" : "text-status-failed"}`}>
+                          {tk.changePct >= 0 ? "+" : ""}{tk.changePct.toFixed(2)}%
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={() => removeTicker(tk.symbol)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-status-failed transition"
+                      aria-label={t("agora.watchlist.remove")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </li>
               ))}
+              {sorted.length === 0 && <li className="text-center text-xs text-muted-foreground py-8">{t("agora.watchlist.empty")}</li>}
             </ul>
           </Card>
 
@@ -133,9 +181,14 @@ export const MarketWatchlist = () => {
                   </div>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => toast.success("Saved to research_note")}>{t("agora.market.captureObservation")}</Button>
-                  <Button size="sm" variant="outline" onClick={() => toast.success("Pushed to Ask Personas")}><Eye className="h-4 w-4 mr-1" />{t("agora.market.askPersonas")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate("/agora/ask")}>
+                    <Eye className="h-4 w-4 mr-1" />{t("agora.market.askPersonas")}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => pushToTriage(active)}>
+                    {t("agora.watchlist.pushTriage")}
+                  </Button>
                 </div>
               </>
             ) : (
