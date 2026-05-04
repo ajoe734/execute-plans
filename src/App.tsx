@@ -31,7 +31,7 @@ import {
 import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
 } from "@/management/pages/Operations";
-import { Placeholder } from "@/platform/components/Placeholder";
+
 import { CommitteeRoom } from "@/agora/pages/CommitteeRoom";
 import { SignalDetail } from "@/agora/pages/SignalDetail";
 import { CommandCenter } from "@/management/pages/CommandCenter";
