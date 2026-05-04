@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/platform/hooks";
-import { Check, X, Edit3, Brain } from "lucide-react";
+import { Check, X, Edit3, Brain, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { useHandoff } from "@/lib/handoff";
 
 interface MemoryCandidate {
   id: string;
@@ -33,6 +34,7 @@ const scopeTone = (s: string) =>
 
 export const MemoryReview = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [items, setItems] = useState<MemoryCandidate[]>(seed);
   const [active, setActive] = useState<MemoryCandidate | null>(seed[0]);
   const [edit, setEdit] = useState("");
@@ -86,6 +88,14 @@ export const MemoryReview = () => {
                 <div className="flex gap-2 mt-5">
                   <Button onClick={() => decide(active.id, "approve")}><Check className="h-4 w-4 mr-1" />{t("memoryReview.approve")}</Button>
                   <Button variant="outline" onClick={() => toast(t("memoryReview.editSaved"))}><Edit3 className="h-4 w-4 mr-1" />{t("memoryReview.saveEdit")}</Button>
+                  <Button variant="outline" onClick={() => openHandoff({
+                    type: "training_feedback",
+                    source: { kind: "MemoryCandidate", id: active.id, label: active.target },
+                    summary: edit || active.proposal,
+                    evidence: [active.evidence, active.source],
+                    priority: active.confidence > 0.8 ? "high" : "normal",
+                    suggestedPersona: active.scope === "persona" ? active.target : "",
+                  })}><ArrowRight className="h-4 w-4 mr-1" />{t("handoff.heading", { defaultValue: "Hand off" })}</Button>
                   <Button variant="ghost" onClick={() => decide(active.id, "reject")}><X className="h-4 w-4 mr-1" />{t("memoryReview.reject")}</Button>
                 </div>
               </>

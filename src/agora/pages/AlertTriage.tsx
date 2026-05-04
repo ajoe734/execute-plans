@@ -10,9 +10,11 @@ import type { Alert } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { toast } from "sonner";
+import { useHandoff } from "@/lib/handoff";
 
 export const AlertTriage = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [active, setActive] = useState<Alert | null>(null);
   const [note, setNote] = useState("");
@@ -108,7 +110,14 @@ export const AlertTriage = () => {
 
                 <div className="flex gap-2">
                   {!active.acknowledged && <Button onClick={() => ack(active.id)}><CheckCircle2 className="h-4 w-4 mr-1" />{t("table_actions.acknowledge")}</Button>}
-                  <Button variant="outline" onClick={() => toast.success("Escalated to incident")}><AlertTriangle className="h-4 w-4 mr-1" />{t("agora.alertTriage.escalate")}</Button>
+                  <Button variant="outline" onClick={() => openHandoff({
+                    type: "alert_escalation",
+                    source: { kind: "Alert", id: active.id, label: active.title },
+                    summary: `Escalate alert: ${active.title}`,
+                    evidence: [active.metric, active.threshold, active.observed].filter(Boolean) as string[],
+                    priority: active.severity === "critical" ? "urgent" : active.severity === "high" ? "high" : "normal",
+                    notes: note,
+                  })}><AlertTriangle className="h-4 w-4 mr-1" />{t("agora.alertTriage.escalate")}</Button>
                   <Button variant="ghost" onClick={() => toast.success("Pushed to Ask Personas")}><MessageSquare className="h-4 w-4 mr-1" />{t("agora.alertTriage.discuss")}</Button>
                 </div>
               </>

@@ -6,11 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { useHandoff } from "@/lib/handoff";
 
 interface Note { id: string; title: string; body: string; ts: string; }
 
 export const Notebook = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -22,6 +24,17 @@ export const Notebook = () => {
     toast.success("research_note saved");
   };
 
+  const handoff = (type: "strategy_idea" | "research_task") => {
+    if (!title.trim()) { toast.error("Add a title first"); return; }
+    openHandoff({
+      type,
+      source: { kind: "ResearchNote", id: `rn_${Date.now().toString(36)}`, label: title },
+      summary: title,
+      notes: body,
+      priority: "normal",
+    });
+  };
+
   return (
     <>
       <PageHeader title={t("nav.notebook")} />
@@ -31,8 +44,8 @@ export const Notebook = () => {
             <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <Textarea placeholder="Capture observations, hypothesis, links…" className="min-h-[200px]" value={body} onChange={(e) => setBody(e.target.value)} />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => toast.success("Converted to strategy_idea")}>→ Strategy Idea</Button>
-              <Button variant="outline" onClick={() => toast.success("Converted to research_task")}>→ Research Task</Button>
+              <Button variant="outline" onClick={() => handoff("strategy_idea")}>→ Strategy Idea</Button>
+              <Button variant="outline" onClick={() => handoff("research_task")}>→ Research Task</Button>
               <Button onClick={add}>{t("actions.save")}</Button>
             </div>
           </Card>
