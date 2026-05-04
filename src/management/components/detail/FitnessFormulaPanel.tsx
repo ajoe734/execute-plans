@@ -6,7 +6,7 @@ import { bff } from "@/lib/bff/client";
 import type { FitnessFormula, MutationRule } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 
-export const FitnessFormulaPanel = () => {
+export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness" | "mutation" }) => {
   const t = useT();
   const [formulas, setFormulas] = useState<FitnessFormula[]>([]);
   const [rules, setRules] = useState<MutationRule[]>([]);
@@ -14,8 +14,11 @@ export const FitnessFormulaPanel = () => {
     bff.fitnessFormulas.list().then(setFormulas);
     bff.mutationRules.list().then(setRules);
   }, []);
+  const showFitness = mode === "all" || mode === "fitness";
+  const showMutation = mode === "all" || mode === "mutation";
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className={mode === "all" ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : "space-y-4"}>
+      {showFitness && (
       <Card className="p-4 space-y-3">
         <div className="text-sm font-semibold">{t("evolution.fitness.title")}</div>
         {formulas.map((f) => (
@@ -30,6 +33,8 @@ export const FitnessFormulaPanel = () => {
         ))}
         {formulas.length === 0 && <div className="text-xs text-muted-foreground">{t("empty.none")}</div>}
       </Card>
+      )}
+      {showMutation && (
       <Card className="p-4 space-y-3">
         <div className="text-sm font-semibold">{t("evolution.mutation.title")}</div>
         {rules.map((r) => (
@@ -46,6 +51,7 @@ export const FitnessFormulaPanel = () => {
         ))}
         {rules.length === 0 && <div className="text-xs text-muted-foreground">{t("empty.none")}</div>}
       </Card>
+      )}
     </div>
   );
 };

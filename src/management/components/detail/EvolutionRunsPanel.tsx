@@ -9,7 +9,7 @@ import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 
-export const EvolutionRunsPanel = ({ programId }: { programId: string }) => {
+export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: string; mode?: "all" | "runs" | "candidates" }) => {
   const t = useT();
   const [runs, setRuns] = useState<EvolutionRun[]>([]);
   const [active, setActive] = useState<string | undefined>();
@@ -27,8 +27,12 @@ export const EvolutionRunsPanel = ({ programId }: { programId: string }) => {
     bff.evolutionCandidates.forRun(active).then(setCands);
   }, [active]);
 
+  const showRuns = mode === "all" || mode === "runs";
+  const showCandidates = mode === "all" || mode === "candidates";
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className={mode === "all" ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : "space-y-4"}>
+      {showRuns && (
       <Card className="p-4 space-y-2">
         <div className="text-sm font-semibold">{t("evolution.runs.title")}</div>
         {runs.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">{t("empty.none")}</div>}
@@ -45,6 +49,8 @@ export const EvolutionRunsPanel = ({ programId }: { programId: string }) => {
           </button>
         ))}
       </Card>
+      )}
+      {showCandidates && (
       <Card className="p-4 space-y-2">
         <div className="text-sm font-semibold">{t("evolution.runs.candidates")}</div>
         {cands.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">{t("empty.none")}</div>}
@@ -65,6 +71,7 @@ export const EvolutionRunsPanel = ({ programId }: { programId: string }) => {
           </div>
         ))}
       </Card>
+      )}
     </div>
   );
 };
