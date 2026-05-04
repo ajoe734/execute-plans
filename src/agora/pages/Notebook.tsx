@@ -25,7 +25,7 @@ export const Notebook = () => {
   };
 
   const handoff = (type: "strategy_idea" | "research_task") => {
-    if (!title.trim()) { toast.error("Add a title first"); return; }
+    if (!title.trim()) { toast.error(t("common.addTitleFirst")); return; }
     openHandoff({
       type,
       source: { kind: "ResearchNote", id: `rn_${Date.now().toString(36)}`, label: title },
