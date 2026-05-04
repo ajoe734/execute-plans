@@ -14,6 +14,8 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
+import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
+import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 
 export const McpServerDetail = () => {
   const { id } = useParams();
@@ -77,6 +79,8 @@ export const McpServerDetail = () => {
             />
           ),
         },
+        { value: "registry", label: t("mcp.tab.registry"), content: <McpRegistryPanel server={s} /> },
+        { value: "activity", label: t("mcp.tab.activity"), content: <ActivityMonitor scope={s.id} /> },
         {
           value: "health", label: "Health",
           content: (

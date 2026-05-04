@@ -24,6 +24,7 @@ import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
+import { StrategyParamsEditor } from "@/management/components/detail/StrategyParamsEditor";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -161,14 +162,7 @@ export const StrategyDetail = () => {
                   </div>
                 </Section>
                 <Section title={t("strategyDetail.params")}>
-                  <DataTable<typeof params[number] & { id: string }>
-                    rows={params.map((p) => ({ ...p, id: p.key }))}
-                    columns={[
-                      { key: "k", header: t("strategyDetail.paramKey"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.key}</code> },
-                      { key: "v", header: t("table.value"), cell: (r) => <span className="text-mono text-sm">{r.value}</span> },
-                      { key: "n", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.note}</span> },
-                    ]}
-                  />
+                  <StrategyParamsEditor strategy={s} initial={params} />
                 </Section>
               </>
             ),

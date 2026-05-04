@@ -14,6 +14,7 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { skillMachine, type SkillState } from "@/lib/stateMachines";
 import { Send, Archive } from "lucide-react";
 import { toast } from "sonner";
+import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 
 export const SkillDetail = () => {
   const { id } = useParams();
@@ -82,6 +83,7 @@ export const SkillDetail = () => {
               </>
             ),
           },
+          { value: "prompt", label: t("skill.tab.prompt"), content: <SkillPromptEditor skill={skill} /> },
           { value: "evals", label: t("skill.evals"), content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

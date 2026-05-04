@@ -200,6 +200,40 @@ export default {
     trainingHint: "輸入此技能的教練範例與記憶候選。",
     auditHint: "技能生命週期稽核。",
     state: { draft: "草稿", published: "已發佈" },
+    tab: { prompt: "提示詞與規格" },
+    prompt: {
+      title: "提示詞與規格",
+      hint: "編輯會建立草稿版本。透過動作列發佈以套用至指派的角色。",
+      lines: "行", chars: "字元", unsaved: "未儲存的變更",
+      saveDraft: "儲存草稿", saved: "草稿已儲存",
+    },
+  },
+  tool: {
+    tab: { schema: "Schema", sandbox: "沙箱", activity: "活動" },
+    schema: { inputs: "輸入參數", output: "輸出 Schema" },
+    sandbox: {
+      hint: "在研究沙箱中執行一次性呼叫。編輯不會影響線上環境。",
+      request: "請求內容（JSON）", response: "回應",
+      run: "在沙箱中執行", executed: "沙箱呼叫完成",
+      invalidJson: "請求內容不是有效的 JSON",
+    },
+  },
+  mcp: {
+    tab: { registry: "註冊", activity: "活動" },
+    registry: {
+      title: "環境授權",
+      hint: "切換哪些環境可呼叫此 MCP 伺服器上的工具。Live 存取需要風險 + 維運雙重核准。",
+      liveWarn: "已啟用 LIVE 存取 — 儲存前請確認雙重核准已歸檔。",
+      saved: "註冊已更新",
+    },
+  },
+  strategy: {
+    params: {
+      title: "參數",
+      hint: "編輯數值以建立草稿版本。送出後將進入治理流程後再行部署。",
+      submit: "送出草稿版本",
+      draftCreated: "草稿版本已排入審核",
+    },
   },
   notifications: {
     title: "通知中心",
