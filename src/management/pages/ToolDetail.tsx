@@ -8,6 +8,8 @@ import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { ToolSchemaPanel, ToolSandboxPanel } from "@/management/components/detail/ToolSchemaPanel";
+import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 
 export const ToolDetail = () => {
   const { id } = useParams();
@@ -49,6 +51,9 @@ export const ToolDetail = () => {
             </>
           ),
         },
+        { value: "schema", label: t("tool.tab.schema"), content: <ToolSchemaPanel tool={tool} /> },
+        { value: "sandbox", label: t("tool.tab.sandbox"), content: <ToolSandboxPanel tool={tool} /> },
+        { value: "activity", label: t("tool.tab.activity"), content: <ActivityMonitor scope={tool.id} /> },
         { value: "consumers", label: t("nav.strategies"), content: (
           <DataTable rows={consumers} onRowClick={(r) => nav(`/management/strategies/${r.id}`)} columns={[
             { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
