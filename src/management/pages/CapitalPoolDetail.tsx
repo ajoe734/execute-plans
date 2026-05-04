@@ -46,15 +46,15 @@ export const CapitalPoolDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-3 gap-4">
-                  <StatCard label="Allocated" value={`${c.currency} ${c.allocated.toLocaleString()}`} />
-                  <StatCard label="Utilized" value={`${c.currency} ${c.utilized.toLocaleString()}`} hint={`${utilizationPct.toFixed(1)}%`} />
-                  <StatCard label="Risk Budget" value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
+                  <StatCard label={t("section.holdings")} value={`${c.currency} ${c.allocated.toLocaleString()}`} />
+                  <StatCard label={t("table.utilization")} value={`${c.currency} ${c.utilized.toLocaleString()}`} hint={`${utilizationPct.toFixed(1)}%`} />
+                  <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
                 </div>
-                <Section title="Utilization">
+                <Section title={t("table.utilization")}>
                   <Progress value={utilizationPct} className="h-2" />
                   <div className="flex justify-between text-xs text-muted-foreground text-mono">
                     <span>0</span>
@@ -65,18 +65,18 @@ export const CapitalPoolDetail = () => {
             ),
           },
           {
-            value: "strategies", label: "Strategies",
+            value: "strategies", label: t("nav.strategies"),
             content: (
               <DataTable
                 rows={strats}
                 onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Strategy", cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "name", header: t("nav.strategies"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                  { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                   { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
                 ]}
-                empty="No strategies in this pool"
+                empty={t("empty.noResults")}
               />
             ),
           },
@@ -86,15 +86,15 @@ export const CapitalPoolDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="VaR (mock)" value={`${c.currency} ${(c.allocated * c.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
-                  <Field label="Risk Budget" value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
-                  <Field label="Headroom" value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
-                  <Field label="Currency" value={c.currency} mono />
+                  <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
+                  <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
+                  <Field label={t("table.value")} value={c.currency} mono />
                 </div>
               </Section>
             ),
           },
-          { value: "rebalance", label: "Rebalance History", content: <Placeholder text="Rebalance history will appear here." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Capital pool audit trail." /> },
+          { value: "rebalance", label: t("section.history"), content: <Placeholder text={t("empty.none")} /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Capital pool audit trail." /> },
         ]}
       />
 
@@ -105,7 +105,7 @@ export const CapitalPoolDetail = () => {
         description="Changing the risk budget will affect every strategy assigned to this pool."
         confirmToken="ADJUST"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success("Risk budget change submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );

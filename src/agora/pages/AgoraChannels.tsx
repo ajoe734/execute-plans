@@ -24,10 +24,7 @@ export const AgoraChannels = () => {
 
   return (
     <>
-      <PageHeader
-        title={t("nav.channels")}
-        subtitle="Notification routes available from Agora. Used by personas and skills to publish briefs, alerts, and digests."
-      />
+      <PageHeader title={t("nav.channels")} subtitle={t("page.channelsSubtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {channels.map((c) => (
@@ -42,16 +39,18 @@ export const AgoraChannels = () => {
                     <Badge variant="outline" className={`text-[10px] uppercase ${kindTone(c.kind)}`}>{c.kind}</Badge>
                   </div>
                   <div className="text-mono text-xs text-muted-foreground truncate mt-0.5">{c.destination}</div>
-                  <div className="text-mono text-[10px] text-muted-foreground mt-1">{c.subscribers} subscribers · filters: {c.filters ?? "all"}</div>
+                  <div className="text-mono text-[10px] text-muted-foreground mt-1">
+                    {t("page.subscribersFmt", { n: c.subscribers, f: c.filters ?? t("common.all") })}
+                  </div>
                   <div className="flex gap-2 mt-3">
-                    <Button size="sm" variant="outline" onClick={() => toast.success("Test message sent")}><Send className="h-3 w-3 mr-1" />Send test</Button>
-                    <Button size="sm" variant="ghost" onClick={() => navigate(`/management/channels/${c.id}`)}><Settings2 className="h-3 w-3 mr-1" />Configure</Button>
+                    <Button size="sm" variant="outline" onClick={() => toast.success(t("table_actions.sendTestSuccess"))}><Send className="h-3 w-3 mr-1" />{t("table_actions.sendTest")}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => navigate(`/management/channels/${c.id}`)}><Settings2 className="h-3 w-3 mr-1" />{t("table_actions.configure")}</Button>
                   </div>
                 </div>
               </div>
             </Card>
           ))}
-          {channels.length === 0 && <Card className="p-8 text-center text-sm text-muted-foreground">No channels configured.</Card>}
+          {channels.length === 0 && <Card className="p-8 text-center text-sm text-muted-foreground">{t("page.noChannels")}</Card>}
         </div>
       </PageBody>
     </>

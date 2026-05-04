@@ -63,7 +63,7 @@ export const AlertTriage = () => {
               <div>
                 <div className="flex items-center gap-2 mb-2 mt-4">
                   <CheckCircle2 className="h-4 w-4 text-status-success" />
-                  <span className="text-xs uppercase tracking-wider font-semibold">Acknowledged</span>
+                  <span className="text-xs uppercase tracking-wider font-semibold">{t("table_actions.acknowledged")}</span>
                 </div>
                 <div className="space-y-2 opacity-70">
                   {ackd.map((a) => (
@@ -107,7 +107,7 @@ export const AlertTriage = () => {
                 />
 
                 <div className="flex gap-2">
-                  {!active.acknowledged && <Button onClick={() => ack(active.id)}><CheckCircle2 className="h-4 w-4 mr-1" />Acknowledge</Button>}
+                  {!active.acknowledged && <Button onClick={() => ack(active.id)}><CheckCircle2 className="h-4 w-4 mr-1" />{t("table_actions.acknowledge")}</Button>}
                   <Button variant="outline" onClick={() => toast.success("Escalated to incident")}><AlertTriangle className="h-4 w-4 mr-1" />Escalate</Button>
                   <Button variant="ghost" onClick={() => toast.success("Pushed to Ask Personas")}><MessageSquare className="h-4 w-4 mr-1" />Discuss</Button>
                 </div>

@@ -124,10 +124,10 @@ export const SignalDetail = () => {
 
               <TabsContent value="market" className="mt-4">
                 <Card className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                  <Field label="Vol regime" value="Mid (VIX 18.4)" mono />
-                  <Field label="Sector beta" value="1.12" mono />
-                  <Field label="Correlation" value="0.42 (SPX)" mono />
-                  <Field label="Liquidity" value="High (ADV 2.1M)" mono />
+                  <Field label={t("table.metric")} value="Mid (VIX 18.4)" mono />
+                  <Field label={t("table.metric")} value="1.12" mono />
+                  <Field label={t("table.metric")} value="0.42 (SPX)" mono />
+                  <Field label={t("table.metric")} value="High (ADV 2.1M)" mono />
                 </Card>
               </TabsContent>
 

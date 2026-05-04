@@ -24,7 +24,7 @@ export const ToolsList = () => {
       basePath="/management/tools"
       extraColumns={[
         { key: "cat", header: "Category", cell: (r) => <span className="text-xs uppercase tracking-wider text-muted-foreground">{r.category}</span> },
-        { key: "ver", header: "Version", cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
         { key: "in", header: "Inputs", cell: (r) => <span className="text-mono text-xs">{r.inputs}</span> },
         { key: "used", header: "Used by", cell: (r) => <span className="text-mono text-xs">{r.usedBy}</span> },
       ]}
@@ -41,7 +41,7 @@ export const McpServersList = () => {
       basePath="/management/mcp"
       extraColumns={[
         { key: "ep", header: "Endpoint", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.endpoint}</span> },
-        { key: "rg", header: "Region", cell: (r) => <span className="text-mono text-xs">{r.region}</span> },
+        { key: "rg", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{r.region}</span> },
         { key: "tc", header: "Tools", cell: (r) => <span className="text-mono text-xs">{r.toolCount}</span> },
         { key: "envs", header: "Envs", cell: (r) => (
           <div className="flex gap-1">
@@ -64,7 +64,7 @@ export const SkillsList = () => {
       basePath="/management/skills"
       extraColumns={[
         { key: "arch", header: "Archetype", cell: (r) => r.archetype },
-        { key: "ver", header: "Version", cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
         { key: "draft", header: "Mode", cell: (r) => <span className={`text-xs uppercase tracking-wider ${r.draft ? "text-status-warning" : "text-status-success"}`}>{r.draft ? "Draft" : "Published"}</span> },
         { key: "eval", header: "Eval", cell: (r) => <span className="text-mono text-xs">{r.evalScore?.toFixed(2) ?? "—"}</span> },
         { key: "use", header: "Personas", cell: (r) => <span className="text-mono text-xs">{r.usedByPersonas}</span> },
@@ -81,10 +81,10 @@ export const ChannelsList = () => {
       loader={() => bff.channels.list()}
       basePath="/management/channels"
       extraColumns={[
-        { key: "kind", header: "Kind", cell: (r) => <span className="text-xs uppercase tracking-wider">{r.kind}</span> },
-        { key: "dst", header: "Destination", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.destination}</span> },
+        { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs uppercase tracking-wider">{r.kind}</span> },
+        { key: "dst", header: t("table.destination"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.destination}</span> },
         { key: "subs", header: "Subs", cell: (r) => <span className="text-mono text-xs">{r.subscribers}</span> },
-        { key: "f", header: "Filters", cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.filters ?? "—"}</code> },
+        { key: "f", header: t("table.filters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.filters ?? "—"}</code> },
       ]}
     />
   );

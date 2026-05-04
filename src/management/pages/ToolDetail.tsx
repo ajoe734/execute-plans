@@ -19,27 +19,27 @@ export const ToolDetail = () => {
       subtitle={`${tool.category} · v${tool.version}`}
       tabs={[
         {
-          value: "overview", label: "Overview",
+          value: "overview", label: t("section.overview"),
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="Category" value={tool.category.toUpperCase()} />
-                <StatCard label="Version" value={tool.version} />
+                <StatCard label={t("table.version")} value={tool.version} />
                 <StatCard label="Inputs" value={tool.inputs} />
                 <StatCard label="Used by" value={tool.usedBy} />
               </div>
-              <Section title="Description">
+              <Section title={t("table.description")}>
                 <p className="text-sm leading-relaxed">{tool.description}</p>
               </Section>
               <Section title="Schema">
                 <Field label="Tool ID" value={tool.id} mono />
-                <Field label="Owner" value={tool.owner} mono />
+                <Field label={t("table.owner")} value={tool.owner} mono />
               </Section>
             </>
           ),
         },
         { value: "consumers", label: "Consumers", content: <Placeholder text="Strategies, personas, and skills using this tool." /> },
-        { value: "audit", label: "Audit", content: <Placeholder text="Tool-level invocation audit log." /> },
+        { value: "audit", label: t("nav.audit"), content: <Placeholder text="Tool-level invocation audit log." /> },
       ]}
     />
   );

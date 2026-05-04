@@ -1,104 +1,95 @@
-## 背景
+## 現況盤點
 
-依先前對照 `.lovable/spec/` 的盤點，目前完成度：表面 ~70%、規格對齊 ~25–30%。本計畫把缺口拆成 Phase 10–15，優先補基礎與高價值缺漏，再補長尾。每個 phase 約 1 個工作批次可收斂。
+跑了一輪 i18n 與規格對照，目前狀況如下：
 
----
+**i18n 字典本身**
+- `en-US` 與 `zh-TW` 各 323 keys，左右對齊（沒有單側缺漏）。
+- 但程式中使用的 key 有 12 個在兩邊都不存在（會 fallback 顯示 key 字串）：
+  - `agree`, `disagree`, `flag`（SignalDetail 動作）
+  - `alert`, `audit`, `data`, `job`（realtime 事件 toast）
+  - `al_500`（疑似錯字 key）
+  - `alert.acknowledge`, `approval.approve`, `approval.reject`, `strategy.promote_live`（mutation toast）
 
-## Phase 10 — Foundation Realignment（基礎修正）
+**真正的問題：硬編碼英文字串**
+共約 22 個頁面含 ≥3 個硬編碼英文字串，前 10 大：
+```
+Operations.tsx           33  Lists.tsx              22
+StrategyDetail.tsx       31  PersonaDetail.tsx      21
+RiskCenter.tsx           28  RebalanceDetail.tsx    20
+McpDetail.tsx            19  SkillDetail.tsx        16
+DeploymentDetail.tsx     16  CapitalPoolDetail.tsx  16
+```
+原因：Phase 13–15 為了趕功能，table headers / tab labels / section titles / toast / placeholder 大量寫死英文，沒回頭走 i18n。在 zh-TW 模式下這些就直接漏出英文，使用者看到的「中文沒出來」就是這個。
 
-對應 spec：Part 1（Master Blueprint）、Part 6（BFF 契約）、Part 7（Component System）。
+**規格對齊缺口（除 i18n 以外）**
+依 spec Part 2/3/4/5 與目前實作對照，仍缺：
 
-範圍：
-- i18n 預設 locale 改為 `zh-TW`；補齊既有頁面缺漏的 key（目標覆蓋 ≥ 80%）。
-- Routing 校正成 spec 命名：
-  - `/management/research` → `/management/experiments`
-  - 補上 `/management/command-center`、`/management/risk-center`、`/agora/committee` 等 placeholder route。
-  - 重設首頁：`/management` → Command Center；`Overview` 變子頁。
-- DTO 補欄位（`src/lib/bff/types.ts`）：
-  - `BaseObject` 新增 `availableActions: string[]`、`labelKey: string`。
-  - 在 `mock/seed.ts` 注入對應資料；client 不變。
-- RBAC hook：新增 `usePermissions()`，依 `role` 過濾 `availableActions`，並在 list/detail action button 套用。
-
-不變更：UI 視覺、現有 Phase 1–9 已完成的元件骨架。
-
----
-
-## Phase 11 — Shell 補件（Right Drawer / Notifications / Jobs / Lineage）
-
-對應 spec：Part 1 §Shell、Part 7 §Shared Components。
-
-範圍：
-- `RightDrawer / Inspector`：可由任何 list row 開啟，顯示 metadata、lineage、最近活動、actions。
-- `NotificationCenter`：TopBar Bell → Sheet，列出 alerts / approvals / jobs，分頁 tabs。
-- `JobProgressDrawer`：底部固定 drawer，顯示 running jobs 與進度（接 `useMockRealtime`）。
-- `LineageGraph`：簡易 DAG（用 SVG 或 dagre-lite），用於 Strategy/Artifact/Deployment 詳情頁。
-- TopBar `Bell` 真正打開 NotificationCenter（目前是空 button）。
-
----
-
-## Phase 12 — HighRiskConfirm 補欄位 + State Machines
-
-對應 spec：Part 7 §HighRiskConfirm（12 欄位）、§State Machines（18 種）。
-
-範圍：
-- `HighRiskConfirm` 補：Operation、Target、CurrentState、NewState、RiskImpact、Affected Scope、Rollback Plan、Approver、Justification（textarea）、Dual-Confirm（live env）、Audit Note、Cooldown timer。改成結構化 props。
-- `src/lib/stateMachine.ts` 拆分為 `stateMachines/` 目錄，補齊 18 種：strategy、persona、capitalPool、rebalance、deployment、experiment、artifact、evolution、tool、mcpServer、mcpTool、skill、channel、incident、approval、alert、runtime、job。每種定義 states / transitions / guards / risk。
-- 在 detail 頁面 action menu 改用 `nextStates(machine, currentState)` 動態產生。
+1. **Strategy lifecycle 完整 8 狀態** (`draft → review → approved → paper → ramp → live → degraded → retired`) — 目前 stateMachines 有定義但 UI 動作菜單未呈現所有合法 transition。
+2. **Rebalance 4 階段工作流** (`propose → simulate → review → apply`) — RebalanceDetail 只有 propose/apply。
+3. **Approval Stages 多階段審批** — GovernanceReview 只有單一決策面板，spec 要求顯示「Stage 1: Risk → Stage 2: Capital → Stage 3: Admin」進度。
+4. **AuditTimeline 共用元件** — spec §3.9 要求獨立元件，目前各頁自繪。
+5. **EntityHeader 共用元件** — spec §3.1 要求 ID/labelKey/risk/state/owner/env 一條 header，目前 PageHeader 不含 entity metadata。
+6. **PermissionAwareButton** — spec §3.6 要求 disabled 時顯示「需要 X 角色」tooltip，目前只是 hide。
+7. **Daily Trading Cockpit 缺 Persona Voices 區塊** (Part 4 §8.1)。
+8. **Memory Review / Skill Coaching / Trainer Studio** 仍是 placeholder-ish（功能淺）。
+9. **Right Drawer 欄位** — spec §4.5 要求 metadata + lineage + recent activity + actions 四區，目前只有 actions。
 
 ---
 
-## Phase 13 — Management 缺漏頁面 ✅
+## Phase 16 計畫
 
-對應 spec：Part 2 / Part 3。
+### 16.1 i18n 全面收斂（最高優先，使用者直接體感）
 
-完成範圍：
-- **Command Center**（`/management/command-center`，亦為 `/management` index）：6 KPI 卡（Live Risk / Open Incidents / Pending Approvals / Running Jobs / Runtime Health / Capital Util）+ Lifecycle bottlenecks 桶 + 待辦審批清單 + Capital exposure bar + Alerts/Incidents 列 + Persona activity + Agora 移交收件匣 + Recent state transitions + Running jobs。
-- **Risk Center**（`/management/risk-center`）：6 KPI + Breach matrix（Domain × Severity）+ 6 個分頁（Capital/Strategy/Persona/Runtime/Capability/Incidents），每個分頁可下鑽至物件詳情。
-- **Incident Detail**（`/management/incidents/:id`）：Summary card + 5 個分頁（Timeline / Affected scope / Root cause / Postmortem / Audit）+ HighRiskConfirm 包裝的 Close（高嚴重需 Postmortem ≥20 字）與 Pause Affected。
-- **Governance Review**（`/management/governance/:id`）：3 欄佈局（Summary / Evidence + Validator / Decision Panel）+ 底部 Audit timeline + 5 種決策（Approve / Reject / Request Changes / Escalate / Freeze）皆走 HighRiskConfirm，risk=critical 額外要求輸入 token。
-- IncidentsPage 列點擊改為跳轉至 IncidentDetail（保留 sheet 為快速預覽 fallback 已移除）。
+a. **補 12 個缺漏 key** 到 `en-US.ts` / `zh-TW.ts`：
+   - `signal.decision.{agree,disagree,flag}`（已存在於 spec 結構，補對應 key）
+   - `realtime.event.{data,job,alert,audit}`
+   - `mutations.{alertAcknowledged,approvalApproved,approvalRejected,strategyPromoteLive}`
+   - 修正 `al_500` 錯字。
 
----
+b. **掃 22 個頁面，把硬編碼英文字串改成 t() 呼叫**：
+   - 新增字典分群：`table.*`（共用 column header：Status/Owner/Updated/Risk/Type…）、`section.*`（Timeline/Rationale/Change Summary/Approval Stages/Suggested Action…）、`toast.*`（共用 toast 訊息）。
+   - 估計新增 ~120 個 key，雙語對齊。
+   - 優先順序：Operations → StrategyDetail → RiskCenter → 其餘 detail 頁。
 
-## Phase 14 — Agora 缺漏頁面 + Handoff ✅
+c. **加 i18n lint script**（`scripts/check-i18n.ts`）：
+   - 列出 `t("...")` 中 key 但字典缺漏。
+   - 列出 `.tsx` 中 `>[A-Z][a-zA-Z ]{3,}<` 的硬編碼字串候選。
+   - 寫進 README，未來新頁面 PR 前可手動跑。
 
-對應 spec：Part 4 §8 / §11、Part 5 §21。
+### 16.2 共用元件補件（spec §3）
 
-完成範圍：
-- **Committee Room**（`/agora/committee` 列表 + `/:sessionId` 詳情）：6 種 template、persona 多選、evidence pack、分輪討論（agree/disagree/neutral）、Vote 統計、Memo 生成與儲存、Submit Memo → governance handoff、Follow-ups（research_task / insight / close session）。
-- **Signal Detail**（`/agora/signals/:id`）：Header summary + 7 個 Tabs（Explanation/Market/Similar/Persona Opinions/Feedback/Research/Audit）+ 右側動作面板（Agree/Disagree/Flag/Ask Persona/Ask Committee/Handoff to research/Open Strategy）。SignalReview 列表加上「Open Detail」連結。
-- **Handoff 機制**：`src/lib/handoff.ts`（zustand store + 8 種 HandoffType + targetRouteFor 對應）+ `HandoffDrawer`（10 欄位：type/source/summary/evidence list/priority/owner/persona/notes，summary 強制 ≥8 字），全域掛載於 PlatformShell。InsightInbox / DecisionJournal / Committee Room / Signal Detail 皆已加上 Handoff 入口；submit 後 toast 含「Open target」可帶 `?from=handoff&handoff={id}` 預填到對應管理頁。
+- `EntityHeader.tsx`：吃 `BaseObject`，渲染 ID + labelKey + StatusBadge + RiskBadge + owner + env + actions。所有 `*Detail.tsx` 改用。
+- `AuditTimeline.tsx`：吃 `AuditEvent[]`，統一樣式（actor avatar + action + target + ts + memo）。Incident/Governance/Strategy 詳情換掉。
+- `PermissionAwareButton.tsx`：包 Button，無權限時 disabled + Tooltip 顯示「需要角色：X」。
 
----
+### 16.3 Workflow 補完整
 
-## Phase 15 — Persistence、Audit、QA 收斂 ✅
+- **Strategy actions menu**：`StrategyDetail` 動作改用 `nextStates(strategyMachine, currentState)` 動態產生（含 ramp / degraded transitions）。
+- **Rebalance 4 階段**：`RebalanceDetail` 補 `simulate` 與 `review` 階段 UI（progress stepper + 各階段的 evidence 區塊）。
+- **Approval Stages**：`GovernanceReview` 加 stepper（Risk → Capital → Admin），每階段顯示 approver、決策、時間。
 
-對應 spec：Part 6 §Mutations、Part 8 §QA。
+### 16.4 規格落差小補
 
-完成項目：
-- ✅ `bff/mutations.ts`：`runAction` / `approve` / `reject` / `acknowledgeAlert` / `setIncidentStatus` / `promoteLive` / `rollback` / `pause`，更新 seed 記憶體狀態並 emit `data` realtime event。
-- ✅ 自動寫入 `auditEvents`：actor=current role、action、target、ts、memo。
-- ✅ Toast-only actions 已替換：Operations (Alerts/Incidents/Approvals)、StrategyDetail、GovernanceReview、IncidentDetail、Persona/CapitalPool/RankingFormula/Rebalance/Deployment/Skill/Mcp/Evolution/Research/ArtifactDetail。
-- ✅ `QAChecklist` 重寫成 spec Part 8 §10–§14 全部 71 項，狀態持久化於 `qa-checklist-v2`。
-- ✅ Vitest 18 測試 pass：state machine transitions、permission gating、mutation → audit 寫入。
-
----
-
-## 技術細節（給工程參考）
-
-- 新增檔案規劃：
-  - `src/lib/permissions.ts`、`src/lib/stateMachines/{entity}.ts`
-  - `src/platform/components/{RightDrawer,NotificationCenter,JobProgressDrawer,LineageGraph}.tsx`
-  - `src/management/pages/{CommandCenter,RiskCenter,IncidentDetail,GovernanceReview}.tsx`
-  - `src/agora/pages/{CommitteeRoom,SignalDetail}.tsx`
-  - `src/lib/bff/mutations.ts`、`src/lib/handoff.ts`
-- 既有檔案調整：`App.tsx`（routing）、`store.ts`（i18n default、role permissions cache）、`HighRiskConfirm.tsx`、`TopBar.tsx`（Bell → NotificationCenter）、`seed.ts`（注入 availableActions/labelKey、可變 state）。
-- 不引入新重量級依賴；LineageGraph 用 SVG 自繪或 `reactflow` 視 bundle 影響再決定（預設不裝）。
+- **Daily Cockpit**：補 Persona Voices 區塊（最近 24h Persona 對市場的關鍵語錄）。
+- **Right Drawer**：補 metadata、lineage（用現有 LineageGraph）、recent activity 三區，不只 actions。
+- **Memory Review / Skill Coaching**：補 spec Part 4 §8.11/§8.12 的核心欄位（Memory diff viewer、Skill rubric 評分），不一定全做但至少資料展示。
 
 ---
 
-## 交付順序建議
+## 技術細節
 
-10 → 11 → 12 → 13 → 14 → 15。10–12 是底座，沒做完 13–15 會堆技術債。若想先看「畫面進度」可把 13 提前到 11 之後，但 12 必須在 15 之前完成。
+- 不引入新依賴。
+- 字典變大但 i18next 仍可接受（單一文件 ~600 lines → ~750）。
+- `EntityHeader` 取代各 detail 頁的 header 區塊；改動 14 個 detail 頁，採批次 line_replace。
+- 保留現有 `PageHeader`（list 頁仍用），新元件只給 detail 頁。
+- 不動 routing、不動 BFF mutations、不動 state machine 定義（只動消費端）。
 
-完成全部後，預期規格對齊度從 ~30% 提升至 ~85%，剩餘 15% 為視覺 polish 與細部互動。
+---
+
+## 交付順序
+
+**16.1 i18n（先做完，立即見效）** → 16.2 共用元件 → 16.3 workflow → 16.4 落差補件。
+
+預期完成後，zh-TW 介面英文殘留 < 5%，spec 對齊度由 ~85% 提升至 ~92%。
+
+要我直接開始 16.1 嗎？或想先聚焦特定頁面（例如使用者目前在的 `/agora/channels` 也是英文，可以納入 16.1 第一批）。

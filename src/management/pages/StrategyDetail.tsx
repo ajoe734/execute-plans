@@ -81,30 +81,30 @@ export const StrategyDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="Alpha" value={s.alpha} mono />
-                  <Field label="Capital Pool" value={s.capitalPoolId} mono />
-                  <Field label="Personas" value={s.personaIds.join(", ")} mono />
-                  <Field label="Updated" value={new Date(s.updatedAt).toLocaleString()} mono />
+                  <Field label={t("nav.capitalPools")} value={s.capitalPoolId} mono />
+                  <Field label={t("nav.personas")} value={s.personaIds.join(", ")} mono />
+                  <Field label={t("table.updated")} value={new Date(s.updatedAt).toLocaleString()} mono />
                 </div>
               </Section>
             ),
           },
           {
-            value: "performance", label: "Performance",
+            value: "performance", label: t("section.performance"),
             content: (
               <div className="grid grid-cols-3 gap-4">
                 <StatCard label="PnL 30d" value={`${(s.pnl30d * 100).toFixed(2)}%`} tone={s.pnl30d >= 0 ? "success" : "danger"} />
-                <StatCard label="Sharpe" value={s.sharpe.toFixed(2)} />
-                <StatCard label="Max Drawdown" value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
+                <StatCard label={t("table.sharpe")} value={s.sharpe.toFixed(2)} />
+                <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
               </div>
             ),
           },
           {
-            value: "lineage", label: "Lineage",
+            value: "lineage", label: t("section.lineage"),
             content: (() => {
               const nodes: LineageNode[] = [
                 { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
@@ -127,38 +127,38 @@ export const StrategyDetail = () => {
             })(),
           },
           {
-            value: "risk", label: "Risk",
-            content: <Placeholder text="Risk dashboards & limits will appear here." />,
+            value: "risk", label: t("table.risk"),
+            content: <Placeholder text={t("empty.none")} />,
           },
           {
-            value: "runtime", label: "Runtime",
+            value: "runtime", label: t("nav.runtimes"),
             content: (
               <DataTable rows={jobs.slice(0, 5)} columns={[
-                { key: "id", header: "Job ID", cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                { key: "kind", header: "Kind", cell: (r) => r.kind },
-                { key: "status", header: "Status", cell: (r) => <StatusBadge state={r.status} /> },
-                { key: "started", header: "Started", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span> },
-              ]} empty="No recent jobs" />
+                { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
+                { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+                { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span> },
+              ]} empty={t("empty.noResults")} />
             ),
           },
           {
-            value: "approvals", label: "Approvals",
+            value: "approvals", label: t("nav.approvals"),
             content: (
               <DataTable rows={approvals} columns={[
-                { key: "kind", header: "Kind", cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-                { key: "subject", header: "Subject", cell: (r) => r.subject },
-                { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
-              ]} empty="No approvals on this strategy" />
+                { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                { key: "subject", header: t("table.subject"), cell: (r) => r.subject },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+              ]} empty={t("empty.noResults")} />
             ),
           },
           {
-            value: "audit", label: "Audit",
+            value: "audit", label: t("nav.audit"),
             content: (
               <DataTable rows={audit} columns={[
-                { key: "ts", header: "Time", cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
-                { key: "actor", header: "Actor", cell: (r) => r.actor },
-                { key: "action", header: "Action", cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-              ]} empty="No audit events" />
+                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+                { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
+                { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
+              ]} empty={t("empty.noResults")} />
             ),
           },
         ]}

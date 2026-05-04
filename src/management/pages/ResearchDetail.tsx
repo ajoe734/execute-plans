@@ -39,13 +39,13 @@ export const ResearchDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Status" value={x.status.toUpperCase()} />
+                  <StatCard label={t("table.status")} value={x.status.toUpperCase()} />
                   <StatCard label={x.metric} value={x.metricValue.toFixed(3)} tone="success" />
-                  <StatCard label="Owner" value={x.owner} />
+                  <StatCard label={t("table.owner")} value={x.owner} />
                   <StatCard label="Artifact" value={x.artifactId ?? "—"} />
                 </div>
                 <Section title="Hypothesis">
@@ -76,7 +76,7 @@ export const ResearchDetail = () => {
             ) : <Placeholder text="No artifacts produced yet." />,
           },
           {
-            value: "params", label: "Parameters",
+            value: "params", label: t("section.parameters"),
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -87,7 +87,7 @@ export const ResearchDetail = () => {
               </Section>
             ),
           },
-          { value: "audit", label: "Audit", content: <Placeholder text="Experiment lifecycle events." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Experiment lifecycle events." /> },
         ]}
       />
 
