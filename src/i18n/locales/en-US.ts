@@ -107,7 +107,7 @@ export default {
     approve: "Approve", reject: "Reject", deploy: "Deploy",
     rollback: "Rollback", suspend: "Suspend", retire: "Retire",
     cancel: "Cancel", confirm: "Confirm", save: "Save",
-    promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
+    reset: "Reset", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
   },
   confirm: {
     title: "Confirm high-risk action",
@@ -469,6 +469,10 @@ export default {
       under_review: "Under review", approved: "Approved", scheduled: "Scheduled",
       applied: "Applied", rolled_back: "Rolled back", cancelled: "Cancelled",
     },
+    evolution: {
+      draft: "Draft", under_review: "Under review", active: "Active",
+      paused: "Paused", completed: "Completed", retired: "Retired",
+    },
     approval: {
       draft: "Draft", submitted: "Submitted", validator_running: "Validating",
       in_review: "In review", approved: "Approved", rejected: "Rejected",
@@ -481,6 +485,10 @@ export default {
     noAction: "No actions available in the current state.",
     confirmTitle: "{{action}} — {{name}}",
     confirmDesc: "Move {{name}} from {{from}} to {{to}}.",
+    tabs: { constraints: "Constraints", overrides: "Overrides", approval: "Approval" },
+    overrides: { increase: "Manual overweight to preserve ranked momentum edge.", decrease: "Manual underweight to reduce drawdown concentration." },
+    sim: { sharpe: "Sharpe", drawdown: "Drawdown", turnover: "Turnover", totalWeight: "Total weight", weights: "Target weights", queued: "Simulation queued", run: "Run simulation" },
+    constraints: { maxWeight: "Single strategy max weight", totalWeight: "Portfolio total weight", expectedDD: "Expected drawdown", turnover: "Turnover budget" },
   },
   confirmDialog: {
     resolveIncident: "Resolve incident — {{title}}",
