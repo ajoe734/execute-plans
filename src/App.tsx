@@ -38,6 +38,8 @@ import { CommandCenter } from "@/management/pages/CommandCenter";
 import { RiskCenter } from "@/management/pages/RiskCenter";
 import { IncidentDetail } from "@/management/pages/IncidentDetail";
 import { GovernanceReview } from "@/management/pages/GovernanceReview";
+import { RoutePoliciesList } from "@/management/pages/governance/RoutePoliciesList";
+import { RoutePolicyDetail } from "@/management/pages/governance/RoutePolicyDetail";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
@@ -111,6 +113,8 @@ const App = () => (
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="incidents/:id" element={<IncidentDetail />} />
               <Route path="governance" element={<GovernanceQueuePage />} />
+              <Route path="governance/policies" element={<RoutePoliciesList />} />
+              <Route path="governance/policies/:id" element={<RoutePolicyDetail />} />
               <Route path="governance/:id" element={<GovernanceReview />} />
               <Route path="knowledge" element={<KnowledgeInboxPage />} />
               <Route path="postmortems" element={<PostmortemLibraryPage />} />
