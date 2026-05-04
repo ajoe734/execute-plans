@@ -39,20 +39,20 @@ export const SkillDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label="Mode" value={skill.draft ? "DRAFT" : "PUBLISHED"} tone={skill.draft ? "warning" : "success"} />
                   <StatCard label="Eval Score" value={skill.evalScore?.toFixed(2) ?? "—"} tone={(skill.evalScore ?? 0) > 0.85 ? "success" : "warning"} />
                   <StatCard label="Used by Personas" value={skill.usedByPersonas} />
-                  <StatCard label="Version" value={skill.version} />
+                  <StatCard label={t("table.version")} value={skill.version} />
                 </div>
                 <Section title="Description">
                   <p className="text-sm leading-relaxed">{skill.description}</p>
                 </Section>
                 <Section title="Metadata">
-                  <Field label="Archetype" value={skill.archetype} mono />
+                  <Field label={t("table.type")} value={skill.archetype} mono />
                   <Field label="Published" value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleString() : "—"} mono />
                 </Section>
               </>
@@ -60,7 +60,7 @@ export const SkillDetail = () => {
           },
           { value: "evals", label: "Evaluations", content: <Placeholder text="Skill evaluation suite results." /> },
           { value: "training", label: "Training Data", content: <Placeholder text="Coaching examples and memory candidates feeding this skill." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Skill lifecycle audit." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Skill lifecycle audit." /> },
         ]}
       />
 

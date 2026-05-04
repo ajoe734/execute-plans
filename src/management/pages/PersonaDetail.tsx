@@ -47,14 +47,14 @@ export const PersonaDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="Archetype" value={p.archetype} />
-                  <Field label="Routed Strategies" value={p.routedStrategies} mono />
-                  <Field label="Success Rate" value={`${(p.successRate * 100).toFixed(0)}%`} mono />
-                  <Field label="Owner" value={p.owner} mono />
+                  <Field label={t("table.type")} value={p.archetype} />
+                  <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
+                  <Field label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} mono />
+                  <Field label={t("table.owner")} value={p.owner} mono />
                 </div>
               </Section>
             ),
@@ -66,37 +66,37 @@ export const PersonaDetail = () => {
                 rows={routed}
                 onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Strategy", cell: (r) => <div className="font-medium">{r.name}</div> },
+                  { key: "name", header: t("nav.strategies"), cell: (r) => <div className="font-medium">{r.name}</div> },
                   { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
-                  { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                 ]}
-                empty="No strategies routed to this persona"
+                empty={t("empty.noResults")}
               />
             ),
           },
           {
-            value: "performance", label: "Performance",
+            value: "performance", label: t("section.performance"),
             content: (
               <div className="grid grid-cols-3 gap-4">
-                <StatCard label="Success Rate" value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
-                <StatCard label="Routed Strategies" value={p.routedStrategies} />
-                <StatCard label="Active Sessions" value={Math.floor(Math.random() * 12)} hint="mock" />
+                <StatCard label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
+                <StatCard label={t("nav.strategies")} value={p.routedStrategies} />
+                <StatCard label={t("section.activity")} value={Math.floor(Math.random() * 12)} hint="mock" />
               </div>
             ),
           },
           {
-            value: "memory", label: "Memory",
+            value: "memory", label: t("nav.memoryReview"),
             content: <Placeholder text="Persona memory snapshots & training data." />,
           },
           {
-            value: "audit", label: "Audit",
+            value: "audit", label: t("nav.audit"),
             content: (
               <DataTable rows={audit} columns={[
-                { key: "ts", header: "Time", cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
-                { key: "actor", header: "Actor", cell: (r) => r.actor },
-                { key: "action", header: "Action", cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-              ]} empty="No audit events" />
+                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+                { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
+                { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
+              ]} empty={t("empty.noResults")} />
             ),
           },
         ]}

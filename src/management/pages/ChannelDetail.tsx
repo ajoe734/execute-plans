@@ -27,14 +27,14 @@ export const ChannelDetail = () => {
       }
       tabs={[
         {
-          value: "overview", label: "Overview",
+          value: "overview", label: t("section.overview"),
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="Kind" value={c.kind.toUpperCase()} />
                 <StatCard label="Subscribers" value={c.subscribers} />
-                <StatCard label="Owner" value={c.owner} />
-                <StatCard label="State" value={c.state} />
+                <StatCard label={t("table.owner")} value={c.owner} />
+                <StatCard label={t("table.state")} value={c.state} />
               </div>
               <Section title="Routing">
                 <Field label="Destination" value={c.destination} mono />
@@ -44,7 +44,7 @@ export const ChannelDetail = () => {
           ),
         },
         { value: "history", label: "Recent Messages", content: <Placeholder text="Last 100 messages routed through this channel." /> },
-        { value: "audit", label: "Audit", content: <Placeholder text="Channel configuration history." /> },
+        { value: "audit", label: t("nav.audit"), content: <Placeholder text="Channel configuration history." /> },
       ]}
     />
   );

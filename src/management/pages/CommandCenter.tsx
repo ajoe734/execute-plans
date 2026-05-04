@@ -245,7 +245,7 @@ export const CommandCenter = () => {
             rows={d.jobs}
             onRowClick={() => navigate("/management/jobs")}
             columns={[
-              { key: "id", header: "ID", cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+              { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
               { key: "kind", header: t("commandCenter.col.kind"), cell: (r) => r.kind },
               { key: "status", header: t("common.state"), cell: (r) => <StatusBadge state={r.status} /> },
               { key: "owner", header: t("common.owner"), cell: (r) => r.owner },

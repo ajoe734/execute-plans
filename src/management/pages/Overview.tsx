@@ -41,9 +41,9 @@ export const ManagementOverview = () => {
               rows={data.alerts}
               onRowClick={() => navigate("/management/alerts")}
               columns={[
-                { key: "sev", header: "Severity", cell: (r) => <RiskBadge level={r.severity} /> },
-                { key: "title", header: "Title", cell: (r) => r.title },
-                { key: "src", header: "Source", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.source}</span> },
+                { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                { key: "title", header: t("table.title"), cell: (r) => r.title },
+                { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.source}</span> },
               ]}
             />
           </div>
@@ -53,10 +53,10 @@ export const ManagementOverview = () => {
               rows={data.approvals}
               onRowClick={() => navigate("/management/approvals")}
               columns={[
-                { key: "kind", header: "Kind", cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-                { key: "subject", header: "Subject", cell: (r) => r.subject },
-                { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.riskLevel} /> },
-                { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
+                { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                { key: "subject", header: t("table.subject"), cell: (r) => r.subject },
+                { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
               ]}
             />
           </div>
@@ -68,10 +68,10 @@ export const ManagementOverview = () => {
             rows={data.jobs}
             onRowClick={() => navigate("/management/jobs")}
             columns={[
-              { key: "id", header: "ID", cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-              { key: "kind", header: "Kind", cell: (r) => r.kind },
-              { key: "status", header: "Status", cell: (r) => <StatusBadge state={r.status} /> },
-              { key: "owner", header: "Owner", cell: (r) => r.owner },
+              { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+              { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
+              { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+              { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
             ]}
           />
         </div>

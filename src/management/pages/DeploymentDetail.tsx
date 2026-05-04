@@ -47,12 +47,12 @@ export const DeploymentDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Target" value={d.target.toUpperCase()} tone={targetTone(d.target)} />
-                  <StatCard label="Version" value={d.version} />
+                  <StatCard label={t("table.target")} value={d.target.toUpperCase()} tone={targetTone(d.target)} />
+                  <StatCard label={t("table.version")} value={d.version} />
                   <StatCard label="Previous" value={d.previousVersion ?? "—"} />
                   <StatCard label="Promoted" value={d.promotedAt ? new Date(d.promotedAt).toLocaleString() : "—"} />
                 </div>
@@ -66,7 +66,7 @@ export const DeploymentDetail = () => {
                     <Field label="Artifact" value={
                       <button className="text-accent hover:underline text-mono" onClick={() => navigate(`/management/artifacts/${d.artifactId}`)}>{d.artifactId}</button>
                     } />
-                    <Field label="Owner" value={d.owner} mono />
+                    <Field label={t("table.owner")} value={d.owner} mono />
                   </div>
                 </Section>
               </>
@@ -74,7 +74,7 @@ export const DeploymentDetail = () => {
           },
           { value: "runtime", label: "Runtime", content: <Placeholder text="Live executor metrics for this deployment." /> },
           { value: "approvals", label: "Approvals", content: <Placeholder text="Promotion and rollback approvals." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Deployment audit trail." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Deployment audit trail." /> },
         ]}
       />
 

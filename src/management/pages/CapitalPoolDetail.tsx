@@ -46,7 +46,7 @@ export const CapitalPoolDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-3 gap-4">
@@ -71,9 +71,9 @@ export const CapitalPoolDetail = () => {
                 rows={strats}
                 onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
                 columns={[
-                  { key: "name", header: "Strategy", cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
-                  { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+                  { key: "name", header: t("nav.strategies"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                  { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                   { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
                 ]}
                 empty="No strategies in this pool"
@@ -94,7 +94,7 @@ export const CapitalPoolDetail = () => {
             ),
           },
           { value: "rebalance", label: "Rebalance History", content: <Placeholder text="Rebalance history will appear here." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Capital pool audit trail." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Capital pool audit trail." /> },
         ]}
       />
 

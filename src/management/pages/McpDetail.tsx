@@ -33,7 +33,7 @@ export const McpServerDetail = () => {
       subtitle={s.endpoint}
       tabs={[
         {
-          value: "overview", label: "Overview",
+          value: "overview", label: t("section.overview"),
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -62,7 +62,7 @@ export const McpServerDetail = () => {
               rows={tools}
               onRowClick={(r) => navigate(`/management/mcp-tools/${r.id}`)}
               columns={[
-                { key: "name", header: "Name", cell: (r) => <div className="font-mono text-xs">{r.name}</div> },
+                { key: "name", header: t("table.name"), cell: (r) => <div className="font-mono text-xs">{r.name}</div> },
                 { key: "scope", header: "Scope", cell: (r) => <span className={`text-xs uppercase tracking-wider ${scopeTone(r.scope)}`}>{r.scope}</span> },
                 { key: "envs", header: "Granted Envs", cell: (r) => (
                   <div className="flex gap-1">
@@ -70,13 +70,13 @@ export const McpServerDetail = () => {
                   </div>
                 )},
                 { key: "calls", header: "Calls 24h", cell: (r) => <span className="text-mono text-xs">{r.callsLast24h.toLocaleString()}</span> },
-                { key: "state", header: "State", cell: (r) => <StatusBadge state={r.state} /> },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
               ]}
               empty="No tools registered on this server."
             />
           ),
         },
-        { value: "audit", label: "Audit", content: <Placeholder text="Per-server invocation log." /> },
+        { value: "audit", label: t("nav.audit"), content: <Placeholder text="Per-server invocation log." /> },
       ]}
     />
   );
@@ -107,14 +107,14 @@ export const McpToolDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label="Scope" value={tool.scope.toUpperCase()} tone={tool.scope === "destructive" ? "danger" : tool.scope === "write" ? "warning" : "success"} />
                   <StatCard label="Calls 24h" value={tool.callsLast24h.toLocaleString()} />
                   <StatCard label="Envs" value={tool.envGrants.length} />
-                  <StatCard label="State" value={tool.state} />
+                  <StatCard label={t("table.state")} value={tool.state} />
                 </div>
                 <Section title="Description">
                   <p className="text-sm leading-relaxed">{tool.description}</p>
@@ -134,7 +134,7 @@ export const McpToolDetail = () => {
               </>
             ),
           },
-          { value: "audit", label: "Audit", content: <Placeholder text="Per-tool invocation log." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Per-tool invocation log." /> },
         ]}
       />
 

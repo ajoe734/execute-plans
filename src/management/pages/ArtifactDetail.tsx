@@ -39,14 +39,14 @@ export const ArtifactDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label="Kind" value={a.kind.toUpperCase()} />
-                  <StatCard label="Version" value={a.version} />
+                  <StatCard label={t("table.version")} value={a.version} />
                   <StatCard label="Size" value={`${a.sizeMb.toLocaleString()} MB`} />
-                  <StatCard label="Owner" value={a.owner} />
+                  <StatCard label={t("table.owner")} value={a.owner} />
                 </div>
                 <Section title="Hash">
                   <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{a.hash}</pre>
@@ -55,7 +55,7 @@ export const ArtifactDetail = () => {
             ),
           },
           {
-            value: "lineage", label: "Lineage",
+            value: "lineage", label: t("section.lineage"),
             content: a.sourceExperimentId ? (
               <Section>
                 <div
@@ -81,13 +81,13 @@ export const ArtifactDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <Field label="Format" value={a.kind === "model" ? "ONNX" : a.kind === "dataset" ? "Parquet" : a.kind === "container" ? "OCI" : "PDF"} mono />
-                  <Field label="Created" value={new Date(a.updatedAt).toLocaleDateString()} mono />
+                  <Field label={t("table.created")} value={new Date(a.updatedAt).toLocaleDateString()} mono />
                   <Field label="License" value="Internal" mono />
                 </div>
               </Section>
             ),
           },
-          { value: "audit", label: "Audit", content: <Placeholder text="Artifact lifecycle events." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Artifact lifecycle events." /> },
         ]}
       />
 

@@ -51,7 +51,7 @@ export const RebalanceDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -75,7 +75,7 @@ export const RebalanceDetail = () => {
                 rows={lines.map((l) => ({ ...l, id: l.strategyId }))}
                 onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)}
                 columns={[
-                  { key: "strat", header: "Strategy", cell: (row) => <div className="font-medium">{row.strategyName}</div> },
+                  { key: "strat", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
                   { key: "cur", header: "Current", cell: (row) => <span className="text-mono text-xs">{(row.currentWeight * 100).toFixed(1)}%</span> },
                   { key: "prop", header: "Proposed", cell: (row) => <span className="text-mono text-xs">{(row.proposedWeight * 100).toFixed(1)}%</span> },
                   { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
@@ -98,7 +98,7 @@ export const RebalanceDetail = () => {
             ),
           },
           { value: "approvals", label: "Approvals", content: <Placeholder text="Pending approvals routed via the rebalance.apply workflow." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Rebalance audit trail." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Rebalance audit trail." /> },
         ]}
       />
 

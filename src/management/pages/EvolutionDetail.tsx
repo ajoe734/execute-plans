@@ -39,7 +39,7 @@ export const EvolutionDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -55,7 +55,7 @@ export const EvolutionDetail = () => {
             ),
           },
           {
-            value: "lineage", label: "Lineage",
+            value: "lineage", label: t("section.lineage"),
             content: (
               <Section>
                 <div className="flex items-center gap-3 text-sm">
@@ -83,7 +83,7 @@ export const EvolutionDetail = () => {
               </Section>
             ),
           },
-          { value: "audit", label: "Audit", content: <Placeholder text="Lifecycle events for this program." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Lifecycle events for this program." /> },
         ]}
       />
 

@@ -37,13 +37,13 @@ export const RankingFormulaDetail = () => {
         }
         tabs={[
           {
-            value: "overview", label: "Overview",
+            value: "overview", label: t("section.overview"),
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <Field label="Applied to" value={`${f.appliedTo} strategies`} mono />
-                  <Field label="State" value={f.state} mono />
-                  <Field label="Owner" value={f.owner} mono />
+                  <Field label={t("table.state")} value={f.state} mono />
+                  <Field label={t("table.owner")} value={f.owner} mono />
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Expression</div>
@@ -54,7 +54,7 @@ export const RankingFormulaDetail = () => {
           },
           { value: "preview", label: "Preview Ranking", content: <Placeholder text="Run a preview ranking against current strategies." /> },
           { value: "history", label: "Version History", content: <Placeholder text="All versions, who edited, and impact." /> },
-          { value: "audit", label: "Audit", content: <Placeholder text="Audit trail for activations and edits." /> },
+          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Audit trail for activations and edits." /> },
         ]}
       />
 
