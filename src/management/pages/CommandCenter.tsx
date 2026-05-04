@@ -248,7 +248,7 @@ export const CommandCenter = () => {
           <DataTable
             rows={agoraIncoming}
             columns={[
-              { key: "risk", header: t("common.state"), cell: (r) => <RiskBadge level={r.risk} /> },
+              { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               { key: "title", header: t("commandCenter.col.signal"), cell: (r) => <span className="font-medium">{r.title}</span> },
               { key: "source", header: t("commandCenter.col.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
               { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleString()}</span> },
