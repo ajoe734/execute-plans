@@ -66,21 +66,21 @@ export const PersonaLab = () => {
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <Card className="lg:col-span-3 p-5 space-y-4">
-            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold">Persona draft</h3></div>
+            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold">{t("agora.personaLab.draft")}</h3></div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Name</label>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.name")}</label>
                 <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Archetype</label>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.archetype")}</label>
                 <Input value={draft.archetype} onChange={(e) => setDraft({ ...draft, archetype: e.target.value })} />
               </div>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">System Prompt</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.systemPrompt")}</label>
               <Textarea
                 value={draft.systemPrompt}
                 onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })}
@@ -89,7 +89,7 @@ export const PersonaLab = () => {
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Skills</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.skills")}</label>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {skills.map((s) => {
                   const on = draft.skills.includes(s.id);
@@ -107,7 +107,7 @@ export const PersonaLab = () => {
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Tools</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.tools")}</label>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {tools.map((tl) => {
                   const on = draft.tools.includes(tl.id);
@@ -125,7 +125,7 @@ export const PersonaLab = () => {
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Memory Routes</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.memoryRoutes")}</label>
               <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
                 {draft.memoryRoutes.map((r) => (
                   <Badge key={r} variant="outline" className="gap-1">
@@ -140,18 +140,18 @@ export const PersonaLab = () => {
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border">
-              <Button variant="outline" onClick={() => toast.success("Persona draft saved")}><Save className="h-4 w-4 mr-1" />Save draft</Button>
-              <Button onClick={() => toast.success("Submitted for review")}>Submit for review</Button>
+              <Button variant="outline" onClick={() => toast.success("Persona draft saved")}><Save className="h-4 w-4 mr-1" />{t("agora.personaLab.saveDraft")}</Button>
+              <Button onClick={() => toast.success("Submitted for review")}>{t("agora.personaLab.submitReview")}</Button>
             </div>
           </Card>
 
           <Card className="lg:col-span-2 p-5 space-y-3">
-            <h3 className="text-sm font-semibold">Test bench</h3>
+            <h3 className="text-sm font-semibold">{t("agora.personaLab.testBench")}</h3>
             <Textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} className="min-h-[80px]" />
             <Button onClick={runTest} className="w-full"><Play className="h-4 w-4 mr-1" />Run</Button>
             {testOutput && (
               <div className="rounded-md bg-muted/40 p-3 text-sm leading-relaxed">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Response</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.personaLab.response")}</div>
                 {testOutput}
               </div>
             )}

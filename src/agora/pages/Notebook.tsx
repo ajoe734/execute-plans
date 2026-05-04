@@ -38,7 +38,7 @@ export const Notebook = () => {
           </Card>
 
           <div className="space-y-3">
-            {notes.length === 0 && <Card className="p-8 text-center text-muted-foreground text-sm">No notes yet.</Card>}
+            {notes.length === 0 && <Card className="p-8 text-center text-muted-foreground text-sm">{t("agora.notebook.empty")}</Card>}
             {notes.map((n) => (
               <Card key={n.id} className="p-4">
                 <div className="font-semibold">{n.title}</div>

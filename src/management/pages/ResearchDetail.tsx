@@ -31,7 +31,7 @@ export const ResearchDetail = () => {
         subtitle={x.id}
         actions={
           <>
-            <Button size="sm" variant="outline"><Beaker className="h-4 w-4 mr-1" />Re-run</Button>
+            <Button size="sm" variant="outline"><Beaker className="h-4 w-4 mr-1" />{t("research.rerun")}</Button>
             <Button size="sm" onClick={() => setPromoteOpen(true)}>
               <Package className="h-4 w-4 mr-1" />Promote to Strategy
             </Button>

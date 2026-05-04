@@ -31,7 +31,7 @@ export const ArtifactDetail = () => {
         subtitle={`${a.kind} · v${a.version}`}
         actions={
           <>
-            <Button size="sm" variant="outline"><Download className="h-4 w-4 mr-1" />Download</Button>
+            <Button size="sm" variant="outline"><Download className="h-4 w-4 mr-1" />{t("artifact.download")}</Button>
             <Button size="sm" variant="destructive" onClick={() => setRetireOpen(true)}>
               <Trash2 className="h-4 w-4 mr-1" />Retire
             </Button>
@@ -63,7 +63,7 @@ export const ArtifactDetail = () => {
                   onClick={() => navigate(`/management/research/${a.sourceExperimentId}`)}
                 >
                   <div>
-                    <div className="text-xs uppercase text-muted-foreground">Source experiment</div>
+                    <div className="text-xs uppercase text-muted-foreground">{t("artifact.sourceExperiment")}</div>
                     <div className="text-mono text-sm">{a.sourceExperimentId}</div>
                   </div>
                   <span className="text-xs text-muted-foreground">View →</span>

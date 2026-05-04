@@ -118,13 +118,13 @@ export const SignalReview = () => {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Size</div><div className="text-mono text-sm">{(active.size * 100).toFixed(2)}%</div></div>
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Conviction</div><div className="text-mono text-sm">{(active.conviction * 100).toFixed(0)}%</div></div>
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Alpha</div><div className="text-mono text-sm">{active.alpha}</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.size")}</div><div className="text-mono text-sm">{(active.size * 100).toFixed(2)}%</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.signalReview.conviction")}</div><div className="text-mono text-sm">{(active.conviction * 100).toFixed(0)}%</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.signalReview.alpha")}</div><div className="text-mono text-sm">{active.alpha}</div></div>
                 </div>
 
                 <div className="rounded-md bg-muted/50 p-3 text-sm leading-relaxed mb-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Rationale</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.signalReview.rationale")}</div>
                   {active.rationale}
                 </div>
 
@@ -136,14 +136,14 @@ export const SignalReview = () => {
                 />
 
                 <div className="flex gap-2 flex-wrap">
-                  <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />Approve</Button>
-                  <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />Reject</Button>
-                  <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />Flag for review</Button>
-                  <Button variant="outline" className="ml-auto" onClick={() => navigate(`/agora/signals/${active.id}`)}>Open Detail <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                  <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />{t("agora.signalReview.approve")}</Button>
+                  <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />{t("agora.signalReview.reject")}</Button>
+                  <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />{t("agora.signalReview.flagReview")}</Button>
+                  <Button variant="outline" className="ml-auto" onClick={() => navigate(`/agora/signals/${active.id}`)}>{t("agora.signalReview.openDetail")} <ArrowRight className="h-4 w-4 ml-1" /></Button>
                 </div>
               </>
             ) : (
-              <div className="text-center text-muted-foreground py-12 text-sm">Select a signal.</div>
+              <div className="text-center text-muted-foreground py-12 text-sm">{t("agora.signalReview.selectSignal")}</div>
             )}
           </Card>
         </div>

@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Check, Circle } from "lucide-react";
+import { useT } from "@/platform/hooks";
 
 type Item = { id: string; label: string; detail?: string };
 type Section = { id: string; title: string; items: Item[] };
@@ -127,6 +128,7 @@ const SECTIONS: Section[] = [
 const STORAGE_KEY = "qa-checklist-v2";
 
 export const QAChecklist = () => {
+  const t = useT();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); } catch { return {}; }
   });
@@ -157,8 +159,8 @@ export const QAChecklist = () => {
         subtitle={`Spec Part 8 acceptance: ${done} / ${total} items complete (${pct}%)`}
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={fillAll}>Mark all</Button>
-            <Button size="sm" variant="outline" onClick={reset}>Reset</Button>
+            <Button size="sm" variant="ghost" onClick={fillAll}>{t("qa.markAll")}</Button>
+            <Button size="sm" variant="outline" onClick={reset}>{t("qa.reset")}</Button>
           </div>
         }
       />

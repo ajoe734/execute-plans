@@ -49,7 +49,7 @@ export const MarketWatchlist = () => {
       <PageHeader
         title={t("nav.market")}
         subtitle="Watchlist, regime tags, and qualitative observations. Notes flow into research_note."
-        actions={<Button size="sm"><Plus className="h-4 w-4 mr-1" />Add ticker</Button>}
+        actions={<Button size="sm"><Plus className="h-4 w-4 mr-1" />{t("agora.market.addTicker")}</Button>}
       />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -113,16 +113,16 @@ export const MarketWatchlist = () => {
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="rounded-md border border-border p-2">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Volume</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.market.volume")}</div>
                     <div className="text-mono text-sm">{active.vol}</div>
                   </div>
                   <div className="rounded-md border border-border p-2">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Sector</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.market.sector")}</div>
                     <div className="text-sm">{active.sector}</div>
                   </div>
                   <div className="rounded-md border border-border p-2">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Regime</div>
-                    <div className="text-sm">Risk-on</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.market.regime")}</div>
+                    <div className="text-sm">{t("agora.market.riskOn")}</div>
                   </div>
                 </div>
 
@@ -134,12 +134,12 @@ export const MarketWatchlist = () => {
                 )}
 
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => toast.success("Saved to research_note")}>Capture observation</Button>
-                  <Button size="sm" variant="outline" onClick={() => toast.success("Pushed to Ask Personas")}><Eye className="h-4 w-4 mr-1" />Ask Personas</Button>
+                  <Button size="sm" onClick={() => toast.success("Saved to research_note")}>{t("agora.market.captureObservation")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => toast.success("Pushed to Ask Personas")}><Eye className="h-4 w-4 mr-1" />{t("agora.market.askPersonas")}</Button>
                 </div>
               </>
             ) : (
-              <div className="text-center text-muted-foreground py-12 text-sm">Select a ticker.</div>
+              <div className="text-center text-muted-foreground py-12 text-sm">{t("agora.market.selectTicker")}</div>
             )}
           </Card>
         </div>

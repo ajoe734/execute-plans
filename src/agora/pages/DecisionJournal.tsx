@@ -76,7 +76,7 @@ export const DecisionJournal = () => {
       <PageHeader
         title={t("nav.decisions")}
         subtitle="Long-form record of judgment calls. Used to coach AI personas and reflect on operator skill."
-        actions={!creating && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4 mr-1" />New decision</Button>}
+        actions={!creating && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4 mr-1" />{t("agora.decisionJournal.newDecision")}</Button>}
       />
       <PageBody>
         {creating && (
@@ -107,15 +107,15 @@ export const DecisionJournal = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Context</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.decisionJournal.context")}</div>
                   <p className="text-sm leading-relaxed">{d.context}</p>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Decision</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.decisionJournal.decision")}</div>
                   <p className="text-sm leading-relaxed">{d.decision}</p>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Rationale</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.decisionJournal.rationale")}</div>
                   <p className="text-sm leading-relaxed">{d.rationale}</p>
                 </div>
               </div>
@@ -130,7 +130,7 @@ export const DecisionJournal = () => {
                   type: "insight",
                   source: { kind: "Decision", id: d.id, label: d.title },
                   summary: d.title, notes: `${d.context}\n\nDecision: ${d.decision}\nRationale: ${d.rationale}`,
-                })}><Send className="h-4 w-4 mr-1" />Handoff</Button>
+                })}><Send className="h-4 w-4 mr-1" />{t("agora.decisionJournal.handoff")}</Button>
               </div>
             </Card>
           ))}

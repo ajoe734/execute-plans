@@ -55,7 +55,7 @@ export const AlertTriage = () => {
                     <div className="text-mono text-[10px] text-muted-foreground mt-1">{new Date(a.openedAt).toLocaleString()}</div>
                   </Card>
                 ))}
-                {open.length === 0 && <Card className="p-4 text-center text-xs text-muted-foreground">All clear.</Card>}
+                {open.length === 0 && <Card className="p-4 text-center text-xs text-muted-foreground">{t("agora.alertTriage.allClear")}</Card>}
               </div>
             </div>
 
@@ -87,14 +87,14 @@ export const AlertTriage = () => {
                 <p className="text-sm text-muted-foreground mb-4">{active.description ?? "No additional detail."}</p>
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Metric</div><div className="text-mono text-sm">{active.metric ?? "—"}</div></div>
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Threshold</div><div className="text-mono text-sm">{active.threshold ?? "—"}</div></div>
-                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Observed</div><div className="text-mono text-sm">{active.observed ?? "—"}</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.metric")}</div><div className="text-mono text-sm">{active.metric ?? "—"}</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.threshold")}</div><div className="text-mono text-sm">{active.threshold ?? "—"}</div></div>
+                  <div className="rounded-md border p-2"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.observed")}</div><div className="text-mono text-sm">{active.observed ?? "—"}</div></div>
                 </div>
 
                 {active.suggestedAction && (
                   <div className="rounded-md bg-muted/50 p-3 text-sm mb-4">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Suggested Action</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.alertTriage.suggestedAction")}</div>
                     {active.suggestedAction}
                   </div>
                 )}
@@ -108,12 +108,12 @@ export const AlertTriage = () => {
 
                 <div className="flex gap-2">
                   {!active.acknowledged && <Button onClick={() => ack(active.id)}><CheckCircle2 className="h-4 w-4 mr-1" />{t("table_actions.acknowledge")}</Button>}
-                  <Button variant="outline" onClick={() => toast.success("Escalated to incident")}><AlertTriangle className="h-4 w-4 mr-1" />Escalate</Button>
-                  <Button variant="ghost" onClick={() => toast.success("Pushed to Ask Personas")}><MessageSquare className="h-4 w-4 mr-1" />Discuss</Button>
+                  <Button variant="outline" onClick={() => toast.success("Escalated to incident")}><AlertTriangle className="h-4 w-4 mr-1" />{t("agora.alertTriage.escalate")}</Button>
+                  <Button variant="ghost" onClick={() => toast.success("Pushed to Ask Personas")}><MessageSquare className="h-4 w-4 mr-1" />{t("agora.alertTriage.discuss")}</Button>
                 </div>
               </>
             ) : (
-              <div className="text-center text-muted-foreground py-12 text-sm">No alert selected.</div>
+              <div className="text-center text-muted-foreground py-12 text-sm">{t("agora.alertTriage.noAlertSelected")}</div>
             )}
           </Card>
         </div>
