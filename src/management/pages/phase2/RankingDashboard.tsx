@@ -95,7 +95,7 @@ export const RankingDashboardPage = () => {
                         </tr>
                       ))}
                       <tr className="border-t border-border">
-                        <td colSpan={3} className="py-1.5 text-right text-xs text-muted-foreground">Total</td>
+                        <td colSpan={3} className="py-1.5 text-right text-xs text-muted-foreground">{t("section.total")}</td>
                         <td className="text-right text-mono text-sm font-bold">{active.score.toFixed(3)}</td>
                       </tr>
                     </tbody>
