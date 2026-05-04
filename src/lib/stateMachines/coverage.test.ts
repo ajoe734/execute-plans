@@ -51,16 +51,19 @@ describe("state machine coverage (Part 7 §17)", () => {
     }
   });
 
-  it("rebalance follows the documented 4-stage canonical order", () => {
-    // proposed → simulated → reviewed → applied
-    expect(canTransition(rebalanceMachine, "proposed" as any, "simulated" as any)).toBe(true);
-    expect(canTransition(rebalanceMachine, "simulated" as any, "reviewed" as any)).toBe(true);
-    expect(canTransition(rebalanceMachine, "reviewed" as any, "applied" as any)).toBe(true);
+  it("rebalance covers the canonical 9-stage workflow", () => {
+    const order = ["draft", "metrics_freezing", "metrics_frozen",
+      "ranking_calculated", "simulation_ready", "under_review",
+      "approved", "scheduled", "applied"] as const;
+    for (let i = 0; i < order.length - 1; i++) {
+      expect(canTransition(rebalanceMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+    }
   });
 
-  it("incident: open → mitigated → resolved is a valid path", () => {
-    expect(canTransition(incidentMachine, "open" as any, "mitigated" as any)).toBe(true);
-    expect(canTransition(incidentMachine, "mitigated" as any, "resolved" as any)).toBe(true);
+  it("incident: assigned → investigating → mitigation → mitigated path", () => {
+    expect(canTransition(incidentMachine, "assigned" as any, "investigating" as any)).toBe(true);
+    expect(canTransition(incidentMachine, "investigating" as any, "mitigation_in_progress" as any)).toBe(true);
+    expect(canTransition(incidentMachine, "mitigation_in_progress" as any, "mitigated" as any)).toBe(true);
   });
 
   it("nextStates is a subset of nextTransitions targets", () => {
