@@ -522,7 +522,21 @@ export default {
       askPersonas: "Ask Personas",
       selectTicker: "Select a ticker.",
     },
-    notebook: { empty: "No notes yet." },
+    markets: {
+      subtitle: "Market overview, sector heatmap, and macro regime context.",
+      regime: "Macro regime", heatmap: "Sector heatmap", clearFilter: "Clear filter", topMovers: "Top movers",
+    },
+    watchlist: {
+      subtitle: "Personal watchlist with signal triage handoff.",
+      searchPh: "Search ticker or name", addHint: "Ticker add flow queued for review.", remove: "Remove ticker",
+      removed: "{{symbol}} removed from watchlist", pushedToTriage: "{{symbol}} pushed to triage", empty: "No tickers match.",
+      pushTriage: "Push to triage", sort: { changePct: "Move", symbol: "Symbol", signal: "Signal" },
+    },
+    notebook: {
+      empty: "No notes yet.", titlePh: "Title", bodyPh: "Capture observations, hypothesis, links…",
+      tagsPh: "Tags, comma-separated", artifactPh: "Linked artifact id", convertResearch: "Convert to research task",
+      queued: "Research task queued via {{id}}",
+    },
     personaLab: {
       draft: "Persona draft", archetype: "Archetype", systemPrompt: "System Prompt",
       skills: "Skills", tools: "Tools", memoryRoutes: "Memory Routes",
