@@ -64,6 +64,10 @@ export const ArtifactDetail = () => {
             ),
           },
           {
+            value: "diff", label: t("artifact.tab.diff"),
+            content: <ArtifactDiffPanel artifact={a} />,
+          },
+          {
             value: "lineage", label: t("section.lineage"),
             content: a.sourceExperimentId ? (
               <Section>
@@ -79,6 +83,10 @@ export const ArtifactDetail = () => {
                 </div>
               </Section>
             ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No upstream experiment recorded.</div></Section>,
+          },
+          {
+            value: "rollback", label: t("artifact.tab.rollback"),
+            content: <ArtifactRollbackPanel artifact={a} />,
           },
           {
             value: "consumers", label: t("nav.deployments"),
