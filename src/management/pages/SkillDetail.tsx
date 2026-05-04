@@ -4,7 +4,6 @@ import { bff } from "@/lib/bff/client";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
-void Placeholder;
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
