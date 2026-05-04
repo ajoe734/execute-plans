@@ -571,17 +571,6 @@ export default {
     incident: "Incident", author: "Author", resolved: "Resolved",
     rootCause: "Root cause", impact: "Impact", followUps: "Follow-ups",
   },
-  governance: {
-    notFound: "Approval request not found",
-    notFoundHint: "It may have been resolved, withdrawn, or archived.",
-    summary: "Request", kind: "Type", requester: "Requester", created: "Created",
-    stages: "Approval stages", rationale: "Rationale", diff: "Change summary",
-    evidence: "Evidence & validator results", auditTimeline: "Audit timeline",
-    memoRequired: "All decisions require a memo. High-risk decisions also need a typed token.",
-    alreadyDecided: "Already {{state}}.",
-    queueSubtitle: "Pending governance reviews split from the Approvals inbox. Click to open the review surface.",
-    decision: { title: "Decision", approve: "Approve", reject: "Reject", request_changes: "Request changes", escalate: "Escalate", freeze: "Freeze target" },
-  },
   rankingDashboard: {
     subtitle: "Performance ranking by formula, with click-through score breakdown.",
     score: "Score", breakdown: "Score breakdown", openStrategy: "Open strategy",
