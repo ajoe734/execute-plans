@@ -409,6 +409,7 @@ export default {
     relatedObjects: "關聯物件", participants: "參與者",
     discussion: "討論", vote: "投票", memo: "Memo",
     members: "成員", followUps: "後續行動", auditLog: "稽核日誌",
+    simulation: "模擬", weight: "權重", contribution: "貢獻度", total: "合計",
   },
   table_actions: {
     acknowledge: "確認", acknowledged: "已確認", open: "未處理",
