@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { ArtifactDiffPanel } from "@/management/components/detail/ArtifactDiffPanel";
+import { ArtifactRollbackPanel } from "@/management/components/detail/ArtifactRollbackPanel";
 
 export const ArtifactDetail = () => {
   const { id } = useParams();
