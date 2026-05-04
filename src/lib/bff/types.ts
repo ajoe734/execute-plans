@@ -219,3 +219,109 @@ export interface Channel extends BaseObject {
   subscribers: number;
   filters?: string;
 }
+
+// ----- Phase 9: governance / studio surfaces -----
+
+export type RouteTargetKind = "tool" | "mcp" | "skill";
+
+export interface RoutePolicyRule {
+  id: string;
+  intent: string;            // "research", "execute_order", "summarize", ...
+  targetKind: RouteTargetKind;
+  targetId: string;          // tl_*/mcp_*/sk_*
+  envScope: ("research" | "paper" | "live")[];
+  priority: number;          // lower = first
+  guard?: string;            // optional natural-language constraint
+}
+
+export interface RoutePolicy extends BaseObject {
+  personaId: string;
+  version: string;           // v1, v2
+  rules: RoutePolicyRule[];
+  publishedAt?: string;
+}
+
+export interface PolicyVersion {
+  id: string;
+  policyId: string;
+  version: string;
+  rules: RoutePolicyRule[];
+  author: string;
+  createdAt: string;
+  note?: string;
+}
+
+export type PermissionInstance = "persona-tool" | "persona-mcp" | "persona-skill" | "persona-lifecycle";
+export type PermissionGrant = "none" | "read" | "use" | "manage";
+
+export interface PermissionCell {
+  rowId: string;             // persona id
+  colId: string;             // tool/mcp/skill/action id
+  grant: PermissionGrant;
+  envScope?: ("research" | "paper" | "live")[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface PermissionMatrix {
+  instance: PermissionInstance;
+  rows: { id: string; label: string }[];
+  cols: { id: string; label: string; risk?: RiskLevel }[];
+  cells: PermissionCell[];
+}
+
+export interface MemoryUpdate {
+  id: string;
+  personaId: string;
+  kind: "fact" | "preference" | "skill_pref" | "redaction";
+  source: "operator" | "signal_feedback" | "decision_log" | "evaluation";
+  proposedBy: string;
+  proposedAt: string;
+  state: "queued" | "approved" | "rejected" | "merged" | "conflict";
+  before?: string;
+  after: string;
+  conflictWith?: string;     // memoryUpdate id
+}
+
+export interface EvolutionRun {
+  id: string;
+  programId: string;
+  generation: number;
+  startedAt: string;
+  finishedAt?: string;
+  status: RunState;
+  bestFitness: number;
+  candidates: number;
+}
+
+export interface EvolutionCandidate {
+  id: string;
+  runId: string;
+  fitness: number;
+  parents: string[];
+  mutationsApplied: string[];
+  state: "scored" | "promoted" | "discarded";
+}
+
+export interface FitnessFormula extends BaseObject {
+  expression: string;        // e.g. 0.6*sharpe - 0.3*|dd| + 0.1*capacity
+  metrics: string[];         // referenced metric ids
+  appliedTo: number;
+}
+
+export interface MutationRule extends BaseObject {
+  scope: "param" | "structure" | "feature";
+  expression: string;
+  rateBps: number;           // mutation rate in basis points
+  enabled: boolean;
+}
+
+export interface AllocationSimulation {
+  id: string;
+  rebalanceId: string;
+  weights: { strategyId: string; weight: number }[];
+  expectedSharpe: number;
+  expectedDrawdown: number;
+  capacityUsed: number;
+  createdAt: string;
+}
