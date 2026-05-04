@@ -5,7 +5,7 @@ import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
 import { Pause, Edit } from "lucide-react";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
