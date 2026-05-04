@@ -78,6 +78,7 @@ export default {
     workflowTemplates: "工作流模板",
     hooks: "排程與 Hook",
     alphaFactory: "Alpha 工廠",
+    studios: "Studios",
   },
   groups: {
     overview: "總覽",
