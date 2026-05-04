@@ -35,7 +35,7 @@ export const AgoraLayout = () => {
   return (
     <>
       <SideNav groups={groups} />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 min-w-0">
         <Outlet />
       </main>
     </>
