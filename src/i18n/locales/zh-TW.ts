@@ -102,7 +102,7 @@ export default {
     approve: "核准", reject: "駁回", deploy: "部署",
     rollback: "回滾", suspend: "暫停", retire: "退役",
     cancel: "取消", confirm: "確認", save: "儲存",
-    promoteLive: "升級至 Live", applyRebalance: "套用調倉",
+    reset: "重設", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
   },
   confirm: {
     title: "高風險動作確認",
@@ -461,6 +461,10 @@ export default {
       under_review: "審查中", approved: "已核准", scheduled: "已排程",
       applied: "已套用", rolled_back: "已回滾", cancelled: "已取消",
     },
+    evolution: {
+      draft: "草稿", under_review: "審查中", active: "啟用中",
+      paused: "暫停", completed: "完成", retired: "退役",
+    },
     approval: {
       draft: "草稿", submitted: "已送出", validator_running: "驗證中",
       in_review: "審查中", approved: "已核准", rejected: "已駁回",
@@ -473,6 +477,10 @@ export default {
     noAction: "目前狀態無可執行動作。",
     confirmTitle: "{{action}} — {{name}}",
     confirmDesc: "將 {{name}} 從 {{from}} 推進至 {{to}}。",
+    tabs: { constraints: "限制檢查", overrides: "手動覆寫", approval: "審批" },
+    overrides: { increase: "手動加碼以保留排序後的動能優勢。", decrease: "手動降碼以降低回撤集中度。" },
+    sim: { sharpe: "Sharpe", drawdown: "回撤", turnover: "換手率", totalWeight: "總權重", weights: "目標權重", queued: "模擬已排入", run: "執行模擬" },
+    constraints: { maxWeight: "單一策略最高權重", totalWeight: "組合總權重", expectedDD: "預期回撤", turnover: "換手預算" },
   },
   confirmDialog: {
     resolveIncident: "結案事件 — {{title}}",
