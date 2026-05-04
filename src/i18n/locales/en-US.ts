@@ -112,6 +112,10 @@ export default {
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All", back: "Back",
   },
+  permission: {
+    requireAction: "Requires permission: {{action}}",
+    requireRoles: "Requires role: {{roles}}",
+  },
   inspector: {
     metadata: "Metadata",
     actions: "Available Actions",
