@@ -107,7 +107,7 @@ export default {
     approve: "Approve", reject: "Reject", deploy: "Deploy",
     rollback: "Rollback", suspend: "Suspend", retire: "Retire",
     cancel: "Cancel", confirm: "Confirm", save: "Save",
-    reset: "Reset", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
+    reset: "Reset", proposeChange: "Propose change", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
   },
   confirm: {
     title: "Confirm high-risk action",
@@ -489,6 +489,25 @@ export default {
     overrides: { increase: "Manual overweight to preserve ranked momentum edge.", decrease: "Manual underweight to reduce drawdown concentration." },
     sim: { sharpe: "Sharpe", drawdown: "Drawdown", turnover: "Turnover", totalWeight: "Total weight", weights: "Target weights", queued: "Simulation queued", run: "Run simulation" },
     constraints: { maxWeight: "Single strategy max weight", totalWeight: "Portfolio total weight", expectedDD: "Expected drawdown", turnover: "Turnover budget" },
+  },
+  persona: {
+    tabs: { routePolicy: "Route Policy", toolsMcpSkills: "Tools · MCP · Skills", activity: "Activity", training: "Training & Memory" },
+    routePolicy: { empty: "No route policy is assigned to this persona.", editStub: "Open editor", rules: "Rules", versions: "Versions" },
+    permissions: { noGrants: "No grants for this persona." },
+    activity: { title: "Activity monitor" },
+    memory: { queue: "Memory governance queue", openReview: "Open review", approved: "Memory approved", rejected: "Memory rejected" },
+  },
+  capitalPool: {
+    mandate: {
+      charter: "Mandate charter", bindingRules: "Binding rules",
+      objectiveValue: "Generate risk-adjusted alpha within sanctioned mandate.",
+      horizonValue: "Quarterly review cycle, 12-month horizon.",
+      rule1: "No single strategy > 35% of allocated capital.",
+      rule2: "Live-env strategies require dual approval.",
+      rule3: "Drawdown breach > 8% triggers auto-pause.",
+    },
+    risk: { editor: "Risk budget editor", breakdown: "Risk budget breakdown", queued: "Risk budget change queued" },
+    bindings: { title: "Strategy / persona bindings", hint: "Active bindings for pool {{pool}}." },
   },
   confirmDialog: {
     resolveIncident: "Resolve incident — {{title}}",
