@@ -19,6 +19,26 @@ import { usePlatform } from "@/platform/store";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, AlertOctagon, Activity, Wallet, Inbox } from "lucide-react";
 
+const relTime = (iso: string, locale: string, justNow: string) => {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(diffMs);
+  if (abs < 60_000) return justNow;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["day", 86_400_000], ["hour", 3_600_000], ["minute", 60_000],
+  ];
+  for (const [unit, ms] of units) {
+    if (abs >= ms) return rtf.format(Math.round(diffMs / ms), unit);
+  }
+  return justNow;
+};
+
+const poolBarClass = (pct: number) =>
+  pct > 90 ? "bg-risk-critical" : pct > 75 ? "bg-risk-high" : pct > 60 ? "bg-risk-medium" : "bg-accent";
+
+const poolRiskLevel = (pct: number): "low" | "medium" | "high" | "critical" =>
+  pct > 90 ? "critical" : pct > 75 ? "high" : pct > 60 ? "medium" : "low";
+
 interface State {
   strategies: Strategy[];
   personas: Persona[];
@@ -38,6 +58,7 @@ export const CommandCenter = () => {
   const t = useT();
   const navigate = useNavigate();
   const env = usePlatform((s) => s.env);
+  const locale = usePlatform((s) => s.locale);
   const [d, setD] = useState<State>(empty);
 
   useEffect(() => {
@@ -101,24 +122,24 @@ export const CommandCenter = () => {
         </div>
 
         {/* ── Lifecycle bottlenecks + Pending actions ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <Card className="p-4 flex flex-col h-full">
             <SectionHeader icon={<Activity className="h-4 w-4" />} title={t("commandCenter.section.bottlenecks")} hint={t("commandCenter.section.bottlenecksHint")} />
-            <div className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {bottlenecks.map((b) => (
                 <button
                   key={b.state}
                   onClick={() => navigate(`/management/strategies?state=${b.state}`)}
-                  className="rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition px-2 py-3 text-left"
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 hover:bg-muted/60 transition px-3 py-1.5"
                 >
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">{b.state}</div>
-                  <div className="text-mono text-xl font-semibold mt-1">{b.count}</div>
+                  <StatusBadge state={b.state} />
+                  <span className="text-mono text-sm font-semibold">{b.count}</span>
                 </button>
               ))}
             </div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 flex flex-col h-full">
             <SectionHeader icon={<Inbox className="h-4 w-4" />} title={t("commandCenter.section.pendingActions")} hint={t("commandCenter.section.pendingHint")} />
             <ul className="mt-3 divide-y divide-border">
               {d.approvals.filter((a) => a.state === "pending").slice(0, 5).map((a) => (
@@ -142,20 +163,24 @@ export const CommandCenter = () => {
         </div>
 
         {/* ── Capital exposure + Alerts/Incidents + Persona ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+          <Card className="p-4 flex flex-col h-full">
             <SectionHeader icon={<Wallet className="h-4 w-4" />} title={t("commandCenter.section.capitalExposure")} />
             <ul className="mt-3 space-y-3">
               {d.pools.map((p) => {
                 const pct = Math.round((p.utilized / p.allocated) * 100);
+                const level = poolRiskLevel(pct);
                 return (
                   <li key={p.id} className="text-sm">
-                    <div className="flex justify-between items-center">
-                      <button onClick={() => navigate(`/management/capital-pools/${p.id}`)} className="font-medium hover:underline">{p.name}</button>
-                      <span className="text-mono text-xs text-muted-foreground">{pct}%</span>
+                    <div className="flex justify-between items-center gap-2">
+                      <button onClick={() => navigate(`/management/capital-pools/${p.id}`)} className="font-medium hover:underline truncate">{p.name}</button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-mono text-xs text-muted-foreground">{pct}%</span>
+                        <RiskBadge level={level} />
+                      </div>
                     </div>
                     <div className="mt-1 h-1.5 bg-muted rounded overflow-hidden">
-                      <div className={`h-full ${pct > 90 ? "bg-risk-critical" : pct > 75 ? "bg-risk-high" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+                      <div className={`h-full ${poolBarClass(pct)}`} style={{ width: `${pct}%` }} />
                     </div>
                   </li>
                 );
@@ -163,43 +188,52 @@ export const CommandCenter = () => {
             </ul>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 flex flex-col h-full">
             <SectionHeader icon={<AlertOctagon className="h-4 w-4" />} title={t("commandCenter.section.alertsIncidents")} />
             <ul className="mt-3 divide-y divide-border">
               {d.incidents.filter((i) => i.status !== "resolved").map((i) => (
                 <li key={i.id} onClick={() => navigate(`/management/incidents/${i.id}`)} className="py-2 cursor-pointer hover:bg-muted/30 -mx-2 px-2 rounded">
                   <div className="flex items-center gap-2">
                     <RiskBadge level={i.severity} />
-                    <span className="text-xs text-mono text-muted-foreground">{i.id}</span>
+                    <span className="text-sm font-medium truncate flex-1">{i.title}</span>
                   </div>
-                  <div className="text-sm font-medium mt-1">{i.title}</div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="text-mono">{i.id}</span>
+                    <span>·</span>
+                    <span>{relTime(i.openedAt, locale, t("common.justNow"))}</span>
+                  </div>
                 </li>
               ))}
               {d.alerts.filter((a) => !a.acknowledged).slice(0, 3).map((a) => (
                 <li key={a.id} onClick={() => navigate("/management/alerts")} className="py-2 cursor-pointer hover:bg-muted/30 -mx-2 px-2 rounded">
                   <div className="flex items-center gap-2">
                     <RiskBadge level={a.severity} />
-                    <span className="text-xs text-mono text-muted-foreground">{a.source}</span>
+                    <span className="text-sm truncate flex-1">{a.title}</span>
                   </div>
-                  <div className="text-sm mt-1 truncate">{a.title}</div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="text-mono">{a.source}</span>
+                    <span>·</span>
+                    <span>{relTime(a.openedAt, locale, t("common.justNow"))}</span>
+                  </div>
                 </li>
               ))}
             </ul>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 flex flex-col h-full">
             <SectionHeader title={t("commandCenter.section.personaActivity")} />
-            <ul className="mt-3 space-y-2">
+            <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-xs items-center">
+              <div className="text-muted-foreground uppercase tracking-wider">{t("common.owner")}</div>
+              <div className="text-muted-foreground uppercase tracking-wider text-right">{t("common.successRate")}</div>
+              <div className="text-muted-foreground uppercase tracking-wider text-right">{t("common.risk")}</div>
               {d.personas.map((p) => (
-                <li key={p.id} className="flex items-center justify-between text-sm">
-                  <button onClick={() => navigate(`/management/personas/${p.id}`)} className="hover:underline">{p.name}</button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground text-mono">{Math.round(p.successRate * 100)}%</span>
-                    <RiskBadge level={p.risk} />
-                  </div>
-                </li>
+                <div key={p.id} className="contents">
+                  <button onClick={() => navigate(`/management/personas/${p.id}`)} className="text-sm hover:underline truncate text-left">{p.name}</button>
+                  <span className="text-mono text-sm text-right">{Math.round(p.successRate * 100)}%</span>
+                  <div className="justify-self-end"><RiskBadge level={p.risk} /></div>
+                </div>
               ))}
-            </ul>
+            </div>
           </Card>
         </div>
 
@@ -214,7 +248,7 @@ export const CommandCenter = () => {
           <DataTable
             rows={agoraIncoming}
             columns={[
-              { key: "risk", header: t("common.state"), cell: (r) => <RiskBadge level={r.risk} /> },
+              { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               { key: "title", header: t("commandCenter.col.signal"), cell: (r) => <span className="font-medium">{r.title}</span> },
               { key: "source", header: t("commandCenter.col.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
               { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleString()}</span> },

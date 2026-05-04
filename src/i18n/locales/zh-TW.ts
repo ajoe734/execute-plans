@@ -105,7 +105,8 @@ export default {
   common: {
     owner: "負責人", updated: "更新時間", state: "狀態",
     actions: "動作", noResults: "無結果", loading: "載入中…",
-    all: "全部", back: "返回",
+    all: "全部", back: "返回", risk: "風險", successRate: "成功率",
+    justNow: "剛剛",
   },
   permission: {
     requireAction: "需要權限：{{action}}",

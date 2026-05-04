@@ -110,7 +110,8 @@ export default {
   common: {
     owner: "Owner", updated: "Last updated", state: "State",
     actions: "Actions", noResults: "No results", loading: "Loading…",
-    all: "All", back: "Back",
+    all: "All", back: "Back", risk: "Risk", successRate: "Success",
+    justNow: "just now",
   },
   permission: {
     requireAction: "Requires permission: {{action}}",
