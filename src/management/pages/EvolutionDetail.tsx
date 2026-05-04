@@ -13,6 +13,19 @@ import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
+import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { evolutionMachine, type EvolutionState } from "@/lib/stateMachines";
+import { FitnessFormulaPanel } from "../components/detail/FitnessFormulaPanel";
+import { EvolutionRunsPanel } from "../components/detail/EvolutionRunsPanel";
+
+const mapState = (s: string): EvolutionState => {
+  const m: Record<string, EvolutionState> = {
+    draft: "draft", review: "under_review", approved: "active",
+    deployed: "active", paused: "paused", retired: "retired",
+  };
+  return m[s] ?? "draft";
+};
 
 export const EvolutionDetail = () => {
   const { id } = useParams();
@@ -31,14 +44,7 @@ export const EvolutionDetail = () => {
   }, [id]);
 
   if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-
-  const candidates = Array.from({ length: 6 }).map((_, i) => ({
-    id: `${e.id}_g${e.generation}_c${i}`,
-    rank: i + 1,
-    fitness: e.bestFitness - i * 0.04,
-    sharpe: 1.6 - i * 0.08,
-    drawdown: -(0.03 + i * 0.005),
-  }));
+  const machineState = mapState(e.state);
 
   return (
     <>
@@ -67,7 +73,23 @@ export const EvolutionDetail = () => {
                 <Section title="Generation Progress">
                   <Progress value={e.progress * 100} className="h-2" />
                 </Section>
+                <Section title={t("lifecycle.title")}>
+                  <LifecycleStepper machine={evolutionMachine} current={machineState} i18nPrefix="lifecycle.evolution" />
+                </Section>
               </>
+            ),
+          },
+          {
+            value: "direction", label: t("evolution.tabs.direction"),
+            content: (
+              <Section title={t("evolution.direction.title")}>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Field label={t("evolution.direction.parent")} value={e.parentAlpha} mono />
+                  <Field label={t("evolution.direction.objective")} value={t("evolution.direction.objectiveValue")} />
+                  <Field label={t("evolution.direction.selection")} value="tournament(k=4)" mono />
+                  <Field label={t("evolution.direction.population")} value={e.population} mono />
+                </div>
+              </Section>
             ),
           },
           {
@@ -83,18 +105,22 @@ export const EvolutionDetail = () => {
               </Section>
             ),
           },
-          {
-            value: "population", label: "Top Candidates",
-            content: (
-              <DataTable rows={candidates} columns={[
-                { key: "rank", header: "#", cell: (r) => <span className="text-mono text-xs">{r.rank}</span> },
-                { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                { key: "fit", header: "Fitness", cell: (r) => <span className="text-mono text-xs">{r.fitness.toFixed(3)}</span> },
-                { key: "sh", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
-                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs text-status-failed">{(r.drawdown * 100).toFixed(2)}%</span> },
-              ]} />
-            ),
-          },
+          { value: "fitness", label: t("evolution.tabs.fitness"), content: <FitnessFormulaPanel mode="fitness" /> },
+          { value: "mutation", label: t("evolution.tabs.mutation"), content: <FitnessFormulaPanel mode="mutation" /> },
+          { value: "runs", label: t("evolution.tabs.runs"), content: <EvolutionRunsPanel programId={e.id} mode="runs" /> },
+          { value: "candidates", label: t("evolution.tabs.candidates"), content: <EvolutionRunsPanel programId={e.id} mode="candidates" /> },
+          { value: "promotion", label: t("evolution.tabs.promotion"), content: (
+            <Section title={t("evolution.promotion.title")}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label={t("evolution.promotion.candidate")} value={`${e.id}_best_g${e.generation}`} mono />
+                <Field label={t("evolution.promotion.fitnessLift")} value={`+${(e.bestFitness * 8).toFixed(1)}%`} mono />
+                <Field label={t("evolution.promotion.target")} value={e.parentAlpha} mono />
+              </div>
+              <div className="flex justify-end">
+                <PermissionAwareButton requiredAction="promote_best" size="sm" onClick={() => toast.success(t("evolution.promotion.queued"))}>{t("evolution.promotion.promote")}</PermissionAwareButton>
+              </div>
+            </Section>
+          ) },
           {
             value: "config", label: "Config",
             content: (
