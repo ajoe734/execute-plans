@@ -5,7 +5,7 @@ import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
 import { Beaker, Package } from "lucide-react";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
@@ -89,7 +89,7 @@ export const ResearchDetail = () => {
                   <span className="text-xs text-muted-foreground">View →</span>
                 </div>
               </Section>
-            ) : <Placeholder text="No artifacts produced yet." />,
+            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No artifacts produced yet.</div></Section>,
           },
           {
             value: "params", label: t("section.parameters"),

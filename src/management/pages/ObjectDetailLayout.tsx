@@ -55,9 +55,6 @@ export const Section = ({ title, children }: { title?: string; children: ReactNo
   </Card>
 );
 
-export const Placeholder = ({ text }: { text: string }) => (
-  <Card className="p-6 text-sm text-muted-foreground text-center">{text}</Card>
-);
 // useT preserved for future tab-level helpers; intentional named re-export.
 export { useT };
 
