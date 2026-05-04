@@ -447,6 +447,7 @@ export default {
       submitted: "協作規則變更已送審",
     },
   },
+  handoff: {
     title: "移交", heading: "移交至 Management", subtitle: "將此 Agora 項目以可追溯的方式提交為管理工作流。",
     type: "類型", source: "來源", summary: "摘要",
     summaryPlaceholder: "一句話描述需要管理端處理的內容…",
