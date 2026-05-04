@@ -3,7 +3,7 @@ import type {
   Deployment, Job, Alert, Incident, ApprovalRequest, AuditEvent,
   EvolutionProgram, ResearchExperiment, Artifact, Runtime,
   Tool, McpServer, McpTool, Skill, Channel,
-  RoutePolicy, PolicyVersion, PermissionMatrix, MemoryUpdate,
+  RoutePolicy, PolicyVersion, PermissionMatrix, MemoryUpdate, ConsultRule,
   EvolutionRun, EvolutionCandidate, FitnessFormula, MutationRule,
   AllocationSimulation,
 } from "@/lib/bff/types";
@@ -277,6 +277,13 @@ export const memoryUpdates: MemoryUpdate[] = [
   { id: "mu_003", personaId: "per_macro", kind: "fact", source: "decision_log", proposedBy: "bob", proposedAt: ago(8), state: "conflict", after: "Disable carry when VIX>22.", conflictWith: "mu_004" },
   { id: "mu_004", personaId: "per_macro", kind: "fact", source: "evaluation", proposedBy: "ai_trainer", proposedAt: ago(7), state: "conflict", after: "Disable carry when VIX>26.", conflictWith: "mu_003" },
   { id: "mu_005", personaId: "per_risk", kind: "redaction", source: "operator", proposedBy: "carol", proposedAt: ago(20), state: "approved", before: "Internal counter-party note", after: "[redacted]" },
+];
+
+export const consultRules: ConsultRule[] = [
+  { id: "cr_001", name: "Risk consult on high-risk orders", fromPersonaId: "per_quant", toPersonaId: "per_risk", trigger: "order.risk>=high", mode: "blocking", envScope: ["paper", "live"], enabled: true, owner: "ops", updatedAt: ago(48) },
+  { id: "cr_002", name: "Macro briefing before regime change", fromPersonaId: "per_quant", toPersonaId: "per_macro", trigger: "regime.change=true", mode: "advisory", envScope: ["research", "paper", "live"], enabled: true, owner: "ai_trainer", updatedAt: ago(120) },
+  { id: "cr_003", name: "Red-team review on new alpha", fromPersonaId: "per_quant", toPersonaId: "per_red", trigger: "lifecycle=submit_review&kind=Strategy", mode: "ack", envScope: ["research"], enabled: false, owner: "ai_trainer", updatedAt: ago(240) },
+  { id: "cr_004", name: "Risk officer pause confirm", fromPersonaId: "per_macro", toPersonaId: "per_risk", trigger: "action=pause", mode: "blocking", envScope: ["live"], enabled: true, owner: "ops", updatedAt: ago(8) },
 ];
 
 export const evolutionRuns: EvolutionRun[] = [
