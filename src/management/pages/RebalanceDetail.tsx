@@ -17,6 +17,9 @@ import { rebalanceMachine, type RebalanceState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "sonner";
+import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
+import { ConstraintChecker } from "../components/detail/ConstraintChecker";
+import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 
 // Map mock BaseObject lifecycle → rebalance state machine.
 const mapState = (s: string): RebalanceState => {
@@ -60,6 +63,16 @@ export const RebalanceDetail = () => {
 
   if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   const lines = r.lines ?? [];
+  const overrideRows = lines
+    .filter((l) => Math.abs(l.delta) >= 0.03)
+    .map((l) => ({
+      id: `${r.id}_${l.strategyId}`,
+      strategyId: l.strategyId,
+      strategyName: l.strategyName,
+      delta: l.delta,
+      reason: l.delta > 0 ? t("rebalance.overrides.increase") : t("rebalance.overrides.decrease"),
+      state: Math.abs(l.delta) > 0.06 ? "review" : "approved",
+    }));
 
   return (
     <>
@@ -140,24 +153,30 @@ export const RebalanceDetail = () => {
           },
           {
             value: "simulation", label: t("section.simulation", { defaultValue: "Simulation" }),
-            content: (
-              <Section title="Backtest preview">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("table.sharpe")} value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
-                  <StatCard label={t("table.drawdown")} value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="warning" />
-                  <StatCard label="Turnover" value={`${(Math.abs(r.proposedDelta) * 100).toFixed(1)}%`} />
-                  <StatCard label="Lines" value={lines.length} />
-                </div>
-              </Section>
-            ),
+            content: <AllocationSimulationPanel rebalance={r} />,
           },
-          { value: "approvals", label: t("nav.approvals"), content: (
-            <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
-              { key: "kind", header: t("table.kind"), cell: (row) => <span className="text-mono text-xs">{row.kind}</span> },
-              { key: "subject", header: t("table.subject"), cell: (row) => <div className="font-medium">{row.subject}</div> },
-              { key: "risk", header: t("table.risk"), cell: (row) => <RiskBadge level={row.riskLevel} /> },
+          { value: "constraints", label: t("rebalance.tabs.constraints"), content: <ConstraintChecker rebalance={r} /> },
+          { value: "overrides", label: t("rebalance.tabs.overrides"), content: (
+            <DataTable rows={overrideRows} onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)} columns={[
+              { key: "strategy", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
+              { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
+              { key: "reason", header: t("section.rationale"), cell: (row) => <span className="text-sm">{row.reason}</span> },
               { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
+              { key: "action", header: t("common.actions"), cell: () => <PermissionAwareButton requiredAction="approve_rebalance" size="sm" variant="outline">{t("actions.approve")}</PermissionAwareButton> },
             ]} empty={t("empty.none")} />
+          ) },
+          { value: "approvals", label: t("rebalance.tabs.approval"), content: (
+            <div className="space-y-4">
+              <Section title={t("section.approvalStages")}>
+                <LifecycleStepper machine={rebalanceMachine} current={machineState} i18nPrefix="lifecycle.rebalance" />
+              </Section>
+              <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
+                { key: "kind", header: t("table.kind"), cell: (row) => <span className="text-mono text-xs">{row.kind}</span> },
+                { key: "subject", header: t("table.subject"), cell: (row) => <div className="font-medium">{row.subject}</div> },
+                { key: "risk", header: t("table.risk"), cell: (row) => <RiskBadge level={row.riskLevel} /> },
+                { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
+              ]} empty={t("empty.none")} />
+            </div>
           ) },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
