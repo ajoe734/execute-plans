@@ -3,6 +3,9 @@ import type {
   Deployment, Job, Alert, Incident, ApprovalRequest, AuditEvent,
   EvolutionProgram, ResearchExperiment, Artifact, Runtime,
   Tool, McpServer, McpTool, Skill, Channel,
+  RoutePolicy, PolicyVersion, PermissionMatrix, MemoryUpdate,
+  EvolutionRun, EvolutionCandidate, FitnessFormula, MutationRule,
+  AllocationSimulation,
 } from "@/lib/bff/types";
 
 const now = () => new Date().toISOString();
