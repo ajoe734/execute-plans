@@ -80,6 +80,38 @@ export const bff = {
     list: () => delay(seed.channels),
     get: (id: string) => delay(seed.channels.find((c) => c.id === id)),
   },
+  routePolicies: {
+    list: () => delay(seed.routePolicies),
+    get: (id: string) => delay(seed.routePolicies.find((p) => p.id === id)),
+    forPersona: (personaId: string) => delay(seed.routePolicies.find((p) => p.personaId === personaId)),
+  },
+  policyVersions: {
+    list: (policyId: string) => delay(seed.policyVersions.filter((v) => v.policyId === policyId)),
+  },
+  permissionMatrix: {
+    get: (instance: string) => delay(seed.permissionMatrices.find((m) => m.instance === instance)),
+  },
+  memoryUpdates: {
+    list: () => delay(seed.memoryUpdates),
+    forPersona: (personaId: string) => delay(seed.memoryUpdates.filter((m) => m.personaId === personaId)),
+  },
+  evolutionRuns: {
+    list: () => delay(seed.evolutionRuns),
+    forProgram: (programId: string) => delay(seed.evolutionRuns.filter((r) => r.programId === programId)),
+  },
+  evolutionCandidates: {
+    forRun: (runId: string) => delay(seed.evolutionCandidates.filter((c) => c.runId === runId)),
+  },
+  fitnessFormulas: {
+    list: () => delay(seed.fitnessFormulas),
+    get: (id: string) => delay(seed.fitnessFormulas.find((f) => f.id === id)),
+  },
+  mutationRules: {
+    list: () => delay(seed.mutationRules),
+  },
+  allocationSimulations: {
+    forRebalance: (rebalanceId: string) => delay(seed.allocationSimulations.filter((s) => s.rebalanceId === rebalanceId)),
+  },
   search: (q: string) => {
     const all = seed.searchableObjects();
     if (!q) return delay(all.slice(0, 8));
