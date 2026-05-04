@@ -1,178 +1,122 @@
 
-# 補齊到藍圖：完整 Phase 計畫
+# 補齊到藍圖：Phase 9–12 實作計畫
 
-目標：把現況（59 頁 + Shell 完整、但 Sidebar 不對、子表面缺）推進到 Spec Part 1–3、Part 4–5 列出的所有模組與 UI Surface。
-
-每個 Phase 結束都應該可單獨驗收、不破壞前一階段。預估規模以「新增/重構頁面數」為單位，1 頁 ≈ 中等複雜度元件。
+承接前次盤點（zh-TW + en-US 雙版），目前缺口集中在 **Detail Tab 深度**、**治理表面（§12–13）**、**Studio 類（§15–18）**、**Agora 拆頁與個人 Trainer**、以及對應的 **BFF mock seeds**。以下分四個 Phase，全部 mock-first、不接真後端、語意 token only、雙語 i18n、走 PermissionAwareButton + stateMachines。
 
 ---
 
-## Phase 1 — Sidebar、群組、路由對齊（小，~1 sprint）
+## Phase 9 — Agora 拆頁 + BFF Seeds 擴充（S, ~1 sprint）
 
-不新增功能，只動結構，先讓導覽符合藍圖。
+把後續 Phase 都會踩到的「資料缺口」與「Agora 雙頁共用」先處理掉。
 
-**Management Sidebar 重排成 6 群：**
-```text
-Command          → Command Center
-Core Management  → Strategies / Personas / Capital / Ranking / Rebalance / Evolution
-Research & Gov.  → Experiments / Governance / Knowledge / Lineage
-Operations       → Deployment / Runtimes / Risk Center / Incidents / Jobs
-Capabilities     → Tools / MCP / Skills
-System           → Audit / Settings
-```
+### 9.1 Agora 拆頁
+- 拆 `MarketWatchlist.tsx`：
+  - `Markets.tsx`：總覽、熱門資產、市場熱力。
+  - `Watchlist.tsx`：個人關注清單、可加減、排序、推到 Signal Triage。
+- 新增 `TrainerStudio/:personaId` 路由與分支邏輯：
+  - 無 personaId → 現有總覽（queues + sources）。
+  - 有 personaId → 個人 Trainer：persona header、memory edit、skill assign、eval run 三個區塊（重用 §4 元件）。
+- `AskPersonas.tsx`：personas multi-select、context attach、handoff to Committee 按鈕。
+- `Notebook.tsx`：tag、link to artifact、convert to research_task（觸發 mock job）。
 
-**Agora Sidebar 重排成 5 群：**
-```text
-Daily Work       → Daily / Market / Signals / Triage
-Research         → Notebook / Insights / Decisions
-AI Collaboration → Ask Personas / Committee Room
-Training         → Trainer / Memory / Skill Coaching / Persona Lab / Evaluations
-Channels         → Channels
-```
+### 9.2 BFF Seeds 擴充
+在 `src/mocks/seed.ts` + `src/lib/bff/client.ts` + `src/lib/bff/types.ts` 新增：
+- `routePolicies`（persona → tool/mcp/skill 路由規則 + version）
+- `permissionMatrix`（4 個 instance 的 cell-level grants）
+- `memoryUpdates`、`trainingUpdates`（Persona memory governance queue）
+- `evolutionRuns`、`evolutionCandidates`（演化執行 + 候選）
+- `fitnessFormulas`、`mutationRules`
+- `allocationSimulations`（rebalance slider 結果）
+- `policyVersions`（policy v1/v2 diff）
 
-**路由名稱對齊：**
-- `capital-pools` → `capital`（保留 redirect）
-- `rebalances` → `rebalance`
-- `ranking-formulas` → `ranking/formulas`，新增 `ranking` dashboard 殼
-- 拆 `governance` 與 `approvals` 為兩個獨立路由
-- 新增 `/management/lineage`、`/management/settings`
-- Agora：`agora` → 對應 `agora/daily`；`market` 拆 `markets` + `watchlist`；`decisions` → `journal`；`skills` → `skill-coaching`；`eval` → `evaluations`；新增 `agora/trainer/:personaId`
-
-**涉及檔案：** `ManagementLayout.tsx`、`AgoraLayout.tsx`、`App.tsx`、`i18n/locales/*`、`Placeholder` 殼填空頁。
-
-**驗收：** Sidebar 群組與藍圖 §5/§6 一字不差；舊路由 301 redirect；所有新路由不 404。
+驗收：跑 vitest 全綠；每個新 endpoint 有至少 3 筆 seed；Agora sidebar 兩條路由各自獨立頁。
 
 ---
 
-## Phase 2 — 缺漏模組殼 + Settings/Lineage/Knowledge（中，~1–2 sprint）
+## Phase 10 — Detail Tab 深度補齊（M, ~2 sprint）
 
-把 Phase 1 開出的空路由補成「可導覽、有骨架、有 Mock 資料」的頁面，先求覆蓋率。
+對齊 Spec Part 3 的 Tab 結構，把現有以 DataTable/AuditTimeline 帶過的 Tab 換成藍圖指定內容。
 
-**新建頁面：**
-1. `Settings`（§System）— 個人偏好、Workspace、整合、API Keys、Locale、Theme、Feature Flags 6 個 Tab。
-2. `LineageExplorer`（§19.6）— 重用 `LineageGraph` 元件，加上 entity selector + filter。
-3. `KnowledgeInbox`（§19.6）— Insight triage queue，可推到 Artifact / Postmortem。
-4. `PostmortemLibrary`（§19.6）— 列表 + Detail（從 Incident `postmortem_id` 跳入）。
-5. `GovernanceQueue` 與 `GovernanceReview`（§9.6）— 從 Approvals 拆出，獨立 review 流程。
-6. `RankingDashboard`（§15.7）— Performance ranking 主表 + Score Breakdown drawer。
-7. `WorkflowTemplates` + `HookCronManager`（§18.9）— Capabilities 群下兩個獨立頁。
-8. `AlphaFactoryBoard`（§6.8）— Strategies 子頁，Discovered/Scaffolded/Replicated 三欄看板。
+| 頁面 | 補上的 Tab 內容 |
+|---|---|
+| `PersonaDetail` | Route Policy（Editor 預覽 + 版本）、Tools-MCP-Skills（PermissionMatrix 嵌入）、Activity Monitor（即時 mock stream）、Training & Memory（governance queue 連結） |
+| `CapitalPoolDetail` | Mandate（章程 + binding 規則）、Risk Budget（編輯器）、Bindings（strategy/persona binding matrix） |
+| `RebalanceDetail` | Simulation（slider + 重算）、Constraints（checker）、Overrides（手動覆寫清單）、Approval（多階段 stepper） |
+| `EvolutionDetail` | Direction、Fitness（formula 顯示）、Mutation（rule list）、Runs、Candidates、Promotion |
+| `McpDetail` | Server / Tools / Schema / Permissions / Secrets / Audit |
+| `SkillDetail` | 補 Sandbox（輸入框 + mock trace）、Risk |
+| `StrategyDetail` | 補 Spec & Parameters、Paper-Live、Evolution、Lineage（與 §11 共用 LineageGraph） |
+| `ArtifactDetail` | Diff、Lineage、Rollback |
+| `DeploymentDetail` | Stages（環境 stepper）、Rollback |
 
-**驗收：** 所有藍圖 §5 列出的 Sidebar 項目都點得進去且有非 Placeholder 內容。
-
----
-
-## Phase 3 — Detail Page 補齊 Tab（中，~2 sprint）
-
-對齊 Spec Part 3 列出的每個 Detail 頁 Tab 數。
-
-| 頁面 | 現況 Tabs | 藍圖要求 |
-|---|---|---|
-| StrategyDetail | 2–3 | Overview / Spec & Parameters / Experiments / Paper-Live / Risk & Alerts / Incidents / Artifacts / Evolution / Governance / Lineage / Audit（11） |
-| PersonaDetail | 1–2 | Overview / Route Policy / Tools-MCP-Skills / Activity Monitor / Training & Memory（5） |
-| CapitalPoolDetail | 1 | Mandate / Risk Budget / Bindings / Activity / Audit（5） |
-| RebalanceDetail | 2 | Overview / Simulation / Constraints / Overrides / Approval / History（6） |
-| EvolutionDetail | 1 | Direction / Fitness / Mutation / Runs / Candidates / Promotion（6） |
-| McpServerDetail | 2 | Server / Tools / Schema / Permissions / Secrets / Audit（6） |
-| SkillDetail | 2 | Overview / Versions / Sandbox / Permissions / Risk / Audit（6） |
-| ArtifactDetail | 2 | Overview / Diff / Lineage / Rollback / Audit（5） |
-| DeploymentDetail | 1 | Overview / Stages / Rollback / Audit（4） |
-
-每個 Tab 需含：標題、Mock 資料、空狀態、可選 action（接 PermissionAwareButton）。
-
-**驗收：** Detail 頁 Tab 數量與藍圖一致，每 Tab 有可呈現內容（非 placeholder）。
+每 Tab：標題 + mock 資料 + 空狀態 + PermissionAwareButton。所有 high-risk 動作走 HighRiskConfirm。
 
 ---
 
-## Phase 4 — 治理深度表面：Route Policy / Permission Matrix / Memory Governance（大，~2 sprint）
+## Phase 11 — 治理深度表面 §12 / §13（L, ~2 sprint）
 
-藍圖 §12 / §13 整組沒做，這是治理核心。
+藍圖治理核心，目前完全沒做。新元件放在 `src/management/components/governance/`。
 
-**新建：**
-- `RoutePolicyEditor`（visual editor + JSON 雙模式）
-- `PermissionMatrix` 通用元件（Persona×Tool / Persona×MCP / Persona×Skill / Persona×LifecycleAction 四個 instance）
-- `ConsultRuleManager`
+### 11.1 通用元件
+- `PermissionMatrix`（reusable，row/col/cell/状态/批次選取）
+- `RoutePolicyEditor`（Visual + JSON 雙模式 toggle）
 - `PolicyVersionDiff`（左右 diff）
-- `PolicyApprovalFlow`（用 Approvals model）
+- `PolicyApprovalFlow`（用既有 Approvals model）
+
+### 11.2 新建頁面（路由放 `/management/governance/...` 與 Persona 子頁）
+- `RoutePoliciesList` + `RoutePolicyDetail`
+- `PermissionMatrixPage`（4 個 instance：Persona×Tool / ×MCP / ×Skill / ×LifecycleAction，用 tab 切換）
+- `ConsultRuleManager`
 - `PersonaMemoryGovernance`、`TrainingUpdateReview`、`MemoryConflictResolver`
-- `PersonaActivationPanel`、`PersonaRestrictionPanel`、`PersonaEvaluationDashboard`、`PersonaActivityMonitor`
+- `PersonaActivationPanel`、`PersonaRestrictionPanel`、`PersonaEvaluationDashboard`、`PersonaActivityMonitor`（多數能在 PersonaDetail Tab 內嵌）
 
-**新增 BFF mock endpoint：** `routePolicies`, `permissionMatrix`, `memoryUpdates`, `trainingUpdates`。
-
-**驗收：** 可用 Persona 為單位開啟一張 Permission Matrix 並編輯/送審；可看 policy v1 vs v2 diff。
+驗收：可選一個 Persona → 開 Permission Matrix → 編輯 cell → 送審；可看 policy v1 vs v2 diff；Memory governance queue 可 approve / reject / merge。
 
 ---
 
-## Phase 5 — Studio 類：Formula / Fitness / Sandbox / Allocation Simulation（大，~2 sprint）
+## Phase 12 — Studio 類 §15–18（L, ~2 sprint）
 
-**新建：**
-- `FormulaStudio`（§15.7）— 編輯器 + Metric library 拖拉 + 表達式驗證
+### 12.1 Ranking / Fitness Studio
+- `FormulaStudio`（§15.7）：metric library 拖拉 + 表達式驗證
 - `FormulaBacktest`、`FormulaCompare`（A/B 並列）
 - `FitnessFormulaStudio`（§17.6）
+
+### 12.2 Evolution
 - `MutationRuleManager`、`EvolutionRunMonitor`、`CandidateBrowser`、`PromotionPanel`
-- `SkillSandboxRunner`（§18.9）— 可塞輸入、跑 mock、看 trace
-- `AllocationSimulation`（§16.6）— 拖 slider 看 portfolio 重算
-- `MetricFreezeManager`、`ConstraintChecker`、`OverrideManager`（rebalance 子流程）
-- `RiskBudgetEditor`、`Persona/Strategy-Capital BindingMatrix`、`AllocationLimitManager`、`FreezeUnfreezePanel`
 
-**驗收：** 每個 Studio 可在 Mock 資料上完整跑一次「編輯 → 驗證 → 結果」；不需要真實計算引擎，但要呈現結果結構。
+### 12.3 Skill / Capital / Rebalance
+- `SkillSandboxRunner`（§18.9）：輸入 → mock 執行 → trace 結果
+- `AllocationSimulation`（§16.6）：slider 拖動即時重算 portfolio
+- `MetricFreezeManager`、`ConstraintChecker`、`OverrideManager`
+- `RiskBudgetEditor`、`BindingMatrix`、`AllocationLimitManager`、`FreezeUnfreezePanel`
 
----
-
-## Phase 6 — 觀測性與 Audit 深度（中，~1 sprint）
-
-- `JobLogs` viewer（從 JobProgressDrawer 抽出獨立路由 + filter）
-- `SystemEventStream`（realtime tail）
-- `ApprovalHistory`（獨立查詢頁）
-- `EntityAuditTimeline` 接到所有 Detail Tab
-- `MCPCallAudit`、`SkillAudit` 獨立頁
-
-**驗收：** 每個核心 entity 在 Detail 頁的 Audit Tab 都顯示真實 mock 事件；可從 Audit Explorer 反查 entity。
+每個 Studio：完整跑「編輯 → 驗證 → 結果」於 mock data 上。
 
 ---
 
-## Phase 7 — Agora 補完 + i18n / QA（小，~1 sprint）
-
-- `Markets` / `Watchlist` 拆成兩頁（目前合併）
-- `TrainerStudio/:personaId` 個人 trainer 頁（含 memory edit、skill assign、eval run）
-- `AskPersonas` 補：personas multi-select、context attach、handoff to Committee
-- `Notebook` 補：tag、link to artifact、convert to research_task with job
-- 跑 `scripts/check-i18n.ts` 確保新增 key 兩語系都有
-- 更新 `QAChecklist` 把 Spec Part 8 的 acceptance 全部列入並打勾
-
-**驗收：** 跑完 i18n check 0 missing；QA Checklist 全綠。
+## 跨階段保證
+- 每 Phase 結束跑 `bunx vitest run` + `scripts/check-i18n.ts`，必須 0 missing。
+- 所有新 string 同步進 `zh-TW.ts` + `en-US.ts`。
+- 嚴禁直寫 color；走 semantic token。
+- 結束時更新 `QAChecklist`，把 Spec Part 8 acceptance 標記至對應項。
 
 ---
 
-## 規模估算
+## 規模
 
-| Phase | 新建頁面 | 重構頁面 | 新元件 | 預估 |
-|---|---|---|---|---|
-| 1 | 0 | 3 | 0 | S |
-| 2 | 8 | 1 | 1 | M |
-| 3 | 0 | 9 | 0 | M |
-| 4 | 11 | 2 | 2 | L |
-| 5 | 14 | 1 | 0 | L |
-| 6 | 5 | 多 | 0 | M |
-| 7 | 2 | 3 | 0 | S |
+| Phase | 新頁/拆頁 | 重構 | 新元件 | BFF seeds | 規模 |
+|---|---|---|---|---|---|
+| 9 | 4 | 1 | 0 | 8 | S |
+| 10 | 0 | 9 | 0 | 0 | M |
+| 11 | 8 | 2 | 4 | 0 | L |
+| 12 | 14 | 1 | 0 | 0 | L |
 
-合計：約 40 新頁、20 重構、3 新通用元件。全做完估 8–10 sprint。
+合計：約 26 新頁、13 重構、4 新通用元件、8 組新 mock endpoint。
 
 ---
 
-## 執行原則
+## 建議啟動順序
 
-- **Mock 先行**：所有新頁先用 `bff` mock client，不打真實後端。
-- **語意 token only**：嚴禁直寫 color；走 `index.css` / `tailwind.config.ts`。
-- **Permission gating**：所有 action 走 `PermissionAwareButton`，high-risk 走 `HighRiskConfirm`。
-- **狀態機驅動**：state badge / 可用 action 一律從 `stateMachines/` 推導。
-- **i18n 雙語**：每個 string 進 `locales/*.ts`。
-- **每 Phase 結束跑** `bunx vitest run` + `scripts/check-i18n.ts`。
+**先做 Phase 9**（拆頁 + seeds），因為 Phase 10/11/12 都依賴新 mock endpoint。確認 Phase 9 後再進 Phase 10（Detail Tab，使用者最有感），最後 Phase 11 → 12（治理 → Studio）。
 
----
-
-## 建議下一步
-
-如果同意，先動 **Phase 1**（最小破壞、最大「對齊感」），約 1–2 個 commit 即可看到整個 Sidebar 變成藍圖樣子。確認 Phase 1 行為後再啟動 Phase 2。
-
-要不要直接核准我開始 Phase 1？或你想先調整哪個 Phase 的順序/範圍？
+要不要直接核准 Phase 9 開工？或想先調整 Phase 順序 / 範圍？
