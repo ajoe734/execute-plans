@@ -321,6 +321,7 @@ export default {
     auditTimeline: "Audit timeline",
     memoRequired: "All decisions require a memo. High-risk decisions also need a typed token.",
     alreadyDecided: "Already {{state}}.",
+    queueSubtitle: "Pending governance reviews split from the Approvals inbox. Click to open the review surface.",
     decision: {
       title: "Decision",
       approve: "Approve",
