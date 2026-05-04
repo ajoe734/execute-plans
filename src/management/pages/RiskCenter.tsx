@@ -212,12 +212,12 @@ export const RiskCenter = () => {
 };
 
 const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: CapitalPool[]; runtimes: Runtime[]; tools: Tool[] } }) => {
-  // 3×4 matrix: rows = domain, columns = severity counts
+  const t = useT();
   const rows = [
-    { label: "Strategy", counts: bucket(data.strategies.map((s) => s.risk)) },
-    { label: "Capital", counts: bucket(data.pools.map((p) => p.risk)) },
-    { label: "Runtime", counts: bucket(data.runtimes.map((r) => (r.status === "failed" ? "critical" : r.status === "warning" ? "high" : "low") as RiskLevel)) },
-    { label: "Tools", counts: bucket(data.tools.map((t) => t.risk)) },
+    { label: t("riskCenter.tab.strategy"), counts: bucket(data.strategies.map((s) => s.risk)) },
+    { label: t("riskCenter.tab.capital"), counts: bucket(data.pools.map((p) => p.risk)) },
+    { label: t("riskCenter.tab.runtime"), counts: bucket(data.runtimes.map((r) => (r.status === "failed" ? "critical" : r.status === "warning" ? "high" : "low") as RiskLevel)) },
+    { label: t("nav.tools"), counts: bucket(data.tools.map((tl) => tl.risk)) },
   ];
   const cell = (n: number, level: RiskLevel) => {
     if (n === 0) return <span className="text-mono text-xs text-muted-foreground">—</span>;
@@ -225,11 +225,11 @@ const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: Capital
   };
   return (
     <div className="grid grid-cols-5 gap-x-6 gap-y-2 text-sm">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">Domain</div>
-      <div className="text-xs uppercase tracking-wider text-risk-low">Low</div>
-      <div className="text-xs uppercase tracking-wider text-risk-medium">Medium</div>
-      <div className="text-xs uppercase tracking-wider text-risk-high">High</div>
-      <div className="text-xs uppercase tracking-wider text-risk-critical">Critical</div>
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("table.type")}</div>
+      <div className="text-xs uppercase tracking-wider text-risk-low">{t("risk.low")}</div>
+      <div className="text-xs uppercase tracking-wider text-risk-medium">{t("risk.medium")}</div>
+      <div className="text-xs uppercase tracking-wider text-risk-high">{t("risk.high")}</div>
+      <div className="text-xs uppercase tracking-wider text-risk-critical">{t("risk.critical")}</div>
       {rows.map((r) => (
         <Fragment key={r.label}>
           <div className="font-medium">{r.label}</div>
