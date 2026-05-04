@@ -101,8 +101,18 @@ export const McpServerDetail = () => {
             </Section>
           ),
         },
-        { value: "lineage", label: t("section.lineage"), content: <Placeholder text="Tools and personas that depend on this MCP server." /> },
-        { value: "audit", label: t("nav.audit"), content: <Placeholder text="Per-server invocation log." /> },
+        { value: "lineage", label: t("section.lineage"), content: (
+          <Section>
+            <div className="text-sm space-y-2">
+              <div><span className="text-mono text-xs text-muted-foreground">tools:</span> <span className="text-mono text-xs text-accent">{tools.map((tt) => tt.name).join(", ") || "—"}</span></div>
+              <div><span className="text-mono text-xs text-muted-foreground">runtime:</span> <span className="text-mono text-xs">{s.region} · {s.endpoint}</span></div>
+            </div>
+          </Section>
+        ) },
+        { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
+          { id: "au_mcp_1", actor: s.owner, action: "mcp.health.check", target: s.id, ts: new Date(Date.now() - 600_000).toISOString() },
+          { id: "au_mcp_2", actor: "ops", action: "mcp.tool.register", target: s.id, ts: new Date(Date.now() - 7200_000).toISOString() },
+        ]} /> },
       ]}
     />
   );
@@ -160,7 +170,10 @@ export const McpToolDetail = () => {
               </>
             ),
           },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Per-tool invocation log." /> },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
+            { id: "au_mt_1", actor: tool.owner, action: "mcp_tool.invoke", target: tool.id, ts: new Date(Date.now() - 1200_000).toISOString(), memo: `${tool.callsLast24h.toLocaleString()} calls in last 24h` },
+            { id: "au_mt_2", actor: "ops", action: "mcp_tool.grant_env", target: tool.id, ts: new Date(Date.now() - 86400_000).toISOString(), memo: `Granted: ${tool.envGrants.join(", ")}` },
+          ]} /> },
         ]}
       />
 

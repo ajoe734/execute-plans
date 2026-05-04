@@ -5,10 +5,14 @@ import { Rocket, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { Deployment } from "@/lib/bff/types";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff/types";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { DataTable } from "@/platform/components/DataTable";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { StatusBadge } from "@/platform/components/StatusBadge";
+import { RiskBadge } from "@/platform/components/RiskBadge";
 
 const targetTone = (t: Deployment["target"]) =>
   t === "live" ? "danger" : t === "paper" ? "warning" : "default";
@@ -18,10 +22,19 @@ export const DeploymentDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const [d, setD] = useState<Deployment | undefined>();
+  const [runtimes, setRuntimes] = useState<Runtime[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
 
-  useEffect(() => { if (id) bff.deployments.get(id).then(setD); }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    bff.deployments.get(id).then(setD);
+    bff.runtimes.list().then(setRuntimes);
+    bff.approvals.list().then(setApprovals);
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("deployment."))));
+  }, [id]);
   if (!d) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
   const isLive = d.target === "live";
@@ -72,9 +85,31 @@ export const DeploymentDetail = () => {
               </>
             ),
           },
-          { value: "runtime", label: "Runtime", content: <Placeholder text="Live executor metrics for this deployment." /> },
-          { value: "approvals", label: t("nav.approvals"), content: <Placeholder text="Promotion and rollback approvals." /> },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Deployment audit trail." /> },
+          { value: "runtime", label: t("nav.runtimes"), content: (() => {
+            const filtered = runtimes.filter((r) => r.env === d.target && r.kind === "executor");
+            return (
+              <DataTable rows={filtered} columns={[
+                { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium text-mono text-xs">{r.name}</div> },
+                { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{(r.cpu * 100).toFixed(0)}%</span> },
+                { key: "mem", header: "MEM", cell: (r) => <span className="text-mono text-xs">{(r.memory * 100).toFixed(0)}%</span> },
+                { key: "p95", header: "p95", cell: (r) => <span className="text-mono text-xs">{r.latencyP95Ms}ms</span> },
+                { key: "uptime", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{r.uptimePct}%</span> },
+              ]} empty={t("empty.noResults")} />
+            );
+          })() },
+          { value: "approvals", label: t("nav.approvals"), content: (() => {
+            const filtered = approvals.filter((a) => a.subject.includes(d.version) || a.kind.includes("deploy"));
+            return (
+              <DataTable rows={filtered} columns={[
+                { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+                { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+              ]} empty={t("empty.none")} />
+            );
+          })() },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 

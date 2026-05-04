@@ -3,23 +3,30 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { Artifact } from "@/lib/bff/types";
+import type { Artifact, AuditEvent, Deployment } from "@/lib/bff/types";
 import { Download, Trash2 } from "lucide-react";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { DataTable } from "@/platform/components/DataTable";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { StatusBadge } from "@/platform/components/StatusBadge";
 
 export const ArtifactDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
   const [a, setA] = useState<Artifact | undefined>();
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [retireOpen, setRetireOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     bff.artifacts.get(id).then(setA);
+    bff.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
+    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action.startsWith("artifact."))));
   }, [id]);
 
   if (!a) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -72,8 +79,15 @@ export const ArtifactDetail = () => {
             ) : <Placeholder text="No upstream experiment recorded." />,
           },
           {
-            value: "consumers", label: "Consumers",
-            content: <Placeholder text="Strategies & deployments that reference this artifact." />,
+            value: "consumers", label: t("nav.deployments"),
+            content: (
+              <DataTable rows={deployments} onRowClick={(r) => navigate(`/management/deployments/${r.id}`)} columns={[
+                { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
+                { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+                { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+              ]} empty={t("empty.none")} />
+            ),
           },
           {
             value: "metadata", label: "Metadata",
@@ -87,7 +101,7 @@ export const ArtifactDetail = () => {
               </Section>
             ),
           },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Artifact lifecycle events." /> },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 

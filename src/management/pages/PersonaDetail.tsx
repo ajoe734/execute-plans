@@ -87,7 +87,22 @@ export const PersonaDetail = () => {
           },
           {
             value: "memory", label: t("nav.memoryReview"),
-            content: <Placeholder text={t("empty.none")} />,
+            content: (
+              <Section title={t("nav.memoryReview")}>
+                <div className="space-y-2 text-sm">
+                  {[
+                    { id: "m_01", text: `${p.archetype} prefers low-leverage entries during high-vol regimes.`, src: "memory_review", ts: 6 },
+                    { id: "m_02", text: `Tag risk events on ${p.routedStrategies} routed strategies for follow-up review.`, src: "audit", ts: 24 },
+                    { id: "m_03", text: "Defer rebalance recommendations into the morning UTC window.", src: "operator", ts: 72 },
+                  ].map((m) => (
+                    <div key={m.id} className="p-3 rounded-md bg-muted/50 border border-border">
+                      <div className="text-sm">{m.text}</div>
+                      <div className="text-mono text-[10px] text-muted-foreground mt-1">{m.id} · from {m.src} · {m.ts}h ago</div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            ),
           },
           {
             value: "audit", label: t("nav.audit"),

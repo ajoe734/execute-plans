@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { CapitalPool, Strategy } from "@/lib/bff/types";
+import type { AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
 import { Edit, ShieldAlert } from "lucide-react";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
@@ -20,12 +21,16 @@ export const CapitalPoolDetail = () => {
   const navigate = useNavigate();
   const [c, setC] = useState<CapitalPool | undefined>();
   const [strats, setStrats] = useState<Strategy[]>([]);
+  const [rebalances, setRebalances] = useState<Rebalance[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     bff.capitalPools.get(id).then(setC);
     bff.strategies.list().then((all) => setStrats(all.filter((s) => s.capitalPoolId === id)));
+    bff.rebalances.list().then((all) => setRebalances(all.filter((r) => r.targetPoolId === id)));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("capital.") || x.action.startsWith("rebalance."))));
   }, [id]);
 
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -93,8 +98,15 @@ export const CapitalPoolDetail = () => {
               </Section>
             ),
           },
-          { value: "rebalance", label: t("section.history"), content: <Placeholder text={t("empty.none")} /> },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Capital pool audit trail." /> },
+          { value: "rebalance", label: t("nav.rebalance"), content: (
+            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/rebalance/${r.id}`)} columns={[
+              { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+              { key: "q", header: "Quarter", cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
+              { key: "delta", header: "Δ", cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
+              { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+            ]} empty={t("empty.none")} />
+          ) },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 
