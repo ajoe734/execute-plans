@@ -508,7 +508,7 @@ export default {
     tab: { explain: "Explanation", market: "Market context", similar: "Similar cases", persona: "Persona opinions", feedback: "Trader feedback", research: "Linked research", audit: "Audit" },
   },
   table: {
-    id: "ID", kind: "Kind", type: "Type", status: "Status", state: "State",
+    id: "ID", kind: "Kind", type: "Type", status: "Status", state: "State", persona: "Persona",
     owner: "Owner", risk: "Risk", severity: "Severity", title: "Title",
     source: "Source", opened: "Opened", started: "Started", created: "Created",
     updated: "Updated", time: "Time", actor: "Actor", action: "Action",
