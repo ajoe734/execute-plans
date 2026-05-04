@@ -5,8 +5,12 @@ import {
   capitalPoolMachine,
   rebalanceMachine,
   skillMachine,
-  mcpToolMachine,
+  mcpServerMachine,
+  toolMachine,
   incidentMachine,
+  jobMachine,
+  approvalMachine,
+  deploymentMachine,
 } from "@/lib/stateMachines";
 import {
   nextTransitions,
@@ -18,7 +22,8 @@ import {
 describe("state machine coverage (Part 7 §17)", () => {
   const machines = [
     strategyMachine, personaMachine, capitalPoolMachine, rebalanceMachine,
-    skillMachine, mcpToolMachine, incidentMachine,
+    skillMachine, mcpServerMachine, toolMachine, incidentMachine,
+    jobMachine, approvalMachine, deploymentMachine,
   ];
 
   it("every transition's `from` is a known state (or 'any')", () => {
