@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
@@ -10,9 +10,12 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatCard } from "@/platform/components/StatCard";
-import { useNavigate } from "react-router-dom";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
+import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
+import { ActivityMonitor } from "../components/detail/ActivityMonitor";
+import { MemoryGovernanceQueue } from "../components/detail/MemoryGovernanceQueue";
 
 export const PersonaDetail = () => {
   const { id } = useParams();
