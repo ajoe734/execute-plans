@@ -69,6 +69,7 @@ export default {
     lineage: "Lineage Explorer",
     knowledge: "Knowledge Inbox",
     governance: "Governance",
+    routePolicies: "Route Policies",
     settings: "Settings",
     markets: "Markets",
     watchlist: "Watchlist",
