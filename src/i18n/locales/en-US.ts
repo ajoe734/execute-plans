@@ -205,6 +205,40 @@ export default {
     trainingHint: "Coaching examples and memory candidates feeding this skill.",
     auditHint: "Skill lifecycle audit.",
     state: { draft: "Draft", published: "Published" },
+    tab: { prompt: "Prompt & Spec" },
+    prompt: {
+      title: "Prompt & specification",
+      hint: "Edits create a draft revision. Publish via the action bar to roll out to assigned personas.",
+      lines: "lines", chars: "chars", unsaved: "unsaved changes",
+      saveDraft: "Save draft", saved: "Draft saved",
+    },
+  },
+  tool: {
+    tab: { schema: "Schema", sandbox: "Sandbox", activity: "Activity" },
+    schema: { inputs: "Input parameters", output: "Output schema" },
+    sandbox: {
+      hint: "Run a one-off invocation against the research sandbox. Edits do not affect production.",
+      request: "Request payload (JSON)", response: "Response",
+      run: "Run in sandbox", executed: "Sandbox call complete",
+      invalidJson: "Request payload is not valid JSON",
+    },
+  },
+  mcp: {
+    tab: { registry: "Registry", activity: "Activity" },
+    registry: {
+      title: "Environment grants",
+      hint: "Toggle which environments may invoke tools on this MCP server. Live access requires risk + ops approval.",
+      liveWarn: "LIVE access enabled — ensure dual approval is on file before saving.",
+      saved: "Registry updated",
+    },
+  },
+  strategy: {
+    params: {
+      title: "Parameters",
+      hint: "Edit a value to create a draft revision. Submitting routes the change through governance before deployment.",
+      submit: "Submit draft revision",
+      draftCreated: "Draft revision queued for review",
+    },
   },
   notifications: {
     title: "Notification Center",
