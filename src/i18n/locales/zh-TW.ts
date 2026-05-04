@@ -128,6 +128,9 @@ export default {
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部", back: "返回", risk: "風險", successRate: "成功率",
     justNow: "剛剛",
+    notFound: "找不到頁面", returnHome: "回到首頁",
+    densityComfortable: "舒適",
+    addTitleFirst: "請先輸入標題",
   },
   permission: {
     requireAction: "需要權限：{{action}}",
