@@ -91,7 +91,7 @@ const App = () => (
               <Route path="capital/:id" element={<CapitalPoolDetail />} />
               <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
               <Route path="capital-pools/:id" element={<CapitalPoolDetail />} />
-              <Route path="ranking" element={<Placeholder title="Ranking Dashboard" hint="Phase 2: ranking dashboard with formula breakdown." />} />
+              <Route path="ranking" element={<RankingDashboardPage />} />
               <Route path="ranking/formulas" element={<RankingFormulasList />} />
               <Route path="ranking/formulas/:id" element={<RankingFormulaDetail />} />
               <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
@@ -109,11 +109,15 @@ const App = () => (
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="incidents/:id" element={<IncidentDetail />} />
-              <Route path="governance" element={<Placeholder title="Governance Queue" hint="Phase 2: governance review queue (split from approvals)." />} />
+              <Route path="governance" element={<GovernanceQueuePage />} />
               <Route path="governance/:id" element={<GovernanceReview />} />
-              <Route path="knowledge" element={<Placeholder title="Knowledge Inbox" hint="Phase 2: insight triage feeding artifacts & postmortems." />} />
-              <Route path="lineage" element={<Placeholder title="Lineage Explorer" hint="Phase 2: cross-entity lineage graph." />} />
-              <Route path="settings" element={<Placeholder title="Settings" hint="Phase 2: workspace, integrations, locale, theme, feature flags." />} />
+              <Route path="knowledge" element={<KnowledgeInboxPage />} />
+              <Route path="postmortems" element={<PostmortemLibraryPage />} />
+              <Route path="lineage" element={<LineageExplorerPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="alpha-factory" element={<AlphaFactoryBoardPage />} />
+              <Route path="workflows" element={<WorkflowTemplatesPage />} />
+              <Route path="hooks" element={<HookCronManagerPage />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
