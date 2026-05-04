@@ -17,6 +17,7 @@ import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 export const IncidentDetail = () => {
   const t = useT();
@@ -203,14 +204,14 @@ export const IncidentDetail = () => {
           </TabsContent>
 
           <TabsContent value="audit" className="mt-4">
-            <Card className="p-4">
-              <ol className="space-y-2 text-sm">
-                <li className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{new Date(incident.openedAt).toLocaleString()}</span><span className="text-mono text-xs text-accent">system</span><span>incident.opened</span></li>
-                {(incident.timeline ?? []).map((e, i) => (
-                  <li key={i} className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{new Date(e.ts).toLocaleString()}</span><span className="text-mono text-xs text-accent">{e.actor}</span><span>{e.note}</span></li>
-                ))}
-              </ol>
-            </Card>
+            <AuditTimeline
+              entries={[
+                { ts: incident.openedAt, actor: "system", action: "incident.opened", target: incident.id },
+                ...(incident.timeline ?? []).map((e, i) => ({
+                  id: `t${i}`, ts: e.ts, actor: e.actor, action: "incident.update", target: incident.id, memo: e.note,
+                })),
+              ]}
+            />
           </TabsContent>
         </Tabs>
 

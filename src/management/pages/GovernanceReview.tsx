@@ -15,6 +15,7 @@ import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
@@ -159,24 +160,15 @@ export const GovernanceReview = () => {
         </div>
 
         {/* Bottom — Audit Timeline */}
-        <Card className="p-4">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.auditTimeline")}</div>
-          <ol className="space-y-2">
-            <li className="flex gap-3 text-sm">
-              <span className="text-mono text-xs text-muted-foreground">{new Date(req.createdAt).toLocaleString()}</span>
-              <span className="text-mono text-xs text-accent">{req.requester}</span>
-              <span>requested {req.kind}</span>
-            </li>
-            {linkedAudit.map((e) => (
-              <li key={e.id} className="flex gap-3 text-sm">
-                <span className="text-mono text-xs text-muted-foreground">{new Date(e.ts).toLocaleString()}</span>
-                <span className="text-mono text-xs text-accent">{e.actor}</span>
-                <span className="text-mono text-xs">{e.action}</span>
-                <span className="text-xs text-muted-foreground">→ {e.target}</span>
-              </li>
-            ))}
-          </ol>
-        </Card>
+        <AuditTimeline
+          title={t("governance.auditTimeline")}
+          entries={[
+            { ts: req.createdAt, actor: req.requester, action: `request.${req.kind}`, target: req.id },
+            ...linkedAudit.map((e) => ({
+              id: e.id, ts: e.ts, actor: e.actor, action: e.action, target: e.target, memo: e.memo,
+            })),
+          ]}
+        />
 
         <HighRiskConfirm
           open={decision !== null}
