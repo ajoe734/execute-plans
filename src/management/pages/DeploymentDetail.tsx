@@ -73,7 +73,7 @@ export const DeploymentDetail = () => {
             ),
           },
           { value: "runtime", label: "Runtime", content: <Placeholder text="Live executor metrics for this deployment." /> },
-          { value: "approvals", label: "Approvals", content: <Placeholder text="Promotion and rollback approvals." /> },
+          { value: "approvals", label: t("nav.approvals"), content: <Placeholder text="Promotion and rollback approvals." /> },
           { value: "audit", label: t("nav.audit"), content: <Placeholder text="Deployment audit trail." /> },
         ]}
       />

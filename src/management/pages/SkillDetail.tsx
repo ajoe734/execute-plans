@@ -43,17 +43,17 @@ export const SkillDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Mode" value={skill.draft ? "DRAFT" : "PUBLISHED"} tone={skill.draft ? "warning" : "success"} />
-                  <StatCard label="Eval Score" value={skill.evalScore?.toFixed(2) ?? "—"} tone={(skill.evalScore ?? 0) > 0.85 ? "success" : "warning"} />
-                  <StatCard label="Used by Personas" value={skill.usedByPersonas} />
+                  <StatCard label={t("table.state")} value={skill.draft ? "DRAFT" : "PUBLISHED"} tone={skill.draft ? "warning" : "success"} />
+                  <StatCard label={t("section.performance")} value={skill.evalScore?.toFixed(2) ?? "—"} tone={(skill.evalScore ?? 0) > 0.85 ? "success" : "warning"} />
+                  <StatCard label={t("nav.personas")} value={skill.usedByPersonas} />
                   <StatCard label={t("table.version")} value={skill.version} />
                 </div>
-                <Section title="Description">
+                <Section title={t("table.description")}>
                   <p className="text-sm leading-relaxed">{skill.description}</p>
                 </Section>
-                <Section title="Metadata">
+                <Section title={t("section.metadata")}>
                   <Field label={t("table.type")} value={skill.archetype} mono />
-                  <Field label="Published" value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleString() : "—"} mono />
+                  <Field label={t("table.created")} value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleString() : "—"} mono />
                 </Section>
               </>
             ),

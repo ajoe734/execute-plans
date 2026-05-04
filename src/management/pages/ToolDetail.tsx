@@ -28,7 +28,7 @@ export const ToolDetail = () => {
                 <StatCard label="Inputs" value={tool.inputs} />
                 <StatCard label="Used by" value={tool.usedBy} />
               </div>
-              <Section title="Description">
+              <Section title={t("table.description")}>
                 <p className="text-sm leading-relaxed">{tool.description}</p>
               </Section>
               <Section title="Schema">

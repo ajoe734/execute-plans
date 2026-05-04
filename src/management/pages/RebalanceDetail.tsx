@@ -55,13 +55,13 @@ export const RebalanceDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Target Pool" value={pool ? pool.name : r.targetPoolId} />
+                  <StatCard label={t("nav.capitalPools")} value={pool ? pool.name : r.targetPoolId} />
                   <StatCard label="Proposed Δ" value={`${(r.proposedDelta * 100).toFixed(1)}%`} tone="warning" />
-                  <StatCard label="Expected Sharpe" value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
-                  <StatCard label="Expected Drawdown" value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="danger" />
+                  <StatCard label={t("table.sharpe")} value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
+                  <StatCard label={t("table.drawdown")} value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="danger" />
                 </div>
                 {r.notes && (
-                  <Section title="Notes">
+                  <Section title={t("section.notes")}>
                     <p className="text-sm leading-relaxed">{r.notes}</p>
                   </Section>
                 )}
@@ -69,35 +69,35 @@ export const RebalanceDetail = () => {
             ),
           },
           {
-            value: "lines", label: "Allocation Lines",
+            value: "lines", label: t("section.holdings"),
             content: (
               <DataTable
                 rows={lines.map((l) => ({ ...l, id: l.strategyId }))}
                 onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)}
                 columns={[
                   { key: "strat", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
-                  { key: "cur", header: "Current", cell: (row) => <span className="text-mono text-xs">{(row.currentWeight * 100).toFixed(1)}%</span> },
-                  { key: "prop", header: "Proposed", cell: (row) => <span className="text-mono text-xs">{(row.proposedWeight * 100).toFixed(1)}%</span> },
+                  { key: "cur", header: t("section.overview"), cell: (row) => <span className="text-mono text-xs">{(row.currentWeight * 100).toFixed(1)}%</span> },
+                  { key: "prop", header: t("section.changeSummary"), cell: (row) => <span className="text-mono text-xs">{(row.proposedWeight * 100).toFixed(1)}%</span> },
                   { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
                 ]}
-                empty="No allocation lines"
+                empty={t("empty.noResults")}
               />
             ),
           },
           {
-            value: "risk", label: "Risk Impact",
+            value: "risk", label: t("table.risk"),
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="Pool VaR" value={pool ? `${pool.currency} ${(pool.allocated * pool.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"} mono />
-                  <Field label="Concentration" value="OK" mono />
-                  <Field label="Liquidity check" value="Pass" mono />
+                  <Field label={t("table.risk")} value={pool ? `${pool.currency} ${(pool.allocated * pool.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"} mono />
+                  <Field label={t("table.utilization")} value="OK" mono />
+                  <Field label={t("table.utilization")} value="Pass" mono />
                   <Field label="Stress (−20%)" value={`${(r.expectedDrawdown! * 100 * 1.5).toFixed(1)}%`} mono />
                 </div>
               </Section>
             ),
           },
-          { value: "approvals", label: "Approvals", content: <Placeholder text="Pending approvals routed via the rebalance.apply workflow." /> },
+          { value: "approvals", label: t("nav.approvals"), content: <Placeholder text={t("empty.none")} /> },
           { value: "audit", label: t("nav.audit"), content: <Placeholder text="Rebalance audit trail." /> },
         ]}
       />
@@ -108,7 +108,7 @@ export const RebalanceDetail = () => {
         title={`Simulate Rebalance — ${r.name}`}
         description="Runs a full backtest simulation of this rebalance against the last 90 days. Read-only."
         confirmToken="SIMULATE"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "simulate", memo }); toast.success("Simulation job queued"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "simulate", memo }); toast.success(t("toast.actionQueued")); }}
       />
       <HighRiskConfirm
         open={applyOpen}
@@ -117,7 +117,7 @@ export const RebalanceDetail = () => {
         description="Applies the proposed allocation to the target pool. This will route an approval request and, when approved, generate live orders."
         confirmToken="APPLY"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "apply", newState: "deployed", memo }); toast.success("Apply request submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "apply", newState: "deployed", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );

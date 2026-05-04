@@ -60,7 +60,7 @@ export const PersonaDetail = () => {
             ),
           },
           {
-            value: "routes", label: "Route Policy",
+            value: "routes", label: t("section.permissions"),
             content: (
               <DataTable
                 rows={routed}
@@ -87,7 +87,7 @@ export const PersonaDetail = () => {
           },
           {
             value: "memory", label: t("nav.memoryReview"),
-            content: <Placeholder text="Persona memory snapshots & training data." />,
+            content: <Placeholder text={t("empty.none")} />,
           },
           {
             value: "audit", label: t("nav.audit"),
@@ -108,7 +108,7 @@ export const PersonaDetail = () => {
         title={`Suspend persona — ${p.name}`}
         description="Suspending this persona will stop routing strategies through it."
         confirmToken="SUSPEND"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success("Persona suspended"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success(t("toast.saved")); }}
       />
     </>
   );

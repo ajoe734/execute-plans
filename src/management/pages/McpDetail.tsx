@@ -37,14 +37,14 @@ export const McpServerDetail = () => {
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Health" value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
-                <StatCard label="Tools" value={s.toolCount} />
-                <StatCard label="Region" value={s.region} />
+                <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
+                <StatCard label={t("nav.tools")} value={s.toolCount} />
+                <StatCard label={t("table.region")} value={s.region} />
                 <StatCard label="Envs" value={s.envAllowed.length} />
               </div>
-              <Section title="Endpoint">
+              <Section title={t("section.configuration")}>
                 <Field label="URL" value={s.endpoint} mono />
-                <Field label="Allowed Environments" value={
+                <Field label={t("table.env")} value={
                   <div className="flex gap-1 mt-1">
                     {s.envAllowed.map((e) => (
                       <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
@@ -63,7 +63,7 @@ export const McpServerDetail = () => {
               onRowClick={(r) => navigate(`/management/mcp-tools/${r.id}`)}
               columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <div className="font-mono text-xs">{r.name}</div> },
-                { key: "scope", header: "Scope", cell: (r) => <span className={`text-xs uppercase tracking-wider ${scopeTone(r.scope)}`}>{r.scope}</span> },
+                { key: "scope", header: t("section.permissions"), cell: (r) => <span className={`text-xs uppercase tracking-wider ${scopeTone(r.scope)}`}>{r.scope}</span> },
                 { key: "envs", header: "Granted Envs", cell: (r) => (
                   <div className="flex gap-1">
                     {r.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
@@ -111,21 +111,21 @@ export const McpToolDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Scope" value={tool.scope.toUpperCase()} tone={tool.scope === "destructive" ? "danger" : tool.scope === "write" ? "warning" : "success"} />
+                  <StatCard label={t("section.permissions")} value={tool.scope.toUpperCase()} tone={tool.scope === "destructive" ? "danger" : tool.scope === "write" ? "warning" : "success"} />
                   <StatCard label="Calls 24h" value={tool.callsLast24h.toLocaleString()} />
                   <StatCard label="Envs" value={tool.envGrants.length} />
                   <StatCard label={t("table.state")} value={tool.state} />
                 </div>
-                <Section title="Description">
+                <Section title={t("table.description")}>
                   <p className="text-sm leading-relaxed">{tool.description}</p>
                 </Section>
-                <Section title="Server">
-                  <Field label="Server" value={
+                <Section title={t("nav.mcp")}>
+                  <Field label={t("nav.mcp")} value={
                     <button className="text-accent hover:underline text-mono text-xs" onClick={() => navigate(`/management/mcp/${tool.serverId}`)}>
                       {tool.serverId}
                     </button>
                   } />
-                  <Field label="Granted environments" value={
+                  <Field label={t("table.env")} value={
                     <div className="flex gap-1 mt-1">
                       {tool.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
                     </div>
@@ -145,7 +145,7 @@ export const McpToolDetail = () => {
         description="Authorizes this destructive tool to execute against the LIVE environment. Requires dual approval (risk + ops) before taking effect."
         confirmToken="GRANT-LIVE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success("Live grant request submitted for approval"); }}
+        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );
