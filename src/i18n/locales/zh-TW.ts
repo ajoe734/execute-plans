@@ -514,7 +514,21 @@ export default {
       askPersonas: "詢問 Persona",
       selectTicker: "請選擇一檔標的。",
     },
-    notebook: { empty: "尚未建立筆記。" },
+    markets: {
+      subtitle: "市場總覽、產業熱力與宏觀狀態脈絡。",
+      regime: "宏觀狀態", heatmap: "產業熱力圖", clearFilter: "清除篩選", topMovers: "熱門變動標的",
+    },
+    watchlist: {
+      subtitle: "個人關注清單，可推送到 Signal Triage。",
+      searchPh: "搜尋代號或名稱", addHint: "新增標的流程已排入審核。", remove: "移除標的",
+      removed: "已從 Watchlist 移除 {{symbol}}", pushedToTriage: "已將 {{symbol}} 推送到 Triage", empty: "沒有符合的標的。",
+      pushTriage: "推送到 Triage", sort: { changePct: "漲跌", symbol: "代號", signal: "訊號" },
+    },
+    notebook: {
+      empty: "尚未建立筆記。", titlePh: "標題", bodyPh: "記錄觀察、假設與連結…",
+      tagsPh: "標籤，以逗號分隔", artifactPh: "連結 Artifact ID", convertResearch: "轉成研究任務",
+      queued: "研究任務已透過 {{id}} 排入",
+    },
     personaLab: {
       draft: "Persona 草稿", archetype: "原型", systemPrompt: "System Prompt",
       skills: "技能", tools: "工具", memoryRoutes: "記憶路由",
