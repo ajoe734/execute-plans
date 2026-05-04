@@ -69,7 +69,7 @@ export const Markets = () => {
     <>
       <PageHeader
         title={t("nav.markets")}
-        subtitle="Market overview, sector heatmap, and macro regime context."
+        subtitle={t("agora.markets.subtitle")}
       />
       <PageBody>
         <Card className="p-4">

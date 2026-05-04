@@ -5,7 +5,7 @@
 import * as seed from "@/mocks/seed";
 import type {
   AuditEvent, ApprovalRequest, Incident, Alert,
-  LifecycleState, Strategy,
+  LifecycleState, Strategy, Job,
 } from "./types";
 import { realtime } from "./realtime";
 import { usePlatform } from "@/platform/store";
@@ -31,6 +31,26 @@ function pushAudit(action: string, target: string, memo?: string): AuditEvent {
 
 function findById<T extends { id: string }>(arr: readonly T[], id: string): T | undefined {
   return arr.find((x) => x.id === id);
+}
+
+function queueMockJob(kind: string, owner = usePlatform.getState().role): Job {
+  const job: Job = {
+    id: `job_${Date.now().toString(36)}`,
+    kind,
+    status: "running",
+    startedAt: new Date().toISOString(),
+    owner,
+  };
+  (seed.jobs as Job[]).unshift(job);
+  realtime.emit("job", { jobId: job.id, kind: job.kind, owner: job.owner, ts: job.startedAt, status: "running" });
+  realtime.emit("data", { kind: "Job" });
+  setTimeout(() => {
+    job.status = "success";
+    job.durationMs = 1_800;
+    realtime.emit("job", { jobId: job.id, kind: job.kind, owner: job.owner, ts: new Date().toISOString(), status: "success" });
+    realtime.emit("data", { kind: "Job" });
+  }, 1800);
+  return job;
 }
 
 export type RunActionInput = {
@@ -128,6 +148,12 @@ export const mutations = {
     realtime.emit("data", { kind: "Strategy" });
     const audit = pushAudit("strategy.promote_live", strategyId, memo);
     return delay({ ok: true, audit });
+  },
+
+  createResearchTaskFromNote(noteId: string, memo?: string): Promise<MutationResult & { job: Job }> {
+    const job = queueMockJob("research_task.scaffold");
+    const audit = pushAudit("notebook.convert_research_task", noteId, memo);
+    return delay({ ok: true, audit, job, message: `Research task queued: ${job.id}` });
   },
 
   rollback(kind: string, id: string, memo?: string): Promise<MutationResult> {
