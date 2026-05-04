@@ -76,7 +76,7 @@ export const ArtifactDetail = () => {
                   <span className="text-xs text-muted-foreground">View →</span>
                 </div>
               </Section>
-            ) : <Placeholder text="No upstream experiment recorded." />,
+            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No upstream experiment recorded.</div></Section>,
           },
           {
             value: "consumers", label: t("nav.deployments"),
