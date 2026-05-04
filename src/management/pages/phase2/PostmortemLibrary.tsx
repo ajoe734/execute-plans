@@ -41,7 +41,7 @@ export const PostmortemLibraryPage = () => {
       }/>
       <PageBody>
         <Card>
-          <DataTable rows={rows} onRowClick={setActive} columns={[
+          <DataTable<Postmortem> rows={rows} onRowClick={setActive} columns={[
             { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
             { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
             { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },

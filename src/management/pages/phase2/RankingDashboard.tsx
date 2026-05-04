@@ -61,7 +61,7 @@ export const RankingDashboardPage = () => {
       }/>
       <PageBody>
         <Card>
-          <DataTable rows={rows} onRowClick={setActive} columns={[
+          <DataTable<Row> rows={rows} onRowClick={setActive} columns={[
             { key: "rank", header: "#", cell: (r) => <span className="text-mono text-sm font-semibold">{r.rank}</span> },
             { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
             { key: "score", header: t("rankingDashboard.score"), cell: (r) => <span className="text-mono text-sm">{r.score.toFixed(3)}</span> },

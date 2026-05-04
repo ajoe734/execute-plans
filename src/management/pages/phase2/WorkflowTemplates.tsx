@@ -45,7 +45,7 @@ export const WorkflowTemplatesPage = () => {
       }/>
       <PageBody>
         <Card>
-          <DataTable rows={SEED} onRowClick={setActive} columns={[
+          <DataTable<Template> rows={SEED} onRowClick={setActive} columns={[
             { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
             { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
             { key: "cat", header: t("table.category"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${catTone(r.category)}`}>{r.category}</Badge> },
