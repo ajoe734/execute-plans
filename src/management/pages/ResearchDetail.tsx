@@ -89,7 +89,7 @@ export const ResearchDetail = () => {
                   <span className="text-xs text-muted-foreground">View →</span>
                 </div>
               </Section>
-            ) : <Placeholder text="No artifacts produced yet." />,
+            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No artifacts produced yet.</div></Section>,
           },
           {
             value: "params", label: t("section.parameters"),
