@@ -58,6 +58,7 @@ export const CommandCenter = () => {
   const t = useT();
   const navigate = useNavigate();
   const env = usePlatform((s) => s.env);
+  const locale = usePlatform((s) => s.locale);
   const [d, setD] = useState<State>(empty);
 
   useEffect(() => {
