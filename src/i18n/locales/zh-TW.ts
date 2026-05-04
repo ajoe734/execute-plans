@@ -558,7 +558,6 @@ export default {
     startEvolution: "開始演化程式",
     noGovernance: "此策略尚無治理請求。",
   },
-};
   settings: {
     subtitle: "個人偏好、Workspace、整合、語言、佈景與功能旗標。",
     tab: { profile: "個人", workspace: "Workspace", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標" },
