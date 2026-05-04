@@ -133,6 +133,9 @@ export default {
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All", back: "Back", risk: "Risk", successRate: "Success",
     justNow: "just now",
+    notFound: "Oops! Page not found", returnHome: "Return to Home",
+    densityComfortable: "Comfortable",
+    addTitleFirst: "Add a title first",
   },
   permission: {
     requireAction: "Requires permission: {{action}}",
