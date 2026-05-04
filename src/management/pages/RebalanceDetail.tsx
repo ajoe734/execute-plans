@@ -148,7 +148,7 @@ export const RebalanceDetail = () => {
           riskImpact={activeTr.requiresApproval ? t("rebalance.confirmDesc", { name: r.name, from: machineState, to: activeTr.to }) : undefined}
           requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
           rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${r.id}@previous` : undefined}
-          affected={{ rebalances: [r.id], capitalPools: [r.targetPoolId] }}
+          affected={{ capitalPools: [r.targetPoolId], strategies: lines.map((l) => l.strategyId) }}
           destructive={activeTr.uiPattern === "destructive_modal"}
           confirmToken={activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
           onConfirm={async (memo) => {
