@@ -1,6 +1,8 @@
 // scripts/list-hardcoded.ts — print every hard-coded English candidate with file:line
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "src");
 function walk(dir: string, out: string[] = []) {
   for (const f of readdirSync(dir)) {
