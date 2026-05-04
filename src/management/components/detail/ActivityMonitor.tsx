@@ -22,7 +22,7 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
       const evt = p as { jobId: string; status: string; ts: string; kind?: string; owner?: string };
       setEvents((prev) => [{ id: evt.jobId, ts: evt.ts, kind: evt.kind ?? "job", status: evt.status, owner: evt.owner }, ...prev].slice(0, 20));
     });
-    return off;
+    return () => { off(); };
   }, [scope]);
 
   const tone = (s: string) =>
