@@ -566,7 +566,6 @@ export default {
     startEvolution: "Start an evolution program",
     noGovernance: "No governance requests linked to this strategy.",
   },
-};
   settings: {
     subtitle: "Personal preferences, workspace, integrations, locale, theme, and feature flags.",
     tab: { profile: "Profile", workspace: "Workspace", integrations: "Integrations", api: "API Keys", locale: "Language", flags: "Feature Flags" },
