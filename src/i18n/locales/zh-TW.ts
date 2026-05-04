@@ -500,7 +500,7 @@ export default {
     tab: { explain: "解釋", market: "市場背景", similar: "歷史相似案例", persona: "Persona 意見", feedback: "交易員回饋", research: "連結研究", audit: "稽核" },
   },
   table: {
-    id: "編號", kind: "種類", type: "類型", status: "狀態", state: "狀態",
+    id: "編號", kind: "種類", type: "類型", status: "狀態", state: "狀態", persona: "Persona",
     owner: "負責人", risk: "風險", severity: "嚴重度", title: "標題",
     source: "來源", opened: "開啟時間", started: "開始時間", created: "建立時間",
     updated: "更新時間", time: "時間", actor: "操作者", action: "動作",
