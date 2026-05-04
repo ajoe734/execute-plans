@@ -20,7 +20,7 @@ export const StatusBadge = ({ state }: { state: string }) => {
   const t = useT();
   const key = `status.${state}`;
   return (
-    <Badge variant="outline" className={cn("font-medium capitalize", map[state] ?? "bg-muted text-muted-foreground")}>
+    <Badge variant="outline" className={cn("font-medium", map[state] ?? "bg-muted text-muted-foreground")}>
       {t(key, { defaultValue: state })}
     </Badge>
   );
