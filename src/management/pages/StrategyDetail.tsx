@@ -86,6 +86,10 @@ export const StrategyDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <Section>
+                <div className="mb-4">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>
+                  <LifecycleStepper machine={strategyMachine} current={machineState} i18nPrefix="lifecycle.strategy" />
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="Alpha" value={s.alpha} mono />
                   <Field label={t("nav.capitalPools")} value={s.capitalPoolId} mono />
