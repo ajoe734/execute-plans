@@ -133,6 +133,9 @@ export default {
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All", back: "Back", risk: "Risk", successRate: "Success",
     justNow: "just now",
+    notFound: "Oops! Page not found", returnHome: "Return to Home",
+    densityComfortable: "Comfortable",
+    addTitleFirst: "Add a title first",
   },
   permission: {
     requireAction: "Requires permission: {{action}}",
@@ -417,6 +420,7 @@ export default {
     relatedObjects: "Related objects", participants: "Participants",
     discussion: "Discussion", vote: "Vote", memo: "Memo",
     members: "Members", followUps: "Follow-ups", auditLog: "Audit log",
+    simulation: "Simulation", weight: "Weight", contribution: "Contribution", total: "Total",
   },
   table_actions: {
     acknowledge: "Acknowledge", acknowledged: "Acknowledged", open: "Open",

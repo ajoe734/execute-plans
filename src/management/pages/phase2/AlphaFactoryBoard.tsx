@@ -68,7 +68,7 @@ export const AlphaFactoryBoardPage = () => {
                     <div className="mt-2 text-xs text-muted-foreground">{c.note}</div>
                     {c.sharpe !== undefined && (
                       <div className="mt-2 flex items-center gap-3 text-xs text-mono">
-                        <span>Sharpe <strong>{c.sharpe.toFixed(2)}</strong></span>
+                        <span>{t("table.sharpe")} <strong>{c.sharpe.toFixed(2)}</strong></span>
                       </div>
                     )}
                     {col !== "replicated" && (

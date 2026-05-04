@@ -84,7 +84,7 @@ export const RankingDashboardPage = () => {
                 <Card className="p-4">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("rankingDashboard.breakdown")}</div>
                   <table className="w-full text-sm">
-                    <thead><tr className="text-xs text-muted-foreground"><th className="text-left py-1">Metric</th><th className="text-right">Value</th><th className="text-right">Weight</th><th className="text-right">Contribution</th></tr></thead>
+                    <thead><tr className="text-xs text-muted-foreground"><th className="text-left py-1">{t("table.metric")}</th><th className="text-right">{t("table.value")}</th><th className="text-right">{t("section.weight")}</th><th className="text-right">{t("section.contribution")}</th></tr></thead>
                     <tbody>
                       {active.components.map((c) => (
                         <tr key={c.metric} className="border-t border-border">
@@ -95,7 +95,7 @@ export const RankingDashboardPage = () => {
                         </tr>
                       ))}
                       <tr className="border-t border-border">
-                        <td colSpan={3} className="py-1.5 text-right text-xs text-muted-foreground">Total</td>
+                        <td colSpan={3} className="py-1.5 text-right text-xs text-muted-foreground">{t("section.total")}</td>
                         <td className="text-right text-mono text-sm font-bold">{active.score.toFixed(3)}</td>
                       </tr>
                     </tbody>

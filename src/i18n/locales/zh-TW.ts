@@ -128,6 +128,9 @@ export default {
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部", back: "返回", risk: "風險", successRate: "成功率",
     justNow: "剛剛",
+    notFound: "找不到頁面", returnHome: "回到首頁",
+    densityComfortable: "舒適",
+    addTitleFirst: "請先輸入標題",
   },
   permission: {
     requireAction: "需要權限：{{action}}",
@@ -409,6 +412,7 @@ export default {
     relatedObjects: "關聯物件", participants: "參與者",
     discussion: "討論", vote: "投票", memo: "Memo",
     members: "成員", followUps: "後續行動", auditLog: "稽核日誌",
+    simulation: "模擬", weight: "權重", contribution: "貢獻度", total: "合計",
   },
   table_actions: {
     acknowledge: "確認", acknowledged: "已確認", open: "未處理",
