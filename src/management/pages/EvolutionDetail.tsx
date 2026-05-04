@@ -1,28 +1,44 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { EvolutionProgram } from "@/lib/bff/types";
+import type { AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Pause, Play, GitBranch } from "lucide-react";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { DataTable } from "@/platform/components/DataTable";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { StatusBadge } from "@/platform/components/StatusBadge";
 
 export const EvolutionDetail = () => {
   const { id } = useParams();
   const t = useT();
+  const nav = useNavigate();
   const [e, setE] = useState<EvolutionProgram | undefined>();
+  const [experiments, setExperiments] = useState<ResearchExperiment[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     bff.evolution.get(id).then(setE);
+    bff.research.list().then(setExperiments);
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("evolution."))));
   }, [id]);
 
   if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+
+  const candidates = Array.from({ length: 6 }).map((_, i) => ({
+    id: `${e.id}_g${e.generation}_c${i}`,
+    rank: i + 1,
+    fitness: e.bestFitness - i * 0.04,
+    sharpe: 1.6 - i * 0.08,
+    drawdown: -(0.03 + i * 0.005),
+  }));
 
   return (
     <>
@@ -69,7 +85,15 @@ export const EvolutionDetail = () => {
           },
           {
             value: "population", label: "Top Candidates",
-            content: <Placeholder text="Top-N candidates and their fitness will appear here." />,
+            content: (
+              <DataTable rows={candidates} columns={[
+                { key: "rank", header: "#", cell: (r) => <span className="text-mono text-xs">{r.rank}</span> },
+                { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                { key: "fit", header: "Fitness", cell: (r) => <span className="text-mono text-xs">{r.fitness.toFixed(3)}</span> },
+                { key: "sh", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs text-status-failed">{(r.drawdown * 100).toFixed(2)}%</span> },
+              ]} />
+            ),
           },
           {
             value: "config", label: "Config",
@@ -83,8 +107,15 @@ export const EvolutionDetail = () => {
               </Section>
             ),
           },
-          { value: "experiments", label: "Experiments", content: <Placeholder text="Linked research experiments derived from this program." /> },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Lifecycle events for this program." /> },
+          { value: "experiments", label: t("nav.experiments"), content: (
+            <DataTable rows={experiments} onRowClick={(r) => nav(`/management/experiments/${r.id}`)} columns={[
+              { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+              { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+              { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {r.metricValue.toFixed(3)}</span> },
+              { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "concluded" ? "success" : r.status === "running" ? "running" : "pending"} /> },
+            ]} empty={t("empty.noResults")} />
+          ) },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 

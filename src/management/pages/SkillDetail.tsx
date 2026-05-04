@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { bff } from "@/lib/bff/client";
-import type { Skill } from "@/lib/bff/types";
+import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { DataTable } from "@/platform/components/DataTable";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -15,10 +18,18 @@ import { toast } from "sonner";
 export const SkillDetail = () => {
   const { id } = useParams();
   const t = useT();
+  const nav = useNavigate();
   const [skill, setSkill] = useState<Skill | undefined>();
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [pubOpen, setPubOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
-  useEffect(() => { if (id) bff.skills.get(id).then(setSkill); }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    bff.skills.get(id).then(setSkill);
+    bff.personas.list().then(setPersonas);
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("skill."))));
+  }, [id]);
 
   const machineState: SkillState = useMemo(() => {
     if (!skill) return "draft";
@@ -73,9 +84,22 @@ export const SkillDetail = () => {
           },
           { value: "evals", label: t("skill.evals"), content: <Placeholder text={t("skill.evalsHint")} /> },
           { value: "training", label: t("skill.training"), content: <Placeholder text={t("skill.trainingHint")} /> },
-          { value: "consumers", label: t("nav.personas"), content: <Placeholder text="Personas currently consuming this skill." /> },
-          { value: "lineage", label: t("section.lineage"), content: <Placeholder text="Upstream training runs and downstream deployments." /> },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text={t("skill.auditHint")} /> },
+          { value: "consumers", label: t("nav.personas"), content: (
+            <DataTable rows={personas.slice(0, skill.usedByPersonas || personas.length)} onRowClick={(r) => nav(`/management/personas/${r.id}`)} columns={[
+              { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+              { key: "arch", header: t("table.type"), cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
+              { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+            ]} empty={t("empty.none")} />
+          ) },
+          { value: "lineage", label: t("section.lineage"), content: (
+            <Section>
+              <div className="text-sm space-y-2">
+                <div><span className="text-mono text-xs text-muted-foreground">upstream:</span> <span className="text-mono text-xs text-accent">trainer/{skill.archetype.toLowerCase()}_examples</span> → <span className="text-mono text-xs">memory_review</span></div>
+                <div><span className="text-mono text-xs text-muted-foreground">downstream:</span> <span className="text-mono text-xs text-accent">{personas.slice(0, skill.usedByPersonas).map((p) => p.id).join(", ") || "—"}</span></div>
+              </div>
+            </Section>
+          ) },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 

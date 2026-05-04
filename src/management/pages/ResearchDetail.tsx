@@ -3,26 +3,36 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { ResearchExperiment } from "@/lib/bff/types";
+import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
 import { Beaker, Package } from "lucide-react";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { DataTable } from "@/platform/components/DataTable";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 export const ResearchDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
   const [x, setX] = useState<ResearchExperiment | undefined>();
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     bff.research.get(id).then(setX);
+    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action.startsWith("research."))));
   }, [id]);
 
   if (!x) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  const folds = Array.from({ length: 5 }).map((_, i) => ({
+    id: `fold_${i + 1}`,
+    fold: i + 1,
+    metric: x.metricValue + (Math.random() - 0.5) * 0.08,
+    samples: 800 + i * 120,
+  }));
 
   return (
     <>
@@ -55,8 +65,14 @@ export const ResearchDetail = () => {
             ),
           },
           {
-            value: "metrics", label: "Metrics",
-            content: <Placeholder text="Experiment metric chart and per-fold breakdown." />,
+            value: "metrics", label: t("table.metric"),
+            content: (
+              <DataTable rows={folds} columns={[
+                { key: "fold", header: "Fold", cell: (r) => <span className="text-mono text-xs">#{r.fold}</span> },
+                { key: "metric", header: x.metric, cell: (r) => <span className="text-mono text-xs">{r.metric.toFixed(3)}</span> },
+                { key: "samples", header: "Samples", cell: (r) => <span className="text-mono text-xs">{r.samples.toLocaleString()}</span> },
+              ]} />
+            ),
           },
           {
             value: "artifacts", label: "Artifacts",
@@ -87,7 +103,7 @@ export const ResearchDetail = () => {
               </Section>
             ),
           },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Experiment lifecycle events." /> },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 

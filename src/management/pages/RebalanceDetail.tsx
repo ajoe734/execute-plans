@@ -3,9 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { Rebalance, CapitalPool } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool } from "@/lib/bff/types";
 import { Download } from "lucide-react";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { StatusBadge } from "@/platform/components/StatusBadge";
+import { RiskBadge } from "@/platform/components/RiskBadge";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -31,6 +34,8 @@ export const RebalanceDetail = () => {
   const { can } = usePermissions();
   const [r, setR] = useState<Rebalance | undefined>();
   const [pool, setPool] = useState<CapitalPool | undefined>();
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [activeTr, setActiveTr] = useState<Transition<RebalanceState> | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [machineState, setMachineState] = useState<RebalanceState>("draft");
@@ -44,6 +49,8 @@ export const RebalanceDetail = () => {
         bff.capitalPools.get(rb.targetPoolId).then(setPool);
       }
     });
+    bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("rebalance"))));
+    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action.startsWith("rebalance."))));
   }, [id]);
 
   const transitions = useMemo(
@@ -144,8 +151,15 @@ export const RebalanceDetail = () => {
               </Section>
             ),
           },
-          { value: "approvals", label: t("nav.approvals"), content: <Placeholder text={t("empty.none")} /> },
-          { value: "audit", label: t("nav.audit"), content: <Placeholder text="Rebalance audit trail." /> },
+          { value: "approvals", label: t("nav.approvals"), content: (
+            <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
+              { key: "kind", header: t("table.kind"), cell: (row) => <span className="text-mono text-xs">{row.kind}</span> },
+              { key: "subject", header: t("table.subject"), cell: (row) => <div className="font-medium">{row.subject}</div> },
+              { key: "risk", header: t("table.risk"), cell: (row) => <RiskBadge level={row.riskLevel} /> },
+              { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
+            ]} empty={t("empty.none")} />
+          ) },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />
 
