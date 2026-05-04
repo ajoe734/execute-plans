@@ -12,7 +12,7 @@ export const StrategiesList = () => {
       extraColumns={[
         { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
         { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
-        { key: "sharpe", header: "Sharpe", cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+        { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
       ]}
     />
   );
@@ -26,9 +26,9 @@ export const PersonasList = () => {
       loader={() => bff.personas.list()}
       basePath="/management/personas"
       extraColumns={[
-        { key: "arch", header: "Archetype", cell: (r) => r.archetype },
-        { key: "rs", header: "Routed", cell: (r) => <span className="text-mono text-xs">{r.routedStrategies}</span> },
-        { key: "sr", header: "Success", cell: (r) => <span className="text-mono text-xs">{(r.successRate * 100).toFixed(0)}%</span> },
+        { key: "arch", header: t("table.type"), cell: (r) => r.archetype },
+        { key: "rs", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.routedStrategies}</span> },
+        { key: "sr", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{(r.successRate * 100).toFixed(0)}%</span> },
       ]}
     />
   );
@@ -42,10 +42,10 @@ export const CapitalPoolsList = () => {
       loader={() => bff.capitalPools.list()}
       basePath="/management/capital-pools"
       extraColumns={[
-        { key: "ccy", header: "CCY", cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
-        { key: "alloc", header: "Allocated", cell: (r) => <span className="text-mono text-xs">{r.allocated.toLocaleString()}</span> },
-        { key: "util", header: "Utilized", cell: (r) => <span className="text-mono text-xs">{r.utilized.toLocaleString()}</span> },
-        { key: "rb", header: "Risk Budget", cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
+        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
+        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{r.allocated.toLocaleString()}</span> },
+        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{r.utilized.toLocaleString()}</span> },
+        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
       ]}
     />
   );
@@ -59,8 +59,8 @@ export const RankingFormulasList = () => {
       loader={() => bff.rankingFormulas.list()}
       basePath="/management/ranking-formulas"
       extraColumns={[
-        { key: "expr", header: "Expression", cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
-        { key: "applied", header: "Applied to", cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },
+        { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
+        { key: "applied", header: t("section.relatedObjects"), cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },
       ]}
     />
   );
@@ -74,8 +74,8 @@ export const RebalancesList = () => {
       loader={() => bff.rebalances.list()}
       basePath="/management/rebalances"
       extraColumns={[
-        { key: "q", header: "Quarter", cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
-        { key: "delta", header: "Delta", cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
+        { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
+        { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
       ]}
     />
   );
@@ -89,8 +89,8 @@ export const DeploymentsList = () => {
       loader={() => bff.deployments.list()}
       basePath="/management/deployments"
       extraColumns={[
-        { key: "tgt", header: "Target", cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
-        { key: "ver", header: "Version", cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
       ]}
     />
   );
@@ -104,10 +104,10 @@ export const EvolutionList = () => {
       loader={() => bff.evolution.list()}
       basePath="/management/evolution"
       extraColumns={[
-        { key: "gen", header: "Generation", cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
-        { key: "pop", header: "Population", cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
-        { key: "fit", header: "Best Fitness", cell: (r) => <span className="text-mono text-xs">{r.bestFitness.toFixed(2)}</span> },
-        { key: "prog", header: "Progress", cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
+        { key: "gen", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
+        { key: "pop", header: t("section.members"), cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
+        { key: "fit", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{r.bestFitness.toFixed(2)}</span> },
+        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
       ]}
     />
   );
@@ -121,9 +121,9 @@ export const ResearchList = () => {
       loader={() => bff.research.list()}
       basePath="/management/research"
       extraColumns={[
-        { key: "status", header: "Status", cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
-        { key: "metric", header: "Metric", cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
-        { key: "val", header: "Value", cell: (r) => <span className="text-mono text-xs">{r.metricValue.toFixed(2)}</span> },
+        { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
+        { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
+        { key: "val", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.metricValue.toFixed(2)}</span> },
       ]}
     />
   );
@@ -137,8 +137,8 @@ export const ArtifactsList = () => {
       loader={() => bff.artifacts.list()}
       basePath="/management/artifacts"
       extraColumns={[
-        { key: "kind", header: "Kind", cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
-        { key: "ver", header: "Version", cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
         { key: "size", header: "Size (MB)", cell: (r) => <span className="text-mono text-xs">{r.sizeMb.toLocaleString()}</span> },
         { key: "hash", header: "Hash", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.hash}</span> },
       ]}
