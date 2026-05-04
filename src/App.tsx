@@ -31,7 +31,7 @@ import {
 import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
 } from "@/management/pages/Operations";
-import { Placeholder } from "@/platform/components/Placeholder";
+
 import { CommitteeRoom } from "@/agora/pages/CommitteeRoom";
 import { SignalDetail } from "@/agora/pages/SignalDetail";
 import { CommandCenter } from "@/management/pages/CommandCenter";
@@ -53,6 +53,15 @@ import { PersonaLab } from "@/agora/pages/PersonaLab";
 import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
 import { AgoraChannels } from "@/agora/pages/AgoraChannels";
 import { QAChecklist } from "@/platform/pages/QAChecklist";
+import { SettingsPage } from "@/management/pages/phase2/Settings";
+import { LineageExplorerPage } from "@/management/pages/phase2/LineageExplorer";
+import { KnowledgeInboxPage } from "@/management/pages/phase2/KnowledgeInbox";
+import { PostmortemLibraryPage } from "@/management/pages/phase2/PostmortemLibrary";
+import { GovernanceQueuePage } from "@/management/pages/phase2/GovernanceQueue";
+import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard";
+import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
+import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
+import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -82,7 +91,7 @@ const App = () => (
               <Route path="capital/:id" element={<CapitalPoolDetail />} />
               <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
               <Route path="capital-pools/:id" element={<CapitalPoolDetail />} />
-              <Route path="ranking" element={<Placeholder title="Ranking Dashboard" hint="Phase 2: ranking dashboard with formula breakdown." />} />
+              <Route path="ranking" element={<RankingDashboardPage />} />
               <Route path="ranking/formulas" element={<RankingFormulasList />} />
               <Route path="ranking/formulas/:id" element={<RankingFormulaDetail />} />
               <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
@@ -100,11 +109,15 @@ const App = () => (
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="incidents/:id" element={<IncidentDetail />} />
-              <Route path="governance" element={<Placeholder title="Governance Queue" hint="Phase 2: governance review queue (split from approvals)." />} />
+              <Route path="governance" element={<GovernanceQueuePage />} />
               <Route path="governance/:id" element={<GovernanceReview />} />
-              <Route path="knowledge" element={<Placeholder title="Knowledge Inbox" hint="Phase 2: insight triage feeding artifacts & postmortems." />} />
-              <Route path="lineage" element={<Placeholder title="Lineage Explorer" hint="Phase 2: cross-entity lineage graph." />} />
-              <Route path="settings" element={<Placeholder title="Settings" hint="Phase 2: workspace, integrations, locale, theme, feature flags." />} />
+              <Route path="knowledge" element={<KnowledgeInboxPage />} />
+              <Route path="postmortems" element={<PostmortemLibraryPage />} />
+              <Route path="lineage" element={<LineageExplorerPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="alpha-factory" element={<AlphaFactoryBoardPage />} />
+              <Route path="workflows" element={<WorkflowTemplatesPage />} />
+              <Route path="hooks" element={<HookCronManagerPage />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />

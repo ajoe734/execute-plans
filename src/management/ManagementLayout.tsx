@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
-  BookOpen, Workflow,
+  BookOpen, Workflow, FileText, Factory, Clock,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -17,6 +17,7 @@ export const ManagementLayout = () => {
     ]},
     { label: t("groups.coreManagement"), items: [
       { to: "/management/strategies", label: t("nav.strategies"), icon: Boxes },
+      { to: "/management/alpha-factory", label: t("nav.alphaFactory"), icon: Factory },
       { to: "/management/personas", label: t("nav.personas"), icon: Users },
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
@@ -27,6 +28,7 @@ export const ManagementLayout = () => {
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/governance", label: t("nav.governance"), icon: ClipboardCheck },
       { to: "/management/knowledge", label: t("nav.knowledge"), icon: BookOpen },
+      { to: "/management/postmortems", label: t("nav.postmortems"), icon: FileText },
       { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
     ]},
@@ -43,6 +45,8 @@ export const ManagementLayout = () => {
       { to: "/management/tools", label: t("nav.tools"), icon: Wrench },
       { to: "/management/mcp", label: t("nav.mcp"), icon: Network },
       { to: "/management/skills", label: t("nav.skills"), icon: Sparkles },
+      { to: "/management/workflows", label: t("nav.workflowTemplates"), icon: Workflow },
+      { to: "/management/hooks", label: t("nav.hooks"), icon: Clock },
       { to: "/management/channels", label: t("nav.channels"), icon: Radio },
     ]},
     { label: t("groups.system"), items: [
