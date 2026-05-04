@@ -19,6 +19,26 @@ import { usePlatform } from "@/platform/store";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, AlertOctagon, Activity, Wallet, Inbox } from "lucide-react";
 
+const relTime = (iso: string, locale: string, justNow: string) => {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(diffMs);
+  if (abs < 60_000) return justNow;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["day", 86_400_000], ["hour", 3_600_000], ["minute", 60_000],
+  ];
+  for (const [unit, ms] of units) {
+    if (abs >= ms) return rtf.format(Math.round(diffMs / ms), unit);
+  }
+  return justNow;
+};
+
+const poolBarClass = (pct: number) =>
+  pct > 90 ? "bg-risk-critical" : pct > 75 ? "bg-risk-high" : pct > 60 ? "bg-risk-medium" : "bg-accent";
+
+const poolRiskLevel = (pct: number): "low" | "medium" | "high" | "critical" =>
+  pct > 90 ? "critical" : pct > 75 ? "high" : pct > 60 ? "medium" : "low";
+
 interface State {
   strategies: Strategy[];
   personas: Persona[];
