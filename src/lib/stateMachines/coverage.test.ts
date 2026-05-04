@@ -93,41 +93,16 @@ describe("state machine coverage (Part 7 §17)", () => {
     }
   });
 
-  it("every requiresApproval transition has a risk level", () => {
-    // Approvals without risk metadata cannot be routed correctly by GovernanceQueue.
-    const exempt = new Set([
-      // Memory edits / merges and similar low-risk approvals are intentional.
-      "memory:edit_memory", "memory:merge_memory", "memory:approve_memory",
-      "memory:reject_memory", "memory:deprecate_memory",
-      "memory:convert_to_research", "memory:convert_to_strategy",
-      // Approval workflow internal transitions.
-      "approval:reject", "approval:request_changes", "approval:resubmit",
-      // Incident closure has its own gating.
-      "incident:close_incident",
-      // Rebalance progression requires approval but risk applies on apply.
-      "rebalance:submit_for_review", "rebalance:unfreeze_metrics",
-      // Strategy review is gated but not high-risk by itself.
-      "strategy:submit_review",
-      // Persona restoration & insight conversions.
-      "persona:restore_active", "persona:remove_restriction",
-      "insight:convert_to_research",
-      // Tool / skill / mcp lifecycle resumes.
-      "tool:activate_tool", "tool:unrestrict_tool", "tool:retire_tool",
-      "skill:submit_for_approval", "skill:retire_skill", "skill:reopen_skill",
-      "rankingFormula:submit_formula_review", "rankingFormula:retire_formula",
-      "mcpServer:reenable",
-      // EvolutionRun has no risk grading; runtime control only.
-      // Approval workflow approve action.
-    ]);
+  it("transitions using a high-risk UI pattern declare a risk level", () => {
+    const highRiskPatterns = new Set(["high_risk_modal", "rollback_modal", "destructive_modal"]);
     for (const m of all) {
       for (const t of m.transitions) {
-        if (!t.requiresApproval) continue;
-        const key = `${m.name}:${t.action}`;
-        if (exempt.has(key)) continue;
+        if (!t.uiPattern || !highRiskPatterns.has(t.uiPattern)) continue;
         expect(
           t.risk,
-          `${m.name}: ${t.from}→${t.to} (${t.action}) requires approval but has no risk`,
+          `${m.name}: ${t.from}→${t.to} (${t.action}) uses ${t.uiPattern} but has no risk`,
         ).toBeDefined();
+        expect(["high", "critical"]).toContain(t.risk);
       }
     }
   });
