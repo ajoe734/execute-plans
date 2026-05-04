@@ -84,14 +84,14 @@ export const SkillCoaching = () => {
 
           <div className="lg:col-span-3 space-y-4">
             <Card className="p-4">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">System Prompt</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("agora.skillCoaching.systemPrompt")}</div>
               <Textarea
                 value={active.systemPrompt}
                 onChange={(e) => updateActive({ systemPrompt: e.target.value })}
                 className="min-h-[100px] text-mono text-xs"
               />
               <div className="flex justify-end mt-2">
-                <Button size="sm" variant="outline" onClick={() => toast.success("Skill draft saved")}>Save draft</Button>
+                <Button size="sm" variant="outline" onClick={() => toast.success("Skill draft saved")}>{t("agora.skillCoaching.saveDraft")}</Button>
               </div>
             </Card>
 
@@ -104,7 +104,7 @@ export const SkillCoaching = () => {
                   <div key={ex.id} className="rounded-md border border-border p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">User</div>
                     <p className="text-sm mb-2">{ex.prompt}</p>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Expected</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.skillCoaching.expected")}</div>
                     <p className="text-sm">{ex.expected}</p>
                     <div className="flex items-center gap-2 mt-3">
                       <Button size="sm" variant={ex.rating === "good" ? "default" : "outline"} onClick={() => rate(ex.id, "good")}><ThumbsUp className="h-3 w-3 mr-1" />Good</Button>
@@ -119,8 +119,8 @@ export const SkillCoaching = () => {
                 <Textarea value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder="New user prompt…" className="min-h-[60px]" />
                 <Textarea value={newExpected} onChange={(e) => setNewExpected(e.target.value)} placeholder="Expected response…" className="min-h-[60px]" />
                 <div className="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" onClick={() => toast("Sent to draft preview")}><Send className="h-3 w-3 mr-1" />Test draft</Button>
-                  <Button size="sm" onClick={addExample}><Plus className="h-3 w-3 mr-1" />Add example</Button>
+                  <Button size="sm" variant="outline" onClick={() => toast("Sent to draft preview")}><Send className="h-3 w-3 mr-1" />{t("agora.skillCoaching.testDraft")}</Button>
+                  <Button size="sm" onClick={addExample}><Plus className="h-3 w-3 mr-1" />{t("agora.skillCoaching.addExample")}</Button>
                 </div>
               </div>
             </Card>

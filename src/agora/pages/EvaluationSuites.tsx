@@ -124,15 +124,15 @@ export const EvaluationSuites = () => {
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-sm">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prompt</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.evaluation.prompt")}</div>
                       {c.prompt}
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Expected</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.evaluation.expected")}</div>
                       {c.expected}
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Observed</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.evaluation.observed")}</div>
                       {c.observed ?? <span className="text-muted-foreground">—</span>}
                     </div>
                   </div>

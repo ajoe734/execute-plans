@@ -32,8 +32,8 @@ export const TrainerStudio = () => {
           <div className="flex items-center gap-3 mb-3">
             <div className="rounded-md p-2 bg-accent/10 border border-accent/20"><GraduationCap className="h-5 w-5 text-accent" /></div>
             <div>
-              <h3 className="font-semibold">Today's training pipeline</h3>
-              <p className="text-xs text-muted-foreground">Naturally-collected training events flowing in from Agora.</p>
+              <h3 className="font-semibold">{t("agora.trainerStudio.title")}</h3>
+              <p className="text-xs text-muted-foreground">{t("agora.trainerStudio.subtitle")}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">

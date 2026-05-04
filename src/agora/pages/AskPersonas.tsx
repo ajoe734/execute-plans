@@ -40,7 +40,7 @@ export const AskPersonas = () => {
       <PageHeader title={t("nav.askPersonas")} subtitle="Single or multi-persona committee" />
       <PageBody>
         <Card className="p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Personas</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{t("agora.askPersonas.personas")}</div>
           <div className="flex flex-wrap gap-2">
             {personas.map((p) => {
               const on = selected.includes(p.id);
@@ -55,12 +55,12 @@ export const AskPersonas = () => {
                 </button>
               );
             })}
-            {selected.length > 1 && <Badge variant="outline">Committee mode</Badge>}
+            {selected.length > 1 && <Badge variant="outline">{t("agora.askPersonas.committeeMode")}</Badge>}
           </div>
         </Card>
 
         <Card className="p-4 min-h-[300px] space-y-3">
-          {msgs.length === 0 && <div className="text-sm text-muted-foreground text-center py-12">Start a conversation. Pantheon will capture each response into <code className="text-mono">persona_response_feedback</code>.</div>}
+          {msgs.length === 0 && <div className="text-sm text-muted-foreground text-center py-12">{t("agora.askPersonas.hint")}</div>}
           {msgs.map((m, i) => (
             <div key={i} className={`flex gap-3 ${m.from === "you" ? "justify-end" : ""}`}>
               {m.from !== "you" && <Avatar className="h-8 w-8"><AvatarFallback className="text-xs">{m.from.split(" ").map((w) => w[0]).join("")}</AvatarFallback></Avatar>}

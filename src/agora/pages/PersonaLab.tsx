@@ -66,21 +66,21 @@ export const PersonaLab = () => {
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <Card className="lg:col-span-3 p-5 space-y-4">
-            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold">Persona draft</h3></div>
+            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold">{t("agora.personaLab.draft")}</h3></div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Name</label>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.name")}</label>
                 <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Archetype</label>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.archetype")}</label>
                 <Input value={draft.archetype} onChange={(e) => setDraft({ ...draft, archetype: e.target.value })} />
               </div>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">System Prompt</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.systemPrompt")}</label>
               <Textarea
                 value={draft.systemPrompt}
                 onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })}
@@ -89,7 +89,7 @@ export const PersonaLab = () => {
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Skills</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.personaLab.skills")}</label>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {skills.map((s) => {
                   const on = draft.skills.includes(s.id);
