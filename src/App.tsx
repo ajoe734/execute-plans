@@ -41,7 +41,8 @@ import { GovernanceReview } from "@/management/pages/GovernanceReview";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
-import { MarketWatchlist } from "@/agora/pages/MarketWatchlist";
+import { Markets } from "@/agora/pages/Markets";
+import { Watchlist } from "@/agora/pages/Watchlist";
 import { SignalReview } from "@/agora/pages/SignalReview";
 import { AlertTriage } from "@/agora/pages/AlertTriage";
 import { DecisionJournal } from "@/agora/pages/DecisionJournal";
@@ -141,8 +142,8 @@ const App = () => (
             <Route path="/agora" element={<AgoraLayout />}>
               <Route index element={<DailyBrief />} />
               <Route path="daily" element={<DailyBrief />} />
-              <Route path="markets" element={<MarketWatchlist />} />
-              <Route path="watchlist" element={<MarketWatchlist />} />
+              <Route path="markets" element={<Markets />} />
+              <Route path="watchlist" element={<Watchlist />} />
               <Route path="market" element={<Navigate to="/agora/markets" replace />} />
               <Route path="signals" element={<SignalReview />} />
               <Route path="signals/:id" element={<SignalDetail />} />
