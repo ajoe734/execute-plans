@@ -120,3 +120,22 @@
 **先做 Phase 9**（拆頁 + seeds），因為 Phase 10/11/12 都依賴新 mock endpoint。確認 Phase 9 後再進 Phase 10（Detail Tab，使用者最有感），最後 Phase 11 → 12（治理 → Studio）。
 
 要不要直接核准 Phase 9 開工？或想先調整 Phase 順序 / 範圍？
+
+---
+
+## 完成狀態（2026-05-04）
+
+- ✅ **Phase 9** — Agora 拆頁 + BFF Seeds 擴充
+- ✅ **Phase 10** — Detail Tab 深度補齊（10.1–10.4）
+- ✅ **Phase 11** — 治理深度表面 §12 / §13（11.1–11.5）
+- ✅ **Phase 12** — Studio 類 §15–18（Formula / Fitness / Evolution / Allocation / Rebalance Ops / Capital / Skill Sandbox + Studios Hub）
+
+### 收尾驗證
+- `bunx vitest run` → 47 / 47 passed
+- `bun scripts/check-i18n.ts` → 0 missing, en-US 1014 keys ↔ zh-TW 1014 keys，雙語完全對齊
+- Hard-coded 候選剩 21 條，集中在 shadcn 內部與 TrainerStudio 標籤（皆為非 UI 文字或 props 名稱），可忽略
+
+### 後續建議
+1. 在 `/platform/qa` 把 Spec Part 8 §10–§14 對應條目逐項勾選作為里程碑驗收。
+2. 若要接真後端，替換 `src/lib/bff/{client,mutations,realtime}.ts` 的 transport，其餘 UI 與狀態機不需改動。
+3. Publish 前再跑一次 `bunx vitest run` + `bun scripts/check-i18n.ts`。
