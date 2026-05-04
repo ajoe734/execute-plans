@@ -86,6 +86,7 @@ export const DeploymentDetail = () => {
               </>
             ),
           },
+          { value: "stages", label: t("deployment.tab.stages"), content: <DeploymentStagesPanel deployment={d} /> },
           { value: "runtime", label: t("nav.runtimes"), content: (() => {
             const filtered = runtimes.filter((r) => r.env === d.target && r.kind === "executor");
             return (
