@@ -76,6 +76,32 @@ export const McpServerDetail = () => {
             />
           ),
         },
+        {
+          value: "health", label: "Health",
+          content: (
+            <Section title="Runtime health">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
+                <StatCard label="Uptime" value="99.9%" tone="success" />
+                <StatCard label="P95 latency" value="42 ms" />
+                <StatCard label={t("table.region")} value={s.region} />
+              </div>
+            </Section>
+          ),
+        },
+        {
+          value: "permissions", label: t("section.permissions"),
+          content: (
+            <Section title="Allowed environments">
+              <div className="flex gap-1">
+                {s.envAllowed.map((e) => (
+                  <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
+                ))}
+              </div>
+            </Section>
+          ),
+        },
+        { value: "lineage", label: t("section.lineage"), content: <Placeholder text="Tools and personas that depend on this MCP server." /> },
         { value: "audit", label: t("nav.audit"), content: <Placeholder text="Per-server invocation log." /> },
       ]}
     />

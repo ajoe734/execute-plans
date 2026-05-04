@@ -73,6 +73,8 @@ export const SkillDetail = () => {
           },
           { value: "evals", label: t("skill.evals"), content: <Placeholder text={t("skill.evalsHint")} /> },
           { value: "training", label: t("skill.training"), content: <Placeholder text={t("skill.trainingHint")} /> },
+          { value: "consumers", label: t("nav.personas"), content: <Placeholder text="Personas currently consuming this skill." /> },
+          { value: "lineage", label: t("section.lineage"), content: <Placeholder text="Upstream training runs and downstream deployments." /> },
           { value: "audit", label: t("nav.audit"), content: <Placeholder text={t("skill.auditHint")} /> },
         ]}
       />
