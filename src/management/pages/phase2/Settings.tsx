@@ -73,7 +73,7 @@ export const SettingsPage = () => {
                 <Switch defaultChecked />
               </Row>
               <Row label={t("settings.theme.density")}>
-                <Badge variant="outline">Comfortable</Badge>
+                <Badge variant="outline">{t("common.densityComfortable")}</Badge>
               </Row>
             </Section>
           </TabsContent>
