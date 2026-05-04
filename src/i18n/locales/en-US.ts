@@ -640,7 +640,7 @@ export default {
       current: "Current",
     },
   },
-  env: { research: "Research", paper: "Paper", live: "Live" },
+  
   evolution: {
     resume: "Resume",
     tabs: { direction: "Direction", fitness: "Fitness", mutation: "Mutation", runs: "Runs", candidates: "Candidates", promotion: "Promotion" },
