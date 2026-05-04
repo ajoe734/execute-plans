@@ -1,32 +1,55 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import type { Rebalance, CapitalPool } from "@/lib/bff/types";
-import { PlayCircle, FileSearch, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
+import { rebalanceMachine, type RebalanceState } from "@/lib/stateMachines";
+import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
+import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "sonner";
+
+// Map mock BaseObject lifecycle → rebalance state machine.
+const mapState = (s: string): RebalanceState => {
+  const m: Record<string, RebalanceState> = {
+    draft: "draft", review: "under_review", approved: "approved",
+    deployed: "applied", paused: "scheduled", retired: "cancelled",
+  };
+  return m[s] ?? "draft";
+};
 
 export const RebalanceDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const [r, setR] = useState<Rebalance | undefined>();
   const [pool, setPool] = useState<CapitalPool | undefined>();
-  const [applyOpen, setApplyOpen] = useState(false);
-  const [simOpen, setSimOpen] = useState(false);
+  const [activeTr, setActiveTr] = useState<Transition<RebalanceState> | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [machineState, setMachineState] = useState<RebalanceState>("draft");
 
   useEffect(() => {
     if (!id) return;
     bff.rebalances.get(id).then((rb) => {
       setR(rb);
-      if (rb) bff.capitalPools.get(rb.targetPoolId).then(setPool);
+      if (rb) {
+        setMachineState(mapState(rb.state));
+        bff.capitalPools.get(rb.targetPoolId).then(setPool);
+      }
     });
   }, [id]);
+
+  const transitions = useMemo(
+    () => r ? nextTransitions(rebalanceMachine, machineState).filter((tr) => can(tr.action)) : [],
+    [machineState, can, r],
+  );
 
   if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   const lines = r.lines ?? [];
@@ -38,15 +61,22 @@ export const RebalanceDetail = () => {
         subtitle={`${r.quarter} · target ${r.targetPoolId}`}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => setSimOpen(true)}>
-              <FileSearch className="h-4 w-4 mr-1" />Simulate
-            </Button>
             <Button size="sm" variant="outline">
               <Download className="h-4 w-4 mr-1" />Export
             </Button>
-            <Button size="sm" onClick={() => setApplyOpen(true)}>
-              <PlayCircle className="h-4 w-4 mr-1" />{t("actions.applyRebalance")}
-            </Button>
+            {transitions.length === 0 && (
+              <span className="text-xs text-muted-foreground">{t("rebalance.noAction")}</span>
+            )}
+            {transitions.map((tr) => (
+              <Button
+                key={tr.action}
+                size="sm"
+                variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
+                onClick={() => { setActiveTr(tr); setConfirmOpen(true); }}
+              >
+                {tr.action} → {t(`lifecycle.rebalance.${tr.to}`, { defaultValue: tr.to })}
+              </Button>
+            ))}
           </>
         }
         tabs={[
@@ -54,6 +84,10 @@ export const RebalanceDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <>
+                <Section>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>
+                  <LifecycleStepper machine={rebalanceMachine} current={machineState} i18nPrefix="lifecycle.rebalance" />
+                </Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label={t("nav.capitalPools")} value={pool ? pool.name : r.targetPoolId} />
                   <StatCard label="Proposed Δ" value={`${(r.proposedDelta * 100).toFixed(1)}%`} tone="warning" />
@@ -102,23 +136,28 @@ export const RebalanceDetail = () => {
         ]}
       />
 
-      <HighRiskConfirm
-        open={simOpen}
-        onOpenChange={setSimOpen}
-        title={`Simulate Rebalance — ${r.name}`}
-        description="Runs a full backtest simulation of this rebalance against the last 90 days. Read-only."
-        confirmToken="SIMULATE"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "simulate", memo }); toast.success(t("toast.actionQueued")); }}
-      />
-      <HighRiskConfirm
-        open={applyOpen}
-        onOpenChange={setApplyOpen}
-        title={`Apply Rebalance — ${r.name}`}
-        description="Applies the proposed allocation to the target pool. This will route an approval request and, when approved, generate live orders."
-        confirmToken="APPLY"
-        destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: "apply", newState: "deployed", memo }); toast.success(t("toast.actionQueued")); }}
-      />
+      {activeTr && (
+        <HighRiskConfirm
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          operation={activeTr.action}
+          target={{ type: "Rebalance", id: r.id, name: r.name }}
+          currentState={machineState}
+          newState={activeTr.to}
+          risk={activeTr.risk ?? "medium"}
+          riskImpact={activeTr.requiresApproval ? t("rebalance.confirmDesc", { name: r.name, from: machineState, to: activeTr.to }) : undefined}
+          requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
+          rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${r.id}@previous` : undefined}
+          affected={{ rebalances: [r.id], capitalPools: [r.targetPoolId] }}
+          destructive={activeTr.uiPattern === "destructive_modal"}
+          confirmToken={activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
+          onConfirm={async (memo) => {
+            await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: activeTr.action, memo });
+            setMachineState(activeTr.to);
+            toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
+          }}
+        />
+      )}
     </>
   );
 };
