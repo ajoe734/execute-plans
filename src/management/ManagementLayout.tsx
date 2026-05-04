@@ -6,6 +6,7 @@ import {
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
+  Beaker,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -52,6 +53,7 @@ export const ManagementLayout = () => {
       { to: "/management/workflows", label: t("nav.workflowTemplates"), icon: Workflow },
       { to: "/management/hooks", label: t("nav.hooks"), icon: Clock },
       { to: "/management/channels", label: t("nav.channels"), icon: Radio },
+      { to: "/management/studios", label: t("nav.studios"), icon: Beaker },
     ]},
     { label: t("groups.system"), items: [
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },

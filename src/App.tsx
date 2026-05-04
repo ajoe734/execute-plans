@@ -68,6 +68,14 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
+import { StudiosOverview } from "@/management/pages/studios/StudiosOverview";
+import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
+import { FitnessFormulaStudio } from "@/management/pages/studios/FitnessFormulaStudio";
+import { EvolutionStudio } from "@/management/pages/studios/EvolutionStudio";
+import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
+import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
+import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
+import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -146,6 +154,14 @@ const App = () => (
               <Route path="skills/:id" element={<SkillDetail />} />
               <Route path="channels" element={<ChannelsList />} />
               <Route path="channels/:id" element={<ChannelDetail />} />
+              <Route path="studios" element={<StudiosOverview />} />
+              <Route path="studios/formula" element={<FormulaStudio />} />
+              <Route path="studios/fitness" element={<FitnessFormulaStudio />} />
+              <Route path="studios/evolution" element={<EvolutionStudio />} />
+              <Route path="studios/allocation" element={<AllocationStudio />} />
+              <Route path="studios/rebalance-ops" element={<RebalanceOpsStudio />} />
+              <Route path="studios/capital" element={<CapitalStudio />} />
+              <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
             </Route>
 
             {/* Agora Workbench */}
