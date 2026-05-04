@@ -1,42 +1,47 @@
-## Command Center UI 收斂
+## Sidebar / 全站翻譯收斂
 
-針對 `/management` (CommandCenter.tsx) 的 5 處可見問題一次處理。
+針對 zh-TW 介面中側邊欄與相關 i18n key 仍夾雜英文的問題，一次補齊。同時順手處理 KPI 與 StatCard 的 `uppercase` 副作用。
 
-### 1. 生命週期瓶頸卡片 compact 化
-- 將四個狀態桶從 `grid-cols-3 sm:grid-cols-6` 大方塊改為水平 chip 列：每個 chip 一行顯示 `[STATE_BADGE] [count]`，使用 `flex flex-wrap gap-2`。
-- 移除大字 `text-xl` 留白，改用 `StatusBadge` + `text-mono` 計數，整張卡片高度縮減約 50%。
-- 修正 DEPLOYED/REVIEW 字疊問題（根因是 grid cell 寬度不足 + uppercase 全寫）。
+### 1. zh-TW nav / groups 補譯
+`src/i18n/locales/zh-TW.ts` 修改：
 
-### 2. 資金池曝險配色補中間色階
-目前邏輯 `pct > 90 → critical(紅), > 75 → high(橘), else accent(藍)`，但截圖中 Beta 60% 顯示為藍、Tactical 96% 為紅，缺中間警示。
-- 新增 `> 60` → `bg-risk-medium`（黃）一階，符合 spec 4 級 risk 配色。
-- 在 bar 右側百分比旁加上 `RiskBadge` 對應 level，雙重編碼（顏色 + 標籤）避免色盲誤讀。
+- `nav.jobs`: `Jobs` → `任務`
+- `nav.runtimes`: `Runtime` → `執行環境`
+- `nav.tools`: `Tools` → `工具`
+- `nav.mcp`: `MCP` → `MCP 伺服器`（MCP 為協定縮寫保留）
+- `nav.skills`: `Skills` → `技能`
+- `nav.channels`: `Channel` → `通道`
+- `nav.memoryReview`: `Memory Review` → `記憶回顧`
+- `nav.skillCoaching`: `Skill Coaching` → `技能教練`
+- `nav.personaLab`: `Persona Lab` → `Persona 實驗室`
+- `nav.eval`: `Evaluation Suites` → `評估套件`
+- `nav.committee`: `Committee Room` → `委員會`
+- `nav.trainerStudio`: `AI 訓練工作室`（保留）
+- `groups.operations`: `Operations` → `營運`
 
-### 3. Agora 移交表格欄名修正
-- `t("common.state")` 改為 `t("common.risk")`（已存在 key），語意對齊欄位內容（RiskBadge）。
-- 同步調整 i18n（若 `common.risk` 缺 zh-TW 翻譯則補上「風險」）。
+`topbar.search` / `topbar.runningJobs` 中的 `Job` → `任務`。
 
-### 4. 告警與事件補時間脈絡
-- 每筆 incident/alert 列加上 `relative time`（例如 `12 分鐘前`），使用 `Intl.RelativeTimeFormat` 配合 i18n locale。
-- 將 `in_021` 這類 ID 從標題位置降級為 `text-mono text-xs text-muted-foreground` 的副標。
+### 2. en-US 對齊
+`src/i18n/locales/en-US.ts` 確認對應 key 都存在（committee、memoryReview、skillCoaching、personaLab、eval），缺的補上英文值，避免 fallback 顯示 key。
 
-### 5. Persona 活躍度語意分離
-- 將「成功率%」與「風險 badge」拆成兩欄，並加上 micro label（`成功率` / `風險`）於卡片頂部 header row，避免 91% 配「低」看似矛盾。
-- 使用 `grid grid-cols-[1fr_auto_auto] gap-3` 對齊。
+### 3. StatCard / Badge `uppercase` 收斂
+- `src/platform/components/StatCard.tsx`：標題容器把 `uppercase tracking-wider` 改為僅在 `locale==="en-US"` 套用（透過 `usePlatform` 讀 locale），或直接移除 `uppercase`，改用 `text-xs font-semibold tracking-wide`。中文不需要全大寫。
+- `src/platform/components/StatusBadge.tsx`：移除 `capitalize`（中文無作用，英文 label 已是大寫開頭）。
+- 同步修 `CommandCenter.tsx` 中 KPI 標題「LIVE 高風險策略 / RUNTIME 健康度 / 執行中 JOB」字串：拆成純語意 — `live.highRiskStrategies` → `Live 高風險策略`、`runtime.health` → `Runtime 健康度`、`jobs.running` → `執行中任務`，並把 i18n key 化（不再硬編碼於 page）。
 
-### 6. （順手）三欄高度對齊
-- 包住三欄 grid 加 `items-stretch`，每張 Card 內部用 `flex flex-col h-full`，讓資金池 / 告警 / Persona 高度一致，避免 Persona 欄出現大量空白。
+### 4. Mock 資料中明顯的英文 UI 字串
+- 不動業務性英文（incident title、actor、symbol），符合 spec「runtime data 由後端產生」原則。
+- 但 `CapabilitiesLists.tsx` 中 column header `Category / Inputs / Used by / Endpoint / Tools / Envs / Mode / Eval / Personas / Subs` 全部走 i18n（新增 `table.category / table.inputs / table.usedBy / table.endpoint / table.tools / table.envs / table.mode / table.eval / table.personas / table.subscribers`）。
 
-### 技術細節
-- 僅修改 `src/management/pages/CommandCenter.tsx`。
-- 若 `common.risk` 在 `zh-TW.ts`/`en-US.ts` 缺鍵則補上（zh: 風險, en: Risk）。
-- 不新增依賴，`Intl.RelativeTimeFormat` 為原生 API。
-- 不影響既有測試（30/30 應維持）。
+### 涉及檔案
+- `src/i18n/locales/zh-TW.ts`
+- `src/i18n/locales/en-US.ts`
+- `src/platform/components/StatCard.tsx`
+- `src/platform/components/StatusBadge.tsx`
+- `src/management/pages/CommandCenter.tsx`
+- `src/management/pages/CapabilitiesLists.tsx`
 
 ### 驗收
-- `/management` 在 1120px viewport 下，KPI Strip 應出現在 above-the-fold（瓶頸卡片變矮後自然上移）。
-- 瓶頸卡片無字疊。
-- 資金池 60–75% 區間顯示黃色 bar。
-- Agora 表格欄名為「風險」/`Risk`。
-- 告警列每筆顯示相對時間。
-- 三欄高度齊平。
+- 切到 zh-TW，左側欄無任何英文（除 MCP 縮寫 / Persona 專有名詞）。
+- KPI 卡標題在 zh-TW 下不再全大寫、無字疊。
+- `bun run scripts/check-i18n.ts` 通過、30/30 測試維持。

@@ -223,9 +223,9 @@ export const CommandCenter = () => {
           <Card className="p-4 flex flex-col h-full">
             <SectionHeader title={t("commandCenter.section.personaActivity")} />
             <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-xs items-center">
-              <div className="text-muted-foreground uppercase tracking-wider">{t("common.owner")}</div>
-              <div className="text-muted-foreground uppercase tracking-wider text-right">{t("common.successRate")}</div>
-              <div className="text-muted-foreground uppercase tracking-wider text-right">{t("common.risk")}</div>
+              <div className="text-muted-foreground tracking-wide">{t("common.owner")}</div>
+              <div className="text-muted-foreground tracking-wide text-right">{t("common.successRate")}</div>
+              <div className="text-muted-foreground tracking-wide text-right">{t("common.risk")}</div>
               {d.personas.map((p) => (
                 <div key={p.id} className="contents">
                   <button onClick={() => navigate(`/management/personas/${p.id}`)} className="text-sm hover:underline truncate text-left">{p.name}</button>
@@ -293,7 +293,7 @@ export const CommandCenter = () => {
 
 const SectionHeader = ({ icon, title, hint }: { icon?: React.ReactNode; title: string; hint?: string }) => (
   <div>
-    <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground">
       {icon}
       {title}
     </div>

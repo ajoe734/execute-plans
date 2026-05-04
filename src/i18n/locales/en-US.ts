@@ -379,6 +379,8 @@ export default {
     capacity: "Capacity", utilization: "Utilization", region: "Region",
     version: "Version", tags: "Tags", priority: "Priority",
     filters: "Filters", subscribers: "Subscribers", destination: "Destination",
+    category: "Category", inputs: "Inputs", usedBy: "Used by", endpoint: "Endpoint",
+    tools: "Tools", envs: "Envs", mode: "Mode", eval: "Eval", personas: "Personas",
   },
   section: {
     timeline: "Timeline", rationale: "Rationale", changeSummary: "Change Summary",
