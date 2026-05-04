@@ -9,10 +9,12 @@
 //
 // Exit code is 0 — informational only, so CI never blocks unintentionally.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import en from "../src/i18n/locales/en-US";
 import zh from "../src/i18n/locales/zh-TW";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "src");
 
 function walk(dir: string, out: string[] = []): string[] {
