@@ -30,6 +30,12 @@ export interface InspectorTarget {
   href?: string;
   /** Optional extra metadata rows. */
   meta?: Array<{ label: string; value: string }>;
+  /** Optional environment chip. */
+  env?: "research" | "paper" | "live";
+  /** Lineage preview: upstream / downstream object refs. */
+  lineage?: { upstream?: string[]; downstream?: string[] };
+  /** Next-step transitions to surface (action → state). */
+  nextTransitions?: Array<{ action: string; to: string }>;
 }
 
 interface InspectorState {
@@ -72,6 +78,11 @@ export const RightDrawer = () => {
                 <Badge variant="outline" className="text-mono text-[10px]">{target.type}</Badge>
                 {target.state && <StatusBadge state={target.state} />}
                 {target.risk && <RiskBadge level={target.risk} />}
+                {target.env && (
+                  <Badge variant="secondary" className="text-mono text-[10px] uppercase">
+                    {t(`env.${target.env}`, { defaultValue: target.env })}
+                  </Badge>
+                )}
               </div>
               <SheetTitle className="text-base">{target.name}</SheetTitle>
               <SheetDescription className="text-mono text-xs">{target.id}</SheetDescription>
@@ -87,6 +98,47 @@ export const RightDrawer = () => {
                 {target.meta?.map((m) => <Row key={m.label} label={m.label} value={m.value} />)}
               </div>
             </section>
+
+            {(target.lineage?.upstream?.length || target.lineage?.downstream?.length) && (
+              <>
+                <Separator />
+                <section className="space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("inspector.lineage")}</div>
+                  {target.lineage?.upstream?.length ? (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground mr-1">↑</span>
+                      {target.lineage.upstream.map((u) => (
+                        <Badge key={u} variant="outline" className="text-mono text-[10px] mr-1">{u}</Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  {target.lineage?.downstream?.length ? (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground mr-1">↓</span>
+                      {target.lineage.downstream.map((d) => (
+                        <Badge key={d} variant="outline" className="text-mono text-[10px] mr-1">{d}</Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+              </>
+            )}
+
+            {target.nextTransitions && target.nextTransitions.length > 0 && (
+              <>
+                <Separator />
+                <section className="space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("inspector.nextTransitions")}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {target.nextTransitions.map((tr) => (
+                      <Badge key={tr.action} variant="secondary" className="text-mono text-[11px]">
+                        {tr.action} → {tr.to}
+                      </Badge>
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
 
             {acts.length > 0 && (
               <>

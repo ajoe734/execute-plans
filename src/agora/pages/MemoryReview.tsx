@@ -40,20 +40,20 @@ export const MemoryReview = () => {
   const decide = (id: string, action: "approve" | "reject") => {
     setItems((m) => m.filter((i) => i.id !== id));
     setActive((a) => (a?.id === id ? null : a));
-    toast.success(action === "approve" ? "Memory promoted to persona/skill" : "Memory rejected");
+    toast.success(action === "approve" ? t("memoryReview.promoted") : t("memoryReview.rejected"));
   };
 
   return (
     <>
-      <PageHeader title={t("nav.memoryReview")} subtitle="Approve or reject memory candidates harvested from operator activity. Approved memories shape future persona behavior." />
+      <PageHeader title={t("memoryReview.title")} subtitle={t("memoryReview.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 space-y-2">
-            {items.length === 0 && <Card className="p-8 text-center text-sm text-muted-foreground">Inbox zero — no pending memory candidates.</Card>}
+            {items.length === 0 && <Card className="p-8 text-center text-sm text-muted-foreground">{t("memoryReview.inboxZero")}</Card>}
             {items.map((i) => (
               <Card key={i.id} onClick={() => { setActive(i); setEdit(i.proposal); }} className={`p-3 cursor-pointer transition ${active?.id === i.id ? "ring-2 ring-accent" : "hover:bg-muted/40"}`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="outline" className={`text-[10px] uppercase ${scopeTone(i.scope)}`}>{i.scope}</Badge>
+                  <Badge variant="outline" className={`text-[10px] uppercase ${scopeTone(i.scope)}`}>{t(`memoryReview.scope.${i.scope}`)}</Badge>
                   <span className="text-mono text-[10px] text-muted-foreground">{i.target}</span>
                   <span className="text-mono text-[10px] text-muted-foreground ml-auto">conf {(i.confidence * 100).toFixed(0)}%</span>
                 </div>
@@ -68,27 +68,29 @@ export const MemoryReview = () => {
               <>
                 <div className="flex items-center gap-2 mb-3">
                   <Brain className="h-4 w-4 text-accent" />
-                  <Badge variant="outline" className={`uppercase text-[10px] ${scopeTone(active.scope)}`}>{active.scope}</Badge>
+                  <Badge variant="outline" className={`uppercase text-[10px] ${scopeTone(active.scope)}`}>{t(`memoryReview.scope.${active.scope}`)}</Badge>
                   <span className="text-mono text-xs">{active.target}</span>
                   <span className="text-mono text-xs text-muted-foreground ml-auto">conf {(active.confidence * 100).toFixed(0)}%</span>
                 </div>
 
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 mt-2">Memory text</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 mt-2">{t("memoryReview.memoryText")}</div>
                 <Textarea value={edit} onChange={(e) => setEdit(e.target.value)} className="min-h-[100px]" />
 
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 mt-4">Evidence</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 mt-4">{t("memoryReview.evidence")}</div>
                 <p className="text-sm leading-relaxed bg-muted/40 rounded-md p-3">{active.evidence}</p>
 
-                <div className="text-mono text-xs text-muted-foreground mt-3">From {active.source} · captured {new Date(active.capturedAt).toLocaleString()}</div>
+                <div className="text-mono text-xs text-muted-foreground mt-3">
+                  {t("memoryReview.fromSource", { src: active.source, ts: new Date(active.capturedAt).toLocaleString() })}
+                </div>
 
                 <div className="flex gap-2 mt-5">
-                  <Button onClick={() => decide(active.id, "approve")}><Check className="h-4 w-4 mr-1" />Approve</Button>
-                  <Button variant="outline" onClick={() => toast("Edit saved as new candidate")}><Edit3 className="h-4 w-4 mr-1" />Save edit</Button>
-                  <Button variant="ghost" onClick={() => decide(active.id, "reject")}><X className="h-4 w-4 mr-1" />Reject</Button>
+                  <Button onClick={() => decide(active.id, "approve")}><Check className="h-4 w-4 mr-1" />{t("memoryReview.approve")}</Button>
+                  <Button variant="outline" onClick={() => toast(t("memoryReview.editSaved"))}><Edit3 className="h-4 w-4 mr-1" />{t("memoryReview.saveEdit")}</Button>
+                  <Button variant="ghost" onClick={() => decide(active.id, "reject")}><X className="h-4 w-4 mr-1" />{t("memoryReview.reject")}</Button>
                 </div>
               </>
             ) : (
-              <div className="text-center text-muted-foreground py-12 text-sm">Select a candidate.</div>
+              <div className="text-center text-muted-foreground py-12 text-sm">{t("memoryReview.selectHint")}</div>
             )}
           </Card>
         </div>
