@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
-  BookOpen, Workflow,
+  BookOpen, Workflow, FileText, FactoryIcon as Factory, Clock,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
