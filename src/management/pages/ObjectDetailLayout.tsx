@@ -61,21 +61,3 @@ export const Placeholder = ({ text }: { text: string }) => (
 // useT preserved for future tab-level helpers; intentional named re-export.
 export { useT };
 
-
-export const Field = ({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) => (
-  <div>
-    <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-    <div className={`mt-0.5 text-sm ${mono ? "text-mono" : ""}`}>{value}</div>
-  </div>
-);
-
-export const Section = ({ title, children }: { title?: string; children: ReactNode }) => (
-  <Card className="p-4 space-y-3">
-    {title && <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>}
-    {children}
-  </Card>
-);
-
-export const Placeholder = ({ text }: { text: string }) => (
-  <Card className="p-6 text-sm text-muted-foreground text-center">{text}</Card>
-);
