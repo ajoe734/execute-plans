@@ -16,6 +16,7 @@ import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 
 type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
@@ -140,19 +141,19 @@ export const GovernanceReview = () => {
               <div className="text-sm text-muted-foreground">{t("governance.alreadyDecided", { state: req.state })}</div>
             ) : (
               <div className="space-y-2">
-                {perms.can("approve") && (
-                  <Button className="w-full" onClick={() => setDecision("approve")}>{t("governance.decision.approve")}</Button>
-                )}
-                {perms.can("reject") && (
-                  <Button variant="outline" className="w-full" onClick={() => setDecision("request_changes")}>{t("governance.decision.request_changes")}</Button>
-                )}
-                {perms.can("reject") && (
-                  <Button variant="destructive" className="w-full" onClick={() => setDecision("reject")}>{t("governance.decision.reject")}</Button>
-                )}
+                <PermissionAwareButton requiredAction="approve" className="w-full" onClick={() => setDecision("approve")}>
+                  {t("governance.decision.approve")}
+                </PermissionAwareButton>
+                <PermissionAwareButton requiredAction="reject" variant="outline" className="w-full" onClick={() => setDecision("request_changes")}>
+                  {t("governance.decision.request_changes")}
+                </PermissionAwareButton>
+                <PermissionAwareButton requiredAction="reject" variant="destructive" className="w-full" onClick={() => setDecision("reject")}>
+                  {t("governance.decision.reject")}
+                </PermissionAwareButton>
                 <Button variant="ghost" className="w-full" onClick={() => setDecision("escalate")}>{t("governance.decision.escalate")}</Button>
-                {perms.can("freeze") && (
-                  <Button variant="ghost" className="w-full" onClick={() => setDecision("freeze")}>{t("governance.decision.freeze")}</Button>
-                )}
+                <PermissionAwareButton requiredAction="freeze" variant="ghost" className="w-full" onClick={() => setDecision("freeze")}>
+                  {t("governance.decision.freeze")}
+                </PermissionAwareButton>
               </div>
             )}
             <p className="text-xs text-muted-foreground">{t("governance.memoRequired")}</p>

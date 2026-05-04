@@ -18,6 +18,7 @@ import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 
 export const IncidentDetail = () => {
   const t = useT();
@@ -79,14 +80,18 @@ export const IncidentDetail = () => {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
-            {incident.status === "open" && perms.can("approve") && (
-              <Button size="sm" onClick={() => advance("mitigating")}>{t("incident.startMitigation")}</Button>
+            {incident.status === "open" && (
+              <PermissionAwareButton requiredAction="approve" size="sm" onClick={() => advance("mitigating")}>
+                {t("incident.startMitigation")}
+              </PermissionAwareButton>
             )}
-            {perms.can("pause") && (
-              <Button size="sm" variant="outline" onClick={() => setPauseOpen(true)}>{t("incident.pauseStrategy")}</Button>
-            )}
-            {incident.status !== "resolved" && perms.can("approve") && (
-              <Button size="sm" variant="destructive" onClick={() => setCloseOpen(true)}>{t("incident.close")}</Button>
+            <PermissionAwareButton requiredAction="pause" size="sm" variant="outline" onClick={() => setPauseOpen(true)}>
+              {t("incident.pauseStrategy")}
+            </PermissionAwareButton>
+            {incident.status !== "resolved" && (
+              <PermissionAwareButton requiredAction="approve" size="sm" variant="destructive" onClick={() => setCloseOpen(true)}>
+                {t("incident.close")}
+              </PermissionAwareButton>
             )}
           </div>
         }
