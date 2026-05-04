@@ -452,6 +452,7 @@ export default {
       submitted: "Consult rule changes submitted for review",
     },
   },
+  handoff: {
     title: "Handoff",
     heading: "Hand off to Management",
     subtitle: "Submit this Agora item as a traceable management workflow request.",
