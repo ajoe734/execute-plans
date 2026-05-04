@@ -316,6 +316,7 @@ export default {
     auditTimeline: "稽核時間軸",
     memoRequired: "所有決策都需備註。高風險決策還需輸入確認字串。",
     alreadyDecided: "已 {{state}}。",
+    queueSubtitle: "從審批收件匣拆分出的待審治理項目，點擊進入審查表面。",
     decision: {
       title: "決策",
       approve: "核准",
@@ -535,4 +536,55 @@ export default {
   ranking: { expression: "公式" },
   research: { rerun: "重新執行" },
   qa: { markAll: "全部勾選", reset: "重設" },
+  settings: {
+    subtitle: "個人偏好、Workspace、整合、語言、佈景與功能旗標。",
+    tab: { profile: "個人", workspace: "Workspace", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標" },
+    profile: { title: "個人資料", displayName: "顯示名稱", email: "電子郵件" },
+    workspace: { title: "Workspace", name: "名稱", tz: "時區" },
+    theme: { title: "佈景", dark: "深色模式", darkHint: "預設適用低光環境作業。", density: "密度" },
+    integrations: { title: "整合", hint: "已串接到 Pantheon 的外部服務。", manage: "管理", connect: "連接" },
+    api: { title: "API 金鑰", hint: "用於程式化存取 BFF。", create: "建立金鑰", rotate: "輪替" },
+    locale: { title: "語言", use: "使用" },
+    flags: { title: "功能旗標", hint: "切換實驗功能；變更會記入稽核。" },
+  },
+  lineageExplorer: {
+    subtitle: "跨物件血緣，可依型別篩選。選一個根節點追蹤上下游。",
+    root: "根節點", filter: "篩選", filterPh: "依 ID 或名稱篩選", types: "型別",
+  },
+  knowledge: {
+    subtitle: "從營運活動匯集的洞察。可升級為 Artifact、Postmortem 或研究任務。",
+    empty: "收件匣已清空。", selectHint: "請選一筆洞察。",
+    promoteArtifact: "升級 → Artifact", promotePostmortem: "升級 → Postmortem", promoteResearch: "升級 → 研究任務",
+    dismiss: "忽略", dismissed: "洞察已忽略", promotedTo: "已升級為 {{target}}",
+  },
+  postmortem: {
+    subtitle: "可搜尋的事件 Postmortem 知識庫,可回連至原事件。",
+    search: "搜尋標題或事件…",
+    incident: "事件", author: "作者", resolved: "結案時間",
+    rootCause: "根因", impact: "影響", followUps: "後續行動",
+  },
+  rankingDashboard: {
+    subtitle: "依公式排序的績效儀表板,可下鑽看分數組成。",
+    score: "分數", breakdown: "分數組成", openStrategy: "開啟策略",
+  },
+  workflows: {
+    subtitle: "可重用的工作流模板,各自定義有序步驟與必要輸入。",
+    create: "新建模板", steps: "步驟", inputs: "輸入", runs: "已執行", lastRun: "上次執行",
+    run: "立即執行", edit: "編輯", queued: "工作流 {{id}} 已排入",
+  },
+  hooks: {
+    subtitle: "排程 (cron) 與事件觸發 (hook),驅動工作流。",
+    create: "新建規則", tab: { cron: "排程任務", hooks: "事件 Hook" },
+    schedule: "排程", target: "目標", nextRun: "下次執行", enabled: "啟用",
+    event: "事件", firedToday: "今日觸發",
+  },
+  alphaFactory: {
+    subtitle: "Alpha 流水線看板 — 發現候選、Scaffolded 實驗、已重現的策略。",
+    openList: "開啟策略列表",
+    scaffold: "建檔", replicate: "重現",
+    col: { discovered: "Discovered", scaffolded: "Scaffolded", replicated: "Replicated" },
+    discovered: { note: "由研究訊號浮現,需建檔成回測。" },
+    scaffolded: { note: "回測已建檔,等待重現審查。" },
+    replicated: { note: "已重現為正式策略。" },
+  },
 };
