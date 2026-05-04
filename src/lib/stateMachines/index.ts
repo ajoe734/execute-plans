@@ -43,7 +43,7 @@ export const personaMachine: StateMachine<PersonaState> = {
     { from: "probation", to: "active", action: "restore_active", requiresApproval: true },
     { from: "restricted", to: "active", action: "remove_restriction", requiresApproval: true },
     { from: "active", to: "retired", action: "retire_persona", requiresApproval: true, risk: "high", uiPattern: "high_risk_modal" },
-    { from: "retired", to: "archived", action: "archive_persona", requiresApproval: true, uiPattern: "destructive_modal" },
+    { from: "retired", to: "archived", action: "archive_persona", requiresApproval: true, risk: "critical", uiPattern: "destructive_modal" },
   ],
 };
 
@@ -99,6 +99,7 @@ export const rebalanceMachine: StateMachine<RebalanceState> = {
     { from: "scheduled", to: "applied", action: "apply_rebalance", requiresApproval: true, risk: "critical", uiPattern: "high_risk_modal" },
     { from: "applied", to: "rolled_back", action: "rollback_rebalance", requiresApproval: true, risk: "critical", uiPattern: "rollback_modal" },
     { from: "draft", to: "cancelled", action: "cancel" },
+    { from: "metrics_freezing", to: "cancelled", action: "cancel" },
     { from: "metrics_frozen", to: "cancelled", action: "cancel" },
     { from: "ranking_calculated", to: "cancelled", action: "cancel" },
     { from: "simulation_ready", to: "cancelled", action: "cancel" },
@@ -222,6 +223,9 @@ export const alertMachine: StateMachine<AlertState> = {
     { from: "new", to: "investigating", action: "create_incident", risk: "high" },
     { from: "acknowledged", to: "investigating", action: "create_incident", risk: "high" },
     { from: "assigned", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "investigating", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "mitigated", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "resolved", to: "investigating", action: "create_incident", risk: "high" },
   ],
 };
 
