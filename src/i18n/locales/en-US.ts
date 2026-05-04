@@ -417,6 +417,7 @@ export default {
     relatedObjects: "Related objects", participants: "Participants",
     discussion: "Discussion", vote: "Vote", memo: "Memo",
     members: "Members", followUps: "Follow-ups", auditLog: "Audit log",
+    simulation: "Simulation", weight: "Weight", contribution: "Contribution", total: "Total",
   },
   table_actions: {
     acknowledge: "Acknowledge", acknowledged: "Acknowledged", open: "Open",
