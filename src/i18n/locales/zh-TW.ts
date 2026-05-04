@@ -610,7 +610,28 @@ export default {
       subtitle: "由 Agora 自然累積流入的訓練事件。",
     },
   },
-  artifact: { download: "下載", sourceExperiment: "來源實驗" },
+  artifact: {
+    download: "下載",
+    sourceExperiment: "來源實驗",
+    tab: { diff: "差異", rollback: "回滾" },
+    diff: { title: "版本差異", hint: "與上一個發佈版本的逐欄比對。", changes: "項變更" },
+    rollback: {
+      title: "回滾歷史",
+      hint: "可回退到任一前版。引用此 artifact 的部署會被重新對接。",
+      active: "目前版本",
+      confirm: "將回滾此 artifact 並重新對接相依部署。",
+      done: "回滾請求已排入",
+    },
+  },
+  deployment: {
+    tab: { stages: "階段" },
+    stages: {
+      title: "升級階段",
+      hint: "每個環境都有自己的審批規則。",
+      detail: "階段詳情",
+      current: "目前",
+    },
+  },
   evolution: {
     resume: "恢復",
     tabs: { direction: "方向", fitness: "適應度", mutation: "變異", runs: "執行", candidates: "候選", promotion: "升級" },
