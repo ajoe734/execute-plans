@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
-import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { useHandoff } from "@/lib/handoff";
 
 interface CoachingExample {
   id: string;
@@ -47,6 +48,7 @@ const seed: SkillDraft[] = [
 
 export const SkillCoaching = () => {
   const t = useT();
+  const openHandoff = useHandoff((s) => s.openHandoff);
   const [drafts, setDrafts] = useState<SkillDraft[]>(seed);
   const [activeId, setActiveId] = useState(seed[0].id);
   const [newPrompt, setNewPrompt] = useState("");
@@ -90,7 +92,14 @@ export const SkillCoaching = () => {
                 onChange={(e) => updateActive({ systemPrompt: e.target.value })}
                 className="min-h-[100px] text-mono text-xs"
               />
-              <div className="flex justify-end mt-2">
+              <div className="flex justify-end gap-2 mt-2">
+                <Button size="sm" variant="outline" onClick={() => openHandoff({
+                  type: "skill_draft",
+                  source: { kind: "SkillDraft", id: active.id, label: active.name },
+                  summary: `Promote skill draft ${active.name}`,
+                  evidence: active.examples.map((e) => `${e.prompt} → ${e.expected.slice(0, 40)}…`),
+                  priority: "normal",
+                })}><ArrowRight className="h-4 w-4 mr-1" />{t("handoff.heading", { defaultValue: "Hand off" })}</Button>
                 <Button size="sm" variant="outline" onClick={() => toast.success("Skill draft saved")}>{t("agora.skillCoaching.saveDraft")}</Button>
               </div>
             </Card>
