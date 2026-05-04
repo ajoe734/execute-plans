@@ -160,6 +160,161 @@ export const channels: Channel[] = [
   { id: "ch_webhook_audit", name: "Audit Forwarder", kind: "webhook", destination: "https://siem.internal/ingest", subscribers: 1, filters: "all", owner: "ops", updatedAt: ago(200), state: "deployed", risk: "low" },
 ];
 
+// ---------- Phase 9: governance / studio surfaces ----------
+
+export const routePolicies: RoutePolicy[] = [
+  {
+    id: "rp_quant_v2", name: "Quant Architect Routing v2", personaId: "per_quant",
+    version: "v2", owner: "ai_trainer", updatedAt: ago(6), state: "deployed", risk: "medium",
+    publishedAt: ago(6),
+    rules: [
+      { id: "r1", intent: "compute_factor", targetKind: "mcp", targetId: "mt_001", envScope: ["research", "paper", "live"], priority: 10 },
+      { id: "r2", intent: "preview_order", targetKind: "mcp", targetId: "mt_002", envScope: ["paper", "live"], priority: 20, guard: "qty <= dailyCap" },
+      { id: "r3", intent: "review_signal", targetKind: "skill", targetId: "sk_signal_review", envScope: ["research", "paper", "live"], priority: 30 },
+      { id: "r4", intent: "fetch_market", targetKind: "tool", targetId: "tl_market_data", envScope: ["research", "paper", "live"], priority: 40 },
+    ],
+  },
+  {
+    id: "rp_macro_v1", name: "Macro Strategist Routing v1", personaId: "per_macro",
+    version: "v1", owner: "ai_trainer", updatedAt: ago(48), state: "deployed", risk: "low",
+    publishedAt: ago(48),
+    rules: [
+      { id: "r1", intent: "macro_brief", targetKind: "skill", targetId: "sk_macro_brief", envScope: ["research", "paper", "live"], priority: 10 },
+      { id: "r2", intent: "news_search", targetKind: "tool", targetId: "tl_news_search", envScope: ["research", "paper", "live"], priority: 20 },
+    ],
+  },
+  {
+    id: "rp_risk_v1", name: "Risk Officer Routing v1", personaId: "per_risk",
+    version: "v1", owner: "ai_trainer", updatedAt: ago(120), state: "deployed", risk: "low",
+    publishedAt: ago(120),
+    rules: [
+      { id: "r1", intent: "factor_attribute", targetKind: "tool", targetId: "tl_factor_attr", envScope: ["research", "paper", "live"], priority: 10 },
+      { id: "r2", intent: "cancel_all", targetKind: "mcp", targetId: "mt_003", envScope: ["research"], priority: 20, guard: "requires dual-approval in live" },
+    ],
+  },
+];
+
+export const policyVersions: PolicyVersion[] = [
+  {
+    id: "pv_quant_v1", policyId: "rp_quant_v2", version: "v1",
+    author: "ai_trainer", createdAt: ago(240), note: "Initial routing.",
+    rules: [
+      { id: "r1", intent: "compute_factor", targetKind: "mcp", targetId: "mt_001", envScope: ["research", "paper"], priority: 10 },
+      { id: "r2", intent: "review_signal", targetKind: "skill", targetId: "sk_signal_review", envScope: ["research", "paper", "live"], priority: 20 },
+    ],
+  },
+  {
+    id: "pv_quant_v2", policyId: "rp_quant_v2", version: "v2",
+    author: "ai_trainer", createdAt: ago(6), note: "Promoted live for compute_factor; added preview_order guard.",
+    rules: routePolicies[0].rules,
+  },
+];
+
+const buildPermissionMatrix = (): PermissionMatrix[] => {
+  const personasRows = personas.map((p) => ({ id: p.id, label: p.name }));
+  return [
+    {
+      instance: "persona-tool",
+      rows: personasRows,
+      cols: tools.map((t) => ({ id: t.id, label: t.name, risk: t.risk })),
+      cells: [
+        { rowId: "per_quant", colId: "tl_market_data", grant: "use", envScope: ["research", "paper", "live"] },
+        { rowId: "per_quant", colId: "tl_order_submit", grant: "manage", envScope: ["paper", "live"], updatedBy: "ops", updatedAt: ago(36) },
+        { rowId: "per_quant", colId: "tl_factor_attr", grant: "use", envScope: ["research", "paper", "live"] },
+        { rowId: "per_macro", colId: "tl_news_search", grant: "use", envScope: ["research", "paper", "live"] },
+        { rowId: "per_macro", colId: "tl_slack_post", grant: "use", envScope: ["paper", "live"] },
+        { rowId: "per_risk", colId: "tl_factor_attr", grant: "manage", envScope: ["research", "paper", "live"] },
+        { rowId: "per_risk", colId: "tl_order_submit", grant: "read", envScope: ["live"] },
+        { rowId: "per_red", colId: "tl_market_data", grant: "read", envScope: ["research"] },
+      ],
+    },
+    {
+      instance: "persona-mcp",
+      rows: personasRows,
+      cols: mcpTools.map((t) => ({ id: t.id, label: t.name, risk: t.risk })),
+      cells: [
+        { rowId: "per_quant", colId: "mt_001", grant: "use", envScope: ["research", "paper", "live"] },
+        { rowId: "per_quant", colId: "mt_002", grant: "use", envScope: ["paper", "live"] },
+        { rowId: "per_quant", colId: "mt_003", grant: "read", envScope: ["research"] },
+        { rowId: "per_risk", colId: "mt_003", grant: "manage", envScope: ["research", "paper"] },
+        { rowId: "per_macro", colId: "mt_004", grant: "use", envScope: ["research"] },
+      ],
+    },
+    {
+      instance: "persona-skill",
+      rows: personasRows,
+      cols: skills.map((s) => ({ id: s.id, label: s.name, risk: s.risk })),
+      cells: [
+        { rowId: "per_quant", colId: "sk_signal_review", grant: "use" },
+        { rowId: "per_macro", colId: "sk_macro_brief", grant: "use" },
+        { rowId: "per_risk", colId: "sk_capital_summary", grant: "use" },
+        { rowId: "per_red", colId: "sk_redteam_attack", grant: "manage" },
+      ],
+    },
+    {
+      instance: "persona-lifecycle",
+      rows: personasRows,
+      cols: [
+        { id: "act_pause", label: "pause" }, { id: "act_resume", label: "resume" },
+        { id: "act_retire", label: "retire" }, { id: "act_promote", label: "promote_live", risk: "critical" },
+        { id: "act_rollback", label: "rollback" },
+      ],
+      cells: [
+        { rowId: "per_quant", colId: "act_pause", grant: "manage" },
+        { rowId: "per_quant", colId: "act_promote", grant: "use" },
+        { rowId: "per_risk", colId: "act_pause", grant: "manage" },
+        { rowId: "per_risk", colId: "act_rollback", grant: "manage" },
+      ],
+    },
+  ];
+};
+
+export const permissionMatrices = buildPermissionMatrix();
+
+export const memoryUpdates: MemoryUpdate[] = [
+  { id: "mu_001", personaId: "per_quant", kind: "fact", source: "signal_feedback", proposedBy: "alice", proposedAt: ago(0.4), state: "queued", after: "Asia tech earnings drift ~4d post-earnings (n=128)." },
+  { id: "mu_002", personaId: "per_quant", kind: "preference", source: "operator", proposedBy: "alice", proposedAt: ago(2), state: "queued", before: "Prefer 1d horizon", after: "Prefer 4d horizon for momentum signals." },
+  { id: "mu_003", personaId: "per_macro", kind: "fact", source: "decision_log", proposedBy: "bob", proposedAt: ago(8), state: "conflict", after: "Disable carry when VIX>22.", conflictWith: "mu_004" },
+  { id: "mu_004", personaId: "per_macro", kind: "fact", source: "evaluation", proposedBy: "ai_trainer", proposedAt: ago(7), state: "conflict", after: "Disable carry when VIX>26.", conflictWith: "mu_003" },
+  { id: "mu_005", personaId: "per_risk", kind: "redaction", source: "operator", proposedBy: "carol", proposedAt: ago(20), state: "approved", before: "Internal counter-party note", after: "[redacted]" },
+];
+
+export const evolutionRuns: EvolutionRun[] = [
+  { id: "er_001", programId: "ev_001", generation: 14, startedAt: ago(0.6), status: "running", bestFitness: 1.83, candidates: 64 },
+  { id: "er_002", programId: "ev_001", generation: 13, startedAt: ago(8), finishedAt: ago(7.2), status: "success", bestFitness: 1.79, candidates: 64 },
+  { id: "er_003", programId: "ev_002", generation: 6, startedAt: ago(3), status: "warning", bestFitness: 1.21, candidates: 32 },
+];
+
+export const evolutionCandidates: EvolutionCandidate[] = [
+  { id: "ec_001", runId: "er_001", fitness: 1.83, parents: ["alpha_mq_v3"], mutationsApplied: ["param.lookback+5", "feature.add_vol_surface"], state: "promoted" },
+  { id: "ec_002", runId: "er_001", fitness: 1.81, parents: ["alpha_mq_v3"], mutationsApplied: ["param.lookback-3"], state: "scored" },
+  { id: "ec_003", runId: "er_001", fitness: 1.62, parents: ["alpha_mq_v3"], mutationsApplied: ["structure.swap_ranker"], state: "scored" },
+  { id: "ec_004", runId: "er_001", fitness: 1.41, parents: ["alpha_mq_v3"], mutationsApplied: ["feature.drop_news"], state: "discarded" },
+  { id: "ec_005", runId: "er_003", fitness: 1.21, parents: ["alpha_vsa_v4"], mutationsApplied: ["param.skew_window+2"], state: "scored" },
+];
+
+export const fitnessFormulas: FitnessFormula[] = [
+  { id: "ff_default", name: "Default Fitness", expression: "0.6*sharpe - 0.3*|dd| + 0.1*capacity", metrics: ["sharpe", "dd", "capacity"], appliedTo: 2, owner: "ai_trainer", updatedAt: ago(120), state: "deployed", risk: "low" },
+  { id: "ff_capacity", name: "Capacity-Weighted", expression: "alpha*sqrt(capacity) - 0.2*turnover", metrics: ["alpha", "capacity", "turnover"], appliedTo: 1, owner: "research", updatedAt: ago(40), state: "review", risk: "medium" },
+];
+
+export const mutationRules: MutationRule[] = [
+  { id: "mr_param_lookback", name: "lookback param mutation", scope: "param", expression: "lookback ± uniform(1,5)", rateBps: 150, enabled: true, owner: "ai_trainer", updatedAt: ago(48), state: "deployed", risk: "low" },
+  { id: "mr_feat_swap", name: "feature swap", scope: "feature", expression: "drop(random_feature) | add(random_feature)", rateBps: 80, enabled: true, owner: "ai_trainer", updatedAt: ago(48), state: "deployed", risk: "medium" },
+  { id: "mr_struct_ranker", name: "swap ranker", scope: "structure", expression: "ranker := random_choice(rankers)", rateBps: 30, enabled: false, owner: "ai_trainer", updatedAt: ago(120), state: "review", risk: "high" },
+];
+
+export const allocationSimulations: AllocationSimulation[] = [
+  { id: "as_001", rebalanceId: "rb_q2_2026", weights: [
+    { strategyId: "stg_001", weight: 0.32 }, { strategyId: "stg_003", weight: 0.28 },
+    { strategyId: "stg_004", weight: 0.10 }, { strategyId: "stg_005", weight: 0.30 },
+  ], expectedSharpe: 1.92, expectedDrawdown: -0.038, capacityUsed: 0.74, createdAt: ago(4) },
+  { id: "as_002", rebalanceId: "rb_q2_2026", weights: [
+    { strategyId: "stg_001", weight: 0.40 }, { strategyId: "stg_003", weight: 0.25 },
+    { strategyId: "stg_004", weight: 0.05 }, { strategyId: "stg_005", weight: 0.30 },
+  ], expectedSharpe: 1.84, expectedDrawdown: -0.041, capacityUsed: 0.72, createdAt: ago(2) },
+];
+
 // ---------- Action catalog (Part 6 §availableActions) ----------
 // Drives BFF-declared availableActions per state; RBAC further filters at the UI layer.
 type ActionMap = Partial<Record<import("@/lib/bff/types").LifecycleState, string[]>>;
