@@ -27,6 +27,7 @@ export const ManagementLayout = () => {
     { label: t("groups.researchGov"), items: [
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/governance", label: t("nav.governance"), icon: ClipboardCheck },
+      { to: "/management/governance/policies", label: t("nav.routePolicies"), icon: ClipboardCheck },
       { to: "/management/knowledge", label: t("nav.knowledge"), icon: BookOpen },
       { to: "/management/postmortems", label: t("nav.postmortems"), icon: FileText },
       { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
