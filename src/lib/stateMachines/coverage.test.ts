@@ -114,6 +114,7 @@ describe("state machine coverage (Part 7 §17)", () => {
       // Tool / skill / mcp lifecycle resumes.
       "tool:activate_tool", "tool:unrestrict_tool", "tool:retire_tool",
       "skill:submit_for_approval", "skill:retire_skill", "skill:reopen_skill",
+      "rankingFormula:submit_formula_review", "rankingFormula:retire_formula",
       "mcpServer:reenable",
       // EvolutionRun has no risk grading; runtime control only.
       // Approval workflow approve action.
