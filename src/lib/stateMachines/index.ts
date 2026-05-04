@@ -223,6 +223,9 @@ export const alertMachine: StateMachine<AlertState> = {
     { from: "new", to: "investigating", action: "create_incident", risk: "high" },
     { from: "acknowledged", to: "investigating", action: "create_incident", risk: "high" },
     { from: "assigned", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "investigating", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "mitigated", to: "investigating", action: "create_incident", risk: "high" },
+    { from: "resolved", to: "investigating", action: "create_incident", risk: "high" },
   ],
 };
 
