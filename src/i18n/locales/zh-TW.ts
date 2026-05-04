@@ -107,6 +107,10 @@ export default {
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部", back: "返回",
   },
+  permission: {
+    requireAction: "需要權限：{{action}}",
+    requireRoles: "需要角色：{{roles}}",
+  },
   inspector: {
     metadata: "中繼資料",
     actions: "可用動作",

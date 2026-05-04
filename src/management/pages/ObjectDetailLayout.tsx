@@ -1,12 +1,8 @@
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import { PageBody, PageHeader } from "@/platform/components/PageHeader";
-import { StatusBadge } from "@/platform/components/StatusBadge";
-import { RiskBadge } from "@/platform/components/RiskBadge";
+import { PageBody } from "@/platform/components/PageHeader";
+import { EntityHeader } from "@/platform/components/EntityHeader";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
 
@@ -22,37 +18,14 @@ interface Props<T extends BaseObject> {
   actions?: ReactNode;
   tabs: DetailTab[];
   defaultTab?: string;
+  env?: "research" | "paper" | "live";
 }
 
-export function ObjectDetailLayout<T extends BaseObject>({ object, subtitle, actions, tabs, defaultTab }: Props<T>) {
-  const t = useT();
-  const navigate = useNavigate();
+export function ObjectDetailLayout<T extends BaseObject>({ object, subtitle, actions, tabs, defaultTab, env }: Props<T>) {
   return (
     <>
-      <PageHeader
-        title={object.name}
-        subtitle={subtitle ?? object.id}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-              <ArrowLeft className="h-4 w-4 mr-1" />Back
-            </Button>
-            {actions}
-          </div>
-        }
-      />
+      <EntityHeader object={object} subtitle={subtitle} actions={actions} env={env} />
       <PageBody>
-        <div className="flex items-center gap-2">
-          <StatusBadge state={object.state} />
-          <RiskBadge level={object.risk} />
-          <span className="text-xs text-muted-foreground">
-            {t("common.owner")}: <span className="text-mono">{object.owner}</span>
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {t("common.updated")}: <span className="text-mono">{new Date(object.updatedAt).toLocaleString()}</span>
-          </span>
-        </div>
-
         <Tabs defaultValue={defaultTab ?? tabs[0].value}>
           <TabsList>
             {tabs.map((tab) => (
@@ -85,3 +58,6 @@ export const Section = ({ title, children }: { title?: string; children: ReactNo
 export const Placeholder = ({ text }: { text: string }) => (
   <Card className="p-6 text-sm text-muted-foreground text-center">{text}</Card>
 );
+// useT preserved for future tab-level helpers; intentional named re-export.
+export { useT };
+
