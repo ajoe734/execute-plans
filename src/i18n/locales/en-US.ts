@@ -368,6 +368,33 @@ export default {
     subscribersFmt: "{{n}} subscribers · filters: {{f}}",
   },
   filter: { pending: "Pending", all: "All" },
+  lifecycle: {
+    title: "Lifecycle",
+    branch: "Branch state:",
+    strategy: {
+      discovered: "Discovered", scaffolded: "Scaffolded", replicated: "Replicated",
+      approved: "Approved", paper: "Paper", live: "Live", degraded: "Degraded",
+      replaced: "Replaced", retired: "Retired", archived: "Archived",
+    },
+    rebalance: {
+      draft: "Draft", metrics_freezing: "Freezing metrics", metrics_frozen: "Metrics frozen",
+      ranking_calculated: "Ranking calculated", simulation_ready: "Simulation ready",
+      under_review: "Under review", approved: "Approved", scheduled: "Scheduled",
+      applied: "Applied", rolled_back: "Rolled back", cancelled: "Cancelled",
+    },
+    approval: {
+      draft: "Draft", submitted: "Submitted", validator_running: "Validating",
+      in_review: "In review", approved: "Approved", rejected: "Rejected",
+      changes_requested: "Changes requested", cancelled: "Cancelled",
+      risk: "Risk", ops: "Ops", security: "Security", finance: "Finance",
+    },
+  },
+  rebalance: {
+    nextAction: "Next action",
+    noAction: "No actions available in the current state.",
+    confirmTitle: "{{action}} — {{name}}",
+    confirmDesc: "Move {{name}} from {{from}} to {{to}}.",
+  },
   confirmDialog: {
     resolveIncident: "Resolve incident — {{title}}",
     resolveIncidentDesc: "Mark this incident as resolved. A post-mortem task will be filed automatically.",

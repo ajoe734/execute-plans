@@ -360,6 +360,33 @@ export default {
     subscribersFmt: "{{n}} 位訂閱者 · 過濾條件：{{f}}",
   },
   filter: { pending: "待處理", all: "全部" },
+  lifecycle: {
+    title: "生命週期",
+    branch: "分支狀態：",
+    strategy: {
+      discovered: "發現", scaffolded: "建檔", replicated: "重現",
+      approved: "核准", paper: "模擬", live: "正式", degraded: "退化",
+      replaced: "取代", retired: "退役", archived: "封存",
+    },
+    rebalance: {
+      draft: "草稿", metrics_freezing: "凍結指標中", metrics_frozen: "指標已凍結",
+      ranking_calculated: "排序完成", simulation_ready: "模擬完成",
+      under_review: "審查中", approved: "已核准", scheduled: "已排程",
+      applied: "已套用", rolled_back: "已回滾", cancelled: "已取消",
+    },
+    approval: {
+      draft: "草稿", submitted: "已送出", validator_running: "驗證中",
+      in_review: "審查中", approved: "已核准", rejected: "已駁回",
+      changes_requested: "要求修改", cancelled: "已取消",
+      risk: "風險審", ops: "Ops 審", security: "安全審", finance: "財務審",
+    },
+  },
+  rebalance: {
+    nextAction: "下一步動作",
+    noAction: "目前狀態無可執行動作。",
+    confirmTitle: "{{action}} — {{name}}",
+    confirmDesc: "將 {{name}} 從 {{from}} 推進至 {{to}}。",
+  },
   confirmDialog: {
     resolveIncident: "結案事件 — {{title}}",
     resolveIncidentDesc: "將此事件標記為已結案，系統會自動建立檢討任務。",
