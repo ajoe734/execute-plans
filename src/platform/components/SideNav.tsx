@@ -8,7 +8,7 @@ export interface NavGroup {
 }
 
 export const SideNav = ({ groups }: { groups: NavGroup[] }) => (
-  <nav className="w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border h-[calc(100vh-3.5rem)] overflow-y-auto py-4 px-2">
+  <nav className="w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-14 self-start max-h-[calc(100vh-3.5rem)] overflow-y-auto py-4 px-2">
     {groups.map((g) => (
       <div key={g.label} className="mb-5">
         <div className="text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/50 px-3 mb-1">
