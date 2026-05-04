@@ -16,7 +16,7 @@ import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Inbox, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { ObjectDetailLayout, Section, Field, Placeholder } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { usePermissions } from "@/lib/usePermissions";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useInspector } from "@/platform/components/RightDrawer";
