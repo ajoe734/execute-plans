@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { ArtifactDiffPanel } from "@/management/components/detail/ArtifactDiffPanel";
+import { ArtifactRollbackPanel } from "@/management/components/detail/ArtifactRollbackPanel";
 
 export const ArtifactDetail = () => {
   const { id } = useParams();
@@ -62,6 +64,10 @@ export const ArtifactDetail = () => {
             ),
           },
           {
+            value: "diff", label: t("artifact.tab.diff"),
+            content: <ArtifactDiffPanel artifact={a} />,
+          },
+          {
             value: "lineage", label: t("section.lineage"),
             content: a.sourceExperimentId ? (
               <Section>
@@ -77,6 +83,10 @@ export const ArtifactDetail = () => {
                 </div>
               </Section>
             ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No upstream experiment recorded.</div></Section>,
+          },
+          {
+            value: "rollback", label: t("artifact.tab.rollback"),
+            content: <ArtifactRollbackPanel artifact={a} />,
           },
           {
             value: "consumers", label: t("nav.deployments"),

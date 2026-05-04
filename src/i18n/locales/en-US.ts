@@ -618,7 +618,29 @@ export default {
       subtitle: "Naturally-collected training events flowing in from Agora.",
     },
   },
-  artifact: { download: "Download", sourceExperiment: "Source experiment" },
+  artifact: {
+    download: "Download",
+    sourceExperiment: "Source experiment",
+    tab: { diff: "Diff", rollback: "Rollback" },
+    diff: { title: "Version diff", hint: "Compares this artifact to its previous published version.", changes: "changed" },
+    rollback: {
+      title: "Rollback history",
+      hint: "Revert to a previous version. Active deployments referencing this artifact will be re-pinned.",
+      active: "Active",
+      confirm: "This will revert the artifact and trigger re-pinning of dependent deployments.",
+      done: "Rollback queued",
+    },
+  },
+  deployment: {
+    tab: { stages: "Stages" },
+    stages: {
+      title: "Promotion stages",
+      hint: "Each environment is gated by its own approval rules.",
+      detail: "Stage details",
+      current: "Current",
+    },
+  },
+  
   evolution: {
     resume: "Resume",
     tabs: { direction: "Direction", fitness: "Fitness", mutation: "Mutation", runs: "Runs", candidates: "Candidates", promotion: "Promotion" },

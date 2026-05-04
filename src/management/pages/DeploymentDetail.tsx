@@ -13,6 +13,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { DeploymentStagesPanel } from "@/management/components/detail/DeploymentStagesPanel";
 
 const targetTone = (t: Deployment["target"]) =>
   t === "live" ? "danger" : t === "paper" ? "warning" : "default";
@@ -85,6 +86,7 @@ export const DeploymentDetail = () => {
               </>
             ),
           },
+          { value: "stages", label: t("deployment.tab.stages"), content: <DeploymentStagesPanel deployment={d} /> },
           { value: "runtime", label: t("nav.runtimes"), content: (() => {
             const filtered = runtimes.filter((r) => r.env === d.target && r.kind === "executor");
             return (
