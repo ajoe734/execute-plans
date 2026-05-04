@@ -461,4 +461,62 @@ export default {
     rejectTitle: "Reject — {{subject}}",
     rejectDesc: "Reject this request. The requester will be notified and the workflow halts.",
   },
+  agora: {
+    alertTriage: {
+      allClear: "All clear.",
+      suggestedAction: "Suggested Action",
+      escalate: "Escalate",
+      discuss: "Discuss",
+      noAlertSelected: "No alert selected.",
+    },
+    askPersonas: {
+      personas: "Personas",
+      committeeMode: "Committee mode",
+      hint: "Start a conversation. Pantheon will capture each response into your decision context.",
+    },
+    decisionJournal: {
+      newDecision: "New decision",
+      context: "Context",
+      decision: "Decision",
+      rationale: "Rationale",
+      handoff: "Handoff",
+    },
+    evaluation: { prompt: "Prompt", expected: "Expected", observed: "Observed" },
+    insightInbox: {
+      promote: "Promote", handoff: "Handoff", discuss: "Discuss", dismiss: "Dismiss",
+      empty: "Inbox zero.",
+    },
+    market: {
+      addTicker: "Add ticker", volume: "Volume", sector: "Sector",
+      regime: "Regime", riskOn: "Risk-on",
+      captureObservation: "Capture observation",
+      askPersonas: "Ask Personas",
+      selectTicker: "Select a ticker.",
+    },
+    notebook: { empty: "No notes yet." },
+    personaLab: {
+      draft: "Persona draft", archetype: "Archetype", systemPrompt: "System Prompt",
+      skills: "Skills", tools: "Tools", memoryRoutes: "Memory Routes",
+      saveDraft: "Save draft", submitReview: "Submit for review",
+      testBench: "Test bench", response: "Response",
+    },
+    signalReview: {
+      conviction: "Conviction", alpha: "Alpha", rationale: "Rationale",
+      approve: "Approve", reject: "Reject", flagReview: "Flag for review",
+      openDetail: "Open Detail", selectSignal: "Select a signal.",
+    },
+    skillCoaching: {
+      systemPrompt: "System Prompt", saveDraft: "Save draft",
+      expected: "Expected", testDraft: "Test draft", addExample: "Add example",
+    },
+    trainerStudio: {
+      title: "Today's training pipeline",
+      subtitle: "Naturally-collected training events flowing in from Agora.",
+    },
+  },
+  artifact: { download: "Download", sourceExperiment: "Source experiment" },
+  evolution: { resume: "Resume" },
+  ranking: { expression: "Expression" },
+  research: { rerun: "Re-run" },
+  qa: { markAll: "Mark all", reset: "Reset" },
 };

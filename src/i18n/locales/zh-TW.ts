@@ -453,4 +453,62 @@ export default {
     rejectTitle: "駁回 — {{subject}}",
     rejectDesc: "駁回此請求，申請人會收到通知，流程中止。",
   },
+  agora: {
+    alertTriage: {
+      allClear: "目前無告警。",
+      suggestedAction: "建議動作",
+      escalate: "升級",
+      discuss: "討論",
+      noAlertSelected: "尚未選擇告警。",
+    },
+    askPersonas: {
+      personas: "Persona 列表",
+      committeeMode: "委員會模式",
+      hint: "開始對話，Pantheon 會把每則回覆收進你的決策脈絡。",
+    },
+    decisionJournal: {
+      newDecision: "新增決策",
+      context: "脈絡",
+      decision: "決策",
+      rationale: "理由",
+      handoff: "交接",
+    },
+    evaluation: { prompt: "提示詞", expected: "預期", observed: "實際" },
+    insightInbox: {
+      promote: "升級", handoff: "交接", discuss: "討論", dismiss: "忽略",
+      empty: "收件匣已清空。",
+    },
+    market: {
+      addTicker: "新增標的", volume: "成交量", sector: "產業",
+      regime: "市場狀態", riskOn: "風險偏好",
+      captureObservation: "記錄觀察",
+      askPersonas: "詢問 Persona",
+      selectTicker: "請選擇一檔標的。",
+    },
+    notebook: { empty: "尚未建立筆記。" },
+    personaLab: {
+      draft: "Persona 草稿", archetype: "原型", systemPrompt: "System Prompt",
+      skills: "技能", tools: "工具", memoryRoutes: "記憶路由",
+      saveDraft: "儲存草稿", submitReview: "送出審核",
+      testBench: "測試台", response: "回覆",
+    },
+    signalReview: {
+      conviction: "信心", alpha: "Alpha", rationale: "理由",
+      approve: "核准", reject: "駁回", flagReview: "標記複審",
+      openDetail: "開啟詳情", selectSignal: "請選擇一筆訊號。",
+    },
+    skillCoaching: {
+      systemPrompt: "System Prompt", saveDraft: "儲存草稿",
+      expected: "預期", testDraft: "測試草稿", addExample: "新增範例",
+    },
+    trainerStudio: {
+      title: "今日訓練管線",
+      subtitle: "由 Agora 自然累積流入的訓練事件。",
+    },
+  },
+  artifact: { download: "下載", sourceExperiment: "來源實驗" },
+  evolution: { resume: "恢復" },
+  ranking: { expression: "公式" },
+  research: { rerun: "重新執行" },
+  qa: { markAll: "全部勾選", reset: "重設" },
 };
