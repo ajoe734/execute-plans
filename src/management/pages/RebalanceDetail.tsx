@@ -131,6 +131,19 @@ export const RebalanceDetail = () => {
               </Section>
             ),
           },
+          {
+            value: "simulation", label: t("section.simulation", { defaultValue: "Simulation" }),
+            content: (
+              <Section title="Backtest preview">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <StatCard label={t("table.sharpe")} value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
+                  <StatCard label={t("table.drawdown")} value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="warning" />
+                  <StatCard label="Turnover" value={`${(Math.abs(r.proposedDelta) * 100).toFixed(1)}%`} />
+                  <StatCard label="Lines" value={lines.length} />
+                </div>
+              </Section>
+            ),
+          },
           { value: "approvals", label: t("nav.approvals"), content: <Placeholder text={t("empty.none")} /> },
           { value: "audit", label: t("nav.audit"), content: <Placeholder text="Rebalance audit trail." /> },
         ]}

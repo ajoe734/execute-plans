@@ -83,6 +83,7 @@ export const EvolutionDetail = () => {
               </Section>
             ),
           },
+          { value: "experiments", label: "Experiments", content: <Placeholder text="Linked research experiments derived from this program." /> },
           { value: "audit", label: t("nav.audit"), content: <Placeholder text="Lifecycle events for this program." /> },
         ]}
       />
