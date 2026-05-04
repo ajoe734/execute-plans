@@ -24,6 +24,7 @@ import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
+import { StrategyParamsEditor } from "@/management/components/detail/StrategyParamsEditor";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
