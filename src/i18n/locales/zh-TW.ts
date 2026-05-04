@@ -371,6 +371,8 @@ export default {
     capacity: "容量", utilization: "使用率", region: "區域",
     version: "版本", tags: "標籤", priority: "優先度",
     filters: "過濾條件", subscribers: "訂閱者", destination: "目的地",
+    category: "分類", inputs: "輸入", usedBy: "被使用於", endpoint: "端點",
+    tools: "工具數", envs: "環境", mode: "模式", eval: "評估分數", personas: "Persona 數",
   },
   section: {
     timeline: "時間軸", rationale: "理由", changeSummary: "變更摘要",
