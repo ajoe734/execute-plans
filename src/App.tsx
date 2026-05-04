@@ -78,11 +78,18 @@ const App = () => (
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
               <Route path="personas/:id" element={<PersonaDetail />} />
-              <Route path="capital-pools" element={<CapitalPoolsList />} />
+              <Route path="capital" element={<CapitalPoolsList />} />
+              <Route path="capital/:id" element={<CapitalPoolDetail />} />
+              <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
               <Route path="capital-pools/:id" element={<CapitalPoolDetail />} />
-              <Route path="ranking-formulas" element={<RankingFormulasList />} />
+              <Route path="ranking" element={<Placeholder title="Ranking Dashboard" hint="Phase 2: ranking dashboard with formula breakdown." />} />
+              <Route path="ranking/formulas" element={<RankingFormulasList />} />
+              <Route path="ranking/formulas/:id" element={<RankingFormulaDetail />} />
+              <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
               <Route path="ranking-formulas/:id" element={<RankingFormulaDetail />} />
-              <Route path="rebalances" element={<RebalancesList />} />
+              <Route path="rebalance" element={<RebalancesList />} />
+              <Route path="rebalance/:id" element={<RebalanceDetail />} />
+              <Route path="rebalances" element={<Navigate to="/management/rebalance" replace />} />
               <Route path="rebalances/:id" element={<RebalanceDetail />} />
               <Route path="evolution" element={<EvolutionList />} />
               <Route path="evolution/:id" element={<EvolutionDetail />} />
@@ -93,8 +100,11 @@ const App = () => (
               <Route path="artifacts" element={<ArtifactsList />} />
               <Route path="artifacts/:id" element={<ArtifactDetail />} />
               <Route path="incidents/:id" element={<IncidentDetail />} />
-              <Route path="governance" element={<Navigate to="/management/approvals" replace />} />
+              <Route path="governance" element={<Placeholder title="Governance Queue" hint="Phase 2: governance review queue (split from approvals)." />} />
               <Route path="governance/:id" element={<GovernanceReview />} />
+              <Route path="knowledge" element={<Placeholder title="Knowledge Inbox" hint="Phase 2: insight triage feeding artifacts & postmortems." />} />
+              <Route path="lineage" element={<Placeholder title="Lineage Explorer" hint="Phase 2: cross-entity lineage graph." />} />
+              <Route path="settings" element={<Placeholder title="Settings" hint="Phase 2: workspace, integrations, locale, theme, feature flags." />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
@@ -117,7 +127,10 @@ const App = () => (
             {/* Agora Workbench */}
             <Route path="/agora" element={<AgoraLayout />}>
               <Route index element={<DailyBrief />} />
-              <Route path="market" element={<MarketWatchlist />} />
+              <Route path="daily" element={<DailyBrief />} />
+              <Route path="markets" element={<MarketWatchlist />} />
+              <Route path="watchlist" element={<MarketWatchlist />} />
+              <Route path="market" element={<Navigate to="/agora/markets" replace />} />
               <Route path="signals" element={<SignalReview />} />
               <Route path="signals/:id" element={<SignalDetail />} />
               <Route path="triage" element={<AlertTriage />} />
@@ -125,13 +138,17 @@ const App = () => (
               <Route path="ask" element={<AskPersonas />} />
               <Route path="committee" element={<CommitteeRoom />} />
               <Route path="committee/:sessionId" element={<CommitteeRoom />} />
-              <Route path="decisions" element={<DecisionJournal />} />
+              <Route path="journal" element={<DecisionJournal />} />
+              <Route path="decisions" element={<Navigate to="/agora/journal" replace />} />
               <Route path="insights" element={<InsightInbox />} />
               <Route path="trainer" element={<TrainerStudio />} />
+              <Route path="trainer/:personaId" element={<TrainerStudio />} />
               <Route path="memory" element={<MemoryReview />} />
-              <Route path="skills" element={<SkillCoaching />} />
+              <Route path="skill-coaching" element={<SkillCoaching />} />
+              <Route path="skills" element={<Navigate to="/agora/skill-coaching" replace />} />
               <Route path="persona-lab" element={<PersonaLab />} />
-              <Route path="eval" element={<EvaluationSuites />} />
+              <Route path="evaluations" element={<EvaluationSuites />} />
+              <Route path="eval" element={<Navigate to="/agora/evaluations" replace />} />
               <Route path="channels" element={<AgoraChannels />} />
             </Route>
 
