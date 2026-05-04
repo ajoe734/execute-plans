@@ -99,6 +99,7 @@ export const rebalanceMachine: StateMachine<RebalanceState> = {
     { from: "scheduled", to: "applied", action: "apply_rebalance", requiresApproval: true, risk: "critical", uiPattern: "high_risk_modal" },
     { from: "applied", to: "rolled_back", action: "rollback_rebalance", requiresApproval: true, risk: "critical", uiPattern: "rollback_modal" },
     { from: "draft", to: "cancelled", action: "cancel" },
+    { from: "metrics_freezing", to: "cancelled", action: "cancel" },
     { from: "metrics_frozen", to: "cancelled", action: "cancel" },
     { from: "ranking_calculated", to: "cancelled", action: "cancel" },
     { from: "simulation_ready", to: "cancelled", action: "cancel" },
