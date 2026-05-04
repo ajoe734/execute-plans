@@ -40,6 +40,9 @@ import { IncidentDetail } from "@/management/pages/IncidentDetail";
 import { GovernanceReview } from "@/management/pages/GovernanceReview";
 import { RoutePoliciesList } from "@/management/pages/governance/RoutePoliciesList";
 import { RoutePolicyDetail } from "@/management/pages/governance/RoutePolicyDetail";
+import { PermissionMatrixPage } from "@/management/pages/governance/PermissionMatrixPage";
+import { MemoryGovernancePage } from "@/management/pages/governance/MemoryGovernancePage";
+import { ConsultRulesPage } from "@/management/pages/governance/ConsultRulesPage";
 import { DailyBrief } from "@/agora/pages/DailyBrief";
 import { AskPersonas } from "@/agora/pages/AskPersonas";
 import { Notebook } from "@/agora/pages/Notebook";
@@ -115,6 +118,9 @@ const App = () => (
               <Route path="governance" element={<GovernanceQueuePage />} />
               <Route path="governance/policies" element={<RoutePoliciesList />} />
               <Route path="governance/policies/:id" element={<RoutePolicyDetail />} />
+              <Route path="governance/permissions" element={<PermissionMatrixPage />} />
+              <Route path="governance/memory" element={<MemoryGovernancePage />} />
+              <Route path="governance/consult" element={<ConsultRulesPage />} />
               <Route path="governance/:id" element={<GovernanceReview />} />
               <Route path="knowledge" element={<KnowledgeInboxPage />} />
               <Route path="postmortems" element={<PostmortemLibraryPage />} />

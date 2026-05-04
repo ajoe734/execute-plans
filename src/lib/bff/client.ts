@@ -91,9 +91,16 @@ export const bff = {
   permissionMatrix: {
     get: (instance: string) => delay(seed.permissionMatrices.find((m) => m.instance === instance)),
   },
+  permissionMatrices: {
+    list: () => delay(seed.permissionMatrices),
+  },
   memoryUpdates: {
     list: () => delay(seed.memoryUpdates),
     forPersona: (personaId: string) => delay(seed.memoryUpdates.filter((m) => m.personaId === personaId)),
+  },
+  consultRules: {
+    list: () => delay(seed.consultRules),
+    get: (id: string) => delay(seed.consultRules.find((c) => c.id === id)),
   },
   evolutionRuns: {
     list: () => delay(seed.evolutionRuns),

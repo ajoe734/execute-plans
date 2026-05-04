@@ -270,6 +270,19 @@ export interface PermissionMatrix {
   cells: PermissionCell[];
 }
 
+export interface ConsultRule {
+  id: string;
+  name: string;
+  fromPersonaId: string;        // requester
+  toPersonaId: string;          // consultee
+  trigger: string;              // e.g. "risk>high" or "intent=hedge_decision"
+  mode: "advisory" | "blocking" | "ack";
+  envScope: ("research" | "paper" | "live")[];
+  enabled: boolean;
+  owner: string;
+  updatedAt: string;
+}
+
 export interface MemoryUpdate {
   id: string;
   personaId: string;

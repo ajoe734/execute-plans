@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
-  BookOpen, Workflow, FileText, Factory, Clock,
+  BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -28,6 +28,9 @@ export const ManagementLayout = () => {
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/governance", label: t("nav.governance"), icon: ClipboardCheck },
       { to: "/management/governance/policies", label: t("nav.routePolicies"), icon: ClipboardCheck },
+      { to: "/management/governance/permissions", label: t("nav.permissions"), icon: ShieldCheck },
+      { to: "/management/governance/memory", label: t("nav.memoryGov"), icon: Brain },
+      { to: "/management/governance/consult", label: t("nav.consultRules"), icon: MessagesSquare },
       { to: "/management/knowledge", label: t("nav.knowledge"), icon: BookOpen },
       { to: "/management/postmortems", label: t("nav.postmortems"), icon: FileText },
       { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
