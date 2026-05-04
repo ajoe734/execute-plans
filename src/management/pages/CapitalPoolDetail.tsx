@@ -14,6 +14,9 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { MandatePanel } from "../components/detail/MandatePanel";
+import { RiskBudgetPanel } from "../components/detail/RiskBudgetPanel";
+import { BindingsMatrix } from "../components/detail/BindingsMatrix";
 
 export const CapitalPoolDetail = () => {
   const { id } = useParams();
