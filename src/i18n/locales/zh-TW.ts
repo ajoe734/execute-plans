@@ -102,7 +102,7 @@ export default {
     approve: "核准", reject: "駁回", deploy: "部署",
     rollback: "回滾", suspend: "暫停", retire: "退役",
     cancel: "取消", confirm: "確認", save: "儲存",
-    reset: "重設", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
+    reset: "重設", proposeChange: "提出變更", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
   },
   confirm: {
     title: "高風險動作確認",
@@ -481,6 +481,25 @@ export default {
     overrides: { increase: "手動加碼以保留排序後的動能優勢。", decrease: "手動降碼以降低回撤集中度。" },
     sim: { sharpe: "Sharpe", drawdown: "回撤", turnover: "換手率", totalWeight: "總權重", weights: "目標權重", queued: "模擬已排入", run: "執行模擬" },
     constraints: { maxWeight: "單一策略最高權重", totalWeight: "組合總權重", expectedDD: "預期回撤", turnover: "換手預算" },
+  },
+  persona: {
+    tabs: { routePolicy: "路由政策", toolsMcpSkills: "工具 · MCP · 技能", activity: "活動", training: "訓練與記憶" },
+    routePolicy: { empty: "此 Persona 尚未指派路由政策。", editStub: "開啟編輯器", rules: "規則", versions: "版本" },
+    permissions: { noGrants: "此 Persona 尚無權限授權。" },
+    activity: { title: "活動監控" },
+    memory: { queue: "記憶治理佇列", openReview: "開啟審查", approved: "記憶已核可", rejected: "記憶已駁回" },
+  },
+  capitalPool: {
+    mandate: {
+      charter: "資金池章程", bindingRules: "綁定規則",
+      objectiveValue: "在核准授權範圍內產生風險調整後 Alpha。",
+      horizonValue: "季度檢視週期，12 個月視野。",
+      rule1: "單一策略不得超過已配置資金的 35%。",
+      rule2: "Live 環境策略需要雙重審批。",
+      rule3: "回撤超過 8% 會觸發自動暫停。",
+    },
+    risk: { editor: "風險預算編輯器", breakdown: "風險預算拆分", queued: "風險預算變更已排入" },
+    bindings: { title: "策略 / Persona 綁定", hint: "資金池 {{pool}} 的啟用中綁定。" },
   },
   confirmDialog: {
     resolveIncident: "結案事件 — {{title}}",
