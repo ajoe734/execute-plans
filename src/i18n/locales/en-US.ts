@@ -83,6 +83,7 @@ export default {
     workflowTemplates: "Workflow Templates",
     hooks: "Hooks & Cron",
     alphaFactory: "Alpha Factory",
+    studios: "Studios",
   },
   groups: {
     overview: "Overview",
