@@ -82,8 +82,47 @@ export const SkillDetail = () => {
               </>
             ),
           },
-          { value: "evals", label: t("skill.evals"), content: <Placeholder text={t("skill.evalsHint")} /> },
-          { value: "training", label: t("skill.training"), content: <Placeholder text={t("skill.trainingHint")} /> },
+          { value: "evals", label: t("skill.evals"), content: (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard label={t("section.performance")} value={skill.evalScore?.toFixed(2) ?? "—"} tone={(skill.evalScore ?? 0) > 0.85 ? "success" : "warning"} />
+                <StatCard label="Pass rate" value={`${Math.round((skill.evalScore ?? 0) * 100)}%`} />
+                <StatCard label="Suites" value={3} />
+                <StatCard label="Last run" value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleDateString() : "—"} />
+              </div>
+              <DataTable
+                rows={[
+                  { id: "ev_correctness", suite: "correctness", score: (skill.evalScore ?? 0.8), passed: 42, failed: 3 },
+                  { id: "ev_grounding", suite: "grounding", score: Math.max(0, (skill.evalScore ?? 0.8) - 0.05), passed: 38, failed: 7 },
+                  { id: "ev_safety", suite: "safety", score: Math.min(1, (skill.evalScore ?? 0.8) + 0.04), passed: 50, failed: 0 },
+                ]}
+                columns={[
+                  { key: "suite", header: "Suite", cell: (r) => <span className="text-mono text-xs">{r.suite}</span> },
+                  { key: "score", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{r.score.toFixed(2)}</span> },
+                  { key: "passed", header: "Passed", cell: (r) => <span className="text-mono text-xs text-status-success">{r.passed}</span> },
+                  { key: "failed", header: "Failed", cell: (r) => <span className={`text-mono text-xs ${r.failed > 0 ? "text-risk-high" : "text-muted-foreground"}`}>{r.failed}</span> },
+                ]}
+              />
+            </>
+          ) },
+          { value: "training", label: t("skill.training"), content: (
+            <Section title={t("skill.training")}>
+              <p className="text-xs text-muted-foreground mb-3">{t("skill.trainingHint")}</p>
+              <DataTable
+                rows={[
+                  { id: "ex_001", source: "memory_review", kind: "positive", excerpt: "Capture macro regime shift commentary inline.", ts: skill.updatedAt },
+                  { id: "ex_002", source: "trainer_studio", kind: "correction", excerpt: "Cite source URL when citing macro data.", ts: skill.updatedAt },
+                  { id: "ex_003", source: "skill_coaching", kind: "positive", excerpt: "Concise structured output preferred.", ts: skill.updatedAt },
+                ]}
+                columns={[
+                  { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+                  { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                  { key: "ex", header: t("table.description"), cell: (r) => <span className="text-sm">{r.excerpt}</span> },
+                  { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleDateString()}</span> },
+                ]}
+              />
+            </Section>
+          ) },
           { value: "consumers", label: t("nav.personas"), content: (
             <DataTable rows={personas.slice(0, skill.usedByPersonas || personas.length)} onRowClick={(r) => nav(`/management/personas/${r.id}`)} columns={[
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
