@@ -16,6 +16,7 @@ import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/com
 import { useInspector } from "@/platform/components/RightDrawer";
 import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -153,13 +154,7 @@ export const StrategyDetail = () => {
           },
           {
             value: "audit", label: t("nav.audit"),
-            content: (
-              <DataTable rows={audit} columns={[
-                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
-                { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
-                { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-              ]} empty={t("empty.noResults")} />
-            ),
+            content: <AuditTimeline entries={audit} />,
           },
         ]}
       />
