@@ -70,6 +70,10 @@ export default {
     journal: "決策日誌",
     capital: "資金池",
     rebalance: "季度調倉",
+    postmortems: "Postmortem 知識庫",
+    workflowTemplates: "工作流模板",
+    hooks: "排程與 Hook",
+    alphaFactory: "Alpha 工廠",
   },
   groups: {
     overview: "總覽",

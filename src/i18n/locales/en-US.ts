@@ -75,6 +75,10 @@ export default {
     journal: "Decision Journal",
     capital: "Capital Pools",
     rebalance: "Rebalances",
+    postmortems: "Postmortem Library",
+    workflowTemplates: "Workflow Templates",
+    hooks: "Hooks & Cron",
+    alphaFactory: "Alpha Factory",
   },
   groups: {
     overview: "Overview",
