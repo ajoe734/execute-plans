@@ -43,7 +43,7 @@ export const personaMachine: StateMachine<PersonaState> = {
     { from: "probation", to: "active", action: "restore_active", requiresApproval: true },
     { from: "restricted", to: "active", action: "remove_restriction", requiresApproval: true },
     { from: "active", to: "retired", action: "retire_persona", requiresApproval: true, risk: "high", uiPattern: "high_risk_modal" },
-    { from: "retired", to: "archived", action: "archive_persona", requiresApproval: true, uiPattern: "destructive_modal" },
+    { from: "retired", to: "archived", action: "archive_persona", requiresApproval: true, risk: "critical", uiPattern: "destructive_modal" },
   ],
 };
 
