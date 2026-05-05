@@ -50,11 +50,13 @@ const seed: SkillDraft[] = [
 
 export const SkillCoaching = () => {
   const t = useT();
+  const navigate = useNavigate();
   const openHandoff = useHandoff((s) => s.openHandoff);
   const [drafts, setDrafts] = useState<SkillDraft[]>(seed);
   const [activeId, setActiveId] = useState(seed[0].id);
   const [newPrompt, setNewPrompt] = useState("");
   const [newExpected, setNewExpected] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const active = drafts.find((d) => d.id === activeId)!;
   const updateActive = (patch: Partial<SkillDraft>) =>
@@ -71,6 +73,33 @@ export const SkillCoaching = () => {
 
   const rate = (exId: string, rating: "good" | "bad") =>
     updateActive({ examples: active.examples.map((e) => (e.id === exId ? { ...e, rating } : e)) });
+
+  /** Phase 20 — Scenario F: Skill draft → Management approval (real). */
+  const submitForApproval = async () => {
+    if (active.examples.length === 0) {
+      toast.error(t("agora.skillCoaching.needExamples", { defaultValue: "Add at least one example before submitting." }));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const r = await mutations.createApproval({
+        kind: "skill.publish",
+        subject: `skill: ${active.name} (${active.archetype})`,
+        rationale: active.systemPrompt.slice(0, 240),
+        diffSummary: `${active.examples.length} training example(s) attached`,
+        riskLevel: active.archetype === "RedTeam" ? "high" : "medium",
+        stages: [
+          { name: "trainer-lead", slaHours: 12 },
+          { name: "capability-admin", slaHours: 24, escalateTo: "committee" },
+        ],
+      });
+      toast.success(t("agora.skillCoaching.approvalCreated", { defaultValue: "Approval request created" }), {
+        description: r.approval.id,
+        action: { label: t("actions.open", { defaultValue: "Open" }),
+          onClick: () => navigate(`/management/governance/${r.approval.id}`) },
+      });
+    } finally { setSubmitting(false); }
+  };
 
   return (
     <>
