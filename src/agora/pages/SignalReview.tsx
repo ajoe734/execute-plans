@@ -107,7 +107,7 @@ export const SignalReview = () => {
                     <Badge variant="outline" className={`text-[10px] uppercase ${s.side === "long" ? "bg-status-success/15 text-status-success border-status-success/30" : "bg-status-failed/15 text-status-failed border-status-failed/30"}`}>{s.side}</Badge>
                     <span className="font-mono text-sm font-semibold">{s.symbol}</span>
                     <RiskBadge level={s.risk} />
-                    {d && <Badge variant="outline" className="ml-auto text-[10px] uppercase">{d}</Badge>}
+                    {d && <Badge variant="outline" className="ml-auto text-[10px] uppercase">{d.decision}·{d.confidence}/5</Badge>}
                   </div>
                   <div className="text-sm font-medium truncate">{s.strategyName}</div>
                   <div className="text-xs text-mono text-muted-foreground">size {(s.size * 100).toFixed(2)}% · conviction {(s.conviction * 100).toFixed(0)}%</div>
