@@ -201,8 +201,16 @@ export const IncidentDetail = () => {
               {isHighSev && (
                 <p className="text-xs text-status-warning">{t("incident.postmortemRequired")}</p>
               )}
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => toast.success(t("incident.feedbackQueued"))}>{t("incident.createTrainingFeedback")}</Button>
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
+                  await bff.mutations.appendPostmortem(incident.id, postmortem);
+                  toast.success(t("incident.postmortem.appended"));
+                  setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[postmortem] ${postmortem.slice(0, 80)}` }] });
+                }}>{t("incident.postmortem.add")}</Button>
+                <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
+                  const res = await bff.mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
+                  toast.success(t("incident.feedbackQueued"), { description: res.feedbackId });
+                }}>{t("incident.createTrainingFeedback")}</Button>
                 <Button size="sm" variant="outline" onClick={() => toast.success(t("incident.constraintQueued"))}>{t("incident.createEvolutionConstraint")}</Button>
               </div>
             </Card>
