@@ -852,6 +852,9 @@ export default {
       conviction: "Conviction", alpha: "Alpha", rationale: "Rationale",
       approve: "Approve", reject: "Reject", flagReview: "Flag for review",
       openDetail: "Open Detail", selectSignal: "Select a signal.",
+      confidence: "Confidence",
+      reasonPlaceholder: "Reason (required for disagree at confidence ≥4 and any flag_suspicious)…",
+      agree: "Agree", disagree: "Disagree", flag: "Flag suspicious",
     },
     skillCoaching: {
       systemPrompt: "System Prompt", saveDraft: "Save draft",
