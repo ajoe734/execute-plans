@@ -126,11 +126,15 @@ function setState(kind: string, id: string, newState: string | undefined): boole
  * (legacy phases used `LifecycleState` like "deployed"/"review"), so the
  * existing UI keeps working while new flows opt into machine vocab.
  */
+type GuardResult =
+  | { ok: true; resolvedState?: string }
+  | { ok: false; reason: string };
+
 function validateTransition(
   kind: string, id: string, action: string, newState?: string,
-): { ok: true; resolvedState?: string } | { ok: false; reason: string } {
+): GuardResult {
   const mKey = KIND_TO_MACHINE[kind];
-  if (!mKey) return { ok: true, resolvedState: newState }; // not governed
+  if (!mKey) return { ok: true, resolvedState: newState };
   const machine = machines[mKey];
   const col = SEED_COLLECTIONS[kind];
   const obj = col ? findById(col, id) as { state?: string } | undefined : undefined;
@@ -140,7 +144,6 @@ function validateTransition(
     ...machine.states,
     ...(machine.branchStates ?? []),
   ]);
-  // Foreign vocabulary → permissive.
   if (!fromState || !machineStates.has(fromState)) {
     return { ok: true, resolvedState: newState };
   }
