@@ -4,6 +4,9 @@ export default {
     management: "管理控制台",
     agora: "Agora 工作台",
   },
+  ui: {
+    pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
+  },
   env: {
     research: "研究", paper: "模擬", live: "正式", label: "環境",
   },
@@ -971,7 +974,7 @@ export default {
     theme: { title: "佈景", dark: "深色模式", darkHint: "預設適用低光環境作業。", density: "密度" },
     integrations: { title: "整合", hint: "已串接到 Pantheon 的外部服務。", manage: "管理", connect: "連接" },
     api: { title: "API 金鑰", hint: "用於程式化存取 BFF。", create: "建立金鑰", rotate: "輪替" },
-    locale: { title: "語言", use: "使用" },
+    locale: { title: "語言", use: "使用", hint: "切換語言會同步更新 UI 字串以及每次 BFF 呼叫帶出的 Accept-Language 標頭。", acceptLanguage: "Accept-Language", acceptHint: "每次 BFF 呼叫都會送出。" },
     flags: { title: "功能旗標", hint: "切換實驗功能；變更會記入稽核。" },
   },
   lineageExplorer: {

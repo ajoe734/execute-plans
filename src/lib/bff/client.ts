@@ -1,10 +1,31 @@
 // Mock BFF client. Returns promises with simulated latency.
+// Phase P2 — every request "carries" the active locale (Accept-Language) so
+// downstream services can respond in the operator's language. The mock layer
+// surfaces the current value via `bff.getAcceptLanguage()` and logs locale
+// changes onto the realtime bus for observability parity with a real fetch BFF.
 import * as seed from "@/mocks/seed";
 import { mutations } from "./mutations";
+import { realtime } from "./realtime";
+import { usePlatform } from "@/platform/store";
+
+const acceptLanguage = (): string => {
+  const l = usePlatform.getState().locale;
+  return l === "zh-TW" ? "zh-TW,zh;q=0.9,en;q=0.5" : "en-US,en;q=0.9";
+};
+
+let lastLocale = usePlatform.getState().locale;
+usePlatform.subscribe((s) => {
+  if (s.locale !== lastLocale) {
+    lastLocale = s.locale;
+    realtime.emit("data", { kind: "locale", value: s.locale, accept: acceptLanguage() });
+  }
+});
 
 const delay = <T>(v: T, ms = 220) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
 export const bff = {
+  /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
+  getAcceptLanguage: acceptLanguage,
   mutations,
   strategies: {
     list: () => delay(seed.strategies),
