@@ -1,0 +1,93 @@
+id,severity,part,section,line,title,area,current_workaround,suggested_resolution
+G01,H,1,§11,1177-1230,Strategy 8 狀態未含 under_review/paused,Strategy lifecycle,stateMachines/strategy.ts 8 states + mock alias,Spec 補 Status×Role×Action 矩陣，統一 enum
+G02,H,1,§1.1 / Part 2 §3,55-76,Role × Action 權限真值表缺漏,Permissions,permissions.ts 自訂 8 role×60 action,Part 1 新增 §11.x 矩陣
+G03,H,1,§12,1231-1271,High-Risk action 全集與 confirm token 規格缺,Hi-Risk,mutations.ts HIGH_RISK_ACTIONS 12 項 hardcode,列出全集 + Part 6 加 /commands/confirm-token
+G04,H,1,§4.1,320-341,EnvironmentIndicator env enum 與 gating 規則缺,Top Bar,GlobalTopBar 寫死 dev/staging/prod,補 env enum 與 hi-risk gating 表
+G05,H,1,§10.3,1143-1176,availableActions 計算規則與結構未定,BFF DTO,queries.ts 回 string[],統一 object[] 並補規則
+G06,M,1,§13.8,1485-1506,Persona 回應語言耦合規則模糊,i18n,全域 locale 套用,補 user/session/per-message override
+G07,M,1,§4.4,402-424,Notification 種類與 payload 缺,Notifications,NotificationCenter 自定 5 類,補 NotificationType enum
+G08,M,1,§4.5,425-463,RightDrawer surface enum 不全,Drawer,RightDrawer 自加 persona quick ask,補 surface enum
+G09,M,1,§4.3,357-401,Global Search 範圍與 ranking 缺,Search,useGlobalSearch 全 entity 無 ranking,補 search domain + weight
+G10,M,1,"§16,§18",1604-1682,Locked decisions 未版本化,Process,plan.md 對照,加 ADR id
+G11,L,1,§15,1561-1603,Visual token mapping 缺,Design,index.css 自定 token,補 token mapping
+G12,L,1,§13.9,1507-1529,i18n QA 工具未列,i18n,manual,補工具列表
+G13,H,2,§5-§20,-,Process×Page mapping 表缺,Process,plan.md 自對照,補 mapping 矩陣
+G14,H,2,§6.3-§6.5,2155-2302,Strategy transition 觸發者缺,Strategy,stateMachines/strategy.ts 推測,補 transition table
+G15,H,2,§11.3,2749-2761,Persona suspended/archived transition 缺,Persona,stateMachines/persona.ts 推測,補 reversibility + reviewer
+G16,H,2,§14.3-§14.5,2984-3047,Capital Pool mandate schema 缺,Capital,CapitalPoolDetail 6 欄皆 number,補 jsonschema
+G17,H,2,§15,3048-3155,Ranking scope×metric matrix 缺,Ranking,RankingDashboard 6 tab 共用 metric,補對應矩陣
+G18,H,2,§16.4,3188-3208,Rebalance reviewer/approver 缺,Rebalance,stateMachines/rebalance.ts 推測,補 step×role 表
+G19,H,2,§17,3245-3322,Evolution Constraints/Alerts/Approvals schema 缺,Evolution,EvolutionDetail placeholder,補三 entity schema
+G20,M,2,§10.6,-,Incident mitigation/training feedback 子流程缺,Incident,placeholder,補欄位
+G21,M,2,§13.4,-,Memory states 與 TrainingUpdate 對應缺,Memory,推測,補對應
+G22,M,2,§18,-,Tool/MCP/Skill sandbox 規格僅 Skill 段,Capability,ToolDetail/SkillDetail 重複,拆 sandbox 規格
+G23,M,2,§19.5,-,Insight lineage 欄位缺,Insight,推測,補 lineage 欄位
+G24,M,2,§20.2,-,Job types payload 未列,Jobs,JobDrawer 通用欄位,補各 type payload
+G25,M,2,§4.4,-,Long task job 化門檻未定,Jobs,sync,補門檻
+G26,M,2,§4.7,-,Handoff SLA / re-route 缺,Handoff,handoff.ts 自定,補 SLA
+G27,L,2,§4.5,-,Audit retention 未說,Audit,mock 90d,補保留期
+G28,H,3,Strategy Detail,4464-4644,Strategy 11 vs 13 tabs 不一致,Strategy,StrategyDetail 11 tabs,補 Costs/Calendar 或修 spec
+G29,H,3,Persona Detail,4803-4918,Persona Lab/Memory tab 規格缺,Persona,PersonaDetail 自加 6 tabs,補 spec
+G30,H,3,Capital Pool Detail,-,Performance/Ranking Inputs tab 缺,Capital,placeholder cards,補 schema
+G31,H,3,§5.143,-,Formula weights schema 缺,Ranking,FormulaBuilder JSON 自由,補 weight tree schema
+G32,H,3,§5.213,-,Rebalance step UI 元件未指定,Rebalance,6 step stepper 自選,補 UI map
+G33,H,3,Risk Center,-,route /risk vs /risk-center 衝突,Risk,alias 兩 route,擇一
+G34,M,3,Command Center,4121-,KPI list 缺,Command,CommandCenter 自定 KPI,補 KPI 列表
+G35,M,3,Strategies List,-,sort/filter 規格缺,Strategy,全欄 sort,補規格
+G36,M,3,Strategy Tab Experiments,-,Run experiment input schema 缺,Strategy,ExperimentForm 自定,補 schema
+G37,M,3,Strategy Tab Risk,-,與 Risk Center 同步來源未定,Strategy,共用 list,明確化
+G38,M,3,Strategy Tab Governance,-,與 Governance Review 物件關係未定,Strategy,兩處 list,明確化
+G39,M,3,Capabilities List,4943-4982,Tools/MCP/Skills 共用 list 欄位 N/A,Capability,共用 list,補各類欄位
+G40,M,3,Tool Detail,5690-,Tool 與 MCP server 混寫,Capability,ToolDetail,拆兩類
+G41,M,3,Skill Detail,5785-,sandbox tab 規格僅一行,Capability,SkillDetail placeholder,補 sandbox schema
+G42,M,3,Lineage,5865-,graph 規模上限未定,Lineage,限 200 node,補 graph 限制
+G43,M,3,Audit,5936-,retention/export 行為缺,Audit,自加 CSV export,補 export 規格
+G44,M,3,Settings,5976-,SSE diagnostic 未列,Settings,Settings 自加,補 SSE tooling
+G45,L,3,Empty State,6008-,頁面 ID 未對應,UX,通用 placeholder,補頁面對應
+G46,L,3,Loading/Error,6028-,型別差異未列,UX,通用,補型別 variant
+G47,L,3,Acceptance,-,各頁尾段風格不一,Process,ad hoc,統一模板
+G48,H,4,§22,7410-7471,Handoff payload schema 缺,Handoff,handoff.ts 7 種自定,補各 type schema
+G49,H,4,§9.6,-,Signal captured signal throttling 未說,Signal,每點擊送,補 batch 規則
+G50,M,4,§11.4,-,Persona Ask Modes prompt scope 缺,Persona,AskPersonas 自定,補 prompt scope
+G51,M,4,§12.4,-,Committee evidence pack schema 缺,Committee,markdown placeholder,補 schema
+G52,M,4,§15,-,Insight attach to strategy 規格缺,Insight,InsightInbox 自加,補 endpoint
+G53,M,4,§18,-,Trainer evaluation suite 欄位缺,Trainer,TrainerStudio 自定,補 schema
+G54,L,4,§3.2,-,Agora 不可做事項與 §24 重複,Process,duplicate,合併表
+G55,L,4,§4.1,-,角色 default route 未定,Workflow,ad hoc,補落地頁
+G56,H,5,Daily Brief,8116-,KPI 計算公式缺,DailyBrief,DailyBrief 自算,補公式
+G57,H,5,Signal Review,8265-,confidence scale 未定,Signal,採 1-5,補 scale
+G58,H,5,Committee Room,-,evidence pack upload 規格缺,Committee,textarea,補 upload spec
+G59,M,5,Notebook,8378-,markdown extension 未指定,Notebook,KaTeX 自加,補 extension list
+G60,M,5,Persona Lab,-,sandbox commit 流程缺,PersonaLab,commit 自加,補 commit flow
+G61,M,5,Memory Review,9166-,quarantined→active reviewer 缺,Memory,自定,補 reviewer 規則
+G62,M,5,Trainer Studio,9253-,publish 前 evaluation gate 缺,Trainer,不阻擋,補 gate
+G63,M,5,Skill Coaching,9390-,與 Trainer suite 是否同物件未定,Skill,兩處 list,明確化
+G64,L,5,Agora Channels,9464-,ChannelDetail 欄位不全,Channel,N/A 欄,補欄位
+G65,L,5,Handoff,9520-,handoff types 數量 6 vs 7,Handoff,以 7 為主,統一
+G66,H,6,§3.6 / §2.5,-,confirm token endpoint 缺,BFF,mutations 自定,補 endpoint
+G67,H,6,§3.5 vs §6.x,-,availableActions list/detail 不一致,BFF,string[] / object[] 並存,統一 object[]
+G68,H,6,§6.7,-,Rebalance reviewer/approver 欄缺,Rebalance,推測,補欄位
+G69,M,6,§7.3,-,Session/Message attachment/citation 缺,Agora,CommitteeRoom 自加,補欄位
+G70,M,6,§8,-,BFF endpoint 缺 5 個,BFF,queries 自加,補 endpoint
+G71,M,6,§10,-,Accept-Language fallback 鏈缺,i18n,mock 自加,補 fallback
+G72,M,6,-,-,SSE channel catalog 缺,Realtime,useMockRealtime 18 channel,Part 6 新增 §11
+G73,M,6,§6.11,-,Job progress 節流率未定,Jobs,JobDrawer 1s,補節流
+G74,M,6,§3.7,-,Error i18nKey 缺,Errors,英文 fallback,補 i18nKey
+G75,L,6,§3.8,-,Timezone 顯示策略未定,Format,dayjs 自定,補時區
+G76,L,6,§3.9,-,Money 精度未定,Format,2 位,補精度
+G77,L,6,§6.10,-,Review observer 欄缺,Governance,無 observer,補欄位
+G78,H,7,§17.x,-,18 state machine 與 Part 2/6 5 處不一致,StateMachine,以 Part 7 為主,統一
+G79,M,7,§8.3,-,HighRiskConfirmationModal memo 字數限缺,Hi-Risk,maxLen 1000,補限制
+G80,M,7,§11.3,-,IncidentTimeline attachment 缺,Incident,link list,補 attachment
+G81,L,7,§6.x,-,StatusBadge 顏色 token 缺,Design,自用 token,補 mapping
+G82,L,7,§13.1,-,FormulaBuilder shortcut 缺,Ranking,自加,補 shortcut
+G83,L,7,§15.x,-,Agora/Console 元件命名重複,Components,分資料夾,重命名或共用
+G84,L,7,§11.5,-,EventStream retain count 缺,Realtime,200,補上限
+G85,L,7,§16,-,Forms 驗證策略缺,Forms,zod 自選,補策略
+G86,H,8,QA,-,Emergency Kill entry/target 缺,Risk,Operations 自加 strategy target,補 target enum
+G87,M,8,§7.x,-,Mock 與 schema 欄位不齊,Mock,fixture 不全,對齊 fixture
+G88,L,8,§8,-,Demo scenarios 與 acceptance 對應缺,QA,ad hoc,補 mapping
+G89,L,8,§2.x,-,Phase 與 Part 章節對應缺,Process,plan 自對,補 phase 表
+G90,L,8,§3,-,Master Prompt token budget 缺,Prompt,-,補 budget
+G91,L,8,§6,-,Routes dynamic param 規範缺,Router,:id 自定,補 schema
+G92,L,8,§7.x,-,Mock id 命名不一致,Mock,unify,統一命名
