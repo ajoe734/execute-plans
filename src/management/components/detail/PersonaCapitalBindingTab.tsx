@@ -30,7 +30,7 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
         columns={[
           { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
           { key: "currency", header: "Currency", cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
-          { key: "alloc", header: t("capitalPool.allocated") || "Allocated", cell: (r) => <span className="text-mono text-xs">${(r.allocated / 1e6).toFixed(1)}M</span> },
+          { key: "alloc", header: "Allocated", cell: (r) => <span className="text-mono text-xs">${(r.allocated / 1e6).toFixed(1)}M</span> },
           { key: "bound", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.boundStrategies.length}</span> },
         ]}
         empty={t("empty.noResults")}
