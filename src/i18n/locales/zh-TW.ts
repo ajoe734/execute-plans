@@ -678,6 +678,10 @@ export default {
       capital: "資金審", committee: "委員會", proposer: "提案者",
       reviewer: "審核者", executor: "執行者", "trainer-lead": "訓練主管",
     },
+    mcpServer: {
+      draft: "草稿", connected: "已連線", healthy: "健康",
+      degraded: "降級", disabled: "已停用", retired: "已退役",
+    },
   },
   rebalance: {
     nextAction: "下一步動作",
