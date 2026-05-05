@@ -15,8 +15,8 @@ import { bff } from "@/lib/bff/client";
 import { realtime } from "@/lib/bff/realtime";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
-import type { Alert, ApprovalRequest, Job } from "@/lib/bff/types";
-import { AlertTriangle, ClipboardCheck, Loader2 } from "lucide-react";
+import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
+import { AlertTriangle, ClipboardCheck, Loader2, ShieldAlert } from "lucide-react";
 
 interface NCState {
   open: boolean;
