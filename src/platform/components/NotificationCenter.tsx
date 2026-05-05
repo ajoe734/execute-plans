@@ -36,11 +36,12 @@ export const NotificationCenter = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([bff.alerts.list(), bff.approvals.list(), bff.jobs.list()]).then(
-      ([a, ap, j]) => { setAlerts(a); setApprovals(ap); setJobs(j); },
+    void Promise.all([bff.alerts.list(), bff.approvals.list(), bff.jobs.list(), bff.incidents.list()]).then(
+      ([a, ap, j, inc]) => { setAlerts(a); setApprovals(ap); setJobs(j); setIncidents(inc); },
     );
     const offAlert = realtime.on("alert", (p) => {
       const a = p as Alert;
@@ -50,13 +51,17 @@ export const NotificationCenter = () => {
       const j = p as { jobId: string; kind: string; status: Job["status"]; ts: string; owner: string };
       setJobs((cur) => [{ id: j.jobId, kind: j.kind, status: j.status, startedAt: j.ts, owner: j.owner }, ...cur].slice(0, 50));
     });
-    return () => { offAlert?.(); offJob?.(); };
+    const offData = realtime.on("data", (e: any) => {
+      if (e?.kind === "Incident") void bff.incidents.list().then(setIncidents);
+    });
+    return () => { offAlert?.(); offJob?.(); offData?.(); };
   }, [open]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };
   const openCount = alerts.filter((a) => !a.acknowledged).length;
   const pendingCount = approvals.filter((a) => a.state === "pending").length;
   const runningCount = jobs.filter((j) => j.status === "running").length;
+  const incidentCount = incidents.filter((i) => i.status !== "resolved").length;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
