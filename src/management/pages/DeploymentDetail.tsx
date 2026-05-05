@@ -55,6 +55,11 @@ export const DeploymentDetail = () => {
                 <Rocket className="h-4 w-4 mr-1" />{t("actions.promoteLive")}
               </Button>
             )}
+            {isLive && (
+              <Button size="sm" variant="outline" onClick={() => setReduceOpen(true)}>
+                <TrendingDown className="h-4 w-4 mr-1" />{t("deployment.reduceAllocation.action")}
+              </Button>
+            )}
             {d.rollbackAvailable && (
               <Button size="sm" variant="outline" onClick={() => setRollbackOpen(true)}>
                 <Undo2 className="h-4 w-4 mr-1" />{t("actions.rollback")}
