@@ -8,7 +8,7 @@ export const StrategiesList = () => {
     <ObjectListPage
       title={t("nav.strategies")}
       loader={() => bff.strategies.list()}
-      basePath="/management/strategies"
+      basePath="/management/strategies" liveKinds={["Strategy"]}
       extraColumns={[
         { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
         { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
@@ -24,7 +24,7 @@ export const PersonasList = () => {
     <ObjectListPage
       title={t("nav.personas")}
       loader={() => bff.personas.list()}
-      basePath="/management/personas"
+      basePath="/management/personas" liveKinds={["Persona"]}
       extraColumns={[
         { key: "arch", header: t("table.type"), cell: (r) => r.archetype },
         { key: "rs", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.routedStrategies}</span> },
@@ -40,7 +40,7 @@ export const CapitalPoolsList = () => {
     <ObjectListPage
       title={t("nav.capitalPools")}
       loader={() => bff.capitalPools.list()}
-      basePath="/management/capital-pools"
+      basePath="/management/capital-pools" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       extraColumns={[
         { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
         { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{r.allocated.toLocaleString()}</span> },
@@ -57,7 +57,7 @@ export const RankingFormulasList = () => {
     <ObjectListPage
       title={t("nav.rankingFormulas")}
       loader={() => bff.rankingFormulas.list()}
-      basePath="/management/ranking-formulas"
+      basePath="/management/ranking-formulas" liveKinds={["RankingFormula"]}
       extraColumns={[
         { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
         { key: "applied", header: t("section.relatedObjects"), cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },
@@ -72,7 +72,7 @@ export const RebalancesList = () => {
     <ObjectListPage
       title={t("nav.rebalances")}
       loader={() => bff.rebalances.list()}
-      basePath="/management/rebalances"
+      basePath="/management/rebalances" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
         { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
@@ -87,7 +87,7 @@ export const DeploymentsList = () => {
     <ObjectListPage
       title={t("nav.deployments")}
       loader={() => bff.deployments.list()}
-      basePath="/management/deployments"
+      basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       extraColumns={[
         { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
@@ -102,7 +102,7 @@ export const EvolutionList = () => {
     <ObjectListPage
       title={t("nav.evolution")}
       loader={() => bff.evolution.list()}
-      basePath="/management/evolution"
+      basePath="/management/evolution" liveKinds={["Evolution","Promotion"]}
       extraColumns={[
         { key: "gen", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
         { key: "pop", header: t("section.members"), cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
@@ -119,7 +119,7 @@ export const ResearchList = () => {
     <ObjectListPage
       title={t("nav.research")}
       loader={() => bff.research.list()}
-      basePath="/management/research"
+      basePath="/management/research" liveKinds={["Research"]}
       extraColumns={[
         { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
         { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
@@ -135,7 +135,7 @@ export const ArtifactsList = () => {
     <ObjectListPage
       title={t("nav.artifacts")}
       loader={() => bff.artifacts.list()}
-      basePath="/management/artifacts"
+      basePath="/management/artifacts" liveKinds={["Artifact"]}
       extraColumns={[
         { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
