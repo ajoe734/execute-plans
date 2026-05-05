@@ -222,9 +222,7 @@ export const StrategyDetail = () => {
             value: "paperLive", label: t("strategyDetail.paperLive"),
             content: (
               <>
-                <Section title={t("strategyDetail.paperLiveTitle")}>
-                  <p className="text-xs text-muted-foreground">{t("strategyDetail.paperLiveHint")}</p>
-                </Section>
+                <StrategyPaperLiveTab strategyId={s.id} />
                 <Card className="overflow-hidden mt-4">
                   <table className="w-full text-sm">
                     <thead>
