@@ -112,6 +112,37 @@ export const CapitalPoolDetail = () => {
           { value: "bindings", label: t("phase13.capital.tabs.bindings"), content: <BindingsMatrix strategies={strats} poolId={c.id} /> },
           { value: "limits", label: t("phase13.capital.tabs.limits"), content: <AllocationLimitsManager poolId={c.id} /> },
           { value: "freeze", label: t("phase13.capital.tabs.freeze"), content: <FreezeUnfreezePanel poolId={c.id} /> },
+
+          // ── v3 §13 — Performance ──
+          {
+            value: "performance", label: t("section.performance", { defaultValue: "Performance" }),
+            content: (
+              <Section title={t("section.performance", { defaultValue: "Performance" })}>
+                <div className="grid grid-cols-3 gap-4">
+                  <StatCard label="PnL 30d" value={`${(strats.reduce((a, s) => a + s.pnl30d, 0) * 100).toFixed(2)}%`} tone="success" />
+                  <StatCard label={t("table.sharpe")} value={(strats.reduce((a, s) => a + s.sharpe, 0) / Math.max(1, strats.length)).toFixed(2)} />
+                  <StatCard label={t("table.drawdown")} value={`${(Math.min(...strats.map((s) => s.drawdown), 0) * 100).toFixed(2)}%`} tone="warning" />
+                </div>
+              </Section>
+            ),
+          },
+
+          // ── v3 §13 — Ranking Inputs ──
+          {
+            value: "rankingInputs", label: t("capital.rankingInputs", { defaultValue: "Ranking Inputs" }),
+            content: (
+              <DataTable
+                rows={strats.map((s) => ({ id: s.id, name: s.name, sharpe: s.sharpe, dd: s.drawdown, pnl: s.pnl30d }))}
+                columns={[
+                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                  { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.dd * 100).toFixed(2)}%</span> },
+                  { key: "pnl", header: "PnL 30d", cell: (r) => <span className="text-mono text-xs">{(r.pnl * 100).toFixed(2)}%</span> },
+                ]}
+                empty={t("empty.noResults")}
+              />
+            ),
+          },
           {
             value: "simulation", label: t("phase13.capital.tabs.simulation"),
             content: firstRebalance ? <AllocationSimulationPanel rebalance={firstRebalance} /> : <Section><div className="text-sm text-muted-foreground">{t("empty.none")}</div></Section>,
@@ -166,7 +197,10 @@ export const CapitalPoolDetail = () => {
         onOpenChange={setConfirmOpen}
         title={`Adjust Risk Budget — ${c.name}`}
         description="Changing the risk budget will affect every strategy assigned to this pool."
-        confirmToken="ADJUST"
+        actionId="capital_pool.set_risk_budget"
+        confirmEntity={{ type: "pool", id: c.id }}
+        target={{ type: "CapitalPool", id: c.id, name: c.name }}
+        risk="high"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
       />

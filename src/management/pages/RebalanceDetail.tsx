@@ -176,28 +176,37 @@ export const RebalanceDetail = () => {
         ]}
       />
 
-      {activeTr && (
-        <HighRiskConfirm
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
-          operation={activeTr.action}
-          target={{ type: "Rebalance", id: r.id, name: r.name }}
-          currentState={machineState}
-          newState={activeTr.to}
-          risk={activeTr.risk ?? "medium"}
-          riskImpact={activeTr.requiresApproval ? t("rebalance.confirmDesc", { name: r.name, from: machineState, to: activeTr.to }) : undefined}
-          requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
-          rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${r.id}@previous` : undefined}
-          affected={{ capitalPools: [r.targetPoolId], strategies: lines.map((l) => l.strategyId) }}
-          destructive={activeTr.uiPattern === "destructive_modal"}
-          confirmToken={activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
-          onConfirm={async (memo) => {
-            await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo });
-            setMachineState(activeTr.to);
-            toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
-          }}
-        />
-      )}
+      {activeTr && (() => {
+        const v3ActionMap: Record<string, string> = {
+          apply_rebalance: "rebalance.apply",
+          rollback_rebalance: "rebalance.rollback",
+        };
+        const v3ActionId = v3ActionMap[activeTr.action];
+        return (
+          <HighRiskConfirm
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            operation={activeTr.action}
+            target={{ type: "Rebalance", id: r.id, name: r.name }}
+            currentState={machineState}
+            newState={activeTr.to}
+            risk={activeTr.risk ?? "medium"}
+            riskImpact={activeTr.requiresApproval ? t("rebalance.confirmDesc", { name: r.name, from: machineState, to: activeTr.to }) : undefined}
+            requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
+            rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${r.id}@previous` : undefined}
+            affected={{ capitalPools: [r.targetPoolId], strategies: lines.map((l) => l.strategyId) }}
+            destructive={activeTr.uiPattern === "destructive_modal"}
+            actionId={v3ActionId}
+            confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
+            confirmToken={!v3ActionId && activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
+            onConfirm={async (memo, token) => {
+              await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo: token ? `${memo} [confirmToken=${token.slice(0, 10)}…]` : memo });
+              setMachineState(activeTr.to);
+              toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
+            }}
+          />
+        );
+      })()}
     </>
   );
 };

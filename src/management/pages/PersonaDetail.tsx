@@ -147,7 +147,10 @@ export const PersonaDetail = () => {
         onOpenChange={setConfirmOpen}
         title={`Suspend persona — ${p.name}`}
         description="Suspending this persona will stop routing strategies through it."
-        confirmToken="SUSPEND"
+        actionId="persona.suspend"
+        confirmEntity={{ type: "persona", id: p.id }}
+        target={{ type: "Persona", id: p.id, name: p.name }}
+        risk="high"
         onConfirm={async (memo) => { await runActionSafe({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success(t("toast.saved")); }}
       />
     </>
