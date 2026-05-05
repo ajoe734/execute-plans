@@ -140,7 +140,7 @@ export const LineageExplorerPage = () => {
                   </Button>
                 </>
               ) : (
-                <span className="text-xs text-muted-foreground">No detail route registered for this id.</span>
+                <span className="text-xs text-muted-foreground">{t("common.noDetailRoute")}</span>
               )}
             </div>
           </Card>
