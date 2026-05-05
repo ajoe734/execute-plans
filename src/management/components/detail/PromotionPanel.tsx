@@ -44,12 +44,7 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
 
   const onConfirm = async (memo: string) => {
     if (!confirm) return;
-    await bff.mutations.runAction({
-      kind: "Evolution",
-      id: program.id,
-      action: confirm.target === "live" ? "promote_live" : "promote_paper",
-      memo: `${confirm.candidate.id}: ${memo}`,
-    });
+    await bff.mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
     toast.success(t("phase13.evolution.promotion.queued"));
     setHistory((h) => [
       {
