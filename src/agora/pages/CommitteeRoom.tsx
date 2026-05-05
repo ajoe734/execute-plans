@@ -325,7 +325,7 @@ const CommitteeDetail = ({ session, personas, onBack, onUpdate }: {
               <EvidencePackUploader
                 sessionId={session.id}
                 existingCount={session.evidence.length}
-                onUploaded={(label) => setSessions((arr) => arr.map((s) => s.id === session.id ? { ...s, evidence: [...s.evidence, label] } : s))}
+                onUploaded={(label) => onUpdate({ ...session, evidence: [...session.evidence, label] })}
               />
             </Card>
           </div>
