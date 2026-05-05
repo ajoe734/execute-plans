@@ -6,6 +6,7 @@ export default {
   },
   ui: {
     pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
+    a11y: { close: "Close", toggleSidebar: "Toggle Sidebar" },
   },
   env: {
     research: "Research",
