@@ -95,7 +95,7 @@ const App = () => (
               <Route index element={<CommandCenter />} />
               <Route path="overview" element={<ManagementOverview />} />
               <Route path="command-center" element={<CommandCenter />} />
-              <Route path="risk-center" element={<RiskCenter />} />
+              <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
               <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />

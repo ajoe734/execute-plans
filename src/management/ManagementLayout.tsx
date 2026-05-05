@@ -40,7 +40,7 @@ export const ManagementLayout = () => {
     { label: t("groups.operations"), items: [
       { to: "/management/deployments", label: t("nav.deployments"), icon: Rocket },
       { to: "/management/runtimes", label: t("nav.runtimes"), icon: Server },
-      { to: "/management/risk-center", label: t("nav.riskCenter"), icon: AlertOctagon },
+      { to: "/management/risk", label: t("nav.riskCenter"), icon: AlertOctagon },
       { to: "/management/incidents", label: t("nav.incidents"), icon: AlertOctagon },
       { to: "/management/jobs", label: t("nav.jobs"), icon: ListChecks },
       { to: "/management/alerts", label: t("nav.alerts"), icon: Bell },
