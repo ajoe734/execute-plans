@@ -69,8 +69,8 @@ export const RankingDashboardPage = () => {
 
     let raw: Row[] = [];
     if (scope === "strategy") raw = strategies.map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
-    else if (scope === "paper") raw = strategies.filter((s) => s.env === "paper").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
-    else if (scope === "live") raw = strategies.filter((s) => s.env === "live").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
+    else if (scope === "paper") raw = strategies.filter((s) => s.state !== "deployed").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
+    else if (scope === "live") raw = strategies.filter((s) => s.state === "deployed").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
     else if (scope === "persona") {
       raw = personas.map((p) => {
         const owned = strategies.filter((s) => s.personaIds.includes(p.id));
