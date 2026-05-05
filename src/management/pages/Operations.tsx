@@ -315,16 +315,83 @@ export const ApprovalsPage = () => {
 export const AuditPage = () => {
   const t = useT();
   const [rows, setRows] = useState<AuditEvent[]>([]);
+  const [actor, setActor] = useState<string>("all");
+  const [action, setAction] = useState<string>("all");
+  const [outcome, setOutcome] = useState<string>("all");
   useEffect(() => { bff.audit.list().then(setRows); }, []);
+  useEffect(() => {
+    import("@/lib/bff/realtime").then(({ realtime }) => {
+      const off = realtime.on("audit", (p) => {
+        setRows((rs) => [p as AuditEvent, ...rs].slice(0, 200));
+      });
+      return off;
+    });
+  }, []);
+
+  const actors = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.actor))).sort(),
+    [rows],
+  );
+  const actions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.action))).sort(),
+    [rows],
+  );
+  const filtered = useMemo(() => rows.filter((r) =>
+    (actor === "all" || r.actor === actor) &&
+    (action === "all" || r.action === action) &&
+    (outcome === "all" || (r.outcome ?? "ok") === outcome),
+  ), [rows, actor, action, outcome]);
+
+  const reset = () => { setActor("all"); setAction("all"); setOutcome("all"); };
+  const hasFilter = actor !== "all" || action !== "all" || outcome !== "all";
+
   return (
     <>
       <PageHeader title={t("nav.audit")} subtitle={t("page.auditSubtitle")} />
       <PageBody>
-        <DataTable rows={rows} columns={[
+        <Card className="p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">
+            {t("audit.filterTitle")}
+          </span>
+          <select
+            value={actor} onChange={(e) => setActor(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            <option value="all">{t("audit.allActors")}</option>
+            {actors.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select
+            value={action} onChange={(e) => setAction(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-mono"
+          >
+            <option value="all">{t("audit.allActions")}</option>
+            {actions.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select
+            value={outcome} onChange={(e) => setOutcome(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            <option value="all">{t("audit.allOutcomes")}</option>
+            <option value="ok">{t("audit.outcomeOk")}</option>
+            <option value="rejected">{t("audit.outcomeRejected")}</option>
+          </select>
+          <span className="text-mono text-xs text-muted-foreground ml-auto">
+            {filtered.length} / {rows.length}
+          </span>
+          {hasFilter && (
+            <Button size="sm" variant="ghost" onClick={reset}>{t("qa.reset")}</Button>
+          )}
+        </Card>
+        <DataTable rows={filtered} columns={[
           { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
           { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
           { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
           { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
+          { key: "outcome", header: t("audit.outcome"), cell: (r) => (
+            <span className={`text-mono text-[10px] uppercase ${r.outcome === "rejected" ? "text-destructive" : "text-muted-foreground"}`}>
+              {r.outcome ?? "ok"}
+            </span>
+          ) },
         ]} />
       </PageBody>
     </>

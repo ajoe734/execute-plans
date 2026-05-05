@@ -549,6 +549,7 @@ export default {
     saved: "已儲存",
     failed: "動作失敗",
     illegalTransition: "非法狀態轉移 — 此動作不可在目前狀態執行",
+    actionApplied: "動作已套用",
   },
   empty: {
     none: "目前沒有資料。",
@@ -558,6 +559,13 @@ export default {
   },
   audit: {
     viewDiff: "檢視前/後快照",
+    filterTitle: "篩選",
+    allActors: "全部執行者",
+    allActions: "全部動作",
+    allOutcomes: "全部結果",
+    outcome: "結果",
+    outcomeOk: "已套用",
+    outcomeRejected: "已拒絕",
   },
   page: {
     jobsSubtitle: "即時串流 — 載入頁面後新增 {{count}} 筆事件。",
@@ -736,7 +744,15 @@ export default {
   },
   ranking: { expression: "公式" },
   research: { rerun: "重新執行" },
-  qa: { markAll: "全部勾選", reset: "重設" },
+  qa: {
+    markAll: "全部勾選", reset: "重設",
+    persistTitle: "Mock BFF 持久化",
+    persistDesc: "模擬主控台的所有變更（狀態轉移、審計事件、治理變更）都會快照到 localStorage。立即快照可強制寫入；重設可清除並從種子重新載入。",
+    persistSnapshot: "立即快照",
+    persistSnapshotDone: "持久化快照已寫入",
+    persistReset: "重設持久化",
+    persistResetDone: "持久化已清除 — 重新載入中…",
+  },
   strategyDetail: {
     spec: "規格與參數",
     specTitle: "策略規格",

@@ -3,8 +3,11 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Check, Circle } from "lucide-react";
+import { Check, Circle, RotateCcw } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { clearPersisted, persistNow } from "@/lib/bff/persistence";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { toast } from "sonner";
 
 type Item = { id: string; label: string; detail?: string };
 type Section = { id: string; title: string; items: Item[] };
@@ -152,6 +155,17 @@ export const QAChecklist = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   };
 
+  const [resetPersistOpen, setResetPersistOpen] = useState(false);
+  const handleResetPersist = () => {
+    clearPersisted();
+    toast.success(t("qa.persistResetDone"));
+    setTimeout(() => window.location.reload(), 400);
+  };
+  const handleSnapshotNow = () => {
+    persistNow();
+    toast.success(t("qa.persistSnapshotDone"));
+  };
+
   return (
     <div className="flex-1">
       <PageHeader
@@ -170,6 +184,40 @@ export const QAChecklist = () => {
             <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
           </div>
         </Card>
+
+        <Card className="p-4 border-destructive/30">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-sm font-semibold flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-destructive" />
+                {t("qa.persistTitle")}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                {t("qa.persistDesc")}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={handleSnapshotNow}>
+                {t("qa.persistSnapshot")}
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => setResetPersistOpen(true)}>
+                {t("qa.persistReset")}
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        <HighRiskConfirm
+          open={resetPersistOpen}
+          onOpenChange={setResetPersistOpen}
+          operation="persistence.reset"
+          target={{ type: "Storage", id: "pantheon.bff.persist.v1", name: "Mock BFF persistence" }}
+          currentState="persisted"
+          newState="seed"
+          risk="high"
+          confirmToken="RESET"
+          onConfirm={handleResetPersist}
+        />
 
         {SECTIONS.map((section) => {
           const sDone = section.items.filter((i) => checked[i.id]).length;

@@ -557,6 +557,7 @@ export default {
     saved: "Saved",
     failed: "Action failed",
     illegalTransition: "Illegal state transition — action not allowed from current state",
+    actionApplied: "Action applied",
   },
   empty: {
     none: "Nothing to show.",
@@ -566,6 +567,13 @@ export default {
   },
   audit: {
     viewDiff: "View before/after",
+    filterTitle: "Filters",
+    allActors: "All actors",
+    allActions: "All actions",
+    allOutcomes: "All outcomes",
+    outcome: "Outcome",
+    outcomeOk: "Applied",
+    outcomeRejected: "Rejected",
   },
   page: {
     jobsSubtitle: "Live stream — {{count}} new event(s) since page load.",
@@ -744,7 +752,15 @@ export default {
   },
   ranking: { expression: "Expression" },
   research: { rerun: "Re-run" },
-  qa: { markAll: "Mark all", reset: "Reset" },
+  qa: {
+    markAll: "Mark all", reset: "Reset",
+    persistTitle: "Mock BFF Persistence",
+    persistDesc: "Mutations made in the mock console (state transitions, audit events, governance changes) are snapshotted to localStorage. Snapshot now to force-write, or reset to clear and reload from seed.",
+    persistSnapshot: "Snapshot now",
+    persistSnapshotDone: "Persistence snapshot written",
+    persistReset: "Reset persistence",
+    persistResetDone: "Persistence cleared — reloading…",
+  },
   strategyDetail: {
     spec: "Spec & Parameters",
     specTitle: "Strategy specification",
