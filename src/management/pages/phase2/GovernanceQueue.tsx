@@ -37,10 +37,6 @@ export const GovernanceQueuePage = () => {
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
   };
-  const toggleAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.filter((r) => r.state === "pending").map((r) => r.id)));
-  };
 
   const selectedIds = useMemo(
     () => Array.from(selected).filter((id) => filtered.some((r) => r.id === id && r.state === "pending")),
