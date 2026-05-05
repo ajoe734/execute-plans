@@ -67,6 +67,7 @@ export const StrategyDetail = () => {
       setArtifacts(ar.slice(0, 5));
       setExperiments(ex.slice(0, 6));
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
+      setWatchers(w); setJournal(dj);
     });
   }, [id]);
 
