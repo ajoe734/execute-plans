@@ -5,13 +5,14 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Wifi, WifiOff } from "lucide-react";
+import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User } from "lucide-react";
 import { usePlatform, type Locale, type UserRole } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { bff } from "@/lib/bff/client";
 import { useNotificationCenter } from "./NotificationCenter";
+import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 
 const roles: UserRole[] = [
   "admin", "research_lead", "risk_officer", "capital_manager",
