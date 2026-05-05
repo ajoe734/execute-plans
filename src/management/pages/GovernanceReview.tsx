@@ -32,6 +32,9 @@ export const GovernanceReview = () => {
   const [req, setReq] = useState<ApprovalRequest | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [stageDecision, setStageDecision] = useState<StageDecision | null>(null);
+
+  const reload = () => bff.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
     Promise.all([bff.approvals.get(id), bff.audit.list()])
@@ -91,7 +94,17 @@ export const GovernanceReview = () => {
             <Field label={t("governance.kind")} value={req.kind} mono />
             <Field label={t("governance.requester")} value={req.requester} mono />
             <Field label={t("governance.created")} value={new Date(req.createdAt).toLocaleString()} mono />
-            {req.requiresStages && (
+            {req.stages && req.stages.length > 0 ? (
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>
+                <StageDecisionPanel
+                  stages={req.stages}
+                  i18nPrefix="lifecycle.approval"
+                  disabled={req.state !== "pending"}
+                  onDecide={(stageName, d) => setStageDecision({ stageName, decision: d })}
+                />
+              </div>
+            ) : req.requiresStages && (
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>
                 <ApprovalStagesStepper
