@@ -42,12 +42,31 @@ export const InsightInbox = () => {
   const filtered = filter === "all" ? items : items.filter((i) => i.kind === filter);
   const archive = (id: string) => {
     setItems((m) => m.filter((i) => i.id !== id));
-    toast.success("Archived");
+    toast.success(t("agora.insightInbox.dismiss"));
   };
   const promote = (i: Insight) => {
     if (i.kind === "research_idea") toast.success("Created research_task");
     else if (i.kind === "skill_suggestion") toast.success("Drafted skill in coaching queue");
     else toast.success("Saved to research_note");
+  };
+  const promoteToStrategy = (i: Insight) => {
+    openHandoff({
+      type: "research_task",
+      source: { kind: "Insight", id: i.id, label: i.title },
+      summary: `Strategy idea: ${i.title}`,
+      notes: i.body,
+      evidence: [`source:${i.source}`],
+    });
+    toast.success(t("agora.insightInbox.promotedStrategy"));
+  };
+  const promoteToTraining = (i: Insight) => {
+    openHandoff({
+      type: "skill_draft",
+      source: { kind: "Insight", id: i.id, label: i.title },
+      summary: `Training example: ${i.title}`,
+      notes: i.body,
+    });
+    toast.success(t("agora.insightInbox.promotedTraining"));
   };
 
   return (
@@ -85,8 +104,10 @@ export const InsightInbox = () => {
                     </div>
                     <h3 className="font-semibold text-sm">{i.title}</h3>
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{i.body}</p>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex flex-wrap gap-2 mt-3">
                       <Button size="sm" onClick={() => promote(i)}>{t("agora.insightInbox.promote")}</Button>
+                      <Button size="sm" variant="outline" onClick={() => promoteToStrategy(i)}>{t("agora.insightInbox.promoteToStrategy")}</Button>
+                      <Button size="sm" variant="outline" onClick={() => promoteToTraining(i)}>{t("agora.insightInbox.promoteToTraining")}</Button>
                       <Button size="sm" variant="outline" onClick={() => openHandoff({
                         type: i.kind === "research_idea" ? "research_task" : i.kind === "skill_suggestion" ? "skill_draft" : "insight",
                         source: { kind: "Insight", id: i.id, label: i.title },
