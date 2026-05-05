@@ -32,6 +32,9 @@ export const McpServerDetail = () => {
   const navigate = useNavigate();
   const [s, setS] = useState<McpServer | undefined>();
   const [tools, setTools] = useState<McpTool[]>([]);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const refresh = () => { if (id) bff.mcpServers.get(id).then(setS); };
   useEffect(() => {
     if (!id) return;
     bff.mcpServers.get(id).then(setS);
@@ -39,15 +42,52 @@ export const McpServerDetail = () => {
   }, [id]);
   if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
+  const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
+
+  const run = async (action: string, label: string) => {
+    const r = await runActionSafe({ kind: "McpServer", id: s.id, action });
+    if (r.ok) { toast.success(label); refresh(); }
+    else toast.error(r.message ?? "Rejected");
+  };
+
+  const actionBar = (
+    <div className="flex flex-wrap gap-2">
+      <Button size="sm" variant="outline" onClick={() => run("test_connection", t("mcp.actions.connectionOk"))}>
+        <PlugZap className="h-4 w-4 mr-1" />{t("mcp.actions.testConnection")}
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => run("health_check", t("mcp.actions.healthChecked"))}>
+        <Activity className="h-4 w-4 mr-1" />{t("mcp.actions.healthCheck")}
+      </Button>
+      {machineState !== "disabled" ? (
+        <Button size="sm" variant="outline" onClick={() => setDisableOpen(true)}>
+          <ShieldOff className="h-4 w-4 mr-1" />{t("mcp.actions.disable")}
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => run("reenable", t("mcp.actions.reenabled"))}>
+          <RotateCcw className="h-4 w-4 mr-1" />{t("mcp.actions.reenable")}
+        </Button>
+      )}
+      <Button size="sm" variant="destructive" onClick={() => setRetireOpen(true)}>
+        <ArchiveX className="h-4 w-4 mr-1" />{t("mcp.actions.retire")}
+      </Button>
+    </div>
+  );
+
   return (
+    <>
     <ObjectDetailLayout
       object={s}
       subtitle={s.endpoint}
+      actions={actionBar}
       tabs={[
         {
           value: "overview", label: t("section.overview"),
           content: (
             <>
+              <Section>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>
+                <LifecycleStepper machine={mcpServerMachine} current={machineState} i18nPrefix="lifecycle.mcpServer" />
+              </Section>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
                 <StatCard label={t("nav.tools")} value={s.toolCount} />
