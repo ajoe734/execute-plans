@@ -4,6 +4,9 @@ export default {
     management: "管理控制台",
     agora: "Agora 工作台",
   },
+  ui: {
+    pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
+  },
   env: {
     research: "研究", paper: "模擬", live: "正式", label: "環境",
   },
