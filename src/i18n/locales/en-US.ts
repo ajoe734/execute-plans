@@ -689,6 +689,10 @@ export default {
       capital: "Capital", committee: "Committee", proposer: "Proposer",
       reviewer: "Reviewer", executor: "Executor", "trainer-lead": "Trainer Lead",
     },
+    mcpServer: {
+      draft: "Draft", connected: "Connected", healthy: "Healthy",
+      degraded: "Degraded", disabled: "Disabled", retired: "Retired",
+    },
   },
   rebalance: {
     nextAction: "Next action",
