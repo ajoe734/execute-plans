@@ -145,6 +145,7 @@ export const GovernanceReview = () => {
                 ))}
               </ul>
             </Card>
+            <PolicyValidatorPanel approvalId={req.id} />
           </div>
 
           {/* Right — Decision Panel */}
