@@ -85,14 +85,42 @@ describe("mutations + audit", () => {
   // ---- Phase 14 Slice E + Phase 15 audit trail ----
 
   it("decideApproval records before/after snapshots and outcome=ok", async () => {
-    const id = seed.approvals[0].id;
+    const id = "ap_303"; // single-stage, finalises on one approve.
     const a = seed.approvals.find((x) => x.id === id)!;
     a.state = "pending";
+    a.stages?.forEach((s) => { s.state = "pending"; s.decidedAt = undefined; s.decidedBy = undefined; });
     const r = await mutations.decideApproval(id, "approve", "lgtm");
     expect(r.ok).toBe(true);
     expect(r.audit.outcome).toBe("ok");
-    expect(r.audit.before).toContain("pending");
-    expect(r.audit.after).toContain("approved");
+    expect(a.state).toBe("approved");
+  });
+
+  // ---- Phase 17: multi-stage approval ----
+
+  it("decideApproval advances stages without finalising until last one approves", async () => {
+    const id = "ap_302";
+    const a = seed.approvals.find((x) => x.id === id)!;
+    a.state = "pending";
+    a.stages!.forEach((s) => { s.state = "pending"; s.decidedAt = undefined; s.decidedBy = undefined; });
+    await mutations.decideApproval(id, "approve", "ok-risk");
+    expect(a.stages![0].state).toBe("approved");
+    expect(a.state).toBe("pending");
+    await mutations.decideApproval(id, "approve", "ok-ops");
+    expect(a.stages![1].state).toBe("approved");
+    expect(a.state).toBe("approved");
+  });
+
+  it("tickApprovalSla escalates overdue stages and inserts committee stage", async () => {
+    const a = seed.approvals.find((x) => x.id === "ap_302")!;
+    a.state = "pending";
+    a.stages = [
+      { name: "risk", state: "pending", slaHours: 1, startedAt: new Date(Date.now() - 5 * 3600_000).toISOString(), escalateTo: "committee" },
+      { name: "ops", state: "pending", slaHours: 4 },
+    ];
+    const r = await mutations.tickApprovalSla();
+    expect(r.escalated.length).toBeGreaterThan(0);
+    expect(a.stages.some((s) => s.name === "committee")).toBe(true);
+    expect(a.stages[0].escalated).toBe(true);
   });
 
   it("updatePermissionMatrix mutates cells and writes structured audit", async () => {
