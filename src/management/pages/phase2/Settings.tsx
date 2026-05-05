@@ -112,12 +112,15 @@ export const SettingsPage = () => {
           </TabsContent>
 
           <TabsContent value="locale" className="mt-4">
-            <Section title={t("settings.locale.title")}>
+            <Section title={t("settings.locale.title")} hint={t("settings.locale.hint")}>
               <Row label="繁體中文">
                 <Button size="sm" variant={locale === "zh-TW" ? "default" : "outline"} onClick={() => setLocale("zh-TW")}>{locale === "zh-TW" ? "✓" : t("settings.locale.use")}</Button>
               </Row>
               <Row label="English (US)">
                 <Button size="sm" variant={locale === "en-US" ? "default" : "outline"} onClick={() => setLocale("en-US")}>{locale === "en-US" ? "✓" : t("settings.locale.use")}</Button>
+              </Row>
+              <Row label={t("settings.locale.acceptLanguage")} hint={t("settings.locale.acceptHint")}>
+                <Badge variant="outline" className="text-mono text-[10px]">{bff.getAcceptLanguage()}</Badge>
               </Row>
             </Section>
           </TabsContent>
