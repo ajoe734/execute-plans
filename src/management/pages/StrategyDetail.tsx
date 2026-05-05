@@ -152,11 +152,30 @@ export const StrategyDetail = () => {
                   <StatCard label={t("table.sharpe")} value={s.sharpe.toFixed(2)} />
                   <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
                 </div>
+                <div className="grid gap-4 md:grid-cols-3 mt-4">
+                  <LinkedBlock
+                    icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.identity")}
+                    items={[{ id: s.owner, label: s.owner, meta: t("table.owner") }, ...s.personaIds.map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` }))]}
+                  />
+                  <LinkedBlock
+                    icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.watchers")}
+                    items={watchers.map((w) => ({ id: w.id, label: w.user, meta: new Date(w.since).toLocaleDateString() }))}
+                    emptyHint={t("empty.noResults")}
+                  />
+                  <LinkedBlock
+                    icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.journal")}
+                    items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${new Date(d.decidedAt).toLocaleDateString()}` }))}
+                    emptyHint={t("empty.noResults")}
+                  />
+                </div>
               </>
             ),
           },
 
-          // ── 2. Spec & Parameters ──
+          // ── 2. Spec & Parameters (versioned + lock) ──
           {
             value: "spec", label: t("strategyDetail.spec"),
             content: (
@@ -171,12 +190,12 @@ export const StrategyDetail = () => {
                     <Field label={t("strategyDetail.benchmark")} value="BTC-PERP buy-and-hold" />
                   </div>
                 </Section>
-                <Section title={t("strategyDetail.params")}>
-                  <StrategyParamsEditor strategy={s} initial={params} />
-                </Section>
+                <StrategySpecTab strategy={s} params={params} />
               </>
             ),
           },
+          { value: "dataFeatures", label: t("phase13.strategy.data.tab"), content: <StrategyDataFeaturesTab strategyId={s.id} /> },
+          { value: "performance", label: t("phase13.strategy.perf.tab"), content: <StrategyPerformanceTab strategyId={s.id} /> },
 
           // ── 3. Experiments ──
           {
