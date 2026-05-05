@@ -214,7 +214,7 @@ export const QAChecklist = () => {
           target={{ type: "Storage", id: "pantheon.bff.persist.v1", name: "Mock BFF persistence" }}
           currentState="persisted"
           newState="seed"
-          riskLevel="high"
+          risk="high"
           confirmToken="RESET"
           onConfirm={handleResetPersist}
         />
