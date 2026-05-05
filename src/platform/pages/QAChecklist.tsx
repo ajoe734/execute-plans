@@ -267,3 +267,36 @@ export const QAChecklist = () => {
     </div>
   );
 };
+
+const RealtimeControlCard = () => {
+  const t = useT();
+  const { status, lastEventAt } = useRealtimeStatus();
+  const ageSec = Math.round((Date.now() - lastEventAt) / 1000);
+  const connected = realtime.isConnected();
+  return (
+    <Card className="p-4 border-status-running/30">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-sm font-semibold">{t("qa.realtimeTitle", { defaultValue: "Realtime simulator" })}</div>
+          <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+            {t("qa.realtimeDesc", { defaultValue: "Toggle the mock realtime bus to simulate disconnect/reconnect. Pages should switch to a stale/offline indicator and resync on reconnect." })}
+          </p>
+          <div className="mt-2 text-xs text-mono text-muted-foreground">
+            status=<span className="text-foreground">{status}</span> · last={ageSec}s
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {connected ? (
+            <Button size="sm" variant="outline" onClick={() => { realtime.setConnected(false); toast.message(t("qa.realtimeDisconnected", { defaultValue: "Realtime disconnected" })); }}>
+              {t("qa.realtimeDisconnect", { defaultValue: "Disconnect" })}
+            </Button>
+          ) : (
+            <Button size="sm" variant="default" onClick={() => { realtime.setConnected(true); toast.success(t("qa.realtimeReconnected", { defaultValue: "Realtime reconnected" })); }}>
+              {t("qa.realtimeReconnect", { defaultValue: "Reconnect" })}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+};
