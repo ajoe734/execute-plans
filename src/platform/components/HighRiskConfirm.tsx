@@ -118,7 +118,7 @@ export const HighRiskConfirm = ({
         entityType,
         entityId,
         payloadHash: "mock",
-        tradingEnvironment: (env === "research" ? "backtest" : env) as "paper" | "live" | "backtest",
+        tradingEnvironment: env,
         platformEnvironment: "production",
       },
       { [`${entityType}Id`]: entityId },
