@@ -243,14 +243,37 @@ export const HighRiskConfirm = ({
                 onChange={(e) => setMemo(e.target.value)}
                 placeholder={t("confirm.memoPlaceholder")}
                 rows={3}
+                maxLength={500}
               />
-              {!memoOk && <p className="text-xs text-muted-foreground">{t("confirm.memoHint")}</p>}
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{!memoOk ? t("confirm.memoHint") : ""}</span>
+                <span className={memo.length > 500 ? "text-destructive" : ""}>{memo.length}/500</span>
+              </div>
             </div>
 
             {tokenRequired && (
               <div className="space-y-1.5">
+                {useV3Token && issuing && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Requesting confirm token…
+                  </div>
+                )}
+                {useV3Token && issuedToken && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-mono text-muted-foreground">token: {issuedToken.slice(0, 12)}…</span>
+                    <span className={tokenExpired ? "text-destructive" : "text-status-warning"}>
+                      {tokenExpired ? "expired" : `TTL ${ttlSec}s`}
+                    </span>
+                  </div>
+                )}
                 <Label className="text-xs">{t("confirm.typeToConfirm", { token })}</Label>
-                <Input value={typed} onChange={(e) => setTyped(e.target.value)} className="text-mono" />
+                <Input
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  className="text-mono"
+                  disabled={useV3Token && (!issuedToken || tokenExpired)}
+                />
               </div>
             )}
           </div>
@@ -261,7 +284,11 @@ export const HighRiskConfirm = ({
           <Button
             variant={destructive || risk === "critical" ? "destructive" : "default"}
             disabled={!ok}
-            onClick={async () => { await onConfirm(memo); reset(); onOpenChange(false); }}
+            onClick={async () => {
+              await onConfirm(memo, issuedToken ?? undefined);
+              reset();
+              onOpenChange(false);
+            }}
           >
             {t("actions.confirm")}
           </Button>
