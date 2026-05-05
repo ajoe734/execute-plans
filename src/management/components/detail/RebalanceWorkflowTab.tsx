@@ -26,7 +26,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
     const off = realtime.on("data", (e: any) => {
       if (e?.kind === "RebalanceStep" || e?.kind === "Job") refresh();
     });
-    return off;
+    return () => { off(); };
   }, [rebalanceId]);
 
   const current = steps.findIndex((s) => s.status === "in_progress");
