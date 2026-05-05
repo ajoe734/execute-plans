@@ -114,6 +114,7 @@ export default {
     cancel: "Cancel", confirm: "Confirm", save: "Save",
     reset: "Reset", proposeChange: "Propose change", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
     back: "Back", submitForReview: "Submit for review",
+    open: "Open", submitting: "Submitting…",
   },
   confirm: {
     title: "Confirm high-risk action",
