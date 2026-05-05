@@ -3,8 +3,11 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Check, Circle } from "lucide-react";
+import { Check, Circle, RotateCcw } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { clearPersisted, persistNow } from "@/lib/bff/persistence";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { toast } from "sonner";
 
 type Item = { id: string; label: string; detail?: string };
 type Section = { id: string; title: string; items: Item[] };
