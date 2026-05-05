@@ -6,7 +6,7 @@
 import * as seed from "@/mocks/seed";
 import type {
   AuditEvent, ApprovalRequest, Incident, Alert,
-  LifecycleState, Strategy, Job,
+  LifecycleState, Strategy, Job, RiskLevel,
   MetricFreeze, RebalanceOverride, PromotionRecord, McpSecret,
   AllocationLimit, PoolFreeze, DeploymentStage,
 } from "./types";
