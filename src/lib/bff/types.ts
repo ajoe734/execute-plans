@@ -167,6 +167,12 @@ export interface AuditEvent {
   target: string;
   ts: string;
   memo?: string;
+  /** Phase 15 — full trail. Snapshot of the entity prior to the action (JSON). */
+  before?: string;
+  /** Phase 15 — full trail. Snapshot of the entity after the action (JSON). */
+  after?: string;
+  /** Phase 15 — outcome of the mutation; "rejected" written when guard blocked it. */
+  outcome?: "ok" | "rejected";
 }
 
 export interface SearchResult {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
 import { Beaker, Package } from "lucide-react";
@@ -114,7 +115,7 @@ export const ResearchDetail = () => {
         description="Promoting will scaffold a new strategy from this experiment's artifact and route it for review."
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Research", id: x.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Research", id: x.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}
       />
     </>
   );

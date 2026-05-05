@@ -59,7 +59,7 @@ export const ConsultRulesPage = () => {
   };
 
   const submit = async () => {
-    await bff.mutations.runAction({ kind: "ConsultRuleSet", id: "consult-rules", action: "submit_review", memo: `${rules.length} rule(s)`, newState: "review" });
+    await bff.mutations.updateConsultRules(rules, `${rules.length} rule(s)`);
     toast.success(t("governance.consult.submitted"));
     setDirty(false);
   };

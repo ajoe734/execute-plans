@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { McpServer } from "@/lib/bff/types";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import { envBadge } from "@/management/pages/CapabilitiesLists";
 import { ShieldCheck } from "lucide-react";
@@ -28,7 +29,7 @@ export const McpRegistryPanel = ({ server }: { server: McpServer }) => {
   };
 
   const save = async () => {
-    await bff.mutations.runAction({
+    await runActionSafe({
       kind: "McpServer",
       id: server.id,
       action: "update_env_grants",

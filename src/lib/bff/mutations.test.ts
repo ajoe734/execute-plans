@@ -81,4 +81,47 @@ describe("mutations + audit", () => {
     const row = seed.allocationLimits.find((l) => l.poolId === "cp_alpha" && l.scopeRef === "stg_001");
     expect(row?.cap).toBe(0.42);
   });
+
+  // ---- Phase 14 Slice E + Phase 15 audit trail ----
+
+  it("decideApproval records before/after snapshots and outcome=ok", async () => {
+    const id = seed.approvals[0].id;
+    const a = seed.approvals.find((x) => x.id === id)!;
+    a.state = "pending";
+    const r = await mutations.decideApproval(id, "approve", "lgtm");
+    expect(r.ok).toBe(true);
+    expect(r.audit.outcome).toBe("ok");
+    expect(r.audit.before).toContain("pending");
+    expect(r.audit.after).toContain("approved");
+  });
+
+  it("updatePermissionMatrix mutates cells and writes structured audit", async () => {
+    const matrix = seed.permissionMatrices[0];
+    const cell = matrix.cells[0];
+    const target = cell.grant === "manage" ? "use" : "manage";
+    const r = await mutations.updatePermissionMatrix(matrix.instance, [
+      { rowId: cell.rowId, colId: cell.colId, grant: target },
+    ], "test");
+    expect(r.ok).toBe(true);
+    expect(matrix.cells.find((c) => c.rowId === cell.rowId && c.colId === cell.colId)?.grant).toBe(target);
+    expect(r.audit.action).toBe("permission.update_cells");
+  });
+
+  it("publishRoutePolicy bumps version and stamps state=review", async () => {
+    const policy = seed.routePolicies[0];
+    const before = seed.policyVersions.filter((v) => v.policyId === policy.id).length;
+    const r = await mutations.publishRoutePolicy(policy.id, policy.rules.slice(0, 1), "trim");
+    expect(r.ok).toBe(true);
+    expect(policy.state).toBe("review");
+    expect(seed.policyVersions.filter((v) => v.policyId === policy.id).length).toBe(before + 1);
+  });
+
+  it("rejected runAction marks audit outcome=rejected with before snapshot", async () => {
+    const s = seed.strategies.find((x) => x.id === "stg_005")!;
+    s.state = "discovered" as typeof s.state;
+    const r = await mutations.runAction({ kind: "Strategy", id: "stg_005", action: "promote_live" });
+    expect(r.ok).toBe(false);
+    expect(r.audit.outcome).toBe("rejected");
+    expect(r.audit.before).toContain("discovered");
+  });
 });

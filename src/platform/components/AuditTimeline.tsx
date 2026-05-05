@@ -11,6 +11,12 @@ export interface AuditEntry {
   action: string;
   target?: string;
   memo?: string;
+  /** Phase 15 — JSON snapshot of entity prior to mutation. */
+  before?: string;
+  /** Phase 15 — JSON snapshot of entity after mutation. */
+  after?: string;
+  /** Phase 15 — outcome marker; rejected entries are tinted destructive. */
+  outcome?: "ok" | "rejected";
 }
 
 interface Props {
@@ -48,7 +54,12 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
               </span>
               <div className="text-sm flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="text-mono text-xs text-accent">{e.actor}</span>
-                <span className="text-mono text-xs">{e.action}</span>
+                <span className={`text-mono text-xs ${e.outcome === "rejected" ? "text-destructive" : ""}`}>{e.action}</span>
+                {e.outcome === "rejected" && (
+                  <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-destructive/40 text-destructive">
+                    rejected
+                  </span>
+                )}
                 {e.target && (
                   <span className="text-xs text-muted-foreground">→ <span className="text-mono">{e.target}</span></span>
                 )}
@@ -57,6 +68,21 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                 </span>
               </div>
               {e.memo && <p className="text-xs text-muted-foreground mt-0.5">{e.memo}</p>}
+              {(e.before || e.after) && (
+                <details className="mt-1 group">
+                  <summary className="text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground">
+                    {t("audit.viewDiff")}
+                  </summary>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                    <pre className="text-mono text-[10px] bg-muted/40 p-2 rounded overflow-x-auto max-h-40">
+                      {e.before ?? "—"}
+                    </pre>
+                    <pre className="text-mono text-[10px] bg-muted/40 p-2 rounded overflow-x-auto max-h-40">
+                      {e.after ?? "—"}
+                    </pre>
+                  </div>
+                </details>
+              )}
             </li>
           ))}
         </ol>

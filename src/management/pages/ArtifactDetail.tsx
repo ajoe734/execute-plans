@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { Artifact, AuditEvent, Deployment } from "@/lib/bff/types";
 import { Download, Trash2 } from "lucide-react";
@@ -122,7 +123,7 @@ export const ArtifactDetail = () => {
         description="Retiring will mark this artifact as deprecated and prevent new deployments from using it."
         confirmToken="RETIRE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Artifact", id: a.id, action: "archive", memo }); toast.success("Retirement requested"); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }); toast.success("Retirement requested"); }}
       />
     </>
   );

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
 import { Pause, Edit } from "lucide-react";
@@ -137,7 +138,7 @@ export const PersonaDetail = () => {
         title={`Suspend persona — ${p.name}`}
         description="Suspending this persona will stop routing strategies through it."
         confirmToken="SUSPEND"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success(t("toast.saved")); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success(t("toast.saved")); }}
       />
     </>
   );

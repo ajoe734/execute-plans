@@ -556,6 +556,9 @@ export default {
     noEvents: "尚無事件。",
     noDescription: "無額外說明。",
   },
+  audit: {
+    viewDiff: "檢視前/後快照",
+  },
   page: {
     jobsSubtitle: "即時串流 — 載入頁面後新增 {{count}} 筆事件。",
     alertsSubtitle: "即時風險與 Runtime 告警。確認以接管處理；若需協調可升級為事件。",
