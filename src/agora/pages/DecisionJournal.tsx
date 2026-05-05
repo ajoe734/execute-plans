@@ -21,7 +21,8 @@ interface LongDecision {
   context: string;
   decision: string;
   rationale: string;
-  outcome?: "win" | "loss" | "open";
+  outcome?: "win" | "loss" | "open" | "good" | "neutral" | "bad";
+  reflection?: string;
   tags: string[];
   subjectKind?: string;
   subjectId?: string;
