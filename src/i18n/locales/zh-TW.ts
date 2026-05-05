@@ -138,6 +138,11 @@ export default {
     notFound: "找不到頁面", returnHome: "回到首頁",
     densityComfortable: "舒適",
     addTitleFirst: "請先輸入標題",
+    contextAttachments: "情境附件",
+    evidence: "證據",
+    noUpstreamExperiment: "未紀錄上游實驗。",
+    noArtifactsYet: "尚未產出 artifact。",
+    noDetailRoute: "此 id 尚未註冊明細路由。",
   },
   permission: {
     requireAction: "需要權限：{{action}}",
