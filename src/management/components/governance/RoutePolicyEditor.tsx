@@ -68,10 +68,7 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
   };
 
   const submit = async () => {
-    await runActionSafe({
-      kind: "RoutePolicy", id: policy.id, action: "submit_review",
-      memo: `Edited rules: ${rules.length}`, newState: "review",
-    });
+    await bff.mutations.publishRoutePolicy(policy.id, rules, `Edited rules: ${rules.length}`);
     toast.success(t("governance.policy.submitted"));
     setDirty(false);
   };
