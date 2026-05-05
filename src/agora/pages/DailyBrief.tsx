@@ -10,6 +10,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import type { Strategy, Alert, ApprovalRequest } from "@/lib/bff/types";
 import { TrendingUp, TrendingDown, ThumbsUp, ThumbsDown, Sparkles, Target, Inbox } from "lucide-react";
 import { toast } from "sonner";
+import { AGORA_KPI_SPECS, AGORA_KPI_THRESHOLDS } from "@/lib/v3/agoraKpi";
 
 export const DailyBrief = () => {
   const t = useT();
