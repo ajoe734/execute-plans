@@ -297,6 +297,7 @@ export default {
     title: "Notification Center",
     subtitle: "Unified view of alerts, pending approvals, and running jobs",
     unack: "Unack'd",
+    incidents: "Incidents",
     viewAudit: "View audit log",
   },
   jobs: {
