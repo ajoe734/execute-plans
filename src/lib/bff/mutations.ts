@@ -10,12 +10,19 @@ import type {
   MetricFreeze, RebalanceOverride, PromotionRecord, McpSecret,
   AllocationLimit, PoolFreeze, DeploymentStage,
 } from "./types";
+import type { RoutePolicy, RoutePolicyRule, PermissionMatrix, PermissionGrant, ConsultRule, PolicyVersion } from "./types";
 import { realtime } from "./realtime";
 import { usePlatform } from "@/platform/store";
 import { machines, type MachineKey } from "@/lib/stateMachines";
 import { findTransition } from "@/lib/stateMachines/types";
+import { schedulePersist } from "./persistence";
 
 const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v), ms));
+
+const snap = (v: unknown): string | undefined => {
+  if (v === undefined || v === null) return undefined;
+  try { return JSON.stringify(v); } catch { return undefined; }
+};
 
 let auditSeq = 1000;
 function pushAudit(action: string, target: string, memo?: string): AuditEvent {
