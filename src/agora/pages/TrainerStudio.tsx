@@ -12,23 +12,52 @@ import {
   ArrowLeft, Plus, Play, Check, X,
 } from "lucide-react";
 import { bff } from "@/lib/bff/client";
+import { mutations } from "@/lib/bff/mutations";
 import type { Persona, MemoryUpdate, Skill, RoutePolicy } from "@/lib/bff/types";
 import { toast } from "sonner";
 
-const queues = [
-  { to: "/agora/memory", icon: Brain, title: "Memory Review", desc: "Approve/reject memory candidates harvested from operator activity.", count: 18, accent: "text-accent" },
-  { to: "/agora/skill-coaching", icon: Wand2, title: "Skill Coaching", desc: "Refine in-flight skill drafts with paired examples.", count: 4, accent: "text-status-warning" },
-  { to: "/agora/persona-lab", icon: FlaskConical, title: "Persona Lab", desc: "Compose and test personas with skill / tool / memory routing.", count: 2, accent: "text-status-success" },
-  { to: "/agora/evaluations", icon: Beaker, title: "Evaluation Suites", desc: "Run regression suites against personas and skills.", count: 6, accent: "text-status-running" },
-  { to: "/agora/channels", icon: Radio, title: "Channels", desc: "Manage notification routes the trainer publishes into.", count: 3, accent: "text-status-paused" },
+type FeedbackSource =
+  | "persona_response_incorrect"
+  | "trader_correction"
+  | "analyst_correction"
+  | "signal_disagreement"
+  | "committee_weak_argument"
+  | "memory_conflict"
+  | "bad_tool_use"
+  | "policy_violation";
+
+interface FeedbackItem {
+  id: string;
+  source: FeedbackSource;
+  persona: string;
+  summary: string;
+  evidence: string;
+  capturedAt: string;
+}
+
+const FEEDBACK_SOURCES: FeedbackSource[] = [
+  "persona_response_incorrect", "trader_correction", "analyst_correction",
+  "signal_disagreement", "committee_weak_argument", "memory_conflict",
+  "bad_tool_use", "policy_violation",
 ];
 
-const sources = [
-  { kind: "signal_feedback", count: 132, period: "last 7d" },
-  { kind: "research_note", count: 41, period: "last 7d" },
-  { kind: "decision_log", count: 9, period: "last 7d" },
-  { kind: "persona_response_feedback", count: 64, period: "last 7d" },
-  { kind: "alert_response", count: 21, period: "last 7d" },
+const seedFeedback: FeedbackItem[] = [
+  { id: "fb_01", source: "persona_response_incorrect", persona: "per_quant", summary: "Quant claimed 'no momentum signal' for SOL despite +12% week.", evidence: "Operator marked response as incorrect, attached chart screenshot.", capturedAt: new Date(Date.now() - 1800_000).toISOString() },
+  { id: "fb_02", source: "trader_correction", persona: "per_risk", summary: "Trader corrected risk-off recommendation; macro context outweighed local drawdown.", evidence: "Slack thread #risk-desk, 4 thumbs-up reactions.", capturedAt: new Date(Date.now() - 7200_000).toISOString() },
+  { id: "fb_03", source: "signal_disagreement", persona: "per_quant", summary: "Two signals on ETH conflict (long vs neutral); rationale unclear.", evidence: "Signal explanation lacks regime context; analysts disagree in review.", capturedAt: new Date(Date.now() - 14400_000).toISOString() },
+  { id: "fb_04", source: "committee_weak_argument", persona: "per_macro", summary: "Macro persona's argument cited stale FOMC dot-plot from prior meeting.", evidence: "Committee transcript #cmt_88, two members objected.", capturedAt: new Date(Date.now() - 36000_000).toISOString() },
+  { id: "fb_05", source: "memory_conflict", persona: "per_risk", summary: "Two memories disagree on max single-asset exposure (8% vs 12%).", evidence: "Memory ids mu_44 and mu_77 trigger conflict on rebalance run.", capturedAt: new Date(Date.now() - 50000_000).toISOString() },
+  { id: "fb_06", source: "bad_tool_use", persona: "per_quant", summary: "Persona invoked backtest tool with overlapping windows, double-counted PnL.", evidence: "Tool log shows 2024-Q3 window passed twice; results inflated.", capturedAt: new Date(Date.now() - 86400_000).toISOString() },
+  { id: "fb_07", source: "policy_violation", persona: "per_macro", summary: "Persona referenced disallowed external news source in rationale.", evidence: "Policy 'no-tier3-source' triggered by content scanner.", capturedAt: new Date(Date.now() - 100000_000).toISOString() },
+  { id: "fb_08", source: "analyst_correction", persona: "per_quant", summary: "Analyst rewrote sector rotation thesis — persona conflated tech/comms.", evidence: "Edit diff captured in research notebook rn_91.", capturedAt: new Date(Date.now() - 130000_000).toISOString() },
+];
+
+const queues = [
+  { to: "/agora/memory", icon: Brain, key: "memoryReview", count: 18, accent: "text-accent" },
+  { to: "/agora/skill-coaching", icon: Wand2, key: "skillCoaching", count: 4, accent: "text-status-warning" },
+  { to: "/agora/persona-lab", icon: FlaskConical, key: "personaLab", count: 2, accent: "text-status-success" },
+  { to: "/agora/evaluations", icon: Beaker, key: "evaluations", count: 6, accent: "text-status-running" },
+  { to: "/agora/channels", icon: Radio, key: "channels", count: 3, accent: "text-status-paused" },
 ];
 
 const TrainerOverview = () => {
