@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
 import { Download } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
@@ -19,7 +19,10 @@ import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "sonner";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
-import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+
+import { RebalanceWorkflowTab } from "../components/detail/RebalanceWorkflowTab";
+import { MetricFreezeManager } from "../components/detail/MetricFreezeManager";
+import { OverrideManager } from "../components/detail/OverrideManager";
 
 // Map mock BaseObject lifecycle → rebalance state machine.
 const mapState = (s: string): RebalanceState => {
@@ -42,6 +45,7 @@ export const RebalanceDetail = () => {
   const [activeTr, setActiveTr] = useState<Transition<RebalanceState> | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [machineState, setMachineState] = useState<RebalanceState>("draft");
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -54,6 +58,7 @@ export const RebalanceDetail = () => {
     });
     bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("rebalance"))));
     bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action.startsWith("rebalance."))));
+    bff.strategies.list().then(setStrategies);
   }, [id]);
 
   const transitions = useMemo(
@@ -63,16 +68,6 @@ export const RebalanceDetail = () => {
 
   if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   const lines = r.lines ?? [];
-  const overrideRows = lines
-    .filter((l) => Math.abs(l.delta) >= 0.03)
-    .map((l) => ({
-      id: `${r.id}_${l.strategyId}`,
-      strategyId: l.strategyId,
-      strategyName: l.strategyName,
-      delta: l.delta,
-      reason: l.delta > 0 ? t("rebalance.overrides.increase") : t("rebalance.overrides.decrease"),
-      state: Math.abs(l.delta) > 0.06 ? "review" : "approved",
-    }));
 
   return (
     <>
@@ -156,15 +151,9 @@ export const RebalanceDetail = () => {
             content: <AllocationSimulationPanel rebalance={r} />,
           },
           { value: "constraints", label: t("rebalance.tabs.constraints"), content: <ConstraintChecker rebalance={r} /> },
-          { value: "overrides", label: t("rebalance.tabs.overrides"), content: (
-            <DataTable rows={overrideRows} onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)} columns={[
-              { key: "strategy", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
-              { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
-              { key: "reason", header: t("section.rationale"), cell: (row) => <span className="text-sm">{row.reason}</span> },
-              { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
-              { key: "action", header: t("common.actions"), cell: () => <PermissionAwareButton requiredAction="approve_rebalance" size="sm" variant="outline">{t("actions.approve")}</PermissionAwareButton> },
-            ]} empty={t("empty.none")} />
-          ) },
+          { value: "workflow", label: t("phase13.rebalance.tabs.workflow"), content: <RebalanceWorkflowTab rebalanceId={r.id} /> },
+          { value: "freezeMetrics", label: t("phase13.rebalance.tabs.freezeMetrics"), content: <MetricFreezeManager rebalanceId={r.id} /> },
+          { value: "overrides", label: t("rebalance.tabs.overrides"), content: <OverrideManager rebalanceId={r.id} strategies={strategies.filter((s) => s.capitalPoolId === r.targetPoolId)} /> },
           { value: "approvals", label: t("rebalance.tabs.approval"), content: (
             <div className="space-y-4">
               <Section title={t("section.approvalStages")}>
