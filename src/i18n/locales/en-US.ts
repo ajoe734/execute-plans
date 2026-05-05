@@ -310,6 +310,8 @@ export default {
       scale: { label: "Scale replicas", toast: "Scale dispatched: {{name}}" },
       quarantine: { label: "Quarantine", toast: "Runtime quarantined: {{name}}" },
       inspect_logs: { label: "Inspect logs", toast: "Opening logs: {{name}}" },
+      disable_new: { label: "Disable new deployments", toast: "Disabled new deployments on: {{name}}" },
+      emergency_kill: { label: "Emergency kill", toast: "Emergency kill dispatched: {{name}}", impact: "Force-kills the runtime. Live orders may be cancelled. Use only when graceful drain has failed." },
     },
   },
   notifications: {
@@ -746,6 +748,7 @@ export default {
     overrides: { increase: "Manual overweight to preserve ranked momentum edge.", decrease: "Manual underweight to reduce drawdown concentration." },
     sim: { sharpe: "Sharpe", drawdown: "Drawdown", turnover: "Turnover", totalWeight: "Total weight", weights: "Target weights", queued: "Simulation queued", run: "Run simulation" },
     constraints: { maxWeight: "Single strategy max weight", totalWeight: "Portfolio total weight", expectedDD: "Expected drawdown", turnover: "Turnover budget" },
+    publishReport: { action: "Publish report", toast: "Rebalance report published" },
   },
   persona: {
     tabs: { routePolicy: "Route Policy", toolsMcpSkills: "Tools · MCP · Skills", activity: "Activity", training: "Training & Memory" },
@@ -753,6 +756,14 @@ export default {
     permissions: { noGrants: "No grants for this persona." },
     activity: { title: "Activity monitor" },
     memory: { queue: "Memory governance queue", openReview: "Open review", approved: "Memory approved", rejected: "Memory rejected" },
+    ops: {
+      testAs: "Test as persona",
+      runEval: "Run evaluation",
+      restrictTools: "Restrict tools temporarily",
+      testToast: "Test session started for {{name}}",
+      evalToast: "Evaluation queued",
+      restrictToast: "Tools temporarily restricted",
+    },
   },
   capitalPool: {
     mandate: {
@@ -947,6 +958,13 @@ export default {
       current: "Current allocation",
       target: "Target allocation",
       queued: "Allocation reduced to {{pct}}%",
+    },
+    schedule: {
+      action: "Schedule deployment",
+      title: "Schedule deployment — {{name}}",
+      desc: "Schedules this deployment to promote at a future time. Approval gates still apply.",
+      when: "When (local time)",
+      toast: "Deployment scheduled for {{when}}",
     },
   },
   evolution: {

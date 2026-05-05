@@ -5,7 +5,8 @@ import { bff } from "@/lib/bff/client";
 import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
-import { Download } from "lucide-react";
+import { Download, Send } from "lucide-react";
+import { mutations } from "@/lib/bff/mutations";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -79,6 +80,9 @@ export const RebalanceDetail = () => {
           <>
             <Button size="sm" variant="outline">
               <Download className="h-4 w-4 mr-1" />Export
+            </Button>
+            <Button size="sm" variant="outline" onClick={async () => { await mutations.publishRebalanceReport(r.id, "manual publish"); toast.success(t("rebalance.publishReport.toast")); }}>
+              <Send className="h-4 w-4 mr-1" />{t("rebalance.publishReport.action")}
             </Button>
             {transitions.length === 0 && (
               <span className="text-xs text-muted-foreground">{t("rebalance.noAction")}</span>

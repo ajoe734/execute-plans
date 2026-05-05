@@ -5,7 +5,8 @@ import { bff } from "@/lib/bff/client";
 import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
-import { Pause, Edit } from "lucide-react";
+import { Pause, Edit, Beaker, Play, Lock } from "lucide-react";
+import { mutations } from "@/lib/bff/mutations";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -51,6 +52,15 @@ export const PersonaDetail = () => {
         actions={
           <>
             <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
+            <Button size="sm" variant="outline" onClick={async () => { await mutations.personaOps(p.id, "test", "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
+              <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={async () => { const r = await mutations.personaOps(p.id, "run_eval", "manual eval"); toast.success(t("persona.ops.evalToast"), { description: r.job?.id }); }}>
+              <Play className="h-4 w-4 mr-1" />{t("persona.ops.runEval")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={async () => { await mutations.personaOps(p.id, "restrict_tools", "temporary restriction"); toast.success(t("persona.ops.restrictToast")); }}>
+              <Lock className="h-4 w-4 mr-1" />{t("persona.ops.restrictTools")}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
               <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
             </Button>

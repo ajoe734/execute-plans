@@ -3,7 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Rocket, Undo2, TrendingDown } from "lucide-react";
+import { Rocket, Undo2, TrendingDown, CalendarClock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { mutations } from "@/lib/bff/mutations";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import { runActionSafe } from "@/lib/bff/runAction";
@@ -33,6 +35,8 @@ export const DeploymentDetail = () => {
   const [rollbackOpen, setRollbackOpen] = useState(false);
   const [reduceOpen, setReduceOpen] = useState(false);
   const [newPct, setNewPct] = useState(50);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState<string>(() => new Date(Date.now() + 86400_000).toISOString().slice(0, 16));
 
   useEffect(() => {
     if (!id) return;
@@ -60,6 +64,11 @@ export const DeploymentDetail = () => {
             {isLive && (
               <Button size="sm" variant="outline" onClick={() => setReduceOpen(true)}>
                 <TrendingDown className="h-4 w-4 mr-1" />{t("deployment.reduceAllocation.action")}
+              </Button>
+            )}
+            {!isLive && (
+              <Button size="sm" variant="outline" onClick={() => setScheduleOpen(true)}>
+                <CalendarClock className="h-4 w-4 mr-1" />{t("deployment.schedule.action")}
               </Button>
             )}
             {d.rollbackAvailable && (
@@ -171,6 +180,27 @@ export const DeploymentDetail = () => {
               setReduceOpen(false);
               const fresh = await bff.deployments.get(d.id);
               if (fresh) setD(fresh);
+            }}>{t("actions.confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deployment.schedule.title", { name: d.name })}</DialogTitle>
+            <DialogDescription>{t("deployment.schedule.desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-xs text-muted-foreground">{t("deployment.schedule.when")}</label>
+            <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleOpen(false)}>{t("actions.cancel")}</Button>
+            <Button onClick={async () => {
+              await mutations.scheduleDeployment(d.id, new Date(scheduleAt).toISOString(), `scheduled by user`);
+              toast.success(t("deployment.schedule.toast", { when: new Date(scheduleAt).toLocaleString() }));
+              setScheduleOpen(false);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>
         </DialogContent>
