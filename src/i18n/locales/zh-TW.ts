@@ -300,6 +300,8 @@ export default {
       scale: { label: "調整副本數", toast: "擴縮已派送：{{name}}" },
       quarantine: { label: "隔離", toast: "Runtime 已隔離：{{name}}" },
       inspect_logs: { label: "檢視日誌", toast: "開啟日誌：{{name}}" },
+      disable_new: { label: "停止新部署", toast: "已停止 {{name}} 接受新部署" },
+      emergency_kill: { label: "緊急停機", toast: "緊急停機已派送：{{name}}", impact: "強制停止此 Runtime；Live 訂單可能被取消。僅在優雅排空失敗時使用。" },
     },
   },
   notifications: {
@@ -733,6 +735,7 @@ export default {
     overrides: { increase: "手動加碼以保留排序後的動能優勢。", decrease: "手動降碼以降低回撤集中度。" },
     sim: { sharpe: "Sharpe", drawdown: "回撤", turnover: "換手率", totalWeight: "總權重", weights: "目標權重", queued: "模擬已排入", run: "執行模擬" },
     constraints: { maxWeight: "單一策略最高權重", totalWeight: "組合總權重", expectedDD: "預期回撤", turnover: "換手預算" },
+    publishReport: { action: "發佈報告", toast: "調倉報告已發佈" },
   },
   persona: {
     tabs: { routePolicy: "路由政策", toolsMcpSkills: "工具 · MCP · 技能", activity: "活動", training: "訓練與記憶" },
@@ -740,6 +743,14 @@ export default {
     permissions: { noGrants: "此 Persona 尚無權限授權。" },
     activity: { title: "活動監控" },
     memory: { queue: "記憶治理佇列", openReview: "開啟審查", approved: "記憶已核可", rejected: "記憶已駁回" },
+    ops: {
+      testAs: "以此 Persona 試跑",
+      runEval: "執行評測",
+      restrictTools: "暫時限制工具",
+      testToast: "{{name}} 試跑階段已啟動",
+      evalToast: "評測已排入",
+      restrictToast: "工具已暫時限制",
+    },
   },
   capitalPool: {
     mandate: {
@@ -934,6 +945,13 @@ export default {
       current: "目前配置",
       target: "目標配置",
       queued: "配置已調整為 {{pct}}%",
+    },
+    schedule: {
+      action: "排程部署",
+      title: "排程部署 — {{name}}",
+      desc: "將此部署排程於未來時間自動推進；審批關卡仍會生效。",
+      when: "時間（本地時區）",
+      toast: "部署已排程於 {{when}}",
     },
   },
   evolution: {
