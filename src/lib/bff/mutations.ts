@@ -809,9 +809,26 @@ export const mutations = {
     );
     return delay({ ok: true, audit });
   },
+  /** v3 §6.2 — Mock POST /bff/command-confirmations.
+   *  Issues a short-lived confirm token for a high-risk action. The UI then
+   *  replays the action with `X-Confirm-Token: <token>`. Mock layer does not
+   *  enforce token expiry on subsequent calls (UI handles TTL countdown). */
+  requestConfirmToken(req: ConfirmTokenRequest, params: Record<string, string> = {}): Promise<{
+    ok: true;
+    response: ConfirmTokenResponse;
+    audit: AuditEvent;
+  } | { ok: false; reason: "unknown_high_risk_action"; audit: AuditEvent }> {
+    if (!getHighRiskAction(req.actionId)) {
+      const audit = pushAudit(`${req.actionId}.confirm_token.rejected`, req.entityId,
+        "unknown_high_risk_action", { outcome: "rejected" });
+      return delay({ ok: false, reason: "unknown_high_risk_action", audit });
+    }
+    const response = issueConfirmToken(req, params);
+    const audit = pushAudit(`${req.actionId}.confirm_token.issued`, req.entityId,
+      `ttl=${response.ttlSeconds}s`, { outcome: "ok" });
+    return delay({ ok: true, response, audit });
+  },
 };
-
-export type Mutations = typeof mutations;
 
 /** Helpers for accessing fresh seed snapshots from tests. */
 export const _seedRef = {
