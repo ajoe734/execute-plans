@@ -374,6 +374,7 @@ export default {
       reject: "批次駁回",
       done: "已處理 {{n}} 筆請求",
     },
+    policies: {
       title: "路由策略",
       subtitle: "Persona → tool/MCP/skill 的路由規則，含版本與審批。",
     },
@@ -606,6 +607,8 @@ export default {
       in_review: "審查中", approved: "已核准", rejected: "已駁回",
       changes_requested: "要求修改", cancelled: "已取消",
       risk: "風險審", ops: "Ops 審", security: "安全審", finance: "財務審",
+      capital: "資金審", committee: "委員會", proposer: "提案者",
+      reviewer: "審核者", executor: "執行者", "trainer-lead": "訓練主管",
     },
   },
   rebalance: {
