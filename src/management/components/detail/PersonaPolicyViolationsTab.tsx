@@ -26,7 +26,7 @@ export const PersonaPolicyViolationsTab = ({ personaId }: { personaId: string })
         { key: "policy", header: t("phase13.persona.violations.policy"), cell: (r) => <div><div className="text-sm">{r.policyName}</div><div className="text-mono text-[10px] text-muted-foreground">{r.policyId}</div></div> },
         { key: "severity", header: t("table.risk"), cell: (r) => <RiskBadge level={r.severity} /> },
         { key: "state", header: t("phase13.persona.violations.state"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${stateTone[r.state]}`}>{r.state}</Badge> },
-        { key: "desc", header: t("table.summary"), cell: (r) => <span className="text-xs text-muted-foreground">{r.description}</span> },
+        { key: "desc", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.description}</span> },
       ]}
       empty={t("phase13.persona.violations.empty")}
     />
