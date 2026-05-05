@@ -376,6 +376,7 @@ export default {
     postmortemDraft: "Postmortem 草稿",
     postmortemPlaceholder: "彙總根因、影響、緩解、後續行動…",
     postmortemRequired: "高嚴重事件關閉前須提供 ≥20 字 Postmortem。",
+    postmortem: { add: "新增 Postmortem", appended: "Postmortem 註記已加入" },
     createTrainingFeedback: "建立訓練回饋",
     createEvolutionConstraint: "建立演化限制",
     feedbackQueued: "訓練回饋已建立",
