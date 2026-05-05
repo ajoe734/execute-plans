@@ -18,6 +18,14 @@ import { bff } from "@/lib/bff/client";
 import type { Persona } from "@/lib/bff/types";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
+import { useRef } from "react";
+import {
+  validateEvidenceUpload,
+  COMMITTEE_EVIDENCE_ALLOWED_MIMES,
+  COMMITTEE_EVIDENCE_ENDPOINTS,
+  EVIDENCE_LIMITS,
+  type EvidenceMime,
+} from "@/lib/v3/committeeEvidence";
 
 type SessionStatus = "open" | "discussing" | "memo_ready" | "submitted" | "closed";
 type Template =
