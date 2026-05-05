@@ -16,6 +16,13 @@ import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
 import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
 import { ActivityMonitor } from "../components/detail/ActivityMonitor";
 import { MemoryGovernanceQueue } from "../components/detail/MemoryGovernanceQueue";
+import { PersonaIdentityTab } from "../components/detail/PersonaIdentityTab";
+import { PersonaWorkspaceTab } from "../components/detail/PersonaWorkspaceTab";
+import { PersonaCapitalBindingTab } from "../components/detail/PersonaCapitalBindingTab";
+import { PersonaStrategyOwnershipTab } from "../components/detail/PersonaStrategyOwnershipTab";
+import { PersonaPolicyViolationsTab } from "../components/detail/PersonaPolicyViolationsTab";
+import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTab";
+import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 
 export const PersonaDetail = () => {
   const { id } = useParams();
@@ -62,6 +69,10 @@ export const PersonaDetail = () => {
               </Section>
             ),
           },
+          { value: "identity", label: t("phase13.persona.tabs.identity"), content: <PersonaIdentityTab p={p} /> },
+          { value: "workspace", label: t("phase13.persona.tabs.workspace"), content: <PersonaWorkspaceTab personaId={p.id} /> },
+          { value: "capitalBinding", label: t("phase13.persona.tabs.capitalBinding"), content: <PersonaCapitalBindingTab personaId={p.id} /> },
+          { value: "strategyOwnership", label: t("phase13.persona.tabs.strategyOwnership"), content: <PersonaStrategyOwnershipTab personaId={p.id} strategies={routed} /> },
           {
             value: "routes", label: t("section.permissions"),
             content: (
@@ -104,6 +115,9 @@ export const PersonaDetail = () => {
             value: "memory", label: t("persona.tabs.training"),
             content: <MemoryGovernanceQueue personaId={p.id} />,
           },
+          { value: "violations", label: t("phase13.persona.tabs.violations"), content: <PersonaPolicyViolationsTab personaId={p.id} /> },
+          { value: "evaluations", label: t("phase13.persona.tabs.evaluations"), content: <PersonaEvaluationsTab personaId={p.id} /> },
+          { value: "versions", label: t("phase13.persona.tabs.versions"), content: <PersonaVersionHistoryTab personaId={p.id} /> },
           {
             value: "audit", label: t("nav.audit"),
             content: (
