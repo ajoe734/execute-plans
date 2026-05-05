@@ -88,6 +88,7 @@ export const HighRiskConfirm = ({
   rollbackTarget, requiredApproval,
   title, description,
   confirmToken, destructive, extra,
+  actionId, confirmEntity,
   onConfirm,
 }: HighRiskConfirmProps) => {
   const t = useT();
@@ -95,16 +96,67 @@ export const HighRiskConfirm = ({
   const [memo, setMemo] = useState("");
   const [typed, setTyped] = useState("");
 
+  // ---- v3 §6.2 confirm-token state ----
+  const v3Action = actionId ? getHighRiskAction(actionId) : undefined;
+  const useV3Token = !!v3Action;
+  const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [requiredPhrase, setRequiredPhrase] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [issuing, setIssuing] = useState(false);
+  const reqIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!open || !useV3Token) return;
+    const myReq = ++reqIdRef.current;
+    setIssuing(true);
+    const entityType = confirmEntity?.type ?? target?.type ?? "entity";
+    const entityId = confirmEntity?.id ?? target?.id ?? "—";
+    bff.commands.requestConfirmToken(
+      {
+        actionId: actionId!,
+        entityType,
+        entityId,
+        payloadHash: "mock",
+        tradingEnvironment: (env === "research" ? "backtest" : env) as "paper" | "live" | "backtest",
+        platformEnvironment: "production",
+      },
+      { [`${entityType}Id`]: entityId },
+    ).then((r) => {
+      if (myReq !== reqIdRef.current) return;
+      if (r.ok) {
+        setIssuedToken(r.response.confirmToken);
+        setRequiredPhrase(r.response.requiredPhrase);
+        setExpiresAt(Date.parse(r.response.expiresAt));
+      }
+      setIssuing(false);
+    }).catch(() => setIssuing(false));
+  }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);
+
+  useEffect(() => {
+    if (!open || !expiresAt) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [open, expiresAt]);
+
   const op = operation ?? title ?? "action";
   const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
 
-  const tokenRequired = !!confirmToken || env === "live" || risk === "critical";
-  const token = confirmToken ?? op.toUpperCase();
+  const tokenRequired = useV3Token || !!confirmToken || env === "live" || risk === "critical";
+  const token = useV3Token
+    ? (requiredPhrase ?? "")
+    : (confirmToken ?? op.toUpperCase());
   const memoOk = memo.trim().length >= 8;
-  const tokenOk = !tokenRequired || typed === token;
-  const ok = memoOk && tokenOk;
+  const tokenOk = !tokenRequired || (typed === token && token.length > 0);
+  const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
+  const memoMaxOk = memo.length <= 500;
+  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && (!useV3Token || !!issuedToken);
+  const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
-  const reset = () => { setMemo(""); setTyped(""); };
+  const reset = () => {
+    setMemo(""); setTyped("");
+    setIssuedToken(null); setRequiredPhrase(null); setExpiresAt(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
