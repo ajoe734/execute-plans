@@ -197,7 +197,10 @@ export const CapitalPoolDetail = () => {
         onOpenChange={setConfirmOpen}
         title={`Adjust Risk Budget — ${c.name}`}
         description="Changing the risk budget will affect every strategy assigned to this pool."
-        confirmToken="ADJUST"
+        actionId="capital_pool.set_risk_budget"
+        confirmEntity={{ type: "pool", id: c.id }}
+        target={{ type: "CapitalPool", id: c.id, name: c.name }}
+        risk="high"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
       />

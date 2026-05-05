@@ -94,7 +94,10 @@ export const RankingFormulaDetail = () => {
         onOpenChange={setConfirmOpen}
         title={`Activate Ranking Formula — ${f.name}`}
         description="Activating this formula will replace the current production ranking and may rebalance allocations."
-        confirmToken="ACTIVATE"
+        actionId="ranking_formula.activate"
+        confirmEntity={{ type: "formula", id: f.id }}
+        target={{ type: "RankingFormula", id: f.id, name: f.name }}
+        risk="high"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }); toast.success("Activation requested — pending approval"); }}
       />

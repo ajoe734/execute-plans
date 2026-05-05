@@ -457,35 +457,48 @@ export const StrategyDetail = () => {
         ]}
       />
 
-      {activeTr && (
-        <HighRiskConfirm
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
-          operation={activeTr.action}
-          target={{ type: "Strategy", id: s.id, name: s.name }}
-          currentState={machineState}
-          newState={activeTr.to}
-          risk={activeTr.risk ?? "medium"}
-          riskImpact={activeTr.requiresApproval ? "Requires approval before commit." : undefined}
-          requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
-          rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${s.id}@previous` : undefined}
-          affected={{ strategies: [s.id], capitalPools: [s.capitalPoolId], personas: s.personaIds }}
-          destructive={activeTr.uiPattern === "destructive_modal"}
-          onConfirm={async (memo) => {
-            await runActionSafe({
-              kind: "Strategy", id: s.id, action: activeTr.action,
-              newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
-                ? activeTr.to : undefined,
-              memo,
-            });
-            const fresh = await bff.strategies.get(s.id);
-            if (fresh) setS(fresh);
-            const a = await bff.audit.list();
-            setAudit(a.filter((x) => x.target === s.id));
-            toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
-          }}
-        />
-      )}
+      {activeTr && (() => {
+        // Map state-machine action → v3 dotted actionId for confirm-token flow.
+        const v3ActionMap: Record<string, string> = {
+          promote_paper: "strategy.promote_paper",
+          promote_live: "strategy.deploy_live",
+          rollback_to_paper: "strategy.rollback_live",
+          retire_live: "strategy.retire",
+          replace_strategy: "strategy.deploy_live",
+        };
+        const v3ActionId = v3ActionMap[activeTr.action];
+        return (
+          <HighRiskConfirm
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            operation={activeTr.action}
+            target={{ type: "Strategy", id: s.id, name: s.name }}
+            currentState={machineState}
+            newState={activeTr.to}
+            risk={activeTr.risk ?? "medium"}
+            riskImpact={activeTr.requiresApproval ? "Requires approval before commit." : undefined}
+            requiredApproval={activeTr.requiresApproval ? ["risk", "ops"] : undefined}
+            rollbackTarget={activeTr.uiPattern === "rollback_modal" ? `${s.id}@previous` : undefined}
+            affected={{ strategies: [s.id], capitalPools: [s.capitalPoolId], personas: s.personaIds }}
+            destructive={activeTr.uiPattern === "destructive_modal"}
+            actionId={v3ActionId}
+            confirmEntity={v3ActionId ? { type: "strategy", id: s.id } : undefined}
+            onConfirm={async (memo, token) => {
+              await runActionSafe({
+                kind: "Strategy", id: s.id, action: activeTr.action,
+                newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
+                  ? activeTr.to : undefined,
+                memo: token ? `${memo} [confirmToken=${token.slice(0, 10)}…]` : memo,
+              });
+              const fresh = await bff.strategies.get(s.id);
+              if (fresh) setS(fresh);
+              const a = await bff.audit.list();
+              setAudit(a.filter((x) => x.target === s.id));
+              toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
+            }}
+          />
+        );
+      })()}
     </>
   );
 };
