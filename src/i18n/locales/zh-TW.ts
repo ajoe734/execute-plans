@@ -368,7 +368,12 @@ export default {
       escalate: "升級",
       freeze: "凍結目標",
     },
-    policies: {
+    batch: {
+      selected: "已選 {{n}} 筆",
+      approve: "批次核准",
+      reject: "批次駁回",
+      done: "已處理 {{n}} 筆請求",
+    },
       title: "路由策略",
       subtitle: "Persona → tool/MCP/skill 的路由規則，含版本與審批。",
     },
