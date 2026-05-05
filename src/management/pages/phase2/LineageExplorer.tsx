@@ -1,14 +1,18 @@
 // Lineage Explorer — Spec Part 3 §19.6.
 // Cross-entity lineage graph with entity selector + filter.
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useT } from "@/platform/hooks";
 import { bff } from "@/lib/bff/client";
 import type { Strategy } from "@/lib/bff/types";
+import { resolveEntity, decisionsHref, auditHref } from "@/lib/entityLinks";
+import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 
 const TYPES = ["Strategy", "Persona", "Artifact", "CapitalPool", "Experiment"] as const;
 
