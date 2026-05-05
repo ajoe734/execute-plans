@@ -584,6 +584,19 @@ export default {
     subscribersFmt: "{{n}} 位訂閱者 · 過濾條件：{{f}}",
   },
   filter: { pending: "待處理", all: "全部" },
+  approval: {
+    sla: {
+      label: "SLA",
+      notStarted: "尚未開始",
+      remaining: "剩 {{t}}",
+      overdue: "逾期 {{t}}",
+      escalated: "已升級",
+    },
+    stage: {
+      approve: "核准本階段",
+      reject: "駁回",
+    },
+  },
   lifecycle: {
     title: "生命週期",
     branch: "分支狀態：",
