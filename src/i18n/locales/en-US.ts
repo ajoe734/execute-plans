@@ -987,7 +987,7 @@ export default {
     theme: { title: "Theme", dark: "Dark mode", darkHint: "Default for low-light operator workflows.", density: "Density" },
     integrations: { title: "Integrations", hint: "External services hooked into Pantheon.", manage: "Manage", connect: "Connect" },
     api: { title: "API keys", hint: "Programmatic access to BFF endpoints.", create: "Create key", rotate: "Rotate" },
-    locale: { title: "Language", use: "Use" },
+    locale: { title: "Language", use: "Use", hint: "Switching the language updates UI strings and the Accept-Language header sent to the BFF on every request.", acceptLanguage: "Accept-Language", acceptHint: "Sent on every BFF call." },
     flags: { title: "Feature flags", hint: "Toggle in-progress capabilities. Changes audit-logged." },
   },
   lineageExplorer: {
