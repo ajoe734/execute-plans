@@ -450,3 +450,54 @@ const VoteSummary = ({ session }: { session: Session }) => {
     </div>
   );
 };
+
+// v3 §18 Evidence Pack uploader — file picker + client-side validation,
+// then POSTs metadata to mock BFF endpoint.
+const EvidencePackUploader = ({ sessionId, existingCount, onUploaded }: {
+  sessionId: string;
+  existingCount: number;
+  onUploaded: (label: string) => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onPick = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const incoming = Array.from(files).map((f) => ({
+      fileName: f.name,
+      mimeType: f.type,
+      sizeBytes: f.size,
+      metadata: { source: "committee_upload", title: f.name, uploadedBy: "trader@local", createdAt: new Date().toISOString() },
+    }));
+    // Pretend existing count maps to existing files of size 0 for cap check.
+    const existing = Array.from({ length: existingCount }).map(() => ({
+      id: "ex", fileName: "", mimeType: "application/pdf" as EvidenceMime,
+      sizeBytes: 0, storageUrl: "", extractedTextStatus: "completed" as const,
+    }));
+    const errs = validateEvidenceUpload(existing, incoming);
+    if (errs.length) {
+      toast.error(`evidence rejected: ${errs.map((e) => e.code).join(", ")}`);
+      return;
+    }
+    void fetch(COMMITTEE_EVIDENCE_ENDPOINTS.uploadFiles(sessionId), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ files: incoming }),
+    }).catch(() => {/* mocked */});
+    incoming.forEach((f) => onUploaded(`${f.fileName} (${(f.sizeBytes / 1024).toFixed(0)} KB)`));
+    toast.success(`uploaded ${incoming.length} file(s) to evidence pack`);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+  return (
+    <div className="space-y-1">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={COMMITTEE_EVIDENCE_ALLOWED_MIMES.join(",")}
+        onChange={(e) => onPick(e.target.files)}
+        className="block w-full text-xs file:mr-2 file:rounded file:border-0 file:bg-accent file:px-2 file:py-1 file:text-accent-foreground"
+      />
+      <div className="text-[10px] text-muted-foreground">
+        max {EVIDENCE_LIMITS.maxFilesPerPack} files · {(EVIDENCE_LIMITS.maxFileSizeBytes / 1024 / 1024).toFixed(0)}MB each · pdf/md/txt/csv/png/jpg
+      </div>
+    </div>
+  );
+};
