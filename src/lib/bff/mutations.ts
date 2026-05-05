@@ -160,7 +160,7 @@ export const mutations = {
   runAction(input: RunActionInput): Promise<MutationResult> {
     const { kind, id, action, newState, memo } = input;
     const guard = validateTransition(kind, id, action, newState);
-    if (!guard.ok) {
+    if (guard.ok === false) {
       const audit = pushAudit(`${kind.toLowerCase()}.illegal_transition`, id, `${action}: ${guard.reason}`);
       return delay({ ok: false, audit, rejected: "illegal_transition", message: guard.reason });
     }
