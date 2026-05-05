@@ -567,6 +567,13 @@ export default {
   },
   audit: {
     viewDiff: "View before/after",
+    filterTitle: "Filters",
+    allActors: "All actors",
+    allActions: "All actions",
+    allOutcomes: "All outcomes",
+    outcome: "Outcome",
+    outcomeOk: "Applied",
+    outcomeRejected: "Rejected",
   },
   page: {
     jobsSubtitle: "Live stream — {{count}} new event(s) since page load.",

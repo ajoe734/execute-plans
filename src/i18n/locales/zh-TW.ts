@@ -559,6 +559,13 @@ export default {
   },
   audit: {
     viewDiff: "檢視前/後快照",
+    filterTitle: "篩選",
+    allActors: "全部執行者",
+    allActions: "全部動作",
+    allOutcomes: "全部結果",
+    outcome: "結果",
+    outcomeOk: "已套用",
+    outcomeRejected: "已拒絕",
   },
   page: {
     jobsSubtitle: "即時串流 — 載入頁面後新增 {{count}} 筆事件。",
