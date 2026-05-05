@@ -30,10 +30,32 @@ export const DailyBrief = () => {
   ];
   const missions = [t("daily.mission.a"), t("daily.mission.b"), t("daily.mission.c")];
 
+  // v3 §17 KPI computations against current mock data.
+  const kpiValues: Record<string, number> = {
+    watchlistMoveCount: strategies.filter((s) => Math.abs(s.pnl30d) >= AGORA_KPI_THRESHOLDS.watchlistMoveThresholdPct).length,
+    openRiskAlerts: alerts.filter((a) => ["new", "acknowledged", "assigned", "investigating"].includes((a as { status?: string }).status ?? "new")).length,
+    signalReviewQueue: Math.min(strategies.length, 5),
+    paperLiveDivergenceCount: strategies.filter((s) => s.sharpe < 0.5).length,
+    personaBriefCount: 3,
+    researchQuestionCount: pending.filter((p) => p.kind === "research").length,
+    incidentNeedsTraderInput: alerts.filter((a) => a.severity === "high" || a.severity === "critical").length,
+  };
+
   return (
     <>
       <PageHeader title={t("daily.title")} subtitle={t("daily.subtitle", { date: new Date().toLocaleDateString() })} />
       <PageBody>
+        <Card className="p-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+            {AGORA_KPI_SPECS.map((spec) => (
+              <div key={spec.id} className="rounded-md border p-2" title={`${spec.formula} · refresh ${spec.refresh}`}>
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground truncate">{spec.id}</div>
+                <div className="text-mono text-lg font-semibold">{kpiValues[spec.id] ?? 0}</div>
+                <div className="text-[9px] text-muted-foreground">{spec.refresh === "realtime" ? "live" : `${spec.refresh}s`}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="p-5 lg:col-span-2">
             <h3 className="font-semibold mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4" />{t("daily.signals")}</h3>
