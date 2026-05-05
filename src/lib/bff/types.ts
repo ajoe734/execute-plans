@@ -338,3 +338,156 @@ export interface AllocationSimulation {
   capacityUsed: number;
   createdAt: string;
 }
+
+// ----- Phase 13: Detail tab depth -----
+
+export interface PolicyViolation {
+  id: string;
+  subjectKind: "Persona" | "Strategy";
+  subjectId: string;
+  policyId: string;
+  policyName: string;
+  severity: RiskLevel;
+  ts: string;
+  state: "open" | "acknowledged" | "resolved";
+  description: string;
+  resolvedBy?: string;
+}
+
+export interface EvaluationRun {
+  id: string;
+  subjectKind: "Persona" | "Skill" | "Strategy";
+  subjectId: string;
+  suite: string;
+  score: number;            // 0..1
+  pass: boolean;
+  ranAt: string;
+  trend: number[];          // last n scores
+}
+
+export interface ObjectVersion {
+  id: string;
+  subjectKind: "Persona" | "Strategy" | "Skill" | "RoutePolicy" | "Artifact";
+  subjectId: string;
+  version: string;
+  author: string;
+  createdAt: string;
+  note?: string;
+  spec: Record<string, unknown>;   // free-form snapshot
+}
+
+export interface FeatureSet {
+  id: string;
+  strategyId: string;
+  name: string;
+  upstreamDataset: string;
+  freshnessMin: number;
+  missingPct: number;
+  owner: string;
+}
+
+export interface PerformancePoint {
+  ts: string;
+  pnl: number;
+  benchmark: number;
+}
+
+export interface PerformanceSeries {
+  strategyId: string;
+  granularity: "day" | "week" | "month";
+  points: PerformancePoint[];
+}
+
+export interface Watcher {
+  id: string;
+  subjectKind: "Strategy" | "Persona" | "CapitalPool";
+  subjectId: string;
+  user: string;
+  since: string;
+}
+
+export interface DecisionJournalEntry {
+  id: string;
+  subjectKind: string;
+  subjectId: string;
+  title: string;
+  decidedAt: string;
+  decidedBy: string;
+  outcome?: "pending" | "good" | "neutral" | "bad";
+}
+
+export interface AllocationLimit {
+  id: string;
+  poolId: string;
+  scope: "strategy" | "sector";
+  scopeRef: string;
+  cap: number;            // 0..1
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface PoolFreeze {
+  id: string;
+  poolId: string;
+  reason: string;
+  frozenBy: string;
+  frozenAt: string;
+  active: boolean;
+}
+
+export interface WorkflowStep {
+  id: string;
+  label: string;
+  status: "pending" | "in_progress" | "complete" | "blocked" | "skipped";
+  actor?: string;
+  ts?: string;
+  note?: string;
+}
+
+export interface DeploymentStage {
+  id: string;
+  deploymentId: string;
+  env: "research" | "paper" | "canary" | "live";
+  status: "pending" | "in_progress" | "complete" | "blocked";
+  promotedAt?: string;
+  health?: "ok" | "warn" | "down";
+}
+
+export interface McpSecret {
+  id: string;
+  serverId: string;
+  name: string;
+  lastRotatedAt: string;
+  rotatedBy: string;
+}
+
+export interface PromotionRecord {
+  id: string;
+  programId: string;
+  candidateId: string;
+  target: "paper" | "live";
+  promotedAt: string;
+  promotedBy: string;
+  deltaSharpe: number;
+  deltaDrawdown: number;
+}
+
+export interface MetricFreeze {
+  id: string;
+  rebalanceId: string;
+  metric: string;
+  frozen: boolean;
+  frozenAt?: string;
+  frozenBy?: string;
+}
+
+export interface RebalanceOverride {
+  id: string;
+  rebalanceId: string;
+  strategyId: string;
+  delta: number;
+  reason: string;
+  state: "draft" | "review" | "approved";
+  proposedBy: string;
+  proposedAt: string;
+}

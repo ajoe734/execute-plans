@@ -119,6 +119,56 @@ export const bff = {
   allocationSimulations: {
     forRebalance: (rebalanceId: string) => delay(seed.allocationSimulations.filter((s) => s.rebalanceId === rebalanceId)),
   },
+  // ----- Phase 13 -----
+  policyViolations: {
+    list: () => delay(seed.policyViolations),
+    forSubject: (kind: string, id: string) => delay(seed.policyViolations.filter((v) => v.subjectKind === kind && v.subjectId === id)),
+  },
+  evaluationRuns: {
+    list: () => delay(seed.evaluationRuns),
+    forSubject: (kind: string, id: string) => delay(seed.evaluationRuns.filter((e) => e.subjectKind === kind && e.subjectId === id)),
+  },
+  objectVersions: {
+    forSubject: (kind: string, id: string) => delay(seed.objectVersions.filter((v) => v.subjectKind === kind && v.subjectId === id)),
+  },
+  featureSets: {
+    forStrategy: (id: string) => delay(seed.featureSets.filter((f) => f.strategyId === id)),
+  },
+  performanceSeries: {
+    forStrategy: (id: string, granularity: "day" | "week" | "month") =>
+      delay(seed.performanceSeries.find((s) => s.strategyId === id && s.granularity === granularity)),
+  },
+  watchers: {
+    forSubject: (kind: string, id: string) => delay(seed.watchers.filter((w) => w.subjectKind === kind && w.subjectId === id)),
+  },
+  decisionJournal: {
+    list: () => delay(seed.decisionJournal),
+    forSubject: (kind: string, id: string) => delay(seed.decisionJournal.filter((d) => d.subjectKind === kind && d.subjectId === id)),
+  },
+  allocationLimits: {
+    forPool: (id: string) => delay(seed.allocationLimits.filter((l) => l.poolId === id)),
+  },
+  poolFreezes: {
+    forPool: (id: string) => delay(seed.poolFreezes.filter((f) => f.poolId === id)),
+  },
+  deploymentStages: {
+    forDeployment: (id: string) => delay(seed.deploymentStages.filter((s) => s.deploymentId === id)),
+  },
+  mcpSecrets: {
+    forServer: (id: string) => delay(seed.mcpSecrets.filter((s) => s.serverId === id)),
+  },
+  promotions: {
+    forProgram: (id: string) => delay(seed.promotions.filter((p) => p.programId === id)),
+  },
+  metricFreezes: {
+    forRebalance: (id: string) => delay(seed.metricFreezes.filter((m) => m.rebalanceId === id)),
+  },
+  rebalanceOverrides: {
+    forRebalance: (id: string) => delay(seed.rebalanceOverrides.filter((o) => o.rebalanceId === id)),
+  },
+  rebalanceWorkflow: {
+    forRebalance: (id: string) => delay(seed.rebalanceWorkflowSteps(id)),
+  },
   search: (q: string) => {
     const all = seed.searchableObjects();
     if (!q) return delay(all.slice(0, 8));
