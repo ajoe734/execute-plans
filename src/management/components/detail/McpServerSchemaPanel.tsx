@@ -32,12 +32,11 @@ export const McpServerSchemaPanel = ({ server }: { server: McpServer }) => {
               <div className="uppercase tracking-wider text-[10px] text-muted-foreground mb-2">{t("phase13.mcp.schema.input")}</div>
               <pre className="text-mono text-[11px] leading-5 whitespace-pre-wrap">{`{
   "type": "object",
-  "required": [${tool.inputs > 0 ? `"arg0"` : ""}],
-  "properties": ${JSON.stringify(
-    Object.fromEntries(Array.from({ length: Math.max(1, tool.inputs) }, (_, i) => [`arg${i}`, { type: i === 0 ? "string" : "number" }])),
-    null,
-    2,
-  )}
+  "required": ["arg0"],
+  "properties": {
+    "arg0": { "type": "string" },
+    "arg1": { "type": "number" }
+  }
 }`}</pre>
             </div>
             <div className="rounded-md border border-border p-3">
