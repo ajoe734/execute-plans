@@ -4,6 +4,9 @@ export default {
     management: "Management Console",
     agora: "Agora Workbench",
   },
+  ui: {
+    pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
+  },
   env: {
     research: "Research",
     paper: "Paper",
