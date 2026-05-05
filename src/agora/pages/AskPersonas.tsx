@@ -93,7 +93,7 @@ export const AskPersonas = () => {
         </Card>
 
         <Card className="p-4 space-y-2">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">Context attachments</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider">{t("common.contextAttachments")}</div>
           <div className="flex gap-2">
             <Input
               value={ctxInput}
