@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
+import { useInspector } from "@/platform/components/RightDrawer";
 import { useT } from "@/platform/hooks";
 import { bff } from "@/lib/bff/client";
 import type { Strategy } from "@/lib/bff/types";
