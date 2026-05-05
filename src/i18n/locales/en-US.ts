@@ -557,6 +557,7 @@ export default {
     saved: "Saved",
     failed: "Action failed",
     illegalTransition: "Illegal state transition — action not allowed from current state",
+    actionApplied: "Action applied",
   },
   empty: {
     none: "Nothing to show.",

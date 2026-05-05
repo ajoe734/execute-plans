@@ -549,6 +549,7 @@ export default {
     saved: "已儲存",
     failed: "動作失敗",
     illegalTransition: "非法狀態轉移 — 此動作不可在目前狀態執行",
+    actionApplied: "動作已套用",
   },
   empty: {
     none: "目前沒有資料。",
