@@ -830,6 +830,8 @@ export const mutations = {
   },
 };
 
+export type Mutations = typeof mutations;
+
 /** Helpers for accessing fresh seed snapshots from tests. */
 export const _seedRef = {
   approvals: () => seed.approvals as ApprovalRequest[],
