@@ -832,6 +832,7 @@ export default {
         },
       },
     },
+  },
   artifact: {
     download: "Download",
     sourceExperiment: "Source experiment",
