@@ -136,12 +136,54 @@ const scenarioGovernance: Scenario = {
   ],
 };
 
+// ---------- Scenario F — Signal review → Research handoff ----------
+const scenarioSignalHandoff: Scenario = {
+  id: "signal_research_handoff",
+  labelKey: "qa.scenario.signalResearchHandoff",
+  fallbackLabel: "Signal review → research task scaffold",
+  reset() { /* idempotent — produces a fresh job each run. */ },
+  steps: [
+    { label: "convert note → research task", run: () => mutations.createResearchTaskFromNote("nt_signal_001", "scenario handoff") },
+    { label: "verify job queued", run: async () => {
+        const j = seed.jobs.find((x) => x.kind === "research_task.scaffold");
+        return { ok: !!j, message: j ? `job=${j.id}` : "no job seen" };
+      } },
+  ],
+};
+
+// ---------- Scenario G — Skill draft → sandbox → approval ----------
+const scenarioSkillSandbox: Scenario = {
+  id: "skill_sandbox_approval",
+  labelKey: "qa.scenario.skillSandboxApproval",
+  fallbackLabel: "Skill: draft → sandbox → validate → approval",
+  reset() {
+    const s = seed.skills.find((x) => x.id === "sk_macro_brief") as { state?: string; draft?: boolean } | undefined;
+    if (s) { s.state = "draft"; s.draft = true; }
+  },
+  steps: [
+    { label: "deploy_sandbox", run: () => mutations.runAction({ kind: "Skill", id: "sk_macro_brief", action: "deploy_sandbox" }) },
+    { label: "validate_skill", run: () => mutations.runAction({ kind: "Skill", id: "sk_macro_brief", action: "validate_skill" }) },
+    { label: "create approval request", run: async () => {
+        const r = await mutations.createApproval({
+          kind: "skill_publish",
+          subject: "sk_macro_brief publish",
+          rationale: "scenario runner — sandbox passed validators",
+          riskLevel: "medium",
+          stages: [{ name: "reviewer", slaHours: 6 }, { name: "head_of_research", slaHours: 12 }],
+        });
+        return { ok: r.ok, message: `approval=${r.approval.id}` };
+      } },
+  ],
+};
+
 export const scenarios: Scenario[] = [
   scenarioStrategy,
   scenarioApproval,
   scenarioRebalance,
   scenarioIncident,
   scenarioGovernance,
+  scenarioSignalHandoff,
+  scenarioSkillSandbox,
 ];
 
 export async function runScenario(id: string): Promise<ScenarioResult> {
