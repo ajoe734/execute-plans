@@ -889,6 +889,11 @@ export default {
     lastEvent: "上次",
     newUpdates: "有 {{count}} 筆新更新 — 點擊重新整理",
     status: { live: "即時", stale: "停滯", offline: "離線" },
+    diagnostics: "QA：模擬連線狀態",
+    disconnect: "斷線",
+    reconnect: "重連",
+    events: "緩衝",
+    topics: "主題",
   },
   strategyDetail: {
     spec: "規格與參數",
