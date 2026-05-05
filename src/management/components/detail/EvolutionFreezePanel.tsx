@@ -50,7 +50,7 @@ export const EvolutionFreezePanel = ({ program }: { program: EvolutionProgram })
         confirmToken="FREEZE-GEN"
         destructive
         onConfirm={async (memo) => {
-          await bff.mutations.runAction({ kind: "Evolution", id: program.id, action: "freeze_generation", memo });
+          await bff.mutations.freezeGeneration(program.id, memo);
           setFrozen(true);
           toast.success(t("phase13.evolution.freeze.queued"));
         }}

@@ -548,6 +548,7 @@ export default {
     actionQueued: "動作已排入佇列",
     saved: "已儲存",
     failed: "動作失敗",
+    illegalTransition: "非法狀態轉移 — 此動作不可在目前狀態執行",
   },
   empty: {
     none: "目前沒有資料。",

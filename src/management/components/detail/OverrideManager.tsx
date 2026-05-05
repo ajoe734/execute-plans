@@ -32,7 +32,7 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
       reason: reason.trim(), state: "review",
       proposedBy: "ops", proposedAt: new Date().toISOString(),
     };
-    await bff.mutations.runAction({ kind: "Rebalance", id: rebalanceId, action: "submit_override", memo: `${stratId} Δ${parsed} · ${reason.slice(0, 30)}` });
+    await bff.mutations.submitOverride(rebalanceId, stratId, parsed, reason.trim());
     setRows((r) => [ov, ...r]);
     setReason("");
     toast.success(t("phase13.rebalance.override.queued"));

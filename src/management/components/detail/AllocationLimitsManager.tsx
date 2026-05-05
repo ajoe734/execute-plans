@@ -26,7 +26,7 @@ export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
       poolId, scope, scopeRef, cap: c,
       updatedBy: "capital", updatedAt: new Date().toISOString(),
     };
-    await bff.mutations.runAction({ kind: "CapitalPool", id: poolId, action: "set_limit", memo: `${scope}:${scopeRef} cap ${(c * 100).toFixed(0)}%` });
+    await bff.mutations.setAllocationLimit(poolId, scope, scopeRef, c);
     setRows((r) => [lim, ...r]);
     setScopeRef("");
     toast.success(t("phase13.capital.limits.queued"));

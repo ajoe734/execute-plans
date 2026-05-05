@@ -556,6 +556,7 @@ export default {
     actionQueued: "Action queued",
     saved: "Saved",
     failed: "Action failed",
+    illegalTransition: "Illegal state transition — action not allowed from current state",
   },
   empty: {
     none: "Nothing to show.",

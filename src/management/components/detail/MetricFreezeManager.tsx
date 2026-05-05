@@ -43,8 +43,9 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
           description={`Toggle freeze on ${pending.metric}. Frozen metrics will not update during the rebalance window.`}
           confirmToken={pending.frozen ? "UNFREEZE" : "FREEZE"}
           onConfirm={async (memo) => {
-            await bff.mutations.runAction({ kind: "Rebalance", id: rebalanceId, action: pending.frozen ? "unfreeze_metric" : "freeze_metric", memo });
-            setRows((rs) => rs.map((r) => r.id === pending.id ? { ...r, frozen: !pending.frozen, frozenBy: "ops", frozenAt: new Date().toISOString() } : r));
+            const r = await bff.mutations.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
+            if (!r.ok) { toast.error(t("toast.illegalTransition")); return; }
+            setRows((rs) => rs.map((x) => x.id === pending.id ? { ...x, frozen: !pending.frozen, frozenBy: "ops", frozenAt: new Date().toISOString() } : x));
             toast.success(t("toast.actionQueued"));
           }}
         />

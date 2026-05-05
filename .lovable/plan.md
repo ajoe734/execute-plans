@@ -1,4 +1,44 @@
 
+# Phase 14 — BFF Mutations × State Machine Wiring
+
+對齊 Spec Part 6 (BFF mutations) × Part 7 §17 (18 entity state machines)。Phase 13 已把 detail tabs 全部接到 `bff.mutations.runAction`，但目前 mutation 層只「設 state + 寫 audit」，並未 (a) 用 stateMachines 驗證合法 transition、(b) 為 Phase 13 新加的 entity-specific 動作（lock_params / freeze_metric / promote_candidate / rotate_secret / set_limit / freeze_pool / promote_stage / submit_override / freeze_generation）建立 typed helper、(c) 在拒絕轉移時回 UI 友好錯誤。
+
+## Slice A — runAction transition guard
+- `runAction` 接 `kind` → 對映 stateMachines registry，呼叫 `findTransition(machine, fromState, action)`，找不到時回 `{ ok: false, message: "illegal_transition" }` 並寫 `audit.action = "<kind>.illegal_transition"`。
+- `newState` 改成由 transition `to` 推導（如 input 帶 newState 則 assert 一致）。
+- toast helper：UI 接 `result.ok === false` 顯示 `t("toast.illegalTransition")`。
+
+## Slice B — typed mutations for Phase 13 entities
+新增於 `mutations`：
+- `lockParams(strategyId, lock, memo)` — 切 strategy 上的 paramsLocked flag (新欄位 on Strategy)，audit `strategy.lock_params`/`unlock_params`。
+- `freezeMetric(rebalanceId, metric, frozen, memo)` — toggle `MetricFreeze` seed 一筆。
+- `submitOverride(rebalanceId, strategyId, delta, reason)` — push `RebalanceOverride{state:"review"}`。
+- `promoteCandidate(programId, candidateId, target, memo)` — push `PromotionRecord` + 將 candidate state 設 "promoted"。
+- `rotateMcpSecret(secretId, memo)` — 更新 `lastRotatedAt`。
+- `setAllocationLimit(poolId, scope, scopeRef, cap)` — upsert `AllocationLimit`。
+- `freezePool(poolId, reason)` / `unfreezePool(poolId, freezeId)` — push `PoolFreeze` 或將 active 設 false；同步 capitalPool.state via runAction。
+- `promoteStage(deploymentId, stageId, memo)` — 把該 stage 設 complete + 下一階段 in_progress。
+- `freezeGeneration(programId, memo)` — set evolution program 一個 frozenGeneration 欄位。
+
+每個 helper 內部最後都呼叫 `pushAudit(...)` + `realtime.emit("data", ...)`。
+
+## Slice C — UI 接線升級
+把 Phase 13 panels（`StrategySpecTab`、`MetricFreezeManager`、`OverrideManager`、`PromotionPanel`、`McpSecretsPanel`、`AllocationLimitsManager`、`FreezeUnfreezePanel`、`DeploymentStagesPanel`、`EvolutionFreezePanel`）從 generic `runAction` 改用對應 typed helper，能即時看到 seed 更新（DataTable refetch）。
+
+## Slice D — Tests
+- `mutations.test.ts` 新增：illegal transition rejected + 一個 typed helper smoke test。
+- `stateMachines.test.ts` 已有 coverage，無需動。
+- `check-i18n.ts` 0 missing（新增 `toast.illegalTransition` 與 helper-specific keys）。
+
+## 完成判定
+- vitest 全綠
+- check-i18n 0 missing
+- preview：在 Strategy detail 點 Lock Params → seed 反映 → audit 多一筆；在 Rebalance 點非法 action（手動 hack）→ 出 toast「非法狀態轉移」
+
+每個 Slice 一個 commit point。
+
+---
+
 # Phase 13 — Detail Tab 完整補齊
 
 對齊 Spec Part 3（§6 Strategy / §7 Persona / §8 Capital / §9 Rebalance / §10 Evolution / §11 MCP·Skill / §13 Artifact·Deployment）。本階段全部 mock-first、語意 token、雙語 i18n、走 PermissionAwareButton + stateMachines + HighRiskConfirm。

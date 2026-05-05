@@ -65,8 +65,8 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
         description={`Freezing this pool halts new allocations. Reason: ${reason}`}
         confirmToken="FREEZE"
         destructive
-        onConfirm={async (memo) => {
-          await bff.mutations.runAction({ kind: "CapitalPool", id: poolId, action: "freeze_pool", memo });
+        onConfirm={async () => {
+          await bff.mutations.freezePool(poolId, reason);
           setRows((r) => [{ id: `pf_new_${Date.now().toString(36)}`, poolId, reason, frozenBy: "capital", frozenAt: new Date().toISOString(), active: true }, ...r]);
           setReason("");
           toast.success(t("phase13.capital.freeze.queued"));
@@ -80,7 +80,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           description="Unfreezing restores allocation flow. Confirm with audit memo."
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
-            await bff.mutations.runAction({ kind: "CapitalPool", id: poolId, action: "unfreeze_pool", memo });
+            await bff.mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
             setRows((r) => r.map((x) => x.id === unfreezeTarget.id ? { ...x, active: false } : x));
             toast.success(t("phase13.capital.freeze.queued"));
           }}

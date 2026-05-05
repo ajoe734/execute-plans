@@ -49,7 +49,7 @@ export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
         confirmToken="ROTATE"
         destructive
         onConfirm={async (memo) => {
-          await bff.mutations.runAction({ kind: "McpSecret", id: rotate!.id, action: "rotate", memo });
+          await bff.mutations.rotateMcpSecret(rotate!.id, memo);
           setSecrets((ss) => ss.map((x) => x.id === rotate!.id ? { ...x, lastRotatedAt: new Date().toISOString(), rotatedBy: "you" } : x));
           toast.success(t("phase13.mcp.secrets.queued"));
           setRotate(null);

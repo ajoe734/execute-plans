@@ -52,4 +52,33 @@ describe("mutations + audit", () => {
     expect(inc.status).toBe("resolved");
     expect(inc.timeline!.length).toBe(beforeLen + 1);
   });
+
+  it("runAction rejects illegal transitions when state matches machine vocabulary", async () => {
+    // Force a strategy into a vocab-known state, then attempt an action with no transition.
+    const s = seed.strategies.find((x) => x.id === "stg_005")!;
+    s.state = "discovered" as typeof s.state;
+    const r = await mutations.runAction({
+      kind: "Strategy", id: "stg_005", action: "promote_live",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.rejected).toBe("illegal_transition");
+    expect(r.audit.action).toBe("strategy.illegal_transition");
+  });
+
+  it("freezeMetric upserts a MetricFreeze and audits", async () => {
+    const before = seed.auditEvents.length;
+    const r = await mutations.freezeMetric("rb_q2_2026", "sharpe", true, "freeze sharpe");
+    expect(r.ok).toBe(true);
+    const row = seed.metricFreezes.find((m) => m.rebalanceId === "rb_q2_2026" && m.metric === "sharpe");
+    expect(row?.frozen).toBe(true);
+    expect(seed.auditEvents.length).toBe(before + 1);
+    expect(seed.auditEvents[0].action).toBe("rebalance.freeze_metric");
+  });
+
+  it("setAllocationLimit upserts and audits", async () => {
+    const r = await mutations.setAllocationLimit("cp_alpha", "strategy", "stg_001", 0.42);
+    expect(r.ok).toBe(true);
+    const row = seed.allocationLimits.find((l) => l.poolId === "cp_alpha" && l.scopeRef === "stg_001");
+    expect(row?.cap).toBe(0.42);
+  });
 });
