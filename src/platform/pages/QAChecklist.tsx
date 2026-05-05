@@ -209,6 +209,8 @@ export const QAChecklist = () => {
           </div>
         </Card>
 
+        <RealtimeControlCard />
+
         <HighRiskConfirm
           open={resetPersistOpen}
           onOpenChange={setResetPersistOpen}
