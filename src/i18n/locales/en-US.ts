@@ -609,6 +609,8 @@ export default {
       in_review: "In review", approved: "Approved", rejected: "Rejected",
       changes_requested: "Changes requested", cancelled: "Cancelled",
       risk: "Risk", ops: "Ops", security: "Security", finance: "Finance",
+      capital: "Capital", committee: "Committee", proposer: "Proposer",
+      reviewer: "Reviewer", executor: "Executor", "trainer-lead": "Trainer Lead",
     },
   },
   rebalance: {
