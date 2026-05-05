@@ -24,7 +24,6 @@ import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
-import { StrategyParamsEditor } from "@/management/components/detail/StrategyParamsEditor";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
