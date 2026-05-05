@@ -16,6 +16,8 @@ import { ShieldCheck } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
 import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
+import { McpSecretsPanel } from "@/management/components/detail/McpSecretsPanel";
+import { McpServerSchemaPanel } from "@/management/components/detail/McpServerSchemaPanel";
 
 export const McpServerDetail = () => {
   const { id } = useParams();
@@ -114,6 +116,8 @@ export const McpServerDetail = () => {
             </div>
           </Section>
         ) },
+        { value: "schema", label: t("phase13.mcp.tabs.schema"), content: <McpServerSchemaPanel server={s} /> },
+        { value: "secrets", label: t("phase13.mcp.tabs.secrets"), content: <McpSecretsPanel server={s} /> },
         { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
           { id: "au_mcp_1", actor: s.owner, action: "mcp.health.check", target: s.id, ts: new Date(Date.now() - 600_000).toISOString() },
           { id: "au_mcp_2", actor: "ops", action: "mcp.tool.register", target: s.id, ts: new Date(Date.now() - 7200_000).toISOString() },

@@ -18,6 +18,10 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { evolutionMachine, type EvolutionState } from "@/lib/stateMachines";
 import { FitnessFormulaPanel } from "../components/detail/FitnessFormulaPanel";
 import { EvolutionRunsPanel } from "../components/detail/EvolutionRunsPanel";
+import { PromotionPanel } from "../components/detail/PromotionPanel";
+import { MutationRuleManager } from "../components/detail/MutationRuleManager";
+import { EvolutionCandidatesTab } from "../components/detail/EvolutionCandidatesTab";
+import { EvolutionFreezePanel } from "../components/detail/EvolutionFreezePanel";
 
 const mapState = (s: string): EvolutionState => {
   const m: Record<string, EvolutionState> = {
@@ -106,21 +110,11 @@ export const EvolutionDetail = () => {
             ),
           },
           { value: "fitness", label: t("evolution.tabs.fitness"), content: <FitnessFormulaPanel mode="fitness" /> },
-          { value: "mutation", label: t("evolution.tabs.mutation"), content: <FitnessFormulaPanel mode="mutation" /> },
+          { value: "mutation", label: t("evolution.tabs.mutation"), content: <MutationRuleManager /> },
           { value: "runs", label: t("evolution.tabs.runs"), content: <EvolutionRunsPanel programId={e.id} mode="runs" /> },
-          { value: "candidates", label: t("evolution.tabs.candidates"), content: <EvolutionRunsPanel programId={e.id} mode="candidates" /> },
-          { value: "promotion", label: t("evolution.tabs.promotion"), content: (
-            <Section title={t("evolution.promotion.title")}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Field label={t("evolution.promotion.candidate")} value={`${e.id}_best_g${e.generation}`} mono />
-                <Field label={t("evolution.promotion.fitnessLift")} value={`+${(e.bestFitness * 8).toFixed(1)}%`} mono />
-                <Field label={t("evolution.promotion.target")} value={e.parentAlpha} mono />
-              </div>
-              <div className="flex justify-end">
-                <PermissionAwareButton requiredAction="promote_best" size="sm" onClick={() => toast.success(t("evolution.promotion.queued"))}>{t("evolution.promotion.promote")}</PermissionAwareButton>
-              </div>
-            </Section>
-          ) },
+          { value: "candidates", label: t("evolution.tabs.candidates"), content: <EvolutionCandidatesTab programId={e.id} /> },
+          { value: "promotion", label: t("evolution.tabs.promotion"), content: <PromotionPanel program={e} /> },
+          { value: "freeze", label: t("phase13.evolution.tabs.freeze"), content: <EvolutionFreezePanel program={e} /> },
           {
             value: "config", label: "Config",
             content: (
