@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
-import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown, ArrowRight } from "lucide-react";
+import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown, ArrowRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useHandoff } from "@/lib/handoff";
+import { mutations } from "@/lib/bff/mutations";
+import { useNavigate } from "react-router-dom";
 
 interface CoachingExample {
   id: string;
