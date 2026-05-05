@@ -6,14 +6,21 @@
 // Submitted handoffs become incoming items in Management Command Center (Spec §21).
 import { create } from "zustand";
 
+// v3 §15 canonical types: strategy_idea | research_task | training_example
+// | committee_memo | skill_draft | mcp_tool_request | incident_note | signal_feedback.
+// We retain the legacy `insight` / `training_feedback` / `alert_escalation` aliases
+// for back-compat with Phase 1–11 callers; new code should use v3 types.
 export type HandoffType =
   | "insight"
   | "strategy_idea"
   | "research_task"
-  | "committee_memo"
+  | "training_example"
   | "training_feedback"
+  | "committee_memo"
   | "skill_draft"
   | "mcp_tool_request"
+  | "incident_note"
+  | "signal_feedback"
   | "alert_escalation";
 
 export interface HandoffSource {
@@ -92,9 +99,12 @@ export function targetRouteFor(type: HandoffType): string {
     case "strategy_idea": return "/management/strategies";
     case "research_task": return "/management/experiments";
     case "committee_memo": return "/management/approvals";
-    case "training_feedback": return "/management/personas";
+    case "training_feedback":
+    case "training_example": return "/management/personas";
     case "skill_draft": return "/management/skills";
     case "mcp_tool_request": return "/management/mcp";
+    case "incident_note":
     case "alert_escalation": return "/management/incidents";
+    case "signal_feedback": return "/management/strategies";
   }
 }

@@ -1,6 +1,12 @@
 // RBAC permission matrix — Part 1 §Roles, Part 6 §availableActions filtering.
 // The BFF emits availableActions per object/state; the UI further filters by role.
+//
+// v3 §5 delegation (Pack A G02): when the action id is a v3-style dotted id
+// (e.g. "strategy.deploy_live"), defer to the v3 truth table. Legacy short ids
+// (e.g. "promote_live") continue to use ACTION_ROLES below for back-compat.
 import type { UserRole } from "@/platform/store";
+import { canRoleInvoke as v3Can, getActionPermission } from "@/lib/v3/permissions";
+import type { ManagementRole } from "@/lib/v3/availableActions";
 
 /** Action ids → roles allowed to invoke them. "*" means any authenticated role. */
 const ACTION_ROLES: Record<string, UserRole[] | "*"> = {
@@ -52,6 +58,10 @@ const ACTION_ROLES: Record<string, UserRole[] | "*"> = {
 };
 
 export function canInvoke(role: UserRole, action: string): boolean {
+  // v3 dotted action id → use v3 truth table when registered.
+  if (action.includes(".") && getActionPermission(action)) {
+    return v3Can(role as ManagementRole, action);
+  }
   const allowed = ACTION_ROLES[action];
   if (!allowed) return true; // unknown action → don't block by default
   if (allowed === "*") return true;
