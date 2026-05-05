@@ -11,6 +11,12 @@ export interface AuditEntry {
   action: string;
   target?: string;
   memo?: string;
+  /** Phase 15 — JSON snapshot of entity prior to mutation. */
+  before?: string;
+  /** Phase 15 — JSON snapshot of entity after mutation. */
+  after?: string;
+  /** Phase 15 — outcome marker; rejected entries are tinted destructive. */
+  outcome?: "ok" | "rejected";
 }
 
 interface Props {
