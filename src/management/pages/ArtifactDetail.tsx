@@ -83,7 +83,7 @@ export const ArtifactDetail = () => {
                   <span className="text-xs text-muted-foreground">View →</span>
                 </div>
               </Section>
-            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">No upstream experiment recorded.</div></Section>,
+            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">{t("common.noUpstreamExperiment")}</div></Section>,
           },
           {
             value: "rollback", label: t("artifact.tab.rollback"),

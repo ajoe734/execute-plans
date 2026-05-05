@@ -114,6 +114,7 @@ export default {
     cancel: "Cancel", confirm: "Confirm", save: "Save",
     reset: "Reset", proposeChange: "Propose change", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
     back: "Back", submitForReview: "Submit for review",
+    open: "Open", submitting: "Submitting…",
   },
   confirm: {
     title: "Confirm high-risk action",
@@ -142,6 +143,11 @@ export default {
     notFound: "Oops! Page not found", returnHome: "Return to Home",
     densityComfortable: "Comfortable",
     addTitleFirst: "Add a title first",
+    contextAttachments: "Context attachments",
+    evidence: "Evidence",
+    noUpstreamExperiment: "No upstream experiment recorded.",
+    noArtifactsYet: "No artifacts produced yet.",
+    noDetailRoute: "No detail route registered for this id.",
   },
   permission: {
     requireAction: "Requires permission: {{action}}",
@@ -806,7 +812,6 @@ export default {
         evaluations: { title: "Evaluation Suites", desc: "Run regression suites against personas and skills." },
         channels: { title: "Channels", desc: "Manage notification routes the trainer publishes into." },
       },
-      },
       detail: {
         notFound: "Persona {{id}} not found.",
         back: "Back to studio",
@@ -833,6 +838,7 @@ export default {
         },
       },
     },
+  },
   artifact: {
     download: "Download",
     sourceExperiment: "Source experiment",
@@ -901,6 +907,11 @@ export default {
     lastEvent: "last",
     newUpdates: "{{count}} new update(s) — click to refresh",
     status: { live: "LIVE", stale: "STALE", offline: "OFFLINE" },
+    diagnostics: "QA: simulate connection state",
+    disconnect: "Disconnect",
+    reconnect: "Reconnect",
+    events: "Buffered",
+    topics: "Topics",
   },
   strategyDetail: {
     spec: "Spec & Parameters",

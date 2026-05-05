@@ -109,6 +109,7 @@ export default {
     cancel: "取消", confirm: "確認", save: "儲存",
     reset: "重設", proposeChange: "提出變更", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
     back: "返回", submitForReview: "送審",
+    open: "開啟", submitting: "送出中…",
   },
   confirm: {
     title: "高風險動作確認",
@@ -137,6 +138,11 @@ export default {
     notFound: "找不到頁面", returnHome: "回到首頁",
     densityComfortable: "舒適",
     addTitleFirst: "請先輸入標題",
+    contextAttachments: "情境附件",
+    evidence: "證據",
+    noUpstreamExperiment: "未紀錄上游實驗。",
+    noArtifactsYet: "尚未產出 artifact。",
+    noDetailRoute: "此 id 尚未註冊明細路由。",
   },
   permission: {
     requireAction: "需要權限：{{action}}",
@@ -888,6 +894,11 @@ export default {
     lastEvent: "上次",
     newUpdates: "有 {{count}} 筆新更新 — 點擊重新整理",
     status: { live: "即時", stale: "停滯", offline: "離線" },
+    diagnostics: "QA：模擬連線狀態",
+    disconnect: "斷線",
+    reconnect: "重連",
+    events: "緩衝",
+    topics: "主題",
   },
   strategyDetail: {
     spec: "規格與參數",
