@@ -221,6 +221,7 @@ const TrainerOverview = () => {
 };
 
 const PersonaTrainer = ({ personaId }: { personaId: string }) => {
+  const t = useT();
   const navigate = useNavigate();
   const [persona, setPersona] = useState<Persona | null>(null);
   const [memory, setMemory] = useState<MemoryUpdate[]>([]);
@@ -241,8 +242,8 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
   if (!persona) {
     return (
       <Card className="p-12 text-center text-sm text-muted-foreground">
-        Persona <code className="text-mono">{personaId}</code> not found.{" "}
-        <Button variant="link" onClick={() => navigate("/agora/trainer")}>Back to studio</Button>
+        {t("agora.trainerStudio.detail.notFound", { id: personaId })}{" "}
+        <Button variant="link" onClick={() => navigate("/agora/trainer")}>{t("agora.trainerStudio.detail.back")}</Button>
       </Card>
     );
   }
@@ -261,7 +262,7 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
     setTimeout(() => {
       setEvalRunning(false);
       setEvalScore(0.7 + Math.random() * 0.25);
-      toast.success("Evaluation suite finished (mock)");
+      toast.success(t("agora.trainerStudio.detail.eval.finishedToast"));
     }, 1400);
   };
 
@@ -279,7 +280,7 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
     };
     setMemory((prev) => [m, ...prev]);
     setNewMemory("");
-    toast.success("Memory candidate queued for governance");
+    toast.success(t("agora.trainerStudio.detail.memory.queuedToast"));
   };
 
   return (
@@ -302,34 +303,34 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
             </div>
           </div>
           <Link to={`/management/personas/${personaId}`} className="text-xs text-accent hover:underline">
-            Open in Management →
+            {t("agora.trainerStudio.detail.openInMgmt")}
           </Link>
         </div>
       </Card>
 
       <Tabs defaultValue="memory">
         <TabsList>
-          <TabsTrigger value="memory">Memory ({memory.length})</TabsTrigger>
-          <TabsTrigger value="skills">Skill assign ({skills.length})</TabsTrigger>
-          <TabsTrigger value="routing">Routing ({policy?.rules.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="eval">Evaluation</TabsTrigger>
+          <TabsTrigger value="memory">{t("agora.trainerStudio.detail.tabs.memory")} ({memory.length})</TabsTrigger>
+          <TabsTrigger value="skills">{t("agora.trainerStudio.detail.tabs.skills")} ({skills.length})</TabsTrigger>
+          <TabsTrigger value="routing">{t("agora.trainerStudio.detail.tabs.routing")} ({policy?.rules.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="eval">{t("agora.trainerStudio.detail.tabs.eval")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="memory" className="space-y-3">
           <Card className="p-4 space-y-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider">Add memory candidate</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider">{t("agora.trainerStudio.detail.memory.add")}</div>
             <Textarea
               value={newMemory}
               onChange={(e) => setNewMemory(e.target.value)}
-              placeholder="e.g. Prefer 4d horizon for momentum signals."
+              placeholder={t("agora.trainerStudio.detail.memory.placeholder")}
               className="min-h-[60px]"
             />
             <div className="flex justify-end">
-              <Button onClick={queueMemory} size="sm"><Plus className="h-4 w-4 mr-1" />Queue for review</Button>
+              <Button onClick={queueMemory} size="sm"><Plus className="h-4 w-4 mr-1" />{t("agora.trainerStudio.detail.memory.queueBtn")}</Button>
             </div>
           </Card>
           <Card className="divide-y divide-border">
-            {memory.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No memory updates.</div>}
+            {memory.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">{t("agora.trainerStudio.detail.memory.empty")}</div>}
             {memory.map((m) => (
               <div key={m.id} className="p-3 flex items-start gap-3">
                 <Badge variant={m.state === "conflict" ? "destructive" : "outline"} className="text-[10px]">{m.state}</Badge>
@@ -352,7 +353,7 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
                 <div key={s.id} className="p-3 flex items-center gap-3">
                   <Button size="sm" variant={on ? "default" : "outline"} onClick={() => toggleSkill(s.id)}>
                     {on ? <Check className="h-3 w-3 mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
-                    {on ? "Assigned" : "Assign"}
+                    {on ? t("agora.trainerStudio.detail.skills.assigned") : t("agora.trainerStudio.detail.skills.assign")}
                   </Button>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{s.name} <span className="text-mono text-[10px] text-muted-foreground">v{s.version}</span></div>
@@ -367,13 +368,13 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
 
         <TabsContent value="routing">
           <Card className="p-4">
-            {!policy && <div className="text-sm text-muted-foreground">No route policy bound to this persona.</div>}
+            {!policy && <div className="text-sm text-muted-foreground">{t("agora.trainerStudio.detail.routing.empty")}</div>}
             {policy && (
               <>
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="text-sm font-semibold">{policy.name}</div>
-                    <div className="text-[10px] text-mono text-muted-foreground uppercase">version {policy.version}</div>
+                    <div className="text-[10px] text-mono text-muted-foreground uppercase">{t("agora.trainerStudio.detail.routing.version", { v: policy.version })}</div>
                   </div>
                   <Badge variant="outline">{policy.state}</Badge>
                 </div>
@@ -401,20 +402,22 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-sm font-semibold">Run regression suite</div>
-                <div className="text-xs text-muted-foreground">Replays the last 50 prompts and scores against expected outputs.</div>
+                <div className="text-sm font-semibold">{t("agora.trainerStudio.detail.eval.title")}</div>
+                <div className="text-xs text-muted-foreground">{t("agora.trainerStudio.detail.eval.hint")}</div>
               </div>
               <Button onClick={runEval} disabled={evalRunning}>
                 <Play className="h-4 w-4 mr-1" />
-                {evalRunning ? "Running…" : "Run eval"}
+                {evalRunning ? t("agora.trainerStudio.detail.eval.runningBtn") : t("agora.trainerStudio.detail.eval.runBtn")}
               </Button>
             </div>
             {evalScore !== null && (
               <div className="rounded-md border border-border p-4 mt-2">
-                <div className="text-[10px] text-mono uppercase text-muted-foreground">Pass rate</div>
+                <div className="text-[10px] text-mono uppercase text-muted-foreground">{t("agora.trainerStudio.detail.eval.passRate")}</div>
                 <div className="text-3xl text-mono font-semibold">{(evalScore * 100).toFixed(1)}%</div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {evalScore > 0.85 ? <span className="text-status-success">Above release bar.</span> : <span className="text-status-warning">Below release bar — investigate.</span>}
+                  {evalScore > 0.85
+                    ? <span className="text-status-success">{t("agora.trainerStudio.detail.eval.above")}</span>
+                    : <span className="text-status-warning">{t("agora.trainerStudio.detail.eval.below")}</span>}
                 </div>
               </div>
             )}
