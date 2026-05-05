@@ -12,30 +12,90 @@ import {
   ArrowLeft, Plus, Play, Check, X,
 } from "lucide-react";
 import { bff } from "@/lib/bff/client";
+import { mutations } from "@/lib/bff/mutations";
 import type { Persona, MemoryUpdate, Skill, RoutePolicy } from "@/lib/bff/types";
 import { toast } from "sonner";
 
-const queues = [
-  { to: "/agora/memory", icon: Brain, title: "Memory Review", desc: "Approve/reject memory candidates harvested from operator activity.", count: 18, accent: "text-accent" },
-  { to: "/agora/skill-coaching", icon: Wand2, title: "Skill Coaching", desc: "Refine in-flight skill drafts with paired examples.", count: 4, accent: "text-status-warning" },
-  { to: "/agora/persona-lab", icon: FlaskConical, title: "Persona Lab", desc: "Compose and test personas with skill / tool / memory routing.", count: 2, accent: "text-status-success" },
-  { to: "/agora/evaluations", icon: Beaker, title: "Evaluation Suites", desc: "Run regression suites against personas and skills.", count: 6, accent: "text-status-running" },
-  { to: "/agora/channels", icon: Radio, title: "Channels", desc: "Manage notification routes the trainer publishes into.", count: 3, accent: "text-status-paused" },
+type FeedbackSource =
+  | "persona_response_incorrect"
+  | "trader_correction"
+  | "analyst_correction"
+  | "signal_disagreement"
+  | "committee_weak_argument"
+  | "memory_conflict"
+  | "bad_tool_use"
+  | "policy_violation";
+
+interface FeedbackItem {
+  id: string;
+  source: FeedbackSource;
+  persona: string;
+  summary: string;
+  evidence: string;
+  capturedAt: string;
+}
+
+const FEEDBACK_SOURCES: FeedbackSource[] = [
+  "persona_response_incorrect", "trader_correction", "analyst_correction",
+  "signal_disagreement", "committee_weak_argument", "memory_conflict",
+  "bad_tool_use", "policy_violation",
 ];
 
-const sources = [
-  { kind: "signal_feedback", count: 132, period: "last 7d" },
-  { kind: "research_note", count: 41, period: "last 7d" },
-  { kind: "decision_log", count: 9, period: "last 7d" },
-  { kind: "persona_response_feedback", count: 64, period: "last 7d" },
-  { kind: "alert_response", count: 21, period: "last 7d" },
+const seedFeedback: FeedbackItem[] = [
+  { id: "fb_01", source: "persona_response_incorrect", persona: "per_quant", summary: "Quant claimed 'no momentum signal' for SOL despite +12% week.", evidence: "Operator marked response as incorrect, attached chart screenshot.", capturedAt: new Date(Date.now() - 1800_000).toISOString() },
+  { id: "fb_02", source: "trader_correction", persona: "per_risk", summary: "Trader corrected risk-off recommendation; macro context outweighed local drawdown.", evidence: "Slack thread #risk-desk, 4 thumbs-up reactions.", capturedAt: new Date(Date.now() - 7200_000).toISOString() },
+  { id: "fb_03", source: "signal_disagreement", persona: "per_quant", summary: "Two signals on ETH conflict (long vs neutral); rationale unclear.", evidence: "Signal explanation lacks regime context; analysts disagree in review.", capturedAt: new Date(Date.now() - 14400_000).toISOString() },
+  { id: "fb_04", source: "committee_weak_argument", persona: "per_macro", summary: "Macro persona's argument cited stale FOMC dot-plot from prior meeting.", evidence: "Committee transcript #cmt_88, two members objected.", capturedAt: new Date(Date.now() - 36000_000).toISOString() },
+  { id: "fb_05", source: "memory_conflict", persona: "per_risk", summary: "Two memories disagree on max single-asset exposure (8% vs 12%).", evidence: "Memory ids mu_44 and mu_77 trigger conflict on rebalance run.", capturedAt: new Date(Date.now() - 50000_000).toISOString() },
+  { id: "fb_06", source: "bad_tool_use", persona: "per_quant", summary: "Persona invoked backtest tool with overlapping windows, double-counted PnL.", evidence: "Tool log shows 2024-Q3 window passed twice; results inflated.", capturedAt: new Date(Date.now() - 86400_000).toISOString() },
+  { id: "fb_07", source: "policy_violation", persona: "per_macro", summary: "Persona referenced disallowed external news source in rationale.", evidence: "Policy 'no-tier3-source' triggered by content scanner.", capturedAt: new Date(Date.now() - 100000_000).toISOString() },
+  { id: "fb_08", source: "analyst_correction", persona: "per_quant", summary: "Analyst rewrote sector rotation thesis — persona conflated tech/comms.", evidence: "Edit diff captured in research notebook rn_91.", capturedAt: new Date(Date.now() - 130000_000).toISOString() },
+];
+
+const queues = [
+  { to: "/agora/memory", icon: Brain, key: "memoryReview", count: 18, accent: "text-accent" },
+  { to: "/agora/skill-coaching", icon: Wand2, key: "skillCoaching", count: 4, accent: "text-status-warning" },
+  { to: "/agora/persona-lab", icon: FlaskConical, key: "personaLab", count: 2, accent: "text-status-success" },
+  { to: "/agora/evaluations", icon: Beaker, key: "evaluations", count: 6, accent: "text-status-running" },
+  { to: "/agora/channels", icon: Radio, key: "channels", count: 3, accent: "text-status-paused" },
 ];
 
 const TrainerOverview = () => {
   const t = useT();
   const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackItem[]>(seedFeedback);
+  const [activeFb, setActiveFb] = useState<FeedbackItem | null>(seedFeedback[0]);
   useEffect(() => { bff.personas.list().then(setPersonas); }, []);
+
+  const counts = FEEDBACK_SOURCES.reduce<Record<FeedbackSource, number>>((acc, s) => {
+    acc[s] = feedback.filter((f) => f.source === s).length;
+    return acc;
+  }, {} as Record<FeedbackSource, number>);
+
+  const triage = async (item: FeedbackItem, action: string) => {
+    if (action === "submitPersonaUpdate") {
+      const res = await mutations.createApproval({
+        kind: "persona_update",
+        subject: `Persona update from feedback (${item.persona})`,
+        rationale: item.summary,
+        diffSummary: item.evidence,
+        riskLevel: "medium",
+        stages: [
+          { name: "trainer_lead", slaHours: 8 },
+          { name: "risk_review", slaHours: 12 },
+        ],
+      });
+      toast.success(t("agora.trainerStudio.toasts.personaUpdateSubmitted"), {
+        description: res.approval.id,
+        action: { label: "Open", onClick: () => navigate(`/management/approvals/${res.approval.id}`) },
+      });
+    } else {
+      toast.success(t(`agora.trainerStudio.toasts.${action}`));
+    }
+    setFeedback((prev) => prev.filter((f) => f.id !== item.id));
+    setActiveFb((cur) => (cur?.id === item.id ? null : cur));
+  };
 
   return (
     <>
@@ -47,12 +107,13 @@ const TrainerOverview = () => {
             <p className="text-xs text-muted-foreground">{t("agora.trainerStudio.subtitle")}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-          {sources.map((s) => (
-            <div key={s.kind} className="rounded-md border border-border p-3">
-              <div className="text-mono text-[10px] uppercase tracking-wider text-muted-foreground">{s.kind}</div>
-              <div className="text-2xl text-mono font-semibold mt-1">{s.count}</div>
-              <div className="text-[10px] text-muted-foreground">{s.period}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mt-4">
+          {FEEDBACK_SOURCES.map((s) => (
+            <div key={s} className="rounded-md border border-border p-2">
+              <div className="text-mono text-[9px] uppercase tracking-wider text-muted-foreground line-clamp-2 leading-tight min-h-[24px]">
+                {t(`agora.trainerStudio.sources.${s}`)}
+              </div>
+              <div className="text-xl text-mono font-semibold mt-1">{counts[s] ?? 0}</div>
             </div>
           ))}
         </div>
@@ -60,8 +121,59 @@ const TrainerOverview = () => {
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Train a specific persona</h3>
-          <Badge variant="outline" className="text-[10px]">{personas.length} personas</Badge>
+          <div>
+            <h3 className="font-semibold text-sm">{t("agora.trainerStudio.feedbackQueue")}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("agora.trainerStudio.feedbackQueueHint")}</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{feedback.length}</Badge>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+          <div className="lg:col-span-2 space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {feedback.length === 0 && <div className="text-sm text-muted-foreground text-center p-6">{t("agora.trainerStudio.queueEmpty")}</div>}
+            {feedback.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setActiveFb(f)}
+                className={`w-full text-left rounded-md border p-2.5 transition ${activeFb?.id === f.id ? "border-accent bg-accent/5" : "border-border hover:bg-muted/40"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[9px] uppercase">{t(`agora.trainerStudio.sources.${f.source}`)}</Badge>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{f.persona}</span>
+                </div>
+                <p className="text-xs mt-1.5 line-clamp-2">{f.summary}</p>
+              </button>
+            ))}
+          </div>
+          <div className="lg:col-span-3">
+            {activeFb ? (
+              <div className="rounded-md border border-border p-4 h-full flex flex-col">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-[10px]">{t(`agora.trainerStudio.sources.${activeFb.source}`)}</Badge>
+                  <span className="text-mono text-[10px] text-muted-foreground">{activeFb.persona}</span>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(activeFb.capturedAt).toLocaleString()}</span>
+                </div>
+                <p className="text-sm">{activeFb.summary}</p>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">Evidence</div>
+                <p className="text-xs bg-muted/40 rounded-md p-2.5 leading-relaxed">{activeFb.evidence}</p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {(["accept","createExample","createEvalCase","updateRule","submitPersonaUpdate","markDuplicate","archive","reject"] as const).map((a) => (
+                    <Button key={a} size="sm" variant={a === "submitPersonaUpdate" ? "default" : a === "reject" ? "ghost" : "outline"} onClick={() => triage(activeFb, a)}>
+                      {t(`agora.trainerStudio.actions.${a}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground text-sm p-12">{t("agora.trainerStudio.selectFeedback")}</div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm">{t("agora.trainerStudio.trainPersona")}</h3>
+          <Badge variant="outline" className="text-[10px]">{personas.length} {t("agora.trainerStudio.personas")}</Badge>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
           {personas.map((p) => (
@@ -93,11 +205,11 @@ const TrainerOverview = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-sm">{q.title}</h4>
+                    <h4 className="font-semibold text-sm">{t(`agora.trainerStudio.queues.${q.key}.title`)}</h4>
                     <Badge variant="outline" className="text-[10px]">{q.count}</Badge>
                     <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{q.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t(`agora.trainerStudio.queues.${q.key}.desc`)}</p>
                 </div>
               </div>
             </Card>
