@@ -392,25 +392,97 @@ export const mutations = {
 
   // ---- Phase 14 Slice E: governance trio typed helpers ----
 
-  /** Approval decision wrapper that records before/after + structured outcome. */
+  /** Approval decision wrapper.
+   *  Phase 17 — when the request has structured `stages`, the decision applies
+   *  to the next pending stage and the request only finalises when all stages
+   *  approve (or any stage rejects). Without stages, the decision applies to
+   *  the request directly (legacy behaviour). */
   decideApproval(
     id: string,
     decision: "approve" | "reject" | "request_changes" | "escalate" | "freeze",
     memo: string,
+    opts?: { stageName?: string },
   ): Promise<MutationResult> {
     const a = findById(seed.approvals, id) as ApprovalRequest | undefined;
     const before = snap(a);
     if (a) {
-      if (decision === "approve") a.state = "approved";
-      else if (decision === "reject") a.state = "rejected";
-      // request_changes / escalate / freeze keep state pending but log the decision.
+      if (a.stages && a.stages.length > 0 && (decision === "approve" || decision === "reject")) {
+        const stage = opts?.stageName
+          ? a.stages.find((s) => s.name === opts.stageName)
+          : a.stages.find((s) => s.state === "pending");
+        const actor = usePlatform.getState().role;
+        const ts = new Date().toISOString();
+        if (stage && stage.state === "pending") {
+          stage.state = decision === "approve" ? "approved" : "rejected";
+          stage.decidedBy = actor;
+          stage.decidedAt = ts;
+          stage.memo = memo;
+          // Advance: open next pending stage, or finalise the request.
+          if (decision === "reject") {
+            a.state = "rejected";
+          } else {
+            const next = a.stages.find((s) => s.state === "pending");
+            if (next && !next.startedAt) next.startedAt = ts;
+            if (!next) a.state = "approved";
+          }
+        }
+      } else {
+        if (decision === "approve") a.state = "approved";
+        else if (decision === "reject") a.state = "rejected";
+      }
     }
     realtime.emit("data", { kind: "Approval" });
     const audit = pushAudit(
-      `approval.${decision}`, id, memo,
+      `approval.${decision}`, id, opts?.stageName ? `[${opts.stageName}] ${memo}` : memo,
       { before, after: snap(a), outcome: "ok" },
     );
     return delay({ ok: true, audit });
+  },
+
+  /** Phase 17 — batch decide several requests at once. Stops on first failure. */
+  async batchDecideApproval(
+    ids: string[],
+    decision: "approve" | "reject",
+    memo: string,
+  ): Promise<{ ok: boolean; results: MutationResult[] }> {
+    const results: MutationResult[] = [];
+    for (const id of ids) {
+      results.push(await this.decideApproval(id, decision, memo));
+    }
+    return { ok: results.every((r) => r.ok), results };
+  },
+
+  /** Phase 17 — sweep open stages and auto-escalate any whose SLA has elapsed.
+   *  Escalation: the overdue stage is marked `escalated=true` and a synthetic
+   *  "committee" stage is inserted before the next pending stage (if not already
+   *  present). Returns the audit events written. */
+  tickApprovalSla(nowIso: string = new Date().toISOString()): Promise<{ ok: true; escalated: AuditEvent[] }> {
+    const now = Date.parse(nowIso);
+    const events: AuditEvent[] = [];
+    for (const req of seed.approvals as ApprovalRequest[]) {
+      if (req.state !== "pending" || !req.stages) continue;
+      for (const stage of req.stages) {
+        if (stage.state !== "pending" || stage.escalated) continue;
+        const started = stage.startedAt ? Date.parse(stage.startedAt) : Date.parse(req.createdAt);
+        const overdueMs = now - started - stage.slaHours * 3_600_000;
+        if (overdueMs <= 0) continue;
+        stage.escalated = true;
+        const escalateTo = stage.escalateTo ?? "committee";
+        const already = req.stages.some((s) => s.name === escalateTo);
+        if (!already) {
+          const idx = req.stages.indexOf(stage);
+          req.stages.splice(idx + 1, 0, {
+            name: escalateTo,
+            state: "pending",
+            slaHours: Math.max(2, Math.round(stage.slaHours / 2)),
+          });
+        }
+        events.push(pushAudit("approval.sla_escalate", req.id, `[${stage.name}] overdue → ${escalateTo}`,
+          { outcome: "ok" }));
+      }
+    }
+    if (events.length) realtime.emit("data", { kind: "Approval" });
+    return delay({ ok: true, escalated: events });
   },
 
   /** Phase 11 — submit permission matrix cell updates. */
