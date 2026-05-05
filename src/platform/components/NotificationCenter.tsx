@@ -74,10 +74,14 @@ export const NotificationCenter = () => {
         </div>
 
         <Tabs defaultValue="alerts" className="px-5">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="alerts" className="gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />{t("topbar.openAlerts")}
               {openCount > 0 && <Badge variant="destructive" className="ml-1 px-1 text-[10px]">{openCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="incidents" className="gap-1.5">
+              <ShieldAlert className="h-3.5 w-3.5" />{t("notifications.incidents")}
+              {incidentCount > 0 && <Badge variant="destructive" className="ml-1 px-1 text-[10px]">{incidentCount}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="approvals" className="gap-1.5">
               <ClipboardCheck className="h-3.5 w-3.5" />{t("topbar.pendingApprovals")}
