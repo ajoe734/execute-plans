@@ -80,7 +80,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           description="Unfreezing restores allocation flow. Confirm with audit memo."
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
-            await bff.mutations.runAction({ kind: "CapitalPool", id: poolId, action: "unfreeze_pool", memo });
+            await bff.mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
             setRows((r) => r.map((x) => x.id === unfreezeTarget.id ? { ...x, active: false } : x));
             toast.success(t("phase13.capital.freeze.queued"));
           }}
