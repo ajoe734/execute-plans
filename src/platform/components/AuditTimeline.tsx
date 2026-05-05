@@ -1,8 +1,12 @@
 // AuditTimeline — Spec §3.9.
 // Standardised vertical timeline for AuditEvent[] (or compatible). Used by Incident,
 // Governance, Strategy, and Right Drawer. Renders: actor avatar · action · target · ts · memo.
+// Phase 18 — adds cross-page jump buttons (lineage / decisions / detail) when target id resolves.
 import { Card } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { resolveEntity, lineageHref, decisionsHref } from "@/lib/entityLinks";
 
 export interface AuditEntry {
   id?: string;
