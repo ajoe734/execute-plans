@@ -12,13 +12,19 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
+import { mcpServerMachine, type McpServerState } from "@/lib/stateMachines";
 import { toast } from "sonner";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, PlugZap, Activity, ShieldOff, RotateCcw, ArchiveX } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
 import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 import { McpSecretsPanel } from "@/management/components/detail/McpSecretsPanel";
 import { McpServerSchemaPanel } from "@/management/components/detail/McpServerSchemaPanel";
+
+const HEALTH_TO_STATE: Record<string, McpServerState> = {
+  healthy: "healthy", warning: "degraded", failed: "disabled",
+};
 
 export const McpServerDetail = () => {
   const { id } = useParams();
