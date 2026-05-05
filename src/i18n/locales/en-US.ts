@@ -373,6 +373,12 @@ export default {
       escalate: "Escalate",
       freeze: "Freeze target",
     },
+    batch: {
+      selected: "{{n}} selected",
+      approve: "Batch approve",
+      reject: "Batch reject",
+      done: "{{n}} request(s) processed",
+    },
     policies: {
       title: "Route Policies",
       subtitle: "Persona → tool/MCP/skill routing rules with versioning and approvals.",
@@ -586,6 +592,19 @@ export default {
     subscribersFmt: "{{n}} subscribers · filters: {{f}}",
   },
   filter: { pending: "Pending", all: "All" },
+  approval: {
+    sla: {
+      label: "SLA",
+      notStarted: "Not started",
+      remaining: "{{t}} left",
+      overdue: "Overdue {{t}}",
+      escalated: "Escalated",
+    },
+    stage: {
+      approve: "Approve stage",
+      reject: "Reject",
+    },
+  },
   lifecycle: {
     title: "Lifecycle",
     branch: "Branch state:",
@@ -609,6 +628,8 @@ export default {
       in_review: "In review", approved: "Approved", rejected: "Rejected",
       changes_requested: "Changes requested", cancelled: "Cancelled",
       risk: "Risk", ops: "Ops", security: "Security", finance: "Finance",
+      capital: "Capital", committee: "Committee", proposer: "Proposer",
+      reviewer: "Reviewer", executor: "Executor", "trainer-lead": "Trainer Lead",
     },
   },
   rebalance: {

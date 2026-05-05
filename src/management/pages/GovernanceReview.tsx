@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
+import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
+
+type StageDecision = { stageName: string; decision: "approve" | "reject" };
 
 type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
@@ -29,6 +32,9 @@ export const GovernanceReview = () => {
   const [req, setReq] = useState<ApprovalRequest | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [stageDecision, setStageDecision] = useState<StageDecision | null>(null);
+
+  const reload = () => bff.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
     Promise.all([bff.approvals.get(id), bff.audit.list()])
@@ -88,7 +94,17 @@ export const GovernanceReview = () => {
             <Field label={t("governance.kind")} value={req.kind} mono />
             <Field label={t("governance.requester")} value={req.requester} mono />
             <Field label={t("governance.created")} value={new Date(req.createdAt).toLocaleString()} mono />
-            {req.requiresStages && (
+            {req.stages && req.stages.length > 0 ? (
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>
+                <StageDecisionPanel
+                  stages={req.stages}
+                  i18nPrefix="lifecycle.approval"
+                  disabled={req.state !== "pending"}
+                  onDecide={(stageName, d) => setStageDecision({ stageName, decision: d })}
+                />
+              </div>
+            ) : req.requiresStages && (
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>
                 <ApprovalStagesStepper
@@ -182,6 +198,25 @@ export const GovernanceReview = () => {
           destructive={decision === "reject" || decision === "freeze"}
           confirmToken={req.riskLevel === "critical" ? decision?.toUpperCase() : undefined}
           onConfirm={(memo) => { if (decision) apply(decision, memo); }}
+        />
+        <HighRiskConfirm
+          open={stageDecision !== null}
+          onOpenChange={(o) => !o && setStageDecision(null)}
+          operation={stageDecision ? `governance.stage.${stageDecision.decision}` : undefined}
+          target={{ type: "Approval", id: req.id, name: `${req.subject} · ${stageDecision?.stageName ?? ""}` }}
+          currentState={req.state}
+          newState={req.state}
+          risk={req.riskLevel}
+          destructive={stageDecision?.decision === "reject"}
+          confirmToken={req.riskLevel === "critical" ? stageDecision?.decision.toUpperCase() : undefined}
+          onConfirm={async (memo) => {
+            if (!stageDecision) return;
+            const r = await bff.mutations.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
+            if (r.ok) {
+              toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} — ${stageDecision.stageName}`);
+              await reload();
+            }
+          }}
         />
       </PageBody>
     </>

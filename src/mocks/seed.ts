@@ -118,9 +118,18 @@ export const incidents: Incident[] = [
 ];
 
 export const approvals: ApprovalRequest[] = [
-  { id: "ap_301", kind: "deploy.live", subject: "stg_001 v3.2.1", requester: "alice", state: "pending", riskLevel: "critical", createdAt: ago(0.3), rationale: "Hotfix for slippage estimator under high-vol regimes.", diffSummary: "+1 module, +84 LoC, model hash 9f3a→7c11", requiresStages: ["risk", "capital", "ops"] },
-  { id: "ap_302", kind: "rebalance.apply", subject: "Q2 2026 Rebalance", requester: "capital", state: "pending", riskLevel: "high", createdAt: ago(2), rationale: "Quarterly rotation per capital plan.", diffSummary: "4 strategies, max Δ −15%", requiresStages: ["risk", "ops"] },
-  { id: "ap_303", kind: "skill.publish", subject: "skill: macro_briefing v2", requester: "ai_trainer", state: "pending", riskLevel: "medium", createdAt: ago(4), rationale: "New macro briefing skill with grounded sources.", requiresStages: ["trainer-lead"] },
+  { id: "ap_301", kind: "deploy.live", subject: "stg_001 v3.2.1", requester: "alice", state: "pending", riskLevel: "critical", createdAt: ago(0.3), rationale: "Hotfix for slippage estimator under high-vol regimes.", diffSummary: "+1 module, +84 LoC, model hash 9f3a→7c11", requiresStages: ["risk", "capital", "ops"], stages: [
+    { name: "risk", state: "approved", slaHours: 4, startedAt: ago(0.3), decidedBy: "carol", decidedAt: ago(0.2), memo: "VAR within bounds" },
+    { name: "capital", state: "pending", slaHours: 4, startedAt: ago(0.2) },
+    { name: "ops", state: "pending", slaHours: 6, escalateTo: "committee" },
+  ] },
+  { id: "ap_302", kind: "rebalance.apply", subject: "Q2 2026 Rebalance", requester: "capital", state: "pending", riskLevel: "high", createdAt: ago(2), rationale: "Quarterly rotation per capital plan.", diffSummary: "4 strategies, max Δ −15%", requiresStages: ["risk", "ops"], stages: [
+    { name: "risk", state: "pending", slaHours: 1, startedAt: ago(2) },
+    { name: "ops", state: "pending", slaHours: 4 },
+  ] },
+  { id: "ap_303", kind: "skill.publish", subject: "skill: macro_briefing v2", requester: "ai_trainer", state: "pending", riskLevel: "medium", createdAt: ago(4), rationale: "New macro briefing skill with grounded sources.", requiresStages: ["trainer-lead"], stages: [
+    { name: "trainer-lead", state: "pending", slaHours: 12, startedAt: ago(4) },
+  ] },
 ];
 
 export const auditEvents: AuditEvent[] = [
