@@ -275,6 +275,15 @@ export default {
       liveWarn: "LIVE access enabled — ensure dual approval is on file before saving.",
       saved: "Registry updated",
     },
+    actions: {
+      testConnection: "Test connection", connectionOk: "Connection OK",
+      healthCheck: "Health check", healthChecked: "Health check queued",
+      disable: "Disable", disabled: "Server disabled",
+      disableTitle: "Disable {{name}}?", disableDesc: "Disabling stops all tool invocations on this server. Type DISABLE to confirm.",
+      reenable: "Re-enable", reenabled: "Server re-enabled",
+      retire: "Retire", retired: "Server retired",
+      retireTitle: "Retire {{name}}?", retireDesc: "Retiring permanently removes this MCP server from routing. Type RETIRE to confirm.",
+    },
   },
   strategy: {
     params: {
