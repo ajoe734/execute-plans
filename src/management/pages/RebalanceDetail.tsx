@@ -161,15 +161,9 @@ export const RebalanceDetail = () => {
             content: <AllocationSimulationPanel rebalance={r} />,
           },
           { value: "constraints", label: t("rebalance.tabs.constraints"), content: <ConstraintChecker rebalance={r} /> },
-          { value: "overrides", label: t("rebalance.tabs.overrides"), content: (
-            <DataTable rows={overrideRows} onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)} columns={[
-              { key: "strategy", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
-              { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
-              { key: "reason", header: t("section.rationale"), cell: (row) => <span className="text-sm">{row.reason}</span> },
-              { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
-              { key: "action", header: t("common.actions"), cell: () => <PermissionAwareButton requiredAction="approve_rebalance" size="sm" variant="outline">{t("actions.approve")}</PermissionAwareButton> },
-            ]} empty={t("empty.none")} />
-          ) },
+          { value: "workflow", label: t("phase13.rebalance.tabs.workflow"), content: <RebalanceWorkflowTab rebalanceId={r.id} /> },
+          { value: "freezeMetrics", label: t("phase13.rebalance.tabs.freezeMetrics"), content: <MetricFreezeManager rebalanceId={r.id} /> },
+          { value: "overrides", label: t("rebalance.tabs.overrides"), content: <OverrideManager rebalanceId={r.id} strategies={strategies.filter((s) => s.capitalPoolId === r.targetPoolId)} /> },
           { value: "approvals", label: t("rebalance.tabs.approval"), content: (
             <div className="space-y-4">
               <Section title={t("section.approvalStages")}>
