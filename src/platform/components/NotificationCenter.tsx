@@ -110,6 +110,22 @@ export const NotificationCenter = () => {
               ))}
             </TabsContent>
 
+            <TabsContent value="incidents" className="space-y-2 mt-0">
+              {incidents.length === 0 && <Empty text={t("common.noResults")} />}
+              {incidents.map((i) => (
+                <button key={i.id} onClick={() => go(`/management/incidents/${i.id}`)}
+                  className="w-full text-left rounded-md border border-border bg-card hover:bg-muted/40 px-3 py-2 transition">
+                  <div className="flex items-center gap-2">
+                    <RiskBadge level={i.severity} />
+                    <StatusBadge state={i.status === "resolved" ? "success" : i.status === "mitigating" ? "running" : "warning"} />
+                    {i.commander && <span className="text-mono text-[10px] text-muted-foreground ml-auto">{i.commander}</span>}
+                  </div>
+                  <div className="text-sm mt-1">{i.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{new Date(i.openedAt).toLocaleString()}</div>
+                </button>
+              ))}
+            </TabsContent>
+
             <TabsContent value="approvals" className="space-y-2 mt-0">
               {approvals.length === 0 && <Empty text={t("common.noResults")} />}
               {approvals.map((a) => (
