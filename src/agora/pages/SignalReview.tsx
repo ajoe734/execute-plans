@@ -146,17 +146,29 @@ export const SignalReview = () => {
                   {active.rationale}
                 </div>
 
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.signalReview.confidence") || "Confidence"} (1–5)</span>
+                  {[1,2,3,4,5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setConfidence(n as SignalConfidence)}
+                      className={`h-7 w-7 rounded-md border text-xs font-mono ${confidence === n ? "bg-accent text-accent-foreground border-accent" : "hover:bg-muted/50"}`}
+                    >{n}</button>
+                  ))}
+                </div>
+
                 <Textarea
-                  placeholder="Add your reasoning (becomes part of signal_feedback)…"
+                  placeholder={t("agora.signalReview.reasonPlaceholder") || "Reason (required for disagree at confidence ≥4 and any flag_suspicious)…"}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   className="min-h-[80px] mb-3"
                 />
 
                 <div className="flex gap-2 flex-wrap">
-                  <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />{t("agora.signalReview.approve")}</Button>
-                  <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />{t("agora.signalReview.reject")}</Button>
-                  <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />{t("agora.signalReview.flagReview")}</Button>
+                  <Button onClick={() => decide(active.id, "agree")}><ThumbsUp className="h-4 w-4 mr-1" />{t("agora.signalReview.agree") || "Agree"}</Button>
+                  <Button variant="outline" onClick={() => decide(active.id, "disagree")}><ThumbsDown className="h-4 w-4 mr-1" />{t("agora.signalReview.disagree") || "Disagree"}</Button>
+                  <Button variant="ghost" onClick={() => decide(active.id, "flag_suspicious")}><MessageSquareWarning className="h-4 w-4 mr-1" />{t("agora.signalReview.flag") || "Flag suspicious"}</Button>
                   <Button variant="outline" className="ml-auto" onClick={() => navigate(`/agora/signals/${active.id}`)}>{t("agora.signalReview.openDetail")} <ArrowRight className="h-4 w-4 ml-1" /></Button>
                 </div>
               </>
