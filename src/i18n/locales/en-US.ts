@@ -910,6 +910,8 @@ export default {
       rebalanceFlow: "Rebalance: freeze + override",
       incidentTriage: "Incident: ack → mitigate → resolve",
       governanceGrant: "Governance: permission grant + route policy publish",
+      signalResearchHandoff: "Signal review → research task scaffold",
+      skillSandboxApproval: "Skill: draft → sandbox → validate → approval",
     },
   },
   realtime: {
