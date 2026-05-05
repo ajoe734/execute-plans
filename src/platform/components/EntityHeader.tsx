@@ -2,14 +2,15 @@
 // Single header strip for any BaseObject detail page: ID + label + StatusBadge +
 // RiskBadge + owner + env + actions. Replaces ad-hoc PageHeader+meta combinations.
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, GitBranch, BookMarked, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./StatusBadge";
 import { RiskBadge } from "./RiskBadge";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
+import { resolveEntity, lineageHref, decisionsHref, auditHref } from "@/lib/entityLinks";
 
 interface Props {
   object: Pick<BaseObject, "id" | "name" | "owner" | "updatedAt" | "state" | "risk" | "labelKey">;
@@ -58,6 +59,19 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4 mr-1" />{t("common.back")}
             </Button>
+          )}
+          {resolveEntity(object.id) && (
+            <div className="flex items-center gap-1">
+              <Link to={lineageHref(object.id)} title={t("audit.openLineage")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><GitBranch className="h-4 w-4" /></Button>
+              </Link>
+              <Link to={decisionsHref(object.id)} title={t("audit.openDecisions")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><BookMarked className="h-4 w-4" /></Button>
+              </Link>
+              <Link to={auditHref(object.id)} title={t("audit.openAudit")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button>
+              </Link>
+            </div>
           )}
           {actions}
         </div>

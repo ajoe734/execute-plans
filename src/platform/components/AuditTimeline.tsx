@@ -1,8 +1,12 @@
 // AuditTimeline — Spec §3.9.
 // Standardised vertical timeline for AuditEvent[] (or compatible). Used by Incident,
 // Governance, Strategy, and Right Drawer. Renders: actor avatar · action · target · ts · memo.
+// Phase 18 — adds cross-page jump buttons (lineage / decisions / detail) when target id resolves.
 import { Card } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { resolveEntity, lineageHref, decisionsHref } from "@/lib/entityLinks";
 
 export interface AuditEntry {
   id?: string;
@@ -47,7 +51,9 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
         <div className="text-xs text-muted-foreground">{empty}</div>
       ) : (
         <ol className="relative space-y-3 pl-6 before:absolute before:left-3 before:top-1.5 before:bottom-1.5 before:w-px before:bg-border">
-          {rows.map((e, i) => (
+          {rows.map((e, i) => {
+            const resolved = resolveEntity(e.target);
+            return (
             <li key={e.id ?? `${e.ts}-${i}`} className="relative">
               <span className="absolute -left-[18px] top-0 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-[10px] text-mono text-muted-foreground">
                 {initials(e.actor)}
@@ -61,13 +67,33 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                   </span>
                 )}
                 {e.target && (
-                  <span className="text-xs text-muted-foreground">→ <span className="text-mono">{e.target}</span></span>
+                  <span className="text-xs text-muted-foreground">→ {resolved ? (
+                    <Link to={resolved.route} className="text-mono text-accent hover:underline">{e.target}</Link>
+                  ) : (
+                    <span className="text-mono">{e.target}</span>
+                  )}</span>
                 )}
                 <span className="text-mono text-xs text-muted-foreground ml-auto">
                   {new Date(e.ts).toLocaleString()}
                 </span>
               </div>
               {e.memo && <p className="text-xs text-muted-foreground mt-0.5">{e.memo}</p>}
+              {resolved && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <Link to={lineageHref(resolved.id)} title={t("audit.openLineage")}
+                    className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border rounded px-1.5 py-0.5">
+                    <GitBranch className="h-3 w-3" />{t("audit.openLineage")}
+                  </Link>
+                  <Link to={decisionsHref(resolved.kind, resolved.id)} title={t("audit.openDecisions")}
+                    className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border rounded px-1.5 py-0.5">
+                    <BookMarked className="h-3 w-3" />{t("audit.openDecisions")}
+                  </Link>
+                  <Link to={resolved.route} title={t("audit.openDetail")}
+                    className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border rounded px-1.5 py-0.5">
+                    <ArrowUpRight className="h-3 w-3" />{resolved.label}
+                  </Link>
+                </div>
+              )}
               {(e.before || e.after) && (
                 <details className="mt-1 group">
                   <summary className="text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground">
@@ -84,7 +110,8 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                 </details>
               )}
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
     </>

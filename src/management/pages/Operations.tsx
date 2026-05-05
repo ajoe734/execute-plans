@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -12,6 +13,8 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Field } from "./ObjectDetailLayout";
+import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { X } from "lucide-react";
 
 export const JobsPage = () => {
   const t = useT();
@@ -314,6 +317,8 @@ export const ApprovalsPage = () => {
 
 export const AuditPage = () => {
   const t = useT();
+  const [params, setParams] = useSearchParams();
+  const target = params.get("target") ?? "";
   const [rows, setRows] = useState<AuditEvent[]>([]);
   const [actor, setActor] = useState<string>("all");
   const [action, setAction] = useState<string>("all");
@@ -328,49 +333,49 @@ export const AuditPage = () => {
     });
   }, []);
 
-  const actors = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.actor))).sort(),
-    [rows],
-  );
-  const actions = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.action))).sort(),
-    [rows],
-  );
+  const actors = useMemo(() => Array.from(new Set(rows.map((r) => r.actor))).sort(), [rows]);
+  const actions = useMemo(() => Array.from(new Set(rows.map((r) => r.action))).sort(), [rows]);
   const filtered = useMemo(() => rows.filter((r) =>
     (actor === "all" || r.actor === actor) &&
     (action === "all" || r.action === action) &&
-    (outcome === "all" || (r.outcome ?? "ok") === outcome),
-  ), [rows, actor, action, outcome]);
+    (outcome === "all" || (r.outcome ?? "ok") === outcome) &&
+    (!target || r.target === target),
+  ), [rows, actor, action, outcome, target]);
 
   const reset = () => { setActor("all"); setAction("all"); setOutcome("all"); };
+  const clearTarget = () => { const p = new URLSearchParams(params); p.delete("target"); setParams(p, { replace: true }); };
   const hasFilter = actor !== "all" || action !== "all" || outcome !== "all";
 
   return (
     <>
       <PageHeader title={t("nav.audit")} subtitle={t("page.auditSubtitle")} />
       <PageBody>
+        {target && (
+          <Card className="p-3 flex flex-wrap items-center gap-2 border-accent/40 bg-accent/5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">{t("audit.targetFilter")}</span>
+            <span className="text-mono text-sm text-accent">{target}</span>
+            <span className="text-mono text-xs text-muted-foreground ml-2">{filtered.length} / {rows.length}</span>
+            <Button size="sm" variant="ghost" className="ml-auto" onClick={clearTarget}>
+              <X className="h-3 w-3 mr-1" />{t("audit.clearTargetFilter")}
+            </Button>
+          </Card>
+        )}
         <Card className="p-3 flex flex-wrap items-center gap-2">
           <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">
             {t("audit.filterTitle")}
           </span>
-          <select
-            value={actor} onChange={(e) => setActor(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-          >
+          <select value={actor} onChange={(e) => setActor(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs">
             <option value="all">{t("audit.allActors")}</option>
             {actors.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select
-            value={action} onChange={(e) => setAction(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-mono"
-          >
+          <select value={action} onChange={(e) => setAction(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-mono">
             <option value="all">{t("audit.allActions")}</option>
             {actions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select
-            value={outcome} onChange={(e) => setOutcome(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-          >
+          <select value={outcome} onChange={(e) => setOutcome(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs">
             <option value="all">{t("audit.allOutcomes")}</option>
             <option value="ok">{t("audit.outcomeOk")}</option>
             <option value="rejected">{t("audit.outcomeRejected")}</option>
@@ -382,17 +387,21 @@ export const AuditPage = () => {
             <Button size="sm" variant="ghost" onClick={reset}>{t("qa.reset")}</Button>
           )}
         </Card>
-        <DataTable rows={filtered} columns={[
-          { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
-          { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
-          { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-          { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
-          { key: "outcome", header: t("audit.outcome"), cell: (r) => (
-            <span className={`text-mono text-[10px] uppercase ${r.outcome === "rejected" ? "text-destructive" : "text-muted-foreground"}`}>
-              {r.outcome ?? "ok"}
-            </span>
-          ) },
-        ]} />
+        {target ? (
+          <AuditTimeline entries={filtered} title={target} />
+        ) : (
+          <DataTable rows={filtered} columns={[
+            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+            { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
+            { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
+            { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
+            { key: "outcome", header: t("audit.outcome"), cell: (r) => (
+              <span className={`text-mono text-[10px] uppercase ${r.outcome === "rejected" ? "text-destructive" : "text-muted-foreground"}`}>
+                {r.outcome ?? "ok"}
+              </span>
+            ) },
+          ]} />
+        )}
       </PageBody>
     </>
   );

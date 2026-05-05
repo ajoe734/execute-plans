@@ -1,29 +1,53 @@
 // Lineage Explorer — Spec Part 3 §19.6.
 // Cross-entity lineage graph with entity selector + filter.
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useT } from "@/platform/hooks";
 import { bff } from "@/lib/bff/client";
 import type { Strategy } from "@/lib/bff/types";
+import { resolveEntity, decisionsHref, auditHref } from "@/lib/entityLinks";
+import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 
 const TYPES = ["Strategy", "Persona", "Artifact", "CapitalPool", "Experiment"] as const;
 
 export const LineageExplorerPage = () => {
   const t = useT();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const initialRoot = params.get("root") ?? "";
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [rootId, setRootId] = useState<string>("");
+  const [rootId, setRootId] = useState<string>(initialRoot);
   const [filter, setFilter] = useState("");
+  const [selected, setSelected] = useState<LineageNode | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(TYPES.map((t) => [t, true])),
   );
 
   useEffect(() => {
-    bff.strategies.list().then((s) => { setStrategies(s); if (s[0]) setRootId(s[0].id); });
+    bff.strategies.list().then((s) => {
+      setStrategies(s);
+      if (!rootId) {
+        const match = initialRoot && s.find((x) => x.id === initialRoot);
+        setRootId(match ? match.id : (s[0]?.id ?? ""));
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!rootId) return;
+    if (params.get("root") === rootId) return;
+    const p = new URLSearchParams(params);
+    p.set("root", rootId);
+    setParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootId]);
 
   const { nodes, edges } = useMemo<{ nodes: LineageNode[]; edges: LineageEdge[] }>(() => {
     const root = strategies.find((s) => s.id === rootId);
@@ -45,6 +69,8 @@ export const LineageExplorerPage = () => {
     const ids = new Set(filtered.map((n) => n.id));
     return { nodes: filtered, edges: e.filter((edge) => ids.has(edge.from) && ids.has(edge.to)) };
   }, [strategies, rootId, filter, enabled]);
+
+  const selectedResolved = selected ? resolveEntity(selected.id) : null;
 
   return (
     <>
@@ -75,8 +101,34 @@ export const LineageExplorerPage = () => {
           </div>
         </Card>
         <Card className="p-2">
-          <LineageGraph nodes={nodes} edges={edges} height={420} />
+          <LineageGraph nodes={nodes} edges={edges} height={420} onSelect={setSelected} />
         </Card>
+        {selected && (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-baseline gap-3 mb-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">{t("audit.crossLinks")}</span>
+              <span className="font-medium">{selected.label}</span>
+              <span className="text-mono text-xs text-muted-foreground">{selected.id}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedResolved ? (
+                <>
+                  <Link to={selectedResolved.route}>
+                    <Button size="sm" variant="outline"><ArrowUpRight className="h-3.5 w-3.5 mr-1" />{selectedResolved.label}</Button>
+                  </Link>
+                  <Button size="sm" variant="outline" onClick={() => navigate(decisionsHref(selectedResolved.kind, selectedResolved.id))}>
+                    <BookMarked className="h-3.5 w-3.5 mr-1" />{t("audit.openDecisions")}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate(auditHref(selectedResolved.id))}>
+                    <GitBranch className="h-3.5 w-3.5 mr-1" />{t("audit.openAudit")}
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">No detail route registered for this id.</span>
+              )}
+            </div>
+          </Card>
+        )}
       </PageBody>
     </>
   );
