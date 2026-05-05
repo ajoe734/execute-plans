@@ -1,6 +1,12 @@
 // HighRiskConfirm — Part 7 §8.3 HighRiskConfirmationModal.
-// 12 structured fields + audit memo (required) + confirm phrase token (for critical / live).
-import { useState, type ReactNode } from "react";
+// 12 structured fields + audit memo (required) + confirm phrase token.
+//
+// v3 §6.2 confirm-token flow (Pack A G03/G66/G86): when `actionId` is a v3
+// dotted high-risk action id, the modal fetches a short-lived `confirmToken`
+// from `bff.commands.requestConfirmToken` on open, displays a TTL countdown
+// and the server-issued `requiredPhrase`, and passes the token to `onConfirm`.
+// Legacy callers that pass a plain `confirmToken` string continue to work.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -14,10 +20,12 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { RiskLevel } from "@/lib/bff/types";
+import { bff } from "@/lib/bff/client";
+import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 
 export interface AffectedRefs {
   strategies?: string[];
@@ -61,7 +69,15 @@ export interface HighRiskConfirmProps {
   /** Extra slot rendered before footer. */
   extra?: ReactNode;
 
-  onConfirm: (memo: string) => void | Promise<void>;
+  // ---- v3 §6.2 confirm-token integration ----
+  /** v3 dotted action id (e.g. "strategy.deploy_live"). When set and registered
+   *  in HIGH_RISK_ACTIONS, the modal fetches a confirmToken from BFF on open. */
+  actionId?: string;
+  /** Entity type & id used to build the confirm phrase (e.g. {type:"strategy", id:"st_01"}). */
+  confirmEntity?: { type: string; id: string };
+
+  /** Receives the audit memo. With v3 actionId, also receives the issued token. */
+  onConfirm: (memo: string, token?: string) => void | Promise<void>;
 }
 
 export const HighRiskConfirm = ({
@@ -72,6 +88,7 @@ export const HighRiskConfirm = ({
   rollbackTarget, requiredApproval,
   title, description,
   confirmToken, destructive, extra,
+  actionId, confirmEntity,
   onConfirm,
 }: HighRiskConfirmProps) => {
   const t = useT();
@@ -79,16 +96,67 @@ export const HighRiskConfirm = ({
   const [memo, setMemo] = useState("");
   const [typed, setTyped] = useState("");
 
+  // ---- v3 §6.2 confirm-token state ----
+  const v3Action = actionId ? getHighRiskAction(actionId) : undefined;
+  const useV3Token = !!v3Action;
+  const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [requiredPhrase, setRequiredPhrase] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [issuing, setIssuing] = useState(false);
+  const reqIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!open || !useV3Token) return;
+    const myReq = ++reqIdRef.current;
+    setIssuing(true);
+    const entityType = confirmEntity?.type ?? target?.type ?? "entity";
+    const entityId = confirmEntity?.id ?? target?.id ?? "—";
+    bff.commands.requestConfirmToken(
+      {
+        actionId: actionId!,
+        entityType,
+        entityId,
+        payloadHash: "mock",
+        tradingEnvironment: env,
+        platformEnvironment: "production",
+      },
+      { [`${entityType}Id`]: entityId },
+    ).then((r) => {
+      if (myReq !== reqIdRef.current) return;
+      if (r.ok) {
+        setIssuedToken(r.response.confirmToken);
+        setRequiredPhrase(r.response.requiredPhrase);
+        setExpiresAt(Date.parse(r.response.expiresAt));
+      }
+      setIssuing(false);
+    }).catch(() => setIssuing(false));
+  }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);
+
+  useEffect(() => {
+    if (!open || !expiresAt) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [open, expiresAt]);
+
   const op = operation ?? title ?? "action";
   const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
 
-  const tokenRequired = !!confirmToken || env === "live" || risk === "critical";
-  const token = confirmToken ?? op.toUpperCase();
+  const tokenRequired = useV3Token || !!confirmToken || env === "live" || risk === "critical";
+  const token = useV3Token
+    ? (requiredPhrase ?? "")
+    : (confirmToken ?? op.toUpperCase());
   const memoOk = memo.trim().length >= 8;
-  const tokenOk = !tokenRequired || typed === token;
-  const ok = memoOk && tokenOk;
+  const tokenOk = !tokenRequired || (typed === token && token.length > 0);
+  const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
+  const memoMaxOk = memo.length <= 500;
+  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && (!useV3Token || !!issuedToken);
+  const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
-  const reset = () => { setMemo(""); setTyped(""); };
+  const reset = () => {
+    setMemo(""); setTyped("");
+    setIssuedToken(null); setRequiredPhrase(null); setExpiresAt(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
@@ -175,14 +243,37 @@ export const HighRiskConfirm = ({
                 onChange={(e) => setMemo(e.target.value)}
                 placeholder={t("confirm.memoPlaceholder")}
                 rows={3}
+                maxLength={500}
               />
-              {!memoOk && <p className="text-xs text-muted-foreground">{t("confirm.memoHint")}</p>}
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{!memoOk ? t("confirm.memoHint") : ""}</span>
+                <span className={memo.length > 500 ? "text-destructive" : ""}>{memo.length}/500</span>
+              </div>
             </div>
 
             {tokenRequired && (
               <div className="space-y-1.5">
+                {useV3Token && issuing && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Requesting confirm token…
+                  </div>
+                )}
+                {useV3Token && issuedToken && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-mono text-muted-foreground">token: {issuedToken.slice(0, 12)}…</span>
+                    <span className={tokenExpired ? "text-destructive" : "text-status-warning"}>
+                      {tokenExpired ? "expired" : `TTL ${ttlSec}s`}
+                    </span>
+                  </div>
+                )}
                 <Label className="text-xs">{t("confirm.typeToConfirm", { token })}</Label>
-                <Input value={typed} onChange={(e) => setTyped(e.target.value)} className="text-mono" />
+                <Input
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  className="text-mono"
+                  disabled={useV3Token && (!issuedToken || tokenExpired)}
+                />
               </div>
             )}
           </div>
@@ -193,7 +284,11 @@ export const HighRiskConfirm = ({
           <Button
             variant={destructive || risk === "critical" ? "destructive" : "default"}
             disabled={!ok}
-            onClick={async () => { await onConfirm(memo); reset(); onOpenChange(false); }}
+            onClick={async () => {
+              await onConfirm(memo, issuedToken ?? undefined);
+              reset();
+              onOpenChange(false);
+            }}
           >
             {t("actions.confirm")}
           </Button>
