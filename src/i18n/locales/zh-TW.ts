@@ -1143,7 +1143,8 @@ export default {
     },
     mcp: {
       tabs: { schema: "Schema", secrets: "金鑰", audit: "稽核" },
-      schema: { input: "輸入 Schema", output: "輸出 Schema" },
+      schema: { input: "輸入 Schema", output: "輸出 Schema", sample: "呼叫範例" },
+      calls24h: "次呼叫/24h",
       secrets: { lastRotated: "上次輪替", rotate: "輪替", queued: "輪替已送出。", masked: "•••• •••• ••••" },
     },
     skill: {
