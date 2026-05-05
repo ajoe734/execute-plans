@@ -54,12 +54,11 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
   const reset = () => { setGrants(new Map(initial)); setDirty(new Set()); };
 
   const submit = async () => {
-    await runActionSafe({
-      kind: "PermissionMatrix",
-      id: matrix.instance,
-      action: "update_cells",
-      memo: `${dirty.size} cell(s) updated`,
+    const updates = Array.from(dirty).map((k) => {
+      const [rowId, colId] = k.split("|");
+      return { rowId, colId, grant: grants.get(k) ?? "none" };
     });
+    await bff.mutations.updatePermissionMatrix(matrix.instance, updates, `${dirty.size} cell(s) updated`);
     toast.success(t("governance.permission.submitted"));
     setDirty(new Set());
   };
