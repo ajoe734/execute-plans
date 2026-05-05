@@ -24,7 +24,12 @@ import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
-import { StrategyParamsEditor } from "@/management/components/detail/StrategyParamsEditor";
+import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
+import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
+import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
+import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
+import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
+import { Eye, BookOpen, User } from "lucide-react";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -42,6 +47,8 @@ export const StrategyDetail = () => {
   const [evolutions, setEvolutions] = useState<EvolutionProgram[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
+  const [watchers, setWatchers] = useState<Watcher[]>([]);
+  const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -49,7 +56,8 @@ export const StrategyDetail = () => {
       bff.strategies.get(id), bff.jobs.list(), bff.audit.list(),
       bff.approvals.list(), bff.alerts.list(), bff.incidents.list(),
       bff.artifacts.list(), bff.research.list(), bff.evolution.list(),
-    ]).then(([strat, j, a, ap, al, inc, ar, ex, ev]) => {
+      bff.watchers.forSubject("Strategy", id), bff.decisionJournal.forSubject("Strategy", id),
+    ]).then(([strat, j, a, ap, al, inc, ar, ex, ev, w, dj]) => {
       setS(strat); setJobs(j);
       setAudit(a.filter((x) => x.target === id || x.target.includes(id)));
       setApprovals(ap.filter((x) => x.subject.includes(id)));
@@ -58,6 +66,7 @@ export const StrategyDetail = () => {
       setArtifacts(ar.slice(0, 5));
       setExperiments(ex.slice(0, 6));
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
+      setWatchers(w); setJournal(dj);
     });
   }, [id]);
 
@@ -142,11 +151,30 @@ export const StrategyDetail = () => {
                   <StatCard label={t("table.sharpe")} value={s.sharpe.toFixed(2)} />
                   <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
                 </div>
+                <div className="grid gap-4 md:grid-cols-3 mt-4">
+                  <LinkedBlock
+                    icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.identity")}
+                    items={[{ id: s.owner, label: s.owner, meta: t("table.owner") }, ...s.personaIds.map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` }))]}
+                  />
+                  <LinkedBlock
+                    icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.watchers")}
+                    items={watchers.map((w) => ({ id: w.id, label: w.user, meta: new Date(w.since).toLocaleDateString() }))}
+                    emptyHint={t("empty.noResults")}
+                  />
+                  <LinkedBlock
+                    icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
+                    title={t("phase13.strategy.linked.journal")}
+                    items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${new Date(d.decidedAt).toLocaleDateString()}` }))}
+                    emptyHint={t("empty.noResults")}
+                  />
+                </div>
               </>
             ),
           },
 
-          // ── 2. Spec & Parameters ──
+          // ── 2. Spec & Parameters (versioned + lock) ──
           {
             value: "spec", label: t("strategyDetail.spec"),
             content: (
@@ -161,12 +189,12 @@ export const StrategyDetail = () => {
                     <Field label={t("strategyDetail.benchmark")} value="BTC-PERP buy-and-hold" />
                   </div>
                 </Section>
-                <Section title={t("strategyDetail.params")}>
-                  <StrategyParamsEditor strategy={s} initial={params} />
-                </Section>
+                <StrategySpecTab strategy={s} params={params} />
               </>
             ),
           },
+          { value: "dataFeatures", label: t("phase13.strategy.data.tab"), content: <StrategyDataFeaturesTab strategyId={s.id} /> },
+          { value: "performance", label: t("phase13.strategy.perf.tab"), content: <StrategyPerformanceTab strategyId={s.id} /> },
 
           // ── 3. Experiments ──
           {
