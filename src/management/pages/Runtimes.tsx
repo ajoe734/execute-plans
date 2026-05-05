@@ -11,7 +11,8 @@ import { useT } from "@/platform/hooks";
 import type { Runtime } from "@/lib/bff/types";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText } from "lucide-react";
+import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 
 const envTone = (e: Runtime["env"]) => {
   if (e === "live") return "bg-env-live-bg text-status-success border-status-success/30";
@@ -19,15 +20,17 @@ const envTone = (e: Runtime["env"]) => {
   return "bg-env-research-bg text-status-running border-status-running/30";
 };
 
-type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs";
+type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs" | "disable_new";
 
 export const RuntimesPage = () => {
   const t = useT();
   const [rows, setRows] = useState<Runtime[]>([]);
+  const [killTarget, setKillTarget] = useState<Runtime | null>(null);
   useEffect(() => { bff.runtimes.list().then(setRows); }, []);
 
   const run = async (r: Runtime, action: RuntimeAction) => {
-    const res = await mutations.runtimeAction(r.id, action, `from runtimes table`);
+    const mappedAction = action === "disable_new" ? "quarantine" : action;
+    const res = await mutations.runtimeAction(r.id, mappedAction, action === "disable_new" ? "disable_new_deployments" : `from runtimes table`);
     toast.success(t(`runtime.actions.${action}.toast`, { name: r.name }), { description: res.job?.id });
     bff.runtimes.list().then(setRows);
   };
@@ -61,14 +64,34 @@ export const RuntimesPage = () => {
                   <DropdownMenuItem onClick={() => run(r, "move")}><Move className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.move.label")}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => run(r, "scale")}><Maximize2 className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.scale.label")}</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => run(r, "disable_new")}><Ban className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.disable_new.label")}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => run(r, "quarantine")} className="text-status-warning"><ShieldAlert className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.quarantine.label")}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => run(r, "inspect_logs")}><ScrollText className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.inspect_logs.label")}</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setKillTarget(r)} className="text-destructive"><Skull className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.emergency_kill.label")}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) },
           ]}
         />
       </PageBody>
+      {killTarget && (
+        <HighRiskConfirm
+          open={!!killTarget}
+          onOpenChange={(o) => !o && setKillTarget(null)}
+          operation="runtime.emergency_kill"
+          target={{ type: "Runtime", id: killTarget.id, name: killTarget.name }}
+          risk="critical"
+          destructive
+          riskImpact={t("runtime.actions.emergency_kill.impact")}
+          confirmToken="KILL"
+          onConfirm={async (memo) => {
+            await mutations.emergencyKill({ kind: "Runtime", id: killTarget.id }, memo);
+            toast.success(t("runtime.actions.emergency_kill.toast", { name: killTarget.name }));
+            bff.runtimes.list().then(setRows);
+          }}
+        />
+      )}
     </>
   );
 };
