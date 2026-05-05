@@ -23,7 +23,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
 
   useEffect(() => {
     refresh();
-    const off = realtime.subscribe("data", (e: any) => {
+    const off = realtime.on("data", (e: any) => {
       if (e?.kind === "RebalanceStep" || e?.kind === "Job") refresh();
     });
     return off;
