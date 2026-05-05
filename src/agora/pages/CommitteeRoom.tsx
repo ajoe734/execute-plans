@@ -318,10 +318,15 @@ const CommitteeDetail = ({ session, personas, onBack, onUpdate }: {
             </Card>
             <Card className="p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("committee.evidence")}</div>
-              <ul className="text-mono text-xs space-y-1">
+              <ul className="text-mono text-xs space-y-1 mb-2">
                 {session.evidence.map((e, i) => <li key={i}>· {e}</li>)}
                 {session.evidence.length === 0 && <li className="text-muted-foreground">—</li>}
               </ul>
+              <EvidencePackUploader
+                sessionId={session.id}
+                existingCount={session.evidence.length}
+                onUploaded={(label) => setSessions((arr) => arr.map((s) => s.id === session.id ? { ...s, evidence: [...s.evidence, label] } : s))}
+              />
             </Card>
           </div>
 
