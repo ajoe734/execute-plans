@@ -24,6 +24,8 @@ usePlatform.subscribe((s) => {
 const delay = <T>(v: T, ms = 220) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
 export const bff = {
+  /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
+  getAcceptLanguage: acceptLanguage,
   mutations,
   strategies: {
     list: () => delay(seed.strategies),
