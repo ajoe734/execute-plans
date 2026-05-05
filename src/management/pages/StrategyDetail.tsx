@@ -203,6 +203,24 @@ export const StrategyDetail = () => {
             ),
           },
           { value: "dataFeatures", label: t("phase13.strategy.data.tab"), content: <StrategyDataFeaturesTab strategyId={s.id} /> },
+
+          // ── v3 §13 — Costs & Slippage ──
+          {
+            value: "costs", label: t("strategyDetail.costsTab", { defaultValue: "Costs & Slippage" }),
+            content: (
+              <Section title={t("strategyDetail.costsTab", { defaultValue: "Costs & Slippage" })}>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <StatCard label="Avg fee (bps)" value="3.2" hint="taker" />
+                  <StatCard label="Avg slippage (bps)" value="6.8" tone="warning" />
+                  <StatCard label="Funding (30d)" value={`${(s.pnl30d * 0.05 * 100).toFixed(2)}%`} />
+                  <StatCard label="Borrow cost (30d)" value="0.18%" />
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Mock cost decomposition. v3 §13 — Costs & Slippage tab.
+                </p>
+              </Section>
+            ),
+          },
           { value: "performance", label: t("phase13.strategy.perf.tab"), content: <StrategyPerformanceTab strategyId={s.id} /> },
 
           // ── 3. Experiments ──
