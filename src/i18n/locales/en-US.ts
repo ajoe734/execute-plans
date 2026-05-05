@@ -917,6 +917,14 @@ export default {
       detail: "Stage details",
       current: "Current",
     },
+    reduceAllocation: {
+      action: "Reduce allocation",
+      title: "Reduce allocation — {{name}}",
+      desc: "Lowers the live allocation share without rolling back the deployment. Risk and ops are notified via audit.",
+      current: "Current allocation",
+      target: "Target allocation",
+      queued: "Allocation reduced to {{pct}}%",
+    },
   },
   evolution: {
     resume: "Resume",
