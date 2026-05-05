@@ -839,6 +839,9 @@ export default {
       conviction: "信心", alpha: "Alpha", rationale: "理由",
       approve: "核准", reject: "駁回", flagReview: "標記複審",
       openDetail: "開啟詳情", selectSignal: "請選擇一筆訊號。",
+      confidence: "信心",
+      reasonPlaceholder: "原因（信心 ≥4 的不同意或任何標記可疑時必填）…",
+      agree: "同意", disagree: "不同意", flag: "標記可疑",
     },
     skillCoaching: {
       systemPrompt: "System Prompt", saveDraft: "儲存草稿",
