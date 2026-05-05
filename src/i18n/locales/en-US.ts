@@ -143,6 +143,11 @@ export default {
     notFound: "Oops! Page not found", returnHome: "Return to Home",
     densityComfortable: "Comfortable",
     addTitleFirst: "Add a title first",
+    contextAttachments: "Context attachments",
+    evidence: "Evidence",
+    noUpstreamExperiment: "No upstream experiment recorded.",
+    noArtifactsYet: "No artifacts produced yet.",
+    noDetailRoute: "No detail route registered for this id.",
   },
   permission: {
     requireAction: "Requires permission: {{action}}",
