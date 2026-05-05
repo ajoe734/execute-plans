@@ -592,6 +592,19 @@ export default {
     subscribersFmt: "{{n}} subscribers · filters: {{f}}",
   },
   filter: { pending: "Pending", all: "All" },
+  approval: {
+    sla: {
+      label: "SLA",
+      notStarted: "Not started",
+      remaining: "{{t}} left",
+      overdue: "Overdue {{t}}",
+      escalated: "Escalated",
+    },
+    stage: {
+      approve: "Approve stage",
+      reject: "Reject",
+    },
+  },
   lifecycle: {
     title: "Lifecycle",
     branch: "Branch state:",
