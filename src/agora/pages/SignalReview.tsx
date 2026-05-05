@@ -11,6 +11,13 @@ import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { toast } from "sonner";
+import {
+  validateSignalFeedback,
+  SIGNAL_FEEDBACK_ENDPOINT,
+  SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS,
+  type SignalConfidence,
+  type SignalDecision,
+} from "@/lib/v3/signalFeedback";
 
 interface Signal {
   id: string;
