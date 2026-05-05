@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
-import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
 import { Download } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
@@ -20,6 +20,9 @@ import { toast } from "sonner";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { RebalanceWorkflowTab } from "../components/detail/RebalanceWorkflowTab";
+import { MetricFreezeManager } from "../components/detail/MetricFreezeManager";
+import { OverrideManager } from "../components/detail/OverrideManager";
 
 // Map mock BaseObject lifecycle → rebalance state machine.
 const mapState = (s: string): RebalanceState => {
@@ -42,6 +45,7 @@ export const RebalanceDetail = () => {
   const [activeTr, setActiveTr] = useState<Transition<RebalanceState> | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [machineState, setMachineState] = useState<RebalanceState>("draft");
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -54,6 +58,7 @@ export const RebalanceDetail = () => {
     });
     bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("rebalance"))));
     bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action.startsWith("rebalance."))));
+    bff.strategies.list().then(setStrategies);
   }, [id]);
 
   const transitions = useMemo(
