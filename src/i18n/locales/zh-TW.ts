@@ -109,6 +109,7 @@ export default {
     cancel: "取消", confirm: "確認", save: "儲存",
     reset: "重設", proposeChange: "提出變更", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
     back: "返回", submitForReview: "送審",
+    open: "開啟", submitting: "送出中…",
   },
   confirm: {
     title: "高風險動作確認",
