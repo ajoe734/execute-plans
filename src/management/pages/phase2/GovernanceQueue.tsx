@@ -82,13 +82,7 @@ export const GovernanceQueuePage = () => {
             columns={[
               {
                 key: "sel",
-                header: (
-                  <Checkbox
-                    checked={selectedIds.length > 0 && selectedIds.length === filtered.filter((r) => r.state === "pending").length}
-                    onCheckedChange={toggleAll}
-                    aria-label="select all"
-                  />
-                ) as unknown as string,
+                header: "",
                 cell: (r) => (
                   <div onClick={(e) => e.stopPropagation()}>
                     <Checkbox
