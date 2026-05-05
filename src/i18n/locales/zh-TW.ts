@@ -897,6 +897,8 @@ export default {
       rebalanceFlow: "再平衡：凍結指標＋覆寫",
       incidentTriage: "事件：確認 → 緩解 → 解除",
       governanceGrant: "治理：權限授予＋路由政策發佈",
+      signalResearchHandoff: "信號審閱 → 研究任務生成",
+      skillSandboxApproval: "技能：草稿 → 沙箱 → 驗證 → 簽核",
     },
   },
   realtime: {
