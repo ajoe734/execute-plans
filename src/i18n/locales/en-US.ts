@@ -902,6 +902,11 @@ export default {
     lastEvent: "last",
     newUpdates: "{{count}} new update(s) — click to refresh",
     status: { live: "LIVE", stale: "STALE", offline: "OFFLINE" },
+    diagnostics: "QA: simulate connection state",
+    disconnect: "Disconnect",
+    reconnect: "Reconnect",
+    events: "Buffered",
+    topics: "Topics",
   },
   strategyDetail: {
     spec: "Spec & Parameters",
