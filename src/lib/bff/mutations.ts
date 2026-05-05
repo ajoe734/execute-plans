@@ -25,7 +25,12 @@ const snap = (v: unknown): string | undefined => {
 };
 
 let auditSeq = 1000;
-function pushAudit(action: string, target: string, memo?: string): AuditEvent {
+function pushAudit(
+  action: string,
+  target: string,
+  memo?: string,
+  extras?: { before?: string; after?: string; outcome?: "ok" | "rejected" },
+): AuditEvent {
   const ev: AuditEvent = {
     id: `au_${++auditSeq}`,
     actor: usePlatform.getState().role,
@@ -33,10 +38,14 @@ function pushAudit(action: string, target: string, memo?: string): AuditEvent {
     target,
     ts: new Date().toISOString(),
     ...(memo ? { memo } : {}),
+    ...(extras?.before ? { before: extras.before } : {}),
+    ...(extras?.after ? { after: extras.after } : {}),
+    ...(extras?.outcome ? { outcome: extras.outcome } : {}),
   } as AuditEvent;
   (seed.auditEvents as AuditEvent[]).unshift(ev);
   realtime.emit("audit", ev);
   realtime.emit("data", { kind: "audit" });
+  schedulePersist();
   return ev;
 }
 
