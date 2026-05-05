@@ -564,7 +564,9 @@ export default {
     noEvents: "No events yet.",
     noDescription: "No additional description.",
   },
-  page: {
+  audit: {
+    viewDiff: "View before/after",
+  },
     jobsSubtitle: "Live stream — {{count}} new event(s) since page load.",
     alertsSubtitle: "Real-time risk and runtime alerts. Acknowledge to claim ownership; escalate to incident if mitigation requires coordination.",
     incidentsSubtitle: "Coordinated mitigation for production-impacting events. Each incident has a commander and timeline.",
