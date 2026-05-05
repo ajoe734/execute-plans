@@ -61,7 +61,8 @@ export const SignalReview = () => {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [active, setActive] = useState<Signal | null>(null);
   const [comment, setComment] = useState("");
-  const [decided, setDecided] = useState<Record<string, "approved" | "rejected" | "flagged">>({});
+  const [confidence, setConfidence] = useState<SignalConfidence>(3);
+  const [decided, setDecided] = useState<Record<string, { decision: SignalDecision; confidence: SignalConfidence; at: number }>>({});
 
   useEffect(() => {
     bff.strategies.list().then((s) => {
@@ -71,9 +72,19 @@ export const SignalReview = () => {
     });
   }, []);
 
-  const decide = (id: string, d: "approved" | "rejected" | "flagged") => {
-    setDecided((m) => ({ ...m, [id]: d }));
-    toast.success(`signal_feedback (${d}) captured`);
+  const decide = (id: string, decision: SignalDecision) => {
+    const req = { signalId: id, decision, confidence, reason: comment || undefined };
+    const errs = validateSignalFeedback(req);
+    if (errs.length) {
+      toast.error(t(`signal.feedback.error.${errs[0].code}`) || errs[0].code);
+      return;
+    }
+    // POST to v3 §16 endpoint (mock).
+    void fetch(SIGNAL_FEEDBACK_ENDPOINT(id), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req),
+    }).catch(() => {/* mocked BFF */});
+    setDecided((m) => ({ ...m, [id]: { decision, confidence, at: Date.now() } }));
+    toast.success(`signal_feedback ${decision} · conf ${confidence}/5 · editable ${SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS}s`);
     setComment("");
   };
 
