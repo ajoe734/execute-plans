@@ -56,9 +56,7 @@ export const GovernanceReview = () => {
     const mapState: Record<Decision, ApprovalRequest["state"]> = {
       approve: "approved", reject: "rejected", request_changes: "pending", escalate: "pending", freeze: "pending",
     };
-    if (d === "approve") await bff.mutations.approve(req.id, memo);
-    else if (d === "reject") await bff.mutations.reject(req.id, memo);
-    else await runActionSafe({ kind: "Approval", id: req.id, action: d, memo });
+    await bff.mutations.decideApproval(req.id, d, memo);
     setReq({ ...req, state: mapState[d] });
     toast.success(`${t(`governance.decision.${d}`)} — ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`);
   };
