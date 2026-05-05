@@ -94,7 +94,7 @@ export const SkillCoaching = () => {
                 onChange={(e) => updateActive({ systemPrompt: e.target.value })}
                 className="min-h-[100px] text-mono text-xs"
               />
-              <div className="flex justify-end gap-2 mt-2">
+              <div className="flex justify-end gap-2 mt-2 flex-wrap">
                 <Button size="sm" variant="outline" onClick={() => openHandoff({
                   type: "skill_draft",
                   source: { kind: "SkillDraft", id: active.id, label: active.name },
@@ -102,7 +102,12 @@ export const SkillCoaching = () => {
                   evidence: active.examples.map((e) => `${e.prompt} → ${e.expected.slice(0, 40)}…`),
                   priority: "normal",
                 })}><ArrowRight className="h-4 w-4 mr-1" />{t("handoff.heading", { defaultValue: "Hand off" })}</Button>
-                <Button size="sm" variant="outline" onClick={() => toast.success("Skill draft saved")}>{t("agora.skillCoaching.saveDraft")}</Button>
+                <Button size="sm" variant="outline" onClick={() => toast.success(t("agora.skillCoaching.draftSaved", { defaultValue: "Skill draft saved" }))}>{t("agora.skillCoaching.saveDraft")}</Button>
+                <Button size="sm" onClick={submitForApproval} disabled={submitting}>
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  {submitting ? t("actions.submitting", { defaultValue: "Submitting…" })
+                              : t("agora.skillCoaching.sendForApproval", { defaultValue: "Send for approval" })}
+                </Button>
               </div>
             </Card>
 
