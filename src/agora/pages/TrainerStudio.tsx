@@ -64,7 +64,38 @@ const TrainerOverview = () => {
   const t = useT();
   const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackItem[]>(seedFeedback);
+  const [activeFb, setActiveFb] = useState<FeedbackItem | null>(seedFeedback[0]);
   useEffect(() => { bff.personas.list().then(setPersonas); }, []);
+
+  const counts = FEEDBACK_SOURCES.reduce<Record<FeedbackSource, number>>((acc, s) => {
+    acc[s] = feedback.filter((f) => f.source === s).length;
+    return acc;
+  }, {} as Record<FeedbackSource, number>);
+
+  const triage = async (item: FeedbackItem, action: string) => {
+    if (action === "submitPersonaUpdate") {
+      const res = await mutations.createApproval({
+        kind: "persona_update",
+        subject: `Persona update from feedback (${item.persona})`,
+        rationale: item.summary,
+        diffSummary: item.evidence,
+        riskLevel: "medium",
+        stages: [
+          { name: "trainer_lead", slaHours: 8 },
+          { name: "risk_review", slaHours: 12 },
+        ],
+      });
+      toast.success(t("agora.trainerStudio.toasts.personaUpdateSubmitted"), {
+        description: res.approval.id,
+        action: { label: "Open", onClick: () => navigate(`/management/approvals/${res.approval.id}`) },
+      });
+    } else {
+      toast.success(t(`agora.trainerStudio.toasts.${action}`));
+    }
+    setFeedback((prev) => prev.filter((f) => f.id !== item.id));
+    setActiveFb((cur) => (cur?.id === item.id ? null : cur));
+  };
 
   return (
     <>
@@ -76,12 +107,13 @@ const TrainerOverview = () => {
             <p className="text-xs text-muted-foreground">{t("agora.trainerStudio.subtitle")}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-          {sources.map((s) => (
-            <div key={s.kind} className="rounded-md border border-border p-3">
-              <div className="text-mono text-[10px] uppercase tracking-wider text-muted-foreground">{s.kind}</div>
-              <div className="text-2xl text-mono font-semibold mt-1">{s.count}</div>
-              <div className="text-[10px] text-muted-foreground">{s.period}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mt-4">
+          {FEEDBACK_SOURCES.map((s) => (
+            <div key={s} className="rounded-md border border-border p-2">
+              <div className="text-mono text-[9px] uppercase tracking-wider text-muted-foreground line-clamp-2 leading-tight min-h-[24px]">
+                {t(`agora.trainerStudio.sources.${s}`)}
+              </div>
+              <div className="text-xl text-mono font-semibold mt-1">{counts[s] ?? 0}</div>
             </div>
           ))}
         </div>
@@ -89,8 +121,59 @@ const TrainerOverview = () => {
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Train a specific persona</h3>
-          <Badge variant="outline" className="text-[10px]">{personas.length} personas</Badge>
+          <div>
+            <h3 className="font-semibold text-sm">{t("agora.trainerStudio.feedbackQueue")}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("agora.trainerStudio.feedbackQueueHint")}</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{feedback.length}</Badge>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+          <div className="lg:col-span-2 space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {feedback.length === 0 && <div className="text-sm text-muted-foreground text-center p-6">{t("agora.trainerStudio.queueEmpty")}</div>}
+            {feedback.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setActiveFb(f)}
+                className={`w-full text-left rounded-md border p-2.5 transition ${activeFb?.id === f.id ? "border-accent bg-accent/5" : "border-border hover:bg-muted/40"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[9px] uppercase">{t(`agora.trainerStudio.sources.${f.source}`)}</Badge>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{f.persona}</span>
+                </div>
+                <p className="text-xs mt-1.5 line-clamp-2">{f.summary}</p>
+              </button>
+            ))}
+          </div>
+          <div className="lg:col-span-3">
+            {activeFb ? (
+              <div className="rounded-md border border-border p-4 h-full flex flex-col">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-[10px]">{t(`agora.trainerStudio.sources.${activeFb.source}`)}</Badge>
+                  <span className="text-mono text-[10px] text-muted-foreground">{activeFb.persona}</span>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(activeFb.capturedAt).toLocaleString()}</span>
+                </div>
+                <p className="text-sm">{activeFb.summary}</p>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">Evidence</div>
+                <p className="text-xs bg-muted/40 rounded-md p-2.5 leading-relaxed">{activeFb.evidence}</p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {(["accept","createExample","createEvalCase","updateRule","submitPersonaUpdate","markDuplicate","archive","reject"] as const).map((a) => (
+                    <Button key={a} size="sm" variant={a === "submitPersonaUpdate" ? "default" : a === "reject" ? "ghost" : "outline"} onClick={() => triage(activeFb, a)}>
+                      {t(`agora.trainerStudio.actions.${a}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground text-sm p-12">{t("agora.trainerStudio.selectFeedback")}</div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm">{t("agora.trainerStudio.trainPersona")}</h3>
+          <Badge variant="outline" className="text-[10px]">{personas.length} {t("agora.trainerStudio.personas")}</Badge>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
           {personas.map((p) => (
@@ -122,11 +205,11 @@ const TrainerOverview = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-sm">{q.title}</h4>
+                    <h4 className="font-semibold text-sm">{t(`agora.trainerStudio.queues.${q.key}.title`)}</h4>
                     <Badge variant="outline" className="text-[10px]">{q.count}</Badge>
                     <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{q.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t(`agora.trainerStudio.queues.${q.key}.desc`)}</p>
                 </div>
               </div>
             </Card>
