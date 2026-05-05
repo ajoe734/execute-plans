@@ -379,6 +379,7 @@ export default {
       reject: "Batch reject",
       done: "{{n}} request(s) processed",
     },
+    policies: {
       title: "Route Policies",
       subtitle: "Persona → tool/MCP/skill routing rules with versioning and approvals.",
     },
