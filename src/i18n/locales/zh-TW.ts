@@ -752,6 +752,18 @@ export default {
     persistSnapshotDone: "持久化快照已寫入",
     persistReset: "重設持久化",
     persistResetDone: "持久化已清除 — 重新載入中…",
+    realtimeTitle: "即時通道模擬器",
+    realtimeDesc: "切換 mock realtime 匯流排以模擬斷線／重連。頁面應切換為 stale/offline 指示，重連時自動再同步。",
+    realtimeDisconnect: "斷線",
+    realtimeReconnect: "重連",
+    realtimeDisconnected: "Realtime 已斷線",
+    realtimeReconnected: "Realtime 已重連",
+  },
+  realtime: {
+    title: "即時活動",
+    lastEvent: "上次",
+    newUpdates: "有 {{count}} 筆新更新 — 點擊重新整理",
+    status: { live: "即時", stale: "停滯", offline: "離線" },
   },
   strategyDetail: {
     spec: "規格與參數",

@@ -5,13 +5,14 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Wifi, WifiOff } from "lucide-react";
+import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User } from "lucide-react";
 import { usePlatform, type Locale, type UserRole } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { bff } from "@/lib/bff/client";
 import { useNotificationCenter } from "./NotificationCenter";
+import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 
 const roles: UserRole[] = [
   "admin", "research_lead", "risk_officer", "capital_manager",
@@ -24,7 +25,7 @@ export const TopBar = () => {
   const navigate = useNavigate();
   const loc = useLocation();
   const isManagement = loc.pathname.startsWith("/management");
-  const { locale, setLocale, role, setRole, bffOnline } = usePlatform();
+  const { locale, setLocale, role, setRole } = usePlatform();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
 
@@ -107,12 +108,8 @@ export const TopBar = () => {
         <Button variant="ghost" size="icon" title={t("topbar.notifications")} onClick={() => useNotificationCenter.getState().setOpen(true)}><Bell className="h-4 w-4" /></Button>
       </div>
 
-      {/* BFF status */}
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
-        {bffOnline ? <Wifi className="h-3.5 w-3.5 text-status-success" /> : <WifiOff className="h-3.5 w-3.5 text-status-failed" />}
-        <span className="text-mono">{t("topbar.bff")}</span>
-        <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse-dot" title={t("topbar.realtime")} />
-      </div>
+      {/* Realtime / BFF status */}
+      <RealtimeStatusBadge />
 
       {/* Locale */}
       <DropdownMenu>

@@ -21,7 +21,7 @@ export const ToolsList = () => {
     <ObjectListPage
       title={t("nav.tools")}
       loader={() => bff.tools.list()}
-      basePath="/management/tools"
+      basePath="/management/tools" liveKinds={["Tool"]}
       extraColumns={[
         { key: "cat", header: t("table.category"), cell: (r) => <span className="text-xs tracking-wide text-muted-foreground">{r.category}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
@@ -38,7 +38,7 @@ export const McpServersList = () => {
     <ObjectListPage
       title={t("nav.mcp")}
       loader={() => bff.mcpServers.list()}
-      basePath="/management/mcp"
+      basePath="/management/mcp" liveKinds={["McpServer","McpSecret"]}
       extraColumns={[
         { key: "ep", header: t("table.endpoint"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.endpoint}</span> },
         { key: "rg", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{r.region}</span> },
@@ -61,7 +61,7 @@ export const SkillsList = () => {
     <ObjectListPage
       title={t("nav.skills")}
       loader={() => bff.skills.list()}
-      basePath="/management/skills"
+      basePath="/management/skills" liveKinds={["Skill"]}
       extraColumns={[
         { key: "arch", header: "Archetype", cell: (r) => r.archetype },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
@@ -79,7 +79,7 @@ export const ChannelsList = () => {
     <ObjectListPage
       title={t("nav.channels")}
       loader={() => bff.channels.list()}
-      basePath="/management/channels"
+      basePath="/management/channels" liveKinds={["Channel"]}
       extraColumns={[
         { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs tracking-wide">{r.kind}</span> },
         { key: "dst", header: t("table.destination"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.destination}</span> },

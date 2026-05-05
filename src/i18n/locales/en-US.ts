@@ -760,6 +760,18 @@ export default {
     persistSnapshotDone: "Persistence snapshot written",
     persistReset: "Reset persistence",
     persistResetDone: "Persistence cleared — reloading…",
+    realtimeTitle: "Realtime simulator",
+    realtimeDesc: "Toggle the mock realtime bus to simulate disconnect/reconnect. Pages should switch to a stale/offline indicator and resync on reconnect.",
+    realtimeDisconnect: "Disconnect",
+    realtimeReconnect: "Reconnect",
+    realtimeDisconnected: "Realtime disconnected",
+    realtimeReconnected: "Realtime reconnected",
+  },
+  realtime: {
+    title: "Realtime activity",
+    lastEvent: "last",
+    newUpdates: "{{count}} new update(s) — click to refresh",
+    status: { live: "LIVE", stale: "STALE", offline: "OFFLINE" },
   },
   strategyDetail: {
     spec: "Spec & Parameters",
