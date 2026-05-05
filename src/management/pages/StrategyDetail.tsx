@@ -28,6 +28,7 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
+import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
 import { Eye, BookOpen, User } from "lucide-react";
