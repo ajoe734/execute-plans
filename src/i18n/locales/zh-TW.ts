@@ -904,6 +904,14 @@ export default {
       detail: "階段詳情",
       current: "目前",
     },
+    reduceAllocation: {
+      action: "降低配置",
+      title: "降低配置 — {{name}}",
+      desc: "降低 Live 配置占比但不回滾部署。風控與營運將透過審計被通知。",
+      current: "目前配置",
+      target: "目標配置",
+      queued: "配置已調整為 {{pct}}%",
+    },
   },
   evolution: {
     resume: "恢復",
