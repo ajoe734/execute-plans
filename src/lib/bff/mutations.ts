@@ -16,6 +16,12 @@ import { usePlatform } from "@/platform/store";
 import { machines, type MachineKey } from "@/lib/stateMachines";
 import { findTransition } from "@/lib/stateMachines/types";
 import { schedulePersist } from "./persistence";
+import {
+  issueConfirmToken,
+  type ConfirmTokenRequest,
+  type ConfirmTokenResponse,
+  getHighRiskAction,
+} from "@/lib/v3/highRiskActions";
 
 const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
