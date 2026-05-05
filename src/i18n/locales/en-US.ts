@@ -385,6 +385,7 @@ export default {
     postmortemDraft: "Postmortem draft",
     postmortemPlaceholder: "Summarize root cause, impact, mitigation, and follow-up actions…",
     postmortemRequired: "High-severity incidents require a ≥20-character postmortem before closing.",
+    postmortem: { add: "Add postmortem", appended: "Postmortem note appended" },
     createTrainingFeedback: "Create training feedback",
     createEvolutionConstraint: "Create evolution constraint",
     feedbackQueued: "Training feedback queued",
