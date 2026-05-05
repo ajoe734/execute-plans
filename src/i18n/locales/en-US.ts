@@ -1156,7 +1156,8 @@ export default {
     },
     mcp: {
       tabs: { schema: "Schema", secrets: "Secrets", audit: "Audit" },
-      schema: { input: "Input schema", output: "Output schema" },
+      schema: { input: "Input schema", output: "Output schema", sample: "Sample call" },
+      calls24h: "calls 24h",
       secrets: { lastRotated: "Last rotated", rotate: "Rotate", queued: "Rotation queued.", masked: "•••• •••• ••••" },
     },
     skill: {
