@@ -25,6 +25,12 @@ import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategyParamsEditor } from "@/management/components/detail/StrategyParamsEditor";
+import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
+import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
+import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
+import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
+import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
+import { Eye, BookOpen, User } from "lucide-react";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
