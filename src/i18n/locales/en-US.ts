@@ -745,7 +745,15 @@ export default {
   },
   ranking: { expression: "Expression" },
   research: { rerun: "Re-run" },
-  qa: { markAll: "Mark all", reset: "Reset" },
+  qa: {
+    markAll: "Mark all", reset: "Reset",
+    persistTitle: "Mock BFF Persistence",
+    persistDesc: "Mutations made in the mock console (state transitions, audit events, governance changes) are snapshotted to localStorage. Snapshot now to force-write, or reset to clear and reload from seed.",
+    persistSnapshot: "Snapshot now",
+    persistSnapshotDone: "Persistence snapshot written",
+    persistReset: "Reset persistence",
+    persistResetDone: "Persistence cleared — reloading…",
+  },
   strategyDetail: {
     spec: "Spec & Parameters",
     specTitle: "Strategy specification",

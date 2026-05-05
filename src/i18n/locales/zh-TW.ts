@@ -737,7 +737,15 @@ export default {
   },
   ranking: { expression: "公式" },
   research: { rerun: "重新執行" },
-  qa: { markAll: "全部勾選", reset: "重設" },
+  qa: {
+    markAll: "全部勾選", reset: "重設",
+    persistTitle: "Mock BFF 持久化",
+    persistDesc: "模擬主控台的所有變更（狀態轉移、審計事件、治理變更）都會快照到 localStorage。立即快照可強制寫入；重設可清除並從種子重新載入。",
+    persistSnapshot: "立即快照",
+    persistSnapshotDone: "持久化快照已寫入",
+    persistReset: "重設持久化",
+    persistResetDone: "持久化已清除 — 重新載入中…",
+  },
   strategyDetail: {
     spec: "規格與參數",
     specTitle: "策略規格",
