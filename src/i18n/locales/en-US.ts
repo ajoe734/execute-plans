@@ -1109,7 +1109,7 @@ export default {
     strategy: {
       spec: { lock: "Lock parameters", unlock: "Unlock", locked: "Parameters locked", unlocked: "Parameters unlocked", versionPanel: "Version comparison" },
       data: { tab: "Data & Features", empty: "No feature sets registered.", upstream: "Upstream", freshness: "Freshness", missing: "Missing %" },
-      perf: { tab: "Performance", day: "Daily", week: "Weekly", month: "Monthly", vsBenchmark: "vs Benchmark" },
+      perf: { tab: "Performance", day: "Daily", week: "Weekly", month: "Monthly", vsBenchmark: "vs Benchmark", showBenchmark: "Show benchmark", benchmark: "Benchmark" },
       linked: { identity: "Identity", watchers: "Watchers", journal: "Decision Journal" },
     },
     capital: {
