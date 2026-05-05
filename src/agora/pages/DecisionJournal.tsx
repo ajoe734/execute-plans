@@ -200,6 +200,30 @@ export const DecisionJournal = () => {
                     {d.tags.map((tg) => <Badge key={tg} variant="outline" className="text-[10px]">{tg}</Badge>)}
                   </div>
                 )}
+
+                <div className="mt-4 pt-3 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.decisionJournal.followUp")}</div>
+                      <div className="text-[11px] text-muted-foreground">{t("agora.decisionJournal.followUpHint")}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      {(["good","neutral","bad"] as const).map((o) => (
+                        <Button key={o} size="sm" variant={d.outcome === o ? "default" : "outline"}
+                          onClick={() => {
+                            setDecisions((all) => all.map((x) => x.id === d.id ? { ...x, outcome: o } : x));
+                            toast.success(t("agora.decisionJournal.outcomeSaved"));
+                          }}>
+                          {t(`agora.decisionJournal.outcome${o.charAt(0).toUpperCase()}${o.slice(1)}`)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <Textarea rows={2} placeholder={t("agora.decisionJournal.reflectionPh")}
+                    value={d.reflection ?? ""}
+                    onChange={(e) => setDecisions((all) => all.map((x) => x.id === d.id ? { ...x, reflection: e.target.value } : x))} />
+                </div>
+
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
                   {r && (
                     <>
@@ -214,7 +238,7 @@ export const DecisionJournal = () => {
                   <Button size="sm" variant="outline" onClick={() => openHandoff({
                     type: "insight",
                     source: { kind: "Decision", id: d.id, label: d.title },
-                    summary: d.title, notes: `${d.context}\n\nDecision: ${d.decision}\nRationale: ${d.rationale}`,
+                    summary: d.title, notes: `${d.context}\n\nDecision: ${d.decision}\nRationale: ${d.rationale}${d.reflection ? `\n\nReflection: ${d.reflection}` : ""}`,
                   })}><Send className="h-4 w-4 mr-1" />{t("agora.decisionJournal.handoff")}</Button>
                 </div>
               </Card>
