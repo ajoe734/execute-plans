@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
-import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown, ArrowRight } from "lucide-react";
+import { Sparkles, Plus, Send, ThumbsUp, ThumbsDown, ArrowRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useHandoff } from "@/lib/handoff";
+import { mutations } from "@/lib/bff/mutations";
+import { useNavigate } from "react-router-dom";
 
 interface CoachingExample {
   id: string;
@@ -48,11 +50,13 @@ const seed: SkillDraft[] = [
 
 export const SkillCoaching = () => {
   const t = useT();
+  const navigate = useNavigate();
   const openHandoff = useHandoff((s) => s.openHandoff);
   const [drafts, setDrafts] = useState<SkillDraft[]>(seed);
   const [activeId, setActiveId] = useState(seed[0].id);
   const [newPrompt, setNewPrompt] = useState("");
   const [newExpected, setNewExpected] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const active = drafts.find((d) => d.id === activeId)!;
   const updateActive = (patch: Partial<SkillDraft>) =>
@@ -69,6 +73,33 @@ export const SkillCoaching = () => {
 
   const rate = (exId: string, rating: "good" | "bad") =>
     updateActive({ examples: active.examples.map((e) => (e.id === exId ? { ...e, rating } : e)) });
+
+  /** Phase 20 — Scenario F: Skill draft → Management approval (real). */
+  const submitForApproval = async () => {
+    if (active.examples.length === 0) {
+      toast.error(t("agora.skillCoaching.needExamples", { defaultValue: "Add at least one example before submitting." }));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const r = await mutations.createApproval({
+        kind: "skill.publish",
+        subject: `skill: ${active.name} (${active.archetype})`,
+        rationale: active.systemPrompt.slice(0, 240),
+        diffSummary: `${active.examples.length} training example(s) attached`,
+        riskLevel: active.archetype === "RedTeam" ? "high" : "medium",
+        stages: [
+          { name: "trainer-lead", slaHours: 12 },
+          { name: "capability-admin", slaHours: 24, escalateTo: "committee" },
+        ],
+      });
+      toast.success(t("agora.skillCoaching.approvalCreated", { defaultValue: "Approval request created" }), {
+        description: r.approval.id,
+        action: { label: t("actions.open", { defaultValue: "Open" }),
+          onClick: () => navigate(`/management/governance/${r.approval.id}`) },
+      });
+    } finally { setSubmitting(false); }
+  };
 
   return (
     <>
@@ -92,7 +123,7 @@ export const SkillCoaching = () => {
                 onChange={(e) => updateActive({ systemPrompt: e.target.value })}
                 className="min-h-[100px] text-mono text-xs"
               />
-              <div className="flex justify-end gap-2 mt-2">
+              <div className="flex justify-end gap-2 mt-2 flex-wrap">
                 <Button size="sm" variant="outline" onClick={() => openHandoff({
                   type: "skill_draft",
                   source: { kind: "SkillDraft", id: active.id, label: active.name },
@@ -100,7 +131,12 @@ export const SkillCoaching = () => {
                   evidence: active.examples.map((e) => `${e.prompt} → ${e.expected.slice(0, 40)}…`),
                   priority: "normal",
                 })}><ArrowRight className="h-4 w-4 mr-1" />{t("handoff.heading", { defaultValue: "Hand off" })}</Button>
-                <Button size="sm" variant="outline" onClick={() => toast.success("Skill draft saved")}>{t("agora.skillCoaching.saveDraft")}</Button>
+                <Button size="sm" variant="outline" onClick={() => toast.success(t("agora.skillCoaching.draftSaved", { defaultValue: "Skill draft saved" }))}>{t("agora.skillCoaching.saveDraft")}</Button>
+                <Button size="sm" onClick={submitForApproval} disabled={submitting}>
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  {submitting ? t("actions.submitting", { defaultValue: "Submitting…" })
+                              : t("agora.skillCoaching.sendForApproval", { defaultValue: "Send for approval" })}
+                </Button>
               </div>
             </Card>
 

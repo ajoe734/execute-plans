@@ -96,7 +96,7 @@ const App = () => (
               <Route path="overview" element={<ManagementOverview />} />
               <Route path="command-center" element={<CommandCenter />} />
               <Route path="risk-center" element={<RiskCenter />} />
-              <Route path="risk" element={<Navigate to="/management/risk-center" replace />} />
+              <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
@@ -139,6 +139,8 @@ const App = () => (
               <Route path="hooks" element={<HookCronManagerPage />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
+              <Route path="deployment" element={<DeploymentsList />} />
+              <Route path="deployment/:id" element={<DeploymentDetail />} />
               <Route path="runtimes" element={<RuntimesPage />} />
               <Route path="jobs" element={<JobsPage />} />
               <Route path="alerts" element={<AlertsPage />} />

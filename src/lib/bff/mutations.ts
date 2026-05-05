@@ -6,7 +6,7 @@
 import * as seed from "@/mocks/seed";
 import type {
   AuditEvent, ApprovalRequest, Incident, Alert,
-  LifecycleState, Strategy, Job,
+  LifecycleState, Strategy, Job, RiskLevel,
   MetricFreeze, RebalanceOverride, PromotionRecord, McpSecret,
   AllocationLimit, PoolFreeze, DeploymentStage,
 } from "./types";
@@ -207,6 +207,49 @@ export const mutations = {
     realtime.emit("data", { kind: "Approval" });
     const audit = pushAudit("approval.reject", id, memo);
     return delay({ ok: true, audit });
+  },
+
+  /** Phase 20 — create a new approval request from an Agora handoff
+   *  (skill draft, persona update, mcp tool grant, etc.). The new request
+   *  lands in the Governance queue with structured stages, surfaces in
+   *  Command Center "incoming items", and writes a discoverable audit. */
+  createApproval(input: {
+    kind: string;
+    subject: string;
+    rationale?: string;
+    diffSummary?: string;
+    riskLevel?: RiskLevel;
+    stages?: { name: string; slaHours: number; escalateTo?: string }[];
+    handoffId?: string;
+  }): Promise<MutationResult & { approval: ApprovalRequest }> {
+    const stages = (input.stages ?? [{ name: "reviewer", slaHours: 12 }]).map((s, i) => ({
+      name: s.name,
+      state: "pending" as const,
+      slaHours: s.slaHours,
+      escalateTo: s.escalateTo,
+      startedAt: i === 0 ? new Date().toISOString() : undefined,
+    }));
+    const req: ApprovalRequest = {
+      id: `ap_${Date.now().toString(36)}`,
+      kind: input.kind,
+      subject: input.subject,
+      requester: usePlatform.getState().role,
+      state: "pending",
+      riskLevel: input.riskLevel ?? "medium",
+      createdAt: new Date().toISOString(),
+      rationale: input.rationale,
+      diffSummary: input.diffSummary,
+      requiresStages: stages.map((s) => s.name),
+      stages,
+    };
+    (seed.approvals as ApprovalRequest[]).unshift(req);
+    realtime.emit("data", { kind: "Approval" });
+    const audit = pushAudit(
+      "approval.create", req.id,
+      input.handoffId ? `from handoff ${input.handoffId}: ${input.subject}` : input.subject,
+      { after: snap(req), outcome: "ok" },
+    );
+    return delay({ ok: true, audit, approval: req });
   },
 
   acknowledgeAlert(id: string, memo?: string): Promise<MutationResult> {
