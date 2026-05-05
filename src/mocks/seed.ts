@@ -6,6 +6,9 @@ import type {
   RoutePolicy, PolicyVersion, PermissionMatrix, MemoryUpdate, ConsultRule,
   EvolutionRun, EvolutionCandidate, FitnessFormula, MutationRule,
   AllocationSimulation,
+  PolicyViolation, EvaluationRun, ObjectVersion, FeatureSet, PerformanceSeries,
+  Watcher, DecisionJournalEntry, AllocationLimit, PoolFreeze, DeploymentStage,
+  McpSecret, PromotionRecord, MetricFreeze, RebalanceOverride,
 } from "@/lib/bff/types";
 
 const now = () => new Date().toISOString();
