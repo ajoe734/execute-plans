@@ -115,6 +115,9 @@ export const PersonaDetail = () => {
             value: "memory", label: t("persona.tabs.training"),
             content: <MemoryGovernanceQueue personaId={p.id} />,
           },
+          { value: "violations", label: t("phase13.persona.tabs.violations"), content: <PersonaPolicyViolationsTab personaId={p.id} /> },
+          { value: "evaluations", label: t("phase13.persona.tabs.evaluations"), content: <PersonaEvaluationsTab personaId={p.id} /> },
+          { value: "versions", label: t("phase13.persona.tabs.versions"), content: <PersonaVersionHistoryTab personaId={p.id} /> },
           {
             value: "audit", label: t("nav.audit"),
             content: (
