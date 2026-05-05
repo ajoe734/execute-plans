@@ -656,6 +656,91 @@ export const mutations = {
     return delay({ ok: true, audit, feedbackId: fid });
   },
 
+  /** Phase P2 — Recalculate / freeze / publish / override / compare ranking. */
+  rankingAction(
+    scope: "persona" | "strategy" | "alphaFamily" | "capitalPool" | "paper" | "live",
+    action: "recalculate" | "freeze" | "publish" | "override" | "compare",
+    memo?: string,
+  ): Promise<MutationResult & { job?: Job }> {
+    const job = action === "compare" || action === "recalculate" ? queueMockJob(`ranking.${scope}.${action}`) : undefined;
+    realtime.emit("data", { kind: "Ranking" });
+    const audit = pushAudit(`ranking.${action}`, `ranking:${scope}`, memo, { outcome: "ok" });
+    return delay({ ok: true, audit, job, message: `${action} ${scope}` });
+  },
+
+  /** Phase P2 — Switch active ranking formula version (high-risk). */
+  setActiveRankingFormula(formulaId: string, memo?: string): Promise<MutationResult> {
+    const audit = pushAudit("ranking.formula.set_active", formulaId, memo, { outcome: "ok" });
+    realtime.emit("data", { kind: "RankingFormula" });
+    return delay({ ok: true, audit, message: `Active formula → ${formulaId}` });
+  },
+
+  /** Phase P2 — Append a mitigation step to an incident. */
+  appendIncidentMitigation(incidentId: string, content: string): Promise<MutationResult> {
+    const inc = findById(seed.incidents, incidentId);
+    if (inc) {
+      inc.timeline = [
+        ...(inc.timeline ?? []),
+        { ts: new Date().toISOString(), actor: usePlatform.getState().role, note: `[mitigation] ${content.slice(0, 120)}` },
+      ];
+    }
+    realtime.emit("data", { kind: "Incident" });
+    const audit = pushAudit("incident.mitigation.add", incidentId, content.slice(0, 80), { outcome: "ok" });
+    return delay({ ok: true, audit });
+  },
+
+  /** Phase P2 — Create an evolution constraint sourced from an incident. */
+  createEvolutionConstraint(incidentId: string, content: string): Promise<MutationResult & { constraintId: string }> {
+    const cid = `ec_${Date.now().toString(36)}`;
+    const inc = findById(seed.incidents, incidentId);
+    if (inc) {
+      inc.timeline = [
+        ...(inc.timeline ?? []),
+        { ts: new Date().toISOString(), actor: usePlatform.getState().role, note: `[constraint ${cid}] ${content.slice(0, 80)}` },
+      ];
+    }
+    realtime.emit("data", { kind: "Incident" });
+    const audit = pushAudit("incident.constraint.create", incidentId, content.slice(0, 80), { outcome: "ok" });
+    return delay({ ok: true, audit, constraintId: cid });
+  },
+
+  /** Phase P2 — Schedule a deployment for a future window. */
+  scheduleDeployment(deploymentId: string, when: string, memo?: string): Promise<MutationResult> {
+    const audit = pushAudit("deployment.schedule", deploymentId, memo ?? when, { outcome: "ok" });
+    realtime.emit("data", { kind: "Deployment" });
+    return delay({ ok: true, audit, message: `Scheduled for ${when}` });
+  },
+
+  /** Phase P2 — Persona ops: test, run-eval, restrict tools. */
+  personaOps(personaId: string, op: "test" | "run_eval" | "restrict_tools", memo?: string): Promise<MutationResult & { job?: Job }> {
+    const job = op === "test" ? undefined : queueMockJob(`persona.${op}`);
+    const audit = pushAudit(`persona.${op}`, personaId, memo, { outcome: "ok" });
+    realtime.emit("data", { kind: "Persona" });
+    return delay({ ok: true, audit, job });
+  },
+
+  /** Phase P2 — Publish rebalance report. */
+  publishRebalanceReport(rebalanceId: string, memo?: string): Promise<MutationResult> {
+    const audit = pushAudit("rebalance.publish_report", rebalanceId, memo, { outcome: "ok" });
+    realtime.emit("data", { kind: "Rebalance" });
+    return delay({ ok: true, audit });
+  },
+
+  /** Phase P2 — Emergency kill (critical). */
+  emergencyKill(target: { kind: string; id: string }, memo: string): Promise<MutationResult> {
+    const audit = pushAudit("system.emergency_kill", `${target.kind}:${target.id}`, memo, { outcome: "ok" });
+    if (target.kind === "Runtime") {
+      const r = findById(seed.runtimes, target.id);
+      if (r) r.status = "failed";
+    }
+    if (target.kind === "Strategy") {
+      const s = findById(seed.strategies, target.id);
+      if (s) s.state = "paused";
+    }
+    realtime.emit("data", { kind: target.kind });
+    return delay({ ok: true, audit, message: "Emergency kill dispatched" });
+  },
+
   /** Phase 11 — submit permission matrix cell updates. */
   updatePermissionMatrix(
     instance: string,

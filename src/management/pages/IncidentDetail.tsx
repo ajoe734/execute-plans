@@ -32,6 +32,8 @@ export const IncidentDetail = () => {
   const [closeOpen, setCloseOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [postmortem, setPostmortem] = useState("");
+  const [mitigation, setMitigation] = useState("");
+  const [constraint, setConstraint] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -59,6 +61,11 @@ export const IncidentDetail = () => {
   const linkedAlerts = alerts.filter((a) => incident.affected?.includes(a.relatedTarget ?? ""));
   const affectedStrategies = strategies.filter((s) => incident.affected?.includes(s.id));
   const affectedRuntimes = runtimes.filter((r) => incident.affected?.includes(r.id));
+  const affectedCapitalIds = Array.from(new Set(affectedStrategies.map((s) => s.capitalPoolId).filter(Boolean)));
+  const timeline = incident.timeline ?? [];
+  const mitigationEntries = timeline.filter((e) => e.note?.startsWith("[mitigation]"));
+  const trainingEntries = timeline.filter((e) => e.note?.startsWith("[training-feedback"));
+  const constraintEntries = timeline.filter((e) => e.note?.startsWith("[constraint"));
   const isHighSev = incident.severity === "high" || incident.severity === "critical";
   const requirePostmortem = isHighSev && postmortem.trim().length < 20;
 
@@ -112,11 +119,14 @@ export const IncidentDetail = () => {
         )}
 
         <Tabs defaultValue="timeline">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="timeline">{t("incident.tab.timeline")}</TabsTrigger>
             <TabsTrigger value="affected">{t("incident.tab.affected")}</TabsTrigger>
             <TabsTrigger value="root">{t("incident.tab.root")}</TabsTrigger>
+            <TabsTrigger value="mitigation">{t("incident.tab.mitigation")}</TabsTrigger>
             <TabsTrigger value="postmortem">{t("incident.tab.postmortem")}</TabsTrigger>
+            <TabsTrigger value="training">{t("incident.tab.training")}</TabsTrigger>
+            <TabsTrigger value="constraint">{t("incident.tab.constraint")}</TabsTrigger>
             <TabsTrigger value="audit">{t("incident.tab.audit")}</TabsTrigger>
           </TabsList>
 
@@ -172,6 +182,14 @@ export const IncidentDetail = () => {
                 {affectedRuntimes.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
               </div>
             </Card>
+            <Card className="p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedCapital")}</div>
+              <div className="flex flex-wrap gap-2">
+                {affectedCapitalIds.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : affectedCapitalIds.map((cid) => (
+                  <Button key={cid} size="sm" variant="outline" onClick={() => navigate(`/management/capital/${cid}`)}>{cid}</Button>
+                ))}
+              </div>
+            </Card>
           </TabsContent>
 
           <TabsContent value="root" className="mt-4">
@@ -189,6 +207,27 @@ export const IncidentDetail = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="mitigation" className="mt-4">
+            <Card className="p-4 space-y-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("incident.mitigation.title")}</div>
+              <ol className="text-sm space-y-1.5">
+                {mitigationEntries.length === 0 ? <li className="text-xs text-muted-foreground">{t("incident.mitigation.empty")}</li> :
+                  mitigationEntries.map((e, i) => (
+                    <li key={i} className="flex gap-3"><span className="text-mono text-xs text-muted-foreground w-32">{new Date(e.ts).toLocaleString()}</span><span className="flex-1">{e.note}</span></li>
+                  ))}
+              </ol>
+              <Textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t("incident.mitigation.placeholder")} rows={3} />
+              <div>
+                <Button size="sm" disabled={mitigation.trim().length < 8} onClick={async () => {
+                  await bff.mutations.appendIncidentMitigation(incident.id, mitigation);
+                  toast.success(t("incident.mitigation.logged"));
+                  setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[mitigation] ${mitigation.slice(0, 120)}` }] });
+                  setMitigation("");
+                }}>{t("incident.mitigation.add")}</Button>
+              </div>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="postmortem" className="mt-4">
             <Card className="p-4 space-y-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("incident.postmortemDraft")}</div>
@@ -201,17 +240,48 @@ export const IncidentDetail = () => {
               {isHighSev && (
                 <p className="text-xs text-status-warning">{t("incident.postmortemRequired")}</p>
               )}
-              <div className="flex gap-2 flex-wrap">
-                <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
+              <div>
+                <Button size="sm" disabled={postmortem.trim().length < 10} onClick={async () => {
                   await bff.mutations.appendPostmortem(incident.id, postmortem);
                   toast.success(t("incident.postmortem.appended"));
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[postmortem] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.postmortem.add")}</Button>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="training" className="mt-4">
+            <Card className="p-4 space-y-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("incident.training.title")}</div>
+              <ul className="text-sm space-y-1.5">
+                {trainingEntries.length === 0 ? <li className="text-xs text-muted-foreground">{t("incident.training.empty")}</li> :
+                  trainingEntries.map((e, i) => <li key={i} className="text-mono text-xs">{e.note}</li>)}
+              </ul>
+              <div>
                 <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
                   const res = await bff.mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
                   toast.success(t("incident.feedbackQueued"), { description: res.feedbackId });
+                  setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[training-feedback ${res.feedbackId}] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.createTrainingFeedback")}</Button>
-                <Button size="sm" variant="outline" onClick={() => toast.success(t("incident.constraintQueued"))}>{t("incident.createEvolutionConstraint")}</Button>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="constraint" className="mt-4">
+            <Card className="p-4 space-y-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("incident.constraint.title")}</div>
+              <ul className="text-sm space-y-1.5">
+                {constraintEntries.length === 0 ? <li className="text-xs text-muted-foreground">{t("incident.constraint.empty")}</li> :
+                  constraintEntries.map((e, i) => <li key={i} className="text-mono text-xs">{e.note}</li>)}
+              </ul>
+              <Textarea value={constraint} onChange={(e) => setConstraint(e.target.value)} placeholder={t("incident.constraint.placeholder")} rows={3} />
+              <div>
+                <Button size="sm" variant="outline" disabled={constraint.trim().length < 8} onClick={async () => {
+                  const res = await bff.mutations.createEvolutionConstraint(incident.id, constraint);
+                  toast.success(t("incident.constraint.created"), { description: res.constraintId });
+                  setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[constraint ${res.constraintId}] ${constraint.slice(0, 80)}` }] });
+                  setConstraint("");
+                }}>{t("incident.constraint.add")}</Button>
               </div>
             </Card>
           </TabsContent>

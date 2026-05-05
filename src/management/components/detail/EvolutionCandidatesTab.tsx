@@ -1,4 +1,4 @@
-// Phase 13.F — Candidates with state/fitness filter + batch actions.
+// Phase 13.F — Candidates with state/fitness filter + batch actions + inspect drawer.
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
@@ -20,6 +21,7 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [minFit, setMinFit] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [inspect, setInspect] = useState<EvolutionCandidate | null>(null);
 
   useEffect(() => { bff.evolutionRuns.forProgram(programId).then(setRuns); }, [programId]);
   useEffect(() => {
@@ -89,9 +91,46 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
               c.state === "promoted" ? "border-status-success/40 text-status-success"
               : c.state === "discarded" ? "border-status-failed/40 text-status-failed"
               : "border-border text-muted-foreground"}`}>{c.state}</Badge>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setInspect(c)}>
+              {t("evolution.candidate.inspect")}
+            </Button>
           </div>
         ))}
       </Card>
+
+      <Sheet open={!!inspect} onOpenChange={(o) => !o && setInspect(null)}>
+        <SheetContent className="w-[480px] sm:max-w-[480px]">
+          {inspect && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{t("evolution.candidate.drawerTitle")}</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 space-y-4 text-sm">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("evolution.candidate.fitness")}</div>
+                  <div className="text-mono text-2xl">{inspect.fitness.toFixed(4)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("evolution.candidate.lineage")}</div>
+                  <div className="text-mono text-xs">{inspect.parents.join(" + ") || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("evolution.candidate.genome")}</div>
+                  <ul className="text-mono text-xs space-y-1">
+                    {inspect.mutationsApplied.map((m, i) => <li key={i}>· {m}</li>)}
+                    {inspect.mutationsApplied.length === 0 && <li className="text-muted-foreground">—</li>}
+                  </ul>
+                </div>
+                <Button size="sm" disabled={inspect.state === "promoted"} onClick={() => {
+                  setAll((cs) => cs.map((c) => c.id === inspect.id ? { ...c, state: "promoted" } : c));
+                  toast.success(t("evolution.runs.promoted"));
+                  setInspect(null);
+                }}>{t("evolution.candidate.promote")}</Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
