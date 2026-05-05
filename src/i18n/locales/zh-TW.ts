@@ -136,7 +136,7 @@ export default {
   common: {
     owner: "負責人", updated: "更新時間", state: "狀態",
     actions: "動作", noResults: "無結果", loading: "載入中…",
-    all: "全部", back: "返回", risk: "風險", successRate: "成功率",
+    all: "全部", back: "返回", risk: "風險", successRate: "成功率", none: "無",
     justNow: "剛剛",
     notFound: "找不到頁面", returnHome: "回到首頁",
     densityComfortable: "舒適",
@@ -284,6 +284,21 @@ export default {
       hint: "編輯數值以建立草稿版本。送出後將進入治理流程後再行部署。",
       submit: "送出草稿版本",
       draftCreated: "草稿版本已排入審核",
+    },
+    sweep: {
+      run: "執行參數掃描",
+      queued: "參數掃描已排入",
+    },
+  },
+  runtime: {
+    subtitle: "Executor、MCP 伺服器、排程與資料攝取的即時運維視圖。",
+    actions: {
+      restart: { label: "重啟", toast: "重啟已派送：{{name}}" },
+      drain: { label: "排空封鎖", toast: "排空已啟動：{{name}}" },
+      move: { label: "搬移工作負載", toast: "搬移已排入：{{name}}" },
+      scale: { label: "調整副本數", toast: "擴縮已派送：{{name}}" },
+      quarantine: { label: "隔離", toast: "Runtime 已隔離：{{name}}" },
+      inspect_logs: { label: "檢視日誌", toast: "開啟日誌：{{name}}" },
     },
   },
   notifications: {
@@ -1096,7 +1111,7 @@ export default {
     strategy: {
       spec: { lock: "鎖定參數", unlock: "解鎖", locked: "參數已鎖定", unlocked: "參數已解鎖", versionPanel: "版本比對" },
       data: { tab: "資料與特徵", empty: "尚未登錄特徵集。", upstream: "上游", freshness: "新鮮度", missing: "缺失率" },
-      perf: { tab: "績效", day: "日", week: "週", month: "月", vsBenchmark: "vs 基準" },
+      perf: { tab: "績效", day: "日", week: "週", month: "月", vsBenchmark: "vs 基準", showBenchmark: "顯示基準", benchmark: "基準" },
       linked: { identity: "身分", watchers: "監看者", journal: "決策日誌" },
     },
     capital: {
