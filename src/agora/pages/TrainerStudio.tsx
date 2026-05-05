@@ -153,7 +153,7 @@ const TrainerOverview = () => {
                   <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(activeFb.capturedAt).toLocaleString()}</span>
                 </div>
                 <p className="text-sm">{activeFb.summary}</p>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">Evidence</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">{t("common.evidence")}</div>
                 <p className="text-xs bg-muted/40 rounded-md p-2.5 leading-relaxed">{activeFb.evidence}</p>
                 <div className="flex flex-wrap gap-2 mt-4">
                   {(["accept","createExample","createEvalCase","updateRule","submitPersonaUpdate","markDuplicate","archive","reject"] as const).map((a) => (
