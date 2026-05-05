@@ -199,6 +199,25 @@ export const GovernanceReview = () => {
           confirmToken={req.riskLevel === "critical" ? decision?.toUpperCase() : undefined}
           onConfirm={(memo) => { if (decision) apply(decision, memo); }}
         />
+        <HighRiskConfirm
+          open={stageDecision !== null}
+          onOpenChange={(o) => !o && setStageDecision(null)}
+          operation={stageDecision ? `governance.stage.${stageDecision.decision}` : undefined}
+          target={{ type: "Approval", id: req.id, name: `${req.subject} · ${stageDecision?.stageName ?? ""}` }}
+          currentState={req.state}
+          newState={req.state}
+          risk={req.riskLevel}
+          destructive={stageDecision?.decision === "reject"}
+          confirmToken={req.riskLevel === "critical" ? stageDecision?.decision.toUpperCase() : undefined}
+          onConfirm={async (memo) => {
+            if (!stageDecision) return;
+            const r = await bff.mutations.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
+            if (r.ok) {
+              toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} — ${stageDecision.stageName}`);
+              await reload();
+            }
+          }}
+        />
       </PageBody>
     </>
   );
