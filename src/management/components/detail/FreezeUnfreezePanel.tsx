@@ -65,8 +65,8 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
         description={`Freezing this pool halts new allocations. Reason: ${reason}`}
         confirmToken="FREEZE"
         destructive
-        onConfirm={async (memo) => {
-          await bff.mutations.runAction({ kind: "CapitalPool", id: poolId, action: "freeze_pool", memo });
+        onConfirm={async () => {
+          await bff.mutations.freezePool(poolId, reason);
           setRows((r) => [{ id: `pf_new_${Date.now().toString(36)}`, poolId, reason, frozenBy: "capital", frozenAt: new Date().toISOString(), active: true }, ...r]);
           setReason("");
           toast.success(t("phase13.capital.freeze.queued"));
