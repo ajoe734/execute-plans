@@ -404,6 +404,137 @@ enrich(skills, "Skill");
 enrich(channels, "Channel");
 
 
+// ---------- Phase 13: Detail tab depth ----------
+
+export const policyViolations: PolicyViolation[] = [
+  { id: "pv_v01", subjectKind: "Persona", subjectId: "per_quant", policyId: "rp_quant_v2", policyName: "Quant Routing v2", severity: "medium", ts: ago(6), state: "open", description: "Invoked tl_order_submit without dual-approval token in paper env." },
+  { id: "pv_v02", subjectKind: "Persona", subjectId: "per_quant", policyId: "rp_quant_v2", policyName: "Quant Routing v2", severity: "low", ts: ago(40), state: "resolved", description: "Compute factor exceeded daily quota by 3%.", resolvedBy: "ops" },
+  { id: "pv_v03", subjectKind: "Persona", subjectId: "per_macro", policyId: "rp_macro_v1", policyName: "Macro Routing v1", severity: "high", ts: ago(2), state: "acknowledged", description: "Macro briefing posted to live channel without ack." },
+  { id: "pv_v04", subjectKind: "Persona", subjectId: "per_red", policyId: "rp_quant_v2", policyName: "Quant Routing v2", severity: "critical", ts: ago(0.4), state: "open", description: "RedTeam attempted destructive tool in paper env." },
+];
+
+export const evaluationRuns: EvaluationRun[] = [
+  { id: "ev_run_01", subjectKind: "Persona", subjectId: "per_quant", suite: "Quant baseline v3", score: 0.86, pass: true, ranAt: ago(8), trend: [0.79, 0.81, 0.83, 0.86] },
+  { id: "ev_run_02", subjectKind: "Persona", subjectId: "per_quant", suite: "Risk consult adherence", score: 0.92, pass: true, ranAt: ago(20), trend: [0.88, 0.89, 0.91, 0.92] },
+  { id: "ev_run_03", subjectKind: "Persona", subjectId: "per_macro", suite: "Macro briefing quality", score: 0.71, pass: false, ranAt: ago(12), trend: [0.74, 0.73, 0.70, 0.71] },
+  { id: "ev_run_04", subjectKind: "Skill", subjectId: "sk_signal_review", suite: "Signal review adversarial", score: 0.84, pass: true, ranAt: ago(40), trend: [0.80, 0.82, 0.83, 0.84] },
+];
+
+export const objectVersions: ObjectVersion[] = [
+  { id: "ver_per_quant_v1", subjectKind: "Persona", subjectId: "per_quant", version: "v1", author: "ai_trainer", createdAt: ago(720), note: "Initial baseline.", spec: { archetype: "Quant", tone: "concise", riskAppetite: "medium" } },
+  { id: "ver_per_quant_v2", subjectKind: "Persona", subjectId: "per_quant", version: "v2", author: "alice", createdAt: ago(240), note: "Tighten risk appetite.", spec: { archetype: "Quant", tone: "concise", riskAppetite: "low" } },
+  { id: "ver_per_quant_v3", subjectKind: "Persona", subjectId: "per_quant", version: "v3", author: "alice", createdAt: ago(8), note: "Add macro consult preference.", spec: { archetype: "Quant", tone: "concise", riskAppetite: "low", consult: ["per_macro"] } },
+  { id: "ver_per_macro_v1", subjectKind: "Persona", subjectId: "per_macro", version: "v1", author: "ai_trainer", createdAt: ago(500), note: "Initial.", spec: { archetype: "Macro", tone: "narrative" } },
+  { id: "ver_per_macro_v2", subjectKind: "Persona", subjectId: "per_macro", version: "v2", author: "bob", createdAt: ago(20), note: "Tighten regime triggers.", spec: { archetype: "Macro", tone: "narrative", regimeGate: "VIX>22" } },
+  { id: "ver_stg001_v1", subjectKind: "Strategy", subjectId: "stg_001", version: "v1", author: "alice", createdAt: ago(1000), note: "First production cut.", spec: { lookback_days: 90, max_position_pct: 0.1, leverage_cap: 2 } },
+  { id: "ver_stg001_v2", subjectKind: "Strategy", subjectId: "stg_001", version: "v2", author: "alice", createdAt: ago(200), note: "Lengthen lookback.", spec: { lookback_days: 120, max_position_pct: 0.08, leverage_cap: 3 } },
+];
+
+export const featureSets: FeatureSet[] = [
+  { id: "fs_001", strategyId: "stg_001", name: "momentum_factor_set", upstreamDataset: "ds.equity.daily_v3", freshnessMin: 12, missingPct: 0.4, owner: "research" },
+  { id: "fs_002", strategyId: "stg_001", name: "vol_surface_features", upstreamDataset: "ds.options.surface_v1", freshnessMin: 30, missingPct: 1.2, owner: "research" },
+  { id: "fs_003", strategyId: "stg_002", name: "mean_reversion_features", upstreamDataset: "ds.equity.intraday_v2", freshnessMin: 5, missingPct: 0.1, owner: "research" },
+  { id: "fs_004", strategyId: "stg_003", name: "asia_tech_basket", upstreamDataset: "ds.equity.asia_v2", freshnessMin: 60, missingPct: 0.0, owner: "research" },
+];
+
+const buildSeries = (strategyId: string, granularity: "day" | "week" | "month", n: number, base: number, vol: number): PerformanceSeries => {
+  const points = Array.from({ length: n }, (_, i) => {
+    const drift = (i / n) * base;
+    const noise = (Math.sin(i * 1.3) + Math.cos(i * 0.7)) * vol;
+    return { ts: new Date(Date.now() - (n - i) * (granularity === "day" ? 86400_000 : granularity === "week" ? 7 * 86400_000 : 30 * 86400_000)).toISOString(), pnl: drift + noise, benchmark: drift * 0.6 + noise * 0.4 };
+  });
+  return { strategyId, granularity, points };
+};
+
+export const performanceSeries: PerformanceSeries[] = [
+  buildSeries("stg_001", "day", 30, 0.08, 0.012),
+  buildSeries("stg_001", "week", 12, 0.08, 0.018),
+  buildSeries("stg_001", "month", 6, 0.08, 0.022),
+  buildSeries("stg_002", "day", 30, 0.03, 0.02),
+  buildSeries("stg_003", "day", 30, 0.05, 0.01),
+];
+
+export const watchers: Watcher[] = [
+  { id: "w_01", subjectKind: "Strategy", subjectId: "stg_001", user: "alice", since: ago(720) },
+  { id: "w_02", subjectKind: "Strategy", subjectId: "stg_001", user: "carol", since: ago(120) },
+  { id: "w_03", subjectKind: "Strategy", subjectId: "stg_001", user: "ops", since: ago(40) },
+  { id: "w_04", subjectKind: "Strategy", subjectId: "stg_002", user: "bob", since: ago(200) },
+  { id: "w_05", subjectKind: "Persona", subjectId: "per_quant", user: "alice", since: ago(800) },
+  { id: "w_06", subjectKind: "CapitalPool", subjectId: "cp_alpha", user: "capital", since: ago(900) },
+];
+
+export const decisionJournal: DecisionJournalEntry[] = [
+  { id: "dj_001", subjectKind: "Strategy", subjectId: "stg_001", title: "Promote v3.2.0 to live", decidedAt: ago(2), decidedBy: "ops", outcome: "good" },
+  { id: "dj_002", subjectKind: "Strategy", subjectId: "stg_001", title: "Throttle order submission to 50%", decidedAt: ago(1), decidedBy: "ops", outcome: "neutral" },
+  { id: "dj_003", subjectKind: "Strategy", subjectId: "stg_001", title: "Defer rebalance to post-FOMC", decidedAt: ago(40), decidedBy: "capital", outcome: "good" },
+  { id: "dj_004", subjectKind: "Persona", subjectId: "per_quant", title: "Tighten risk appetite to low", decidedAt: ago(240), decidedBy: "alice", outcome: "good" },
+  { id: "dj_005", subjectKind: "Persona", subjectId: "per_macro", title: "Add VIX>22 regime gate", decidedAt: ago(20), decidedBy: "bob", outcome: "pending" },
+  { id: "dj_006", subjectKind: "CapitalPool", subjectId: "cp_alpha", title: "Adjust risk budget to 4%", decidedAt: ago(72), decidedBy: "capital", outcome: "good" },
+];
+
+export const allocationLimits: AllocationLimit[] = [
+  { id: "lim_01", poolId: "cp_alpha", scope: "strategy", scopeRef: "stg_001", cap: 0.35, updatedBy: "capital", updatedAt: ago(120) },
+  { id: "lim_02", poolId: "cp_alpha", scope: "strategy", scopeRef: "stg_003", cap: 0.30, updatedBy: "capital", updatedAt: ago(120) },
+  { id: "lim_03", poolId: "cp_alpha", scope: "sector", scopeRef: "tech", cap: 0.45, updatedBy: "capital", updatedAt: ago(200) },
+  { id: "lim_04", poolId: "cp_beta", scope: "strategy", scopeRef: "stg_002", cap: 0.40, updatedBy: "capital", updatedAt: ago(48) },
+  { id: "lim_05", poolId: "cp_gamma", scope: "sector", scopeRef: "fx", cap: 0.60, updatedBy: "capital", updatedAt: ago(48) },
+];
+
+export const poolFreezes: PoolFreeze[] = [
+  { id: "pf_01", poolId: "cp_gamma", reason: "FX volatility spike post-FOMC", frozenBy: "capital", frozenAt: ago(8), active: true },
+  { id: "pf_02", poolId: "cp_alpha", reason: "Quarterly rebalance freeze", frozenBy: "capital", frozenAt: ago(720), active: false },
+  { id: "pf_03", poolId: "cp_beta", reason: "Risk review", frozenBy: "ops", frozenAt: ago(48), active: false },
+];
+
+export const deploymentStages: DeploymentStage[] = [
+  { id: "dps_001_r", deploymentId: "dp_001", env: "research", status: "complete", promotedAt: ago(20), health: "ok" },
+  { id: "dps_001_p", deploymentId: "dp_001", env: "paper", status: "complete", promotedAt: ago(10), health: "ok" },
+  { id: "dps_001_c", deploymentId: "dp_001", env: "canary", status: "complete", promotedAt: ago(4), health: "ok" },
+  { id: "dps_001_l", deploymentId: "dp_001", env: "live", status: "complete", promotedAt: ago(1), health: "warn" },
+  { id: "dps_002_r", deploymentId: "dp_002", env: "research", status: "complete", promotedAt: ago(40), health: "ok" },
+  { id: "dps_002_p", deploymentId: "dp_002", env: "paper", status: "complete", promotedAt: ago(7), health: "ok" },
+  { id: "dps_002_c", deploymentId: "dp_002", env: "canary", status: "in_progress", health: "ok" },
+  { id: "dps_002_l", deploymentId: "dp_002", env: "live", status: "pending" },
+];
+
+export const mcpSecrets: McpSecret[] = [
+  { id: "sec_alpha_api", serverId: "mcp_alpha", name: "ALPHA_VENUE_API_KEY", lastRotatedAt: ago(720), rotatedBy: "ops" },
+  { id: "sec_alpha_signing", serverId: "mcp_alpha", name: "ALPHA_REQUEST_SIGNING_KEY", lastRotatedAt: ago(120), rotatedBy: "ops" },
+  { id: "sec_beta_api", serverId: "mcp_beta", name: "BETA_VENUE_API_KEY", lastRotatedAt: ago(800), rotatedBy: "ops" },
+  { id: "sec_research_token", serverId: "mcp_research", name: "RESEARCH_DATAHUB_TOKEN", lastRotatedAt: ago(50), rotatedBy: "research" },
+];
+
+export const promotions: PromotionRecord[] = [
+  { id: "pr_001", programId: "ev_001", candidateId: "ec_001", target: "paper", promotedAt: ago(0.5), promotedBy: "ai_trainer", deltaSharpe: 0.13, deltaDrawdown: 0.004 },
+  { id: "pr_002", programId: "ev_001", candidateId: "ec_002", target: "paper", promotedAt: ago(40), promotedBy: "ai_trainer", deltaSharpe: 0.07, deltaDrawdown: -0.002 },
+];
+
+export const metricFreezes: MetricFreeze[] = [
+  { id: "mf_001", rebalanceId: "rb_q2_2026", metric: "sharpe", frozen: true, frozenAt: ago(4), frozenBy: "capital" },
+  { id: "mf_002", rebalanceId: "rb_q2_2026", metric: "drawdown", frozen: true, frozenAt: ago(4), frozenBy: "capital" },
+  { id: "mf_003", rebalanceId: "rb_q2_2026", metric: "turnover", frozen: false },
+  { id: "mf_004", rebalanceId: "rb_q2_2026", metric: "capacity", frozen: false },
+];
+
+export const rebalanceOverrides: RebalanceOverride[] = [
+  { id: "ro_001", rebalanceId: "rb_q2_2026", strategyId: "stg_004", delta: -0.05, reason: "Reduce FX carry exposure ahead of regime change.", state: "review", proposedBy: "capital", proposedAt: ago(2) },
+  { id: "ro_002", rebalanceId: "rb_q2_2026", strategyId: "stg_005", delta: 0.03, reason: "Increase Vol Surface Arb on backtest evidence.", state: "approved", proposedBy: "alice", proposedAt: ago(8) },
+];
+
+export const rebalanceWorkflowSteps = (rebalanceId: string) => [
+  { id: "ws_draft", label: "Draft proposal", status: "complete", actor: "capital", ts: ago(72) },
+  { id: "ws_simulate", label: "Run simulation", status: "complete", actor: "capital", ts: ago(48) },
+  { id: "ws_constraints", label: "Constraint check", status: "complete", actor: "ops", ts: ago(40) },
+  { id: "ws_risk", label: "Risk review", status: "in_progress", actor: "per_risk", ts: ago(8) },
+  { id: "ws_committee", label: "Committee deliberation", status: "pending" },
+  { id: "ws_ops", label: "Ops review", status: "pending" },
+  { id: "ws_schedule", label: "Schedule apply window", status: "pending" },
+  { id: "ws_freeze", label: "Freeze metrics", status: "pending" },
+  { id: "ws_apply", label: "Apply allocation", status: "pending" },
+  { id: "ws_monitor", label: "Monitor first 24h", status: "pending" },
+  { id: "ws_close", label: "Close-out & retrospective", status: "pending" },
+] as const;
+
 export const searchableObjects = () => [
   ...strategies.map((s) => ({ id: s.id, type: "Strategy", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
   ...personas.map((s) => ({ id: s.id, type: "Persona", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
