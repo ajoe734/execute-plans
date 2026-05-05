@@ -373,7 +373,12 @@ export default {
       escalate: "Escalate",
       freeze: "Freeze target",
     },
-    policies: {
+    batch: {
+      selected: "{{n}} selected",
+      approve: "Batch approve",
+      reject: "Batch reject",
+      done: "{{n}} request(s) processed",
+    },
       title: "Route Policies",
       subtitle: "Persona → tool/MCP/skill routing rules with versioning and approvals.",
     },
