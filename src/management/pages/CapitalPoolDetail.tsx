@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
 import { Edit, ShieldAlert } from "lucide-react";
@@ -167,7 +168,7 @@ export const CapitalPoolDetail = () => {
         description="Changing the risk budget will affect every strategy assigned to this pool."
         confirmToken="ADJUST"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );

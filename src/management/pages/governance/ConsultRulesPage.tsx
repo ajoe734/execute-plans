@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import type { ConsultRule, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 
@@ -59,7 +60,7 @@ export const ConsultRulesPage = () => {
   };
 
   const submit = async () => {
-    await bff.mutations.runAction({ kind: "ConsultRuleSet", id: "consult-rules", action: "submit_review", memo: `${rules.length} rule(s)`, newState: "review" });
+    await runActionSafe({ kind: "ConsultRuleSet", id: "consult-rules", action: "submit_review", memo: `${rules.length} rule(s)`, newState: "review" });
     toast.success(t("governance.consult.submitted"));
     setDirty(false);
   };

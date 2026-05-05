@@ -12,6 +12,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Inbox, ArrowRight } from "lucide-react";
@@ -407,7 +408,7 @@ export const StrategyDetail = () => {
           affected={{ strategies: [s.id], capitalPools: [s.capitalPoolId], personas: s.personaIds }}
           destructive={activeTr.uiPattern === "destructive_modal"}
           onConfirm={async (memo) => {
-            await bff.mutations.runAction({
+            await runActionSafe({
               kind: "Strategy", id: s.id, action: activeTr.action,
               newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
                 ? activeTr.to : undefined,

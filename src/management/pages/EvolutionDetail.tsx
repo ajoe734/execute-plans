@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Pause, Play, GitBranch } from "lucide-react";
@@ -146,7 +147,7 @@ export const EvolutionDetail = () => {
         description="Stopping will halt all running generations and discard in-flight candidates."
         confirmToken="STOP"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Evolution", id: e.id, action: "stop", memo }); toast.success("Stop requested"); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }); toast.success("Stop requested"); }}
       />
     </>
   );

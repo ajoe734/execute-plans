@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Rocket, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff/types";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -122,7 +123,7 @@ export const DeploymentDetail = () => {
         description="Promotes this deployment to the LIVE environment. Generates an approval request that requires risk and ops sign-off."
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }); toast.success("Promotion request submitted"); }}
       />
       <HighRiskConfirm
         open={rollbackOpen}

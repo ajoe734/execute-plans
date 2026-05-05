@@ -10,6 +10,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import type { ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
@@ -57,7 +58,7 @@ export const GovernanceReview = () => {
     };
     if (d === "approve") await bff.mutations.approve(req.id, memo);
     else if (d === "reject") await bff.mutations.reject(req.id, memo);
-    else await bff.mutations.runAction({ kind: "Approval", id: req.id, action: d, memo });
+    else await runActionSafe({ kind: "Approval", id: req.id, action: d, memo });
     setReq({ ...req, state: mapState[d] });
     toast.success(`${t(`governance.decision.${d}`)} — ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`);
   };

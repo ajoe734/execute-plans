@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
 import { Download } from "lucide-react";
@@ -187,7 +188,7 @@ export const RebalanceDetail = () => {
           destructive={activeTr.uiPattern === "destructive_modal"}
           confirmToken={activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
           onConfirm={async (memo) => {
-            await bff.mutations.runAction({ kind: "Rebalance", id: r.id, action: activeTr.action, memo });
+            await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo });
             setMachineState(activeTr.to);
             toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
           }}

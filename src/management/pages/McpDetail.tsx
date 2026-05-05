@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import type { McpServer, McpTool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -193,7 +194,7 @@ export const McpToolDetail = () => {
         description="Authorizes this destructive tool to execute against the LIVE environment. Requires dual approval (risk + ops) before taking effect."
         confirmToken="GRANT-LIVE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success(t("toast.actionQueued")); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );

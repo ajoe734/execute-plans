@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -167,7 +168,7 @@ export const SkillDetail = () => {
         title={t("skill.publishTitle", { name: skill.name })}
         description={t("skill.publishDesc")}
         confirmToken="PUBLISH"
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Skill", id: skill!.id, action: "publish", newState: "deployed", memo }); toast.success(t("skill.publishSubmitted")); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Skill", id: skill!.id, action: "publish", newState: "deployed", memo }); toast.success(t("skill.publishSubmitted")); }}
       />
       <HighRiskConfirm
         open={retireOpen}
@@ -176,7 +177,7 @@ export const SkillDetail = () => {
         description={t("skill.retireDesc")}
         confirmToken="RETIRE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "Skill", id: skill!.id, action: "retire", newState: "retired", memo }); toast.success(t("skill.retireSubmitted")); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "Skill", id: skill!.id, action: "retire", newState: "retired", memo }); toast.success(t("skill.retireSubmitted")); }}
       />
     </>
   );

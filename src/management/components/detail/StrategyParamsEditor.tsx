@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { Strategy } from "@/lib/bff/types";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 
 interface ParamRow { key: string; value: string; note: string; }
@@ -25,7 +26,7 @@ export const StrategyParamsEditor = ({ strategy, initial }: { strategy: Strategy
     const changes = rows
       .map((r, i) => ({ ...r, prev: original[i]?.value }))
       .filter((r) => r.value !== r.prev);
-    await bff.mutations.runAction({
+    await runActionSafe({
       kind: "Strategy",
       id: strategy.id,
       action: "update_params",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff/client";
+import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff/types";
 import { CheckCircle2, Edit } from "lucide-react";
@@ -95,7 +96,7 @@ export const RankingFormulaDetail = () => {
         description="Activating this formula will replace the current production ranking and may rebalance allocations."
         confirmToken="ACTIVATE"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.runAction({ kind: "RankingFormula", id: f.id, action: "activate", memo }); toast.success("Activation requested — pending approval"); }}
+        onConfirm={async (memo) => { await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }); toast.success("Activation requested — pending approval"); }}
       />
     </>
   );
