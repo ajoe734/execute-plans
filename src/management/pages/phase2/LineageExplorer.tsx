@@ -102,7 +102,22 @@ export const LineageExplorerPage = () => {
           </div>
         </Card>
         <Card className="p-2">
-          <LineageGraph nodes={nodes} edges={edges} height={420} onSelect={setSelected} />
+          <LineageGraph nodes={nodes} edges={edges} height={420} onSelect={(n) => {
+            setSelected(n);
+            const r = resolveEntity(n.id);
+            useInspector.getState().open({
+              id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
+              href: r?.route,
+              meta: [
+                ...(n.state ? [{ label: "State", value: n.state }] : []),
+                ...(n.risk ? [{ label: "Risk", value: n.risk }] : []),
+              ],
+              lineage: {
+                upstream: edges.filter((e) => e.to === n.id).map((e) => e.from),
+                downstream: edges.filter((e) => e.from === n.id).map((e) => e.to),
+              },
+            });
+          }} />
         </Card>
         {selected && (
           <Card className="p-4">
