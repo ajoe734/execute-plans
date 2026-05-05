@@ -6,6 +6,7 @@ export default {
   },
   ui: {
     pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
+    a11y: { close: "關閉", toggleSidebar: "切換側邊欄" },
   },
   env: {
     research: "研究", paper: "模擬", live: "正式", label: "環境",
