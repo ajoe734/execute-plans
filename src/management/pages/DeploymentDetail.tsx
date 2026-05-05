@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Rocket, Undo2 } from "lucide-react";
+import { Rocket, Undo2, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import { runActionSafe } from "@/lib/bff/runAction";
@@ -29,6 +29,8 @@ export const DeploymentDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
+  const [reduceOpen, setReduceOpen] = useState(false);
+  const [newPct, setNewPct] = useState(50);
 
   useEffect(() => {
     if (!id) return;
