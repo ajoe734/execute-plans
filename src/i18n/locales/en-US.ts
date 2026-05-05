@@ -141,7 +141,7 @@ export default {
   common: {
     owner: "Owner", updated: "Last updated", state: "State",
     actions: "Actions", noResults: "No results", loading: "Loading…",
-    all: "All", back: "Back", risk: "Risk", successRate: "Success",
+    all: "All", back: "Back", risk: "Risk", successRate: "Success", none: "None",
     justNow: "just now",
     notFound: "Oops! Page not found", returnHome: "Return to Home",
     densityComfortable: "Comfortable",
@@ -294,6 +294,21 @@ export default {
       hint: "Edit a value to create a draft revision. Submitting routes the change through governance before deployment.",
       submit: "Submit draft revision",
       draftCreated: "Draft revision queued for review",
+    },
+    sweep: {
+      run: "Run parameter sweep",
+      queued: "Parameter sweep queued",
+    },
+  },
+  runtime: {
+    subtitle: "Live operational view of executors, MCP servers, schedulers, and ingest pipelines.",
+    actions: {
+      restart: { label: "Restart", toast: "Restart dispatched: {{name}}" },
+      drain: { label: "Drain & cordon", toast: "Drain started: {{name}}" },
+      move: { label: "Move workload", toast: "Move queued: {{name}}" },
+      scale: { label: "Scale replicas", toast: "Scale dispatched: {{name}}" },
+      quarantine: { label: "Quarantine", toast: "Runtime quarantined: {{name}}" },
+      inspect_logs: { label: "Inspect logs", toast: "Opening logs: {{name}}" },
     },
   },
   notifications: {
