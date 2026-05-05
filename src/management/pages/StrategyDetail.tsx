@@ -16,7 +16,7 @@ import { mutations } from "@/lib/bff/mutations";
 import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
-import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
+import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { usePermissions } from "@/lib/usePermissions";
@@ -118,6 +118,12 @@ export const StrategyDetail = () => {
               meta: [{ label: "Alpha", value: s.alpha }, { label: "Pool", value: s.capitalPoolId }],
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
+            </Button>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const res = await mutations.runParameterSweep(s.id, { memo: `manual sweep from ${s.id}` });
+              toast.success(t("strategy.sweep.queued"), { description: res.job.id });
+            }}>
+              <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </Button>
             {transitions.map((tr) => (
               <Button
