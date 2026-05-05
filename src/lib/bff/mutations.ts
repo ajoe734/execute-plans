@@ -731,7 +731,7 @@ export const mutations = {
     const audit = pushAudit("system.emergency_kill", `${target.kind}:${target.id}`, memo, { outcome: "ok" });
     if (target.kind === "Runtime") {
       const r = findById(seed.runtimes, target.id);
-      if (r) r.status = "stopped";
+      if (r) r.status = "failed";
     }
     if (target.kind === "Strategy") {
       const s = findById(seed.strategies, target.id);
