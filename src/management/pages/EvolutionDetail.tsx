@@ -18,8 +18,6 @@ import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { AuditTimeline } from "@/platform/components/AuditTimeline";
-import { StatusBadge } from "@/platform/components/StatusBadge";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { evolutionMachine, type EvolutionState } from "@/lib/stateMachines";
