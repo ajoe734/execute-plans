@@ -517,6 +517,9 @@ export const mutations = {
       memo ?? `→ ${newPct}%`,
       { before, after: snap(d ? { allocationPct: d.allocationPct } : undefined), outcome: "ok" });
     return delay({ ok: true, audit, message: `Allocation set to ${newPct}%` });
+  },
+
+  freezeGeneration(programId: string, memo?: string): Promise<MutationResult> {
     const p = findById(seed.evolutionPrograms, programId) as
       (typeof seed.evolutionPrograms[number] & { generationFrozen?: boolean }) | undefined;
     if (p) p.generationFrozen = true;
