@@ -271,6 +271,26 @@ export const StrategyDetail = () => {
                       { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
                       { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
                       { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                      { key: "act", header: "", cell: (r) => (
+                        <div className="flex gap-1 justify-end">
+                          {!r.acknowledged && (
+                            <Button size="sm" variant="ghost" onClick={async (e) => {
+                              e.stopPropagation();
+                              await mutations.acknowledgeAlert(r.id, `from ${s.id}`);
+                              toast.success(t("toast.alertAcknowledged", { id: r.id }));
+                              const al = await bff.alerts.list();
+                              setAlerts(al.filter((x) => x.relatedTarget === s.id || x.source.includes(s.id) || x.title.includes(s.id)));
+                            }}><CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}</Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={async (e) => {
+                            e.stopPropagation();
+                            const res = await mutations.escalateAlertToIncident(r.id, `from ${s.id}`);
+                            toast.success(t("table_actions.incidentEscalateQueued"), { description: res.incidentId });
+                            const inc = await bff.incidents.list();
+                            setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
+                          }}><AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}</Button>
+                        </div>
+                      ) },
                     ]}
                   />
                 </Section>
@@ -292,6 +312,26 @@ export const StrategyDetail = () => {
                   { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
                   { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
                   { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                  { key: "act", header: "", cell: (r) => (
+                    <div className="flex gap-1 justify-end">
+                      {r.status !== "resolved" && (
+                        <Button size="sm" variant="ghost" onClick={async (e) => {
+                          e.stopPropagation();
+                          await mutations.setIncidentStatus(r.id, r.status === "open" ? "mitigating" : "resolved");
+                          toast.success(t("toast.incidentAdvanced", { id: r.id, status: r.status === "open" ? "mitigating" : "resolved" }));
+                          const inc = await bff.incidents.list();
+                          setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
+                        }}>
+                          {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={async (e) => {
+                        e.stopPropagation();
+                        await mutations.appendPostmortem(r.id, `Initial postmortem draft for ${r.id}`);
+                        toast.success(t("incident.postmortem.appended"));
+                      }}><FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}</Button>
+                    </div>
+                  ) },
                 ]}
               />
             ),
