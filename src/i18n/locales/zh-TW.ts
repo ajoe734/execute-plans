@@ -790,6 +790,17 @@ export default {
     realtimeReconnect: "重連",
     realtimeDisconnected: "Realtime 已斷線",
     realtimeReconnected: "Realtime 已重連",
+    scenario: {
+      title: "情境流程模擬器",
+      desc: "對 BFF mutation 層一鍵跑完精選的端對端流程。每個情境會先重置種子，再依序觸發狀態轉移、審批、審計事件。",
+      run: "執行", runAll: "全部執行",
+      passed: "情境通過", failed: "情境失敗", allDone: "情境執行完成",
+      strategyLifecycle: "策略：discovered → live（5 段轉移）",
+      approvalMultistage: "審批：多階段批准",
+      rebalanceFlow: "再平衡：凍結指標＋覆寫",
+      incidentTriage: "事件：確認 → 緩解 → 解除",
+      governanceGrant: "治理：權限授予＋路由政策發佈",
+    },
   },
   realtime: {
     title: "即時活動",
