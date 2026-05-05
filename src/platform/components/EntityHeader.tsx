@@ -60,6 +60,19 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
               <ArrowLeft className="h-4 w-4 mr-1" />{t("common.back")}
             </Button>
           )}
+          {resolveEntity(object.id) && (
+            <div className="flex items-center gap-1">
+              <Link to={lineageHref(object.id)} title={t("audit.openLineage")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><GitBranch className="h-4 w-4" /></Button>
+              </Link>
+              <Link to={decisionsHref(object.id)} title={t("audit.openDecisions")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><BookMarked className="h-4 w-4" /></Button>
+              </Link>
+              <Link to={auditHref(object.id)} title={t("audit.openAudit")}>
+                <Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button>
+              </Link>
+            </div>
+          )}
           {actions}
         </div>
       </div>
