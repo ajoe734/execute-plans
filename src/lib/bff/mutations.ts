@@ -608,6 +608,39 @@ export const mutations = {
     return delay({ ok: true, escalated: events });
   },
 
+  /** Phase P0 — Queue a parameter sweep job for a strategy. */
+  runParameterSweep(strategyId: string, opts: { params?: string[]; memo?: string } = {}): Promise<MutationResult & { job: Job }> {
+    const job = queueMockJob("strategy.param_sweep");
+    const audit = pushAudit("strategy.run_sweep", strategyId, opts.memo ?? (opts.params?.join(",") ?? "all"), { outcome: "ok" });
+    return delay({ ok: true, audit, job, message: `Sweep queued: ${job.id}` });
+  },
+
+  /** Phase P0 — Generic runtime row action (restart/drain/move/scale/quarantine/inspect_logs). */
+  runtimeAction(runtimeId: string, action: "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs", memo?: string): Promise<MutationResult & { job?: Job }> {
+    const r = findById(seed.runtimes, runtimeId);
+    if (r && (action === "drain" || action === "quarantine")) r.status = "paused";
+    if (r && action === "restart") r.status = "running";
+    realtime.emit("data", { kind: "Runtime" });
+    const job = action === "inspect_logs" ? undefined : queueMockJob(`runtime.${action}`);
+    const audit = pushAudit(`runtime.${action}`, runtimeId, memo, { outcome: "ok" });
+    return delay({ ok: true, audit, job, message: `${action} dispatched` });
+  },
+
+  /** Phase P0 — Append a training-feedback record sourced from an incident postmortem. */
+  createTrainingFeedback(incidentId: string, content: string, target?: { kind: string; id: string }): Promise<MutationResult & { feedbackId: string }> {
+    const fid = `tf_${Date.now().toString(36)}`;
+    const inc = findById(seed.incidents, incidentId);
+    if (inc) {
+      inc.timeline = [
+        ...(inc.timeline ?? []),
+        { ts: new Date().toISOString(), actor: usePlatform.getState().role, note: `[training-feedback ${fid}] ${content.slice(0, 80)}` },
+      ];
+    }
+    realtime.emit("data", { kind: "Incident" });
+    const audit = pushAudit("incident.training_feedback.create", incidentId, target ? `${target.kind}:${target.id}` : content.slice(0, 80), { outcome: "ok" });
+    return delay({ ok: true, audit, feedbackId: fid });
+  },
+
   /** Phase 11 — submit permission matrix cell updates. */
   updatePermissionMatrix(
     instance: string,
