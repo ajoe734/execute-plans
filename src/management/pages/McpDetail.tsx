@@ -171,6 +171,24 @@ export const McpServerDetail = () => {
         ]} /> },
       ]}
     />
+    <HighRiskConfirm
+      open={disableOpen}
+      onOpenChange={setDisableOpen}
+      title={t("mcp.actions.disableTitle", { name: s.name })}
+      description={t("mcp.actions.disableDesc")}
+      confirmToken="DISABLE"
+      onConfirm={async (memo) => { await runActionSafe({ kind: "McpServer", id: s.id, action: "disable", memo }); toast.success(t("mcp.actions.disabled")); refresh(); }}
+    />
+    <HighRiskConfirm
+      open={retireOpen}
+      onOpenChange={setRetireOpen}
+      title={t("mcp.actions.retireTitle", { name: s.name })}
+      description={t("mcp.actions.retireDesc")}
+      confirmToken="RETIRE"
+      destructive
+      onConfirm={async (memo) => { await runActionSafe({ kind: "McpServer", id: s.id, action: "retire", memo }); toast.success(t("mcp.actions.retired")); refresh(); }}
+    />
+    </>
   );
 };
 
