@@ -147,6 +147,27 @@ export interface Incident {
   timeline?: { ts: string; actor: string; note: string }[];
 }
 
+/** Phase 17 — multi-stage approval workflow.
+ *  A stage represents one reviewer role (proposer → reviewer → committee → executor).
+ *  Each stage owns its own SLA + decision; the parent request advances to the next
+ *  pending stage automatically and finalises when the last stage is approved. */
+export interface ApprovalStage {
+  /** Stage role id, e.g. "proposer", "risk", "capital", "ops", "committee", "executor". */
+  name: string;
+  state: "pending" | "approved" | "rejected" | "skipped";
+  /** SLA budget for this stage in hours. */
+  slaHours: number;
+  /** When this stage opened for review (set when previous stage cleared). */
+  startedAt?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  memo?: string;
+  /** Set true once the stage has been auto-escalated past its SLA. */
+  escalated?: boolean;
+  /** Optional: which role to escalate to. Falls back to "committee". */
+  escalateTo?: string;
+}
+
 export interface ApprovalRequest {
   id: string;
   kind: string;
@@ -157,7 +178,10 @@ export interface ApprovalRequest {
   createdAt: string;
   rationale?: string;
   diffSummary?: string;
+  /** Legacy flat-string stage list (kept for back-compat display). */
   requiresStages?: string[];
+  /** Phase 17 — structured stage records with SLA + per-stage decisions. */
+  stages?: ApprovalStage[];
 }
 
 export interface AuditEvent {
