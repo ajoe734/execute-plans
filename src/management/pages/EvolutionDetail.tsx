@@ -43,13 +43,21 @@ export const EvolutionDetail = () => {
   const [e, setE] = useState<EvolutionProgram | undefined>();
   const [experiments, setExperiments] = useState<ResearchExperiment[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
+  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([
+    { id: "ec_seed1", expr: "max_drawdown < 0.15", ts: new Date(Date.now() - 86400_000).toISOString() },
+  ]);
+  const [newConstraint, setNewConstraint] = useState("");
 
   useEffect(() => {
     if (!id) return;
     bff.evolution.get(id).then(setE);
     bff.research.list().then(setExperiments);
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("evolution."))));
+    bff.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
+    bff.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
   }, [id]);
 
   if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -120,6 +128,50 @@ export const EvolutionDetail = () => {
           { value: "candidates", label: t("evolution.tabs.candidates"), content: <EvolutionCandidatesTab programId={e.id} /> },
           { value: "promotion", label: t("evolution.tabs.promotion"), content: <PromotionPanel program={e} /> },
           { value: "freeze", label: t("phase13.evolution.tabs.freeze"), content: <EvolutionFreezePanel program={e} /> },
+          {
+            value: "constraints", label: t("evolution.tabs.constraints"),
+            content: (
+              <Section title={t("evolution.constraints.title")}>
+                <ul className="space-y-1.5 text-sm mb-3">
+                  {constraints.length === 0 && <li className="text-xs text-muted-foreground">{t("evolution.constraints.empty")}</li>}
+                  {constraints.map((c) => (
+                    <li key={c.id} className="flex items-center gap-3 text-mono text-xs">
+                      <Badge variant="outline" className="text-[10px]">{c.id}</Badge>
+                      <span className="flex-1">{c.expr}</span>
+                      <span className="text-muted-foreground">{new Date(c.ts).toLocaleDateString()}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Textarea value={newConstraint} onChange={(ev) => setNewConstraint(ev.target.value)} placeholder={t("evolution.constraints.placeholder")} rows={2} />
+                <Button className="mt-2" size="sm" disabled={newConstraint.trim().length < 4} onClick={() => {
+                  setConstraints((cs) => [...cs, { id: `ec_${Date.now().toString(36)}`, expr: newConstraint.trim(), ts: new Date().toISOString() }]);
+                  setNewConstraint("");
+                  toast.success(t("evolution.constraints.created"));
+                }}>{t("evolution.constraints.add")}</Button>
+              </Section>
+            ),
+          },
+          {
+            value: "alerts", label: t("evolution.tabs.alerts"),
+            content: alerts.length === 0
+              ? <Card className="p-6 text-xs text-muted-foreground">{t("evolution.alerts.empty")}</Card>
+              : <DataTable rows={alerts} columns={[
+                  { key: "title", header: t("table.title", { defaultValue: "Title" }), cell: (r) => <span className="text-sm">{r.title}</span> },
+                  { key: "sev", header: t("incident.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                  { key: "src", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+                ]} empty={t("empty.noResults")} />,
+          },
+          {
+            value: "approvals", label: t("evolution.tabs.approvals"),
+            content: approvals.length === 0
+              ? <Card className="p-6 text-xs text-muted-foreground">{t("evolution.approvals.empty")}</Card>
+              : <DataTable rows={approvals} onRowClick={(r) => nav(`/management/governance/${r.id}`)} columns={[
+                  { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                  { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+                  { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                ]} empty={t("empty.none")} />,
+          },
           {
             value: "config", label: "Config",
             content: (
