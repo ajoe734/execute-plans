@@ -25,7 +25,7 @@ export const TopBar = () => {
   const navigate = useNavigate();
   const loc = useLocation();
   const isManagement = loc.pathname.startsWith("/management");
-  const { locale, setLocale, role, setRole, bffOnline } = usePlatform();
+  const { locale, setLocale, role, setRole } = usePlatform();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
 
