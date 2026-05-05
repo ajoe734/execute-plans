@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
+import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
+
+type StageDecision = { stageName: string; decision: "approve" | "reject" };
 
 type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
