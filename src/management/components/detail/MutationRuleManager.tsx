@@ -24,10 +24,10 @@ export const MutationRuleManager = () => {
   };
 
   return (
-    <Section
-      title={t("evolution.tabs.mutation")}
-      action={<Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" />{t("phase13.evolution.mutation.add")}</Button>}
-    >
+    <Section title={t("evolution.tabs.mutation")}>
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" />{t("phase13.evolution.mutation.add")}</Button>
+      </div>
       <Card className="p-0">
         <DataTable
           rows={rules}
