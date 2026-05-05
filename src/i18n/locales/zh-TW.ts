@@ -1065,4 +1065,32 @@ export default {
       rollback: { pickVersion: "選擇要回滾到的版本", queued: "回滾已送出。" },
     },
   },
+  phase21: {
+    rebalance: {
+      workflow: {
+        advanceBtn: "前進步驟",
+        rerunBtn: "重跑作業",
+        advanced: "已前進到下一步",
+        queuedJob: "已排入作業",
+        rerun: "作業已重跑",
+      },
+    },
+    paperLive: {
+      title: "Paper vs Live 偏離監控",
+      hint: "近 30 個交易日。容忍區間 ±150 bps；突破即列為偏離警示。",
+      band: "容忍區間 ±150 bps",
+      paper: "Paper PnL", live: "Live PnL", delta: "Δ（live − paper）bps",
+      alerts: "偏離警示",
+      noBreach: "區間內未發生突破。",
+      breachOpened: "偏離開啟",
+      breachResolved: "偏離結束",
+    },
+    governance: {
+      validatorTitle: "政策驗證器",
+      validatorHint: "每條政策都會自動由驗證器套件重放。失敗將阻擋核可。",
+      running: "驗證中…",
+      passed: "通過", failed: "失敗", warning: "警告",
+      validator: { schema: "Schema 檢查", consistency: "一致性", impact: "影響分析", precedence: "優先順序", coverage: "涵蓋率" },
+    },
+  },
 };

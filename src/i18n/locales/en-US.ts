@@ -1078,4 +1078,32 @@ export default {
       rollback: { pickVersion: "Pick a version to roll back to", queued: "Rollback queued." },
     },
   },
+  phase21: {
+    rebalance: {
+      workflow: {
+        advanceBtn: "Advance step",
+        rerunBtn: "Re-run job",
+        advanced: "Step advanced",
+        queuedJob: "Queued job",
+        rerun: "Job re-queued",
+      },
+    },
+    paperLive: {
+      title: "Paper vs Live divergence",
+      hint: "Last 30 trading days. Threshold band ±150 bps; breaches surface as divergence alerts.",
+      band: "Threshold ±150 bps",
+      paper: "Paper PnL", live: "Live PnL", delta: "Δ (live − paper) bps",
+      alerts: "Divergence alerts",
+      noBreach: "No band breach in window.",
+      breachOpened: "Breach opened",
+      breachResolved: "Breach resolved",
+    },
+    governance: {
+      validatorTitle: "Policy validators",
+      validatorHint: "Each policy is automatically replayed by the validator suite. Failures block approval.",
+      running: "Validators running…",
+      passed: "Passed", failed: "Failed", warning: "Warning",
+      validator: { schema: "Schema check", consistency: "Consistency", impact: "Impact analysis", precedence: "Precedence", coverage: "Coverage" },
+    },
+  },
 };

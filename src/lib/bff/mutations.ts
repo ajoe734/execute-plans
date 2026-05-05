@@ -252,6 +252,49 @@ export const mutations = {
     return delay({ ok: true, audit, approval: req });
   },
 
+  /** Phase 21 — advance one rebalance workflow step. Marks current in_progress
+   *  as complete, opens the next pending one, and (when defined) queues the
+   *  step's mock job (e.g. start_metrics_freeze, rebalance.apply, validators). */
+  advanceRebalanceStep(rebalanceId: string, memo?: string): Promise<MutationResult & { stepId?: string; jobId?: string }> {
+    const steps = seed.rebalanceWorkflowSteps(rebalanceId);
+    const idx = steps.findIndex((s) => s.status === "in_progress");
+    if (idx === -1) {
+      const audit = pushAudit("rebalance.workflow.noop", rebalanceId, "no in-progress step", { outcome: "rejected" });
+      return delay({ ok: false, audit, message: "no in-progress step" });
+    }
+    const cur = steps[idx];
+    cur.status = "complete";
+    cur.ts = new Date().toISOString();
+    cur.actor = usePlatform.getState().role;
+    if (memo) cur.note = memo;
+    const next = steps[idx + 1];
+    let jobId: string | undefined;
+    if (next) {
+      next.status = "in_progress";
+      next.ts = new Date().toISOString();
+      if (next.jobKind) {
+        const job = queueMockJob(next.jobKind);
+        jobId = job.id;
+      }
+    }
+    realtime.emit("data", { kind: "RebalanceStep" });
+    const audit = pushAudit("rebalance.workflow.advance", rebalanceId, `${cur.id} → complete${next ? `; ${next.id} → in_progress` : ""}`, { outcome: "ok" });
+    return delay({ ok: true, audit, stepId: cur.id, jobId });
+  },
+
+  /** Phase 21 — run a step's job again without advancing (re-simulate, re-validate). */
+  rerunRebalanceStep(rebalanceId: string, stepId: string): Promise<MutationResult & { jobId?: string }> {
+    const steps = seed.rebalanceWorkflowSteps(rebalanceId);
+    const step = steps.find((s) => s.id === stepId);
+    if (!step?.jobKind) {
+      const audit = pushAudit("rebalance.workflow.rerun_skipped", rebalanceId, stepId, { outcome: "rejected" });
+      return delay({ ok: false, audit });
+    }
+    const job = queueMockJob(step.jobKind);
+    const audit = pushAudit("rebalance.workflow.rerun", rebalanceId, `${stepId} → ${step.jobKind}`, { outcome: "ok" });
+    return delay({ ok: true, audit, jobId: job.id });
+  },
+
   acknowledgeAlert(id: string, memo?: string): Promise<MutationResult> {
     const a = findById(seed.alerts, id);
     if (a) a.acknowledged = true;

@@ -19,6 +19,7 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
+import { PolicyValidatorPanel } from "@/management/components/governance/PolicyValidatorPanel";
 
 type StageDecision = { stageName: string; decision: "approve" | "reject" };
 
@@ -144,6 +145,7 @@ export const GovernanceReview = () => {
                 ))}
               </ul>
             </Card>
+            <PolicyValidatorPanel approvalId={req.id} />
           </div>
 
           {/* Right — Decision Panel */}

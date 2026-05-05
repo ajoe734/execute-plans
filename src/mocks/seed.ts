@@ -530,19 +530,37 @@ export const rebalanceOverrides: RebalanceOverride[] = [
   { id: "ro_002", rebalanceId: "rb_q2_2026", strategyId: "stg_005", delta: 0.03, reason: "Increase Vol Surface Arb on backtest evidence.", state: "approved", proposedBy: "alice", proposedAt: ago(8) },
 ];
 
-export const rebalanceWorkflowSteps = (rebalanceId: string) => [
-  { id: "ws_draft", label: "Draft proposal", status: "complete", actor: "capital", ts: ago(72) },
-  { id: "ws_simulate", label: "Run simulation", status: "complete", actor: "capital", ts: ago(48) },
-  { id: "ws_constraints", label: "Constraint check", status: "complete", actor: "ops", ts: ago(40) },
-  { id: "ws_risk", label: "Risk review", status: "in_progress", actor: "per_risk", ts: ago(8) },
-  { id: "ws_committee", label: "Committee deliberation", status: "pending" },
-  { id: "ws_ops", label: "Ops review", status: "pending" },
-  { id: "ws_schedule", label: "Schedule apply window", status: "pending" },
-  { id: "ws_freeze", label: "Freeze metrics", status: "pending" },
-  { id: "ws_apply", label: "Apply allocation", status: "pending" },
-  { id: "ws_monitor", label: "Monitor first 24h", status: "pending" },
-  { id: "ws_close", label: "Close-out & retrospective", status: "pending" },
-] as const;
+// Phase 21 — mutable per-rebalance workflow steps (per spec §16.4 — 11 stages).
+export interface RebalanceStep {
+  id: string;
+  label: string;
+  status: "pending" | "in_progress" | "complete" | "blocked" | "skipped";
+  actor?: string;
+  ts?: string;
+  note?: string;
+  jobKind?: string; // mock job triggered when this step is advanced
+}
+const REBALANCE_STEP_TEMPLATE: RebalanceStep[] = [
+  { id: "ws_draft",       label: "Draft proposal",        status: "complete", actor: "capital",  ts: ago(72) },
+  { id: "ws_simulate",    label: "Run simulation",        status: "complete", actor: "capital",  ts: ago(48), jobKind: "rebalance.simulate" },
+  { id: "ws_constraints", label: "Constraint check",      status: "complete", actor: "ops",      ts: ago(40), jobKind: "rebalance.validate_constraints" },
+  { id: "ws_risk",        label: "Risk review",           status: "in_progress", actor: "per_risk", ts: ago(8) },
+  { id: "ws_committee",   label: "Committee deliberation",status: "pending" },
+  { id: "ws_ops",         label: "Ops review",            status: "pending" },
+  { id: "ws_schedule",    label: "Schedule apply window", status: "pending" },
+  { id: "ws_freeze",      label: "Freeze metrics",        status: "pending", jobKind: "start_metrics_freeze" },
+  { id: "ws_apply",       label: "Apply allocation",      status: "pending", jobKind: "rebalance.apply" },
+  { id: "ws_monitor",     label: "Monitor first 24h",     status: "pending", jobKind: "rebalance.monitor" },
+  { id: "ws_close",       label: "Close-out & retrospective", status: "pending" },
+];
+const _rebalanceStepStore = new Map<string, RebalanceStep[]>();
+export const rebalanceWorkflowSteps = (rebalanceId: string): RebalanceStep[] => {
+  if (!_rebalanceStepStore.has(rebalanceId)) {
+    _rebalanceStepStore.set(rebalanceId, REBALANCE_STEP_TEMPLATE.map((s) => ({ ...s })));
+  }
+  return _rebalanceStepStore.get(rebalanceId)!;
+};
+
 
 export const searchableObjects = () => [
   ...strategies.map((s) => ({ id: s.id, type: "Strategy", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),

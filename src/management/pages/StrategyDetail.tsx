@@ -28,6 +28,7 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
+import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
 import { Eye, BookOpen, User } from "lucide-react";
@@ -221,9 +222,7 @@ export const StrategyDetail = () => {
             value: "paperLive", label: t("strategyDetail.paperLive"),
             content: (
               <>
-                <Section title={t("strategyDetail.paperLiveTitle")}>
-                  <p className="text-xs text-muted-foreground">{t("strategyDetail.paperLiveHint")}</p>
-                </Section>
+                <StrategyPaperLiveTab strategyId={s.id} />
                 <Card className="overflow-hidden mt-4">
                   <table className="w-full text-sm">
                     <thead>
