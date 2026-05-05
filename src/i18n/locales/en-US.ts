@@ -798,6 +798,17 @@ export default {
     realtimeReconnect: "Reconnect",
     realtimeDisconnected: "Realtime disconnected",
     realtimeReconnected: "Realtime reconnected",
+    scenario: {
+      title: "Scenario Runner",
+      desc: "Run curated end-to-end mock flows against the BFF mutation layer. Each scenario resets seed rows, then exercises every step (state transitions, approvals, audit writes).",
+      run: "Run", runAll: "Run all",
+      passed: "Scenario passed", failed: "Scenario failed", allDone: "Scenarios complete",
+      strategyLifecycle: "Strategy: discovered → live (5 transitions)",
+      approvalMultistage: "Approval: multi-stage approve",
+      rebalanceFlow: "Rebalance: freeze + override",
+      incidentTriage: "Incident: ack → mitigate → resolve",
+      governanceGrant: "Governance: permission grant + route policy publish",
+    },
   },
   realtime: {
     title: "Realtime activity",

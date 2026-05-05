@@ -10,6 +10,7 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { realtime } from "@/lib/bff/realtime";
 import { useRealtimeStatus } from "@/lib/useLiveList";
+import { ScenarioRunnerCard } from "@/platform/components/ScenarioRunnerCard";
 
 type Item = { id: string; label: string; detail?: string };
 type Section = { id: string; title: string; items: Item[] };
@@ -210,6 +211,7 @@ export const QAChecklist = () => {
         </Card>
 
         <RealtimeControlCard />
+        <ScenarioRunnerCard />
 
         <HighRiskConfirm
           open={resetPersistOpen}
