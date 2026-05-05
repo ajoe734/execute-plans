@@ -1,4 +1,4 @@
-// Phase 13.F — Candidates with state/fitness filter + batch actions.
+// Phase 13.F — Candidates with state/fitness filter + batch actions + inspect drawer.
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
@@ -20,6 +21,7 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [minFit, setMinFit] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [inspect, setInspect] = useState<EvolutionCandidate | null>(null);
 
   useEffect(() => { bff.evolutionRuns.forProgram(programId).then(setRuns); }, [programId]);
   useEffect(() => {
