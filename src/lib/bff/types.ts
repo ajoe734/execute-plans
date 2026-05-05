@@ -1,5 +1,11 @@
 // Shared type contracts (subset of Part 6 BFF API)
 
+import type { ActionDescriptor } from "@/lib/v3/availableActions";
+import type {
+  StrategyLifecycleStatus, StrategyReviewStatus, StrategyDeploymentStatus,
+  PersonaStatus,
+} from "@/lib/v3/status";
+
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type LifecycleState = "draft" | "review" | "approved" | "deployed" | "paused" | "retired";
 export type RunState = "pending" | "running" | "success" | "warning" | "failed" | "paused";
@@ -14,8 +20,15 @@ export interface BaseObject {
   /** i18n key for the object's display label (Part 6 contract). */
   labelKey?: string;
   /** Action ids the BFF declares are valid for the current state (Part 6 contract).
-   *  RBAC further filters this to what the current role may actually invoke. */
+   *  RBAC further filters this to what the current role may actually invoke.
+   *  Legacy string[] for back-compat; new code should consume `actionDescriptors`. */
   availableActions?: string[];
+  /** v3 §8 — full action descriptors (typed, with blockers/roles/risk/endpoints). */
+  actionDescriptors?: ActionDescriptor[];
+  /** v3 §4 canonical Strategy status triple (only set on Strategy mocks). */
+  lifecycleStatus?: StrategyLifecycleStatus | PersonaStatus | string;
+  reviewStatus?: StrategyReviewStatus | string;
+  deploymentStatus?: StrategyDeploymentStatus | string;
 }
 
 export interface Strategy extends BaseObject {
