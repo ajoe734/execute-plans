@@ -2,14 +2,15 @@
 // Single header strip for any BaseObject detail page: ID + label + StatusBadge +
 // RiskBadge + owner + env + actions. Replaces ad-hoc PageHeader+meta combinations.
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, GitBranch, BookMarked, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./StatusBadge";
 import { RiskBadge } from "./RiskBadge";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
+import { resolveEntity, lineageHref, decisionsHref, auditHref } from "@/lib/entityLinks";
 
 interface Props {
   object: Pick<BaseObject, "id" | "name" | "owner" | "updatedAt" | "state" | "risk" | "labelKey">;
