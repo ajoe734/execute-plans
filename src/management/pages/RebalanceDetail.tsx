@@ -19,7 +19,7 @@ import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "sonner";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
-import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+
 import { RebalanceWorkflowTab } from "../components/detail/RebalanceWorkflowTab";
 import { MetricFreezeManager } from "../components/detail/MetricFreezeManager";
 import { OverrideManager } from "../components/detail/OverrideManager";
@@ -68,16 +68,6 @@ export const RebalanceDetail = () => {
 
   if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   const lines = r.lines ?? [];
-  const overrideRows = lines
-    .filter((l) => Math.abs(l.delta) >= 0.03)
-    .map((l) => ({
-      id: `${r.id}_${l.strategyId}`,
-      strategyId: l.strategyId,
-      strategyName: l.strategyName,
-      delta: l.delta,
-      reason: l.delta > 0 ? t("rebalance.overrides.increase") : t("rebalance.overrides.decrease"),
-      state: Math.abs(l.delta) > 0.06 ? "review" : "approved",
-    }));
 
   return (
     <>
