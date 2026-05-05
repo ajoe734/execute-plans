@@ -21,11 +21,7 @@ export const StrategySpecTab = ({ strategy, params }: { strategy: Strategy; para
   }, [strategy.id]);
 
   const toggleLock = async () => {
-    await bff.mutations.runAction({
-      kind: "Strategy", id: strategy.id,
-      action: locked ? "unlock_params" : "lock_params",
-      memo: locked ? "unlock parameters" : "lock parameters",
-    });
+    await bff.mutations.lockParams(strategy.id, !locked, locked ? "unlock parameters" : "lock parameters");
     setLocked((v) => !v);
     toast.success(locked ? t("phase13.strategy.spec.unlocked") : t("phase13.strategy.spec.locked"));
   };
