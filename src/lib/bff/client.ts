@@ -27,6 +27,10 @@ export const bff = {
   /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
   getAcceptLanguage: acceptLanguage,
   mutations,
+  /** v3 §6.2 high-risk confirmation token issuance. */
+  commands: {
+    requestConfirmToken: mutations.requestConfirmToken,
+  },
   strategies: {
     list: () => delay(seed.strategies),
     get: (id: string) => delay(seed.strategies.find((s) => s.id === id)),
