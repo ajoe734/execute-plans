@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
 import { bff } from "@/lib/bff/client";
-import { runActionSafe } from "@/lib/bff/runAction";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 

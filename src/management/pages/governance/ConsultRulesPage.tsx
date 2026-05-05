@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
-import { runActionSafe } from "@/lib/bff/runAction";
 import type { ConsultRule, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 

@@ -10,7 +10,6 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff/client";
-import { runActionSafe } from "@/lib/bff/runAction";
 import type { ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
