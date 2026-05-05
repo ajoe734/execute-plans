@@ -806,7 +806,6 @@ export default {
         evaluations: { title: "Evaluation Suites", desc: "Run regression suites against personas and skills." },
         channels: { title: "Channels", desc: "Manage notification routes the trainer publishes into." },
       },
-      },
       detail: {
         notFound: "Persona {{id}} not found.",
         back: "Back to studio",
