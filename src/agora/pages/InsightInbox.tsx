@@ -42,12 +42,31 @@ export const InsightInbox = () => {
   const filtered = filter === "all" ? items : items.filter((i) => i.kind === filter);
   const archive = (id: string) => {
     setItems((m) => m.filter((i) => i.id !== id));
-    toast.success("Archived");
+    toast.success(t("agora.insightInbox.dismiss"));
   };
   const promote = (i: Insight) => {
     if (i.kind === "research_idea") toast.success("Created research_task");
     else if (i.kind === "skill_suggestion") toast.success("Drafted skill in coaching queue");
     else toast.success("Saved to research_note");
+  };
+  const promoteToStrategy = (i: Insight) => {
+    openHandoff({
+      type: "research_task",
+      source: { kind: "Insight", id: i.id, label: i.title },
+      summary: `Strategy idea: ${i.title}`,
+      notes: i.body,
+      evidence: [`source:${i.source}`],
+    });
+    toast.success(t("agora.insightInbox.promotedStrategy"));
+  };
+  const promoteToTraining = (i: Insight) => {
+    openHandoff({
+      type: "skill_draft",
+      source: { kind: "Insight", id: i.id, label: i.title },
+      summary: `Training example: ${i.title}`,
+      notes: i.body,
+    });
+    toast.success(t("agora.insightInbox.promotedTraining"));
   };
 
   return (
