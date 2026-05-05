@@ -108,12 +108,8 @@ export const TopBar = () => {
         <Button variant="ghost" size="icon" title={t("topbar.notifications")} onClick={() => useNotificationCenter.getState().setOpen(true)}><Bell className="h-4 w-4" /></Button>
       </div>
 
-      {/* BFF status */}
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
-        {bffOnline ? <Wifi className="h-3.5 w-3.5 text-status-success" /> : <WifiOff className="h-3.5 w-3.5 text-status-failed" />}
-        <span className="text-mono">{t("topbar.bff")}</span>
-        <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse-dot" title={t("topbar.realtime")} />
-      </div>
+      {/* Realtime / BFF status */}
+      <RealtimeStatusBadge />
 
       {/* Locale */}
       <DropdownMenu>
