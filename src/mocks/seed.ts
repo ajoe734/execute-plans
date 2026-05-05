@@ -387,12 +387,77 @@ const LABEL_KEY_BY_TYPE: Record<string, string> = {
   Skill: "object.skill", Channel: "object.channel",
 };
 
-function enrich<T extends { state?: string; availableActions?: string[]; labelKey?: string }>(arr: T[], type: string): T[] {
+// v3 §4: map legacy LifecycleState → v3 Strategy lifecycle/review/deployment triple.
+const STRATEGY_STATUS_MAP: Record<string, { lifecycle: string; review: string; deployment: string }> = {
+  draft:    { lifecycle: "discovered",  review: "draft",      deployment: "not_deployed" },
+  review:   { lifecycle: "replicated",  review: "in_review",  deployment: "not_deployed" },
+  approved: { lifecycle: "approved",    review: "approved",   deployment: "scheduled"    },
+  deployed: { lifecycle: "live",        review: "none",       deployment: "running"      },
+  paused:   { lifecycle: "degraded",    review: "none",       deployment: "paused"       },
+  retired:  { lifecycle: "retired",     review: "none",       deployment: "stopped"      },
+};
+// v3 §4 Persona status mapping.
+const PERSONA_STATUS_MAP: Record<string, string> = {
+  draft: "draft", review: "sandbox", approved: "active",
+  deployed: "active", paused: "suspended", retired: "retired",
+};
+
+import type { ActionDescriptor, EntityType } from "@/lib/v3/availableActions";
+
+const ACTION_RISK: Record<string, "low" | "medium" | "high" | "critical"> = {
+  promote_live: "critical", deploy_paper: "high", deploy: "high", apply: "critical",
+  rollback: "high", retire: "medium", pause: "medium", resume: "low",
+  approve: "medium", reject: "low", grant_env: "high", revoke: "high",
+  cancel_all: "critical", publish: "medium", deprecate: "low",
+};
+const ENTITY_TYPE_MAP: Record<string, EntityType> = {
+  Strategy: "strategy", Persona: "persona", CapitalPool: "capitalPool",
+  Rebalance: "rebalance", Deployment: "deployment", Evolution: "evolution",
+  Research: "experiment", Artifact: "artifact", RankingFormula: "rankingFormula",
+  Tool: "tool", McpServer: "mcpServer", McpTool: "mcpTool",
+  Skill: "skill", Channel: "channel",
+};
+
+function enrich<T extends {
+  state?: string; availableActions?: string[]; labelKey?: string;
+  actionDescriptors?: ActionDescriptor[];
+  lifecycleStatus?: string; reviewStatus?: string; deploymentStatus?: string;
+}>(arr: T[], type: string): T[] {
+  const entity = ENTITY_TYPE_MAP[type];
   for (const o of arr) {
     o.labelKey = o.labelKey ?? LABEL_KEY_BY_TYPE[type];
-    if (o.availableActions) continue;
-    const map = ACTIONS_BY_TYPE[type];
-    o.availableActions = (map && o.state ? map[o.state as keyof ActionMap] : undefined) ?? [];
+    if (!o.availableActions) {
+      const map = ACTIONS_BY_TYPE[type];
+      o.availableActions = (map && o.state ? map[o.state as keyof ActionMap] : undefined) ?? [];
+    }
+    // v3 §8 — synthesize ActionDescriptor[] from legacy string ids.
+    if (!o.actionDescriptors && entity) {
+      o.actionDescriptors = (o.availableActions ?? []).map((id) => ({
+        id, labelKey: `actions.${id}`, entityType: entity,
+        actionType: "command",
+        riskLevel: ACTION_RISK[id] ?? "low",
+        enabled: true,
+        requiresApproval: ACTION_RISK[id] === "high" || ACTION_RISK[id] === "critical",
+        requiresConfirmation: ACTION_RISK[id] === "critical",
+        requiresMemo: ACTION_RISK[id] === "critical",
+        allowedRoles: [],
+        requiredEntityStatuses: o.state ? [o.state] : [],
+        requiredPlatformEnvironments: [],
+        requiredTradingEnvironments: [],
+        blockers: [],
+      }));
+    }
+    // v3 §4 — synthesize Strategy / Persona status triples.
+    if (!o.lifecycleStatus && o.state) {
+      if (type === "Strategy") {
+        const m = STRATEGY_STATUS_MAP[o.state];
+        if (m) { o.lifecycleStatus = m.lifecycle; o.reviewStatus = m.review; o.deploymentStatus = m.deployment; }
+      } else if (type === "Persona") {
+        o.lifecycleStatus = PERSONA_STATUS_MAP[o.state] ?? "active";
+      } else {
+        o.lifecycleStatus = o.state;
+      }
+    }
   }
   return arr;
 }
