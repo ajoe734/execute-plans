@@ -389,6 +389,92 @@ export const mutations = {
     const audit = pushAudit("evolution.freeze_generation", programId, memo);
     return delay({ ok: true, audit });
   },
+
+  // ---- Phase 14 Slice E: governance trio typed helpers ----
+
+  /** Approval decision wrapper that records before/after + structured outcome. */
+  decideApproval(
+    id: string,
+    decision: "approve" | "reject" | "request_changes" | "escalate" | "freeze",
+    memo: string,
+  ): Promise<MutationResult> {
+    const a = findById(seed.approvals, id) as ApprovalRequest | undefined;
+    const before = snap(a);
+    if (a) {
+      if (decision === "approve") a.state = "approved";
+      else if (decision === "reject") a.state = "rejected";
+      // request_changes / escalate / freeze keep state pending but log the decision.
+    }
+    realtime.emit("data", { kind: "Approval" });
+    const audit = pushAudit(
+      `approval.${decision}`, id, memo,
+      { before, after: snap(a), outcome: "ok" },
+    );
+    return delay({ ok: true, audit });
+  },
+
+  /** Phase 11 — submit permission matrix cell updates. */
+  updatePermissionMatrix(
+    instance: string,
+    updates: { rowId: string; colId: string; grant: PermissionGrant }[],
+    memo?: string,
+  ): Promise<MutationResult> {
+    const matrix = (seed.permissionMatrices as PermissionMatrix[]).find((m) => m.instance === instance);
+    const before = snap(matrix?.cells);
+    if (matrix) {
+      const actor = usePlatform.getState().role;
+      const ts = new Date().toISOString();
+      for (const u of updates) {
+        const cell = matrix.cells.find((c) => c.rowId === u.rowId && c.colId === u.colId);
+        if (cell) { cell.grant = u.grant; cell.updatedBy = actor; cell.updatedAt = ts; }
+        else matrix.cells.push({ rowId: u.rowId, colId: u.colId, grant: u.grant, updatedBy: actor, updatedAt: ts });
+      }
+    }
+    realtime.emit("data", { kind: "PermissionMatrix" });
+    const audit = pushAudit(
+      "permission.update_cells", instance, memo ?? `${updates.length} cell(s)`,
+      { before, after: snap(matrix?.cells), outcome: "ok" },
+    );
+    return delay({ ok: true, audit });
+  },
+
+  /** Phase 11 — replace route-policy rules and bump a draft version. */
+  publishRoutePolicy(policyId: string, rules: RoutePolicyRule[], memo?: string): Promise<MutationResult> {
+    const policy = (seed.routePolicies as RoutePolicy[]).find((p) => p.id === policyId);
+    const before = snap(policy?.rules);
+    if (policy) {
+      policy.rules = rules.map((r, i) => ({ ...r, priority: (i + 1) * 10 }));
+      policy.state = "review";
+      const next = `v${(seed.policyVersions as PolicyVersion[]).filter((v) => v.policyId === policyId).length + 1}`;
+      (seed.policyVersions as PolicyVersion[]).unshift({
+        id: `pv_${Date.now().toString(36)}`,
+        policyId, version: next,
+        rules: policy.rules,
+        author: usePlatform.getState().role,
+        createdAt: new Date().toISOString(),
+        note: memo,
+      });
+    }
+    realtime.emit("data", { kind: "RoutePolicy" });
+    const audit = pushAudit(
+      "routePolicy.submit_review", policyId, memo ?? `${rules.length} rule(s)`,
+      { before, after: snap(policy?.rules), outcome: "ok" },
+    );
+    return delay({ ok: true, audit });
+  },
+
+  /** Phase 11.5 — replace consult ruleset wholesale. */
+  updateConsultRules(rules: ConsultRule[], memo?: string): Promise<MutationResult> {
+    const list = seed.consultRules as ConsultRule[];
+    const before = snap(list);
+    list.splice(0, list.length, ...rules.map((r) => ({ ...r, updatedAt: new Date().toISOString() })));
+    realtime.emit("data", { kind: "ConsultRule" });
+    const audit = pushAudit(
+      "consult.update_rules", "consult-rules", memo ?? `${rules.length} rule(s)`,
+      { before, after: snap(list), outcome: "ok" },
+    );
+    return delay({ ok: true, audit });
+  },
 };
 
 export type Mutations = typeof mutations;
