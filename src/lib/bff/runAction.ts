@@ -20,7 +20,7 @@ export async function runActionSafe(input: RunActionInput): Promise<MutationResu
       description: `${input.kind} · ${input.action}`,
     });
   } else if (!result.ok) {
-    toast.error(ttl("toast.actionFailed", "Action failed"), {
+    toast.error(ttl("toast.failed", "Action failed"), {
       description: result.message,
     });
   }
