@@ -104,8 +104,10 @@ export const InsightInbox = () => {
                     </div>
                     <h3 className="font-semibold text-sm">{i.title}</h3>
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{i.body}</p>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex flex-wrap gap-2 mt-3">
                       <Button size="sm" onClick={() => promote(i)}>{t("agora.insightInbox.promote")}</Button>
+                      <Button size="sm" variant="outline" onClick={() => promoteToStrategy(i)}>{t("agora.insightInbox.promoteToStrategy")}</Button>
+                      <Button size="sm" variant="outline" onClick={() => promoteToTraining(i)}>{t("agora.insightInbox.promoteToTraining")}</Button>
                       <Button size="sm" variant="outline" onClick={() => openHandoff({
                         type: i.kind === "research_idea" ? "research_task" : i.kind === "skill_suggestion" ? "skill_draft" : "insight",
                         source: { kind: "Insight", id: i.id, label: i.title },
