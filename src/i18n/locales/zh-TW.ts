@@ -904,6 +904,14 @@ export default {
       detail: "階段詳情",
       current: "目前",
     },
+    reduceAllocation: {
+      action: "降低配置",
+      title: "降低配置 — {{name}}",
+      desc: "降低 Live 配置占比但不回滾部署。風控與營運將透過審計被通知。",
+      current: "目前配置",
+      target: "目標配置",
+      queued: "配置已調整為 {{pct}}%",
+    },
   },
   evolution: {
     resume: "恢復",
@@ -1143,7 +1151,8 @@ export default {
     },
     mcp: {
       tabs: { schema: "Schema", secrets: "金鑰", audit: "稽核" },
-      schema: { input: "輸入 Schema", output: "輸出 Schema" },
+      schema: { input: "輸入 Schema", output: "輸出 Schema", sample: "呼叫範例" },
+      calls24h: "次呼叫/24h",
       secrets: { lastRotated: "上次輪替", rotate: "輪替", queued: "輪替已送出。", masked: "•••• •••• ••••" },
     },
     skill: {

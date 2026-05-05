@@ -917,6 +917,14 @@ export default {
       detail: "Stage details",
       current: "Current",
     },
+    reduceAllocation: {
+      action: "Reduce allocation",
+      title: "Reduce allocation — {{name}}",
+      desc: "Lowers the live allocation share without rolling back the deployment. Risk and ops are notified via audit.",
+      current: "Current allocation",
+      target: "Target allocation",
+      queued: "Allocation reduced to {{pct}}%",
+    },
   },
   evolution: {
     resume: "Resume",
@@ -1156,7 +1164,8 @@ export default {
     },
     mcp: {
       tabs: { schema: "Schema", secrets: "Secrets", audit: "Audit" },
-      schema: { input: "Input schema", output: "Output schema" },
+      schema: { input: "Input schema", output: "Output schema", sample: "Sample call" },
+      calls24h: "calls 24h",
       secrets: { lastRotated: "Last rotated", rotate: "Rotate", queued: "Rotation queued.", masked: "•••• •••• ••••" },
     },
     skill: {

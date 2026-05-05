@@ -504,6 +504,21 @@ export const mutations = {
     return delay({ ok: true, audit });
   },
 
+  /** Phase P1 — Reduce a live deployment's allocation share without rolling back.
+   *  Mock semantics: stores the new pct on the deployment as `allocationPct`,
+   *  emits realtime + audit so dashboards refresh. */
+  reduceAllocation(deploymentId: string, newPct: number, memo?: string): Promise<MutationResult> {
+    const d = findById(seed.deployments, deploymentId) as
+      (typeof seed.deployments[number] & { allocationPct?: number }) | undefined;
+    const before = snap(d ? { allocationPct: d.allocationPct ?? 100 } : undefined);
+    if (d) d.allocationPct = Math.max(0, Math.min(100, Math.round(newPct)));
+    realtime.emit("data", { kind: "Deployment" });
+    const audit = pushAudit("deployment.reduce_allocation", deploymentId,
+      memo ?? `→ ${newPct}%`,
+      { before, after: snap(d ? { allocationPct: d.allocationPct } : undefined), outcome: "ok" });
+    return delay({ ok: true, audit, message: `Allocation set to ${newPct}%` });
+  },
+
   freezeGeneration(programId: string, memo?: string): Promise<MutationResult> {
     const p = findById(seed.evolutionPrograms, programId) as
       (typeof seed.evolutionPrograms[number] & { generationFrozen?: boolean }) | undefined;

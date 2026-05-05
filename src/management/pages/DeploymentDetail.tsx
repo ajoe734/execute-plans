@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Rocket, Undo2 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Rocket, Undo2, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff/client";
 import { runActionSafe } from "@/lib/bff/runAction";
@@ -29,6 +31,8 @@ export const DeploymentDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
+  const [reduceOpen, setReduceOpen] = useState(false);
+  const [newPct, setNewPct] = useState(50);
 
   useEffect(() => {
     if (!id) return;
@@ -51,6 +55,11 @@ export const DeploymentDetail = () => {
             {!isLive && (
               <Button size="sm" onClick={() => setPromoteOpen(true)}>
                 <Rocket className="h-4 w-4 mr-1" />{t("actions.promoteLive")}
+              </Button>
+            )}
+            {isLive && (
+              <Button size="sm" variant="outline" onClick={() => setReduceOpen(true)}>
+                <TrendingDown className="h-4 w-4 mr-1" />{t("deployment.reduceAllocation.action")}
               </Button>
             )}
             {d.rollbackAvailable && (
@@ -134,6 +143,38 @@ export const DeploymentDetail = () => {
         destructive
         onConfirm={async (memo) => { await bff.mutations.rollback("Deployment", d.id, memo); toast.success("Rollback executed"); }}
       />
+
+      <Dialog open={reduceOpen} onOpenChange={setReduceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deployment.reduceAllocation.title", { name: d.name })}</DialogTitle>
+            <DialogDescription>{t("deployment.reduceAllocation.desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{t("deployment.reduceAllocation.current")}</span>
+              <span className="text-mono">{((d as Deployment & { allocationPct?: number }).allocationPct ?? 100)}%</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{t("deployment.reduceAllocation.target")}</span>
+                <span className="text-mono font-semibold">{newPct}%</span>
+              </div>
+              <Slider value={[newPct]} onValueChange={(v) => setNewPct(v[0])} min={0} max={100} step={5} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReduceOpen(false)}>{t("actions.cancel")}</Button>
+            <Button onClick={async () => {
+              await bff.mutations.reduceAllocation(d.id, newPct, `manual reduce → ${newPct}%`);
+              toast.success(t("deployment.reduceAllocation.queued", { pct: newPct }));
+              setReduceOpen(false);
+              const fresh = await bff.deployments.get(d.id);
+              if (fresh) setD(fresh);
+            }}>{t("actions.confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
