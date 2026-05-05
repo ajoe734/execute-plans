@@ -18,6 +18,14 @@ import { bff } from "@/lib/bff/client";
 import type { Persona } from "@/lib/bff/types";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
+import { useRef } from "react";
+import {
+  validateEvidenceUpload,
+  COMMITTEE_EVIDENCE_ALLOWED_MIMES,
+  COMMITTEE_EVIDENCE_ENDPOINTS,
+  EVIDENCE_LIMITS,
+  type EvidenceMime,
+} from "@/lib/v3/committeeEvidence";
 
 type SessionStatus = "open" | "discussing" | "memo_ready" | "submitted" | "closed";
 type Template =
@@ -318,10 +326,15 @@ const CommitteeDetail = ({ session, personas, onBack, onUpdate }: {
             </Card>
             <Card className="p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("committee.evidence")}</div>
-              <ul className="text-mono text-xs space-y-1">
+              <ul className="text-mono text-xs space-y-1 mb-2">
                 {session.evidence.map((e, i) => <li key={i}>· {e}</li>)}
                 {session.evidence.length === 0 && <li className="text-muted-foreground">—</li>}
               </ul>
+              <EvidencePackUploader
+                sessionId={session.id}
+                existingCount={session.evidence.length}
+                onUploaded={(label) => onUpdate({ ...session, evidence: [...session.evidence, label] })}
+              />
             </Card>
           </div>
 
@@ -434,6 +447,57 @@ const VoteSummary = ({ session }: { session: Session }) => {
         );
       })}
       {all.length === 0 && <div className="text-xs text-muted-foreground">{t("common.noResults")}</div>}
+    </div>
+  );
+};
+
+// v3 §18 Evidence Pack uploader — file picker + client-side validation,
+// then POSTs metadata to mock BFF endpoint.
+const EvidencePackUploader = ({ sessionId, existingCount, onUploaded }: {
+  sessionId: string;
+  existingCount: number;
+  onUploaded: (label: string) => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onPick = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const incoming = Array.from(files).map((f) => ({
+      fileName: f.name,
+      mimeType: f.type,
+      sizeBytes: f.size,
+      metadata: { source: "committee_upload", title: f.name, uploadedBy: "trader@local", createdAt: new Date().toISOString() },
+    }));
+    // Pretend existing count maps to existing files of size 0 for cap check.
+    const existing = Array.from({ length: existingCount }).map(() => ({
+      id: "ex", fileName: "", mimeType: "application/pdf" as EvidenceMime,
+      sizeBytes: 0, storageUrl: "", extractedTextStatus: "completed" as const,
+    }));
+    const errs = validateEvidenceUpload(existing, incoming);
+    if (errs.length) {
+      toast.error(`evidence rejected: ${errs.map((e) => e.code).join(", ")}`);
+      return;
+    }
+    void fetch(COMMITTEE_EVIDENCE_ENDPOINTS.uploadFiles(sessionId), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ files: incoming }),
+    }).catch(() => {/* mocked */});
+    incoming.forEach((f) => onUploaded(`${f.fileName} (${(f.sizeBytes / 1024).toFixed(0)} KB)`));
+    toast.success(`uploaded ${incoming.length} file(s) to evidence pack`);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+  return (
+    <div className="space-y-1">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={COMMITTEE_EVIDENCE_ALLOWED_MIMES.join(",")}
+        onChange={(e) => onPick(e.target.files)}
+        className="block w-full text-xs file:mr-2 file:rounded file:border-0 file:bg-accent file:px-2 file:py-1 file:text-accent-foreground"
+      />
+      <div className="text-[10px] text-muted-foreground">
+        max {EVIDENCE_LIMITS.maxFilesPerPack} files · {(EVIDENCE_LIMITS.maxFileSizeBytes / 1024 / 1024).toFixed(0)}MB each · pdf/md/txt/csv/png/jpg
+      </div>
     </div>
   );
 };

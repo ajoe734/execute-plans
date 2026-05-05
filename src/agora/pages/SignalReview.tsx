@@ -11,6 +11,13 @@ import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { toast } from "sonner";
+import {
+  validateSignalFeedback,
+  SIGNAL_FEEDBACK_ENDPOINT,
+  SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS,
+  type SignalConfidence,
+  type SignalDecision,
+} from "@/lib/v3/signalFeedback";
 
 interface Signal {
   id: string;
@@ -54,7 +61,8 @@ export const SignalReview = () => {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [active, setActive] = useState<Signal | null>(null);
   const [comment, setComment] = useState("");
-  const [decided, setDecided] = useState<Record<string, "approved" | "rejected" | "flagged">>({});
+  const [confidence, setConfidence] = useState<SignalConfidence>(3);
+  const [decided, setDecided] = useState<Record<string, { decision: SignalDecision; confidence: SignalConfidence; at: number }>>({});
 
   useEffect(() => {
     bff.strategies.list().then((s) => {
@@ -64,9 +72,19 @@ export const SignalReview = () => {
     });
   }, []);
 
-  const decide = (id: string, d: "approved" | "rejected" | "flagged") => {
-    setDecided((m) => ({ ...m, [id]: d }));
-    toast.success(`signal_feedback (${d}) captured`);
+  const decide = (id: string, decision: SignalDecision) => {
+    const req = { signalId: id, decision, confidence, reason: comment || undefined };
+    const errs = validateSignalFeedback(req);
+    if (errs.length) {
+      toast.error(t(`signal.feedback.error.${errs[0].code}`) || errs[0].code);
+      return;
+    }
+    // POST to v3 §16 endpoint (mock).
+    void fetch(SIGNAL_FEEDBACK_ENDPOINT(id), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req),
+    }).catch(() => {/* mocked BFF */});
+    setDecided((m) => ({ ...m, [id]: { decision, confidence, at: Date.now() } }));
+    toast.success(`signal_feedback ${decision} · conf ${confidence}/5 · editable ${SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS}s`);
     setComment("");
   };
 
@@ -89,7 +107,7 @@ export const SignalReview = () => {
                     <Badge variant="outline" className={`text-[10px] uppercase ${s.side === "long" ? "bg-status-success/15 text-status-success border-status-success/30" : "bg-status-failed/15 text-status-failed border-status-failed/30"}`}>{s.side}</Badge>
                     <span className="font-mono text-sm font-semibold">{s.symbol}</span>
                     <RiskBadge level={s.risk} />
-                    {d && <Badge variant="outline" className="ml-auto text-[10px] uppercase">{d}</Badge>}
+                    {d && <Badge variant="outline" className="ml-auto text-[10px] uppercase">{d.decision}·{d.confidence}/5</Badge>}
                   </div>
                   <div className="text-sm font-medium truncate">{s.strategyName}</div>
                   <div className="text-xs text-mono text-muted-foreground">size {(s.size * 100).toFixed(2)}% · conviction {(s.conviction * 100).toFixed(0)}%</div>
@@ -128,17 +146,29 @@ export const SignalReview = () => {
                   {active.rationale}
                 </div>
 
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("agora.signalReview.confidence") || "Confidence"} (1–5)</span>
+                  {[1,2,3,4,5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setConfidence(n as SignalConfidence)}
+                      className={`h-7 w-7 rounded-md border text-xs font-mono ${confidence === n ? "bg-accent text-accent-foreground border-accent" : "hover:bg-muted/50"}`}
+                    >{n}</button>
+                  ))}
+                </div>
+
                 <Textarea
-                  placeholder="Add your reasoning (becomes part of signal_feedback)…"
+                  placeholder={t("agora.signalReview.reasonPlaceholder") || "Reason (required for disagree at confidence ≥4 and any flag_suspicious)…"}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   className="min-h-[80px] mb-3"
                 />
 
                 <div className="flex gap-2 flex-wrap">
-                  <Button onClick={() => decide(active.id, "approved")}><ThumbsUp className="h-4 w-4 mr-1" />{t("agora.signalReview.approve")}</Button>
-                  <Button variant="outline" onClick={() => decide(active.id, "rejected")}><ThumbsDown className="h-4 w-4 mr-1" />{t("agora.signalReview.reject")}</Button>
-                  <Button variant="ghost" onClick={() => decide(active.id, "flagged")}><MessageSquareWarning className="h-4 w-4 mr-1" />{t("agora.signalReview.flagReview")}</Button>
+                  <Button onClick={() => decide(active.id, "agree")}><ThumbsUp className="h-4 w-4 mr-1" />{t("agora.signalReview.agree") || "Agree"}</Button>
+                  <Button variant="outline" onClick={() => decide(active.id, "disagree")}><ThumbsDown className="h-4 w-4 mr-1" />{t("agora.signalReview.disagree") || "Disagree"}</Button>
+                  <Button variant="ghost" onClick={() => decide(active.id, "flag_suspicious")}><MessageSquareWarning className="h-4 w-4 mr-1" />{t("agora.signalReview.flag") || "Flag suspicious"}</Button>
                   <Button variant="outline" className="ml-auto" onClick={() => navigate(`/agora/signals/${active.id}`)}>{t("agora.signalReview.openDetail")} <ArrowRight className="h-4 w-4 ml-1" /></Button>
                 </div>
               </>
