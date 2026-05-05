@@ -175,13 +175,22 @@ export const mutations = {
   /** Generic state-machine action. Validates transition, updates state, writes audit, emits realtime. */
   runAction(input: RunActionInput): Promise<MutationResult> {
     const { kind, id, action, newState, memo } = input;
+    const col = SEED_COLLECTIONS[kind];
+    const obj = col ? findById(col, id) as { state?: string } | undefined : undefined;
+    const before = snap(obj);
     const guard = validateTransition(kind, id, action, newState);
     if (guard.ok === false) {
-      const audit = pushAudit(`${kind.toLowerCase()}.illegal_transition`, id, `${action}: ${guard.reason}`);
+      const audit = pushAudit(
+        `${kind.toLowerCase()}.illegal_transition`, id, `${action}: ${guard.reason}`,
+        { before, outcome: "rejected" },
+      );
       return delay({ ok: false, audit, rejected: "illegal_transition", message: guard.reason });
     }
     setState(kind, id, guard.resolvedState);
-    const audit = pushAudit(`${kind.toLowerCase()}.${action}`, id, memo);
+    const audit = pushAudit(
+      `${kind.toLowerCase()}.${action}`, id, memo,
+      { before, after: snap(obj), outcome: "ok" },
+    );
     return delay({ ok: true, audit, message: `${action} applied` });
   },
 
