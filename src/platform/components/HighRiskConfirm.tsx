@@ -1,6 +1,12 @@
 // HighRiskConfirm — Part 7 §8.3 HighRiskConfirmationModal.
-// 12 structured fields + audit memo (required) + confirm phrase token (for critical / live).
-import { useState, type ReactNode } from "react";
+// 12 structured fields + audit memo (required) + confirm phrase token.
+//
+// v3 §6.2 confirm-token flow (Pack A G03/G66/G86): when `actionId` is a v3
+// dotted high-risk action id, the modal fetches a short-lived `confirmToken`
+// from `bff.commands.requestConfirmToken` on open, displays a TTL countdown
+// and the server-issued `requiredPhrase`, and passes the token to `onConfirm`.
+// Legacy callers that pass a plain `confirmToken` string continue to work.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -14,10 +20,12 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { RiskLevel } from "@/lib/bff/types";
+import { bff } from "@/lib/bff/client";
+import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 
 export interface AffectedRefs {
   strategies?: string[];
@@ -61,7 +69,15 @@ export interface HighRiskConfirmProps {
   /** Extra slot rendered before footer. */
   extra?: ReactNode;
 
-  onConfirm: (memo: string) => void | Promise<void>;
+  // ---- v3 §6.2 confirm-token integration ----
+  /** v3 dotted action id (e.g. "strategy.deploy_live"). When set and registered
+   *  in HIGH_RISK_ACTIONS, the modal fetches a confirmToken from BFF on open. */
+  actionId?: string;
+  /** Entity type & id used to build the confirm phrase (e.g. {type:"strategy", id:"st_01"}). */
+  confirmEntity?: { type: string; id: string };
+
+  /** Receives the audit memo. With v3 actionId, also receives the issued token. */
+  onConfirm: (memo: string, token?: string) => void | Promise<void>;
 }
 
 export const HighRiskConfirm = ({
