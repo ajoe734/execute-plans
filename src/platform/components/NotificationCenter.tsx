@@ -15,8 +15,8 @@ import { bff } from "@/lib/bff/client";
 import { realtime } from "@/lib/bff/realtime";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
-import type { Alert, ApprovalRequest, Job } from "@/lib/bff/types";
-import { AlertTriangle, ClipboardCheck, Loader2 } from "lucide-react";
+import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
+import { AlertTriangle, ClipboardCheck, Loader2, ShieldAlert } from "lucide-react";
 
 interface NCState {
   open: boolean;
@@ -36,11 +36,12 @@ export const NotificationCenter = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([bff.alerts.list(), bff.approvals.list(), bff.jobs.list()]).then(
-      ([a, ap, j]) => { setAlerts(a); setApprovals(ap); setJobs(j); },
+    void Promise.all([bff.alerts.list(), bff.approvals.list(), bff.jobs.list(), bff.incidents.list()]).then(
+      ([a, ap, j, inc]) => { setAlerts(a); setApprovals(ap); setJobs(j); setIncidents(inc); },
     );
     const offAlert = realtime.on("alert", (p) => {
       const a = p as Alert;
@@ -50,13 +51,17 @@ export const NotificationCenter = () => {
       const j = p as { jobId: string; kind: string; status: Job["status"]; ts: string; owner: string };
       setJobs((cur) => [{ id: j.jobId, kind: j.kind, status: j.status, startedAt: j.ts, owner: j.owner }, ...cur].slice(0, 50));
     });
-    return () => { offAlert?.(); offJob?.(); };
+    const offData = realtime.on("data", (e: any) => {
+      if (e?.kind === "Incident") void bff.incidents.list().then(setIncidents);
+    });
+    return () => { offAlert?.(); offJob?.(); offData?.(); };
   }, [open]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };
   const openCount = alerts.filter((a) => !a.acknowledged).length;
   const pendingCount = approvals.filter((a) => a.state === "pending").length;
   const runningCount = jobs.filter((j) => j.status === "running").length;
+  const incidentCount = incidents.filter((i) => i.status !== "resolved").length;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -69,10 +74,14 @@ export const NotificationCenter = () => {
         </div>
 
         <Tabs defaultValue="alerts" className="px-5">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="alerts" className="gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />{t("topbar.openAlerts")}
               {openCount > 0 && <Badge variant="destructive" className="ml-1 px-1 text-[10px]">{openCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="incidents" className="gap-1.5">
+              <ShieldAlert className="h-3.5 w-3.5" />{t("notifications.incidents")}
+              {incidentCount > 0 && <Badge variant="destructive" className="ml-1 px-1 text-[10px]">{incidentCount}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="approvals" className="gap-1.5">
               <ClipboardCheck className="h-3.5 w-3.5" />{t("topbar.pendingApprovals")}
@@ -97,6 +106,22 @@ export const NotificationCenter = () => {
                   </div>
                   <div className="text-sm mt-1">{a.title}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{new Date(a.openedAt).toLocaleString()}</div>
+                </button>
+              ))}
+            </TabsContent>
+
+            <TabsContent value="incidents" className="space-y-2 mt-0">
+              {incidents.length === 0 && <Empty text={t("common.noResults")} />}
+              {incidents.map((i) => (
+                <button key={i.id} onClick={() => go(`/management/incidents/${i.id}`)}
+                  className="w-full text-left rounded-md border border-border bg-card hover:bg-muted/40 px-3 py-2 transition">
+                  <div className="flex items-center gap-2">
+                    <RiskBadge level={i.severity} />
+                    <StatusBadge state={i.status === "resolved" ? "success" : i.status === "mitigating" ? "running" : "warning"} />
+                    {i.commander && <span className="text-mono text-[10px] text-muted-foreground ml-auto">{i.commander}</span>}
+                  </div>
+                  <div className="text-sm mt-1">{i.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{new Date(i.openedAt).toLocaleString()}</div>
                 </button>
               ))}
             </TabsContent>

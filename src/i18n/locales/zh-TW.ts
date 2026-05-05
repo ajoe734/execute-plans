@@ -265,6 +265,15 @@ export default {
       liveWarn: "已啟用 LIVE 存取 — 儲存前請確認雙重核准已歸檔。",
       saved: "註冊已更新",
     },
+    actions: {
+      testConnection: "測試連線", connectionOk: "連線正常",
+      healthCheck: "健康檢查", healthChecked: "健康檢查已排入",
+      disable: "停用", disabled: "伺服器已停用",
+      disableTitle: "停用 {{name}}？", disableDesc: "停用後將停止此伺服器上所有工具呼叫。輸入 DISABLE 確認。",
+      reenable: "重新啟用", reenabled: "伺服器已重新啟用",
+      retire: "退役", retired: "伺服器已退役",
+      retireTitle: "退役 {{name}}？", retireDesc: "退役會永久將此 MCP 伺服器從路由中移除。輸入 RETIRE 確認。",
+    },
   },
   strategy: {
     params: {
@@ -278,6 +287,7 @@ export default {
     title: "通知中心",
     subtitle: "告警、待審批、執行中 Job 的彙總視圖",
     unack: "未確認",
+    incidents: "事件",
     viewAudit: "前往稽核日誌",
   },
   jobs: {
@@ -366,6 +376,7 @@ export default {
     postmortemDraft: "Postmortem 草稿",
     postmortemPlaceholder: "彙總根因、影響、緩解、後續行動…",
     postmortemRequired: "高嚴重事件關閉前須提供 ≥20 字 Postmortem。",
+    postmortem: { add: "新增 Postmortem", appended: "Postmortem 註記已加入" },
     createTrainingFeedback: "建立訓練回饋",
     createEvolutionConstraint: "建立演化限制",
     feedbackQueued: "訓練回饋已建立",
@@ -666,6 +677,10 @@ export default {
       risk: "風險審", ops: "Ops 審", security: "安全審", finance: "財務審",
       capital: "資金審", committee: "委員會", proposer: "提案者",
       reviewer: "審核者", executor: "執行者", "trainer-lead": "訓練主管",
+    },
+    mcpServer: {
+      draft: "草稿", connected: "已連線", healthy: "健康",
+      degraded: "降級", disabled: "已停用", retired: "已退役",
     },
   },
   rebalance: {

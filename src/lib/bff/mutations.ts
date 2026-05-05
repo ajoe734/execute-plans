@@ -303,6 +303,43 @@ export const mutations = {
     return delay({ ok: true, audit });
   },
 
+  /** Phase P1 — Escalate an alert into an Incident, linking the alert as evidence. */
+  escalateAlertToIncident(alertId: string, memo?: string): Promise<MutationResult & { incidentId: string }> {
+    const alert = findById(seed.alerts, alertId);
+    const id = `inc_${Date.now().toString(36)}`;
+    const inc: Incident = {
+      id,
+      severity: alert?.severity ?? "high",
+      title: alert ? `Escalated: ${alert.title}` : `Escalated alert ${alertId}`,
+      status: "open",
+      openedAt: new Date().toISOString(),
+      description: memo,
+      affected: alert?.relatedTarget ? [alert.relatedTarget] : [],
+      commander: usePlatform.getState().role,
+      timeline: [{ ts: new Date().toISOString(), actor: usePlatform.getState().role, note: memo ?? `Escalated from ${alertId}` }],
+    };
+    (seed.incidents as Incident[]).unshift(inc);
+    if (alert) alert.acknowledged = true;
+    realtime.emit("data", { kind: "Incident" });
+    realtime.emit("data", { kind: "Alert" });
+    const audit = pushAudit("alert.escalate_incident", alertId, `→ ${id}`, { outcome: "ok" });
+    return delay({ ok: true, audit, incidentId: id, message: `Incident ${id} opened` });
+  },
+
+  /** Phase P1 — Append a postmortem note to an incident's timeline. */
+  appendPostmortem(incidentId: string, note: string): Promise<MutationResult> {
+    const inc = findById(seed.incidents, incidentId);
+    if (inc) {
+      inc.timeline = [
+        ...(inc.timeline ?? []),
+        { ts: new Date().toISOString(), actor: usePlatform.getState().role, note: `[postmortem] ${note}` },
+      ];
+    }
+    realtime.emit("data", { kind: "Incident" });
+    const audit = pushAudit("incident.postmortem.append", incidentId, note.slice(0, 80));
+    return delay({ ok: true, audit });
+  },
+
   setIncidentStatus(id: string, status: Incident["status"], memo?: string): Promise<MutationResult> {
     const i = findById(seed.incidents, id);
     if (i) {
