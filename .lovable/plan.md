@@ -112,3 +112,33 @@ src/lib/bff/client.ts   掛 bff.v5
 - 既有頁面（Command Center / Approvals / Personas）行為無變化（因為僅新增 v5 層、未改 seed）
 
 核准後即進入 default mode 執行 A + C，然後等指示推進 E1。
+
+---
+
+## G. Pack E disposition 已收 + E0 已落地（2026-05-06）
+
+規劃團隊回覆 28/28 收件並歸檔於 `.lovable/feedback/2026-05-06-E/Pack_E_Planner_Response_2026-05-06.md` 與 `Pack_E_Disposition.csv`。19 條 spec-conflict-E 全數 RESOLVED。
+
+### 落地成果
+
+**新增**
+- `src/lib/v5/{enums,types,list,events,timeoutPolicy,health,remediation,overlay,sentinel,index}.ts`
+- `src/lib/v5/adapters/{persona,strategy,loopRun,intervention}.ts`
+- `src/lib/v5/__tests__/{health,overlay,sentinel,bff}.test.ts` — 18 tests passing
+- `src/lib/bff/v5.ts` facade（session / controlRoom / loops / personas / strategies / sentinel / interventions / remediation）
+
+**更新**
+- `src/lib/bff/client.ts` 掛 `bff.v5`
+- `.lovable/audits/spec-conflict-2026-05-06-E.md`（19 條全標 RESOLVED）
+- `.lovable/audits/INDEX.md`
+- `.lovable/spec/v5/Pantheon_v5_INDEX.md`（disposition canonical 鎖定段）
+- `mem://index.md` Core + `mem://features/v5-loop-os.md`
+
+**刻意不做**
+- 不寫回 seed（personas/strategies/deployments）— 既有頁面行為未變
+- 不引入 localStorage / DB
+- 本輪未動 `App.tsx` / `ManagementLayout.tsx` / `SideNav.tsx` / i18n locale（留給 E1）
+
+### 下一步
+
+E1 routing + nav：新增 5 條 v5 一級 route（control-room / loops / loops/{kind} / sentinel / interventions），Command Center 移 Legacy（Q17），Personas dedupeKey（Q18），i18n key 補齊。等核准後啟動。
