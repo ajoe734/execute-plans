@@ -141,4 +141,29 @@ src/lib/bff/client.ts   掛 bff.v5
 
 ### 下一步
 
-E1 routing + nav：新增 5 條 v5 一級 route（control-room / loops / loops/{kind} / sentinel / interventions），Command Center 移 Legacy（Q17），Personas dedupeKey（Q18），i18n key 補齊。等核准後啟動。
+E4 `/management/loops/optimization` + E5 `/management/sentinel` 高保真化。
+
+---
+
+## H. E2 + E3 已落地（2026-05-06）
+
+**E2 — Control Room 高保真**
+- `src/management/pages/v5/ControlRoom.tsx`：8 KPI cards、Top Loops、Top Findings、Persona/Strategy 健康摘要、refresh button、generatedAt
+- 訂閱 `onV5Event` → 任何 v5 寫入會自動 refresh（Q22）
+
+**E3 — Execution Loop + Persona Health Matrix**
+- `src/management/pages/v5/ExecutionLoop.tsx`：execution-kind LoopRuns 表格 + stage dots + v0-mock timeout policy KPI
+- `src/management/pages/v5/PersonaHealthMatrix.tsx`：依 critical→healthy 排序，顯示 mode/status/score/routed/findings/formula
+
+**共用**
+- `src/management/pages/v5/useV5Live.ts`：async loader + onV5Event 自動刷新
+
+**Routing**
+- `/management/control-room` → 新 `ControlRoomPage`
+- `/management/loops/execution` → 新 `ExecutionLoopPage`
+- `/management/loops/:kind` 仍由 `LoopsPage` 處理（research/optimization）
+
+**i18n**：en-US + zh-TW 補齊 `v5.controlRoom.*` / `v5.loops.execution.*` / `v5.matrix.*` / `v5.kpi.*` 擴充 keys。
+
+**驗收**：18 v5 vitest 全綠；不動 seed、不動 v4。
+
