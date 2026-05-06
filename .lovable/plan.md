@@ -167,3 +167,20 @@ E4 `/management/loops/optimization` + E5 `/management/sentinel` 高保真化。
 
 **驗收**：18 v5 vitest 全綠；不動 seed、不動 v4。
 
+
+---
+
+## I. E7 + E8 已落地（2026-05-06）
+
+**E7 — IA 收斂（前次已交付，本輪 reaffirm）**
+- `ManagementLayout.tsx` 已將 v5 群組（Closed-Loop OS）置頂；Command Center / Overview 移 Legacy；Approvals dedupeKey="humanQueue" 與 HIQ 共存
+- `SideNav.tsx` dedupeKey 機制；Personas / Loops 不重複高亮
+- `/management` index 已指向 `ControlRoomPage`（Q23 ✓）
+
+**E8 — Final Polish & Launch（本輪）**
+- `ExecutionLoop.tsx` / `OptimizationLoop.tsx`：`animate-pulse` → `motion-safe:animate-pulse`（C058 reduced-motion compliance）
+- i18n 覆蓋核對：v5 頁面使用的 124 keys 在 en-US / zh-TW 全數對齊（無缺漏）
+- vitest：18 v5 tests 全綠
+- 不刪 `/management/approvals` 與 `/management/command-center`（Q11/Q17）
+
+至此 Pack E E0–E8 全部完成，Pantheon Closed-Loop OS 高保真層落地。

@@ -21,7 +21,7 @@ const statusBadgeCls: Record<string, string> = {
 
 const stageDotCls: Record<string, string> = {
   succeeded: "bg-status-success",
-  running: "bg-status-running animate-pulse",
+  running: "bg-status-running motion-safe:animate-pulse",
   blocked: "bg-status-warning",
   failed: "bg-status-failed",
   pending: "bg-muted-foreground/40",
