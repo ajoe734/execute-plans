@@ -16,7 +16,7 @@ import {
   COMMITTEE_TEMPLATES,
   renderKpi, KPI_STORAGE_TZ,
   REBALANCE_STEP_UI,
-  FX_POLICY_NOT_USED_IN_V4_DEFAULT,
+  FRONTEND_FX_FORBIDDEN, PLATFORM_BASE_CURRENCY,
 } from "./index";
 
 // Render-hint table covers all 8 lifecycle machines (C012)
@@ -140,9 +140,10 @@ describe("Pack C-L · C074 rebalance step UI", () => {
   });
 });
 
-// FX policy declared as future-work (C042)
+// FX policy: frontend forbidden from FX conversion (C042)
 describe("Pack C-L · C042 fx policy", () => {
-  it("declares fx policy is not yet active", () => {
-    expect(typeof FX_POLICY_NOT_USED_IN_V4_DEFAULT).toBe("boolean");
+  it("forbids frontend FX and pins base currency", () => {
+    expect(FRONTEND_FX_FORBIDDEN).toBe(true);
+    expect(PLATFORM_BASE_CURRENCY).toBe("USD");
   });
 });
