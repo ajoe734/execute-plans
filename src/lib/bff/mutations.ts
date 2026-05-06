@@ -182,22 +182,65 @@ export const mutations = {
   runAction(input: RunActionInput): Promise<MutationResult> {
     const { kind, id, action, newState, memo } = input;
     const col = SEED_COLLECTIONS[kind];
-    const obj = col ? findById(col, id) as { state?: string } | undefined : undefined;
+    const obj = col ? findById(col, id) as { state?: string; lockVersion?: number; lifecycleStatus?: string; reviewStatus?: string; deploymentStatus?: string } | undefined : undefined;
     const before = snap(obj);
+
+    // Pack C C028 — idempotency-key replay (same key returns prior result within 24h).
+    if (input.idempotencyKey) {
+      const replay = idempotencyReplay(input.idempotencyKey);
+      if (replay) return delay(replay);
+    }
+    // Pack C C010 — optimistic lock check.
+    if (input.expectedVersion !== undefined && obj && obj.lockVersion !== undefined &&
+        obj.lockVersion !== input.expectedVersion) {
+      const audit = pushAudit(
+        `${kind.toLowerCase()}.optimistic_lock_failed`, id,
+        `expected v${input.expectedVersion}, actual v${obj.lockVersion}`,
+        { before, outcome: "rejected" },
+      );
+      const result: MutationResult = { ok: false, audit, rejected: "state_conflict",
+        message: `STATE_CONFLICT: expected v${input.expectedVersion}, got v${obj.lockVersion}` };
+      return delay(result);
+    }
     const guard = validateTransition(kind, id, action, newState);
     if (guard.ok === false) {
       const audit = pushAudit(
         `${kind.toLowerCase()}.illegal_transition`, id, `${action}: ${guard.reason}`,
         { before, outcome: "rejected" },
       );
-      return delay({ ok: false, audit, rejected: "illegal_transition", message: guard.reason });
+      const result: MutationResult = { ok: false, audit, rejected: "illegal_transition", message: guard.reason };
+      if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
+      return delay(result);
     }
     setState(kind, id, guard.resolvedState);
+    // Pack C C008 — Strategy three-axis invariant guard (best-effort, only when triple present).
+    if (kind === "Strategy" && obj?.lifecycleStatus && obj.reviewStatus && obj.deploymentStatus) {
+      const violation = explainTripleViolation({
+        lifecycleStatus: obj.lifecycleStatus as never,
+        reviewStatus: obj.reviewStatus as never,
+        deploymentStatus: obj.deploymentStatus as never,
+      });
+      if (violation) {
+        const audit = pushAudit(
+          "strategy.invariant_violation", id, violation,
+          { before, after: snap(obj), outcome: "rejected" },
+        );
+        const result: MutationResult = { ok: false, audit, rejected: "invariant_violation", message: violation };
+        if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
+        return delay(result);
+      }
+    }
+    // Pack C C010 — bump lockVersion on successful state mutation.
+    if (obj && guard.resolvedState !== undefined) {
+      obj.lockVersion = (obj.lockVersion ?? 0) + 1;
+    }
     const audit = pushAudit(
       `${kind.toLowerCase()}.${action}`, id, memo,
       { before, after: snap(obj), outcome: "ok" },
     );
-    return delay({ ok: true, audit, message: `${action} applied` });
+    const result: MutationResult = { ok: true, audit, message: `${action} applied` };
+    if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
+    return delay(result);
   },
 
   approve(id: string, memo?: string): Promise<MutationResult> {
