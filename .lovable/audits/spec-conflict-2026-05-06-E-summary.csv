@@ -1,0 +1,20 @@
+id,severity,category,title,sd_ref,blocked_phase,linked_pack_d
+E01,Blocker,v4-conflict,v5 enum vs v4 status enum 雙來源,SD §7.1,E0,—
+E02,Blocker,v4-conflict,v5 BFF facade 路徑未定,SD §3.2 §27,E0,—
+E03,Blocker,pack-d-dependency,LoopRun stage timeout 缺基礎,SD §7.2 §7.3,E3,D05
+E04,Blocker,pack-d-dependency,RemediationAction role gate 未定,SD §7.8,E6,D12
+E05,Blocker,pack-d-dependency,ControlRoomSummary 需 MeDto,SD §7.11 §12,E2,D59 D51
+E06,Blocker,pack-d-dependency,v5 typed event vs SSE schema,SD §9,E5,D26
+E07,High,pack-d-dependency,LoopRuns totalCount 未定,SD §13,E1,D22
+E08,High,ia-conflict,Control Room vs Command Center 過渡 nav,SD §6 §27,E1/E7,—
+E09,Medium,ia-conflict,Personas 雙入口,SD §6 §6.2,E1/E7,—
+E10,High,sd-internal,PersonaExecutionHealth.mode enum 矛盾,SD §7.4 §15.6,E0,—
+E11,High,sd-internal,SentinelFinding.status SA vs SD 不一致,SD §7.9 / SA,E0,—
+E12,Medium,sd-internal,RemediationAction.mode vs SA.automationLevel,SD §7.8 / SA,E0,—
+E13,Medium,sd-internal,InterventionItem 欄位增刪未說明,SD §7.10 / SA,E0,—
+E14,High,missing-detail,Health score 公式無權重,SD §20.2,E0,—
+E15,High,missing-detail,Sentinel mock 派生規則缺,SD §8.2,E0/E5,—
+E16,High,missing-detail,Emergency action 對 seed 副作用未訂,SD §15.6 §21.2,E3/E5,—
+E17,Medium,missing-detail,Realtime bus 復用未訂,SD §9,E0,—
+E18,Medium,missing-detail,Permission 模型未訂,SD —,E0,D12
+E19,Medium,missing-detail,/management/alpha-factory 未定義,SD §6,E1,—

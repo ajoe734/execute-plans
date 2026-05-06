@@ -15,6 +15,7 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `spec-gap-2026-05-05-C` | 2026-05-05 | 實作後 deeper-gap 反饋 | 78 | 14 / 38 / 26 | **RESOLVED by Pack C (v4 / 2026-05-05-C)** | 規劃團隊版 = `*-planner.md` |
 | `feedback-2026-05-05-C` | 2026-05-05 | Pack C 78 條規範回應 | 78 | 14 / 38 / 26 | RESOLVED — 進入實作 | 對應 v4 spec，存於 `.lovable/feedback/2026-05-05-C/` |
 | `spec-gap-2026-05-06-D` | 2026-05-06 | Pack C 落地後 second-order gaps | 63 | 21 / 28 / 14 | **OPEN — 待 Pack D 規範回應** | 5 條 blockers 另存 `*-blockers.md` |
+| `spec-conflict-2026-05-06-E` | 2026-05-06 | v5 SA+SD vs v4 / Pack D / SD 內部一致性 | 19 | 6 Blocker / 7 High / 6 Medium | **OPEN — 待 Pack E 規劃回應** | intake 於 `.lovable/feedback/2026-05-06-E/` |
 
 ## 累計覆蓋
 

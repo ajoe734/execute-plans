@@ -1,15 +1,26 @@
 # Pantheon Frontend Build Spec — Index
 
-Last updated: 2026-05-05 (v4)
+Last updated: 2026-05-06 (v5 SA+SD intake)
 
 ## Normative order (highest priority first)
 
-1. **`.lovable/spec/v4/`** — v4 FULL + Pack C remediation (2026-05-05-C). **Authoritative.**
-2. `.lovable/spec/v3/` — v3 FULL + Part 10 Medium/Low remediation (2026-05-05-B)
-3. `.lovable/spec/v2/` — v2 FULL + Part 9 High remediation (2026-05-05-A)
-4. `.lovable/spec/` (this folder) — original Parts 1–8 base spec
+1. **`.lovable/spec/v5/`** — v5 SA + SD (2026-05-06). **IA / Loop view-model / Sentinel / HIQ 升級層**，疊加於 v4 normative 之上。落地待 Pack D blockers + Pack E conflicts 解決。
+2. **`.lovable/spec/v4/`** — v4 FULL + Pack C remediation (2026-05-05-C). **Normative type / status enum / API contract source of truth.**
+3. `.lovable/spec/v3/` — v3 FULL + Part 10 Medium/Low remediation (2026-05-05-B)
+4. `.lovable/spec/v2/` — v2 FULL + Part 9 High remediation (2026-05-05-A)
+5. `.lovable/spec/` (this folder) — original Parts 1–8 base spec
 
-When implementing, **always prefer v4**; fall back to v3/v2/v1 only when v4 is silent.
+When implementing IA / Loop / Sentinel / HIQ 概念，prefer v5；status enum / DTO / permission 仍以 v4 為準。fall back to v3/v2/v1 only when both v4 and v5 are silent.
+
+## v5 (newest, IA + Loop layer)
+
+Folder: `.lovable/spec/v5/`
+
+- `Pantheon_v5_Closed_Loop_Supervisor_OS_SA_2026-05-06.md`
+- `Pantheon_v5_Closed_Loop_Supervisor_OS_SD_2026-05-06.md`
+- `Pantheon_v5_INDEX.md`
+
+Companion intake: `.lovable/feedback/2026-05-06-E/Pack_E_Intake_Notes.md`、conflict: `.lovable/audits/spec-conflict-2026-05-06-E.md`
 
 ## v4 (current authoritative)
 
