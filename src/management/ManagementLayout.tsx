@@ -12,20 +12,23 @@ import {
 export const ManagementLayout = () => {
   const t = useT();
   const groups: NavGroup[] = [
-    // Pack E E1 — v5 Closed-Loop OS top-level group (Q17/Q23 staged replacement)
+    // Pack E E1+E7 — v5 Closed-Loop OS top-level group (Q17/Q23 staged replacement).
+    // dedupeKey prevents double-highlighting when nested loop routes are active.
     { label: t("groups.closedLoopOs"), items: [
-      { to: "/management/control-room", label: t("nav.controlRoom"), icon: Compass },
-      { to: "/management/loops", label: t("nav.loops"), icon: Workflow },
-      { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical },
-      { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target },
-      { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch },
+      { to: "/management/control-room", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "controlRoom" },
+      { to: "/management/loops", label: t("nav.loops"), icon: Workflow, dedupeKey: "loops" },
+      { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical, dedupeKey: "loops" },
+      { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target, dedupeKey: "loops" },
+      { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch, dedupeKey: "loops" },
       { to: "/management/sentinel", label: t("nav.sentinel"), icon: ShieldAlert },
       { to: "/management/interventions", label: t("nav.interventions"), icon: Eye },
     ]},
     { label: t("groups.coreManagement"), items: [
       { to: "/management/strategies", label: t("nav.strategies"), icon: Boxes },
       { to: "/management/alpha-factory", label: t("nav.alphaFactory"), icon: Factory },
-      { to: "/management/personas", label: t("nav.personas"), icon: Users },
+      // Pack E Q18 — Personas remains canonical entry. Execution Loop persona view
+      // shares dedupeKey="personas" so the sidebar does not double-highlight.
+      { to: "/management/personas", label: t("nav.personas"), icon: Users, dedupeKey: "personas" },
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
       { to: "/management/rebalance", label: t("nav.rebalance"), icon: Repeat },
@@ -50,7 +53,10 @@ export const ManagementLayout = () => {
       { to: "/management/incidents", label: t("nav.incidents"), icon: AlertOctagon },
       { to: "/management/jobs", label: t("nav.jobs"), icon: ListChecks },
       { to: "/management/alerts", label: t("nav.alerts"), icon: Bell },
-      { to: "/management/approvals", label: t("nav.approvals"), icon: ClipboardCheck },
+      // Pack E E6/E7 — Approvals coexists with HIQ. dedupeKey shared so
+      // /management/interventions (HIQ) is the canonical entry and Approvals
+      // never double-highlights when reached from HIQ links.
+      { to: "/management/approvals", label: t("nav.approvals"), icon: ClipboardCheck, dedupeKey: "humanQueue" },
     ]},
     { label: t("groups.capabilities"), items: [
       { to: "/management/tools", label: t("nav.tools"), icon: Wrench },
@@ -65,7 +71,9 @@ export const ManagementLayout = () => {
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},
-    // Pack E Q17 — Command Center kept reachable in Legacy until E7
+    // Pack E E7 — Legacy group: Command Center / Overview kept reachable
+    // for muscle memory but ranked below v5 surfaces. NOT auto-redirected
+    // (per Q17) so deep links survive.
     { label: t("groups.legacy"), items: [
       { to: "/management/command-center", label: t("nav.commandCenter"), icon: LayoutDashboard },
       { to: "/management/overview", label: t("nav.overview"), icon: LayoutDashboard },
