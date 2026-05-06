@@ -397,9 +397,11 @@ const STRATEGY_STATUS_MAP: Record<string, { lifecycle: string; review: string; d
   retired:  { lifecycle: "retired",     review: "none",       deployment: "stopped"      },
 };
 // v3 §4 Persona status mapping.
+// Pack C C001: Persona "degraded" is invalid → must map to "restricted".
 const PERSONA_STATUS_MAP: Record<string, string> = {
   draft: "draft", review: "sandbox", approved: "active",
   deployed: "active", paused: "suspended", retired: "retired",
+  degraded: "restricted",
 };
 
 import type { ActionDescriptor, EntityType } from "@/lib/v3/availableActions";
