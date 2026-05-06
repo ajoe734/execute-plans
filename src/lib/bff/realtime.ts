@@ -86,6 +86,7 @@ class RealtimeBus {
         topic: "system",
         ts: new Date().toISOString(),
         payload: { event: "reconnect" },
+        id: `sys-${Date.now().toString(36)}-${(++this.eventSeq).toString(36)}`,
       });
       this.listeners.get("data")?.forEach((h) => h({ kind: "*" }));
     } else {
@@ -93,6 +94,7 @@ class RealtimeBus {
         topic: "system",
         ts: new Date().toISOString(),
         payload: { event: "disconnect" },
+        id: `sys-${Date.now().toString(36)}-${(++this.eventSeq).toString(36)}`,
       });
     }
     this.notifyStatus();
