@@ -6,15 +6,21 @@ import {
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
-  Beaker,
+  Beaker, Compass, Target, Eye, ShieldAlert,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
   const t = useT();
   const groups: NavGroup[] = [
-    { label: t("groups.command"), items: [
-      { to: "/management/command-center", label: t("nav.commandCenter"), icon: LayoutDashboard },
-      { to: "/management/overview", label: t("nav.overview"), icon: LayoutDashboard },
+    // Pack E E1 — v5 Closed-Loop OS top-level group (Q17/Q23 staged replacement)
+    { label: t("groups.closedLoopOs"), items: [
+      { to: "/management/control-room", label: t("nav.controlRoom"), icon: Compass },
+      { to: "/management/loops", label: t("nav.loops"), icon: Workflow },
+      { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical },
+      { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target },
+      { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch },
+      { to: "/management/sentinel", label: t("nav.sentinel"), icon: ShieldAlert },
+      { to: "/management/interventions", label: t("nav.interventions"), icon: Eye },
     ]},
     { label: t("groups.coreManagement"), items: [
       { to: "/management/strategies", label: t("nav.strategies"), icon: Boxes },
@@ -58,6 +64,11 @@ export const ManagementLayout = () => {
     { label: t("groups.system"), items: [
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
+    ]},
+    // Pack E Q17 — Command Center kept reachable in Legacy until E7
+    { label: t("groups.legacy"), items: [
+      { to: "/management/command-center", label: t("nav.commandCenter"), icon: LayoutDashboard },
+      { to: "/management/overview", label: t("nav.overview"), icon: LayoutDashboard },
     ]},
   ];
 
