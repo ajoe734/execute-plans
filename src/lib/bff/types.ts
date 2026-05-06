@@ -26,8 +26,9 @@ export interface BaseObject {
   actionDescriptors?: ActionDescriptor[];
   /** Pack C v4 §C014–C015 — normative ActionDescriptor (group/order/cooldown/idem). */
   actionDescriptorsV4?: ActionDescriptorV4[];
-  /** Pack C v4 §C010 — optimistic-lock version (monotonic). */
-  version?: number;
+  /** Pack C v4 §C010 — optimistic-lock version (monotonic). Distinct from
+   *  domain `version` strings (e.g. artifact semver) used by some subtypes. */
+  lockVersion?: number;
   /** v3 §4 canonical Strategy status triple (only set on Strategy mocks). */
   lifecycleStatus?: StrategyLifecycleStatus | PersonaStatus | string;
   reviewStatus?: StrategyReviewStatus | string;
