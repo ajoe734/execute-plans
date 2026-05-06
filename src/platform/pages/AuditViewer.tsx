@@ -5,6 +5,8 @@ import reportMd from "../../../.lovable/audits/spec-gap-2026-05-06-D.md?raw";
 import blockersMd from "../../../.lovable/audits/spec-gap-2026-05-06-D-blockers.md?raw";
 import summaryCsv from "../../../.lovable/audits/spec-gap-2026-05-06-D-summary.csv?raw";
 import indexMd from "../../../.lovable/audits/INDEX.md?raw";
+import packEQuestionsMd from "../../../.lovable/feedback/2026-05-06-E/Pack_E_Planner_Questions.md?raw";
+import packEConflictMd from "../../../.lovable/audits/spec-conflict-2026-05-06-E.md?raw";
 
 const MarkdownPre = ({ text }: { text: string }) => (
   <pre className="whitespace-pre-wrap text-sm leading-6 font-mono bg-card border border-border rounded-md p-4 overflow-auto max-h-[calc(100vh-220px)]">
@@ -46,17 +48,21 @@ const CsvTable = ({ text }: { text: string }) => {
 export const AuditViewer = () => (
   <div className="flex-1">
     <PageHeader
-      title="Spec Gap Audit D — 2026-05-06"
-      subtitle="63 second-order gaps（21 High / 28 Medium / 14 Low）— 待 Pack D 規範回應"
+      title="Spec Audits — Pack D & Pack E"
+      subtitle="Pack D 63 second-order gaps · Pack E 19 v5 conflicts · 28 規劃團隊待回覆問題"
     />
     <PageBody>
-      <Tabs defaultValue="report">
+      <Tabs defaultValue="pack-e-questions">
         <TabsList>
-          <TabsTrigger value="report">主報告</TabsTrigger>
-          <TabsTrigger value="blockers">Blockers</TabsTrigger>
-          <TabsTrigger value="summary">摘要 CSV</TabsTrigger>
+          <TabsTrigger value="pack-e-questions">Pack E 規劃團隊問題（28）</TabsTrigger>
+          <TabsTrigger value="pack-e-conflict">Pack E 衝突盤點（19）</TabsTrigger>
+          <TabsTrigger value="report">Pack D 主報告</TabsTrigger>
+          <TabsTrigger value="blockers">Pack D Blockers</TabsTrigger>
+          <TabsTrigger value="summary">Pack D 摘要 CSV</TabsTrigger>
           <TabsTrigger value="index">審計索引</TabsTrigger>
         </TabsList>
+        <TabsContent value="pack-e-questions"><MarkdownPre text={packEQuestionsMd} /></TabsContent>
+        <TabsContent value="pack-e-conflict"><MarkdownPre text={packEConflictMd} /></TabsContent>
         <TabsContent value="report"><MarkdownPre text={reportMd} /></TabsContent>
         <TabsContent value="blockers"><MarkdownPre text={blockersMd} /></TabsContent>
         <TabsContent value="summary"><CsvTable text={summaryCsv} /></TabsContent>
