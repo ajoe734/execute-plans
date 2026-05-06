@@ -219,8 +219,13 @@ export const mutations = {
       return delay(result);
     }
     setState(kind, id, guard.resolvedState);
-    // Pack C C008 — Strategy three-axis invariant guard (best-effort, only when triple present).
-    if (kind === "Strategy" && obj?.lifecycleStatus && obj.reviewStatus && obj.deploymentStatus) {
+    // Pack C C008 — Strategy three-axis invariant guard. Best-effort: only when
+    // triple already uses v4-collapsed vocab (legacy seed values are exempted
+    // until Pack C-H2 normalises STRATEGY_STATUS_MAP).
+    const V4_REVIEW = new Set(["none", "pending", "changes_requested", "approved"]);
+    const V4_DEPLOY = new Set(["none", "paper_running", "live_running", "stopped", "rollback_required"]);
+    if (kind === "Strategy" && obj?.lifecycleStatus && obj.reviewStatus && obj.deploymentStatus
+        && V4_REVIEW.has(obj.reviewStatus) && V4_DEPLOY.has(obj.deploymentStatus)) {
       const violation = explainTripleViolation({
         lifecycleStatus: obj.lifecycleStatus as never,
         reviewStatus: obj.reviewStatus as never,
