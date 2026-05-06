@@ -1,0 +1,79 @@
+id,area,severity,spec_ref,gap,impact,suggested_resolution
+C001,Spec governance,H,v3 §2,Override priority lacks legacy→v3 mapping table,Type bridges done ad-hoc per entity,Add §2.1 mapping table per entity with deprecation dates
+C002,Spec governance,H,v3 §2,Dual-write expectation undefined,Silent breakage when v1 fields removed,Define dual-write window and apiVersion tag per endpoint
+C003,Spec governance,M,v3 §13,Removed/merged tabs lack data-destination notes,Migration ambiguity,Annotate every tab change with from/to/dropped/merged-into
+C004,Spec governance,L,Disposition.csv,No reverse index v3-section→GID,Audit trace one-way,Add v3-section-to-gap.csv
+C005,Spec governance,L,v3 INDEX,No section anchor list,High review cost,Expand INDEX with H2 list
+C006,State machines,H,v3 §4,No error/timeout/cancellation transitions,Entities stuck in transient states,Add onFailure/timeoutMs per transition
+C007,State machines,H,v3 §4,No admin force-transition path,Incident workaround bypasses spec,Define forceTransition + add to high-risk catalog
+C008,State machines,H,v3 §4 Strategy,Lifecycle×review×deployment legal-combo whitelist missing,Impossible triples possible,Add invariants table + JSON schema
+C009,State machines,M,v3 §4,Terminal-state retention/SLA undefined,Search/audit visibility unclear,Add retentionDays/searchVisible/auditMutable per terminal
+C010,State machines,M,v3 §4,No concurrency conflict rule,Lost-update on real BFF,Require If-Match version + 409 envelope
+C011,State machines,M,v3 §4,Branch sub-state next-paths undefined,Implementation guesses,Add branch transition table
+C012,State machines,L,v3 §4,No render-hint per machine,Stepper breaks on long machines,Add renderHint per machine
+C013,Permissions,H,v3 §5,Truth table covers only 5 entities,11 entities default-deny,Complete matrix for Tool/MCP/Skill/Memory/Insight/Artifact/Job/Incident/Deployment/Runtime/RoutePolicy
+C014,ActionDescriptor,H,v3 §8,disabledReasonI18nKey namespace unspecified,Raw/missing keys in tooltip,"Standardize actions.<entity>.<action>.disabled.<reasonCode>"
+C015,ActionDescriptor,M,v3 §8,Missing requiresEnv/requiresTwoMan/ttlSec/idempotencyKeyRequired,UI cannot pre-warn,Extend ActionDescriptor schema
+C016,Permissions,M,v3 §5,Emergency override governance undefined,Backdoor without audit,Add §5.6 Emergency Override
+C017,Permissions,L,v3 §5,Role inheritance undefined,Truth table duplication,Define role lattice
+C018,Permissions,L,v3 §5,Multi-tenant scoping not discussed,Future scaling cost,Declare single-tenant; future work
+C019,High-risk,H,v3 §6.2,Confirm token revoke/reuse/idempotency rules missing,Replay risk,Add revoke + tokenUsedOnce + bind to Idempotency-Key
+C020,High-risk,H,v3 §6.1,Catalog vs §5 requiresApproval not cross-checked,Confirm flow may miss actions,Generate cross-check table
+C021,High-risk,M,v3 §6,Memo schema only has max length,Audit memo loses traceability,Add minLen/requireRef/format
+C022,High-risk,M,v3 §6,Two-man rule scope incomplete,Single actor on capital actions,Mark twoMan per action
+C023,High-risk,L,v3 §6,No cool-down between high-risk clicks,Accidental double-fire,Optional cooldownSec
+C024,BFF,H,v3 §8,availableActions ordering/grouping not specified,Inconsistent button order across pages,Add group + order on ActionDescriptor
+C025,BFF,H,Cross,List pagination convention missing,Each page reinvents,Standardize cursor-based pageSize≤200
+C026,BFF,M,Cross,Filter/sort param convention missing,Cannot share hooks,Standardize sort=field,-field2 + filter[field]
+C027,BFF,M,Pack B B1,Error envelope retryable/correlationId undefined,Toast cannot decide retry,"Standard envelope {code,i18nKey,retryable,correlationId,details}"
+C028,BFF,M,Cross,Idempotency-Key window undefined,Duplicate mutations,Require key on POST/PATCH 24h window
+C029,Realtime,M,Pack B B3,SSE reconnect/replay window undefined,Event loss on reconnect,Define last-event-id + heartbeat + backoff
+C030,BFF,L,Cross,X-Request-Id propagation undefined,Trace chain breaks,Frontend ULID + BFF echo + audit
+C031,BFF,L,Cross,Bulk endpoint contract undefined,Select-all UI stuck,Declare future work
+C032,BFF,L,Cross,Bidirectional stream not discussed,Future feature rewrites,Declare SSE-only; future bidi
+C033,Handoff,H,v3 §15,SLA start point ambiguous,Inconsistent overdue judgement,Mark slaStartAt per type
+C034,Handoff,H,v3 §15,Escalation chain undefined,Handoffs sink,Define escalation + notification policy
+C035,Handoff,M,v3 §15,Reject reply schema missing,Free-text rejections,Define HandoffRejectDTO
+C036,Handoff,M,v3 §15,Attachment limits undefined,Inconsistent upload behavior,Standardize ≤25MB + allow-list + scan
+C037,Handoff,L,v3 §15,Threading not discussed,Single-shot only,Declare v1 single-shot
+C038,Capital,H,v3 §9,Mandate breach detection undefined,Auto-trigger missing,Add mandateMonitor + onBreach
+C039,Ranking,M,v3 §10,Metric unit/direction/normalization missing,Sign errors in formulas,Extend metric library schema
+C040,Rebalance,M,v3 §11,Backward step transitions undefined,Reviewers cannot rollback,Add canRollbackTo per step
+C041,Rebalance,M,v3 §11,Reviewer/Approver quorum undefined,Single approver risk,Mark minApprovers + requiredRoles
+C042,Capital,L,v3 §9,Multi-currency/FX not discussed,Cross-FX displays wrong,Declare base currency + BFF FX
+C043,Evolution,M,v3 §12,Constraint validators missing,Runaway runs,Add min/max/step + dry-run
+C044,Experiment,M,v3,Promote gating thresholds missing,Premature promotion,Define promote checklist + automated gate
+C045,Evolution,L,v3 §12,Reproducibility lock missing,Cannot reproduce fitness,Persist seed/snapshot/commit per run
+C046,i18n,M,v3 §13.7,Mixed-locale UGC strategy undefined,Search/TTS/Persona language errors,Keep UGC raw; persona reply uses fallback
+C047,i18n,M,v3 §13,Date/Number/Currency ICU patterns missing,Per-page format drift,Add format token table
+C048,i18n,L,v3 §13.1,Region split (zh-TW/HK/CN) not discussed,Future market entry cost,Declare zh-TW/en-US only
+C049,i18n,L,v3 §13.5,Pluralization convention missing,English plural errors,ICU plural standard
+C050,Design tokens,M,Pack B B1,Dark-mode token values missing,No dark mode support,Add --*-dark + system/user toggle
+C051,Design tokens,M,Pack B B1,Density (compact/comfortable) missing,Trader density unmet,Add density token + preference
+C052,Components,M,Pack B B3,Skeleton specs per component missing,Inconsistent skeletons,Define TableSkeleton/ChartSkeleton
+C053,Components,M,Pack B B3,LineageGraph node-limit/perf budget missing,Large lineages freeze,Cap 200 visible + dagre LR
+C054,Components,L,Cross,RightDrawer stacking undefined,User disorientation,Max 2 layers; ESC closes top
+C055,Components,L,Pack B B1,CommandPalette ranking rules missing,Inconsistent search UX,Define ranking weights
+C056,a11y,H,Cross,No accessibility chapter,Compliance failure on delivery,Add §22 Accessibility AA
+C057,a11y,M,Cross,Global keyboard shortcuts missing,Trader efficiency loss,Define shortcut table + help drawer
+C058,a11y,L,Cross,prefers-reduced-motion not handled,Vestibular issues,Wrap animations motion-safe
+C059,Acceptance,H,Cross,No cross-page end-to-end scenarios,Per-page pass but flow breaks,Add §23 E2E scenarios
+C060,Mock,M,Cross,Seed scale/state coverage undefined,Inconsistent repro,Mark mockMin per entity
+C061,Mock,M,Cross,Demo scenarios lack steps,Demo improvisation,Add Given/When/Then per scenario
+C062,Test,M,Cross,No contract test convention,BFF integration silent break,Declare OpenAPI as SoT + schema validation
+C063,Performance,M,Cross,No performance targets,Cannot accept perf,Add §24 Performance Budget
+C064,Security,H,Cross,No security chapter,Cannot pass security review,Add §25 Security baseline
+C065,Security,M,Cross,Audit immutability not stated,Audit credibility risk,Append-only; admin cannot edit
+C066,Test,L,Cross,No visual regression rule,Refactor regression invisible,Declare future work
+C067,Spec,M,Cross,No glossary,Cross-team term divergence,Add §0.1 Glossary
+C068,Spec,M,Cross,No diagrams (state/flow/ER),Slow ramp-up,Add mermaid diagrams
+C069,Spec,L,Cross,No semver/changelog rule,Unpredictable upgrades,Adopt semver + CHANGELOG.md
+C070,Spec,L,Cross,No section owner,No triage owner,Mark owner per H2
+C071,Strategy,M,v3 §13,Costs/Calendar tab content schema missing,Tab is placeholder,Define cost breakdown + calendar source
+C072,Persona,M,v3 §13,Persona Lab tab internals missing,Lab is shell,Add §11.x Persona Lab design
+C073,Capital,M,v3 §13,Ranking Inputs tab source contract missing,Cannot compute ranking,Add input contract table
+C074,Rebalance,M,v3 §11.2,Per-step UI pattern missing,Generic stepper used,Mark uiPattern per step
+C075,Signal,M,v3 §16,Confidence 1-5 labels/reason rules missing,Random scoring,Define labels + reason required for 4/5
+C076,Committee,L,v3 §18,Per-committee evidence templates missing,Pack assembled ad-hoc,Add 4 committee templates
+C077,DailyBrief,L,Pack B B3,KPI tz/trading-day/null handling missing,Cross-tz divergence,Standardize tz UTC + exchange-local trading day
+C078,CommandCenter,L,Pack B B3,Lifecycle bucket color mapping missing,Inconsistent with StatusBadge,Bind buckets to --status-* tokens

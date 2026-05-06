@@ -1,0 +1,18194 @@
+# Pantheon Frontend Build Spec FULL v4 (zh-TW)
+
+> v4 includes Pack C (C001–C078) as the highest-priority normative addendum.
+
+---
+
+# Pantheon Frontend Build Spec — SA/SD Gap Remediation Pack C
+
+**版本**：2026-05-05-C  
+**範圍**：回應 `spec-gap-2026-05-05-C.md` 的 78 條 deeper gaps。  
+**狀態**：Normative addendum。Pack C 的定義優先於 v3、Pack A、Pack B；若有衝突，以本文件為準。  
+**交付目的**：讓 Lovable / 前端 / BFF 不再靠推測補規格，直接依本文件修正。
+
+## 0. 覆蓋總覽
+
+| Severity | Count | Resolution |
+|---|---:|---|
+| High | 14 | 本文件全部給出可落碼定義 |
+| Medium | 38 | 本文件全部給出欄位、流程或 UI 規則 |
+| Low | 26 | 本文件全部給出一致性或 future-work 裁定 |
+| Total | 78 | C001–C078 全部 resolved |
+
+---
+
+## 1. Spec Governance 與 Legacy → v3 轉換（C001–C005）
+
+### C001 — Legacy → v3 Mapping Table
+
+BFF 必須在 type bridge 中套用以下轉換，不允許頁面自行判讀 legacy 欄位。
+
+| Entity | Legacy field/value | v3 field/value | Conversion rule | Deprecation |
+| --- | --- | --- | --- | --- |
+| Strategy | state | lifecycleStatus | Map legacy state into lifecycleStatus. `under_review` becomes `reviewStatus=pending` and lifecycle remains previous stable lifecycle; `paused` becomes `deploymentStatus=stopped`. | 2026-06-30 |
+| Strategy | reviewState | reviewStatus | If reviewState exists, it overrides inferred reviewStatus. | 2026-06-30 |
+| Strategy | deploymentState | deploymentStatus | If deploymentState exists, it overrides inferred deploymentStatus. | 2026-06-30 |
+| Persona | state | status | `degraded` is invalid; map to `restricted` and emit migrationWarning. | 2026-06-30 |
+| CapitalPool | state | status | Direct map: draft/active/frozen/retired. | 2026-06-30 |
+| Skill | deprecating | deprecated | All intermediate deprecating values must be collapsed into deprecated. | 2026-06-30 |
+| Memory | isolated | quarantined | Rename isolated to quarantined. | 2026-06-30 |
+| availableActions | string[] | ActionDescriptor[] | Each string must be expanded through action catalog. | 2026-06-30 |
+
+### C002 — Dual-write 與 apiVersion
+
+所有 BFF response envelope 必須包含：
+
+```ts
+type BffApiVersion = 'v3';
+interface BffEnvelope<T> {
+  apiVersion: BffApiVersion;
+  data: T;
+  legacyFields?: Record<string, unknown>; // 僅在 migration window 內允許
+  migrationWarnings?: string[];
+}
+```
+
+規則：
+
+- 2026-06-30 前 BFF 可 dual-write legacyFields，但前端不得使用 legacyFields 驅動畫面。
+- 2026-07-01 起 BFF 必須移除 legacyFields。
+- 若 v3 欄位缺漏，前端不得 fallback 到 legacy；必須顯示 schema error 並記錄 audit diagnostic。
+
+### C003 — Tab Migration Table
+
+所有已刪除、合併、搬移的 tab 必須列入 migration table。
+
+| Surface | Old tab | New tab | Rule |
+| --- | --- | --- | --- |
+| StrategyDetail | Performance | Performance | unchanged |
+| StrategyDetail | Costs | Costs | new canonical tab; source = costBreakdown DTO |
+| StrategyDetail | Calendar | Calendar | new canonical tab; source = exchangeCalendar DTO |
+| StrategyDetail | Governance | Governance | merged review history + approvals |
+| PersonaDetail | Memory Snapshot | Training & Memory | merged-into |
+| PersonaDetail | Persona Lab | Persona Lab | new canonical tab |
+| CapitalPoolDetail | Ranking Inputs | Ranking Inputs | new canonical tab |
+| CapitalPoolDetail | Performance | Performance | new canonical tab |
+
+### C004 — Reverse Index
+
+Disposition CSV 必須新增 `v3_section` 與 `resolved_gap_ids` 欄位，格式：
+
+```csv
+v3_section,resolved_gap_ids,owner,last_reviewed_at
+§4 State Machines,"C006,C007,C008,C009,C010,C011,C012",SA,2026-05-05
+```
+
+### C005 — INDEX anchors
+
+INDEX 必須列所有 Part 10 / Pack C H2 anchor：`section_id`, `title`, `one_line_description`, `resolved_gaps`。
+
+---
+
+## 2. 狀態機完整性（C006–C012）
+
+### C006 — Transition Failure / Timeout / Cancellation
+
+每個 transition 必須由 BFF 回傳 `TransitionDescriptor`：
+
+```ts
+type TransitionFailureMode = 'rollback_to_source'|'stay_in_transient'|'move_to_failed'|'manual_recovery_required';
+interface TransitionDescriptor {
+  id: string;
+  entityType: string;
+  from: string;
+  to: string;
+  transientState?: string;
+  timeoutMs: number;
+  onFailure: TransitionFailureMode;
+  failureState?: string;
+  onCancel: 'rollback_to_source'|'stay_in_transient'|'move_to_cancelled';
+  retryable: boolean;
+}
+```
+
+預設 timeout：
+
+| Machine | Default timeoutMs | onFailure | failureState |
+| --- | --- | --- | --- |
+| Strategy lifecycle | 300000 | rollback_to_source | none |
+| Deployment | 600000 | manual_recovery_required | failed |
+| Quarterly Rebalance | 900000 | stay_in_transient | under_review |
+| Experiment | 1800000 | move_to_failed | failed |
+| Evolution Run | 3600000 | move_to_failed | failed |
+| Skill Sandbox | 600000 | move_to_failed | sandbox_failed |
+| MCP Discovery | 300000 | move_to_failed | degraded |
+| Review | 300000 | stay_in_transient | in_review |
+
+### C007 — Admin Force Transition
+
+新增 high-risk command：
+
+```ts
+interface ForceTransitionRequest {
+  entityType: EntityType;
+  entityId: string;
+  targetState: string;
+  reasonCode: 'stuck_transient'|'incident_recovery'|'migration_fix'|'data_repair'|'emergency_override';
+  memo: string; // min 40 chars
+  confirmTokenId: string;
+  expectedVersion: number;
+}
+```
+
+授權：`admin` only；若 target 是 deployment/runtime/capital，必須加 `risk_officer` two-man approval。
+
+### C008 — Strategy 三軸狀態白名單與不變式
+
+Canonical fields：
+
+```ts
+type StrategyLifecycleStatus = 'discovered'|'scaffolded'|'replicated'|'approved'|'paper'|'live'|'degraded'|'retired';
+type StrategyReviewStatus = 'none'|'pending'|'changes_requested'|'approved';
+type StrategyDeploymentStatus = 'none'|'paper_running'|'live_running'|'stopped'|'rollback_required';
+```
+
+合法組合：
+
+| lifecycleStatus | Allowed reviewStatus | Allowed deploymentStatus | Invariant |
+| --- | --- | --- | --- |
+| discovered | none | none | No review or deployment exists. |
+| scaffolded | none, changes_requested | none | Spec may be revised after changes request. |
+| replicated | none, pending, changes_requested | none | Review may be pending after evidence exists. |
+| approved | approved | none | Approved but not yet deployed. |
+| paper | approved | paper_running, stopped, rollback_required | Paper deployment only. |
+| live | approved | live_running, rollback_required | Live requires approved review. |
+| degraded | approved | live_running, rollback_required, stopped | Only live/paper entities can degrade. |
+| retired | none, approved | none, stopped | No running deployment allowed. |
+
+JSON schema invariant：
+
+```ts
+function validateStrategyTriple(s: StrategyDTO): boolean {
+  return STRATEGY_TRIPLE_WHITELIST.some(row =>
+    row.lifecycleStatus === s.lifecycleStatus &&
+    row.reviewStatus.includes(s.reviewStatus) &&
+    row.deploymentStatus.includes(s.deploymentStatus)
+  );
+}
+```
+
+### C009 — Terminal State Retention
+
+| Entity terminal state | retentionDays | searchVisible | auditMutable | purgeAllowed |
+| --- | --- | --- | --- | --- |
+| strategy.retired | 2555 | yes | no | admin_after_retention |
+| persona.retired | 2555 | yes | no | admin_after_retention |
+| artifact.deprecated | 2555 | yes | no | no_if_deployed |
+| skill.deprecated | 1095 | yes | no | admin_after_retention |
+| memory.deleted | 365 | no | no | yes_after_retention |
+| incident.closed | 2555 | yes | no | no |
+| job.completed | 365 | yes | no | yes_after_retention |
+
+### C010 — Optimistic Locking
+
+所有 mutation 必須帶：
+
+```http
+If-Match: <entity.version>
+Idempotency-Key: <ULID>
+X-Request-Id: <ULID>
+```
+
+409 envelope：
+
+```ts
+{ code:'STATE_CONFLICT', i18nKey:'errors.stateConflict', retryable:false, details:{ expectedVersion, actualVersion } }
+```
+
+### C011 — Branching Return Paths
+
+| Machine | Branch state | Next reachable states | Limit |
+| --- | --- | --- | --- |
+| Review | changes_requested | pending, approved | max 3 cycles before escalation |
+| Review | rejected | none; create new review request | terminal for that request |
+| Experiment | failed | queued via retry, archived | max 2 retries |
+| Deployment | failed | scheduled, rolled_back, cancelled | requires incident if live |
+| Incident | mitigated | resolved, investigating | must attach mitigation note |
+| Rebalance | changes_requested | simulation_ready, ranking_calculated | reviewer chooses rollback step |
+
+### C012 — LifecycleStepper Render Hints
+
+| Machine | renderHint | UI component |
+| --- | --- | --- |
+| Strategy | linear | LifecycleStepper horizontal |
+| Review | branchy | WorkflowStepper with branch badges |
+| Rebalance | linear | WizardStepper vertical on detail page |
+| Evolution | branchy | Run timeline + candidate cards |
+| Deployment | linear | DeploymentStepper |
+| Incident | branchy | IncidentTimeline |
+| Memory | linear | StatusBadge + audit timeline |
+| Skill | linear | SandboxApprovalStepper |
+
+---
+
+## 3. Permission Matrix 與 ActionDescriptor（C013–C018）
+
+### C013 — 完整 role × entity × action matrix
+
+以下為本次補齊的 11 類 entity 權限表。`approval=Y` 表示 action 必須至少走 approval 或 high-risk confirmation；若同時在 high-risk catalog，必須使用 confirm token。
+
+| Entity | Action | Allowed roles | Approval | Capability |
+| --- | --- | --- | --- | --- |
+| tool | register_tool | admin, capability_admin | Y | tool.write |
+| tool | edit_tool_schema | admin, capability_admin | Y | tool.write |
+| tool | classify_tool_risk | admin, risk_officer, capability_admin | Y | tool.risk |
+| tool | test_tool | admin, capability_admin, system_operator | N | tool.test |
+| tool | grant_tool_to_persona | admin, capability_admin | Y | tool.permission |
+| tool | revoke_tool_from_persona | admin, capability_admin, risk_officer | Y | tool.permission |
+| tool | disable_tool | admin, risk_officer, capability_admin | Y | tool.lifecycle |
+| tool | retire_tool | admin, capability_admin | Y | tool.lifecycle |
+| tool | view_tool_calls | admin, research_lead, risk_officer, capital_manager, strategy_manager, system_operator, reviewer, capability_admin | N | tool.read |
+| mcp | add_mcp_server | admin, capability_admin | Y | mcp.write |
+| mcp | edit_mcp_connection | admin, capability_admin | Y | mcp.write |
+| mcp | rotate_mcp_secret | admin, capability_admin | Y | mcp.secret |
+| mcp | discover_mcp_tools | admin, capability_admin, system_operator | N | mcp.discover |
+| mcp | import_mcp_schema | admin, capability_admin | Y | mcp.schema |
+| mcp | grant_mcp_tool | admin, capability_admin | Y | mcp.permission |
+| mcp | revoke_mcp_tool | admin, capability_admin, risk_officer | Y | mcp.permission |
+| mcp | disable_mcp_server | admin, risk_officer, capability_admin | Y | mcp.lifecycle |
+| mcp | view_mcp_calls | admin, research_lead, risk_officer, capital_manager, strategy_manager, system_operator, reviewer, capability_admin | N | mcp.read |
+| skill | create_skill | admin, capability_admin | N | skill.write |
+| skill | import_skill | admin, capability_admin | Y | skill.write |
+| skill | run_skill_sandbox | admin, capability_admin, research_lead | N | skill.test |
+| skill | security_scan_skill | admin, capability_admin | N | skill.scan |
+| skill | approve_skill | admin, capability_admin, risk_officer | Y | skill.approve |
+| skill | assign_skill_to_persona | admin, capability_admin | Y | skill.permission |
+| skill | revoke_skill_from_persona | admin, capability_admin, risk_officer | Y | skill.permission |
+| skill | rollback_skill_version | admin, capability_admin | Y | skill.lifecycle |
+| skill | deprecate_skill | admin, capability_admin | Y | skill.lifecycle |
+| memory | approve_memory | admin, research_lead, reviewer | N | memory.review |
+| memory | reject_memory | admin, research_lead, reviewer | N | memory.review |
+| memory | edit_memory | admin, research_lead | Y | memory.write |
+| memory | merge_memory | admin, research_lead | Y | memory.write |
+| memory | move_memory_scope | admin, research_lead | Y | memory.scope |
+| memory | quarantine_memory | admin, research_lead, risk_officer | Y | memory.lifecycle |
+| memory | restore_memory | admin, research_lead, reviewer | Y | memory.lifecycle |
+| memory | mark_memory_sensitive | admin, risk_officer, research_lead | Y | memory.sensitive |
+| memory | delete_memory | admin, risk_officer | Y | memory.delete |
+| insight | triage_insight | admin, research_lead, reviewer, strategy_manager | N | insight.write |
+| insight | convert_insight_to_strategy | admin, research_lead, strategy_manager | N | strategy.create |
+| insight | attach_insight_to_strategy | admin, research_lead, strategy_manager, reviewer | N | insight.link |
+| insight | create_research_task_from_insight | admin, research_lead, strategy_manager | N | experiment.create |
+| insight | archive_insight | admin, research_lead, reviewer | N | insight.lifecycle |
+| insight | reject_insight | admin, research_lead, reviewer | N | insight.lifecycle |
+| artifact | register_artifact | admin, research_lead, strategy_manager | N | artifact.write |
+| artifact | promote_artifact | admin, research_lead, reviewer | Y | artifact.promote |
+| artifact | deprecate_artifact | admin, research_lead, risk_officer | Y | artifact.lifecycle |
+| artifact | set_rollback_target | admin, risk_officer, strategy_manager | Y | deployment.rollback |
+| artifact | attach_artifact_to_review | admin, research_lead, reviewer | N | review.write |
+| artifact | download_artifact | admin, research_lead, risk_officer, capital_manager, strategy_manager, system_operator, reviewer, capability_admin | N | artifact.read |
+| job | view_job | admin, research_lead, risk_officer, capital_manager, strategy_manager, system_operator, reviewer, capability_admin | N | job.read |
+| job | cancel_job | admin, system_operator, research_lead | Y | job.control |
+| job | retry_job | admin, system_operator, research_lead | N | job.control |
+| job | clone_job | admin, system_operator, research_lead, strategy_manager | N | job.create |
+| job | attach_job_result | admin, research_lead, reviewer | N | job.link |
+| job | create_incident_from_job | admin, system_operator, risk_officer | N | incident.create |
+| incident | create_incident | admin, risk_officer, system_operator, research_lead | N | incident.create |
+| incident | assign_incident | admin, risk_officer, system_operator | N | incident.assign |
+| incident | add_timeline_event | admin, risk_officer, system_operator, research_lead, reviewer | N | incident.write |
+| incident | mitigate_incident | admin, risk_officer, system_operator | Y | incident.mitigate |
+| incident | escalate_incident | admin, risk_officer, system_operator | N | incident.escalate |
+| incident | close_incident | admin, risk_officer | Y | incident.close |
+| incident | trigger_incident_rollback | admin, risk_officer, system_operator | Y | deployment.rollback |
+| deployment | plan_deployment | admin, strategy_manager, system_operator | Y | deployment.plan |
+| deployment | approve_deployment | admin, risk_officer, reviewer | Y | deployment.approve |
+| deployment | execute_deployment | admin, system_operator | Y | deployment.execute |
+| deployment | pause_deployment | admin, system_operator, risk_officer | Y | deployment.pause |
+| deployment | resume_deployment | admin, system_operator, risk_officer | Y | deployment.resume |
+| deployment | rollback_deployment | admin, risk_officer, system_operator | Y | deployment.rollback |
+| deployment | retire_deployment | admin, risk_officer, strategy_manager | Y | deployment.retire |
+| deployment | emergency_kill | admin, risk_officer, system_operator | Y | deployment.kill |
+| runtime | view_runtime | admin, research_lead, risk_officer, capital_manager, strategy_manager, system_operator, reviewer, capability_admin | N | runtime.read |
+| runtime | restart_runtime | admin, system_operator | Y | runtime.restart |
+| runtime | drain_runtime | admin, system_operator, risk_officer | Y | runtime.drain |
+| runtime | move_strategy_runtime | admin, system_operator, risk_officer | Y | runtime.move |
+| runtime | disable_new_deployments | admin, system_operator, risk_officer | Y | runtime.disable |
+| runtime | open_runtime_logs | admin, system_operator, risk_officer | N | runtime.logs |
+| route_policy | create_route_policy | admin, capability_admin, research_lead | Y | policy.write |
+| route_policy | edit_route_policy | admin, capability_admin, research_lead | Y | policy.write |
+| route_policy | submit_route_policy_review | admin, capability_admin, research_lead | N | policy.review |
+| route_policy | activate_route_policy | admin, capability_admin, risk_officer | Y | policy.activate |
+| route_policy | rollback_route_policy | admin, capability_admin, risk_officer | Y | policy.rollback |
+| evolution_program | create_evolution_program | admin, research_lead, strategy_manager | N | evolution.write |
+| evolution_program | edit_evolution_direction | admin, research_lead, strategy_manager | Y | evolution.write |
+| evolution_program | set_fitness_formula | admin, research_lead, strategy_manager | Y | evolution.formula |
+| evolution_program | start_evolution_run | admin, research_lead, system_operator | N | evolution.run |
+| evolution_program | pause_evolution_run | admin, research_lead, system_operator | N | evolution.run |
+| evolution_program | stop_evolution_run | admin, research_lead, system_operator, risk_officer | Y | evolution.run |
+| evolution_program | promote_evolution_candidate | admin, research_lead, strategy_manager, reviewer | Y | evolution.promote |
+| evolution_program | retire_evolution_program | admin, research_lead | Y | evolution.lifecycle |
+
+### C014–C015 — ActionDescriptor Schema
+
+```ts
+type ActionGroup = 'primary'|'secondary'|'destructive';
+type DisabledReasonCode =
+  | 'missing_role' | 'invalid_state' | 'wrong_environment' | 'approval_required'
+  | 'confirm_token_required' | 'two_man_required' | 'cooldown_active'
+  | 'blocked_by_incident' | 'blocked_by_policy' | 'stale_version';
+
+interface ActionDescriptor {
+  id: string;
+  entityType: EntityType;
+  labelKey: string;
+  group: ActionGroup;
+  order: number;
+  enabled: boolean;
+  disabledReasonCode?: DisabledReasonCode;
+  disabledReasonI18nKey?: `actions.${string}.${string}.disabled.${DisabledReasonCode}`;
+  riskLevel: 'none'|'low'|'medium'|'high'|'critical';
+  requiresApproval: boolean;
+  requiresConfirmToken: boolean;
+  requiresTwoMan: boolean;
+  requiresEnv?: 'research'|'paper'|'live';
+  ttlSec?: number;
+  cooldownSec?: number;
+  idempotencyKeyRequired: boolean;
+}
+```
+
+排序：`group` 順序為 primary → secondary → destructive；同 group 依 `order` 升冪；destructive 一律靠右或 dropdown 最底部。
+
+### C016 — Emergency Override
+
+```ts
+interface EmergencyOverrideGrant {
+  overrideId: string;
+  incidentId: string;
+  grantedBy: 'admin';
+  approvers: Array<{ role:'risk_officer'|'system_operator', userId:string }>;
+  scope: { entityType: EntityType; entityId: string; actions: string[] };
+  justification: string; // min 80 chars
+  expiresAt: string; // max now + 4h
+  auditEventId: string;
+}
+```
+
+Trigger conditions：`incident.severity in ['high','critical']` 或 `runtime.status='degraded'`。不得用於 routine rebalance / normal promotion。
+
+### C017 — Role Lattice
+
+`admin` 不自動繼承所有 domain role 的 business approval；admin 可操作 technical override，但資金與 live deployment 仍需 risk_officer two-man。Domain hierarchy：
+
+```text
+admin: platform control, not sufficient alone for capital/live approval
+research_lead > strategy_manager for research actions
+risk_officer independent; required for risk/live/capital destructive actions
+capital_manager independent; required for allocation/rebalance actions
+capability_admin independent; required for tools/MCP/skills
+system_operator independent; required for runtime/deployment execution
+reviewer independent; can decide assigned reviews only
+```
+
+### C018 — Tenant Scope
+
+v4 前端與 BFF 明確為 `singleTenant=true`。所有 DTO 可保留 `tenantId?: string`，但 UI 不提供 tenant switcher。Multi-tenant 是 future work，不得在目前 UI 顯示跨 tenant 欄位。
+
+---
+
+## 4. High-Risk Action 與 Confirm Token（C019–C023）
+
+### C019 — Confirm Token API
+
+```http
+POST /bff/commands/confirm-token
+POST /bff/commands/confirm-token/:tokenId/revoke
+```
+
+```ts
+interface ConfirmTokenRequest {
+  entityType: EntityType;
+  entityId: string;
+  actionId: string;
+  expectedVersion: number;
+  memo: string;
+  idempotencyKey: string;
+}
+interface ConfirmTokenDTO {
+  tokenId: string;
+  expiresAt: string; // now + 120s default
+  boundTo: { entityType:string; entityId:string; actionId:string; expectedVersion:number; idempotencyKey:string; userId:string; role:string };
+  used: false;
+}
+```
+
+Rules：
+
+- Token TTL = 120 秒，critical action 可降為 60 秒。
+- Token single-use；reuse 回 `409 CONFIRM_TOKEN_REUSED`。
+- Token 與 `Idempotency-Key` 綁定；command request 的 key 必須與 token request 相同。
+- Token 可撤銷；撤銷後使用回 `410 CONFIRM_TOKEN_REVOKED`。
+- Token 不可跨 entity/action/version/user/role 使用。
+
+### C020–C023 — High-risk catalog with two-man and cooldown
+
+| Entity | Action | requiresApproval | twoMan | confirmTTL | cooldownSec | memo.minLen | memo.requireRef |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| strategy | promote_live | Y | Y | 120 | 300 | 80 | review_or_change |
+| strategy | retire_strategy | Y | Y | 120 | 300 | 60 | change |
+| deployment | rollback_deployment | Y | Y | 120 | 300 | 80 | incident_or_change |
+| deployment | emergency_kill | Y | Y | 60 | 600 | 100 | incident |
+| deployment | pause_deployment | Y | N | 120 | 120 | 50 | incident_or_change |
+| deployment | resume_deployment | Y | Y | 120 | 120 | 50 | incident_or_change |
+| capital | apply_rebalance | Y | Y | 120 | 900 | 100 | rebalance |
+| capital | allocation_override | Y | Y | 120 | 900 | 100 | rebalance_or_change |
+| ranking | activate_formula | Y | Y | 120 | 600 | 80 | change |
+| persona | activate_route_policy | Y | Y | 120 | 300 | 80 | change |
+| persona | rollback_route_policy | Y | Y | 120 | 300 | 80 | incident_or_change |
+| mcp | grant_mcp_tool | Y | Y | 120 | 300 | 80 | change |
+| mcp | production_grant | Y | Y | 120 | 600 | 100 | change |
+| skill | approve_skill | Y | Y | 120 | 300 | 80 | change |
+| skill | assign_skill_to_persona | Y | N | 120 | 120 | 60 | change |
+| tool | disable_tool | Y | N | 120 | 120 | 50 | incident_or_change |
+| runtime | restart_runtime | Y | N | 120 | 300 | 60 | incident_or_change |
+| runtime | drain_runtime | Y | Y | 120 | 300 | 80 | incident_or_change |
+| state_machine | force_transition | Y | Y | 60 | 600 | 120 | incident_or_migration |
+
+Memo schema：
+
+```ts
+interface HighRiskMemo {
+  text: string; // minLen from catalog; maxLen 2000
+  format: 'text'|'markdown';
+  referenceType: 'incident'|'change'|'review'|'rebalance'|'migration'|'none';
+  referenceId?: string;
+}
+```
+
+---
+
+## 5. BFF API Contract（C024–C032）
+
+### C024–C026 — Pagination / filtering / sorting
+
+List APIs 必須採 cursor-based pagination：
+
+```ts
+interface ListRequest {
+  cursor?: string;
+  pageSize?: number; // default 50, max 200
+  sort?: string; // e.g. "updatedAt,-riskLevel"
+  filter?: Record<string, string|string[]>;
+}
+interface ListResponse<T> {
+  data: T[];
+  pageInfo: { nextCursor?: string; hasNextPage: boolean; pageSize: number };
+}
+```
+
+Query style：
+
+```http
+GET /bff/strategies?pageSize=50&cursor=abc&sort=updatedAt,-riskLevel&filter[lifecycleStatus]=live&filter[riskLevel]=high
+```
+
+### C027 — Error Envelope
+
+```ts
+interface BffErrorEnvelope {
+  error: {
+    code: string;
+    i18nKey: string;
+    message: string; // developer-readable fallback
+    retryable: boolean;
+    userActionable: boolean;
+    correlationId: string;
+    cause?: string;
+    details?: Record<string, unknown>;
+  };
+}
+```
+
+### C028 — Idempotency
+
+All POST/PATCH/DELETE command endpoints require:
+
+```http
+Idempotency-Key: <ULID>
+X-Request-Id: <ULID>
+If-Match: <entity.version>
+```
+
+Server replay window = 24h. Same key + same payload returns cached result; same key + different payload returns `409 IDEMPOTENCY_PAYLOAD_MISMATCH`.
+
+### C029 — SSE Reconnection Protocol
+
+```ts
+interface SseEnvelope<T> {
+  id: string; // monotonically sortable ULID
+  channel: string;
+  type: string;
+  occurredAt: string;
+  payload: T;
+}
+```
+
+Rules：
+
+- Heartbeat every 15s: `event: heartbeat`.
+- Replay window: 24h or last 10,000 events per user, whichever smaller.
+- Client reconnect uses `Last-Event-Id`.
+- Backoff: 1s, 2s, 5s, 10s, 30s max + jitter.
+- If replay unavailable, server sends `event: resync_required`; frontend must refetch visible queries.
+
+### C030–C032 — Request ID / bulk / WebSocket
+
+- Frontend generates `X-Request-Id` ULID for every request; BFF echoes it.
+- Bulk operations are **future work**. Current UI must not show select-all bulk mutation buttons.
+- Realtime v1 is SSE only. WebSocket is future work for collaborative cursor / bidirectional streaming.
+
+### SSE Channel Catalog
+
+| Channel | Events | Consumers |
+| --- | --- | --- |
+| job.* | job.started/progress/completed/failed | Management + Agora job drawers |
+| strategy.* | strategy.created/updated/state_changed | Management strategy pages |
+| persona.* | persona.updated/policy_changed/evaluation_completed | Management persona pages |
+| capital.* | capital_pool.updated/breach_created | Capital pages |
+| ranking.* | ranking.recalculated/published | Ranking pages |
+| rebalance.* | rebalance.step_changed/approved/applied/rolled_back | Rebalance pages |
+| evolution.* | evolution.run_progress/candidate_created | Evolution pages |
+| experiment.* | experiment.started/completed/failed | Experiment registry |
+| review.* | review.submitted/validator_completed/decision_changed | Governance pages |
+| deployment.* | deployment.started/completed/failed/rolled_back | Deployment pages |
+| runtime.* | runtime.heartbeat/runtime.degraded/runtime.recovered | Runtime monitor |
+| risk.* | risk.alert_created/risk.alert_updated | Risk center |
+| incident.* | incident.created/updated/escalated/closed | Incident center |
+| tool_call.* | tool_call.completed/tool_call.failed | Tool calls |
+| mcp_call.* | mcp_call.completed/mcp_call.failed | MCP calls |
+| skill.* | skill.sandbox_completed/skill.approved | Skill pages |
+| handoff.* | handoff.created/claimed/rejected/resolved/escalated | Agora + Management |
+| session.* | session.message_created/session.closed | Agora sessions |
+| notification.* | notification.created/read | Notification center |
+
+---
+
+## 6. Agora ↔ Management Handoff（C033–C037）
+
+### C033–C034 — SLA start and escalation
+
+| Handoff type | slaStartAt | initial SLA | primary owner | secondary | escalation action |
+| --- | --- | --- | --- | --- | --- |
+| strategy_idea | created | 86400 | research_lead | admin | notify + Command Center pin |
+| research_task | created | 43200 | research_lead | strategy_manager | notify |
+| signal_feedback | created | 21600 | strategy_manager | research_lead | notify + strategy alert badge |
+| training_feedback | created | 604800 | research_lead | admin | notify trainer + persona owner |
+| committee_memo | created | 43200 | reviewer | research_lead | attach to governance queue |
+| skill_draft | created | 604800 | capability_admin | admin | notify + skill draft badge |
+| incident_note | created | 3600 | risk_officer | system_operator | create incident escalation |
+
+Escalation rules：
+
+- At 80% SLA: warning notification to primary owner.
+- At 100% SLA: escalate to secondary and notify Agora originator.
+- SLA does not reset on escalation; new dueAt = original dueAt + 50% initial SLA.
+- Rejected handoff stops SLA and returns structured rejection to Agora.
+
+### C035 — Reject DTO
+
+```ts
+interface HandoffRejectDTO {
+  handoffId: string;
+  reasonCode: 'insufficient_context'|'duplicate'|'out_of_scope'|'needs_attachment'|'invalid_target'|'policy_blocked';
+  message: string;
+  requiresAttachments?: Array<'chart'|'signal_snapshot'|'experiment_result'|'trade_log'|'market_note'>;
+  returnedTo: string;
+  returnedAt: string;
+}
+```
+
+### C036–C037 — Attachments / threading
+
+Attachment constraints：max 25MB per file, max 10 files per handoff, allowed MIME: png, jpg, webp, pdf, csv, json, txt, md, parquet metadata pointer only. BFF must virus-scan and redact secrets. v1 handoff is single-shot; threading is future work.
+
+---
+
+## 7. Capital / Ranking / Rebalance（C038–C042）
+
+### C038 — Mandate Breach Monitor
+
+```ts
+interface MandateMonitor {
+  intervalSec: number; // default 300
+  onBreach: {
+    notifyRoles: Array<'risk_officer'|'capital_manager'|'system_operator'>;
+    createAlert: boolean;
+    autoAction: 'none'|'freeze_new_allocations'|'require_review'|'freeze_pool';
+    severityByBreachPct: Array<{ thresholdPct:number; severity:'low'|'medium'|'high'|'critical' }>;
+  };
+}
+```
+
+Default：interval 300s；breach > 5% medium, > 15% high, > 25% critical; critical autoAction = freeze_new_allocations。
+
+### C039 — Ranking Metric Metadata
+
+```ts
+interface RankingMetricDefinition {
+  id: string;
+  labelKey: string;
+  unit: 'percent'|'ratio'|'currency'|'days'|'count'|'score';
+  direction: 'higher_better'|'lower_better';
+  normalization: 'z_score'|'min_max'|'none'|'winsorized_z';
+  defaultWeight: number;
+  allowedScopes: Array<'persona'|'strategy'|'alpha_family'|'capital_pool'|'paper'|'live'>;
+}
+```
+
+### C040–C041 — Rebalance rollback and quorum
+
+| Step | Can rollback to | UI pattern | Quorum |
+| --- | --- | --- | --- |
+| metric_freeze | draft | wizard + snapshot table | capital_manager x1 |
+| ranking_calculation | metric_freeze | score table + breakdown | capital_manager x1 |
+| allocation_simulation | ranking_calculation, metric_freeze | side-by-side allocation diff | capital_manager x1 |
+| constraint_check | allocation_simulation | breach panel | risk_officer x1 |
+| review | constraint_check, allocation_simulation | approval panel | risk_officer x1 + capital_manager x1 |
+| scheduled | review | deployment calendar | capital_manager x1 |
+| applied | scheduled | post-apply monitor | rollback requires risk_officer + capital_manager |
+
+### C042 — Currency / FX
+
+Platform base currency = USD. CapitalPool may define `displayCurrency`. BFF must return pre-converted `baseAmount` and `displayAmount`; frontend never performs FX conversion.
+
+---
+
+## 8. Evolution / Experiment（C043–C045）
+
+### C043 — Evolution constraints validation
+
+```ts
+interface EvolutionRunLimits {
+  populationSize: { min: 4, max: 500, step: 1 };
+  maxGenerations: { min: 1, max: 200, step: 1 };
+  maxComputeUsd: { min: 10, max: 50000, step: 10 };
+  maxWallClockHours: { min: 1, max: 168, step: 1 };
+  maxConcurrentRuns: { min: 1, max: 20, step: 1 };
+}
+```
+
+BFF endpoint：`POST /bff/evolution/programs/:id/actions/dry-run` returns `{ valid, warnings[], projectedCost, projectedRuntime }`.
+
+### C044 — Experiment promote gating
+
+```ts
+interface ExperimentPromoteGate {
+  minSampleSize: number; // default 252 daily bars or BFF-specified
+  minOosDurationDays: number; // default 90
+  maxPValue: number; // default 0.10
+  minSharpe: number; // default 0.8
+  maxDrawdownPct: number; // strategy-specific
+  requiresDataLeakagePass: true;
+  requiresReproducibilityHash: true;
+}
+```
+
+### C045 — Reproducibility
+
+Every EvolutionRun and Experiment must store：`seed`, `dataSnapshotId`, `codeCommit`, `configHash`, `dockerImageDigest?`, `createdAt`.
+
+---
+
+## 9. i18n / Locale / Format（C046–C049）
+
+- UGC is stored as-is. No auto detection is required for storage. Search may index original text only in v1.
+- Persona response language follows session setting, then user preference, then UI locale.
+- Supported locales remain `zh-TW` and `en-US`; zh-HK/zh-CN are future work.
+- All pluralization must use ICU MessageFormat.
+
+Format tokens：
+
+| Token | zh-TW | en-US | Fallback |
+| --- | --- | --- | --- |
+| datetime.short | yyyy/MM/dd HH:mm | MMM d, yyyy HH:mm | ISO string |
+| datetime.date | yyyy/MM/dd | MMM d, yyyy | ISO date |
+| number.decimal | 1,234.56 | 1,234.56 | raw |
+| percent | 12.34% | 12.34% | raw |
+| money.usd | US$1,234.56 | $1,234.56 | USD 1234.56 |
+| money.base | {{currency}} {{amount}} | {{currency}} {{amount}} | raw |
+
+---
+
+## 10. UI Components / Design Tokens / Accessibility（C050–C058）
+
+### C050–C051 — Theme and density tokens
+
+```css
+:root {
+  --bg: #ffffff; --fg: #111827; --surface: #f9fafb;
+  --status-live: #16a34a; --status-paper: #d97706; --risk-high: #dc2626;
+  --row-height-comfortable: 44px; --row-height-compact: 32px;
+}
+[data-theme='dark'] {
+  --bg: #0b1120; --fg: #e5e7eb; --surface: #111827;
+  --status-live: #22c55e; --status-paper: #f59e0b; --risk-high: #f87171;
+}
+```
+
+User preferences: `theme: system|light|dark`; `density: comfortable|compact`.
+
+### C052–C055 — Component specs
+
+Skeletons：`<TableSkeleton rows=10 columns=6>`, `<CardGridSkeleton cards=6>`, `<ChartSkeleton type='line|bar|heatmap'>`, `<DrawerSkeleton sections=4>`.
+
+LineageGraph：max visible nodes = 200; if >200, collapse by entity type; layout = dagre LR; pan/zoom enabled; minimap optional.
+
+RightDrawer: max stack depth = 2; ESC closes topmost; route changes close all non-pinned drawers.
+
+CommandPalette ranking: exact match 100, prefix 80, recently viewed +15, pinned +20, current product scope +10, archived -30.
+
+### C056 — Accessibility baseline
+
+Target: WCAG 2.1 AA.
+
+Requirements：
+
+- All interactive elements keyboard reachable.
+- PermissionAwareButton disabled reason must be available by tooltip and `aria-describedby`.
+- Modal focus trap mandatory.
+- DataTable requires keyboard row navigation.
+- Color is never the only status signal; StatusBadge includes text + icon.
+- Risk high/critical colors must pass contrast 4.5:1.
+- Charts must provide table fallback or accessible summary.
+
+### C057–C058 — Shortcuts and reduced motion
+
+Shortcuts：`?` help, `g s` strategies, `g p` personas, `g c` capital, `g j` jobs, `g a` Agora daily, `/` search, `Esc` close drawer/modal, `⌘K/Ctrl+K` command palette.
+
+If `prefers-reduced-motion`, disable non-essential transitions; keep only opacity changes under 150ms.
+
+---
+
+## 11. Testing / Acceptance / Security（C059–C066）
+
+### C059 — End-to-End Scenarios
+
+Happy paths：
+
+1. Agora signal feedback → handoff → Management research task.
+2. Strategy replicated → submit review → approved → promote paper.
+3. Paper strategy → live promotion request → approval → deployment.
+4. Live alert → incident → mitigation → close.
+5. Quarterly rebalance → metric freeze → ranking → simulation → approval → apply.
+6. Persona route policy edit → approval → active policy.
+7. MCP server add → discover tools → grant tool → audit.
+8. Skill draft → sandbox → approval → assign persona.
+9. Evolution run → candidate → experiment → strategy creation.
+10. Artifact build → review attach → promote artifact.
+
+Incident paths：
+
+1. Deployment fails after approval → failed state → incident created.
+2. SSE disconnect → replay unavailable → resync required.
+3. Confirm token reuse → 409 → action blocked.
+4. Optimistic lock conflict → 409 → user reload prompt.
+5. Critical runtime alert → emergency override → rollback → audit.
+
+### C060–C062 — Mock and contract tests
+
+Mock minimums：Strategy 24 covering all 8 lifecycle statuses; Persona 12; CapitalPool 6; RankingFormula 6; Rebalance 4; EvolutionProgram 6; Experiment 24; Job 30; Alert 20; Incident 10; Tool 12; MCPServer 6; Skill 12; AgoraSession 12; Signal 20.
+
+All demo scenarios must be Given/When/Then. OpenAPI schema is source of truth for BFF contract tests. Frontend must validate mock fixtures against generated types.
+
+### C063 — Performance Budget
+
+| Metric | Target |
+| --- | --- |
+| Initial LCP | <= 2.5s on standard desktop |
+| TTI | <= 3.5s |
+| Route transition p95 | <= 500ms with cached data |
+| DataTable render p95 | <= 500ms for 200 rows |
+| Filter interaction p95 | <= 300ms |
+| SSE event-to-paint p95 | <= 1000ms |
+| Drawer open p95 | <= 200ms |
+| LineageGraph 200 nodes | <= 1500ms first layout |
+
+### C064–C066 — Security Baseline
+
+- Auth tokens must be httpOnly, Secure, SameSite=Lax/Strict cookies. No auth token in localStorage.
+- CSRF token required for mutations.
+- CSP baseline: `default-src 'self'; script-src 'self'; connect-src 'self' https: wss:; img-src 'self' data: blob:; frame-ancestors 'none'`.
+- Escape all UGC; markdown renderer must sanitize HTML.
+- Secrets, API keys, tokens, broker identifiers must be redacted in UI logs.
+- Audit log is append-only; admin cannot edit/delete audit events.
+- PII fields must be tagged and hidden from unauthorized roles.
+- Visual regression is future work; not required for v4 acceptance.
+
+---
+
+## 12. Spec Structure（C067–C070）
+
+### C067 — Glossary
+
+Required glossary terms：Strategy, Alpha, Persona, Capital Pool, Mandate, Risk Budget, Ranking Formula, Quarterly Rebalance, Evolution Program, Experiment, Artifact, Review, Approval, Promotion, Deployment, Runtime, Rollback, Incident, Handoff, Insight, Memory, Training Example, Tool, MCP Server, MCP Tool, Skill, Job, Audit Event, Confirm Token, Idempotency Key, Environment.
+
+### C068 — Mermaid diagrams
+
+v4 spec must include at least：Strategy three-axis diagram, Rebalance workflow, Handoff flow, High-risk confirm flow, Entity relationship overview.
+
+### C069–C070 — Semver and owners
+
+Spec semver：major = breaking DTO/state/action change; minor = new optional field/page; patch = clarification. Each H2 must include owner role, e.g. `> owner: SA | reviewer: Product + Frontend Lead`.
+
+---
+
+## 13. 實作期具體缺口（C071–C078）
+
+### C071 — Strategy Costs / Calendar tabs
+
+Costs schema：
+
+```ts
+interface StrategyCostBreakdown {
+  commissionBps: number;
+  slippageBps: number;
+  borrowCostBps?: number;
+  financingCostBps?: number;
+  exchangeFeesBps?: number;
+  taxBps?: number;
+  costModelId: string;
+  lastUpdatedAt: string;
+}
+interface StrategyCalendarEvent {
+  date: string;
+  exchange: string;
+  eventType: 'trading_holiday'|'half_day'|'rebalance_date'|'earnings'|'macro_event'|'custom';
+  label: string;
+  source: 'exchange_calendar'|'custom'|'research_note';
+}
+```
+
+### C072 — Persona Lab tab
+
+Persona Lab requires sandbox runtime DTO：
+
+```ts
+interface PersonaLabRun {
+  runId: string;
+  personaId: string;
+  personaVersion: string;
+  scenarioId: string;
+  status: 'queued'|'running'|'completed'|'failed';
+  score?: number;
+  diffs?: Array<{ field:string; before:string; after:string }>;
+  commitGate: { requiresEvaluationPass:true; requiresApproval:true; target:'persona_update_request' };
+}
+```
+
+### C073 — Capital Ranking Inputs tab
+
+```ts
+interface RankingInputSnapshot {
+  snapshotId: string;
+  scope: 'persona'|'strategy'|'capital_pool';
+  metricAsOf: string;
+  frequency: 'daily'|'weekly'|'monthly'|'quarterly';
+  stalenessToleranceHours: number;
+  metricRows: Array<{ entityId:string; metricId:string; value:number|null; quality:'ok'|'stale'|'missing' }>;
+}
+```
+
+### C074 — Rebalance step UI patterns
+
+| Step | UI pattern | Required component |
+| --- | --- | --- |
+| Metric Freeze | snapshot table + freeze confirmation | MetricFreezePanel |
+| Ranking Calculation | score table + score breakdown drawer | RankingResultPanel |
+| Allocation Simulation | current vs recommended side-by-side diff | AllocationSimulation |
+| Constraint Check | breach checklist + severity table | ConstraintChecker |
+| Review / Approval | approval panel + memo editor | ApprovalPanel |
+| Apply / Monitor | deployment-style progress + post-apply metrics | RebalanceApplyMonitor |
+
+### C075 — Signal confidence 1–5
+
+| Value | Label zh-TW | Label en-US | Reason required |
+| --- | --- | --- | --- |
+| 1 | 確定錯誤 | Definitely invalid | Y, min 20 chars |
+| 2 | 可能錯誤 | Likely invalid | Y, min 20 chars |
+| 3 | 不確定 | Uncertain | N |
+| 4 | 可能正確 | Likely valid | Y, min 20 chars |
+| 5 | 高度確信正確 | Definitely valid | Y, min 20 chars |
+
+### C076 — Committee evidence templates
+
+| Committee type | Required evidence |
+| --- | --- |
+| strategy_review | strategy spec, experiment summary, risk summary, persona rationale |
+| live_promotion | paper performance, risk budget, rollback target, deployment plan |
+| incident_review | alert timeline, runtime logs, strategy exposure, mitigation actions |
+| evolution_candidate | parent strategy, mutation summary, fitness score, OOS result |
+
+### C077 — DailyBrief KPI timezone and null handling
+
+- KPI timezone: `UTC` for storage, exchange-local for tradingDay labels.
+- If metric missing: show `—`, add tooltip `Data unavailable`, exclude from aggregate score.
+- If denominator zero: show `N/A`, do not show 0%.
+- Cross-day futures: tradingDay = exchange session date returned by BFF.
+
+### C078 — Lifecycle bucket colors
+
+| Bucket | Design token |
+| --- | --- |
+| discovered | --status-neutral |
+| scaffolded | --status-info |
+| replicated | --status-purple |
+| approved | --status-success |
+| paper | --status-warning |
+| live | --status-live |
+| degraded | --risk-high |
+| retired | --status-muted |
+
+---
+
+## 14. C001–C078 Disposition Summary
+
+| CID | Severity | Category | Resolution |
+| --- | --- | --- | --- |
+| C001 | H | Spec governance | Legacy → v3 mapping table |
+| C002 | H | Spec governance | Dual-write and apiVersion policy |
+| C003 | M | Spec governance | Tab migration table |
+| C004 | L | Spec governance | Reverse gap index |
+| C005 | L | Spec governance | INDEX section anchors |
+| C006 | H | State machines | Failure / timeout / cancellation transitions |
+| C007 | H | State machines | Admin force-transition |
+| C008 | H | State machines | Strategy three-axis invariants |
+| C009 | M | State machines | Terminal retention and purge SLA |
+| C010 | M | State machines | Concurrency and optimistic locking |
+| C011 | M | State machines | Branching return paths |
+| C012 | L | State machines | LifecycleStepper render hints |
+| C013 | H | Permissions | Complete role-action matrices |
+| C014 | H | ActionDescriptor | disabledReasonI18nKey convention |
+| C015 | M | ActionDescriptor | requiresEnv / two-man / ttl / idempotency fields |
+| C016 | M | Permissions | Emergency override |
+| C017 | L | Permissions | Role lattice |
+| C018 | L | Permissions | Single-tenant scope declaration |
+| C019 | H | High-risk | Confirm token revoke / reuse / idempotency |
+| C020 | H | High-risk | Catalog × approval cross-check |
+| C021 | M | High-risk | Memo schema |
+| C022 | M | High-risk | Two-man rule on each action |
+| C023 | L | High-risk | Cooldown per action |
+| C024 | H | BFF | availableActions ordering and grouping |
+| C025 | H | BFF | Cursor pagination |
+| C026 | M | BFF | Filter and sort query style |
+| C027 | M | BFF | Error envelope semantics |
+| C028 | M | BFF | Idempotency header |
+| C029 | M | Realtime | SSE reconnect protocol |
+| C030 | L | BFF | X-Request-Id propagation |
+| C031 | L | BFF | Bulk operation policy |
+| C032 | L | Realtime | SSE now, WebSocket future |
+| C033 | H | Handoff | SLA start point |
+| C034 | H | Handoff | Escalation chain |
+| C035 | M | Handoff | Reject reply schema |
+| C036 | M | Handoff | Attachment constraints |
+| C037 | L | Handoff | Threading policy |
+| C038 | H | Capital | Mandate breach monitor |
+| C039 | M | Ranking | Metric metadata |
+| C040 | M | Rebalance | Backward transitions |
+| C041 | M | Rebalance | Approval quorum |
+| C042 | L | Capital | Currency / FX |
+| C043 | M | Evolution | Constraints validation |
+| C044 | M | Experiment | Promote gating |
+| C045 | L | Evolution | Reproducibility |
+| C046 | M | i18n | Mixed-locale UGC |
+| C047 | M | i18n | Date / number / currency formats |
+| C048 | L | i18n | Region split |
+| C049 | L | i18n | Pluralization |
+| C050 | M | Design tokens | Dark mode |
+| C051 | M | Design tokens | Density |
+| C052 | M | Components | Skeleton specs |
+| C053 | M | Components | LineageGraph limits |
+| C054 | L | Components | RightDrawer stacking |
+| C055 | L | Components | CommandPalette ranking |
+| C056 | H | Accessibility | WCAG 2.1 AA baseline |
+| C057 | M | Accessibility | Keyboard shortcuts |
+| C058 | L | Accessibility | Reduced motion |
+| C059 | H | Acceptance | Cross-page E2E scenarios |
+| C060 | M | Mock | Seed scale |
+| C061 | M | Mock | Given/When/Then scenarios |
+| C062 | M | Testing | Contract tests |
+| C063 | M | Performance | Performance budgets |
+| C064 | H | Security | Security baseline |
+| C065 | M | Security | Audit immutability |
+| C066 | L | Testing | Visual regression future |
+| C067 | M | Spec | Glossary |
+| C068 | M | Spec | Mermaid diagrams |
+| C069 | L | Spec | Spec semver and changelog |
+| C070 | L | Spec | Owner per section |
+| C071 | M | Strategy | Costs / Calendar tab schema |
+| C072 | M | Persona | Persona Lab tab details |
+| C073 | M | Capital | Ranking Inputs tab |
+| C074 | M | Rebalance | Step UI components |
+| C075 | M | Signal | Confidence scale labels |
+| C076 | L | Committee | Evidence pack templates |
+| C077 | L | DailyBrief | KPI timezone and null handling |
+| C078 | L | CommandCenter | Lifecycle bucket colors |
+
+---
+
+## 15. Lovable Immediate Instruction
+
+Implement Pack C before adding net-new UI features. Replace any guessed behavior that conflicts with this file. In particular:
+
+1. Add legacy → v3 mapping and apiVersion behavior.
+2. Add failure/timeout/cancel transitions and strategy triple invariant validation.
+3. Replace all permission guesses with the Pack C permission matrix.
+4. Extend ActionDescriptor and sort/group actions by group/order.
+5. Implement confirm token revoke/reuse/idempotency behavior in mock BFF.
+6. Apply cursor pagination, unified filters, error envelope, and SSE reconnect protocol.
+7. Add handoff SLA/escalation/reject DTO behavior.
+8. Add mandate breach monitor mock behavior and rebalance quorum.
+9. Add accessibility/security/performance acceptance checks.
+10. Update mock seeds to cover required entity counts and states.
+
+
+---
+
+# Prior v3 Spec Body
+
+# Pantheon Frontend Build Spec FULL v2 — zh-TW
+
+**版本**：v2.0  
+**產出日期**：2026-05-05  
+**文件用途**：給 Lovable 與前端團隊使用的完整 SA/SD build specification。  
+**重大修正**：已將 `Pantheon Spec Gap Audit — 2026-05-05-A` 的 G01–G92 缺漏回填為 normative remediation。  
+
+## v2 使用規則
+
+1. 本文件中的 **SA/SD Gap Remediation Pack 2026-05-05-A** 為規格優先來源。
+2. 若 Part 1–8 與 remediation pack 衝突，一律以 remediation pack 為準。
+3. Lovable 必須先實作 remediation pack 指定的 enum、permission truth table、high-risk action、confirm token、availableActions、state machine、BFF contract，再實作頁面視覺。
+4. 禁止以「etc.」「諸如此類」「合理外推」補足 SA/SD 缺漏；所有 action、enum、role、endpoint、payload、status、workflow step 必須明列。
+5. 前端可先用 mock BFF，但 mock 必須符合本 v2 的 canonical DTO 與 state machine。
+
+---
+
+# Part 9 — SA/SD Gap Remediation Pack 2026-05-05-A
+
+> 本章為 v2 新增的 normative addendum，優先於 Part 1–8。
+
+## Pantheon Frontend Build Spec — SA/SD Gap Remediation Pack 2026-05-05-A
+
+**文件狀態**：Normative Addendum。本文優先於 Part 1–8 中所有互相矛盾或不完整的描述。  
+**適用範圍**：Pantheon Management Console、Pantheon Agora Workbench、BFF Contract、State Machines、Permissions、Mock Data。  
+**輸入依據**：`Pantheon Spec Gap Audit — 2026-05-05-A`，該 audit 指出 Part 1–8 共 92 條缺漏，其中 markdown 條目標籤統計為 H=28、M=41、L=23；總覽表寫 H=27、L=24，本文以條目標籤為準。
+
+---
+
+## 1. 修正原則
+
+1. 本文件禁止使用未展開的「其他」、「等等」、「etc.」作為需求結尾。
+2. 每個 enum 必須列出完整值、顯示 label key、使用位置、是否終態。
+3. 每個高風險 action 必須列出 entity、endpoint、role、memo、confirm token、audit event。
+4. 每個可按按鈕必須由 BFF `availableActions` 決定，不由前端自行推論。
+5. 每個長任務必須轉成 Job，並由 realtime event 更新 UI。
+6. Agora 只能建立 handoff、insight、training example、research task、memo、draft，不可直接部署、調倉、授權 production capability。
+
+---
+
+## 2. 覆蓋優先級
+
+| 優先級 | 文件來源 | 規則 |
+|---:|---|---|
+| 1 | 本文 SA/SD Gap Remediation Pack | 若 Part 1–8 與本文衝突，以本文為準。 |
+| 2 | Part 6 BFF API Contract | 若資料模型衝突，以 Part 6 經本文修正後版本為準。 |
+| 3 | Part 7 Component System / State Machines | 若 UI 元件與狀態機衝突，以本文 enum 和 transition 表為準。 |
+| 4 | Part 1–5 / Part 8 | 只作為頁面與產品意圖參考。 |
+
+---
+
+## 3. Process-to-Surface Mapping（修正 G13）
+
+| 管理流程 | Primary Surface | Secondary Surface | 必要 action surface | Realtime surface | Audit surface |
+|---|---|---|---|---|---|
+| Insight Intake | Management Command Center / Agora Insight Inbox | Knowledge & Lineage | Convert to Strategy, Create Research Task, Archive | `insight.created`, `handoff.created` | Insight Audit Timeline |
+| Strategy Lifecycle | Strategy & Alpha Management | Governance, Deployment, Experiments | Submit Review, Promote Paper, Request Live, Rollback, Retire | `strategy.state_changed` | Strategy Audit Timeline |
+| Strategy Spec / Artifact | Strategy Detail / Artifacts | Lineage | Lock Spec, Promote Artifact, Deprecate Artifact | `artifact.updated` | Artifact Audit Timeline |
+| Research / Experiment | Research & Experiments | Strategy Detail | Run, Cancel, Retry, Compare, Attach Evidence | `job.progress`, `experiment.completed` | Experiment Audit Timeline |
+| Governance / Approval | Governance & Approvals | Command Center | Approve, Reject, Request Changes, Escalate | `approval.requested`, `approval.decided` | Approval History |
+| Deployment / Runtime / Risk | Deployment, Runtime & Risk | Strategy Detail | Deploy, Pause, Resume, Rollback, Emergency Kill | `deployment.updated`, `runtime.heartbeat`, `risk.alert_created` | Deployment Audit Timeline |
+| Persona Lifecycle | Persona Directorate | Trainer Studio | Activate, Restrict, Suspend, Retire | `persona.updated`, `persona.policy_changed` | Persona Audit Timeline |
+| Persona Policy / Permissions | Persona Detail / Tools, MCP & Skills | Governance | Grant, Revoke, Publish Policy, Rollback Policy | `persona.permission_changed` | Permission Audit |
+| Persona Memory / Training | Persona Detail / Agora Memory Review | Trainer Studio | Approve Memory, Quarantine Memory, Create Training Example | `memory.updated`, `training_example.created` | Memory Audit Timeline |
+| Capital Pool / Risk Budget | Capital, Ranking & Rebalance | Risk Center | Freeze Pool, Set Risk Budget, Bind Persona, Bind Strategy | `capital_pool.updated` | Capital Audit Timeline |
+| Performance Ranking / Formula | Performance Ranking / Formula Studio | Capital Pool Detail | Test Formula, Activate Formula, Rollback Formula | `ranking.recalculated`, `formula.activated` | Formula Audit Timeline |
+| Quarterly Rebalance | Quarterly Rebalance Detail | Capital Pool Detail | Freeze Metrics, Simulate, Override, Approve, Apply, Rollback | `rebalance.updated` | Rebalance Audit Timeline |
+| Evolution Steering | Evolution Program Detail | Strategy Detail | Start Run, Pause Run, Promote Candidate | `evolution_run.updated` | Evolution Audit Timeline |
+| Tool / MCP / Skill | Tools, MCP & Skills | Persona Detail | Register, Discover, Sandbox, Approve, Grant, Revoke | `tool.call_completed`, `mcp.call_failed`, `skill.sandbox_completed` | Capability Audit Timeline |
+| Jobs / Events / Audit | Jobs, Events & Audit | All entity inspectors | Cancel, Retry, Clone, Export Audit | `job.progress`, `audit.created` | Global Audit Explorer |
+
+---
+
+## 4. Canonical Status / State Machines（修正 G01, G14, G15, G78）
+
+### 4.1 Strategy 狀態拆分
+
+Strategy 必須拆成三個不同欄位。`under_review` 不是 lifecycle status；`paused` 不是 lifecycle status。
+
+```ts
+type StrategyLifecycleStatus =
+  | 'discovered'
+  | 'scaffolded'
+  | 'replicated'
+  | 'approved'
+  | 'paper'
+  | 'live'
+  | 'degraded'
+  | 'retired';
+
+type StrategyReviewStatus =
+  | 'none'
+  | 'draft'
+  | 'submitted'
+  | 'validator_running'
+  | 'in_review'
+  | 'changes_requested'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled';
+
+type StrategyDeploymentStatus =
+  | 'not_deployed'
+  | 'scheduled'
+  | 'deploying'
+  | 'running'
+  | 'paused'
+  | 'rolling_back'
+  | 'failed'
+  | 'stopped';
+```
+
+#### Strategy lifecycle transition table
+
+| From | To | Action | Allowed roles | Approval | Confirm token | Required evidence | Audit event |
+|---|---|---|---|---|---|---|---|
+| discovered | scaffolded | `strategy.scaffold` | Admin, Research Lead, Strategy Manager | No | No | thesis, source, ownerPersonaId | `strategy.scaffolded` |
+| scaffolded | replicated | `strategy.mark_replicated` | Admin, Research Lead, Strategy Manager | No | No | completed backtest, completed OOS, reproducibilityHash | `strategy.replicated` |
+| replicated | approved | `strategy.approve_review` | Admin, Reviewer, Risk Officer | Yes | No | reviewDecisionId, validatorResults | `strategy.approved` |
+| approved | paper | `strategy.promote_paper` | Admin, Research Lead, Risk Officer | Yes | Yes | artifactId, capitalPoolId, riskBudgetId, paperRuntimeId | `strategy.paper_promoted` |
+| paper | live | `strategy.deploy_live` | Admin, Risk Officer, System Operator | Yes | Yes | artifactId, liveRuntimeId, brokerBindingId, rollbackArtifactId | `strategy.live_deployed` |
+| live | degraded | `strategy.mark_degraded` | Admin, Risk Officer, System Operator | No | No | alertId or incidentId | `strategy.degraded` |
+| live | retired | `strategy.retire_live` | Admin, Risk Officer | Yes | Yes | postmortemRequired=true, retirementReason | `strategy.retired` |
+| degraded | live | `strategy.restore_live` | Admin, Risk Officer, System Operator | Yes | Yes | mitigationId, riskOfficerMemo | `strategy.restored_live` |
+| degraded | retired | `strategy.retire_degraded` | Admin, Risk Officer | Yes | Yes | incidentId, retirementReason | `strategy.retired` |
+| paper | retired | `strategy.retire_paper` | Admin, Research Lead, Risk Officer | Yes | Yes | retirementReason | `strategy.retired` |
+
+### 4.2 Persona status
+
+```ts
+type PersonaStatus =
+  | 'draft'
+  | 'sandbox'
+  | 'active'
+  | 'probation'
+  | 'restricted'
+  | 'suspended'
+  | 'retired'
+  | 'archived';
+```
+
+| From | To | Action | Allowed roles | Approval | Confirm token | Audit event |
+|---|---|---|---|---|---|---|
+| draft | sandbox | `persona.start_sandbox` | Admin, Research Lead, AI Trainer | No | No | `persona.sandbox_started` |
+| sandbox | active | `persona.activate` | Admin, Research Lead | Yes | Yes | `persona.activated` |
+| active | probation | `persona.put_on_probation` | Admin, Risk Officer, Research Lead | Yes | Yes | `persona.probation_started` |
+| active | restricted | `persona.restrict` | Admin, Risk Officer | Yes | Yes | `persona.restricted` |
+| active | suspended | `persona.suspend` | Admin, Risk Officer | Yes | Yes | `persona.suspended` |
+| probation | active | `persona.clear_probation` | Admin, Risk Officer, Research Lead | Yes | Yes | `persona.probation_cleared` |
+| restricted | active | `persona.restore_permissions` | Admin, Risk Officer | Yes | Yes | `persona.restored` |
+| suspended | active | `persona.reactivate` | Admin, Risk Officer | Yes | Yes | `persona.reactivated` |
+| active | retired | `persona.retire` | Admin, Research Lead | Yes | Yes | `persona.retired` |
+| retired | archived | `persona.archive` | Admin | No | No | `persona.archived` |
+
+### 4.3 CapitalPool status
+
+```ts
+type CapitalPoolStatus =
+  | 'draft'
+  | 'active'
+  | 'frozen'
+  | 'rebalancing'
+  | 'restricted'
+  | 'retired';
+```
+
+| From | To | Action | Allowed roles | Approval | Confirm token |
+|---|---|---|---|---|---|
+| draft | active | `capital_pool.activate` | Admin, Capital Manager, Risk Officer | Yes | Yes |
+| active | frozen | `capital_pool.freeze` | Admin, Capital Manager, Risk Officer | Yes | Yes |
+| frozen | active | `capital_pool.unfreeze` | Admin, Capital Manager, Risk Officer | Yes | Yes |
+| active | rebalancing | `capital_pool.start_rebalance` | Admin, Capital Manager | No | No |
+| rebalancing | active | `capital_pool.apply_rebalance` | Admin, Capital Manager, Risk Officer | Yes | Yes |
+| active | restricted | `capital_pool.restrict` | Admin, Risk Officer | Yes | Yes |
+| restricted | active | `capital_pool.restore` | Admin, Risk Officer | Yes | Yes |
+| active | retired | `capital_pool.retire` | Admin, Capital Manager, Risk Officer | Yes | Yes |
+
+### 4.4 Other canonical statuses
+
+| Entity | Canonical status enum | Terminal statuses | Removed alias |
+|---|---|---|---|
+| RankingFormula | draft, testing, approved, active, deprecated, retired | retired | none |
+| QuarterlyRebalance | draft, metrics_freezing, metrics_frozen, ranking_calculated, simulation_ready, under_review, approved, scheduled, applied, rolled_back, cancelled | applied, rolled_back, cancelled | none |
+| EvolutionProgram | draft, active, paused, under_review, completed, retired | completed, retired | none |
+| Experiment | draft, queued, running, completed, failed, invalidated, attached_to_review, archived | archived | none |
+| ReviewRequest | draft, submitted, validator_running, in_review, changes_requested, approved, rejected, cancelled | approved, rejected, cancelled | none |
+| Deployment | draft, submitted, approved, scheduled, deploying, deployed, failed, rolling_back, rolled_back, retired | deployed, rolled_back, retired | none |
+| Tool | draft, testing, active, restricted, deprecated, blocked, retired | retired | none |
+| MCPServer | draft, connected, healthy, degraded, disabled, retired | retired | none |
+| Skill | draft, sandboxed, validated, approved, active, deprecated, blocked, retired | retired | deprecating |
+| MemoryItem | proposed, approved, rejected, edited, merged, quarantined, sensitive, deleted | rejected, deleted | isolated |
+| Insight | raw, triaged, classified, linked, converted_to_strategy, converted_to_research_task, converted_to_training_example, dismissed, archived | dismissed, archived | none |
+| Job | queued, running, waiting_for_approval, completed, failed, cancelled, retrying | completed, failed, cancelled | none |
+
+---
+
+## 5. Permission Truth Tables（修正 G02）
+
+### 5.1 Management roles
+
+```ts
+type ManagementRole =
+  | 'admin'
+  | 'research_lead'
+  | 'risk_officer'
+  | 'capital_manager'
+  | 'strategy_manager'
+  | 'system_operator'
+  | 'reviewer'
+  | 'capability_admin';
+```
+
+### 5.2 Strategy actions
+
+| Action id | Allowed roles | Requires approval | High risk | Notes |
+|---|---|---:|---:|---|
+| `strategy.create` | admin, research_lead, strategy_manager | No | No | Creates discovered strategy. |
+| `strategy.edit_spec` | admin, research_lead, strategy_manager | No | No | Disabled after approved unless unlock approved. |
+| `strategy.lock_spec` | admin, research_lead, strategy_manager | No | No | Creates immutable spec version. |
+| `strategy.assign_persona` | admin, research_lead, strategy_manager | No | No | Persona must be active or probation. |
+| `strategy.run_experiment` | admin, research_lead, strategy_manager | No | No | Creates async job. |
+| `strategy.submit_review` | admin, research_lead, strategy_manager | No | No | Creates ReviewRequest. |
+| `strategy.approve_review` | admin, reviewer, risk_officer | Yes | No | Moves replicated to approved. |
+| `strategy.promote_paper` | admin, research_lead, risk_officer | Yes | Yes | Creates paper deployment. |
+| `strategy.request_live_promotion` | admin, research_lead, risk_officer | Yes | Yes | Creates live promotion request. |
+| `strategy.deploy_live` | admin, risk_officer, system_operator | Yes | Yes | Requires approved live promotion. |
+| `strategy.pause_live` | admin, risk_officer, system_operator | Yes | Yes | Updates deploymentStatus to paused. |
+| `strategy.resume_live` | admin, risk_officer, system_operator | Yes | Yes | Updates deploymentStatus to running. |
+| `strategy.rollback_live` | admin, risk_officer, system_operator | Yes | Yes | Requires rollbackArtifactId. |
+| `strategy.emergency_kill` | admin, risk_officer, system_operator | No pre-approval | Yes | Mandatory memo and postmortem. |
+| `strategy.retire` | admin, research_lead, risk_officer | Yes | Yes | Requires retirementReason. |
+| `strategy.archive` | admin, strategy_manager | No | No | Only retired strategy. |
+
+### 5.3 Persona actions
+
+| Action id | Allowed roles | Requires approval | High risk | Notes |
+|---|---|---:|---:|---|
+| `persona.create` | admin, research_lead, ai_trainer | No | No | Creates draft persona. |
+| `persona.clone` | admin, research_lead, ai_trainer | No | No | Creates draft persona from existing version. |
+| `persona.edit_identity` | admin, research_lead, ai_trainer | No | No | Role, style, risk appetite. |
+| `persona.update_route_policy` | admin, research_lead, risk_officer | Yes | Yes | Publishes new policy version. |
+| `persona.grant_tool` | admin, capability_admin, risk_officer | Yes | Yes | Tool must be active. |
+| `persona.revoke_tool` | admin, capability_admin, risk_officer | Yes | Yes | Immediate effect. |
+| `persona.grant_mcp_tool` | admin, capability_admin, risk_officer | Yes | Yes | MCP server must be healthy. |
+| `persona.revoke_mcp_tool` | admin, capability_admin, risk_officer | Yes | Yes | Immediate effect. |
+| `persona.grant_skill` | admin, capability_admin, research_lead | Yes | Yes | Skill must be active. |
+| `persona.revoke_skill` | admin, capability_admin, research_lead | Yes | Yes | Immediate effect. |
+| `persona.activate` | admin, research_lead | Yes | Yes | Sandbox evaluation required. |
+| `persona.restrict` | admin, risk_officer | Yes | Yes | May disable permissions. |
+| `persona.suspend` | admin, risk_officer | Yes | Yes | Stops new tasks. |
+| `persona.retire` | admin, research_lead | Yes | Yes | Requires retirement memo. |
+
+### 5.4 Capital / ranking / rebalance actions
+
+| Action id | Allowed roles | Requires approval | High risk | Notes |
+|---|---|---:|---:|---|
+| `capital_pool.create` | admin, capital_manager | No | No | Creates draft pool. |
+| `capital_pool.edit_mandate` | admin, capital_manager, risk_officer | Yes | Yes | Affects allowed allocation. |
+| `capital_pool.set_risk_budget` | admin, capital_manager, risk_officer | Yes | Yes | Requires risk memo. |
+| `capital_pool.bind_persona` | admin, capital_manager, risk_officer | Yes | Yes | Requires persona status active/probation. |
+| `capital_pool.bind_strategy` | admin, capital_manager, risk_officer | Yes | Yes | Requires strategy approved/paper/live. |
+| `ranking_formula.create` | admin, capital_manager, risk_officer | No | No | Creates draft formula. |
+| `ranking_formula.edit` | admin, capital_manager, risk_officer | No | No | Only draft/testing. |
+| `ranking_formula.test` | admin, capital_manager, risk_officer | No | No | Creates formula backtest job. |
+| `ranking_formula.approve` | admin, risk_officer, reviewer | Yes | Yes | Moves testing to approved. |
+| `ranking_formula.activate` | admin, capital_manager, risk_officer | Yes | Yes | Affects future ranking. |
+| `ranking_formula.rollback` | admin, capital_manager, risk_officer | Yes | Yes | Restores prior active version. |
+| `rebalance.freeze_metrics` | admin, capital_manager | No | No | Starts metric freeze. |
+| `rebalance.calculate_ranking` | admin, capital_manager | No | No | Creates job. |
+| `rebalance.apply_override` | admin, capital_manager, risk_officer | Yes | Yes | Requires override reason. |
+| `rebalance.approve` | admin, risk_officer, capital_manager | Yes | Yes | Requires reviewer and approver. |
+| `rebalance.apply` | admin, capital_manager, system_operator | Yes | Yes | Applies allocation. |
+| `rebalance.rollback` | admin, capital_manager, risk_officer | Yes | Yes | Restores previous allocation. |
+
+### 5.5 Capability actions
+
+| Action id | Allowed roles | Requires approval | High risk | Notes |
+|---|---|---:|---:|---|
+| `tool.register` | admin, capability_admin | No | No | Creates draft tool. |
+| `tool.edit_schema` | admin, capability_admin | No | No | Draft/testing only. |
+| `tool.classify_risk` | admin, capability_admin, risk_officer | Yes | Yes | Sets sideEffectLevel. |
+| `tool.disable` | admin, capability_admin, risk_officer | Yes | Yes | Immediate effect. |
+| `mcp_server.add` | admin, capability_admin | Yes | Yes | Requires credential scope. |
+| `mcp_server.rotate_secret` | admin, capability_admin | Yes | Yes | Secret never shown in UI. |
+| `mcp_server.disable` | admin, capability_admin, risk_officer | Yes | Yes | Stops calls. |
+| `mcp_tool.grant_persona` | admin, capability_admin, risk_officer | Yes | Yes | Requires parameter restrictions. |
+| `skill.create_draft` | admin, capability_admin, ai_trainer | No | No | Draft only. |
+| `skill.run_sandbox` | admin, capability_admin, ai_trainer | No | No | Creates sandbox job. |
+| `skill.approve` | admin, capability_admin, risk_officer | Yes | Yes | Moves approved/active. |
+| `skill.deprecate` | admin, capability_admin | Yes | Yes | Requires replacement note. |
+
+---
+
+## 6. High-Risk Actions / Confirmation Token（修正 G03, G66, G86）
+
+### 6.1 High-risk action catalog
+
+| Entity | Action id | Memo required | Confirm phrase | Token TTL | Allowed roles | Approval mode |
+|---|---|---:|---|---:|---|---|
+| Strategy | `strategy.promote_paper` | Yes | `PROMOTE PAPER {strategyId}` | 300s | admin, research_lead, risk_officer | approval_required |
+| Strategy | `strategy.deploy_live` | Yes | `DEPLOY LIVE {strategyId}` | 300s | admin, risk_officer, system_operator | approval_required |
+| Strategy | `strategy.pause_live` | Yes | `PAUSE LIVE {strategyId}` | 300s | admin, risk_officer, system_operator | approval_required |
+| Strategy | `strategy.resume_live` | Yes | `RESUME LIVE {strategyId}` | 300s | admin, risk_officer, system_operator | approval_required |
+| Strategy | `strategy.rollback_live` | Yes | `ROLLBACK LIVE {strategyId}` | 300s | admin, risk_officer, system_operator | approval_required |
+| Strategy | `strategy.emergency_kill` | Yes | `KILL {strategyId}` | 120s | admin, risk_officer, system_operator | emergency_no_preapproval |
+| Strategy | `strategy.retire` | Yes | `RETIRE {strategyId}` | 300s | admin, research_lead, risk_officer | approval_required |
+| CapitalPool | `capital_pool.edit_mandate` | Yes | `UPDATE MANDATE {poolId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| CapitalPool | `capital_pool.set_risk_budget` | Yes | `SET RISK {poolId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| CapitalPool | `capital_pool.freeze` | Yes | `FREEZE {poolId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| QuarterlyRebalance | `rebalance.apply_override` | Yes | `OVERRIDE {rebalanceId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| QuarterlyRebalance | `rebalance.apply` | Yes | `APPLY REBALANCE {rebalanceId}` | 300s | admin, capital_manager, system_operator | approval_required |
+| QuarterlyRebalance | `rebalance.rollback` | Yes | `ROLLBACK REBALANCE {rebalanceId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| RankingFormula | `ranking_formula.activate` | Yes | `ACTIVATE FORMULA {formulaId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| RankingFormula | `ranking_formula.rollback` | Yes | `ROLLBACK FORMULA {formulaId}` | 300s | admin, capital_manager, risk_officer | approval_required |
+| Persona | `persona.update_route_policy` | Yes | `PUBLISH POLICY {personaId}` | 300s | admin, research_lead, risk_officer | approval_required |
+| Persona | `persona.activate` | Yes | `ACTIVATE PERSONA {personaId}` | 300s | admin, research_lead | approval_required |
+| Persona | `persona.restrict` | Yes | `RESTRICT PERSONA {personaId}` | 300s | admin, risk_officer | approval_required |
+| Persona | `persona.suspend` | Yes | `SUSPEND PERSONA {personaId}` | 300s | admin, risk_officer | approval_required |
+| Runtime | `runtime.restart` | Yes | `RESTART {runtimeId}` | 180s | admin, system_operator | approval_required |
+| Runtime | `runtime.stop` | Yes | `STOP {runtimeId}` | 180s | admin, system_operator, risk_officer | approval_required |
+| Runtime | `runtime.drain` | Yes | `DRAIN {runtimeId}` | 180s | admin, system_operator | approval_required |
+| MCPServer | `mcp_server.disable` | Yes | `DISABLE MCP {serverId}` | 300s | admin, capability_admin, risk_officer | approval_required |
+| MCPServer | `mcp_server.rotate_secret` | Yes | `ROTATE MCP SECRET {serverId}` | 300s | admin, capability_admin | approval_required |
+| MCPTool | `mcp_tool.grant_persona` | Yes | `GRANT MCP {toolId}` | 300s | admin, capability_admin, risk_officer | approval_required |
+| Tool | `tool.disable` | Yes | `DISABLE TOOL {toolId}` | 300s | admin, capability_admin, risk_officer | approval_required |
+| Skill | `skill.approve` | Yes | `APPROVE SKILL {skillId}` | 300s | admin, capability_admin, risk_officer | approval_required |
+| Skill | `skill.deprecate` | Yes | `DEPRECATE SKILL {skillId}` | 300s | admin, capability_admin | approval_required |
+| MemoryItem | `memory.delete` | Yes | `DELETE MEMORY {memoryId}` | 300s | admin, ai_trainer, risk_officer | approval_required |
+
+### 6.2 Confirmation token API
+
+```http
+POST /bff/command-confirmations
+Content-Type: application/json
+Accept-Language: zh-TW | en-US
+```
+
+Request:
+
+```json
+{
+  "actionId": "strategy.rollback_live",
+  "entityType": "strategy",
+  "entityId": "alpha_042",
+  "payloadHash": "sha256:7f9a...",
+  "tradingEnvironment": "live",
+  "platformEnvironment": "production"
+}
+```
+
+Response:
+
+```json
+{
+  "confirmToken": "ctok_01HX...",
+  "expiresAt": "2026-05-05T12:05:00.000Z",
+  "ttlSeconds": 300,
+  "requiredPhrase": "ROLLBACK LIVE alpha_042",
+  "requiresMemo": true,
+  "auditEventPreview": "strategy.rollback_live.requested"
+}
+```
+
+Token rules:
+
+| Rule | Requirement |
+|---|---|
+| Single use | Token is invalid after one command attempt. |
+| User-bound | Token only valid for requester user id. |
+| Role-bound | Token invalid if role changes before command submission. |
+| Entity-bound | Token only valid for entityType + entityId. |
+| Action-bound | Token only valid for actionId. |
+| Payload-bound | Token invalid if payloadHash changes. |
+| Environment-bound | Token only valid for platformEnvironment + tradingEnvironment. |
+| Expiry | Default 300 seconds; emergency action 120 seconds; runtime action 180 seconds. |
+| Refresh | UI must request a new token after expiry. |
+
+Command request must include:
+
+```json
+{
+  "confirmToken": "ctok_01HX...",
+  "typedPhrase": "ROLLBACK LIVE alpha_042",
+  "memo": "Rollback because slippage breach exceeded live risk threshold.",
+  "payload": {
+    "rollbackArtifactId": "artifact_v11"
+  }
+}
+```
+
+### 6.3 Emergency Kill spec（修正 G86）
+
+Emergency Kill target enum:
+
+```ts
+type EmergencyKillTarget =
+  | 'live_strategy'
+  | 'runtime'
+  | 'broker_connection'
+  | 'mcp_server'
+  | 'tool'
+  | 'skill';
+```
+
+Entry points:
+
+| Entry point | Target | Location | Required UI path |
+|---|---|---|---|
+| Live Strategy Detail | live_strategy | `/management/strategies/:strategyId` → Paper/Live Execution tab | Danger Zone → Emergency Kill |
+| Runtime Monitor | runtime | `/management/runtimes/:runtimeId` | Runtime Actions → Emergency Kill Runtime |
+| Incident Detail | live_strategy, runtime, broker_connection | `/management/incidents/:incidentId` | Emergency Actions panel |
+| MCP Server Detail | mcp_server | `/management/mcp/:serverId` | Danger Zone → Disable Immediately |
+| Tool Detail | tool | `/management/tools/:toolId` | Danger Zone → Disable Immediately |
+| Skill Detail | skill | `/management/skills/:skillId` | Danger Zone → Block Immediately |
+
+Execution SLA:
+
+| Step | Max time | Requirement |
+|---|---:|---|
+| Open modal | 1s | UI must not wait for audit history. |
+| Fetch confirm token | 2s | If token fetch fails, command disabled. |
+| User typed phrase and memo | User-controlled | Memo required. |
+| Submit kill command | 2s | BFF returns accepted job id or failure. |
+| Create incident / postmortem task | 5s | Automatic after accepted command. |
+
+Emergency Kill does not require pre-approval, but it always creates:
+
+```text
+incident.updated
+audit.created
+postmortem.required
+training_feedback.suggested
+```
+
+---
+
+## 7. Environment Model / Action Gating（修正 G04）
+
+Two concepts must not be merged.
+
+```ts
+type PlatformEnvironment = 'local' | 'dev' | 'staging' | 'production';
+type TradingEnvironment = 'research' | 'paper' | 'live';
+```
+
+Top bar display:
+
+```text
+{platformEnvironment.toUpperCase()} / {tradingEnvironment.toUpperCase()}
+```
+
+Action gating table:
+
+| Platform env | Trading env | Live external side effects | Paper deployment | Research jobs | High-risk commands |
+|---|---|---:|---:|---:|---:|
+| local | research | No | No | Yes, mock only | No |
+| dev | research | No | No | Yes, mock or dev worker | No |
+| staging | research | No | No | Yes, staging worker | Confirmed mock only |
+| staging | paper | No | Yes, staging paper only | Yes | Confirmed mock only |
+| production | research | No | No | Yes | Yes if entity allows |
+| production | paper | No | Yes | Yes | Yes if entity allows |
+| production | live | Yes | Yes | Yes | Yes with high-risk confirmation |
+
+If `platformEnvironment !== 'production'`, BFF must reject commands that create broker or live capital side effects even if UI mistakenly enables them.
+
+---
+
+## 8. availableActions Contract（修正 G05, G67）
+
+### 8.1 Canonical shape
+
+`availableActions` is always `ActionDescriptor[]`. It is never `string[]`.
+
+```ts
+interface ActionDescriptor {
+  id: string;
+  labelKey: string;
+  entityType: EntityType;
+  actionType: 'query' | 'command' | 'job_command' | 'approval_command' | 'navigation';
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  enabled: boolean;
+  disabledReasonKey?: string;
+  disabledReasonParams?: Record<string, string | number | boolean>;
+  requiresApproval: boolean;
+  requiresConfirmation: boolean;
+  requiresMemo: boolean;
+  allowedRoles: ManagementRole[];
+  requiredEntityStatuses: string[];
+  requiredPlatformEnvironments: PlatformEnvironment[];
+  requiredTradingEnvironments: TradingEnvironment[];
+  blockers: ActionBlocker[];
+  commandEndpoint?: string;
+  confirmEndpoint?: string;
+}
+
+interface ActionBlocker {
+  code: string;
+  messageKey: string;
+  severity: 'info' | 'warning' | 'error';
+}
+```
+
+### 8.2 BFF calculation formula
+
+An action is enabled only if all conditions are true:
+
+```text
+roleAllowed
+AND lifecycleStatusAllowed
+AND reviewStatusAllowed when action targets review state
+AND deploymentStatusAllowed when action targets deployment state
+AND platformEnvironmentAllowed
+AND tradingEnvironmentAllowed
+AND featureFlagEnabled
+AND entityLockAbsent
+AND noCriticalBlocker
+AND requiredEvidencePresent
+AND policyAllowsAction
+```
+
+BFF must return disabled actions with blockers if the action is relevant but unavailable. BFF may omit actions that are never visible to the current role.
+
+---
+
+## 9. Capital Pool Mandate Schema（修正 G16）
+
+```ts
+interface CapitalPoolMandate {
+  mandateId: string;
+  poolId: string;
+  displayName: string;
+  description: string;
+  baseCurrency: 'USD' | 'TWD' | 'EUR' | 'JPY';
+  allowedMarkets: Array<'US_EQUITY' | 'TW_EQUITY' | 'FX' | 'CRYPTO' | 'FUTURES' | 'ETF'>;
+  allowedStrategyTypes: Array<'mean_reversion' | 'trend_following' | 'stat_arb' | 'factor' | 'macro' | 'execution' | 'risk_overlay'>;
+  allowedPersonaIds: string[];
+  maxGrossExposurePct: number;
+  maxNetExposurePct: number;
+  maxSingleStrategyAllocationPct: number;
+  maxSinglePersonaAllocationPct: number;
+  minCashReservePct: number;
+  maxDrawdownPct: number;
+  warningDrawdownPct: number;
+  maxLeverage: number;
+  maxTurnoverDailyPct: number;
+  maxConcentrationByAssetPct: number;
+  maxCorrelationToExistingLive: number;
+  deployModesAllowed: Array<'research' | 'paper' | 'live'>;
+  emergencyRules: {
+    autoFreezeOnDrawdownPct: number;
+    autoIncidentOnRiskBreach: boolean;
+    requireRiskOfficerForUnfreeze: boolean;
+  };
+  effectiveFrom: string;
+  effectiveTo?: string;
+  version: number;
+  status: 'draft' | 'active' | 'deprecated';
+}
+```
+
+Validation rules:
+
+| Field | Rule |
+|---|---|
+| `maxGrossExposurePct` | 0–300 |
+| `maxNetExposurePct` | 0–200 |
+| `maxSingleStrategyAllocationPct` | 0–100 |
+| `maxSinglePersonaAllocationPct` | 0–100 |
+| `minCashReservePct` | 0–100 |
+| `maxDrawdownPct` | 0–100 and greater than warningDrawdownPct |
+| `warningDrawdownPct` | 0–100 and less than maxDrawdownPct |
+| `maxLeverage` | 0–10 |
+| `maxCorrelationToExistingLive` | 0–1 |
+
+---
+
+## 10. Ranking Formula / Metric Matrix（修正 G17, G31）
+
+### 10.1 Ranking scopes
+
+```ts
+type RankingScope =
+  | 'persona'
+  | 'strategy'
+  | 'alpha_family'
+  | 'capital_pool'
+  | 'paper_strategy'
+  | 'live_strategy'
+  | 'research_productivity'
+  | 'risk_adjusted';
+```
+
+### 10.2 Scope to metric matrix
+
+| Metric | persona | strategy | alpha_family | capital_pool | paper_strategy | live_strategy | research_productivity | risk_adjusted |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| quarterly_return | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| annualized_return | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| sharpe | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| sortino | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| calmar | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| max_drawdown | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| volatility | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| turnover | Yes | Yes | Yes | No | Yes | Yes | No | Yes |
+| hit_rate | Yes | Yes | Yes | No | Yes | Yes | No | Yes |
+| profit_factor | Yes | Yes | Yes | No | Yes | Yes | No | Yes |
+| tail_risk | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| slippage | Yes | Yes | Yes | No | Yes | Yes | No | Yes |
+| capacity | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| stability | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| live_paper_gap | No | Yes | Yes | No | No | Yes | No | Yes |
+| risk_violation_count | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| drawdown_recovery_days | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| research_productivity | Yes | No | No | No | No | No | Yes | No |
+| experiment_success_rate | Yes | No | No | No | No | No | Yes | No |
+| human_override_penalty | Yes | Yes | No | No | Yes | Yes | No | Yes |
+| policy_violation_penalty | Yes | No | No | No | No | No | No | Yes |
+
+### 10.3 Formula schema
+
+```ts
+interface RankingFormula {
+  id: string;
+  name: string;
+  scope: RankingScope;
+  version: number;
+  status: 'draft' | 'testing' | 'approved' | 'active' | 'deprecated' | 'retired';
+  window: {
+    period: 'quarter' | 'half_year' | 'year' | 'rolling_90d' | 'rolling_180d' | 'rolling_365d';
+    startDate?: string;
+    endDate?: string;
+  };
+  normalization: 'z_score' | 'min_max' | 'rank_percentile' | 'none';
+  outlierHandling: 'winsorize_1_99' | 'winsorize_5_95' | 'clip_3sigma' | 'none';
+  metrics: RankingMetricWeight[];
+  caps: {
+    minScore?: number;
+    maxScore?: number;
+    minAllocationPct?: number;
+    maxAllocationPct?: number;
+  };
+  createdBy: string;
+  approvedBy?: string;
+  activeFrom?: string;
+}
+
+interface RankingMetricWeight {
+  metric: string;
+  weight: number;
+  direction: 'higher_is_better' | 'lower_is_better';
+  transform: 'identity' | 'log' | 'sqrt' | 'clip' | 'binary';
+  penaltyMode: 'none' | 'linear' | 'step' | 'hard_block';
+  hardBlockThreshold?: number;
+}
+```
+
+Weight validation:
+
+```text
+For metrics where penaltyMode = none, sum(abs(weight)) must be 1.0 ± 0.0001.
+For penalty metrics, weight must be negative.
+For reward metrics, weight must be positive.
+A formula cannot become active unless status = approved.
+```
+
+---
+
+## 11. Quarterly Rebalance Workflow（修正 G18, G32, G68）
+
+### 11.1 Required reviewer / approver fields
+
+```ts
+interface QuarterlyRebalance {
+  id: string;
+  quarter: string;
+  capitalPoolId: string;
+  formulaId: string;
+  formulaVersion: number;
+  status: QuarterlyRebalanceStatus;
+  reviewers: RebalanceReviewer[];
+  approvers: RebalanceApprover[];
+  metricFreeze: MetricFreeze;
+  rankingResultId?: string;
+  simulationId?: string;
+  overrides: AllocationOverride[];
+  scheduledEffectiveAt?: string;
+  appliedAt?: string;
+  rollbackOf?: string;
+}
+
+interface RebalanceReviewer {
+  userId: string;
+  role: 'capital_manager' | 'risk_officer' | 'reviewer';
+  status: 'pending' | 'approved' | 'rejected' | 'changes_requested';
+  memo?: string;
+  decidedAt?: string;
+}
+
+interface RebalanceApprover {
+  userId: string;
+  role: 'capital_manager' | 'risk_officer' | 'admin';
+  status: 'pending' | 'approved' | 'rejected';
+  memo?: string;
+  decidedAt?: string;
+}
+```
+
+### 11.2 Step table
+
+| Step | Status after step | Primary role | Secondary role | Required UI component | Required BFF action | Can reject | Audit event |
+|---|---|---|---|---|---|---:|---|
+| Create event | draft | capital_manager | admin | RebalanceCreateForm | `POST /bff/rebalances` | No | `rebalance.created` |
+| Freeze metrics | metrics_frozen | capital_manager | risk_officer | MetricFreezePanel | `rebalance.freeze_metrics` | No | `rebalance.metrics_frozen` |
+| Calculate ranking | ranking_calculated | capital_manager | admin | RankingResultViewer | `rebalance.calculate_ranking` | No | `rebalance.ranking_calculated` |
+| Run simulation | simulation_ready | capital_manager | risk_officer | AllocationSimulationPanel | `rebalance.run_simulation` | No | `rebalance.simulation_ready` |
+| Apply override | simulation_ready | capital_manager | risk_officer | OverrideManager | `rebalance.apply_override` | Yes | `rebalance.override_applied` |
+| Submit review | under_review | capital_manager | admin | RebalanceReviewSubmitter | `rebalance.submit_review` | No | `rebalance.submitted` |
+| Risk review | under_review | risk_officer | reviewer | ApprovalPanel | `rebalance.review_decide` | Yes | `rebalance.review_decided` |
+| Final approval | approved | capital_manager, risk_officer | admin | ApprovalPanel | `rebalance.approve` | Yes | `rebalance.approved` |
+| Schedule | scheduled | capital_manager | system_operator | ScheduleEffectiveDate | `rebalance.schedule` | No | `rebalance.scheduled` |
+| Apply | applied | capital_manager, system_operator | risk_officer | HighRiskConfirmationModal | `rebalance.apply` | No | `rebalance.applied` |
+| Rollback | rolled_back | capital_manager, risk_officer | admin | HighRiskConfirmationModal | `rebalance.rollback` | No | `rebalance.rolled_back` |
+
+---
+
+## 12. Evolution Steering Entity Schemas（修正 G19）
+
+```ts
+interface EvolutionConstraint {
+  id: string;
+  programId: string;
+  type: 'hard' | 'soft';
+  field: 'max_drawdown' | 'turnover' | 'capacity' | 'correlation' | 'market' | 'asset_liquidity' | 'holding_period' | 'leverage';
+  operator: '<=' | '>=' | '=' | 'in' | 'not_in';
+  value: number | string | string[];
+  penaltyWeight?: number;
+  status: 'active' | 'disabled';
+}
+
+interface EvolutionAlert {
+  id: string;
+  programId: string;
+  runId?: string;
+  severity: 'info' | 'warning' | 'high' | 'critical';
+  type: 'fitness_plateau' | 'constraint_breach' | 'compute_budget_breach' | 'candidate_risk' | 'data_quality';
+  messageKey: string;
+  createdAt: string;
+  status: 'new' | 'acknowledged' | 'resolved';
+}
+
+interface EvolutionApproval {
+  id: string;
+  programId: string;
+  candidateId?: string;
+  type: 'program_activate' | 'fitness_formula_change' | 'candidate_promote' | 'budget_increase' | 'constraint_change';
+  requestedBy: string;
+  reviewers: string[];
+  status: 'submitted' | 'in_review' | 'approved' | 'rejected' | 'changes_requested';
+  memo?: string;
+}
+```
+
+---
+
+## 13. Management Page Tab Corrections（修正 G28, G29, G30）
+
+### 13.1 Strategy Detail canonical tabs
+
+Strategy Detail has exactly 13 tabs:
+
+```text
+Overview
+Spec & Parameters
+Data & Features
+Costs & Slippage
+Experiments
+Performance
+Paper / Live Execution
+Risk & Alerts
+Incidents
+Artifacts
+Evolution
+Governance
+Lineage & Audit
+```
+
+### 13.2 Persona Detail canonical tabs
+
+Persona Detail has exactly 12 tabs:
+
+```text
+Overview
+Identity & Role
+Private Workspace
+Route Policy
+Tools / MCP / Skills
+Capital Binding
+Strategy Ownership
+Performance & Ranking
+Activity Monitor
+Training & Memory
+Evaluations
+Version History & Audit
+```
+
+### 13.3 Capital Pool Detail canonical tabs
+
+Capital Pool Detail has exactly 10 tabs:
+
+```text
+Overview
+Mandate
+Persona Binding
+Strategy Binding
+Risk Budget
+Current Exposure
+Performance
+Ranking Inputs
+Rebalance History
+Overrides & Audit
+```
+
+---
+
+## 14. Canonical Routes（修正 G33）
+
+Canonical Risk Center route is:
+
+```text
+/management/risk
+```
+
+The following alias is deprecated and must not appear in Lovable prompts or docs after this patch:
+
+```text
+/management/risk-center
+```
+
+If existing front-end has alias support, keep it as redirect only:
+
+```text
+/management/risk-center → /management/risk
+```
+
+---
+
+## 15. Agora Handoff Schema（修正 G48）
+
+```ts
+type AgoraHandoffType =
+  | 'strategy_idea'
+  | 'research_task'
+  | 'training_example'
+  | 'committee_memo'
+  | 'skill_draft'
+  | 'mcp_tool_request'
+  | 'incident_note'
+  | 'signal_feedback';
+
+interface AgoraHandoff {
+  id: string;
+  type: AgoraHandoffType;
+  sourceApp: 'agora';
+  sourceRoute: string;
+  sourceSessionId?: string;
+  sourceMessageIds: string[];
+  createdBy: string;
+  createdAt: string;
+  priority: 'low' | 'medium' | 'high';
+  targetEntityType?: EntityType;
+  targetEntityId?: string;
+  title: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  recommendedManagementAction: string;
+  status: 'new' | 'triaged' | 'accepted' | 'rejected' | 'converted' | 'archived';
+}
+```
+
+Handoff routing table:
+
+| Handoff type | Management destination | Default recommended action |
+|---|---|---|
+| strategy_idea | Command Center / Strategy Inbox | `strategy.create_from_handoff` |
+| research_task | Research & Experiments | `experiment.create_from_handoff` |
+| training_example | Persona Directorate / Trainer queue | `training_example.review` |
+| committee_memo | Governance & Approvals | `review.attach_committee_memo` |
+| skill_draft | Skill Management | `skill.create_draft_from_handoff` |
+| mcp_tool_request | MCP Management | `mcp_tool.permission_request` |
+| incident_note | Incident Center | `incident.attach_note` |
+| signal_feedback | Strategy Detail / Signal Review queue | `strategy.create_research_question` |
+
+---
+
+## 16. Signal Feedback Write Contract（修正 G49, G57）
+
+### 16.1 Confidence scale
+
+UI confidence scale is integer 1–5. BFF stores both raw and normalized values.
+
+| UI value | Meaning | normalizedConfidence |
+|---:|---|---:|
+| 1 | Very low confidence | 0.20 |
+| 2 | Low confidence | 0.40 |
+| 3 | Neutral / uncertain | 0.60 |
+| 4 | High confidence | 0.80 |
+| 5 | Very high confidence | 1.00 |
+
+### 16.2 Endpoint
+
+```http
+POST /bff/agora/signals/{signalId}/feedback
+```
+
+Request:
+
+```json
+{
+  "feedback": "disagree",
+  "confidence": 4,
+  "reason": "Macro regime shifted after the rate announcement.",
+  "createHandoff": true,
+  "handoffType": "signal_feedback"
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "feedbackId": "sf_001",
+    "signalId": "sig_9821",
+    "normalizedConfidence": 0.8,
+    "handoffId": "handoff_777"
+  }
+}
+```
+
+Write behavior:
+
+| Condition | Behavior |
+|---|---|
+| User clicks Agree without reason | Write immediately. |
+| User clicks Disagree | Reason is required if confidence >= 4. |
+| User clicks Flag Suspicious | Reason is always required. |
+| Multiple edits within 30 seconds | BFF updates the same feedback record. |
+| More than 30 seconds after first write | BFF creates a new revision. |
+
+---
+
+## 17. Agora KPI / Daily Brief Formulas（修正 G56）
+
+| KPI | Formula | Source | Refresh |
+|---|---|---|---|
+| `watchlistMoveCount` | count watchlist assets where `abs(return1dPct) >= user.watchlistMoveThresholdPct` | `/bff/agora/watchlist` | 60s |
+| `openRiskAlerts` | count risk alerts where status in new, acknowledged, assigned, investigating | `/bff/alerts` | realtime |
+| `signalReviewQueue` | count signals where reviewStatus = pending_trader_review | `/bff/agora/signals` | realtime |
+| `paperLiveDivergenceCount` | count strategies where `abs(paperReturnWindow - liveReturnWindow) >= divergenceThresholdPct` | `/bff/strategies` | 5m |
+| `personaBriefCount` | count persona daily notes generated in last 24h | `/bff/agora/daily` | 5m |
+| `researchQuestionCount` | count research tasks status in new, triaged | `/bff/research/tasks` | realtime |
+| `incidentNeedsTraderInput` | count incidents where requiredInputRole includes trader | `/bff/incidents` | realtime |
+
+Default thresholds:
+
+| Threshold | Value |
+|---|---:|
+| `watchlistMoveThresholdPct` | 2.0 |
+| `divergenceThresholdPct` | 5.0 |
+| `dailyBriefLookbackHours` | 24 |
+
+---
+
+## 18. Committee Evidence Pack（修正 G58）
+
+```ts
+interface CommitteeEvidencePack {
+  id: string;
+  sessionId: string;
+  targetEntityType: 'strategy' | 'signal' | 'incident' | 'research_note' | 'artifact';
+  targetEntityId: string;
+  uploadedFiles: EvidenceFile[];
+  linkedEntities: LinkedEntity[];
+  notes: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+interface EvidenceFile {
+  id: string;
+  fileName: string;
+  mimeType: 'application/pdf' | 'text/markdown' | 'text/plain' | 'text/csv' | 'image/png' | 'image/jpeg';
+  sizeBytes: number;
+  storageUrl: string;
+  extractedTextStatus: 'not_started' | 'running' | 'completed' | 'failed';
+}
+```
+
+Upload constraints:
+
+| Constraint | Value |
+|---|---:|
+| Max files per evidence pack | 12 |
+| Max file size | 20 MB |
+| Max total size | 100 MB |
+| Allowed MIME types | PDF, Markdown, Plain text, CSV, PNG, JPEG |
+| Required metadata | source, title, uploadedBy, createdAt |
+
+Endpoint:
+
+```http
+POST /bff/agora/committee/{sessionId}/evidence-pack
+POST /bff/agora/committee/{sessionId}/evidence-pack/files
+```
+
+---
+
+## 19. Medium / Low Gap Resolution Register
+
+Medium and Low gaps must be patched in the next document revision. This table defines exact target section for every G item.
+
+| Gap | Severity | Title | Patch target |
+|---|---|---|---|
+| G01 | H | Strategy 8 狀態與 Persona/CapitalPool 狀態未在 Part 1 全部展開 | §4 Canonical Status / State Machines |
+| G02 | H | Role 清單與 Action 權限矩陣（Permission Truth Table）完全缺漏 | §5 Permission Truth Tables |
+| G03 | H | High-Risk Action 未列舉完整集合與 confirm token 規格 | §6 High-Risk Actions / Confirmation Token |
+| G04 | H | EnvironmentIndicator 未定義環境枚舉與切換規則 | §7 Environment Model / Action Gating |
+| G05 | H | BFF availableActions 計算規則未定義 | §8 availableActions Contract |
+| G06 | M | LanguageSwitcher 與 Persona 回應語言耦合規則模糊 | §19 Medium / Low Gap Resolution Register |
+| G07 | M | Notification Center 訊息分類與來源未列舉 | §19 Medium / Low Gap Resolution Register |
+| G08 | M | Right Drawer 內容類型只列舉部分 | §19 Medium / Low Gap Resolution Register |
+| G09 | M | Global Search 範圍與 ranking 規則未列 | §19 Medium / Low Gap Resolution Register |
+| G10 | M | Locked Decisions 與 Build Assumptions 未版本化 | §19 Medium / Low Gap Resolution Register |
+| G11 | L | Visual Direction 描述與設計 token 對應缺 | §19 Medium / Low Gap Resolution Register |
+| G12 | L | i18n QA Checklist 未列驗收工具 | §19 Medium / Low Gap Resolution Register |
+| G13 | H | Process inventory 列 16 個 process 但 Part 3 只展開 22 頁，對應關係未明 | §3 Process-to-Surface Mapping |
+| G14 | H | Strategy §6.3 列 8 狀態，§6.5 列 actions 但未列 transition 觸發者 | §4 Canonical Status / State Machines |
+| G15 | H | Persona §11.3 狀態 active/suspended/archived，但 transition 規則缺 | §4 Canonical Status / State Machines |
+| G16 | H | Capital Pool §14.3 狀態 4 個，§14.5 mandate 欄位 6 個但無 schema type | §9 Capital Pool Mandate Schema |
+| G17 | H | Ranking §15 6 個 scope 與 §15.6 metric library 互不對應 | §10 Ranking Formula / Metric Matrix |
+| G18 | H | Quarterly Rebalance §16 工作流 6 步但未列 reviewer / approver 角色 | §11 Quarterly Rebalance Workflow |
+| G19 | H | Evolution Program §17 Constraints / Alerts / Approvals 三 tab 未列欄位 | §12 Evolution Steering Entity Schemas |
+| G20 | M | §10.6 Incident States 列 5 狀態，但 mitigation / training feedback 子流程缺 | §19 Medium / Low Gap Resolution Register |
+| G21 | M | §13.4 Training Update States 與 Memory 流程連結缺 | §19 Medium / Low Gap Resolution Register |
+| G22 | M | §18 Tool / MCP / Skill 三套 lifecycle 共用 §18.3–§18.5，欄位重疊但差異未定義 | §19 Medium / Low Gap Resolution Register |
+| G23 | M | §19 Insight States 4 個，但 lineage（§19.5）僅列要求未列欄位 | §19 Medium / Low Gap Resolution Register |
+| G24 | M | §20.2 Job Types 列 7 種，但每種 input/output payload 未列 | §19 Medium / Low Gap Resolution Register |
+| G25 | M | §4.4「所有長任務必須 job 化」缺判定門檻 | §19 Medium / Low Gap Resolution Register |
+| G26 | M | §4.7 Agora handoff 必要欄位列「context / target / payload」未含 SLA | §19 Medium / Low Gap Resolution Register |
+| G27 | L | §4.5 audit 必欄列 5 項，但 retention period 未說 | §19 Medium / Low Gap Resolution Register |
+| G28 | H | Strategy Detail 列 11 tabs（§Tab — Overview … Audit），但 §6.5 Phase 1 規劃為 13 tabs | §13 Management Page Tab Corrections |
+| G29 | H | Persona Detail Tabs 列 4，未涵蓋 Persona Lab / Memory Snapshot | §13 Management Page Tab Corrections |
+| G30 | H | Capital Pool Detail Tabs 規格僅 §6.x list，未列「Performance」「Ranking Inputs」tab schema | §13 Management Page Tab Corrections |
+| G31 | H | Ranking Formula Detail §5.143 Formula Fields 僅列「name / scope / weights / window」未定 weights schema | §10 Ranking Formula / Metric Matrix |
+| G32 | H | Rebalance Detail §5.213 Detail Workflow Steps 6 步，但每步 UI 元件未指定 | §11 Quarterly Rebalance Workflow |
+| G33 | H | Risk Center §Routes 列 `/management/risk` 但 §5.556 寫 `/management/risk-center` | §14 Canonical Routes |
+| G34 | M | Command Center §4.121 Goal/Layout 列 6 cards，但 KPI list 未含實際指標 | §19 Medium / Low Gap Resolution Register |
+| G35 | M | Strategies List §Table Columns 列 8 欄，缺 sort / filter 規格 | §19 Medium / Low Gap Resolution Register |
+| G36 | M | Strategy Tab — Experiments §4.509 列 columns，未說明「Run experiment」action input schema | §19 Medium / Low Gap Resolution Register |
+| G37 | M | Strategy Tab — Risk & Alerts 與 Risk Center 內容重疊但沒定義同步來源 | §19 Medium / Low Gap Resolution Register |
+| G38 | M | Strategy Tab — Governance 與 Governance Review 頁的 review request 是同一物件嗎？未定 | §19 Medium / Low Gap Resolution Register |
+| G39 | M | Capabilities List §4.943–4982（Tools/MCP/Skills 通用 list）column 與 detail 欄位不對應 | §19 Medium / Low Gap Resolution Register |
+| G40 | M | Tool Detail §5.690 Server Columns，把 Tool 與 MCP server 混寫 | §19 Medium / Low Gap Resolution Register |
+| G41 | M | Skill Detail §5.785 Detail Tabs 4 個，但 sandbox tab 規格只一行 | §19 Medium / Low Gap Resolution Register |
+| G42 | M | Lineage Page §5.865 Goal 寫「show lineage」未說明 graph 規模上限與 pan/zoom | §19 Medium / Low Gap Resolution Register |
+| G43 | M | Audit §5.936 Filters / Columns 6 欄，缺 retention 與 export 行為 | §19 Medium / Low Gap Resolution Register |
+| G44 | M | Settings §5.976 Sections 列 i18n / theme / api，缺 Realtime SSE channel test 工具 | §19 Medium / Low Gap Resolution Register |
+| G45 | L | Empty State Examples §6.008 缺對應頁面 ID | §19 Medium / Low Gap Resolution Register |
+| G46 | L | Loading / Error State §6.028 範例只給通用版 | §19 Medium / Low Gap Resolution Register |
+| G47 | L | Acceptance Criteria 在每頁尾段風格不一致 | §19 Medium / Low Gap Resolution Register |
+| G48 | H | Process 7–22 各列「主要流程 / 操作 / 捕捉資料 / 送回 Console 產物」，但 handoff payload schema 缺 | §15 Agora Handoff Schema |
+| G49 | H | §9.6 Signal Review captured signals 列 5 種，但 BFF 寫入 endpoint 與 throttling 未說 | §16 Signal Feedback Write Contract |
+| G50 | M | §11.4 Persona Ask Modes 列 5 種，但每 mode 的 system prompt scope 未定 | §19 Medium / Low Gap Resolution Register |
+| G51 | M | §12.4 Committee Templates 列 4 種，每種 evidence pack schema 缺 | §19 Medium / Low Gap Resolution Register |
+| G52 | M | §15 Insight Inbox 缺 「attach to strategy」action 規格 | §19 Medium / Low Gap Resolution Register |
+| G53 | M | §18 Trainer Studio 缺 evaluation suite 詳細欄位 | §19 Medium / Low Gap Resolution Register |
+| G54 | L | §3.2 Agora 不可做的事情列 8 條，與 §24.1/§24.2 部分重複 | §19 Medium / Low Gap Resolution Register |
+| G55 | L | §4.1 Analyst 等 5 角色描述缺 default route | §19 Medium / Low Gap Resolution Register |
+| G56 | H | Daily Brief §8.116 Main Components 列 5，缺 KPI 計算公式 | §17 Agora KPI / Daily Brief Formulas |
+| G57 | H | Signal Review §8.265 Captured Signals 含「user marked confidence」但 scale 未定（1-5？1-10？） | §16 Signal Feedback Write Contract |
+| G58 | H | Committee Room §Routes 含 list + detail，但 detail 之 evidence pack upload 規格缺 | §18 Committee Evidence Pack |
+| G59 | M | Notebook §8.378 Note Types 4 種，但 markdown extension（math / chart）未指定 | §19 Medium / Low Gap Resolution Register |
+| G60 | M | Persona Lab §Routes / Layout 缺「sandbox 結束如何 commit 改動回 Persona」流程 | §19 Medium / Low Gap Resolution Register |
+| G61 | M | Memory Review §9.166 Memory Types 列 5 種，但 quarantined → active 流程缺 reviewer 規格 | §19 Medium / Low Gap Resolution Register |
+| G62 | M | Trainer Studio §9.253 Draft Status 列 4 種，但 publish 前 evaluation gate 規則缺 | §19 Medium / Low Gap Resolution Register |
+| G63 | M | Skill Coaching §9.390 Evaluation Suites 與 Trainer Studio Evaluation Suites 是否同一物件未定 | §19 Medium / Low Gap Resolution Register |
+| G64 | L | Agora Channels §9.464 Channel Types 4 個，連結到 Console ChannelDetail 之欄位不全 | §19 Medium / Low Gap Resolution Register |
+| G65 | L | Handoff §9.520 Handoff Types 列 7 種與 Part 4 §22.2 列 6 種不一致 | §19 Medium / Low Gap Resolution Register |
+| G66 | H | §3.6 Command Response Envelope 含 `confirmToken`，但 §2.5 confirm flow endpoint 缺 | §6 High-Risk Actions / Confirmation Token |
+| G67 | H | §6.x Strategy Spec 列 23 欄，但 `availableActions` 結構與 §3.5 list envelope 不一致 | §8 availableActions Contract |
+| G68 | H | §6.7 Quarterly Rebalance schema 缺 `reviewer[]` / `approver[]` 欄 | §11 Quarterly Rebalance Workflow |
+| G69 | M | §7.3 Agora Session / Message schema 缺 attachment / inline-citation 欄位 | §19 Medium / Low Gap Resolution Register |
+| G70 | M | §8 BFF Endpoint list 缺以下： | §19 Medium / Low Gap Resolution Register |
+| G71 | M | §10 i18n header 規範了 BFF locale，但 `Accept-Language` fallback 鏈未定義 | §19 Medium / Low Gap Resolution Register |
+| G72 | M | Realtime SSE channel 名稱與 payload 列表缺 | §19 Medium / Low Gap Resolution Register |
+| G73 | M | Job payload §6.11 含 `progress` 但更新節流率與 chunk 大小未定 | §19 Medium / Low Gap Resolution Register |
+| G74 | M | §3.7 Error Format 列 3 欄，缺 i18nKey / 多語錯誤訊息對應 | §19 Medium / Low Gap Resolution Register |
+| G75 | L | §3.8 日期時間格式僅指 ISO 8601，未定 timezone 顯示策略 | §19 Medium / Low Gap Resolution Register |
+| G76 | L | §3.9 Money 格式僅列 BigDecimal string，未定顯示精度 | §19 Medium / Low Gap Resolution Register |
+| G77 | L | §6.10 Review Request schema 缺 cc / observer 角色欄位 | §19 Medium / Low Gap Resolution Register |
+| G78 | H | §17.x 18 個 state machine 中，與 Part 2 / Part 6 對應的狀態值有 5 處不一致 | §4 Canonical Status / State Machines |
+| G79 | M | §8.3 HighRiskConfirmationModal 列 props 6 個，未定 memo 字數限制 | §19 Medium / Low Gap Resolution Register |
+| G80 | M | §11.3 IncidentTimeline 欄位 4，未含 attachment（log file）規格 | §19 Medium / Low Gap Resolution Register |
+| G81 | L | §6.x StatusBadge 顏色映射僅敘述 4 級，無 token 對照 | §19 Medium / Low Gap Resolution Register |
+| G82 | L | §13.1 FormulaBuilder 操作描述 5 條，缺 keyboard shortcut spec | §19 Medium / Low Gap Resolution Register |
+| G83 | L | §15.x Agora components 與 Console components 命名重複（如 `MessageAnnotationBar`） | §19 Medium / Low Gap Resolution Register |
+| G84 | L | §11.5 EventStreamPanel 缺 retain count | §19 Medium / Low Gap Resolution Register |
+| G85 | L | §16 Forms / Editors 三個 component 未列驗證策略 | §19 Medium / Low Gap Resolution Register |
+| G86 | H | §QA Checklist 要求「Emergency Kill 必須可在 10 秒內觸發」，但 entry point 與 target 未列 | §6 High-Risk Actions / Confirmation Token |
+| G87 | M | §7.x Mock data section 各列 5–8 筆 mock，但與 Part 6 schema 欄位不完全對齊 | §19 Medium / Low Gap Resolution Register |
+| G88 | L | §8 Demo Scenarios A–F 與 page acceptance criteria 對應缺 | §19 Medium / Low Gap Resolution Register |
+| G89 | L | §2.x Phase 1–6 順序與 Part 3 / Part 5 章節編號不對應 | §19 Medium / Low Gap Resolution Register |
+| G90 | L | §3 Lovable Master Prompt 含 system prompt 全文但 token budget 未列 | §19 Medium / Low Gap Resolution Register |
+| G91 | L | §6 Required Routes 列 36 routes，但未標 dynamic param 規範 | §19 Medium / Low Gap Resolution Register |
+| G92 | L | §7.x Mock 命名 (mock-strategy-1) 與 Part 6 範例 id 命名不一致 | §19 Medium / Low Gap Resolution Register |
+
+---
+
+## 20. Acceptance Criteria
+
+A Lovable implementation is no longer accepted if it relies on undocumented inference for these items.
+
+| Area | Required acceptance condition |
+|---|---|
+| Status enums | Strategy, Persona, CapitalPool, Skill, Memory status values match §4 exactly. |
+| Permission | Every management action in §5 can be answered by role lookup. |
+| High-risk | Every action in §6.1 opens HighRiskConfirmationModal and obtains confirmation token. |
+| availableActions | BFF returns `ActionDescriptor[]`; no page expects string array. |
+| Environment | UI and BFF enforce §7 gating. |
+| Ranking | Formula builder validates metric scope using §10.2. |
+| Rebalance | Rebalance detail includes reviewers and approvers from §11.1. |
+| Evolution | Constraints, alerts, approvals use schemas in §12. |
+| Risk route | `/management/risk` is canonical; `/management/risk-center` is redirect only. |
+| Agora handoff | All handoff objects follow §15 schema. |
+| Signal feedback | Confidence is 1–5 and endpoint behavior follows §16. |
+| Daily brief | KPI values are calculated using §17 formulas. |
+| Committee evidence | Upload constraints and schema follow §18. |
+
+---
+
+## 21. Required action for existing Part 1–8 documents
+
+1. Insert §4 canonical status tables into Part 1, Part 2, Part 6, Part 7.
+2. Replace all `availableActions: string[]` examples with `ActionDescriptor[]`.
+3. Remove Strategy mock statuses `under_review` and `paused`; move them to `reviewStatus` and `deploymentStatus`.
+4. Remove Skill status `deprecating`; use `deprecated`.
+5. Replace Memory status `isolated` with `quarantined`.
+6. Replace `/management/risk-center` with `/management/risk`.
+7. Add `/bff/command-confirmations`.
+8. Add `/bff/agora/signals/{signalId}/feedback`.
+9. Add SSE catalog in Part 6 using event names referenced in Part 3 and Part 5.
+10. Update Part 8 mock data so every mock entity has `availableActions: ActionDescriptor[]`.
+
+— EOF
+
+---
+
+# Base Specification Parts 1–8 (v1 content, corrected by Part 9)
+
+# Pantheon Frontend Build Spec — 完整計畫書
+## Management Console + Agora Workbench
+
+版本：v1.0
+語系：zh-TW
+日期：2026-05-03
+
+本文件合併 Part 1–8，作為交付 Lovable 建置 Pantheon Management Console 與 Pantheon Agora Workbench 的完整前端規劃。
+
+## 文件索引
+- Part 1 — Master Blueprint / 總體產品與系統框架
+- Part 2 — Management Console 完整管理流程盤點
+- Part 3 — Management Console 頁面與功能設計
+- Part 4 — Agora Workbench 使用者流程盤點
+- Part 5 — Agora Workbench 頁面與功能設計
+- Part 6 — Shared Data Model + BFF API Contract
+- Part 7 — Component System + State Machines
+- Part 8 — Lovable Build Prompts + Mock Data + QA Checklist
+
+---
+
+
+---
+
+# Part 1 — Master Blueprint / 總體產品與系統框架
+版本：v1.0  
+語系：zh-TW  
+目標讀者：Lovable、前端工程、BFF 工程、Pantheon 產品設計與審查者  
+交付目的：定義 Pantheon 前端系統的總體產品框架，讓 Lovable 能開始建立雙前端系統：Pantheon Management Console 與 Pantheon Agora Workbench。
+
+---
+
+## 0. 本文件的定位
+
+本文件是 Pantheon 前端規劃的總綱，不是單頁 dashboard 規格，也不是 MVP 提案。後續文件會依此展開完整流程、頁面、資料模型、BFF API、元件、mock data、state machine 與 Lovable build prompt。
+
+Pantheon 前端要建成兩個面向不同使用者的系統：
+
+```text
+Pantheon Management Console
+= 管理者、研究主管、風控、資金配置者、系統操作員使用。
+= 管理 + 監控 + 反應 + 審批 + 部署 + 回滾 + 審計。
+
+Pantheon Agora Workbench
+= 分析師、交易者、AI 訓練師日常使用。
+= 市場分析 + signal review + 研究筆記 + AI persona 協作 + 決策日誌 + 洞察收集。
+```
+
+兩者使用同一個 Pantheon Platform Shell、同一套登入、同一個 BFF、同一套資料模型與事件流，但導航、頁面密度、操作風險與使用者體驗必須分開設計。
+
+---
+
+## 1. 專案目標
+
+### 1.1 產品目標
+
+Pantheon 前端要支援完整的 AI-driven multi-persona strategy operating system，包括：
+
+```text
+策略 / Alpha 管理
+Persona 管理
+資金池管理
+績效排序公式管理
+季度調倉管理
+演化方向管理
+Research / Experiment 管理
+Tool / MCP / Skill 管理
+審批 / Governance 管理
+Paper / Live deployment 管理
+Runtime / Job / Alert / Incident 追蹤與反應
+交易員與 AI Persona 日常協作
+AI 訓練、記憶審查、Skill 草稿與洞察收集
+```
+
+此系統不是只顯示狀態，而是要提供完整管理控制能力。任何重要物件都應該能被建立、編輯、版本化、審批、部署、暫停、回滾、退休與審計。
+
+### 1.2 前端建置目標
+
+Lovable 第一階段要建出可操作的前端骨架，並使用 mock BFF client 開發：
+
+```text
+1. 建立共用 Platform Shell。
+2. 建立 /management 與 /agora 兩個 route group。
+3. 建立 Management Console 的主導航與核心頁面骨架。
+4. 建立 Agora Workbench 的主導航與核心頁面骨架。
+5. 建立中英文語系切換。
+6. 建立 mock data 與 mock BFF action。
+7. 建立高風險操作 confirmation modal。
+8. 建立 jobs / alerts / events 的 mock realtime pattern。
+```
+
+---
+
+## 2. 產品切分
+
+## 2.1 Pantheon Management Console
+
+### 使用者
+
+```text
+Admin
+Research Lead
+Risk Officer
+Capital Manager
+Strategy Manager
+System Operator
+Reviewer / Committee Member
+Capability Admin
+```
+
+### 管理範圍
+
+Management Console 是正式控制台，包含 Core + Operations，不應拆成兩個產品。因為管理策略、人格、資金池、績效公式、季度調倉、演化方向、工具、MCP、Skill、審批、部署，以及追蹤 runtime、paper/live、job、experiment、tool call、alert、incident、rollback，實際上是同一批管理與操作角色在使用。
+
+Management Console 應支援：
+
+```text
+Strategy & Alpha lifecycle 管理
+Persona lifecycle 與 route policy 管理
+Capital pool 與 risk budget 管理
+Performance ranking formula 管理
+Quarterly rebalance 管理
+Evolution steering 管理
+Research / experiment 管理
+Governance / approval 管理
+Deployment / runtime / risk 管理
+Tools / MCP / Skills 管理
+Knowledge / artifact / lineage 管理
+Jobs / events / audit 管理
+```
+
+### UI 性質
+
+Management Console 應是：
+
+```text
+高資訊密度
+Object-first
+State-first
+Action-aware
+Risk-aware
+Permission-aware
+Audit-aware
+Realtime-aware
+```
+
+它不是聊天介面，也不是單純 dashboard。每個管理物件都應該同時呈現：
+
+```text
+目前狀態
+績效狀態
+風險狀態
+執行現況
+關聯 persona
+關聯 capital pool
+關聯 strategy / artifact / runtime
+running jobs
+open alerts
+open incidents
+available actions
+approval status
+audit trail
+```
+
+### 禁忌
+
+Management Console 不應：
+
+```text
+以 AI chat 作為主入口。
+把高風險操作藏在小按鈕裡。
+只顯示狀態，不提供反應操作。
+把管理和監控切成兩套割裂流程。
+把所有頁面做成相同資料表。
+讓前端自己推理審批與操作規則。
+```
+
+---
+
+## 2.2 Pantheon Agora Workbench
+
+### 使用者
+
+```text
+Analyst
+Trader
+AI Trainer
+Research Assistant
+Portfolio Observer
+```
+
+### 工作範圍
+
+Agora Workbench 是分析師、交易者與 AI 訓練師的日常工作台。它不是正式管理控制台，也不直接做 live deployment、capital rebalance、ranking formula activation、MCP production permission 或 skill approval。
+
+Agora Workbench 應支援：
+
+```text
+每日交易與研究摘要
+市場與 watchlist 分析
+Strategy signal review
+研究筆記
+詢問 AI personas
+Multi-persona committee / red-team
+交易決策日誌
+Alert triage
+Insight inbox
+AI Trainer Studio
+Memory Review
+Skill Coaching
+Persona Lab
+Evaluation Suites
+Channel 管理
+```
+
+### 核心價值
+
+Agora 對使用者的價值是：
+
+```text
+幫分析師更快理解市場。
+幫交易者理解策略 signal。
+讓使用者可以問不同 AI persona。
+讓研究筆記能轉成 strategy idea / research task。
+讓交易決策能被記錄與追蹤。
+讓 alert triage 更快完成。
+讓 AI 訓練資料在日常使用中自然產生。
+```
+
+### 自然資料收集
+
+Agora 不應要求使用者填很多管理表單，而是從日常互動中產生 structured data：
+
+```text
+signal_feedback
+trader_note
+research_note
+decision_journal_entry
+persona_response_feedback
+training_example
+memory_candidate
+strategy_idea
+research_task
+committee_memo
+risk_feedback
+skill_draft
+```
+
+### 禁忌
+
+Agora 不應：
+
+```text
+看起來像後台管理系統。
+讓交易者一進來就看到 AI 訓練設定。
+直接提供 Promote to Live / Apply Rebalance / Rollback 這類高風險操作。
+要求使用者為了訓練 AI 而額外填大量表單。
+讓所有互動都變成無結構聊天紀錄。
+```
+
+---
+
+## 3. 平台架構
+
+建議 Lovable 建置為同一個 Pantheon Platform Shell 下的兩個 route group：
+
+```text
+Pantheon Platform
+├── /management
+│   └── Pantheon Management Console
+│
+└── /agora
+    └── Pantheon Agora Workbench
+```
+
+共用能力：
+
+```text
+Authentication
+User role / permissions
+Locale / language switching
+Global Top Bar
+Product Switcher
+Global Search
+Notification Center
+BFF Connection Status
+Realtime Event Indicator
+Command Palette
+Right Drawer / Inspector
+Mock BFF client
+Toast / notification system
+High-risk confirmation modal system
+```
+
+---
+
+## 4. 共用 Platform Shell
+
+## 4.1 Global Top Bar
+
+所有頁面固定顯示。
+
+應包含：
+
+```text
+Pantheon logo
+Product Switcher: Management / Agora
+Current Environment: Research / Paper / Live
+Global Search
+Language Switcher
+BFF Status
+Realtime Event Indicator
+Pending Approvals
+Open Alerts
+Running Jobs
+Notification Bell
+User Role Menu
+```
+
+### Environment Indicator
+
+顯示目前操作環境：
+
+```text
+Research
+Paper
+Live
+```
+
+建議視覺：
+
+```text
+Research: neutral / blue
+Paper: amber
+Live: green with high-risk accent
+```
+
+當 environment 為 Live 時，高風險操作的 confirmation modal 要更明顯。
+
+---
+
+## 4.2 Product Switcher
+
+位置：Top Bar 左側。
+
+選項：
+
+```text
+Management Console
+Agora Workbench
+```
+
+切換後保留登入、使用者角色與 locale。
+
+---
+
+## 4.3 Global Search
+
+搜尋範圍：
+
+```text
+Strategy
+Alpha
+Persona
+Capital Pool
+Ranking Formula
+Quarterly Rebalance
+Evolution Program
+Experiment
+Artifact
+Review Request
+Deployment
+Runtime
+Incident
+Tool
+MCP Server
+MCP Tool
+Skill
+Insight
+Signal
+Research Note
+Agora Session
+Decision Journal
+Job
+Audit Event
+```
+
+Search result 顯示：
+
+```text
+Object type
+Display name
+Status
+Owner
+Risk level
+Last updated
+Quick action
+```
+
+---
+
+## 4.4 Notification Center
+
+通知類型：
+
+```text
+Approval Required
+Risk Alert
+Incident Update
+Job Completed
+Job Failed
+Deployment Event
+Rollback Event
+Persona Policy Violation
+Capital Rebalance Update
+Ranking Formula Approval
+MCP / Skill Approval Needed
+Agora Insight Submitted
+```
+
+每個通知必須可以點進對應物件。
+
+---
+
+## 4.5 Right Drawer / Inspector
+
+共用右側抽屜，避免使用者一直跳頁。
+
+Inspector 類型：
+
+```text
+Strategy Inspector
+Persona Inspector
+Capital Pool Inspector
+Ranking Formula Inspector
+Rebalance Inspector
+Evolution Program Inspector
+Experiment Inspector
+Job Inspector
+Alert Inspector
+Incident Inspector
+Signal Inspector
+Message Inspector
+Artifact Inspector
+Tool Call Inspector
+MCP Tool Inspector
+Skill Inspector
+```
+
+每個 Inspector 應顯示：
+
+```text
+核心資訊
+目前狀態
+風險狀態
+關聯物件
+可執行操作
+最近事件
+audit snippets
+```
+
+---
+
+## 5. Management Console 總導航
+
+Management Console 的 sidebar 建議分組如下。
+
+```text
+Command
+- Command Center
+
+Core Management
+- Strategies & Alphas
+- Personas
+- Capital & Allocation
+- Performance Ranking
+- Quarterly Rebalance
+- Evolution Steering
+
+Research & Governance
+- Experiments
+- Governance & Approvals
+- Knowledge & Artifacts
+- Lineage
+
+Operations
+- Deployment
+- Runtimes
+- Risk Center
+- Incidents
+- Jobs
+
+Capabilities
+- Tools
+- MCP
+- Skills
+
+System
+- Audit
+- Settings
+```
+
+### Management Routes
+
+```text
+/management/command-center
+/management/strategies
+/management/strategies/:strategyId
+/management/personas
+/management/personas/:personaId
+/management/capital
+/management/capital/:poolId
+/management/ranking
+/management/ranking/formulas
+/management/rebalance
+/management/rebalance/:rebalanceId
+/management/evolution
+/management/evolution/:programId
+/management/experiments
+/management/experiments/:experimentId
+/management/governance
+/management/governance/:reviewId
+/management/deployment
+/management/runtimes
+/management/risk
+/management/incidents
+/management/incidents/:incidentId
+/management/tools
+/management/mcp
+/management/skills
+/management/artifacts
+/management/lineage
+/management/jobs
+/management/audit
+/management/settings
+```
+
+---
+
+## 6. Agora Workbench 總導航
+
+Agora 的 sidebar 建議分組如下。
+
+```text
+Daily Work
+- Daily Trading Cockpit
+- Market & Watchlist
+- Signal Review
+- Alert Triage
+
+Research
+- Research Notebook
+- Insight Inbox
+- Decision Journal
+
+AI Collaboration
+- Ask Personas
+- Committee Room
+
+Training
+- Trainer Studio
+- Memory Review
+- Skill Coaching
+- Persona Lab
+- Evaluations
+
+Channels
+- Web / Telegram / Discord / Webhooks
+```
+
+### Agora Routes
+
+```text
+/agora/daily
+/agora/markets
+/agora/watchlist
+/agora/signals
+/agora/signals/:signalId
+/agora/notebook
+/agora/ask
+/agora/committee
+/agora/committee/:sessionId
+/agora/journal
+/agora/triage
+/agora/insights
+/agora/trainer
+/agora/trainer/:personaId
+/agora/memory
+/agora/skill-coaching
+/agora/persona-lab
+/agora/evaluations
+/agora/channels
+```
+
+Agora 的主要入口是 `Daily Trading Cockpit`。不要讓使用者一進來就看到 trainer admin 或 memory admin。
+
+---
+
+## 7. Management Console 模組概述
+
+## 7.1 Command Center
+
+用途：統一管理與執行總覽。
+
+必須顯示：
+
+```text
+Lifecycle bottlenecks
+Pending approvals
+Open incidents
+Live / paper risk
+Running jobs
+Persona violations
+Capital pool exposure
+Agora incoming queue
+Recent state transitions
+```
+
+---
+
+## 7.2 Strategy & Alpha Management
+
+用途：管理 alpha 策略完整 lifecycle，並追蹤 paper/live 執行現況。
+
+核心能力：
+
+```text
+Create / edit / clone strategy
+Lifecycle state management
+Spec management
+Experiment evidence
+Paper / live status
+Risk alerts
+Incidents
+Rollback
+Retirement
+Lineage
+```
+
+---
+
+## 7.3 Persona Directorate
+
+用途：管理 AI persona、權限、資金綁定、工具授權、績效排名、活動狀態。
+
+核心能力：
+
+```text
+Create / clone / edit persona
+Persona lifecycle
+Route policy
+Tool / MCP / Skill permissions
+Capital binding
+Strategy ownership
+Activity monitor
+Policy violations
+Training and memory governance
+Evaluation
+```
+
+---
+
+## 7.4 Capital, Ranking & Rebalance
+
+用途：管理資金池、績效排序公式、季度調倉。
+
+核心能力：
+
+```text
+Capital pool management
+Risk budget
+Persona / strategy capital binding
+Ranking formula studio
+Formula backtest
+Ranking publication
+Quarterly rebalance
+Allocation simulation
+Manual override
+Approval
+Apply / rollback rebalance
+```
+
+---
+
+## 7.5 Evolution Steering
+
+用途：管理 alpha 演化方向與演化 run。
+
+核心能力：
+
+```text
+Evolution program
+Fitness formula
+Mutation rules
+Constraints
+Run monitor
+Candidate strategy browser
+Candidate promotion
+```
+
+---
+
+## 7.6 Research & Experiments
+
+用途：管理回測、OOS、stress test、parameter sweep、RL training 等實驗。
+
+核心能力：
+
+```text
+Experiment registry
+Experiment builder
+Running job tracking
+Metrics viewer
+Logs
+Evidence pack
+Attach to review
+Invalidate / rerun / compare
+```
+
+---
+
+## 7.7 Governance & Approvals
+
+用途：管理所有高風險操作審批。
+
+審批類型：
+
+```text
+Strategy review
+Paper promotion
+Live promotion
+Rollback
+Capital rebalance
+Ranking formula change
+Persona policy change
+MCP approval
+Skill approval
+Tool permission change
+Evolution program approval
+```
+
+---
+
+## 7.8 Deployment, Runtime & Risk
+
+用途：追蹤 paper/live、runtime、risk、alert、incident 並執行反應。
+
+核心能力：
+
+```text
+Runtime monitor
+Paper strategy monitor
+Live strategy monitor
+Risk center
+Alert center
+Incident center
+Rollback manager
+Emergency actions
+```
+
+---
+
+## 7.9 Tools, MCP & Skills
+
+用途：管理 persona 可使用的工具、MCP server/tool、skill。
+
+核心能力：
+
+```text
+Tool registry
+Tool schema
+Tool permission matrix
+MCP server management
+MCP tool discovery
+MCP permission matrix
+Skill registry
+Skill sandbox
+Skill approval
+Skill versioning
+```
+
+---
+
+## 7.10 Knowledge, Artifacts & Lineage
+
+用途：管理 insight、research notes、artifacts、postmortems、lineage。
+
+核心能力：
+
+```text
+Artifact store
+Artifact versions
+Research notes
+Postmortems
+Committee memos
+Lineage graph
+Insight linkage
+```
+
+---
+
+## 7.11 Jobs, Events & Audit
+
+用途：追蹤所有長任務、事件、審計紀錄。
+
+核心能力：
+
+```text
+Job queue
+Job logs
+Realtime event stream
+Audit explorer
+Entity audit timeline
+Approval history
+```
+
+---
+
+## 8. Agora Workbench 模組概述
+
+## 8.1 Daily Trading Cockpit
+
+用途：分析師 / 交易者每天進來看的首頁。
+
+顯示：
+
+```text
+Market summary
+Watchlist changes
+Important signals
+Paper/live strategy highlights
+Open alerts requiring human judgement
+Persona daily brief
+Research questions
+```
+
+產出：
+
+```text
+Trader note
+Insight
+Research task
+Signal feedback
+```
+
+---
+
+## 8.2 Market & Watchlist
+
+用途：協助分析市場與追蹤標的。
+
+功能：
+
+```text
+Watchlist
+Market events
+Persona commentary
+Strategy exposure
+Related signals
+Trader annotations
+```
+
+---
+
+## 8.3 Strategy Signal Review
+
+用途：讓交易者 review 策略 signal 是否合理。
+
+功能：
+
+```text
+Signal explanation
+Similar historical cases
+Persona opinions
+Agree / Disagree / Flag
+Create research task
+Attach trader rationale
+```
+
+產出：
+
+```text
+signal_feedback
+risk_feedback
+strategy_improvement_signal
+training_example
+```
+
+---
+
+## 8.4 Research Notebook
+
+用途：分析師寫研究筆記，並把想法轉成可操作物件。
+
+功能：
+
+```text
+Structured note
+Markdown editor
+Attach chart / signal / strategy
+Ask persona to expand
+Ask persona to critique
+Convert to insight
+Convert to strategy idea
+Convert to experiment request
+```
+
+---
+
+## 8.5 Ask Personas
+
+用途：讓使用者帶上下文詢問 AI persona。
+
+功能：
+
+```text
+Select persona
+Select context
+Ask explain / critique / propose / red-team
+Save as note
+Create insight
+Create training example
+Start committee
+```
+
+---
+
+## 8.6 Committee Room
+
+用途：多 persona structured debate。
+
+功能：
+
+```text
+Select target strategy / signal / incident / note
+Select personas
+Load evidence pack
+Run discussion rounds
+Capture disagreement
+Generate committee memo
+Submit to governance
+```
+
+---
+
+## 8.7 Decision Journal
+
+用途：記錄交易者決策與 rationale。
+
+功能：
+
+```text
+Create decision entry
+Link signal / strategy / market
+Record confidence
+Ask persona
+Schedule follow-up
+Mark actual outcome
+Convert to training / insight
+```
+
+---
+
+## 8.8 Alert Triage
+
+用途：讓交易者輔助判斷 alert 是否重要。
+
+功能：
+
+```text
+View alert
+Market context
+Strategy context
+Persona explanation
+Similar past incidents
+Acknowledge / dismiss / escalate
+Add trader interpretation
+```
+
+---
+
+## 8.9 Insight Inbox
+
+用途：集中處理從 Agora 自然產生的 insight。
+
+功能：
+
+```text
+Promote to strategy idea
+Attach to existing strategy
+Create research task
+Create training example
+Send to Management Console
+Archive
+```
+
+---
+
+## 8.10 Trainer Studio
+
+用途：AI 訓練師管理 persona 行為與 feedback。
+
+功能：
+
+```text
+Behavior rules
+Training examples
+Feedback queue
+Evaluation suites
+Drift monitor
+Version history
+Submit persona update
+```
+
+---
+
+## 8.11 Memory Review
+
+用途：審查 AI memory。
+
+功能：
+
+```text
+Approve
+Reject
+Edit
+Merge
+Move to private
+Move to shared
+Mark sensitive
+Mark do-not-remember
+```
+
+---
+
+## 8.12 Skill Coaching
+
+用途：從日常需求產生 skill draft，但不直接上線。
+
+流程：
+
+```text
+Skill idea
+→ AI draft
+→ trainer edit
+→ sandbox test
+→ submit to Management Skill Approval
+```
+
+---
+
+## 9. Core Data Flow
+
+## 9.1 Management Console Flow
+
+```text
+Strategy / Persona / Capital / Tool / MCP / Skill
+        ↓
+Management actions
+        ↓
+BFF Command API
+        ↓
+Job / approval / state transition
+        ↓
+Realtime events
+        ↓
+UI refresh / notifications / audit
+```
+
+範例：
+
+```text
+Manager approves quarterly rebalance
+→ POST /bff/rebalances/:id/actions/approve
+→ BFF creates job / state transition
+→ event: rebalance.approved
+→ Management Console updates status
+→ Audit timeline records action
+```
+
+---
+
+## 9.2 Agora Workbench Flow
+
+```text
+Analyst / Trader interaction
+        ↓
+Note / feedback / signal annotation / AI session
+        ↓
+Structured insight / training example / research task
+        ↓
+BFF saves event
+        ↓
+Management Console receives incoming item
+```
+
+範例：
+
+```text
+Trader disagrees with a strategy signal
+→ Agora creates signal_feedback event
+→ BFF saves insight candidate
+→ Management Command Center shows Incoming Signal Disagreement
+→ Manager converts it into research task or strategy review question
+```
+
+---
+
+## 10. BFF Integration Principle
+
+前端只透過 BFF，不直接呼叫 Pantheon backend。
+
+## 10.1 BFF Responsibility
+
+BFF 負責：
+
+```text
+聚合 Pantheon backend 資料
+轉換為前端友善 DTO
+處理角色權限
+提供 availableActions
+提供 riskLevel
+提供 linkedEntities
+提供 realtime events
+建立 jobs
+處理 command actions
+```
+
+## 10.2 Frontend Responsibility
+
+Frontend 負責：
+
+```text
+render UI
+呼叫 BFF query API
+呼叫 BFF command API
+訂閱 realtime events
+顯示 jobs / alerts / incidents
+依 permissions 顯示 action
+顯示 confirmation modal
+```
+
+## 10.3 Entity DTO 必須包含 availableActions
+
+所有 entity detail API 建議回傳：
+
+```json
+{
+  "id": "strategy_001",
+  "type": "strategy",
+  "status": "replicated",
+  "riskLevel": "medium",
+  "availableActions": [
+    {
+      "id": "submit_review",
+      "labelKey": "action.submitReview",
+      "riskLevel": "medium",
+      "requiresApproval": false,
+      "enabled": true
+    },
+    {
+      "id": "promote_live",
+      "labelKey": "action.promoteLive",
+      "riskLevel": "high",
+      "requiresApproval": true,
+      "enabled": false,
+      "disabledReasonKey": "reason.strategyMustBeApprovedAndPaperTested"
+    }
+  ]
+}
+```
+
+前端不應自己推理所有操作規則，而應依 BFF 回傳的 `availableActions` 顯示。
+
+---
+
+## 11. Shared Entity Types
+
+兩套前端共用以下 entity。
+
+```text
+Strategy
+Alpha
+Persona
+CapitalPool
+RankingFormula
+QuarterlyRebalance
+EvolutionProgram
+Experiment
+Artifact
+ReviewRequest
+PromotionRequest
+Deployment
+Runtime
+RiskAlert
+Incident
+Job
+Tool
+MCPServer
+MCPTool
+Skill
+Insight
+Signal
+ResearchNote
+DecisionJournalEntry
+AgoraSession
+Message
+MemoryItem
+TrainingExample
+AuditEvent
+```
+
+每個 entity 應有：
+
+```text
+id
+displayName
+type
+status
+owner
+riskLevel
+createdAt
+updatedAt
+linkedEntities
+availableActions
+auditSummary
+```
+
+---
+
+## 12. High-Risk Action Model
+
+Management Console 裡的高風險操作必須有 confirmation modal。
+
+高風險操作包括：
+
+```text
+Promote to Live
+Rollback Live Strategy
+Apply Quarterly Rebalance
+Change Capital Allocation
+Change Ranking Formula
+Grant MCP Tool
+Approve Skill
+Change Persona Route Policy
+Emergency Kill
+Retire Strategy
+```
+
+Confirmation modal 必須顯示：
+
+```text
+Operation
+Target object
+Current state
+New state
+Affected capital pool
+Affected strategy
+Affected persona
+Affected runtime
+Risk impact
+Required approval
+Rollback option
+Audit memo field
+Confirm button
+```
+
+Agora 不能直接執行高風險操作，只能產生 request / proposal。
+
+---
+
+## 13. Localization & Language Switching Requirements
+
+Pantheon 前端必須支援中英文語系切換。這是硬性需求，不是之後再補。
+
+## 13.1 Supported Locales
+
+```text
+zh-TW — 繁體中文，預設語系
+en-US — English
+```
+
+預設：
+
+```text
+defaultLocale = "zh-TW"
+```
+
+---
+
+## 13.2 Language Switcher UI
+
+Management Console 和 Agora Workbench 共用語系切換。
+
+位置：
+
+```text
+Global Top Bar → User Menu 或 Language Switcher
+```
+
+顯示方式：
+
+```text
+繁體中文
+English
+```
+
+或簡潔版：
+
+```text
+ZH
+EN
+```
+
+建議：
+
+```text
+[🌐 繁體中文 ▼]
+```
+
+切換後立即更新：
+
+```text
+sidebar labels
+page titles
+button labels
+table headers
+status labels
+modal text
+form labels
+empty states
+error messages
+confirmation messages
+tooltips
+```
+
+---
+
+## 13.3 Locale Persistence
+
+語系選擇要保存。
+
+優先順序：
+
+```text
+1. User profile locale from BFF
+2. Local storage
+3. Browser language
+4. default zh-TW
+```
+
+建議 local storage key：
+
+```text
+pantheon.locale
+```
+
+BFF user profile 可回傳：
+
+```json
+{
+  "user": {
+    "id": "user_001",
+    "name": "Arvin",
+    "role": "Admin",
+    "locale": "zh-TW"
+  }
+}
+```
+
+---
+
+## 13.4 Routing Strategy
+
+第一版建議不要強制使用 locale route prefix，以免增加 Lovable 初期實作複雜度。
+
+採用：
+
+```text
+/management/command-center
+/agora/daily
+```
+
+語系由 app state 控制。
+
+之後如果需要可分享的多語 URL，可擴充：
+
+```text
+/zh-TW/management/command-center
+/en-US/management/command-center
+```
+
+---
+
+## 13.5 Translation Dictionary
+
+前端應使用 translation keys，不要在元件中硬寫死文字。
+
+範例：
+
+```ts
+const translations = {
+  "zh-TW": {
+    "nav.management.commandCenter": "指揮中心",
+    "nav.management.strategies": "策略與 Alpha 管理",
+    "nav.management.personas": "人格管理",
+    "nav.management.capital": "資金池與配置",
+    "action.submitReview": "送出審查",
+    "action.rollback": "回滾",
+    "status.strategy.live": "實盤",
+    "status.strategy.paper": "模擬盤",
+    "risk.high": "高風險"
+  },
+  "en-US": {
+    "nav.management.commandCenter": "Command Center",
+    "nav.management.strategies": "Strategies & Alphas",
+    "nav.management.personas": "Persona Directorate",
+    "nav.management.capital": "Capital & Allocation",
+    "action.submitReview": "Submit Review",
+    "action.rollback": "Rollback",
+    "status.strategy.live": "Live",
+    "status.strategy.paper": "Paper",
+    "risk.high": "High Risk"
+  }
+}
+```
+
+---
+
+## 13.6 BFF Locale Contract
+
+BFF 應回傳穩定 enum code 或 translation key，不回傳固定中文或英文。
+
+例如 BFF 回傳：
+
+```json
+{
+  "strategy": {
+    "id": "alpha_042",
+    "status": "replicated",
+    "riskLevel": "medium",
+    "availableActions": [
+      {
+        "id": "submit_review",
+        "labelKey": "action.submitReview",
+        "riskLevel": "medium"
+      }
+    ]
+  }
+}
+```
+
+前端依目前 locale 顯示：
+
+```text
+zh-TW: 送出審查
+en-US: Submit Review
+```
+
+---
+
+## 13.7 User Generated Content Rules
+
+以下內容應保留原文，不強制翻譯：
+
+```text
+研究筆記
+交易員筆記
+decision journal
+AI session transcript
+committee memo
+strategy thesis
+postmortem
+```
+
+但可提供輔助操作：
+
+```text
+Translate View
+Summarize in Current Language
+```
+
+---
+
+## 13.8 AI Persona Response Language
+
+Agora Workbench 裡 AI persona 的回答應預設跟隨目前 UI 語系。
+
+規則：
+
+```text
+locale = zh-TW → AI persona 預設用繁體中文回答。
+locale = en-US → AI persona 預設用英文回答。
+```
+
+Session 可覆蓋：
+
+```text
+Follow UI Language
+zh-TW
+en-US
+Mixed / Original
+```
+
+---
+
+## 13.9 i18n QA Checklist
+
+Lovable 交付時需檢查：
+
+```text
+Management Console 可以切換 zh-TW / en-US
+Agora Workbench 可以切換 zh-TW / en-US
+Sidebar 全部有翻譯
+Top bar 全部有翻譯
+Button 全部有翻譯
+Status badge 全部有翻譯
+Risk label 全部有翻譯
+Table header 全部有翻譯
+Empty state 全部有翻譯
+Error message 全部有翻譯
+Confirmation modal 全部有翻譯
+Language setting reload 後仍保留
+Agora AI session 預設跟隨目前語系
+BFF 回傳 enum code 或 labelKey，前端顯示 localized label
+```
+
+---
+
+## 14. User Experience Principles
+
+## 14.1 Management Console UX
+
+```text
+Dense but clear
+Tables + detail drawers + status badges
+Every object has available actions
+Every risky action has confirmation
+Every object has audit trail
+Use tabs for deep object detail
+Use filters heavily
+Support bulk actions carefully
+Realtime updates for jobs / alerts / incidents
+```
+
+## 14.2 Agora Workbench UX
+
+```text
+Friendly daily workflow
+Less dense than Management Console
+Prioritize context, explanation, notes, AI collaboration
+Use cards, notebooks, conversation panels
+Make insight conversion one-click
+Make feedback lightweight
+Avoid asking users to fill long forms
+Use structured capture behind simple UI
+```
+
+---
+
+## 15. Visual Design Direction
+
+## 15.1 Overall
+
+```text
+Professional fintech / research operating system
+Dark-friendly but not mandatory
+High contrast for risk states
+Clear status badges
+Minimal decorative noise
+Information hierarchy over visual gimmicks
+```
+
+## 15.2 Management Console
+
+視覺感：
+
+```text
+Control room
+Institutional dashboard
+Dense tables
+Status chips
+Risk indicators
+Timeline / audit panels
+State machine steppers
+```
+
+## 15.3 Agora Workbench
+
+視覺感：
+
+```text
+Analyst workspace
+Research notebook
+AI collaboration desk
+Cleaner spacing
+Conversation-friendly
+Context cards
+Signal explanation panels
+```
+
+---
+
+## 16. Build Assumptions for Lovable
+
+Lovable 應假設：
+
+```text
+Frontend only
+BFF APIs are mocked first
+Use route groups: /management and /agora
+Use reusable components
+Use mock data models
+Implement responsive desktop-first layout
+No direct Pantheon backend calls
+No real trading operations
+No real secrets
+All high-risk actions simulated through modal + mock BFF command
+Realtime events simulated through mock event feed
+```
+
+建議第一輪建置順序：
+
+```text
+1. Shared App Shell
+2. i18n / Language Switcher
+3. Management Command Center
+4. Strategy Management pages
+5. Persona Directorate pages
+6. Capital / Ranking / Rebalance pages
+7. Deployment / Risk / Jobs pages
+8. Tools / MCP / Skills pages
+9. Agora Daily Cockpit
+10. Agora Signal Review
+11. Agora Research Notebook
+12. Agora Ask Personas / Committee
+13. Agora Trainer / Memory / Skill Coaching
+```
+
+---
+
+## 17. Acceptance Criteria for Part 1 Build
+
+Lovable 的第一階段產出至少要滿足：
+
+```text
+Platform has two product areas: Management and Agora.
+User can switch between Management and Agora.
+Management has correct sidebar structure.
+Agora has correct sidebar structure.
+Top bar shows environment, BFF status, language switcher, alerts, jobs, approvals.
+Language can switch between zh-TW and en-US.
+Management pages are object / state / action oriented.
+Agora pages are analyst / trader workflow oriented.
+High-risk actions are not exposed in Agora.
+High-risk actions in Management use confirmation modal.
+All pages can run on mock data.
+All actions call mock BFF client.
+Realtime jobs / alerts can be simulated.
+```
+
+---
+
+## 18. Locked Decisions
+
+以下決策先鎖定，後續文件依此展開：
+
+```text
+1. Core + Operations 合併為 Pantheon Management Console。
+2. Agora Workbench 獨立，服務分析師、交易者、AI 訓練師。
+3. 兩套系統共用 platform shell、BFF、資料模型、event bus。
+4. Management Console 是 object-first / state-first / action-first。
+5. Agora 是 daily workflow-first / AI collaboration-first。
+6. Agora 只能產生 proposal / insight / feedback，不直接做 live / capital 高風險操作。
+7. 所有高風險操作在 Management Console 內走 confirmation + approval + audit。
+8. Lovable 先用 mock BFF client 建置。
+9. 前端必須支援 zh-TW / en-US 語系切換。
+10. BFF 回傳 enum code / labelKey，前端負責 localization。
+```
+
+---
+
+## 19. 下一份文件
+
+下一份是：
+
+```text
+Part 2 — Pantheon Management Console 完整管理流程盤點
+```
+
+Part 2 會先不寫頁面，專門把 Management Console 需要支援的完整流程逐條盤點清楚：
+
+```text
+Strategy lifecycle
+Persona lifecycle
+Capital pool
+Ranking formula
+Quarterly rebalance
+Evolution program
+Experiment
+Governance
+Deployment / rollback
+Runtime / alert / incident
+Tool / MCP / Skill
+Jobs / audit
+```
+
+這份會確保後面做 UI 時不會缺管理功能。
+
+
+---
+
+# Part 2 — Management Console 完整管理流程盤點
+**文件語系：繁體中文（zh-TW）**  
+**目標讀者：Lovable、前端工程師、BFF 工程師、產品設計者、Pantheon 系統設計者**
+
+---
+
+## 0. 本文件目的
+
+Part 1 已定義 Pantheon 前端平台分成兩套系統：
+
+```text
+Pantheon Management Console
+Pantheon Agora Workbench
+```
+
+本文件只處理 **Pantheon Management Console**。  
+重點不是頁面設計，而是先盤點管理端必須支援的完整流程。
+
+這份文件要確保 Lovable 後續實作 UI 時，不會只做出「展示狀態的 dashboard」，而是做出真正能管理、監控、反應、審批、部署、回滾與審計的管理控制台。
+
+---
+
+## 1. Management Console 的核心定義
+
+Pantheon Management Console 是同一批管理 / 風控 / 研究主管 / 系統操作角色使用的正式控制台。
+
+它必須同時覆蓋：
+
+```text
+管理策略
+管理人格
+管理資金池
+管理績效排序公式
+管理季度調倉
+管理 Alpha 演化方向
+管理 research / experiment
+管理 tool / MCP / skill
+管理審批
+管理 paper / live deployment
+追蹤 runtime / job / experiment / tool call 現況
+處理 alert / incident
+執行 rollback / pause / retire
+審計所有高風險操作
+```
+
+因此本系統不是：
+
+```text
+不是單純狀態展示頁
+不是單純策略列表
+不是單純 AI dashboard
+不是單純 trading monitor
+不是純設定後台
+```
+
+而是：
+
+```text
+Pantheon 的管理與執行控制平面
+Management + Operations + Governance + Audit in one console
+```
+
+---
+
+## 2. 管理流程盤點方法
+
+每條流程都要被定義成以下結構：
+
+```text
+Managed Objects
+States
+State Transitions
+Primary Actions
+Secondary Actions
+Validation Rules
+Approval Requirements
+Job Requirements
+Realtime Events
+Audit Requirements
+BFF Responsibilities
+UI Surfaces Required
+```
+
+Lovable 後續做頁面時，必須從這些流程推導 UI，而不是反過來先畫頁面。
+
+---
+
+## 3. 管理端使用者角色
+
+### 3.1 Admin
+
+負責整體系統設定、角色、權限、工具、MCP、Skill、BFF / integration 設定。
+
+### 3.2 Research Lead
+
+負責策略研究、Alpha lifecycle、experiment、strategy review、persona 指派。
+
+### 3.3 Risk Officer
+
+負責風控、risk budget、paper/live promotion、incident、rollback、資金池風險限制。
+
+### 3.4 Capital Manager
+
+負責 capital pool、績效排名、季度調倉、allocation override、資金池 mandate。
+
+### 3.5 Strategy Manager
+
+負責單一或多個 Alpha / Strategy 的狀態、artifact、deployment、退役、替換。
+
+### 3.6 System Operator
+
+負責 runtime、job、deployment、MCP server health、incident response、rollback 操作。
+
+### 3.7 Reviewer / Committee Member
+
+負責審查 strategy、promotion、rebalance、formula、persona policy、skill/MCP approval。
+
+### 3.8 Capability Admin
+
+負責 Tool、MCP、Skill、workflow template、hook / cron 的註冊、測試、授權與停用。
+
+---
+
+## 4. 全域管理規則
+
+所有 Management Console 的管理物件都必須遵守以下規則。
+
+### 4.1 每個物件都要有狀態
+
+例如：
+
+```text
+Strategy.status
+Persona.status
+CapitalPool.status
+RankingFormula.status
+QuarterlyRebalance.status
+Experiment.status
+Skill.status
+MCPServer.status
+Incident.status
+Job.status
+```
+
+前端不能只依據資料存在與否判斷操作，而要依據狀態與 BFF 回傳的 `availableActions`。
+
+---
+
+### 4.2 BFF 必須回傳 availableActions
+
+每個 detail API 都應該回傳目前使用者可執行的 actions。
+
+範例：
+
+```json
+{
+  "id": "alpha_042",
+  "type": "strategy",
+  "status": "replicated",
+  "riskLevel": "medium",
+  "availableActions": [
+    {
+      "id": "submit_review",
+      "labelKey": "action.submitReview",
+      "enabled": true,
+      "riskLevel": "medium",
+      "requiresApproval": false
+    },
+    {
+      "id": "promote_live",
+      "labelKey": "action.promoteLive",
+      "enabled": false,
+      "riskLevel": "high",
+      "requiresApproval": true,
+      "disabledReasonKey": "reason.strategyNotApprovedForLive"
+    }
+  ]
+}
+```
+
+Lovable 前端不要自行硬編完整業務規則，而是依據 BFF 回傳內容 render action。
+
+---
+
+### 4.3 所有高風險操作必須 confirmation
+
+高風險操作包括：
+
+```text
+Promote to Live
+Rollback Live Strategy
+Apply Quarterly Rebalance
+Change Capital Allocation
+Change Ranking Formula
+Grant MCP Tool
+Approve Skill
+Change Persona Route Policy
+Emergency Kill
+Retire Strategy
+Freeze Capital Pool
+Unfreeze Capital Pool
+```
+
+Confirmation modal 必須顯示：
+
+```text
+操作名稱
+目標物件
+目前狀態
+目標狀態
+影響的策略
+影響的人格
+影響的資金池
+影響的 runtime
+風險等級
+是否需要審批
+rollback option
+audit memo input
+confirm action
+```
+
+---
+
+### 4.4 所有長任務必須 job 化
+
+超過 2 秒的操作不得讓 UI blocking。
+
+必須建立 job：
+
+```text
+Backtest
+OOS
+Stress test
+Artifact build
+Validator run
+Formula recalculation
+Quarterly rebalance simulation
+Evolution run
+MCP discovery
+Skill sandbox
+Persona evaluation
+Deployment
+Rollback
+Postmortem generation
+```
+
+前端必須提供：
+
+```text
+Job Drawer
+Job Progress
+Job Logs
+Cancel / Retry
+Output artifacts
+Realtime update
+```
+
+---
+
+### 4.5 所有重要操作必須 audit
+
+Audit event 至少要包含：
+
+```text
+event_id
+actor_id
+actor_role
+event_type
+target_type
+target_id
+before_state
+after_state
+request_payload_summary
+decision_memo
+timestamp
+ip / session metadata if available
+```
+
+---
+
+### 4.6 Alert / Incident 必須能反應
+
+Alert 不是純通知。每個 alert 必須能：
+
+```text
+Acknowledge
+Assign Owner
+Ask Persona Analysis
+Open Incident
+Dismiss as Noise
+Escalate
+Mitigate
+Close
+Generate Postmortem
+Create Training Feedback
+Create Research Task
+```
+
+---
+
+### 4.7 Agora incoming items 必須進入 Management Console
+
+Agora Workbench 產生的內容不能消失在聊天紀錄裡。它們要進 Management Console 的 incoming queue。
+
+Agora 可能產生：
+
+```text
+Trader Insight
+Signal Feedback
+Decision Journal Outcome
+Committee Memo
+Training Feedback
+Skill Draft
+MCP Tool Request
+Research Task Proposal
+Strategy Proposal
+Memory Update Request
+```
+
+Management Console 必須能處理：
+
+```text
+Accept
+Reject
+Convert to Strategy
+Convert to Research Task
+Attach to Existing Strategy
+Attach to Review
+Convert to Training Example
+Submit for Approval
+Archive
+```
+
+---
+
+# 5. 流程 A：Command Center 管理閉環
+
+## 5.1 目的
+
+Command Center 是 Management Console 的總入口，負責讓管理者掌握：
+
+```text
+什麼事情正在發生
+什麼事情需要處理
+什麼風險需要反應
+哪些審批卡住
+哪些 job / experiment / runtime 出問題
+Agora 有哪些 incoming items 需要正式處理
+```
+
+## 5.2 Managed Objects
+
+```text
+Strategy
+Persona
+CapitalPool
+QuarterlyRebalance
+Experiment
+ReviewRequest
+Deployment
+Runtime
+RiskAlert
+Incident
+Job
+ToolCall
+MCPCall
+SkillCall
+AgoraIncomingItem
+```
+
+## 5.3 Required Status Blocks
+
+Command Center 必須顯示：
+
+```text
+Lifecycle Bottlenecks
+Pending Approvals
+Open Incidents
+Live / Paper Risk Snapshot
+Running Jobs
+Runtime Health
+Capital Pool Exposure
+Persona Policy Violations
+Agora Incoming Queue
+Recent State Transitions
+```
+
+## 5.4 Primary Actions
+
+```text
+Open Strategy
+Open Persona
+Open Capital Pool
+Open Incident
+Open Job
+Open Approval
+Process Agora Incoming Item
+Acknowledge Alert
+Assign Owner
+Run Mitigation
+```
+
+## 5.5 UI Surfaces Required
+
+```text
+Management Command Center page
+Alert cards
+Pending action cards
+Lifecycle summary cards
+Running job table
+Incoming item queue
+Recent event stream
+Right-side inspector drawer
+```
+
+---
+
+# 6. 流程 B：Strategy / Alpha Lifecycle 管理
+
+## 6.1 目的
+
+管理 Alpha 交易策略從想法到退役的完整生命週期。
+
+```text
+discovered → scaffolded → replicated → approved → paper → live → retired
+```
+
+## 6.2 Managed Objects
+
+```text
+Strategy
+StrategySpec
+Experiment
+Artifact
+ReviewRequest
+PromotionRequest
+Deployment
+RiskAlert
+Incident
+Postmortem
+```
+
+## 6.3 Strategy States
+
+```text
+discovered
+scaffolded
+replicated
+approved
+paper
+live
+degraded
+replaced
+retired
+archived
+```
+
+## 6.4 State Definitions
+
+### discovered
+
+策略想法已建立，但尚未有完整 spec。
+
+管理操作：
+
+```text
+Edit thesis
+Assign owner persona
+Set priority
+Attach insight / note / paper
+Reject idea
+Scaffold strategy
+```
+
+### scaffolded
+
+已有初步 spec、資料與 template。
+
+管理操作：
+
+```text
+Edit spec
+Select data source
+Set parameters
+Select experiment engine
+Run backtest
+Run OOS
+```
+
+### replicated
+
+已有可重現實驗結果。
+
+管理操作：
+
+```text
+Attach evidence
+Compare experiments
+Invalidate weak result
+Submit review
+Request more experiments
+```
+
+### approved
+
+通過審查，可進 paper。
+
+管理操作：
+
+```text
+Assign approved artifact
+Bind capital pool for paper
+Create paper promotion request
+```
+
+### paper
+
+已進 paper runtime / 模擬資金環境。
+
+管理操作：
+
+```text
+Monitor paper performance
+Pause paper
+Request live promotion
+Extend paper period
+Retire paper strategy
+```
+
+### live
+
+已進實盤執行。
+
+管理操作：
+
+```text
+Monitor live
+Pause
+Resume
+Reduce allocation
+Rollback
+Replace
+Open incident
+Retire
+Emergency kill
+```
+
+### degraded
+
+live 或 paper 表現惡化，需調查。
+
+管理操作：
+
+```text
+Open incident
+Ask persona analysis
+Reduce allocation
+Rollback
+Create postmortem
+Add evolution constraint
+```
+
+### retired
+
+策略退役，不再部署，但保留歷史。
+
+管理操作：
+
+```text
+View history
+Clone as new strategy
+Generate postmortem
+Archive
+```
+
+## 6.5 Required BFF Actions
+
+```text
+POST /bff/strategies
+POST /bff/strategies/:id/actions/scaffold
+POST /bff/strategies/:id/actions/run-experiment
+POST /bff/strategies/:id/actions/submit-review
+POST /bff/strategies/:id/actions/promote-paper
+POST /bff/strategies/:id/actions/request-live-promotion
+POST /bff/strategies/:id/actions/pause
+POST /bff/strategies/:id/actions/resume
+POST /bff/strategies/:id/actions/rollback
+POST /bff/strategies/:id/actions/retire
+```
+
+## 6.6 Realtime Events
+
+```text
+strategy.created
+strategy.state_changed
+strategy.spec_updated
+strategy.experiment_attached
+strategy.review_submitted
+strategy.promoted_paper
+strategy.promoted_live
+strategy.rollback_started
+strategy.rollback_completed
+strategy.retired
+```
+
+## 6.7 Audit Requirements
+
+每次 state transition 必須 audit。
+
+必要欄位：
+
+```text
+strategy_id
+from_state
+to_state
+actor
+reason
+linked_evidence
+approval_id if any
+```
+
+## 6.8 UI Surfaces Required
+
+```text
+Strategy Registry
+Alpha Factory Board
+Strategy Detail
+Lifecycle Stepper
+State Transition Modal
+Strategy Action Drawer
+Risk / Alert Panel
+Incident Panel
+Audit Timeline
+```
+
+---
+
+# 7. 流程 C：Strategy Spec / Artifact 管理
+
+## 7.1 目的
+
+確保策略規格、參數、artifact、rollback target 都可版本化與審計。
+
+## 7.2 Managed Objects
+
+```text
+StrategySpec
+ParameterSet
+Artifact
+ArtifactVersion
+RollbackTarget
+EvidencePack
+```
+
+## 7.3 StrategySpec States
+
+```text
+draft
+validated
+locked
+approved
+deprecated
+rolled_back
+```
+
+## 7.4 Artifact States
+
+```text
+candidate
+validated
+approved
+paper_deployed
+live_deployed
+deprecated
+retired
+```
+
+## 7.5 Primary Actions
+
+```text
+Create Spec
+Edit Spec
+Clone Spec
+Compare Spec Versions
+Lock Spec
+Unlock with Approval
+Rollback Spec
+Create Parameter Set
+Run Parameter Sweep
+Register Artifact
+Compare Artifacts
+Approve Artifact
+Set Rollback Target
+Deprecate Artifact
+```
+
+## 7.6 Required UI Surfaces
+
+```text
+Spec Editor
+Spec Version Diff
+Parameter Manager
+Artifact Store
+Artifact Detail
+Artifact Compare
+Rollback Target Manager
+Evidence Pack Viewer
+```
+
+## 7.7 BFF Responsibilities
+
+BFF 必須提供：
+
+```text
+current active spec
+spec version history
+artifact version list
+artifact approval state
+rollback eligibility
+availableActions
+```
+
+---
+
+# 8. 流程 D：Research / Experiment 管理
+
+## 8.1 目的
+
+管理 backtest、OOS、stress test、parameter sweep、RL training 等研究與實驗。
+
+## 8.2 Managed Objects
+
+```text
+Experiment
+ExperimentRun
+Dataset
+FeaturePipeline
+EvidencePack
+ExperimentArtifact
+```
+
+## 8.3 Experiment Types
+
+```text
+backtest
+OOS
+stress_test
+ablation
+parameter_sweep
+simulation
+RL_training
+policy_evaluation
+paper_validation
+```
+
+## 8.4 Experiment States
+
+```text
+draft
+queued
+running
+completed
+failed
+invalidated
+attached_to_review
+archived
+```
+
+## 8.5 Primary Actions
+
+```text
+Create Experiment
+Select Engine
+Select Dataset
+Set Time Range
+Set Cost Model
+Set Validation Method
+Run Experiment
+Pause Experiment
+Cancel Experiment
+Retry Experiment
+Clone Experiment
+Compare Experiments
+Invalidate Result
+Attach to Strategy
+Attach to Review
+Export Evidence Pack
+```
+
+## 8.6 Job Requirement
+
+所有 experiment run 必須建立 job。
+
+```text
+experiment.queued
+experiment.running
+experiment.completed
+experiment.failed
+job.progress
+job.logs_updated
+```
+
+## 8.7 UI Surfaces Required
+
+```text
+Experiment Registry
+Experiment Builder
+Experiment Detail
+Experiment Compare
+Metrics Viewer
+Logs Drawer
+Evidence Pack Builder
+Dataset Catalog
+Feature Pipeline Manager
+```
+
+---
+
+# 9. 流程 E：Governance / Approval 管理
+
+## 9.1 目的
+
+管理所有會影響策略、人格、資金、工具、部署的高風險變更。
+
+## 9.2 Review Types
+
+```text
+strategy_review
+patch_review
+artifact_review
+paper_promotion_review
+live_promotion_review
+capital_rebalance_review
+ranking_formula_review
+persona_policy_review
+skill_approval_review
+mcp_approval_review
+evolution_program_review
+rollback_review
+```
+
+## 9.3 Review States
+
+```text
+draft
+submitted
+validator_running
+in_review
+changes_requested
+approved
+rejected
+cancelled
+```
+
+## 9.4 Primary Actions
+
+```text
+Submit Review
+Run Validators
+Assign Reviewer
+Add Committee
+Approve
+Reject
+Request Changes
+Escalate
+Attach Memo
+Attach Evidence
+Lock Decision
+```
+
+## 9.5 Validator Types
+
+```text
+Schema Validator
+Scope Validator
+Data Leakage Check
+Backtest Gate
+OOS Gate
+Risk Check
+Reproducibility Check
+Capital Compatibility Check
+Tool Permission Check
+Policy Violation Check
+```
+
+## 9.6 UI Surfaces Required
+
+```text
+Governance Queue
+Review Detail
+Validator Result Panel
+Approval Chain Viewer
+Decision Memo Editor
+Committee Memo Viewer
+Evidence Pack Viewer
+```
+
+---
+
+# 10. 流程 F：Deployment / Runtime / Risk / Incident / Rollback 管理
+
+## 10.1 目的
+
+把 paper/live deployment、runtime、risk alert、incident、rollback 放在同一條反應流程中。
+
+## 10.2 Managed Objects
+
+```text
+Deployment
+Runtime
+RiskAlert
+Incident
+RollbackRequest
+Postmortem
+MitigationAction
+```
+
+## 10.3 Deployment States
+
+```text
+draft
+submitted
+under_review
+approved
+scheduled
+deploying
+deployed
+failed
+rolled_back
+cancelled
+```
+
+## 10.4 Runtime States
+
+```text
+healthy
+degraded
+disconnected
+draining
+halted
+maintenance
+```
+
+## 10.5 Alert States
+
+```text
+new
+acknowledged
+assigned
+investigating
+mitigated
+resolved
+postmortem_required
+closed
+```
+
+## 10.6 Incident States
+
+```text
+opened
+triaged
+investigating
+mitigating
+monitoring
+resolved
+closed
+```
+
+## 10.7 Primary Actions
+
+```text
+Deploy Paper
+Deploy Live
+Pause Strategy
+Resume Strategy
+Reduce Allocation
+Rollback
+Replace Strategy
+Open Alert
+Acknowledge Alert
+Open Incident
+Assign Incident Owner
+Ask Persona Analysis
+Apply Mitigation
+Generate Postmortem
+Close Incident
+Emergency Kill
+```
+
+## 10.8 Required UI Surfaces
+
+```text
+Deployment Console
+Runtime Monitor
+Live Strategy Monitor
+Paper Strategy Monitor
+Risk Center
+Alert Center
+Incident Detail
+Rollback Manager
+Postmortem Editor
+```
+
+## 10.9 High-Risk Actions
+
+以下必須 confirmation + audit，通常也需要 approval：
+
+```text
+Promote to Live
+Rollback Live
+Emergency Kill
+Reduce Live Allocation
+Replace Live Strategy
+Retire Live Strategy
+Restart Runtime with Active Strategies
+```
+
+---
+
+# 11. 流程 G：Persona Lifecycle 管理
+
+## 11.1 目的
+
+管理 AI Persona 的建立、啟用、限制、停用、退役、版本與評估。
+
+## 11.2 Managed Objects
+
+```text
+Persona
+PersonaVersion
+PersonaProfile
+PersonaEvaluation
+PersonaRestriction
+PersonaAssignment
+```
+
+## 11.3 Persona States
+
+```text
+draft
+sandbox
+active
+probation
+restricted
+suspended
+retired
+archived
+```
+
+## 11.4 Primary Actions
+
+```text
+Create Persona
+Clone Persona
+Edit Persona
+Activate Persona
+Suspend Persona
+Restrict Persona
+Put Persona on Probation
+Retire Persona
+Archive Persona
+Assign Role
+Assign Capital Pool
+Assign Strategies
+Run Evaluation
+Compare Versions
+Rollback Version
+```
+
+## 11.5 Management Fields
+
+```text
+Name
+Role
+Trading Style
+Research Style
+Risk Appetite
+Allowed Markets
+Forbidden Markets
+Decision Style
+Communication Style
+Autonomy Level
+Owner
+Status
+Version
+```
+
+## 11.6 UI Surfaces Required
+
+```text
+Persona Registry
+Persona Detail
+Persona Version Manager
+Persona Activation Panel
+Persona Restriction Panel
+Persona Evaluation Dashboard
+Persona Activity Monitor
+Audit Timeline
+```
+
+---
+
+# 12. 流程 H：Persona Route Policy / 權限管理
+
+## 12.1 目的
+
+管理每個 persona 可以使用哪些工具、MCP、Skill、workflow template，以及可以操作哪些 lifecycle state。
+
+## 12.2 Managed Objects
+
+```text
+RoutePolicy
+ToolPermission
+MCPPermission
+SkillPermission
+WorkflowTemplatePermission
+ConsultRule
+RateLimitRule
+ApprovalRule
+```
+
+## 12.3 RoutePolicy States
+
+```text
+draft
+active
+pending_review
+deprecated
+rolled_back
+```
+
+## 12.4 Primary Actions
+
+```text
+Create Route Policy
+Clone Policy
+Edit Policy
+Grant Tool
+Revoke Tool
+Grant MCP Tool
+Revoke MCP Tool
+Grant Skill
+Revoke Skill
+Set Approval Requirement
+Set Rate Limit
+Set Strategy State Scope
+Set Environment Scope
+Submit Policy Review
+Activate Policy
+Rollback Policy
+```
+
+## 12.5 Permission Dimensions
+
+```text
+Persona
+Tool / MCP / Skill
+Environment: research / paper / live
+Strategy State Scope
+Side Effect Level
+Rate Limit
+Approval Requirement
+Secret Scope
+Audit Level
+```
+
+## 12.6 UI Surfaces Required
+
+```text
+Route Policy Editor
+Persona Permission Matrix
+Tool Permission Matrix
+MCP Permission Matrix
+Skill Permission Matrix
+Consult Rule Manager
+Policy Version Diff
+Policy Approval Flow
+```
+
+---
+
+# 13. 流程 I：Persona Memory / Training / Evaluation 治理
+
+## 13.1 目的
+
+雖然 AI 訓練日常主要在 Agora Workbench，但 Management Console 必須能治理 persona memory、training update、evaluation、版本發佈。
+
+## 13.2 Managed Objects
+
+```text
+MemoryItem
+TrainingExample
+TrainerFeedback
+PersonaEvaluation
+PersonaVersion
+BehaviorRule
+```
+
+## 13.3 Memory States
+
+```text
+proposed
+approved
+rejected
+edited
+merged
+deprecated
+deleted
+sensitive
+```
+
+## 13.4 Training Update States
+
+```text
+draft
+submitted
+under_review
+approved
+published
+rejected
+rolled_back
+```
+
+## 13.5 Primary Actions
+
+```text
+Approve Memory
+Reject Memory
+Edit Memory
+Merge Memory
+Delete Memory
+Move to Shared
+Move to Private
+Mark Sensitive
+Mark Do-Not-Remember
+Run Evaluation
+Approve Persona Update
+Publish Persona Version
+Rollback Persona Version
+```
+
+## 13.6 UI Surfaces Required
+
+```text
+Persona Memory Governance
+Training Update Review
+Evaluation Result Viewer
+Persona Version Publication Panel
+Memory Conflict Resolver
+```
+
+---
+
+# 14. 流程 J：Capital Pool / Risk Budget 管理
+
+## 14.1 目的
+
+管理資金池 mandate、risk budget、人格 / 策略綁定、allocation cap、freeze / unfreeze。
+
+## 14.2 Managed Objects
+
+```text
+CapitalPool
+RiskBudget
+CapitalMandate
+PersonaCapitalBinding
+StrategyCapitalBinding
+AllocationLimit
+CapitalOverride
+```
+
+## 14.3 CapitalPool States
+
+```text
+draft
+active
+frozen
+rebalancing
+restricted
+retired
+```
+
+## 14.4 Primary Actions
+
+```text
+Create Capital Pool
+Edit Mandate
+Set Risk Budget
+Set Drawdown Limit
+Set Allocation Cap
+Bind Persona
+Unbind Persona
+Bind Strategy
+Unbind Strategy
+Freeze Pool
+Unfreeze Pool
+Run Rebalance
+Approve Rebalance
+Rollback Rebalance
+Retire Pool
+```
+
+## 14.5 Mandate Fields
+
+```text
+Pool Name
+Mandate
+Allowed Markets
+Allowed Strategy Types
+Allowed Personas
+Allowed Risk Profile
+Max Allocation
+Min Cash Reserve
+Max Drawdown
+Max Concentration
+Leverage Policy
+Deploy Mode
+```
+
+## 14.6 UI Surfaces Required
+
+```text
+Capital Pool Registry
+Capital Pool Detail
+Risk Budget Editor
+Persona-Capital Binding Matrix
+Strategy-Capital Binding Matrix
+Allocation Limit Manager
+Capital Freeze / Unfreeze Panel
+```
+
+---
+
+# 15. 流程 K：Performance Ranking / Formula 管理
+
+## 15.1 目的
+
+管理投資績效排序、排序公式、分數拆解、公式 backtest、ranking publication。
+
+## 15.2 Ranking Scopes
+
+```text
+Persona Ranking
+Strategy Ranking
+Alpha Family Ranking
+Capital Pool Ranking
+Paper Strategy Ranking
+Live Strategy Ranking
+Research Productivity Ranking
+Risk-Adjusted Ranking
+```
+
+## 15.3 Formula States
+
+```text
+draft
+testing
+approved
+active
+deprecated
+retired
+```
+
+## 15.4 Ranking States
+
+```text
+draft
+calculated
+under_review
+approved
+published
+frozen
+superseded
+```
+
+## 15.5 Primary Actions
+
+```text
+Create Formula
+Clone Formula
+Edit Formula
+Set Metrics
+Set Weights
+Set Penalties
+Set Normalization Method
+Set Caps / Floors
+Set Outlier Handling
+Backtest Formula on Past Quarters
+Compare Formula Versions
+Submit Formula Review
+Approve Formula
+Activate Formula
+Rollback Formula
+Retire Formula
+Calculate Ranking
+Freeze Ranking
+Publish Ranking
+Apply Manual Override
+```
+
+## 15.6 Metric Library
+
+```text
+quarterly_return
+annualized_return
+sharpe
+sortino
+calmar
+max_drawdown
+volatility
+turnover
+hit_rate
+profit_factor
+tail_risk
+slippage
+capacity
+stability
+live_paper_gap
+risk_violation_count
+drawdown_recovery_days
+research_productivity
+experiment_success_rate
+human_override_penalty
+policy_violation_penalty
+```
+
+## 15.7 UI Surfaces Required
+
+```text
+Performance Ranking Dashboard
+Formula Studio
+Metric Library
+Formula Backtest
+Formula Compare
+Score Breakdown Viewer
+Ranking Publication Manager
+Ranking Override Manager
+```
+
+---
+
+# 16. 流程 L：Quarterly Rebalance / 資金重分配管理
+
+## 16.1 目的
+
+每季依據投資績效與 ranking formula，重新排序並調整資金池分配。
+
+## 16.2 Managed Objects
+
+```text
+QuarterlyRebalance
+MetricFreeze
+RankingResult
+AllocationSimulation
+AllocationOverride
+RebalanceApproval
+RebalanceReport
+```
+
+## 16.3 Rebalance States
+
+```text
+draft
+metrics_freezing
+metrics_frozen
+ranking_calculated
+simulation_ready
+under_review
+approved
+scheduled
+applied
+rolled_back
+cancelled
+```
+
+## 16.4 Full Workflow
+
+```text
+1. Select Quarter
+2. Select Capital Pool
+3. Freeze Performance Metrics
+4. Select Ranking Formula Version
+5. Calculate Persona / Strategy Ranking
+6. Generate Recommended Allocation
+7. Run Allocation Simulation
+8. Check Risk Constraints
+9. Apply Manual Overrides
+10. Generate Rebalance Proposal
+11. Risk Officer Review
+12. Investment Committee Approval
+13. Schedule Effective Date
+14. Apply Rebalance
+15. Monitor Post-Rebalance
+16. Rollback if needed
+```
+
+## 16.5 Primary Actions
+
+```text
+Create Rebalance Event
+Freeze Metrics
+Unfreeze Metrics
+Calculate Ranking
+Select Formula
+Run Simulation
+Apply Override
+Submit Approval
+Approve Rebalance
+Reject Rebalance
+Schedule Rebalance
+Apply Rebalance
+Rollback Rebalance
+Publish Report
+```
+
+## 16.6 UI Surfaces Required
+
+```text
+Quarterly Rebalance Console
+Metric Freeze Manager
+Ranking Result Viewer
+Allocation Simulation
+Constraint Checker
+Override Manager
+Rebalance Approval Flow
+Rebalance History
+```
+
+---
+
+# 17. 流程 M：Evolution Steering / 演化方向管理
+
+## 17.1 目的
+
+管理 Alpha 演化方向、fitness formula、mutation rules、constraints、evolution run 與 candidate promotion。
+
+## 17.2 Managed Objects
+
+```text
+EvolutionProgram
+EvolutionDirection
+FitnessFormula
+MutationRule
+EvolutionRun
+CandidateStrategy
+CandidatePromotion
+```
+
+## 17.3 EvolutionProgram States
+
+```text
+draft
+active
+paused
+completed
+under_review
+retired
+```
+
+## 17.4 Primary Actions
+
+```text
+Create Evolution Program
+Edit Objective
+Set Fitness Formula
+Set Mutation Operators
+Set Hard Constraints
+Set Soft Penalties
+Set Exploration Budget
+Assign Persona
+Assign Alpha Family
+Start Evolution Run
+Pause Run
+Stop Run
+Inspect Candidate
+Reject Candidate
+Promote Candidate to Strategy
+Submit Candidate Review
+Retire Program
+```
+
+## 17.5 Fitness Formula Example
+
+```text
+fitness =
+  0.25 * z(OOS_sharpe)
++ 0.20 * z(stability)
++ 0.15 * z(capacity)
++ 0.15 * z(novelty)
+- 0.15 * z(max_drawdown)
+- 0.05 * z(turnover)
+- 0.05 * z(correlation_with_existing_live)
+```
+
+## 17.6 UI Surfaces Required
+
+```text
+Evolution Program Registry
+Evolution Direction Editor
+Fitness Formula Studio
+Mutation Rule Manager
+Evolution Run Monitor
+Candidate Strategy Browser
+Candidate Promotion Panel
+```
+
+---
+
+# 18. 流程 N：Tool / MCP / Skill / Capability 管理
+
+## 18.1 目的
+
+管理所有 persona 可用的工具、MCP server/tool、skills、workflow templates、hooks / cron。
+
+## 18.2 Managed Objects
+
+```text
+Tool
+ToolSchema
+MCPServer
+MCPTool
+MCPPermission
+Skill
+SkillVersion
+SkillSandboxRun
+WorkflowTemplate
+Hook
+CronJob
+CapabilityPolicy
+```
+
+## 18.3 Tool States
+
+```text
+draft
+testing
+active
+restricted
+deprecated
+blocked
+retired
+```
+
+## 18.4 MCPServer States
+
+```text
+draft
+connected
+healthy
+degraded
+disabled
+retired
+```
+
+## 18.5 Skill States
+
+```text
+draft
+sandboxed
+validated
+approved
+active
+deprecated
+blocked
+retired
+```
+
+## 18.6 Primary Tool Actions
+
+```text
+Register Tool
+Edit Tool Schema
+Classify Risk
+Set Side Effect Level
+Set Allowed Personas
+Set Allowed Environments
+Set Approval Rule
+Set Rate Limit
+Run Tool Test
+Disable Tool
+Retire Tool
+View Tool Calls
+```
+
+## 18.7 Primary MCP Actions
+
+```text
+Add MCP Server
+Edit Connection
+Rotate Credentials
+Test Connection
+Discover Tools
+Import Schemas
+Set Tool Permissions
+Set Persona Permissions
+Set Secret Scope
+Set Rate Limit
+Disable Server
+Delete Server
+View MCP Calls
+```
+
+## 18.8 Primary Skill Actions
+
+```text
+Create Skill
+Import Skill
+Generate Skill Draft
+Edit Skill
+Run Sandbox Test
+Run Security Scan
+Classify Risk
+Approve Skill
+Assign Skill to Persona
+Revoke Skill from Persona
+Deprecate Skill
+Rollback Skill Version
+Retire Skill
+```
+
+## 18.9 Required UI Surfaces
+
+```text
+Tool Registry
+Tool Schema Manager
+Tool Risk Classifier
+Tool Permission Matrix
+MCP Server Registry
+MCP Tool Explorer
+MCP Schema Viewer
+MCP Permission Matrix
+MCP Secret Manager
+MCP Call Audit
+Skill Registry
+Skill Draft Manager
+Skill Sandbox Runner
+Skill Risk Classifier
+Skill Permission Matrix
+Skill Version Manager
+Skill Audit
+Workflow Template Manager
+Hook / Cron Manager
+```
+
+---
+
+# 19. 流程 O：Knowledge / Artifact / Lineage 管理
+
+## 19.1 目的
+
+管理 insight、research notes、artifacts、committee memo、postmortem 與完整 lineage。
+
+## 19.2 Managed Objects
+
+```text
+Insight
+ResearchNote
+Artifact
+CommitteeMemo
+Postmortem
+LineageEdge
+KnowledgeItem
+```
+
+## 19.3 Insight States
+
+```text
+raw
+triaged
+classified
+linked
+converted_to_strategy
+converted_to_research_task
+converted_to_training_example
+dismissed
+archived
+```
+
+## 19.4 Primary Actions
+
+```text
+Create Insight
+Classify Insight
+Set Priority
+Assign Persona
+Link Strategy
+Convert to Strategy
+Convert to Research Task
+Convert to Training Example
+Attach to Review
+Dismiss
+Archive
+```
+
+## 19.5 Lineage Requirements
+
+Lineage graph 必須能顯示：
+
+```text
+Insight → Strategy → Spec → Experiment → Artifact → Review → Promotion → Deployment → Telemetry → Incident → Postmortem → Evolution Constraint
+```
+
+## 19.6 UI Surfaces Required
+
+```text
+Knowledge Inbox
+Insight Triage
+Artifact Store
+Artifact Detail
+Research Notes
+Committee Memo Viewer
+Postmortem Library
+Lineage Explorer
+```
+
+---
+
+# 20. 流程 P：Jobs / Events / Audit 管理
+
+## 20.1 目的
+
+集中追蹤所有長任務、事件流與審計紀錄。
+
+## 20.2 Job Types
+
+```text
+backtest
+OOS
+stress_test
+artifact_build
+validator_run
+formula_recalculation
+quarterly_rebalance_simulation
+evolution_run
+MCP_discovery
+skill_sandbox
+persona_evaluation
+deployment
+rollback
+memory_evaluation
+postmortem_generation
+```
+
+## 20.3 Job States
+
+```text
+queued
+running
+waiting_for_approval
+completed
+failed
+cancelled
+retrying
+```
+
+## 20.4 Primary Actions
+
+```text
+Create Job
+View Progress
+View Logs
+Cancel Job
+Retry Job
+Clone Job
+Attach Result
+Archive Job
+Create Incident from Job Failure
+```
+
+## 20.5 Event Types
+
+```text
+job.started
+job.progress
+job.completed
+job.failed
+strategy.state_changed
+persona.policy_changed
+deployment.started
+deployment.failed
+risk.alert_created
+incident.updated
+tool.call_completed
+mcp.call_failed
+skill.sandbox_completed
+rebalance.applied
+```
+
+## 20.6 UI Surfaces Required
+
+```text
+Job Queue
+Job Detail Drawer
+Job Logs
+System Event Stream
+Audit Explorer
+Entity Audit Timeline
+Approval History
+```
+
+---
+
+# 21. 流程與 UI 模組映射
+
+| 管理流程 | 主要 UI 模組 |
+|---|---|
+| Command Center 管理閉環 | Command Center |
+| Strategy lifecycle | Strategy & Alpha Management |
+| Spec / Artifact | Strategy Detail, Artifact Store |
+| Research / Experiment | Research & Experiments |
+| Governance / Approval | Governance & Approvals |
+| Deployment / Risk / Incident | Deployment, Runtime & Risk |
+| Persona lifecycle | Persona Directorate |
+| Route Policy / Permissions | Persona Directorate, Tools/MCP/Skills |
+| Memory / Training Governance | Persona Directorate, Knowledge |
+| Capital Pool | Capital & Allocation |
+| Ranking Formula | Performance Ranking |
+| Quarterly Rebalance | Quarterly Rebalance |
+| Evolution Steering | Evolution Steering |
+| Tool / MCP / Skill | Tools, MCP & Skills |
+| Knowledge / Lineage | Knowledge, Artifacts & Lineage |
+| Jobs / Audit | Jobs, Events & Audit |
+
+---
+
+# 22. Lovable Part 2 Acceptance Criteria
+
+Lovable 後續 UI 規格與實作必須能支援：
+
+```text
+1. 每個核心物件都有 status。
+2. 每個核心物件 detail 都能 render availableActions。
+3. 高風險 action 會顯示 confirmation modal。
+4. 長任務會建立 job 並可追蹤 progress/logs。
+5. alert 可 acknowledge / assign / escalate / incident。
+6. incident 可連到 strategy / runtime / capital pool / postmortem。
+7. strategy lifecycle 完整支援 discovered → retired。
+8. persona lifecycle 完整支援 draft → active → restricted / retired。
+9. route policy 可管理 tool / MCP / skill / workflow template。
+10. capital pool 可管理 mandate / risk budget / binding / freeze。
+11. ranking formula 可建立、測試、比較、啟用、回滾。
+12. quarterly rebalance 可 freeze metrics、calculate ranking、simulate allocation、approval、apply、rollback。
+13. evolution program 可管理 direction、fitness formula、mutation rules、runs、candidate promotion。
+14. MCP / Skill 管理必須有 sandbox / permission / approval / audit。
+15. 所有重要操作都有 audit trail。
+16. Agora incoming items 可被 Management Console 正式處理。
+```
+
+---
+
+# 23. 下一份文件
+
+下一份：
+
+```text
+Part 3 — Pantheon Management Console 頁面與功能設計
+```
+
+Part 3 會根據本文件的流程，開始定義每個 Management Console 頁面：
+
+```text
+Route
+Primary Users
+Goal
+Layout
+Tables
+Cards
+Tabs
+Actions
+Filters
+Drawers
+BFF APIs
+Realtime Events
+Empty / Loading / Error states
+Permission rules
+```
+
+
+---
+
+# Part 3 — Management Console 頁面與功能設計
+**Locale:** zh-TW  
+**Document Type:** Lovable Frontend Build Specification  
+**Scope:** Pantheon Management Console only  
+**Related Docs:**  
+- Part 1 — Master Blueprint  
+- Part 2 — Management Console Process Inventory  
+
+---
+
+# 0. 本文件目的
+
+本文件把 Part 2 盤點出的 Pantheon Management Console 管理流程，轉換成 Lovable 可以開始建置的前端頁面規格。
+
+Pantheon Management Console 不是單純的 dashboard。它是 Pantheon 的正式管理控制台，負責：
+
+```text
+策略管理
+人格管理
+資金池管理
+績效排序公式管理
+季度調倉
+演化方向管理
+Research / Experiment 管理
+Tool / MCP / Skill 管理
+審批
+部署
+runtime 監控
+風險與 incident 反應
+rollback / pause / retire
+audit
+```
+
+這些功能屬於同一批管理使用者，不應拆成不同產品。  
+因此本文件設計的是：
+
+```text
+Pantheon Management Console
+= Management + Operations + Governance + Observability
+```
+
+---
+
+# 1. Lovable 建置總原則
+
+## 1.1 單一管理控制台
+
+Lovable 不要把 Core / Operations 拆成兩個 app。  
+請以 `/management` route group 實作一套完整 Management Console。
+
+```text
+/management
+├── command-center
+├── strategies
+├── personas
+├── capital
+├── ranking
+├── rebalance
+├── evolution
+├── experiments
+├── governance
+├── deployment
+├── runtimes
+├── risk
+├── incidents
+├── tools
+├── mcp
+├── skills
+├── artifacts
+├── lineage
+├── jobs
+├── audit
+└── settings
+```
+
+## 1.2 每個頁面都要同時呈現管理與現況
+
+例如 Strategy Detail 不只是 strategy spec 頁，也要顯示：
+
+```text
+lifecycle state
+owner persona
+capital pool
+paper/live status
+running jobs
+latest experiments
+risk alerts
+open incidents
+available actions
+approval status
+audit timeline
+```
+
+## 1.3 物件優先，而不是聊天優先
+
+Management Console 不是 chat UI。  
+主要 UI 應以 entity、table、tabs、drawer、timeline、state badge、approval panel 為主。
+
+## 1.4 所有高風險操作必須有確認與審批狀態
+
+高風險操作包括：
+
+```text
+promote to live
+rollback
+apply rebalance
+change capital allocation
+change ranking formula
+change persona route policy
+grant MCP tool
+approve skill
+retire live strategy
+emergency kill
+```
+
+這些操作都必須顯示：
+
+```text
+risk impact
+affected object
+required approval
+audit memo
+confirmation modal
+```
+
+## 1.5 使用 Mock BFF 先建置
+
+Lovable 初期不需要真實 Pantheon backend。  
+請建立 mock BFF client，所有資料與操作先使用 mock data。
+
+---
+
+# 2. Management Console 共用 Layout
+
+## 2.1 App Shell
+
+所有 Management 頁面使用同一個 shell：
+
+```text
+GlobalTopBar
+├── Product Switcher
+├── Environment Indicator
+├── Global Search
+├── BFF Status
+├── Pending Approvals
+├── Open Alerts
+├── Running Jobs
+├── Notifications
+└── User / Role Menu
+
+ManagementSidebar
+└── grouped navigation
+
+MainCanvas
+└── current page
+
+RightDrawer / Inspector
+└── contextual entity inspector
+```
+
+## 2.2 Sidebar 分組
+
+```text
+Command
+- Command Center
+
+Core Management
+- Strategies & Alphas
+- Personas
+- Capital & Allocation
+- Performance Ranking
+- Quarterly Rebalance
+- Evolution Steering
+
+Research & Governance
+- Experiments
+- Governance & Approvals
+- Knowledge & Artifacts
+- Lineage
+
+Operations
+- Deployment
+- Runtimes
+- Risk Center
+- Incidents
+- Jobs
+
+Capabilities
+- Tools
+- MCP
+- Skills
+
+System
+- Audit
+- Settings
+```
+
+## 2.3 Top Bar 必備資訊
+
+```text
+Current environment: Research / Paper / Live
+BFF connection: Connected / Degraded / Offline
+Pending approvals count
+Open alerts count
+Running jobs count
+User role
+Language switcher: zh-TW / en-US
+```
+
+---
+
+# 3. 全域共用元件
+
+Lovable 應建立以下 reusable components。
+
+## 3.1 EntityHeader
+
+用途：所有 detail page 的頂部資訊。
+
+Props 建議：
+
+```ts
+{
+  entityType: string
+  entityId: string
+  title: string
+  status: string
+  riskLevel?: "low" | "medium" | "high" | "critical"
+  owner?: string
+  linkedEntities?: Array<Link>
+  primaryAction?: Action
+  secondaryActions?: Action[]
+}
+```
+
+顯示：
+
+```text
+Entity name
+ID
+Status badge
+Risk badge
+Owner
+Last updated
+Primary action
+Secondary action menu
+```
+
+## 3.2 StatusBadge
+
+支援類型：
+
+```text
+strategy status
+persona status
+experiment status
+review status
+deployment status
+job status
+incident status
+skill status
+MCP status
+```
+
+## 3.3 RiskBadge
+
+```text
+Low
+Medium
+High
+Critical
+Blocked
+```
+
+## 3.4 DataTable
+
+所有表格必須支援：
+
+```text
+search
+filter
+sort
+pagination
+row action menu
+click row open detail
+bulk select where applicable
+```
+
+## 3.5 RightDrawer / Inspector
+
+支援：
+
+```text
+Strategy Inspector
+Persona Inspector
+Capital Pool Inspector
+Job Inspector
+Alert Inspector
+Incident Inspector
+Tool Call Inspector
+Artifact Inspector
+```
+
+Drawer 內容：
+
+```text
+summary
+status
+linked entities
+available actions
+recent events
+audit snippets
+```
+
+## 3.6 ActionButton / PermissionAwareButton
+
+按鈕必須根據 BFF 的 `availableActions` 渲染。
+
+狀態：
+
+```text
+enabled
+disabled with reason
+requires approval
+high risk
+hidden if role cannot see
+```
+
+## 3.7 ConfirmationModal
+
+高風險操作必須使用。
+
+欄位：
+
+```text
+operation name
+target object
+current state
+next state
+affected capital pool
+affected runtime
+risk impact
+required approval
+rollback option
+audit memo textarea
+confirm phrase if critical
+```
+
+## 3.8 JobProgressDrawer
+
+用於所有長任務：
+
+```text
+job status
+progress
+current step
+logs
+target object
+started by
+started at
+cancel / retry buttons
+output artifacts
+```
+
+## 3.9 AuditTimeline
+
+顯示：
+
+```text
+state changes
+approvals
+rejections
+deployments
+rollbacks
+policy changes
+tool permission changes
+capital changes
+```
+
+## 3.10 LineageGraph
+
+用於 strategy、artifact、experiment、deployment 的 lineage。
+
+節點：
+
+```text
+Insight
+Strategy Spec
+Experiment
+Artifact
+Review
+Promotion
+Deployment
+Telemetry
+Incident
+Postmortem
+```
+
+---
+
+# 4. Page Spec 格式
+
+後續每一頁都使用以下規格：
+
+```text
+Page
+Route
+Primary Users
+Goal
+Layout
+Key Components
+Primary Data
+Filters
+Main Actions
+Secondary Actions
+BFF APIs
+Realtime Events
+Empty State
+Loading State
+Error State
+Permission Rules
+Acceptance Criteria
+```
+
+---
+
+# 5. Page — Command Center
+
+## Route
+
+```text
+/management/command-center
+```
+
+## Primary Users
+
+```text
+Admin
+Research Lead
+Risk Officer
+Capital Manager
+System Operator
+Reviewer
+```
+
+## Goal
+
+作為 Management Console 首頁，統一呈現：
+
+```text
+策略生命週期瓶頸
+待審批項目
+執行現況
+風險與 incident
+running jobs
+capital exposure
+persona violations
+Agora incoming items
+```
+
+## Layout
+
+```text
+Top KPI Strip
+├── Live Risk
+├── Open Incidents
+├── Pending Approvals
+├── Running Jobs
+├── Runtime Health
+└── Quarterly Rebalance Status
+
+Main Grid
+├── Lifecycle Bottlenecks
+├── Pending Management Actions
+├── Live / Paper Risk Snapshot
+├── Running Jobs
+├── Persona Activity & Violations
+├── Capital Pool Exposure
+├── Alerts & Incidents
+├── Agora Incoming Queue
+└── Recent State Transitions
+```
+
+## Key Components
+
+```text
+MetricCard
+RiskBadge
+LifecycleSummary
+PendingActionList
+AlertCard
+JobMiniList
+CapitalExposureCard
+PersonaActivityCard
+AgoraIncomingQueue
+EventTimeline
+```
+
+## Primary Data
+
+```text
+managementOverview
+strategyLifecycleSummary
+pendingApprovals
+openIncidents
+runningJobs
+riskSummary
+capitalExposure
+personaViolations
+agoraIncomingItems
+recentEvents
+```
+
+## Main Actions
+
+```text
+Open pending approval
+Open incident
+Open job drawer
+Open strategy
+Open persona
+Open rebalance event
+Convert Agora item to management workflow
+```
+
+## BFF APIs
+
+```text
+GET /bff/management/overview
+GET /bff/management/pending-actions
+GET /bff/management/recent-events
+GET /bff/agora/incoming
+POST /bff/agora/incoming/:id/actions/convert
+```
+
+## Realtime Events
+
+```text
+approval.requested
+approval.decided
+job.started
+job.completed
+job.failed
+risk.alert_created
+incident.updated
+strategy.state_changed
+rebalance.status_changed
+agora.incoming_created
+```
+
+## Empty State
+
+如果沒有 pending action：
+
+```text
+目前沒有待處理管理事項。
+```
+
+如果沒有 alert：
+
+```text
+目前沒有開啟中的風險警示。
+```
+
+## Error State
+
+```text
+無法載入管理總覽。請檢查 BFF 連線狀態。
+```
+
+## Acceptance Criteria
+
+```text
+使用者可以在首頁看到所有待處理管理事項。
+使用者可以直接打開 approval、incident、job、strategy、persona。
+Agora incoming items 必須顯示在 Management Console，而不是只留在 Agora。
+所有數字卡可點擊進入對應列表。
+```
+
+---
+
+# 6. Page — Strategy & Alpha Management List
+
+## Route
+
+```text
+/management/strategies
+```
+
+## Primary Users
+
+```text
+Research Lead
+Strategy Manager
+Risk Officer
+Capital Manager
+System Operator
+```
+
+## Goal
+
+管理所有 alpha / strategy，並追蹤其 lifecycle、績效、資金、paper/live、alert、incident 狀態。
+
+## Layout
+
+```text
+Page Header
+├── Title
+├── Create Strategy button
+└── View switcher: Table / Lifecycle Board / Risk View / Capital View
+
+Filter Bar
+├── lifecycle state
+├── owner persona
+├── capital pool
+├── paper/live status
+├── risk level
+├── open alerts
+├── open incidents
+└── search
+
+Main Content
+├── Strategy Table or Board
+└── Right Drawer on row click
+```
+
+## Table Columns
+
+```text
+Strategy ID
+Name
+Lifecycle State
+Owner Persona
+Capital Pool
+Paper Status
+Live Status
+Latest Performance
+Risk Level
+Open Alerts
+Open Jobs
+Current Artifact
+Evolution Program
+Last Updated
+Actions
+```
+
+## Views
+
+```text
+Table View
+Lifecycle Board
+Risk View
+Capital Exposure View
+Persona Ownership View
+```
+
+## Main Actions
+
+```text
+Create Strategy
+Clone Strategy
+Open Strategy Detail
+Assign Persona
+Submit Review
+Promote to Paper
+Request Live Promotion
+Pause
+Rollback
+Retire
+Open Incident
+```
+
+## BFF APIs
+
+```text
+GET /bff/strategies
+POST /bff/strategies
+POST /bff/strategies/:id/actions/clone
+POST /bff/strategies/:id/actions/assign-persona
+POST /bff/strategies/:id/actions/submit-review
+POST /bff/strategies/:id/actions/promote-paper
+POST /bff/strategies/:id/actions/request-live-promotion
+POST /bff/strategies/:id/actions/pause
+POST /bff/strategies/:id/actions/rollback
+POST /bff/strategies/:id/actions/retire
+```
+
+## Realtime Events
+
+```text
+strategy.created
+strategy.updated
+strategy.state_changed
+strategy.alert_created
+strategy.incident_created
+deployment.status_changed
+job.progress
+```
+
+## Acceptance Criteria
+
+```text
+策略列表必須能按 lifecycle state、persona、capital pool、risk level 篩選。
+每列 strategy 必須顯示 available actions。
+高風險 action 必須打開 confirmation modal。
+Lifecycle board 必須支援按 state 分欄。
+```
+
+---
+
+# 7. Page — Strategy Detail
+
+## Route
+
+```text
+/management/strategies/:strategyId
+```
+
+## Primary Users
+
+```text
+Research Lead
+Strategy Manager
+Risk Officer
+Capital Manager
+System Operator
+Reviewer
+```
+
+## Goal
+
+管理單一 strategy 的完整 lifecycle、spec、experiments、paper/live 狀態、風險、incident、artifact、governance 與 audit。
+
+## Layout
+
+```text
+EntityHeader
+├── Strategy name
+├── Lifecycle state
+├── Owner persona
+├── Capital pool
+├── Risk badge
+├── Paper / Live status
+├── Primary action
+└── Secondary actions
+
+Summary Strip
+├── Latest return
+├── Sharpe
+├── Max drawdown
+├── Risk budget usage
+├── Open alerts
+├── Running jobs
+└── Current artifact
+
+Tabs
+├── Overview
+├── Spec & Parameters
+├── Data & Features
+├── Experiments
+├── Performance
+├── Paper / Live Execution
+├── Risk & Alerts
+├── Incidents
+├── Artifacts
+├── Evolution
+├── Governance
+├── Lineage
+└── Audit
+```
+
+## Tab — Overview
+
+顯示：
+
+```text
+Current lifecycle state
+Owner persona
+Capital pool
+Decision readiness panel
+Open blockers
+Latest metrics
+Linked insights
+Latest committee memo
+Next allowed actions
+```
+
+## Tab — Spec & Parameters
+
+功能：
+
+```text
+View / edit strategy spec
+View spec versions
+Compare versions
+Lock / unlock spec
+Manage parameter sets
+Run parameter sweep
+```
+
+Fields:
+
+```text
+Hypothesis
+Market
+Asset universe
+Signal definition
+Entry logic
+Exit logic
+Position sizing
+Risk control
+Data requirement
+Cost model
+Failure modes
+```
+
+## Tab — Experiments
+
+顯示：
+
+```text
+Backtests
+OOS runs
+Stress tests
+Ablations
+Parameter sweeps
+Produced artifacts
+Evidence attachments
+```
+
+Actions:
+
+```text
+Create Experiment
+Clone Experiment
+Rerun
+Compare
+Invalidate
+Attach to Review
+```
+
+## Tab — Paper / Live Execution
+
+顯示：
+
+```text
+Paper runtime
+Live runtime
+Deployment state
+Current artifact
+Capital allocation
+PnL
+Drawdown
+Exposure
+Last signal
+Last trade
+Broker status
+Rollback target
+```
+
+Actions:
+
+```text
+Pause
+Resume
+Reduce Allocation
+Rollback
+Open Incident
+Request Retirement
+```
+
+## Tab — Risk & Alerts
+
+顯示：
+
+```text
+Risk budget usage
+Drawdown
+Exposure
+Concentration
+Slippage
+Alert timeline
+```
+
+Actions:
+
+```text
+Acknowledge alert
+Assign owner
+Ask persona analysis
+Open incident
+Apply mitigation
+```
+
+## Tab — Incidents
+
+顯示與 strategy 相關 incident。
+
+Actions:
+
+```text
+Open incident
+Create postmortem
+Link to evolution constraint
+Link to training feedback
+```
+
+## Tab — Artifacts
+
+顯示：
+
+```text
+Artifact versions
+Artifact type
+Hash
+Produced by experiment
+Approved for
+Deployment usage
+Rollback eligibility
+```
+
+## Tab — Evolution
+
+顯示：
+
+```text
+Linked evolution program
+Candidate children
+Mutation history
+Fitness score changes
+```
+
+## Tab — Governance
+
+顯示：
+
+```text
+Review requests
+Approval history
+Validator results
+Committee memos
+Promotion requests
+```
+
+## Tab — Lineage
+
+使用 LineageGraph。
+
+## Tab — Audit
+
+使用 AuditTimeline。
+
+## BFF APIs
+
+```text
+GET /bff/strategies/:id
+GET /bff/strategies/:id/experiments
+GET /bff/strategies/:id/artifacts
+GET /bff/strategies/:id/deployments
+GET /bff/strategies/:id/alerts
+GET /bff/strategies/:id/incidents
+GET /bff/strategies/:id/audit
+POST /bff/strategies/:id/actions/:actionId
+```
+
+## Realtime Events
+
+```text
+strategy.updated
+strategy.state_changed
+experiment.completed
+deployment.updated
+risk.alert_created
+incident.updated
+job.progress
+artifact.created
+review.updated
+```
+
+## Acceptance Criteria
+
+```text
+Strategy Detail 必須能從同一頁管理 spec、experiments、paper/live、risk、incident、artifacts、governance。
+高風險操作不可直接執行，必須 confirmation。
+Running jobs 必須即時更新。
+Alerts 與 incidents 必須可直接從 strategy 頁處理。
+```
+
+---
+
+# 8. Page — Persona Directorate List
+
+## Route
+
+```text
+/management/personas
+```
+
+## Primary Users
+
+```text
+Admin
+Research Lead
+Capability Admin
+Capital Manager
+AI Governance Manager
+```
+
+## Goal
+
+管理 AI personas 的 lifecycle、role、policy、tool/MCP/skill permission、capital binding、strategy ownership、activity、training/evaluation 狀態。
+
+## Layout
+
+```text
+Page Header
+├── Create Persona
+├── Clone Persona
+└── View switcher: Table / Policy Matrix / Capital View / Activity View
+
+Filter Bar
+├── status
+├── role
+├── capital pool
+├── performance rank
+├── policy violation
+├── tool access
+└── search
+
+Persona Table
+```
+
+## Table Columns
+
+```text
+Persona ID
+Name
+Role
+Status
+Current Version
+Performance Rank
+Capital Binding
+Active Strategies
+Running Jobs
+Tool Calls
+MCP Calls
+Skill Calls
+Policy Violations
+Last Evaluation
+Actions
+```
+
+## Main Actions
+
+```text
+Create Persona
+Clone Persona
+Open Detail
+Activate
+Suspend
+Restrict
+Put on Probation
+Assign Capital
+Run Evaluation
+Retire
+```
+
+## BFF APIs
+
+```text
+GET /bff/personas
+POST /bff/personas
+POST /bff/personas/:id/actions/clone
+POST /bff/personas/:id/actions/activate
+POST /bff/personas/:id/actions/suspend
+POST /bff/personas/:id/actions/restrict
+POST /bff/personas/:id/actions/probation
+POST /bff/personas/:id/actions/retire
+```
+
+## Acceptance Criteria
+
+```text
+Persona list 必須能看到管理狀態與執行活動。
+Policy violations 必須明顯顯示。
+Persona 可從列表直接進入 detail。
+```
+
+---
+
+# 9. Page — Persona Detail
+
+## Route
+
+```text
+/management/personas/:personaId
+```
+
+## Goal
+
+管理單一 persona 的身份、權限、工具、資金、績效、活動、記憶、訓練、評估與 audit。
+
+## Layout
+
+```text
+EntityHeader
+Summary Strip
+Tabs
+```
+
+## Tabs
+
+```text
+Overview
+Identity & Role
+Private Workspace
+Route Policy
+Tools / MCP / Skills
+Capital Binding
+Strategy Ownership
+Performance & Ranking
+Activity Monitor
+Policy Violations
+Training & Memory
+Evaluations
+Version History
+Audit
+```
+
+## Tab — Route Policy
+
+顯示 permission matrix：
+
+```text
+Capability
+Allowed
+Requires Approval
+Scope
+Lifecycle Limit
+Rate Limit
+Environment
+```
+
+Actions:
+
+```text
+Grant capability
+Revoke capability
+Change approval rule
+Change rate limit
+Submit policy change approval
+Rollback policy version
+```
+
+## Tab — Tools / MCP / Skills
+
+顯示三個矩陣：
+
+```text
+Tool permissions
+MCP permissions
+Skill permissions
+```
+
+Actions:
+
+```text
+Grant Tool
+Revoke Tool
+Grant MCP Tool
+Revoke MCP Tool
+Grant Skill
+Revoke Skill
+Test as Persona
+```
+
+## Tab — Activity Monitor
+
+顯示：
+
+```text
+Current task
+Active sessions
+Running jobs
+Recent tool calls
+Recent MCP calls
+Recent skill calls
+Generated strategies
+Generated notes
+Policy violations
+Open feedback
+```
+
+Actions:
+
+```text
+Pause persona
+Restrict tools temporarily
+Reassign task
+Open violation
+Create training feedback
+Run evaluation
+```
+
+## Tab — Training & Memory
+
+顯示：
+
+```text
+Approved memories
+Pending memories
+Rejected memories
+Training examples
+Feedback queue
+```
+
+Actions:
+
+```text
+Approve memory
+Reject memory
+Edit memory
+Merge memory
+Convert feedback to training example
+```
+
+## BFF APIs
+
+```text
+GET /bff/personas/:id
+GET /bff/personas/:id/route-policy
+GET /bff/personas/:id/tool-permissions
+GET /bff/personas/:id/activity
+GET /bff/personas/:id/memory
+GET /bff/personas/:id/evaluations
+POST /bff/personas/:id/actions/:actionId
+```
+
+## Acceptance Criteria
+
+```text
+Persona Detail 必須同時管理身份、權限、資金、策略、活動、記憶與訓練。
+Route policy 與 Tools/MCP/Skills permission 必須清楚可見。
+Policy change 必須能進 approval flow。
+```
+
+---
+
+# 10. Page — Capital Pool List
+
+## Route
+
+```text
+/management/capital
+```
+
+## Goal
+
+管理資金池、risk budget、persona/strategy binding、current exposure 與調倉狀態。
+
+## Table Columns
+
+```text
+Pool ID
+Name
+Status
+Mandate
+Total Capital
+Allocated Capital
+Available Capital
+Risk Budget
+Risk Usage
+Linked Personas
+Linked Strategies
+Current Rebalance
+Open Alerts
+Actions
+```
+
+## Main Actions
+
+```text
+Create Capital Pool
+Open Detail
+Freeze Pool
+Unfreeze Pool
+Create Rebalance
+Edit Mandate
+```
+
+## BFF APIs
+
+```text
+GET /bff/capital-pools
+POST /bff/capital-pools
+POST /bff/capital-pools/:id/actions/freeze
+POST /bff/capital-pools/:id/actions/unfreeze
+POST /bff/capital-pools/:id/actions/create-rebalance
+```
+
+---
+
+# 11. Page — Capital Pool Detail
+
+## Route
+
+```text
+/management/capital/:poolId
+```
+
+## Tabs
+
+```text
+Overview
+Mandate
+Persona Binding
+Strategy Binding
+Risk Budget
+Current Exposure
+Performance
+Ranking Inputs
+Rebalance History
+Overrides
+Alerts
+Audit
+```
+
+## Key Actions
+
+```text
+Edit Mandate
+Set Risk Budget
+Bind Persona
+Unbind Persona
+Bind Strategy
+Unbind Strategy
+Freeze Pool
+Unfreeze Pool
+Create Quarterly Rebalance
+Apply Override
+Open Incident
+```
+
+## Acceptance Criteria
+
+```text
+Capital Pool Detail 必須同時顯示設定與現況。
+Current Exposure 必須包含 persona exposure、strategy exposure、risk usage。
+Rebalance history 必須可追蹤。
+```
+
+---
+
+# 12. Page — Performance Ranking
+
+## Route
+
+```text
+/management/ranking
+```
+
+## Goal
+
+管理 persona / strategy / alpha family / capital pool 的績效排名。
+
+## Layout
+
+```text
+Ranking Scope Tabs
+├── Persona Ranking
+├── Strategy Ranking
+├── Alpha Family Ranking
+├── Capital Pool Ranking
+├── Paper Strategy Ranking
+└── Live Strategy Ranking
+
+Formula Selector
+Ranking Table
+Score Breakdown Drawer
+```
+
+## Table Columns
+
+```text
+Rank
+Entity
+Score
+Previous Rank
+Rank Change
+Return
+Sharpe
+Sortino
+Max Drawdown
+Volatility
+Turnover
+Risk Violations
+Formula Version
+Recommended Allocation
+Actions
+```
+
+## Actions
+
+```text
+Recalculate
+Change Formula
+Freeze Ranking
+Publish Ranking
+Apply Override
+Open Score Breakdown
+Compare Formula Results
+```
+
+## BFF APIs
+
+```text
+GET /bff/rankings
+GET /bff/rankings/:scope
+POST /bff/rankings/:scope/actions/recalculate
+POST /bff/rankings/:scope/actions/publish
+POST /bff/rankings/:scope/actions/freeze
+POST /bff/rankings/:scope/actions/override
+```
+
+---
+
+# 13. Page — Formula Studio
+
+## Route
+
+```text
+/management/ranking/formulas
+```
+
+## Goal
+
+管理績效排序公式與資金配置公式。
+
+## Layout
+
+```text
+Formula List
+Formula Editor
+Metric Library
+Weight Builder
+Penalty Builder
+Preview / Backtest Panel
+Version History
+```
+
+## Formula Fields
+
+```text
+Formula name
+Scope
+Version
+Status
+Metrics
+Weights
+Penalties
+Normalization method
+Caps / floors
+Outlier handling
+Effective date
+```
+
+## Actions
+
+```text
+Create Formula
+Clone Formula
+Edit Formula
+Test Formula
+Backtest on Past Quarters
+Compare Formula Versions
+Submit Approval
+Activate Formula
+Rollback Formula
+Retire Formula
+```
+
+## Acceptance Criteria
+
+```text
+Formula Studio 必須支援權重、penalty、normalization、caps/floors。
+必須能比較公式版本。
+Activate formula 必須走 high-risk confirmation 或 approval。
+```
+
+---
+
+# 14. Page — Quarterly Rebalance
+
+## Route
+
+```text
+/management/rebalance
+/management/rebalance/:rebalanceId
+```
+
+## Goal
+
+管理每季依據投資績效重新排序與資金池調整。
+
+## List Columns
+
+```text
+Rebalance ID
+Quarter
+Capital Pool
+Status
+Formula Version
+Metric Freeze Status
+Ranking Status
+Simulation Status
+Approval Status
+Effective Date
+Actions
+```
+
+## Detail Workflow Steps
+
+```text
+1. Metric Freeze
+2. Ranking Calculation
+3. Allocation Simulation
+4. Constraint Check
+5. Manual Override
+6. Review
+7. Approval
+8. Schedule
+9. Apply
+10. Monitor
+11. Rollback
+```
+
+## Actions
+
+```text
+Create Rebalance
+Freeze Metrics
+Unfreeze Metrics
+Calculate Ranking
+Run Simulation
+Apply Override
+Submit Review
+Approve
+Schedule
+Apply Rebalance
+Rollback
+Publish Report
+```
+
+## BFF APIs
+
+```text
+GET /bff/rebalances
+GET /bff/rebalances/:id
+POST /bff/rebalances
+POST /bff/rebalances/:id/actions/freeze-metrics
+POST /bff/rebalances/:id/actions/calculate-ranking
+POST /bff/rebalances/:id/actions/run-simulation
+POST /bff/rebalances/:id/actions/apply-override
+POST /bff/rebalances/:id/actions/submit-review
+POST /bff/rebalances/:id/actions/approve
+POST /bff/rebalances/:id/actions/apply
+POST /bff/rebalances/:id/actions/rollback
+```
+
+## Acceptance Criteria
+
+```text
+Quarterly Rebalance 頁必須是流程式 UI。
+必須顯示 ranking result、allocation simulation、constraint warnings、manual overrides。
+Apply rebalance 必須是 high-risk action。
+```
+
+---
+
+# 15. Page — Evolution Steering
+
+## Route
+
+```text
+/management/evolution
+/management/evolution/:programId
+```
+
+## Goal
+
+管理 alpha 演化方向、fitness formula、mutation rules、runs、candidate promotion。
+
+## List Columns
+
+```text
+Program ID
+Name
+Target Alpha Family
+Owner Persona
+Status
+Fitness Formula
+Active Runs
+Best Candidate
+Open Jobs
+Last Result
+Actions
+```
+
+## Detail Tabs
+
+```text
+Overview
+Direction
+Fitness Formula
+Mutation Rules
+Constraints
+Active Runs
+Candidates
+Experiments
+Alerts
+Approvals
+Audit
+```
+
+## Actions
+
+```text
+Create Program
+Edit Direction
+Set Fitness Formula
+Set Mutation Rules
+Set Constraints
+Assign Persona
+Start Run
+Pause Run
+Stop Run
+Inspect Candidate
+Promote Candidate to Strategy
+Retire Program
+```
+
+## Acceptance Criteria
+
+```text
+Evolution Program 必須能管理方向，不只是顯示結果。
+Candidate 必須能轉成 scaffolded strategy proposal。
+Fitness formula changes 必須可審批。
+```
+
+---
+
+# 16. Page — Research & Experiments
+
+## Route
+
+```text
+/management/experiments
+/management/experiments/:experimentId
+```
+
+## Goal
+
+管理 experiments 與追蹤長任務。
+
+## Table Columns
+
+```text
+Experiment ID
+Strategy
+Owner Persona
+Engine
+Type
+Status
+Current Step
+Metrics
+Produced Artifact
+Attached Review
+Started At
+Duration
+Actions
+```
+
+## Actions
+
+```text
+Create Experiment
+Run
+Pause
+Cancel
+Retry
+Clone
+Compare
+Invalidate
+Attach to Review
+Create Incident
+Open Logs
+```
+
+## Detail Tabs
+
+```text
+Overview
+Config
+Metrics
+Charts
+Logs
+Artifacts
+Evidence
+Audit
+```
+
+## BFF APIs
+
+```text
+GET /bff/experiments
+GET /bff/experiments/:id
+POST /bff/experiments
+POST /bff/experiments/:id/actions/run
+POST /bff/experiments/:id/actions/cancel
+POST /bff/experiments/:id/actions/retry
+POST /bff/experiments/:id/actions/invalidate
+```
+
+---
+
+# 17. Page — Governance & Approvals
+
+## Route
+
+```text
+/management/governance
+/management/governance/:reviewId
+```
+
+## Goal
+
+集中管理所有高風險操作審批。
+
+## Approval Types
+
+```text
+Strategy Review
+Paper Promotion
+Live Promotion
+Rollback
+Capital Rebalance
+Ranking Formula Change
+Persona Policy Change
+Tool Permission Change
+MCP Approval
+Skill Approval
+Evolution Program Approval
+```
+
+## Table Columns
+
+```text
+Request ID
+Type
+Target Object
+Requested By
+Risk Level
+Required Approvers
+Status
+Age
+Linked Evidence
+Actions
+```
+
+## Detail Layout
+
+```text
+Left: Request Summary
+Center: Evidence / Validator Results
+Right: Decision Panel
+Bottom: Audit Timeline
+```
+
+## Decision Actions
+
+```text
+Approve
+Reject
+Request Changes
+Escalate
+Attach Memo
+Freeze Target
+```
+
+## Acceptance Criteria
+
+```text
+Approval detail 必須顯示 before / after、risk、evidence、validator result。
+所有 decision 必須要求 memo。
+```
+
+---
+
+# 18. Page — Deployment, Runtime & Risk
+
+## Routes
+
+```text
+/management/deployment
+/management/runtimes
+/management/risk
+```
+
+## Deployment Page
+
+顯示：
+
+```text
+Paper deployments
+Live deployments
+Deployment status
+Current artifact
+Runtime
+Capital allocation
+Rollback target
+```
+
+Actions:
+
+```text
+Schedule Deployment
+Pause
+Resume
+Rollback
+Retire
+Open Incident
+```
+
+## Runtime Page
+
+Columns:
+
+```text
+Runtime ID
+Status
+Heartbeat
+Running Strategies
+CPU
+Memory
+Queue Depth
+Broker Connection
+Order Latency
+Last Error
+Open Incidents
+Actions
+```
+
+Actions:
+
+```text
+Restart Runtime
+Drain Runtime
+Move Strategy
+Disable New Deployments
+Open Logs
+Open Incident
+```
+
+## Risk Center
+
+顯示：
+
+```text
+Capital Risk
+Strategy Risk
+Persona Risk
+Runtime Risk
+Tool / MCP / Skill Risk
+```
+
+Actions:
+
+```text
+Acknowledge
+Assign
+Open Incident
+Ask Persona
+Mitigate
+Escalate
+```
+
+---
+
+# 19. Page — Incident Center
+
+## Route
+
+```text
+/management/incidents
+/management/incidents/:incidentId
+```
+
+## List Columns
+
+```text
+Incident ID
+Severity
+Status
+Linked Strategy
+Linked Runtime
+Linked Capital Pool
+Owner
+Created At
+Last Update
+Actions
+```
+
+## Detail Sections
+
+```text
+Incident Summary
+Timeline
+Linked Alerts
+Affected Strategies
+Affected Capital
+Root Cause Hypothesis
+Actions Taken
+Mitigation
+Postmortem
+Training Feedback
+Evolution Constraint
+Audit
+```
+
+## Actions
+
+```text
+Assign Owner
+Ask Persona Analysis
+Pause Strategy
+Rollback
+Create Postmortem
+Create Training Feedback
+Create Evolution Constraint
+Close Incident
+```
+
+## Acceptance Criteria
+
+```text
+Incident 必須能連回 strategy、runtime、capital pool、training feedback、evolution constraint。
+Incident close 前若 severity high，必須要求 postmortem。
+```
+
+---
+
+# 20. Page — Tools Management
+
+## Route
+
+```text
+/management/tools
+```
+
+## Goal
+
+管理 generic tools 與 persona tool permissions。
+
+## Columns
+
+```text
+Tool ID
+Name
+Type
+Status
+Side Effect Level
+Risk Level
+Allowed Personas
+Requires Approval
+Last Health Check
+Last Used
+Error Rate
+Actions
+```
+
+## Actions
+
+```text
+Register Tool
+Edit Schema
+Classify Risk
+Assign Persona
+Set Approval Rule
+Disable Tool
+Retire Tool
+View Calls
+```
+
+---
+
+# 21. Page — MCP Management
+
+## Route
+
+```text
+/management/mcp
+/management/mcp/:serverId
+```
+
+## Goal
+
+管理 MCP servers、MCP tools、schemas、secrets、permissions、calls。
+
+## Server Columns
+
+```text
+Server ID
+Name
+Transport
+Endpoint
+Status
+Tools Count
+Auth Type
+Allowed Personas
+Risk Level
+Last Health Check
+Actions
+```
+
+## Detail Tabs
+
+```text
+Overview
+Connection
+Tools
+Schemas
+Permissions
+Secrets
+Health
+Calls
+Audit
+```
+
+## Actions
+
+```text
+Add MCP Server
+Edit Connection
+Test Connection
+Discover Tools
+Import Schemas
+Grant Persona Permission
+Revoke Permission
+Rotate Secret
+Disable Server
+Delete Server
+```
+
+## Acceptance Criteria
+
+```text
+MCP tools 必須能以 permission matrix 指派給 persona。
+Sensitive MCP permission changes 必須走 approval。
+```
+
+---
+
+# 22. Page — Skill Management
+
+## Route
+
+```text
+/management/skills
+/management/skills/:skillId
+```
+
+## Goal
+
+管理 skill registry、draft、sandbox、approval、version、persona permission。
+
+## Skill Columns
+
+```text
+Skill ID
+Name
+Status
+Version
+Author
+Risk Level
+Required Tools
+Allowed Personas
+Validation Status
+Sandbox Result
+Last Used
+Actions
+```
+
+## Detail Tabs
+
+```text
+Overview
+Source / Definition
+Sandbox Tests
+Security Scan
+Risk Classification
+Permissions
+Versions
+Calls
+Approval History
+Audit
+```
+
+## Actions
+
+```text
+Create Skill
+Import Skill
+Generate Draft
+Run Sandbox Test
+Run Security Scan
+Classify Risk
+Approve Skill
+Assign Persona
+Revoke Persona
+Rollback Version
+Deprecate
+Retire
+```
+
+## Acceptance Criteria
+
+```text
+Skill 不可從 draft 直接 active。
+必須經過 sandbox / scan / approval。
+Skill permissions 必須能按 persona 管理。
+```
+
+---
+
+# 23. Page — Knowledge, Artifacts & Lineage
+
+## Routes
+
+```text
+/management/artifacts
+/management/artifacts/:artifactId
+/management/lineage
+```
+
+## Artifact Columns
+
+```text
+Artifact ID
+Type
+Version
+Strategy
+Produced By
+Status
+Hash
+Approved For
+Used In Runtime
+Created At
+Actions
+```
+
+## Actions
+
+```text
+Open Artifact
+Compare Version
+Promote Artifact
+Deprecate Artifact
+Set Rollback Target
+Attach Evidence
+View Lineage
+```
+
+## Lineage Page
+
+支援 entity filter：
+
+```text
+strategy
+artifact
+experiment
+deployment
+incident
+persona
+```
+
+顯示 graph：
+
+```text
+Insight → Strategy → Experiment → Artifact → Review → Promotion → Deployment → Telemetry → Incident → Postmortem
+```
+
+---
+
+# 24. Page — Jobs
+
+## Route
+
+```text
+/management/jobs
+```
+
+## Columns
+
+```text
+Job ID
+Type
+Target Object
+Triggered By
+Persona
+Status
+Progress
+Current Step
+Started At
+Duration
+Output
+Actions
+```
+
+## Actions
+
+```text
+Open Logs
+Cancel
+Retry
+Clone
+Attach Result
+Create Incident
+```
+
+## BFF APIs
+
+```text
+GET /bff/jobs
+GET /bff/jobs/:id
+GET /bff/jobs/:id/logs
+POST /bff/jobs/:id/actions/cancel
+POST /bff/jobs/:id/actions/retry
+```
+
+---
+
+# 25. Page — Audit
+
+## Route
+
+```text
+/management/audit
+```
+
+## Filters
+
+```text
+entity type
+entity id
+actor
+event type
+risk level
+date range
+approval status
+```
+
+## Columns
+
+```text
+Timestamp
+Actor
+Event Type
+Entity
+Before
+After
+Risk Level
+Approval ID
+Audit Memo
+```
+
+## Entity Audit Timeline
+
+任何 entity detail page 都可嵌入 AuditTimeline。
+
+---
+
+# 26. Page — Settings
+
+## Route
+
+```text
+/management/settings
+```
+
+## Sections
+
+```text
+User & Roles
+Locales
+BFF Connection
+Feature Flags
+Notification Rules
+Risk Threshold Defaults
+Environment Settings
+Audit Retention
+```
+
+## i18n Settings
+
+```text
+Default locale
+Supported locales
+User locale override
+Translation fallback
+```
+
+---
+
+# 27. Management Console Empty / Loading / Error Patterns
+
+## Empty State Examples
+
+```text
+No strategies found.
+No pending approvals.
+No running jobs.
+No open incidents.
+No MCP servers configured.
+No skill drafts waiting for approval.
+```
+
+每個 empty state 都要有合適 CTA：
+
+```text
+Create Strategy
+Add MCP Server
+Create Skill Draft
+Open Agora Insight Inbox
+```
+
+## Loading State
+
+使用 skeleton，不要整頁空白。
+
+## Error State
+
+顯示：
+
+```text
+Error title
+Short explanation
+Retry button
+BFF status
+Optional diagnostics drawer
+```
+
+---
+
+# 28. Management Console Acceptance Criteria
+
+Lovable 完成 Part 3 對應建置後，至少需要滿足：
+
+```text
+Management Console sidebar 結構完整。
+Command Center 顯示管理 + 執行現況。
+Strategy list / detail 可管理 lifecycle 與執行狀態。
+Persona list / detail 可管理 role、policy、tools、MCP、skills、capital、activity。
+Capital / Ranking / Rebalance 頁可管理公式、排名、調倉流程。
+Evolution 頁可管理方向、fitness formula、runs、candidates。
+Experiments 頁可追蹤 job 與 metrics。
+Governance 頁可處理 approval。
+Deployment / Runtime / Risk 頁可追蹤與反應執行現況。
+Tools / MCP / Skills 頁可管理權限與審批。
+Artifacts / Lineage 頁可追蹤完整鏈路。
+Jobs / Audit 頁可追蹤所有操作。
+所有高風險操作都有 confirmation modal。
+所有頁面支援 zh-TW / en-US translation keys。
+所有 action 先走 mock BFF client。
+
+
+---
+
+# Part 4 — Agora Workbench 使用者流程盤點
+**版本**: v1.0  
+**語系**: zh-TW  
+**適用對象**: Lovable 前端建置、產品設計、BFF 設計、Pantheon 團隊審查  
+**範圍**: Pantheon Agora Workbench 的使用者角色、日常工作流程、資料捕捉、與 Management Console 的交接流程。
+
+---
+
+# 1. 本文件目的
+
+Part 1 已定義 Pantheon Platform 的總體切分：
+
+```text
+Pantheon Management Console
+= 管理、監控、審批、部署、反應、回滾、審計。
+
+Pantheon Agora Workbench
+= 分析師、交易者、AI 訓練師日常使用的 AI 工作台。
+```
+
+Part 2 與 Part 3 已聚焦 Management Console。  
+本文件 Part 4 專門盤點 **Pantheon Agora Workbench** 的完整使用者流程。
+
+本文件暫時不設計每個頁面的詳細 layout，而是先回答：
+
+```text
+誰會使用 Agora？
+他們每天為什麼會進來？
+每個工作流程如何幫助分析師 / 交易者 / AI 訓練師？
+哪些互動會自然產生可用資料？
+哪些產物會送回 Management Console？
+哪些操作在 Agora 裡禁止執行？
+```
+
+Part 5 才會把這些流程轉成 Lovable 可建置的頁面規格。
+
+---
+
+# 2. Agora 的產品定位
+
+Pantheon Agora Workbench 不是「AI 訓練後台」，也不是「聊天工具」。
+
+它應該是：
+
+> 給分析師、交易者、AI 訓練師每天使用的 AI 協作工作台。
+
+Agora 的核心價值是：
+
+```text
+1. 幫分析師更快理解市場、策略與 signal。
+2. 幫交易者 review signal、alert、風險與決策。
+3. 讓使用者能自然詢問 AI persona 與 multi-persona committee。
+4. 讓研究筆記、交易判斷、AI 回答、human correction 自然轉成 structured insight。
+5. 把真正有用的資訊送回 Pantheon Management Console，進一步變成策略、研究任務、訓練資料、review evidence 或風控回饋。
+```
+
+換句話說：
+
+```text
+Agora 表面上是分析師 / 交易者的輔助工作台。
+Agora 背後是 Pantheon 的高品質人類判斷與 AI 訓練資料收集層。
+```
+
+資料收集不應該靠強迫填表，而是透過使用者自然工作流程產生。
+
+---
+
+# 3. Agora 與 Management Console 的邊界
+
+## 3.1 Agora 可以做的事情
+
+```text
+查看市場摘要
+查看 watchlist
+查看 paper / live 策略摘要
+review strategy signal
+詢問 AI persona
+召開 committee room
+寫研究筆記
+建立交易決策日誌
+triage alert
+產生 trader insight
+產生 research task request
+產生 strategy idea proposal
+產生 training example
+產生 memory review item
+產生 skill draft
+產生 MCP / tool request
+產生 committee memo
+```
+
+## 3.2 Agora 不可以直接做的事情
+
+Agora 不應直接執行高風險管理操作：
+
+```text
+不可直接 promote strategy to paper
+不可直接 promote strategy to live
+不可直接 apply capital rebalance
+不可直接改 ranking formula
+不可直接改 capital allocation
+不可直接 deploy live artifact
+不可直接 rollback live strategy
+不可直接 grant production MCP tool
+不可直接 approve production skill
+不可直接修改 persona route policy 的 active version
+```
+
+如果使用者在 Agora 裡產生這類需求，只能建立 request / proposal，送到 Management Console 的正式治理流程。
+
+範例：
+
+```text
+Trader 在 Agora Signal Review 中認為某 live strategy 應該降權
+→ Agora 建立 risk_feedback + allocation_review_request
+→ Management Console 的 Capital / Risk / Governance queue 顯示待處理項目
+→ Risk Officer / Capital Manager 在 Management Console 裡審查與批准
+```
+
+---
+
+# 4. Agora 主要使用者角色
+
+## 4.1 Analyst
+
+分析師主要使用 Agora 來：
+
+```text
+看 market summary
+整理 research notebook
+詢問 AI persona 對策略或市場的看法
+把市場觀察轉成 insight
+把研究假設轉成 strategy idea 或 experiment request
+比較不同 persona 的觀點
+```
+
+分析師最需要的是：
+
+```text
+快速理解資料
+方便寫筆記
+能把筆記轉成可執行研究任務
+能追蹤自己提出的 idea 後來變成什麼
+```
+
+## 4.2 Trader
+
+交易者主要使用 Agora 來：
+
+```text
+review strategy signal
+review alert
+理解 live / paper strategy 的異常
+記錄 decision rationale
+詢問 AI persona
+召開 quick committee
+標註 signal 是否合理
+標註 alert 是否 noise
+```
+
+交易者最需要的是：
+
+```text
+快速知道發生什麼事
+快速知道策略為什麼發出 signal
+快速知道 AI personas 是否同意
+能輕鬆記錄自己為什麼採納 / 拒絕某個 signal
+```
+
+## 4.3 AI Trainer
+
+AI 訓練師主要使用 Agora 來：
+
+```text
+審查 AI 回答
+接受 / 拒絕 training feedback
+管理 training examples
+審查 memory
+觀察 persona drift
+建立或修正 persona behavior rules
+把錯誤回答轉成 evaluation case
+把 skill idea 轉成 draft skill
+```
+
+AI Trainer 最需要的是：
+
+```text
+清楚知道 AI 哪裡錯
+能把人類修正轉成訓練資料
+能審查 memory 是否應該保存
+能把 skill draft 送到 Management Console 正式審批
+```
+
+## 4.4 Research Assistant
+
+Research Assistant 可以做：
+
+```text
+整理資料
+標註 insight
+準備 committee evidence pack
+整理 notebook
+建立 research task draft
+```
+
+## 4.5 Portfolio Observer
+
+Portfolio Observer 可以看：
+
+```text
+daily summary
+signal review
+alerts
+persona commentary
+decision journal
+```
+
+但不能進行高風險 action。
+
+---
+
+# 5. Agora 的核心資料產物
+
+Agora 每個工作流程都應該產生 structured artifacts，而不是只留下 chat log。
+
+核心產物：
+
+```text
+Insight
+SignalFeedback
+TraderNote
+ResearchNote
+ResearchTaskRequest
+StrategyIdeaProposal
+DecisionJournalEntry
+PersonaResponseFeedback
+TrainingExample
+MemoryReviewItem
+CommitteeMemo
+AlertTriageRecord
+SkillDraft
+MCPToolRequest
+RiskFeedback
+PostmortemInput
+```
+
+這些產物會送回 Management Console 進一步管理。
+
+---
+
+# 6. Agora 工作流程總覽
+
+Agora 必須支援以下主要使用者流程：
+
+```text
+W1. Daily Trading Cockpit Workflow
+W2. Market & Watchlist Workflow
+W3. Strategy Signal Review Workflow
+W4. Research Notebook Workflow
+W5. Ask Personas Workflow
+W6. Committee Room Workflow
+W7. Decision Journal Workflow
+W8. Alert Triage Workflow
+W9. Insight Inbox Workflow
+W10. AI Trainer Feedback Workflow
+W11. Memory Review Workflow
+W12. Skill Coaching Workflow
+W13. Persona Lab Workflow
+W14. Evaluation Workflow
+W15. Channel / External Conversation Workflow
+W16. Agora → Management Handoff Workflow
+```
+
+以下逐一盤點。
+
+---
+
+# 7. W1 — Daily Trading Cockpit Workflow
+
+## 7.1 使用者
+
+```text
+Trader
+Analyst
+Portfolio Observer
+Research Lead
+```
+
+## 7.2 目的
+
+Daily Trading Cockpit 是 Agora 的首頁。  
+它要讓使用者每天一進來就知道：
+
+```text
+今天市場發生什麼？
+有哪些重要 signal？
+哪些 strategy 需要注意？
+有哪些 alerts 需要人工判斷？
+AI personas 今天有什麼摘要或分歧？
+我昨天留下的 research questions 有什麼進展？
+```
+
+## 7.3 主要流程
+
+```text
+1. 使用者打開 Daily Trading Cockpit。
+2. 系統顯示市場摘要、watchlist 變化、strategy highlights、alerts、persona daily brief。
+3. 使用者可以點開任一 item 查看 context。
+4. 使用者可以標記重要 / 不重要。
+5. 使用者可以詢問 persona。
+6. 使用者可以把 item 轉成 insight、research note、strategy idea 或 alert triage record。
+7. 系統把這些行為轉成 structured event。
+```
+
+## 7.4 主要資料區塊
+
+```text
+Market Summary
+Watchlist Movers
+Strategy Highlights
+Signal Highlights
+Open Alerts
+Persona Briefs
+Research Questions
+Incoming Insights
+```
+
+## 7.5 使用者操作
+
+```text
+Mark as Important
+Dismiss
+Ask Persona
+Open Signal Review
+Open Alert Triage
+Create Trader Note
+Create Insight
+Create Research Task
+Create Strategy Idea
+Send to Committee
+```
+
+## 7.6 自然捕捉的資料
+
+```text
+使用者每天關心哪些市場
+哪些 signal 被打開
+哪些 alerts 被認為重要
+哪些 AI persona brief 被使用者採納
+哪些市場摘要被轉成 research note
+哪些 item 被 dismiss 為 noise
+```
+
+## 7.7 送回 Management Console 的產物
+
+```text
+Insight
+ResearchTaskRequest
+StrategyIdeaProposal
+AlertTriageRecord
+PersonaResponseFeedback
+```
+
+## 7.8 禁止操作
+
+Daily Cockpit 不可直接：
+
+```text
+deploy strategy
+rollback strategy
+change capital allocation
+approve promotion
+apply rebalance
+```
+
+---
+
+# 8. W2 — Market & Watchlist Workflow
+
+## 8.1 使用者
+
+```text
+Analyst
+Trader
+Research Assistant
+```
+
+## 8.2 目的
+
+幫助使用者追蹤市場與 watchlist，並把市場觀察轉成可用 research insight。
+
+## 8.3 主要流程
+
+```text
+1. 使用者查看 watchlist。
+2. 系統顯示價格變化、事件摘要、相關策略 exposure、相關 signals、AI commentary。
+3. 使用者對某個標的或市場事件做 annotation。
+4. 使用者可詢問 persona：「為什麼這個標的今天異動？」
+5. 使用者可把 annotation 轉成 insight 或 strategy idea。
+```
+
+## 8.4 主要資料區塊
+
+```text
+Watchlist
+Market Events
+Price / Volume / Volatility Summary
+Related Strategies
+Related Signals
+Persona Commentary
+Trader Annotations
+```
+
+## 8.5 使用者操作
+
+```text
+Add Watchlist Item
+Remove Watchlist Item
+Add Annotation
+Ask Why Moved
+Ask Related Strategies
+Ask Persona
+Create Insight
+Create Strategy Idea
+Attach to Existing Strategy
+Create Research Task
+```
+
+## 8.6 自然捕捉的資料
+
+```text
+使用者關心的標的
+市場事件與策略的人工連結
+交易者對 regime change 的判斷
+哪些標的常被拿來問 AI
+哪些市場觀察被轉成策略假設
+```
+
+## 8.7 送回 Management Console 的產物
+
+```text
+MarketInsight
+StrategyIdeaProposal
+ResearchTaskRequest
+StrategyAnnotation
+```
+
+---
+
+# 9. W3 — Strategy Signal Review Workflow
+
+## 9.1 使用者
+
+```text
+Trader
+Analyst
+Risk Officer observer
+```
+
+## 9.2 目的
+
+讓交易者 review 策略 signal 是否合理，並自然捕捉人類對 signal 的判斷。
+
+這是 Agora 最重要的資料捕捉流程之一。
+
+## 9.3 主要流程
+
+```text
+1. 系統列出最新或重要 strategy signals。
+2. 使用者點開 signal。
+3. 系統顯示 signal explanation、strategy context、market context、similar historical cases、persona opinions。
+4. 使用者標記 Agree / Disagree / Unsure / Flag Suspicious。
+5. 使用者可以輸入 rationale。
+6. 使用者可以詢問 persona 或召開 committee。
+7. 使用者可以把 signal feedback 轉成 research task、risk feedback 或 strategy improvement request。
+```
+
+## 9.4 Signal Review 必須顯示
+
+```text
+Signal ID
+Strategy
+Asset
+Direction
+Timestamp
+Confidence
+Expected Holding Period
+Current Market Context
+Key Features
+Historical Similar Cases
+Backtest / Paper / Live Context
+Risk Warnings
+Persona Opinions
+Related Alerts
+```
+
+## 9.5 使用者操作
+
+```text
+Agree
+Disagree
+Unsure
+Flag Suspicious
+Add Rationale
+Ask Persona
+Ask Committee
+Create Research Task
+Create Risk Feedback
+Attach to Decision Journal
+Create Training Example from Persona Explanation
+```
+
+## 9.6 自然捕捉的資料
+
+```text
+交易者同意哪些 signal
+交易者不同意哪些 signal
+不同意的理由
+哪些 market regime 被人類認為不同
+哪些 features 被人類懷疑
+哪些 persona 解釋有幫助
+哪些 signal 後續真的失效
+```
+
+## 9.7 送回 Management Console 的產物
+
+```text
+SignalFeedback
+RiskFeedback
+StrategyImprovementRequest
+ResearchTaskRequest
+PersonaResponseFeedback
+DecisionJournalLink
+```
+
+## 9.8 禁止操作
+
+Signal Review 不可直接：
+
+```text
+cancel live order
+change live allocation
+rollback live strategy
+approve / reject live promotion
+```
+
+可以建立 request：
+
+```text
+Request Risk Review
+Request Strategy Pause
+Request Allocation Review
+```
+
+---
+
+# 10. W4 — Research Notebook Workflow
+
+## 10.1 使用者
+
+```text
+Analyst
+Research Assistant
+Trader
+AI Trainer
+```
+
+## 10.2 目的
+
+Research Notebook 是分析師整理想法與轉換研究任務的地方。  
+它要像真正好用的研究筆記，而不是資料庫表單。
+
+## 10.3 主要流程
+
+```text
+1. 使用者建立 note。
+2. 使用者可以插入 market event、strategy、signal、chart、persona response、experiment result。
+3. 使用者用 markdown / structured fields 記錄想法。
+4. 使用者可以請 persona expand / critique / summarize。
+5. 使用者可以把 note 轉成 insight、strategy idea、experiment request、committee question。
+```
+
+## 10.4 Note Types
+
+```text
+Market Observation
+Strategy Hypothesis
+Risk Concern
+Model Failure
+Paper Summary
+Postmortem Thought
+Trader Intuition
+Experiment Idea
+```
+
+## 10.5 使用者操作
+
+```text
+Create Note
+Edit Note
+Pin Note
+Attach Strategy
+Attach Signal
+Attach Market Event
+Ask Persona to Expand
+Ask Persona to Critique
+Convert to Insight
+Convert to Strategy Idea
+Convert to Experiment Request
+Send to Committee
+Archive Note
+```
+
+## 10.6 自然捕捉的資料
+
+```text
+分析師真正的研究假設
+交易者的市場 regime 判斷
+策略失效直覺
+常被提到的 feature / market / risk
+哪些筆記被轉成正式策略或實驗
+```
+
+## 10.7 送回 Management Console 的產物
+
+```text
+ResearchNote
+Insight
+StrategyIdeaProposal
+ExperimentRequest
+CommitteeQuestion
+```
+
+---
+
+# 11. W5 — Ask Personas Workflow
+
+## 11.1 使用者
+
+```text
+Analyst
+Trader
+AI Trainer
+Research Assistant
+```
+
+## 11.2 目的
+
+讓使用者在有上下文的情況下詢問 AI persona，不是空白聊天。
+
+## 11.3 主要流程
+
+```text
+1. 使用者選擇 context：market / signal / strategy / alert / note / incident。
+2. 使用者選擇 persona。
+3. 使用者選擇 mode：explain / critique / propose / red-team / summarize / compare。
+4. Persona 回答。
+5. 使用者可以標記 useful / not useful / incorrect。
+6. 使用者可以把回答保存為 note、insight、training example 或 committee input。
+```
+
+## 11.4 Persona Ask Modes
+
+```text
+Explain
+Critique
+Propose
+Red-Team
+Summarize
+Compare
+Find Risk
+Suggest Experiment
+Generate Questions
+```
+
+## 11.5 使用者操作
+
+```text
+Select Persona
+Select Context
+Ask Question
+Rate Response
+Correct Response
+Save as Note
+Create Insight
+Create Training Example
+Ask Another Persona
+Start Committee
+Attach to Strategy
+```
+
+## 11.6 自然捕捉的資料
+
+```text
+哪些 persona 對哪些問題有幫助
+哪些回答被使用者採納
+哪些回答被修正
+哪類問題最常被問
+哪個 persona 在哪類任務上表現不好
+```
+
+## 11.7 送回 Management Console 的產物
+
+```text
+PersonaResponseFeedback
+TrainingExample
+ResearchNote
+Insight
+CommitteeSeed
+```
+
+---
+
+# 12. W6 — Committee Room Workflow
+
+## 12.1 使用者
+
+```text
+Analyst
+Trader
+Research Lead
+Reviewer
+AI Trainer
+```
+
+## 12.2 目的
+
+讓多個 AI persona 對同一個 strategy / signal / alert / incident / note 進行 structured debate。
+
+Committee Room 不是普通群聊。它要輸出可用的 committee memo 或 review evidence。
+
+## 12.3 主要流程
+
+```text
+1. 使用者選擇 target object：strategy / signal / alert / incident / note。
+2. 選擇 committee template。
+3. 選擇 personas。
+4. 系統載入 evidence pack。
+5. Personas 依照 round 發言。
+6. 使用者可以追問。
+7. 系統整理 disagreement、risk objections、recommendations。
+8. 產生 committee memo。
+9. 使用者可以送到 Management Console 的 Governance / Review。
+```
+
+## 12.4 Committee Templates
+
+```text
+Strategy Review
+Signal Trustworthiness Review
+Risk Red-Team
+Live Incident Review
+Paper-to-Live Promotion Debate
+Postmortem Discussion
+New Strategy Ideation
+```
+
+## 12.5 使用者操作
+
+```text
+Create Committee Session
+Select Target
+Select Personas
+Add Evidence
+Ask Follow-up
+Mark Strong Argument
+Mark Weak Argument
+Generate Memo
+Submit Memo to Governance
+Create Research Task
+Create Training Example
+```
+
+## 12.6 自然捕捉的資料
+
+```text
+persona 之間的分歧
+使用者採納哪個論點
+哪些 risk objection 有價值
+committee memo 是否促成 review approval
+哪些 persona 常提供有用反駁
+```
+
+## 12.7 送回 Management Console 的產物
+
+```text
+CommitteeMemo
+ReviewEvidence
+ResearchTaskRequest
+RiskFeedback
+TrainingExample
+```
+
+---
+
+# 13. W7 — Decision Journal Workflow
+
+## 13.1 使用者
+
+```text
+Trader
+Analyst
+Portfolio Observer
+```
+
+## 13.2 目的
+
+記錄交易者與分析師的真實判斷與 rationale。  
+這是高價值資料來源。
+
+## 13.3 主要流程
+
+```text
+1. 使用者建立 decision entry。
+2. 連結 strategy / signal / alert / market event。
+3. 記錄 decision、rationale、confidence、expected outcome。
+4. 可詢問 persona。
+5. 設定 follow-up date。
+6. 後續標記 actual outcome。
+7. 系統把 decision 和 outcome 轉成 training / ranking / strategy improvement signals。
+```
+
+## 13.4 Journal Entry 欄位
+
+```text
+Date
+Linked Strategy
+Linked Signal
+Linked Market Event
+Decision
+Rationale
+Confidence
+Expected Outcome
+Risk Concern
+Personas Consulted
+Follow-up Date
+Actual Outcome
+Outcome Review
+```
+
+## 13.5 使用者操作
+
+```text
+Create Decision Entry
+Link Signal
+Link Strategy
+Ask Persona
+Add Rationale
+Set Confidence
+Schedule Follow-up
+Mark Outcome
+Convert to Insight
+Convert to Training Example
+Create Strategy Improvement Request
+```
+
+## 13.6 自然捕捉的資料
+
+```text
+交易者的真實決策邏輯
+交易者信心與結果的關係
+AI 建議是否被採納
+AI 建議是否改善結果
+哪些策略常需要人工 override
+```
+
+## 13.7 送回 Management Console 的產物
+
+```text
+DecisionJournalEntry
+TraderJudgementSignal
+PersonaTrustSignal
+StrategyImprovementRequest
+TrainingExample
+```
+
+---
+
+# 14. W8 — Alert Triage Workflow
+
+## 14.1 使用者
+
+```text
+Trader
+Analyst
+Risk Officer observer
+```
+
+## 14.2 目的
+
+讓分析師 / 交易者協助判斷 alerts 是否重要，並補充市場脈絡。
+
+Management Console 管正式 incident。  
+Agora Alert Triage 管使用者判斷與解釋。
+
+## 14.3 主要流程
+
+```text
+1. 使用者看到 alert。
+2. 系統顯示 alert summary、strategy context、market context、persona explanation、similar incidents。
+3. 使用者標記：noise / important / needs investigation / escalate。
+4. 使用者可添加 trader interpretation。
+5. 使用者可詢問 persona 或開 committee。
+6. 若升級，送到 Management Console Incident Center。
+```
+
+## 14.4 使用者操作
+
+```text
+Acknowledge
+Dismiss as Noise
+Mark Important
+Needs Investigation
+Ask Persona
+Start Committee
+Add Trader Interpretation
+Escalate to Incident
+Create Research Task
+```
+
+## 14.5 自然捕捉的資料
+
+```text
+哪些 alerts 是 noise
+哪些 alerts 真正重要
+交易者如何判斷嚴重性
+哪些 alert pattern 需要新規則
+哪些 persona 解釋有幫助
+```
+
+## 14.6 送回 Management Console 的產物
+
+```text
+AlertTriageRecord
+RiskFeedback
+IncidentEscalationRequest
+ResearchTaskRequest
+PostmortemInput
+```
+
+---
+
+# 15. W9 — Insight Inbox Workflow
+
+## 15.1 使用者
+
+```text
+Analyst
+Trader
+Research Assistant
+AI Trainer
+```
+
+## 15.2 目的
+
+集中處理從 Agora 自然產生的 insight candidates。
+
+## 15.3 Insight Sources
+
+```text
+Trader Note
+Signal Feedback
+Research Notebook
+Persona Answer
+Committee Discussion
+Alert Triage
+Decision Journal
+Market Annotation
+Postmortem Input
+```
+
+## 15.4 主要流程
+
+```text
+1. 系統收集 insight candidates。
+2. 使用者 review candidate。
+3. 使用者分類與標籤。
+4. 使用者決定轉成 strategy idea、research task、training example、risk feedback 或 archive。
+5. 重要項目送到 Management Console。
+```
+
+## 15.5 使用者操作
+
+```text
+Classify
+Tag
+Set Priority
+Promote to Strategy Idea
+Attach to Existing Strategy
+Create Research Task
+Create Training Example
+Send to Committee
+Archive
+Dismiss
+```
+
+## 15.6 送回 Management Console 的產物
+
+```text
+Insight
+StrategyIdeaProposal
+ResearchTaskRequest
+TrainingExample
+RiskFeedback
+```
+
+---
+
+# 16. W10 — AI Trainer Feedback Workflow
+
+## 16.1 使用者
+
+```text
+AI Trainer
+Research Lead
+Analyst
+```
+
+## 16.2 目的
+
+讓 AI Trainer 管理人類回饋，並把它轉成訓練資料、persona rule update 或 evaluation case。
+
+## 16.3 Feedback Sources
+
+```text
+Persona response marked incorrect
+Trader correction
+Analyst correction
+Signal explanation disagreement
+Committee weak argument
+Memory conflict
+Bad tool use
+Policy violation
+```
+
+## 16.4 主要流程
+
+```text
+1. 系統收集 feedback item。
+2. AI Trainer review。
+3. AI Trainer 選擇處理方式：ignore / create training example / update behavior rule / create eval case / request persona policy change。
+4. 若涉及 persona active version，送到 Management Console 審批。
+```
+
+## 16.5 使用者操作
+
+```text
+Accept Feedback
+Reject Feedback
+Create Training Example
+Create Evaluation Case
+Update Draft Behavior Rule
+Submit Persona Update Request
+Mark Duplicate
+Archive
+```
+
+## 16.6 送回 Management Console 的產物
+
+```text
+TrainingExample
+PersonaUpdateRequest
+EvaluationCase
+PolicyReviewRequest
+```
+
+---
+
+# 17. W11 — Memory Review Workflow
+
+## 17.1 使用者
+
+```text
+AI Trainer
+Analyst
+Research Lead
+```
+
+## 17.2 目的
+
+管理 AI persona 的 memory 是否應保存、修改、合併、移動或刪除。
+
+## 17.3 Memory Types
+
+```text
+Persona Private Memory
+Shared Knowledge Memory
+Trader Feedback Memory
+Research Memory
+Do-Not-Remember Item
+Sensitive Memory
+```
+
+## 17.4 Memory 狀態
+
+```text
+proposed
+approved
+rejected
+edited
+merged
+moved
+deprecated
+deleted
+sensitive
+```
+
+## 17.5 使用者操作
+
+```text
+Approve Memory
+Reject Memory
+Edit Memory
+Merge Memory
+Move to Private
+Move to Shared
+Mark Sensitive
+Mark Do-Not-Remember
+Delete Memory
+Resolve Conflict
+```
+
+## 17.6 送回 Management Console 的產物
+
+```text
+MemoryApprovalEvent
+MemoryPolicyEvent
+PersonaMemoryUpdate
+SharedKnowledgeUpdate
+```
+
+---
+
+# 18. W12 — Skill Coaching Workflow
+
+## 18.1 使用者
+
+```text
+AI Trainer
+Analyst
+Capability Admin observer
+```
+
+## 18.2 目的
+
+把使用者日常需求轉成 skill draft，但不直接上線。  
+正式 approval 必須在 Management Console 的 Skill Management 裡完成。
+
+## 18.3 主要流程
+
+```text
+1. 使用者從 conversation / note / repeated task 產生 skill idea。
+2. AI 產生 skill draft。
+3. AI Trainer 編輯 skill description、expected input/output、risk notes。
+4. 在 Agora 裡做 sandbox preview。
+5. Submit to Management Skill Approval。
+```
+
+## 18.4 使用者操作
+
+```text
+Create Skill Idea
+Generate Skill Draft
+Edit Draft
+Define Expected Inputs
+Define Expected Outputs
+Add Risk Notes
+Run Sandbox Preview
+Submit to Skill Approval
+Archive Draft
+```
+
+## 18.5 送回 Management Console 的產物
+
+```text
+SkillDraft
+SkillApprovalRequest
+CapabilityRequest
+ToolRequirementRequest
+```
+
+## 18.6 禁止操作
+
+Agora Skill Coaching 不可直接：
+
+```text
+approve skill
+assign production skill to persona
+grant MCP permission
+deploy skill into live runtime
+```
+
+---
+
+# 19. W13 — Persona Lab Workflow
+
+## 19.1 使用者
+
+```text
+AI Trainer
+Research Lead
+Admin observer
+```
+
+## 19.2 目的
+
+建立或測試新 persona draft，並送到 Management Console 進行正式 activation / policy approval。
+
+## 19.3 主要流程
+
+```text
+1. 建立 persona draft 或 clone existing persona。
+2. 設定 role、style、risk appetite、research preference。
+3. 使用 scenario tests 測試 persona。
+4. 和既有人格版本比較。
+5. 產生 persona activation proposal。
+6. 送到 Management Console 審批。
+```
+
+## 19.4 使用者操作
+
+```text
+Create Persona Draft
+Clone Persona
+Edit Draft Rules
+Run Simulation
+Run Scenario Test
+Compare Versions
+Generate Persona Proposal
+Submit to Management Approval
+Archive Draft
+```
+
+## 19.5 送回 Management Console 的產物
+
+```text
+PersonaDraft
+PersonaActivationRequest
+PersonaVersionProposal
+RoutePolicyDraft
+```
+
+---
+
+# 20. W14 — Evaluation Workflow
+
+## 20.1 使用者
+
+```text
+AI Trainer
+Research Lead
+Reviewer
+```
+
+## 20.2 目的
+
+評估 persona 在不同任務上的品質。
+
+## 20.3 Evaluation Types
+
+```text
+Risk Caution Suite
+Evidence Quality Suite
+Tool Use Suite
+Hallucination Suite
+Trading Scenario Suite
+Committee Debate Suite
+Memory Consistency Suite
+Signal Explanation Suite
+```
+
+## 20.4 主要流程
+
+```text
+1. 選擇 persona version。
+2. 選擇 evaluation suite。
+3. Run evaluation。
+4. 查看 failures。
+5. 將 failure 轉成 training example 或 behavior rule update。
+6. 若新版本通過，送 Management Console 審批。
+```
+
+## 20.5 送回 Management Console 的產物
+
+```text
+EvaluationRun
+EvaluationFailure
+PersonaVersionProposal
+TrainingExample
+```
+
+---
+
+# 21. W15 — Channel / External Conversation Workflow
+
+## 21.1 使用者
+
+```text
+Trader
+Analyst
+AI Trainer
+Admin
+```
+
+## 21.2 目的
+
+支援 Web、Telegram、Discord 或其他 channel 的對話入口，但所有高風險操作仍不可在 external channel 直接執行。
+
+## 21.3 Channel 類型
+
+```text
+Web Agora
+Telegram
+Discord
+Webhook
+Optional Slack / Email
+```
+
+## 21.4 管理 / 使用流程
+
+```text
+1. 使用者在外部 channel 與 persona 互動。
+2. 系統將對話同步到 Agora session。
+3. 可從對話中建立 insight / training example / note。
+4. 若外部 channel 嘗試高風險操作，只建立 request，不直接執行。
+```
+
+## 21.5 送回 Management Console 的產物
+
+```text
+ChannelSession
+ExternalInsight
+TrainingExample
+ActionRequest
+```
+
+---
+
+# 22. W16 — Agora → Management Handoff Workflow
+
+## 22.1 目的
+
+把 Agora 產生的使用者工作產物送到 Management Console 正式流程。
+
+## 22.2 Handoff 類型
+
+```text
+Insight → Management Insight Queue
+Strategy Idea → Strategy / Alpha Management
+Research Task → Research & Experiments
+Committee Memo → Governance Review Evidence
+Training Example → Persona Training Governance
+Memory Update → Persona Memory Governance
+Skill Draft → Skill Management Approval
+MCP Tool Request → MCP Management Approval
+Risk Feedback → Risk Center / Incident Center
+Decision Journal Outcome → Performance / Persona Evaluation
+```
+
+## 22.3 Handoff 狀態
+
+```text
+draft
+submitted
+accepted
+rejected
+converted
+archived
+```
+
+## 22.4 使用者操作
+
+```text
+Submit to Management
+Set Priority
+Assign Target Object
+Add Rationale
+Attach Evidence
+Withdraw Submission
+View Management Status
+```
+
+## 22.5 必要 UX
+
+Agora 使用者必須能看到：
+
+```text
+我提交的 insight 後來去哪裡了？
+我的 strategy idea 是否被接受？
+我的 training feedback 是否被採用？
+我的 signal disagreement 是否變成 research task？
+```
+
+因此 Agora 需要 `My Submissions` 或在 Insight Inbox 中顯示 handoff status。
+
+---
+
+# 23. Agora 的自然資料捕捉設計
+
+Agora 不應要求使用者填複雜表單。  
+應該把日常操作轉成 structured events。
+
+## 23.1 Captured Events
+
+```text
+signal_feedback
+persona_response_feedback
+trader_note_created
+research_note_created
+decision_journal_created
+alert_triage_recorded
+committee_memo_generated
+memory_review_decision
+training_example_created
+skill_draft_created
+insight_promoted
+```
+
+## 23.2 範例：Signal Feedback
+
+```json
+{
+  "eventType": "signal_feedback",
+  "actorType": "trader",
+  "actorId": "trader_001",
+  "targetType": "signal",
+  "targetId": "signal_9821",
+  "linkedStrategyId": "alpha_042",
+  "feedback": "disagree",
+  "reason": "Market regime appears different after the macro event.",
+  "confidence": 0.72,
+  "createdAt": "2026-05-03T09:30:00Z"
+}
+```
+
+## 23.3 範例：Persona Response Feedback
+
+```json
+{
+  "eventType": "persona_response_feedback",
+  "personaId": "persona_A",
+  "sessionId": "session_123",
+  "linkedStrategyId": "alpha_017",
+  "rating": "useful",
+  "usedForDecision": true,
+  "convertedToNote": true,
+  "createdAt": "2026-05-03T09:35:00Z"
+}
+```
+
+---
+
+# 24. Agora 權限原則
+
+## 24.1 Agora 可以建立 request
+
+Agora 使用者可以建立：
+
+```text
+ResearchTaskRequest
+StrategyIdeaProposal
+SkillApprovalRequest
+MCPToolRequest
+RiskReviewRequest
+PersonaUpdateRequest
+```
+
+## 24.2 Agora 不直接執行高風險 action
+
+不允許：
+
+```text
+direct live deployment
+direct rollback
+direct capital rebalance
+direct route policy activation
+direct MCP production grant
+direct skill production approval
+```
+
+## 24.3 不同角色顯示不同功能
+
+```text
+Trader: Signal Review, Alert Triage, Decision Journal, Ask Personas
+Analyst: Notebook, Market Watchlist, Insight Inbox, Committee
+AI Trainer: Trainer Studio, Memory Review, Skill Coaching, Persona Lab, Evaluations
+Observer: read-only view
+```
+
+---
+
+# 25. Agora i18n / 語系要求
+
+Agora 必須支援：
+
+```text
+zh-TW
+en-US
+```
+
+UI 文字必須使用 translation keys。  
+使用者產生內容不強制翻譯，但可提供：
+
+```text
+Translate View
+Summarize in Current Language
+```
+
+AI persona 預設跟隨 session language：
+
+```text
+Follow UI Language
+zh-TW
+en-US
+Mixed / Original
+```
+
+---
+
+# 26. Lovable 實作重點提示
+
+Part 5 會細化頁面，但 Lovable 在理解 Part 4 時需注意：
+
+```text
+1. Agora 是分析師 / 交易者工作台，不是 AI 管理後台。
+2. Daily Trading Cockpit 是 Agora 首頁。
+3. Chat 不是唯一互動形式，必須有 signal review、notebook、journal、triage。
+4. 每個 workflow 都要能產生 structured artifact。
+5. Agora 不能直接做 Management Console 的高風險操作。
+6. Agora 必須能顯示提交到 Management Console 的 status。
+7. AI Trainer 功能要存在，但不要讓它壓過交易者 / 分析師日常入口。
+```
+
+---
+
+# 27. Part 4 Acceptance Criteria
+
+Part 4 規格完成後，Lovable 後續建 Part 5 時必須確保：
+
+```text
+Agora 有清楚的 trader / analyst / AI trainer 使用流程。
+Daily Trading Cockpit 是主要入口。
+Signal Review 能捕捉 agree / disagree / rationale。
+Research Notebook 能轉 insight / strategy idea / experiment request。
+Ask Personas 支援 context-aware 問答。
+Committee Room 產生 committee memo。
+Decision Journal 捕捉 decision rationale 與 outcome。
+Alert Triage 能把 alert 判斷送回 Management Console。
+Insight Inbox 能處理從日常工作產生的 insight candidates。
+Trainer Studio / Memory Review / Skill Coaching / Persona Lab 存在，但不是 Agora 的唯一重點。
+Agora 所有高風險操作都只能建立 request，不能直接執行。
+Agora 所有關鍵互動都能產生 structured events。
+Agora 支援 zh-TW / en-US 語系切換。
+```
+
+---
+
+# 28. 下一份文件
+
+下一份是：
+
+```text
+Part 5 — Pantheon Agora Workbench 頁面與功能設計
+```
+
+Part 5 會把本文件的工作流程轉成 Lovable 可建置的頁面規格，包括：
+
+```text
+route
+layout
+components
+tables
+cards
+drawers
+chat/session canvas
+signal review panel
+notebook editor
+decision journal editor
+committee room UI
+BFF API
+realtime events
+empty/loading/error states
+role-based UX
+acceptance criteria
+```
+
+
+---
+
+# Part 5 — Agora Workbench 頁面與功能設計
+版本：v1.0  
+語系：繁體中文（zh-TW）  
+目標讀者：Lovable、前端工程、產品設計、BFF 設計  
+關聯文件：
+- Part 1 — Master Blueprint
+- Part 4 — Agora Workbench 使用者流程盤點
+
+---
+
+## 1. 本文件目的
+
+本文件將 Part 4 盤點出的 Agora Workbench 使用者流程，轉換為 Lovable 可開始建置的前端頁面規格。
+
+Agora Workbench 的主要使用者不是 Pantheon 的管理者，而是：
+
+```text
+分析師
+交易者
+AI 訓練師
+研究助理
+投資組合觀察者
+```
+
+因此 Agora 不應該做成「管理後台」或「AI 訓練資料庫」。它應該像一個真正能幫助分析師與交易者工作的 AI 輔助工作台。
+
+Agora 的核心任務是：
+
+```text
+幫助使用者理解市場
+幫助使用者 review strategy signals
+幫助使用者問 AI personas
+幫助使用者寫研究筆記
+幫助使用者記錄交易決策
+幫助使用者處理 alert triage
+幫助 AI 訓練師審查 feedback / memory / skill draft
+在日常使用中自然產生 insight、training example、research task、strategy proposal
+```
+
+Agora 不直接執行高風險管理操作：
+
+```text
+不直接 deploy live strategy
+不直接 apply capital rebalance
+不直接改 ranking formula
+不直接授權 MCP / Tool / Skill 到 production
+不直接改 live capital allocation
+不直接 rollback live strategy
+```
+
+Agora 只能產生 request、proposal、insight、memo、training feedback，送回 Management Console 進入正式審批與管理流程。
+
+---
+
+## 2. Agora Workbench 產品原則
+
+### 2.1 Workflow-first，不是 admin-first
+
+Agora 的入口要從使用者每天真實工作開始，而不是從系統物件管理開始。
+
+主要工作流：
+
+```text
+每日市場與策略概況
+市場與 watchlist 分析
+策略 signal review
+研究筆記
+詢問 AI persona
+多 persona committee
+交易決策日誌
+alert triage
+insight inbox
+AI 訓練與 memory review
+```
+
+### 2.2 AI-assisted，但不要所有東西都變成聊天
+
+AI persona 對話很重要，但 Agora 不應該只有一個聊天框。不同場景應有不同 UI：
+
+```text
+Signal Review 用 signal panel + persona commentary
+Research Notebook 用 editor + AI sidecar
+Committee 用 structured rounds
+Decision Journal 用 structured decision form
+Alert Triage 用 alert context + action cards
+Ask Personas 才是完整對話頁
+```
+
+### 2.3 自然蒐集高品質資料
+
+Agora 的資料蒐集應來自使用者日常動作：
+
+```text
+agree / disagree signal
+flag suspicious signal
+write trader note
+ask persona
+mark AI answer useful / not useful
+convert note to insight
+create research task
+start committee
+record decision outcome
+correct persona response
+approve / reject memory
+```
+
+這些動作背後會產生 structured events，供 Management Console、Persona Training、Strategy Improvement、Risk Review 使用。
+
+### 2.4 使用者友善
+
+Agora 的 UX 應比 Management Console 更低摩擦：
+
+```text
+少用高密度表格
+多用卡片、上下文面板、筆記、時間線、對話、快速標註
+保留一鍵轉 insight / research task / training example
+把複雜管理流程藏在 handoff drawer 裡
+```
+
+---
+
+## 3. Agora Workbench 主導航
+
+Route group：
+
+```text
+/agora
+```
+
+左側導覽建議分組：
+
+```text
+Daily Work
+- Daily Trading Cockpit
+- Market & Watchlist
+- Signal Review
+- Alert Triage
+
+Research
+- Research Notebook
+- Insight Inbox
+- Decision Journal
+
+AI Collaboration
+- Ask Personas
+- Committee Room
+
+Training
+- Trainer Studio
+- Memory Review
+- Skill Coaching
+- Persona Lab
+- Evaluations
+
+Channels
+- Channels
+```
+
+完整 route list：
+
+```text
+/agora/daily
+/agora/markets
+/agora/watchlist
+/agora/signals
+/agora/signals/:signalId
+/agora/notebook
+/agora/notebook/:noteId
+/agora/ask
+/agora/sessions/:sessionId
+/agora/committee
+/agora/committee/:sessionId
+/agora/journal
+/agora/journal/:entryId
+/agora/triage
+/agora/triage/:alertId
+/agora/insights
+/agora/trainer
+/agora/trainer/:personaId
+/agora/memory
+/agora/skill-coaching
+/agora/skill-coaching/:draftId
+/agora/persona-lab
+/agora/persona-lab/:draftPersonaId
+/agora/evaluations
+/agora/evaluations/:evaluationId
+/agora/channels
+```
+
+---
+
+## 4. Agora 共用 Layout
+
+### 4.1 頁面基本結構
+
+```text
+Global Top Bar
+├── Product Switcher
+├── Current Locale
+├── Search
+├── BFF Status
+├── Notifications
+└── User Menu
+
+Agora Sidebar
+├── Daily Work
+├── Research
+├── AI Collaboration
+├── Training
+└── Channels
+
+Main Canvas
+└── Page-specific content
+
+Right Context Panel / Drawer
+├── Selected entity inspector
+├── Persona sidecar
+├── Insight conversion
+├── Training feedback
+└── Linked objects
+```
+
+### 4.2 Right Context Panel 類型
+
+Agora 頁面應共用右側 contextual panel。
+
+支援：
+
+```text
+Signal Inspector
+Market Inspector
+Persona Inspector
+Message Inspector
+Note Inspector
+Alert Inspector
+Insight Conversion Panel
+Training Feedback Panel
+Linked Strategy Panel
+```
+
+### 4.3 全域快速操作
+
+所有 Agora 頁面應支援快速操作：
+
+```text
+Ask Persona
+Create Note
+Create Insight
+Create Research Task
+Start Committee
+Create Training Example
+Attach to Strategy
+Send to Management
+```
+
+這些操作的顯示與可用性由 BFF 回傳的 `availableActions` 決定。
+
+---
+
+## 5. Page Spec Format
+
+後續每個頁面使用以下格式：
+
+```text
+Page Name
+Route
+Primary Users
+Goal
+Main User Value
+Layout
+Primary Data
+Main Components
+Primary Actions
+Secondary Actions
+Captured Signals
+BFF APIs
+Realtime Events
+Empty State
+Loading State
+Error State
+Permission Rules
+Acceptance Criteria
+```
+
+---
+
+# 6. Daily Trading Cockpit
+
+## Route
+
+```text
+/agora/daily
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+Research Assistant
+Portfolio Observer
+```
+
+## Goal
+
+讓分析師與交易者每天進入 Agora 時，立即知道今天需要關注什麼。
+
+## Main User Value
+
+```text
+不用打開多個頁面，就能看到市場摘要、策略 signal、風險 alert、AI persona brief、待處理研究問題。
+```
+
+## Layout
+
+```text
+Header: 日期、交易日狀態、市場時區、session language
+Top Cards:
+- Market Brief
+- Strategy Signals Needing Review
+- Open Alerts
+- Persona Daily Brief
+- Watchlist Changes
+
+Main Grid:
+Left: Daily Brief Feed
+Center: Priority Work Queue
+Right: Persona Suggestions / Quick Ask
+Bottom: Recent Notes / Decisions / Insights
+```
+
+## Main Components
+
+```text
+DailyBriefCard
+MarketSummaryCard
+PrioritySignalCard
+OpenAlertCard
+PersonaBriefCard
+WatchlistChangeCard
+DailyWorkQueue
+QuickAskPersonaBox
+RecentInsightList
+```
+
+## Primary Actions
+
+```text
+Review Signal
+Ask Persona
+Create Trader Note
+Create Insight
+Create Research Task
+Start Committee
+Open Alert Triage
+Dismiss Item
+Mark Important
+```
+
+## Captured Signals
+
+```text
+which cards user opens
+which alerts user dismisses
+which signals user reviews
+which persona briefs user expands
+which items are marked important
+which items are converted to insight / task
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/daily
+POST /bff/agora/insights
+POST /bff/agora/research-tasks
+POST /bff/agora/events/interaction
+POST /bff/agora/sessions
+```
+
+## Realtime Events
+
+```text
+market.brief_updated
+signal.created
+risk.alert_created
+persona.brief_ready
+job.completed
+```
+
+## Empty State
+
+```text
+今日尚無重要事項。你可以查看 Watchlist、開啟 Research Notebook，或詢問 Persona。
+```
+
+## Loading State
+
+顯示 skeleton cards。
+
+## Error State
+
+```text
+無法載入每日摘要。請檢查 BFF 連線，或稍後重試。
+```
+
+## Permission Rules
+
+```text
+Trader: 可 review signal、寫 note、建立 insight、ask persona
+Analyst: 可建立 research task、note、insight
+Observer: 只能查看與建立個人 note
+AI Trainer: 可從 AI 回答建立 training example
+```
+
+## Acceptance Criteria
+
+```text
+頁面必須顯示每日摘要、priority queue、open alerts、persona brief。
+每個卡片都必須能開啟 detail drawer。
+使用者能從任何 priority item 建立 insight 或 research task。
+所有文字必須支援 zh-TW / en-US。
+```
+
+---
+
+# 7. Market & Watchlist
+
+## Route
+
+```text
+/agora/markets
+/agora/watchlist
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+Research Assistant
+```
+
+## Goal
+
+提供市場觀察與 watchlist 分析入口，讓使用者把市場直覺轉成可用 insight。
+
+## Layout
+
+```text
+Top: Market filter / asset universe / time range
+Left: Watchlist table or card list
+Center: Selected market / asset context
+Right: Persona commentary and note sidecar
+Bottom: Related strategies / signals / alerts
+```
+
+## Main Components
+
+```text
+WatchlistTable
+MarketEventFeed
+AssetContextCard
+RelatedStrategyList
+RelatedSignalList
+PersonaCommentaryPanel
+TraderAnnotationBox
+```
+
+## Primary Actions
+
+```text
+Add Watchlist Item
+Remove Watchlist Item
+Add Market Note
+Ask Why Moved
+Ask Related Strategies
+Create Insight
+Create Strategy Idea
+Attach to Existing Strategy
+Start Committee
+```
+
+## Captured Signals
+
+```text
+watchlist additions
+asset notes
+market regime tags
+ask-persona topics
+insight conversions
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/markets
+GET /bff/agora/watchlist
+POST /bff/agora/watchlist
+POST /bff/agora/market-notes
+POST /bff/agora/insights
+GET /bff/agora/assets/:assetId/context
+```
+
+## Realtime Events
+
+```text
+market.event_created
+watchlist.updated
+signal.created
+risk.alert_created
+```
+
+## Empty State
+
+```text
+尚未建立 Watchlist。新增你關注的市場或標的，讓 Agora 幫你追蹤相關策略、signal 與事件。
+```
+
+## Acceptance Criteria
+
+```text
+使用者能新增 watchlist item。
+使用者能對市場或標的新增 note。
+使用者能一鍵將 note 轉成 insight。
+右側 Persona Commentary 必須可切換 persona。
+```
+
+---
+
+# 8. Strategy Signal Review
+
+## Routes
+
+```text
+/agora/signals
+/agora/signals/:signalId
+```
+
+## Primary Users
+
+```text
+Trader
+Analyst
+Research Assistant
+```
+
+## Goal
+
+讓交易者與分析師 review 策略 signal，判斷 signal 是否合理，並自然收集人類 judgment。
+
+## Signal List Layout
+
+```text
+Header: filters by strategy, asset, severity, review status
+Main: Signal review queue
+Right: Selected signal quick inspector
+```
+
+## Signal Detail Layout
+
+```text
+Header: Signal ID, strategy, asset, direction, confidence, timestamp
+Top Summary: Signal explanation, risk tags, review status
+Tabs:
+- Explanation
+- Market Context
+- Similar Historical Cases
+- Persona Opinions
+- Trader Feedback
+- Linked Research Tasks
+- Audit
+Right Panel:
+- Agree / Disagree / Flag
+- Ask Persona
+- Create Research Task
+- Attach Rationale
+```
+
+## Main Components
+
+```text
+SignalQueueTable
+SignalExplanationPanel
+MarketContextPanel
+SimilarCaseList
+PersonaOpinionCards
+TraderFeedbackForm
+SignalReviewActionBar
+ResearchTaskCreationDrawer
+```
+
+## Primary Actions
+
+```text
+Agree
+Disagree
+Flag Suspicious
+Ask Persona
+Ask Committee
+Create Research Task
+Attach Trader Rationale
+Convert to Insight
+Mark Follow-up Needed
+```
+
+## Captured Signals
+
+```text
+signal_agree
+signal_disagree
+flag_reason
+trader_rationale
+persona_opinion_selected
+research_task_created
+committee_started
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/signals
+GET /bff/agora/signals/:signalId
+POST /bff/agora/signals/:signalId/feedback
+POST /bff/agora/signals/:signalId/flag
+POST /bff/agora/signals/:signalId/research-task
+POST /bff/agora/signals/:signalId/ask-persona
+POST /bff/agora/committee-sessions
+```
+
+## Realtime Events
+
+```text
+signal.created
+signal.updated
+persona.response_ready
+research_task.created
+```
+
+## Empty State
+
+```text
+目前沒有需要 review 的 signal。
+```
+
+## Error State
+
+```text
+無法載入 signal detail。請稍後重試。
+```
+
+## Permission Rules
+
+```text
+Trader: 可 agree / disagree / flag / attach rationale
+Analyst: 可 create research task / insight
+AI Trainer: 可把錯誤 AI 解釋轉成 training example
+Observer: read-only
+```
+
+## Acceptance Criteria
+
+```text
+Signal detail 必須顯示 explanation、market context、persona opinions。
+Agree / Disagree 必須要求可選 reason。
+Flag Suspicious 必須產生 structured feedback event。
+可從 signal 建立 research task。
+```
+
+---
+
+# 9. Research Notebook
+
+## Routes
+
+```text
+/agora/notebook
+/agora/notebook/:noteId
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+Research Assistant
+AI Trainer
+```
+
+## Goal
+
+讓使用者寫研究筆記、交易觀察、市場假設，並能一鍵轉成 insight、strategy idea、experiment request 或 training example。
+
+## Layout
+
+```text
+Notebook List:
+- filter by tag, strategy, asset, author, note type
+- note cards / table toggle
+
+Notebook Detail:
+Left: Note editor
+Right: AI sidecar / linked entities / conversion actions
+Bottom: version history / comments
+```
+
+## Main Components
+
+```text
+NotebookList
+NoteTypeBadge
+MarkdownEditor
+StructuredFieldsPanel
+LinkedEntityPanel
+AIAssistSidecar
+InsightConversionDrawer
+NoteVersionHistory
+```
+
+## Note Types
+
+```text
+Market Observation
+Strategy Hypothesis
+Risk Concern
+Model Failure
+Paper Summary
+Postmortem Thought
+Trader Intuition
+Training Feedback
+```
+
+## Primary Actions
+
+```text
+Create Note
+Edit Note
+Ask Persona to Expand
+Ask Persona to Critique
+Convert to Insight
+Convert to Strategy Idea
+Convert to Experiment Request
+Convert to Training Example
+Attach to Strategy
+Attach to Signal
+Send to Committee
+```
+
+## Captured Signals
+
+```text
+note_type
+linked_strategy
+linked_signal
+hypothesis_tags
+conversion_action
+AI assistance accepted / rejected
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/notes
+POST /bff/agora/notes
+GET /bff/agora/notes/:noteId
+PATCH /bff/agora/notes/:noteId
+POST /bff/agora/notes/:noteId/actions/convert-insight
+POST /bff/agora/notes/:noteId/actions/convert-strategy-idea
+POST /bff/agora/notes/:noteId/actions/convert-experiment-request
+POST /bff/agora/notes/:noteId/actions/ask-persona
+```
+
+## Realtime Events
+
+```text
+note.updated
+persona.response_ready
+insight.created
+research_task.created
+```
+
+## Empty State
+
+```text
+尚無研究筆記。建立第一則市場觀察、策略假設或風險疑慮。
+```
+
+## Acceptance Criteria
+
+```text
+支援 Markdown editor。
+使用者能標記 note type。
+使用者能 link strategy / signal / asset。
+使用者能一鍵轉 insight / strategy idea / experiment request。
+AI sidecar 不能自動改正文，必須由使用者確認採納。
+```
+
+---
+
+# 10. Ask Personas
+
+## Route
+
+```text
+/agora/ask
+/agora/sessions/:sessionId
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+AI Trainer
+Research Assistant
+```
+
+## Goal
+
+提供帶上下文的 AI persona 問答，不是無上下文聊天。
+
+## Layout
+
+```text
+Left: Session list / saved contexts
+Center: Conversation canvas
+Right: Context panel + persona panel + conversion actions
+Top: Persona selector, context selector, response mode, language selector
+```
+
+## Main Components
+
+```text
+PersonaSelector
+ContextPicker
+ResponseModeSelector
+ConversationCanvas
+MessageAnnotationBar
+PersonaMemoryHint
+SessionLanguageSelector
+ConversionActionDrawer
+```
+
+## Context Types
+
+```text
+Strategy
+Signal
+Market / Asset
+Alert
+Incident
+Research Note
+Decision Journal Entry
+Experiment
+Artifact
+```
+
+## Response Modes
+
+```text
+Explain
+Critique
+Propose
+Red-Team
+Summarize
+Compare
+Find Risk
+Suggest Experiment
+```
+
+## Primary Actions
+
+```text
+Ask Persona
+Ask Another Persona
+Save as Note
+Create Insight
+Create Training Example
+Attach to Strategy
+Start Committee
+Mark Useful
+Mark Not Useful
+Flag Incorrect
+```
+
+## Captured Signals
+
+```text
+question_intent
+context_type
+persona_selected
+response_mode
+useful / not useful
+converted_to_note
+converted_to_training_example
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/personas/available
+POST /bff/agora/sessions
+GET /bff/agora/sessions/:sessionId
+POST /bff/agora/sessions/:sessionId/messages
+POST /bff/agora/messages/:messageId/feedback
+POST /bff/agora/messages/:messageId/actions/create-note
+POST /bff/agora/messages/:messageId/actions/create-insight
+POST /bff/agora/messages/:messageId/actions/create-training-example
+```
+
+## Realtime Events
+
+```text
+session.message_created
+persona.response_stream
+persona.response_ready
+message.feedback_recorded
+```
+
+## Empty State
+
+```text
+選擇一個 persona 與上下文，開始詢問。
+```
+
+## Permission Rules
+
+```text
+AI Trainer: 可建立 training example
+Trader / Analyst: 可建立 note / insight / research task
+Observer: read-only sessions
+```
+
+## Acceptance Criteria
+
+```text
+Ask Personas 必須要求使用者選擇 persona 或使用 default persona。
+可選 context。
+每則 AI 回覆都必須有 Useful / Not Useful / Flag Incorrect。
+可以從回覆建立 note、insight、training example。
+語言必須可跟隨目前 locale 或 session language。
+```
+
+---
+
+# 11. Committee Room
+
+## Routes
+
+```text
+/agora/committee
+/agora/committee/:sessionId
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+Research Lead
+AI Trainer
+```
+
+## Goal
+
+提供 structured multi-persona debate，用於 strategy review、signal doubt、alert triage、incident analysis、research decision。
+
+## Layout
+
+```text
+Committee List:
+- open sessions
+- recent memos
+- templates
+
+Committee Detail:
+Header: target object, objective, participants, status
+Left: Agenda / Evidence Pack
+Center: Round-based discussion
+Right: Decision / Memo / Follow-up actions
+Bottom: timeline and artifacts
+```
+
+## Main Components
+
+```text
+CommitteeTemplatePicker
+ParticipantPersonaSelector
+EvidencePackPanel
+RoundTableConversation
+DisagreementCapturePanel
+VoteRecommendationPanel
+CommitteeMemoEditor
+FollowUpActionPanel
+```
+
+## Committee Templates
+
+```text
+Signal Trustworthiness Review
+Strategy Promotion Debate
+Risk Incident Analysis
+Market Regime Debate
+Postmortem Review
+Alpha Idea Red-Team
+```
+
+## Primary Actions
+
+```text
+Create Committee Session
+Add Persona
+Add Evidence
+Start Round
+Ask Follow-up
+Capture Objection
+Generate Memo
+Submit Memo to Governance
+Create Research Task
+Create Insight
+Close Session
+```
+
+## Captured Signals
+
+```text
+persona_disagreement
+objection_type
+accepted_argument
+trader_follow_up
+memo_submitted
+research_task_created
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/committee-sessions
+POST /bff/agora/committee-sessions
+GET /bff/agora/committee-sessions/:sessionId
+POST /bff/agora/committee-sessions/:sessionId/rounds
+POST /bff/agora/committee-sessions/:sessionId/memo
+POST /bff/agora/committee-sessions/:sessionId/actions/submit-governance
+```
+
+## Realtime Events
+
+```text
+committee.round_started
+committee.persona_response_ready
+committee.memo_generated
+committee.submitted_to_governance
+```
+
+## Empty State
+
+```text
+尚無 committee session。你可以從 signal、strategy、alert 或 research note 建立一個 committee。
+```
+
+## Acceptance Criteria
+
+```text
+Committee session 必須支援 target object。
+必須能選擇多個 persona。
+必須能產生 memo。
+Memo 可送到 Management Console 的 Governance / Review Evidence。
+```
+
+---
+
+# 12. Decision Journal
+
+## Routes
+
+```text
+/agora/journal
+/agora/journal/:entryId
+```
+
+## Primary Users
+
+```text
+Trader
+Analyst
+Portfolio Observer
+```
+
+## Goal
+
+捕捉交易者與分析師的真實判斷、信心、理由、結果，形成高價值訓練與策略改善資料。
+
+## Layout
+
+```text
+List View:
+- entries by date, strategy, asset, outcome, confidence
+
+Detail View:
+- structured decision form
+- linked signal / strategy / market
+- AI persona consulted
+- follow-up outcome
+- conversion actions
+```
+
+## Main Components
+
+```text
+DecisionJournalList
+DecisionEntryEditor
+ConfidenceSlider
+LinkedObjectPicker
+OutcomeTracker
+PersonaConsultationSummary
+FollowUpScheduler
+```
+
+## Entry Fields
+
+```text
+Date
+Market Context
+Linked Strategy
+Linked Signal
+Decision
+Rationale
+Confidence
+Expected Outcome
+Risk Concern
+Personas Consulted
+Follow-up Date
+Actual Outcome
+Lesson Learned
+```
+
+## Primary Actions
+
+```text
+Create Decision Entry
+Link Signal
+Link Strategy
+Ask Persona
+Schedule Follow-up
+Mark Outcome
+Convert to Insight
+Convert to Training Example
+Create Research Task
+```
+
+## Captured Signals
+
+```text
+decision_rationale
+confidence_score
+actual_outcome
+AI_advice_used
+human_override_reason
+lesson_learned
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/decision-journal
+POST /bff/agora/decision-journal
+GET /bff/agora/decision-journal/:entryId
+PATCH /bff/agora/decision-journal/:entryId
+POST /bff/agora/decision-journal/:entryId/actions/convert-insight
+POST /bff/agora/decision-journal/:entryId/actions/create-training-example
+```
+
+## Acceptance Criteria
+
+```text
+使用者能建立 structured decision entry。
+必須支援 confidence 與 actual outcome。
+可以連結 signal / strategy。
+可以轉 insight 或 training example。
+```
+
+---
+
+# 13. Alert Triage
+
+## Routes
+
+```text
+/agora/triage
+/agora/triage/:alertId
+```
+
+## Primary Users
+
+```text
+Trader
+Analyst
+Research Assistant
+```
+
+## Goal
+
+讓分析師 / 交易者協助判斷 alert 的市場與策略意義，產生可用風險回饋。
+
+## Layout
+
+```text
+Alert Queue:
+- severity, source, strategy, status
+
+Alert Detail:
+Header: alert severity, linked strategy, runtime, time
+Left: alert detail and timeline
+Center: market / strategy context
+Right: persona explanation and triage actions
+Bottom: similar past alerts / incidents
+```
+
+## Main Components
+
+```text
+AlertQueue
+AlertDetailCard
+MarketContextForAlert
+StrategyContextForAlert
+PersonaAlertExplanation
+SimilarIncidentList
+TriageActionPanel
+```
+
+## Primary Actions
+
+```text
+Acknowledge
+Dismiss as Noise
+Escalate to Incident
+Ask Persona
+Start Committee
+Add Trader Interpretation
+Create Research Task
+Create Risk Feedback
+```
+
+## Captured Signals
+
+```text
+alert_importance_label
+noise_label
+trader_interpretation
+escalation_reason
+persona_explanation_usefulness
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/alerts
+GET /bff/agora/alerts/:alertId
+POST /bff/agora/alerts/:alertId/actions/acknowledge
+POST /bff/agora/alerts/:alertId/actions/dismiss
+POST /bff/agora/alerts/:alertId/actions/escalate
+POST /bff/agora/alerts/:alertId/notes
+POST /bff/agora/alerts/:alertId/research-task
+```
+
+## Realtime Events
+
+```text
+risk.alert_created
+risk.alert_updated
+incident.created
+persona.response_ready
+```
+
+## Permission Rules
+
+```text
+Agora users may triage or escalate, but cannot pause / rollback directly.
+Pause / rollback must be performed in Management Console.
+```
+
+## Acceptance Criteria
+
+```text
+Alert detail 必須顯示 market context、strategy context、similar past incidents。
+Dismiss 必須可選 reason。
+Escalate 必須建立 incident request 或 handoff 到 Management Console。
+```
+
+---
+
+# 14. Insight Inbox
+
+## Route
+
+```text
+/agora/insights
+```
+
+## Primary Users
+
+```text
+Analyst
+Trader
+Research Assistant
+AI Trainer
+```
+
+## Goal
+
+集中處理由 Agora 日常使用自然產生的 insight candidate。
+
+## Layout
+
+```text
+Top: filters by source, type, priority, linked strategy, status
+Main: insight candidate list
+Right: selected insight detail and conversion actions
+```
+
+## Insight Sources
+
+```text
+Signal Review
+Research Notebook
+Ask Personas
+Committee Room
+Decision Journal
+Alert Triage
+Market Watchlist
+Trainer Feedback
+```
+
+## Primary Actions
+
+```text
+Promote to Strategy Idea
+Attach to Existing Strategy
+Create Research Task
+Create Training Example
+Send to Management Console
+Archive
+Merge Duplicate
+Set Priority
+Assign Persona
+```
+
+## Captured Signals
+
+```text
+which insights are promoted
+which are archived
+which source generates useful insights
+priority assigned by human
+linked strategy
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/insights
+GET /bff/agora/insights/:insightId
+PATCH /bff/agora/insights/:insightId
+POST /bff/agora/insights/:insightId/actions/promote-strategy
+POST /bff/agora/insights/:insightId/actions/create-research-task
+POST /bff/agora/insights/:insightId/actions/send-management
+POST /bff/agora/insights/:insightId/actions/archive
+```
+
+## Acceptance Criteria
+
+```text
+Insight Inbox 必須可依來源過濾。
+每條 insight 必須能被轉成 strategy idea / research task / training example。
+送出 Management Console 後狀態必須更新為 submitted_to_management。
+```
+
+---
+
+# 15. Trainer Studio
+
+## Routes
+
+```text
+/agora/trainer
+/agora/trainer/:personaId
+```
+
+## Primary Users
+
+```text
+AI Trainer
+Research Lead
+```
+
+## Goal
+
+管理 AI persona 的行為規則、feedback queue、training examples、evaluation results 與 drift。
+
+## Layout
+
+```text
+Persona selector
+Persona training summary
+Tabs:
+- Behavior Rules
+- Training Examples
+- Feedback Queue
+- Evaluation Suites
+- Drift Monitor
+- Version History
+```
+
+## Main Components
+
+```text
+PersonaTrainingHeader
+BehaviorRuleEditor
+TrainingExampleTable
+FeedbackQueue
+EvaluationSummaryCards
+DriftMonitorChart
+PersonaVersionHistory
+SubmitPersonaUpdatePanel
+```
+
+## Primary Actions
+
+```text
+Edit Behavior Rule Draft
+Add Training Example
+Accept Feedback
+Reject Feedback
+Run Evaluation
+Compare Persona Versions
+Submit Persona Update to Management
+Rollback Draft
+```
+
+## Captured Signals
+
+```text
+accepted_feedback
+rejected_feedback
+behavior_rule_change
+evaluation_failure
+persona_drift_signal
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/trainer/personas
+GET /bff/agora/trainer/personas/:personaId
+PATCH /bff/agora/trainer/personas/:personaId/draft-rules
+POST /bff/agora/trainer/personas/:personaId/training-examples
+POST /bff/agora/trainer/feedback/:feedbackId/actions/accept
+POST /bff/agora/trainer/feedback/:feedbackId/actions/reject
+POST /bff/agora/trainer/personas/:personaId/actions/run-evaluation
+POST /bff/agora/trainer/personas/:personaId/actions/submit-management
+```
+
+## Permission Rules
+
+```text
+Only AI Trainer and Research Lead can edit behavior rules or submit persona updates.
+Trader can create feedback but cannot edit persona rules.
+```
+
+## Acceptance Criteria
+
+```text
+Trainer Studio 必須能看到 feedback queue。
+可從 feedback 建立 training example。
+Persona rule changes must remain draft until submitted to Management Console.
+```
+
+---
+
+# 16. Memory Review
+
+## Route
+
+```text
+/agora/memory
+```
+
+## Primary Users
+
+```text
+AI Trainer
+Research Lead
+Admin
+```
+
+## Goal
+
+審查、合併、刪除、移動、標記 AI persona memory。
+
+## Layout
+
+```text
+Filters: persona, memory type, status, confidence, source
+Main: memory queue table / cards
+Right: memory detail, source message, actions
+```
+
+## Memory Types
+
+```text
+Core Rule
+Private Note
+Conversation Memory
+Trader Feedback
+Research Memory
+Shared Knowledge
+Do-Not-Remember
+```
+
+## Primary Actions
+
+```text
+Approve Memory
+Reject Memory
+Edit Memory
+Merge Memory
+Move to Shared
+Move to Private
+Mark Sensitive
+Mark Do-Not-Remember
+Delete Memory
+Create Training Example
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/memory
+GET /bff/agora/memory/:memoryId
+POST /bff/agora/memory/:memoryId/actions/approve
+POST /bff/agora/memory/:memoryId/actions/reject
+PATCH /bff/agora/memory/:memoryId
+POST /bff/agora/memory/:memoryId/actions/merge
+POST /bff/agora/memory/:memoryId/actions/mark-sensitive
+```
+
+## Acceptance Criteria
+
+```text
+Memory item 必須顯示 source session / message。
+Approve / Reject 必須留下 reviewer 與 timestamp。
+Sensitive memory 必須有明顯標示。
+```
+
+---
+
+# 17. Skill Coaching
+
+## Routes
+
+```text
+/agora/skill-coaching
+/agora/skill-coaching/:draftId
+```
+
+## Primary Users
+
+```text
+AI Trainer
+Analyst
+Capability Admin
+```
+
+## Goal
+
+把使用者需求或 AI 對話轉成 skill draft，但不直接上線。Skill draft 必須送 Management Console 的 Skill Approval。
+
+## Layout
+
+```text
+Draft List:
+- skill drafts by status, author, persona, risk
+
+Draft Detail:
+Header: draft name, status, risk estimate
+Tabs:
+- Requirement
+- Draft Design
+- Input / Output Schema
+- Sandbox Test
+- Risk Notes
+- Management Handoff
+```
+
+## Draft Status
+
+```text
+idea
+drafting
+ready_for_sandbox
+sandbox_failed
+sandbox_passed
+submitted_to_management
+rejected
+archived
+```
+
+## Primary Actions
+
+```text
+Create Skill Idea
+Generate Draft
+Edit Requirement
+Edit Schema
+Run Sandbox Test
+Add Risk Note
+Submit to Management Skill Approval
+Archive Draft
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/skill-drafts
+POST /bff/agora/skill-drafts
+GET /bff/agora/skill-drafts/:draftId
+PATCH /bff/agora/skill-drafts/:draftId
+POST /bff/agora/skill-drafts/:draftId/actions/generate
+POST /bff/agora/skill-drafts/:draftId/actions/sandbox
+POST /bff/agora/skill-drafts/:draftId/actions/submit-management
+```
+
+## Acceptance Criteria
+
+```text
+Skill Coaching 不得提供直接 activate skill 的操作。
+Submit to Management 後必須建立 Management Skill Approval request。
+Sandbox result 必須顯示 pass / fail / logs。
+```
+
+---
+
+# 18. Persona Lab
+
+## Routes
+
+```text
+/agora/persona-lab
+/agora/persona-lab/:draftPersonaId
+```
+
+## Primary Users
+
+```text
+AI Trainer
+Research Lead
+```
+
+## Goal
+n建立、測試、比較 persona draft，送 Management Console 正式審批。
+
+## Layout
+
+```text
+Persona Draft List
+Persona Draft Detail
+Tabs:
+- Identity
+- Behavior Rules
+- Simulations
+- Evaluations
+- Comparison
+- Submit to Management
+```
+
+## Primary Actions
+
+```text
+Create Persona Draft
+Clone Existing Persona
+Edit Draft Rules
+Run Simulation
+Run Evaluation
+Compare with Existing Persona
+Submit Persona Draft to Management
+Archive Draft
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/persona-drafts
+POST /bff/agora/persona-drafts
+GET /bff/agora/persona-drafts/:draftPersonaId
+PATCH /bff/agora/persona-drafts/:draftPersonaId
+POST /bff/agora/persona-drafts/:draftPersonaId/actions/run-simulation
+POST /bff/agora/persona-drafts/:draftPersonaId/actions/run-evaluation
+POST /bff/agora/persona-drafts/:draftPersonaId/actions/submit-management
+```
+
+## Acceptance Criteria
+
+```text
+Persona Lab only handles drafts.
+No draft persona becomes active without Management approval.
+Comparison view must show differences in behavior rules and evaluation scores.
+```
+
+---
+
+# 19. Evaluations
+
+## Routes
+
+```text
+/agora/evaluations
+/agora/evaluations/:evaluationId
+```
+
+## Primary Users
+
+```text
+AI Trainer
+Research Lead
+Admin
+```
+
+## Goal
+
+管理 persona evaluation suite 與 evaluation run。
+
+## Evaluation Suites
+
+```text
+Risk Caution Suite
+Evidence Quality Suite
+Tool Use Suite
+Hallucination Suite
+Trading Scenario Suite
+Committee Debate Suite
+Memory Consistency Suite
+Language Consistency Suite
+```
+
+## Layout
+
+```text
+Evaluation Dashboard
+Suite List
+Run List
+Evaluation Detail
+Failure Cases
+Suggested Fixes
+```
+
+## Primary Actions
+
+```text
+Run Evaluation
+Compare Runs
+Open Failure Case
+Create Training Example
+Create Persona Feedback
+Submit Persona Update
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/evaluations
+GET /bff/agora/evaluations/:evaluationId
+POST /bff/agora/evaluations/actions/run
+POST /bff/agora/evaluations/:evaluationId/actions/create-training-example
+```
+
+## Acceptance Criteria
+
+```text
+Evaluation detail must show score, failures, linked persona version, and suggested fixes.
+Failure case can be converted into training example.
+```
+
+---
+
+# 20. Channels
+
+## Route
+
+```text
+/agora/channels
+```
+
+## Primary Users
+
+```text
+Admin
+AI Trainer
+Trader
+Analyst
+```
+
+## Goal
+
+管理 Agora 的外部入口，例如 Web、Telegram、Discord、Webhook。此頁只管理 Agora channels，不管理 Core live operations。
+
+## Channel Types
+
+```text
+Web
+Telegram
+Discord
+Webhook
+Email / Slack optional
+```
+
+## Layout
+
+```text
+Channel list
+Channel detail drawer
+Permissions
+Persona binding
+Message retention
+Audit
+```
+
+## Primary Actions
+
+```text
+Enable Channel
+Disable Channel
+Bind Persona
+Set Allowed Users
+Set Allowed Actions
+Set Retention
+View Channel Sessions
+```
+
+## BFF APIs
+
+```text
+GET /bff/agora/channels
+GET /bff/agora/channels/:channelId
+PATCH /bff/agora/channels/:channelId
+POST /bff/agora/channels/:channelId/actions/enable
+POST /bff/agora/channels/:channelId/actions/disable
+```
+
+## Acceptance Criteria
+
+```text
+Channels can only trigger Agora-safe actions.
+No external channel can directly trigger live deployment, rollback, or capital rebalance.
+```
+
+---
+
+# 21. Agora → Management Handoff Pattern
+
+Agora 所有高風險或正式管理動作都必須走 handoff。
+
+## Handoff Types
+
+```text
+Insight → Management Insight Queue
+Strategy Idea → Strategy discovered candidate
+Research Task → Experiment / Research queue
+Committee Memo → Governance evidence
+Training Feedback → Persona update request
+Skill Draft → Skill approval request
+MCP Tool Request → MCP permission request
+Alert Escalation → Incident request
+```
+
+## Handoff Drawer Fields
+
+```text
+Handoff Type
+Source Object
+Target Object
+Summary
+Evidence
+Priority
+Suggested Owner
+Suggested Persona
+Notes
+Submit Button
+```
+
+## BFF API
+
+```text
+POST /bff/agora/handoffs
+```
+
+## Acceptance Criteria
+
+```text
+所有 handoff 都必須建立 traceable record。
+handoff 成功後 Agora 顯示 submitted 狀態。
+Management Console Command Center 可看到 incoming queue。
+```
+
+---
+
+# 22. Localization Requirements
+
+Agora 必須支援：
+
+```text
+zh-TW
+en-US
+```
+
+## Rules
+
+```text
+All navigation labels must use translation keys.
+All buttons must use translation keys.
+All status badges must use translation keys.
+All empty/error/loading states must use translation keys.
+User-generated content remains original language by default.
+AI persona response defaults to current UI locale unless session language overrides.
+```
+
+## Session Language Options
+
+```text
+Follow UI Language
+zh-TW
+en-US
+Mixed / Original
+```
+
+## Translation-related BFF Rule
+
+BFF should return enum codes and label keys, not hardcoded Chinese or English labels.
+
+---
+
+# 23. Lovable Build Notes for Agora
+
+Lovable should implement Agora as a friendly analyst/trader workspace.
+
+Do:
+
+```text
+Use cards, panels, notebooks, conversation canvases, and review queues.
+Make insight conversion one-click.
+Make feedback lightweight.
+Keep AI collaboration contextual.
+Use mock BFF data.
+Use translation keys.
+```
+
+Do not:
+
+```text
+Do not make Agora look like a dense admin dashboard.
+Do not expose live deployment actions.
+Do not expose capital rebalance actions.
+Do not allow Skill activation directly from Skill Coaching.
+Do not force long forms for every insight.
+Do not make chat the only interface.
+```
+
+---
+
+# 24. Part 5 Acceptance Criteria
+
+Lovable output for Agora should satisfy:
+
+```text
+Agora has a distinct user experience from Management Console.
+Daily Trading Cockpit is the main entry point.
+Signal Review supports Agree / Disagree / Flag / Ask Persona / Create Research Task.
+Research Notebook supports note-to-insight and note-to-research-task conversion.
+Ask Personas supports context-aware sessions and feedback on AI responses.
+Committee Room supports multi-persona structured discussion and memo generation.
+Decision Journal captures rationale, confidence, and outcome.
+Alert Triage allows dismiss / escalate / ask persona but not direct rollback.
+Insight Inbox handles conversion and Management handoff.
+Trainer Studio manages feedback, training examples, evaluations, and persona update requests.
+Memory Review supports approve / reject / edit / merge.
+Skill Coaching only creates skill drafts and submits them to Management approval.
+All pages support zh-TW and en-US.
+All high-risk actions are blocked from Agora and converted into handoff requests.
+```
+
+---
+
+## 下一份文件
+
+```text
+Part 6 — Shared Data Model + BFF API Contract
+```
+
+Part 6 將定義 Lovable mock data 與 BFF DTO 結構，包括 Strategy、Persona、CapitalPool、Signal、AgoraSession、Message、Insight、Job、Alert、MCP、Skill 等核心資料模型與 API route。
+
+
+---
+
+# Part 6 — Shared Data Model + BFF API Contract
+> 文件版本：v1.0  
+> 適用範圍：Pantheon Management Console、Pantheon Agora Workbench  
+> 目標讀者：Lovable 前端建置者、BFF 工程師、Pantheon 後端整合者、產品/系統設計審查者
+
+---
+
+# 1. 本文件目的
+
+Part 6 定義兩套前端共用的資料模型與 BFF API contract。
+
+Pantheon 前端不直接串接 Pantheon core backend，而是透過 BFF（Backend-for-Frontend）取得前端友善資料與執行 command。BFF 必須負責聚合資料、轉換 DTO、處理權限、提供 available actions、封裝 jobs、提供 realtime events。
+
+本文件讓 Lovable 可以先用 mock BFF client 建置完整前端，之後再由真正 BFF 對接 Pantheon backend。
+
+---
+
+# 2. BFF 設計原則
+
+## 2.1 前端只呼叫 BFF
+
+前端禁止直接呼叫 Pantheon core、broker、runtime、MCP server、skill runner。
+
+```text
+Frontend
+  → BFF Query / Command / Job / Event APIs
+  → Pantheon backend / services / runtime / registries
+```
+
+## 2.2 BFF 回傳 frontend-ready DTO
+
+BFF 回傳的資料應可直接渲染，不要求前端自行推導複雜 business rules。
+
+每個核心 entity detail DTO 應包含：
+
+```text
+id
+type
+displayName
+status
+riskLevel
+owner
+linkedEntities
+availableActions
+auditSummary
+updatedAt
+```
+
+## 2.3 availableActions 由 BFF 計算
+
+前端不自行判斷 lifecycle transition 是否允許。
+
+BFF 應回傳：
+
+```json
+{
+  "availableActions": [
+    {
+      "id": "submit_review",
+      "labelKey": "action.submitReview",
+      "riskLevel": "medium",
+      "requiresApproval": false,
+      "enabled": true
+    }
+  ]
+}
+```
+
+若 action 不可用，BFF 應提供 disabledReasonKey。
+
+## 2.4 BFF 回傳 enum code，不回傳固定語言文字
+
+前端支援 zh-TW / en-US 語系切換，因此 BFF 應回傳穩定 code。
+
+範例：
+
+```json
+{
+  "status": "replicated",
+  "riskLevel": "medium",
+  "labelKey": "status.strategy.replicated"
+}
+```
+
+前端依目前 locale 顯示翻譯。
+
+## 2.5 高風險操作必須走 command + confirmation
+
+前端不直接改狀態。所有會改變策略、資金、部署、工具權限、MCP、Skill、人格政策的操作都走 command API。
+
+```text
+POST /bff/{resource}/:id/actions/{actionId}
+```
+
+高風險 command 回傳可能是：
+
+```text
+approval_required
+job_started
+completed
+rejected
+blocked
+```
+
+---
+
+# 3. API 共通規格
+
+## 3.1 Base URL
+
+```text
+/bff
+```
+
+## 3.2 Auth Header
+
+```http
+Authorization: Bearer <token>
+X-Pantheon-Locale: zh-TW | en-US
+X-Pantheon-Client: management | agora
+```
+
+## 3.3 Request ID
+
+前端每次 command 建議送 request id，方便追蹤。
+
+```http
+X-Request-Id: req_abc123
+```
+
+## 3.4 Query Response Envelope
+
+```ts
+interface QueryResponse<T> {
+  data: T;
+  meta?: ResponseMeta;
+}
+
+interface ResponseMeta {
+  requestId: string;
+  generatedAt: string;
+  locale: LocaleCode;
+  permissions?: string[];
+}
+```
+
+## 3.5 List Response Envelope
+
+```ts
+interface ListResponse<T> {
+  data: T[];
+  page: PageInfo;
+  filters?: AppliedFilter[];
+  meta?: ResponseMeta;
+}
+
+interface PageInfo {
+  cursor?: string;
+  nextCursor?: string | null;
+  pageSize: number;
+  totalCount?: number;
+  hasMore: boolean;
+}
+```
+
+## 3.6 Command Response Envelope
+
+```ts
+interface CommandResponse {
+  result: 'completed' | 'job_started' | 'approval_required' | 'blocked' | 'failed';
+  messageKey?: string;
+  jobId?: string;
+  approvalRequestId?: string;
+  target?: EntityReference;
+  nextState?: string;
+  auditEventId?: string;
+  warnings?: WarningMessage[];
+}
+```
+
+## 3.7 Error Format
+
+```ts
+interface BffError {
+  error: {
+    code: string;
+    messageKey: string;
+    message?: string;
+    details?: Record<string, unknown>;
+    requestId: string;
+  };
+}
+```
+
+常見錯誤 code：
+
+```text
+unauthorized
+forbidden
+not_found
+validation_error
+conflict
+approval_required
+state_transition_blocked
+risk_limit_exceeded
+job_already_running
+backend_unavailable
+rate_limited
+unknown_error
+```
+
+## 3.8 日期時間格式
+
+全部使用 ISO 8601 UTC string。
+
+```text
+2026-05-03T08:30:00.000Z
+```
+
+前端依使用者 locale 顯示本地時間。
+
+## 3.9 Money / Decimal 格式
+
+避免浮點誤差，金額與重要小數建議字串化。
+
+```ts
+interface MoneyAmount {
+  amount: string;
+  currency: 'USD' | 'TWD' | 'USDT' | string;
+}
+
+interface DecimalMetric {
+  value: string;
+  unit?: string;
+}
+```
+
+---
+
+# 4. 共通型別
+
+```ts
+type LocaleCode = 'zh-TW' | 'en-US';
+type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical';
+type EnvironmentCode = 'research' | 'paper' | 'live';
+type EntityType =
+  | 'strategy'
+  | 'persona'
+  | 'capital_pool'
+  | 'ranking_formula'
+  | 'rebalance'
+  | 'evolution_program'
+  | 'experiment'
+  | 'artifact'
+  | 'review_request'
+  | 'deployment'
+  | 'runtime'
+  | 'risk_alert'
+  | 'incident'
+  | 'job'
+  | 'tool'
+  | 'mcp_server'
+  | 'mcp_tool'
+  | 'skill'
+  | 'insight'
+  | 'signal'
+  | 'agora_session'
+  | 'message'
+  | 'research_note'
+  | 'decision_journal_entry'
+  | 'memory_item'
+  | 'training_example'
+  | 'audit_event';
+
+interface EntityReference {
+  id: string;
+  type: EntityType;
+  displayName: string;
+  status?: string;
+  riskLevel?: RiskLevel;
+  route?: string;
+}
+
+interface ActorReference {
+  id: string;
+  type: 'user' | 'persona' | 'system' | 'bff' | 'runtime';
+  displayName: string;
+  role?: string;
+}
+
+interface ActionDescriptor {
+  id: string;
+  labelKey: string;
+  descriptionKey?: string;
+  riskLevel: RiskLevel;
+  requiresApproval: boolean;
+  requiresConfirmation?: boolean;
+  enabled: boolean;
+  disabledReasonKey?: string;
+  commandEndpoint?: string;
+  confirmationKey?: string;
+}
+
+interface AuditSummary {
+  lastChangedBy?: ActorReference;
+  lastChangedAt?: string;
+  lastAuditEventId?: string;
+  changeCount?: number;
+}
+
+interface WarningMessage {
+  code: string;
+  messageKey: string;
+  riskLevel?: RiskLevel;
+}
+```
+
+---
+
+# 5. Status Enum 規格
+
+## 5.1 Strategy Lifecycle
+
+```ts
+type StrategyStatus =
+  | 'discovered'
+  | 'scaffolded'
+  | 'replicated'
+  | 'approved'
+  | 'paper'
+  | 'live'
+  | 'degraded'
+  | 'replaced'
+  | 'retired'
+  | 'archived';
+```
+
+## 5.2 Persona Status
+
+```ts
+type PersonaStatus =
+  | 'draft'
+  | 'sandbox'
+  | 'active'
+  | 'probation'
+  | 'restricted'
+  | 'suspended'
+  | 'retired'
+  | 'archived';
+```
+
+## 5.3 Job Status
+
+```ts
+type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_for_approval'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'retrying';
+```
+
+## 5.4 Review Status
+
+```ts
+type ReviewStatus =
+  | 'draft'
+  | 'submitted'
+  | 'validator_running'
+  | 'in_review'
+  | 'changes_requested'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled';
+```
+
+## 5.5 Incident Status
+
+```ts
+type IncidentStatus =
+  | 'new'
+  | 'acknowledged'
+  | 'assigned'
+  | 'investigating'
+  | 'mitigated'
+  | 'resolved'
+  | 'postmortem_required'
+  | 'closed';
+```
+
+---
+
+# 6. Management Console 資料模型
+
+## 6.1 Strategy
+
+```ts
+interface Strategy {
+  id: string;
+  type: 'strategy';
+  displayName: string;
+  status: StrategyStatus;
+  ownerPersona?: EntityReference;
+  capitalPool?: EntityReference;
+  currentArtifact?: EntityReference;
+  evolutionProgram?: EntityReference;
+  paperDeployment?: EntityReference;
+  liveDeployment?: EntityReference;
+  latestMetrics?: PerformanceMetricSummary;
+  riskLevel: RiskLevel;
+  openAlertsCount: number;
+  openIncidentsCount: number;
+  runningJobsCount: number;
+  linkedEntities: EntityReference[];
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PerformanceMetricSummary {
+  period: string;
+  returnPct?: string;
+  sharpe?: string;
+  sortino?: string;
+  maxDrawdownPct?: string;
+  volatilityPct?: string;
+  turnover?: string;
+  score?: string;
+}
+```
+
+## 6.2 Strategy Spec
+
+```ts
+interface StrategySpec {
+  id: string;
+  strategyId: string;
+  version: string;
+  status: 'draft' | 'validated' | 'locked' | 'approved' | 'deprecated' | 'rolled_back';
+  hypothesis: string;
+  market: string;
+  assetUniverse: string[];
+  signalLogic: string;
+  entryRules: string;
+  exitRules: string;
+  positionSizing: string;
+  riskRules: string;
+  dataRequirements: string[];
+  costModel?: string;
+  failureModes?: string[];
+  createdBy: ActorReference;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## 6.3 Persona
+
+```ts
+interface Persona {
+  id: string;
+  type: 'persona';
+  displayName: string;
+  status: PersonaStatus;
+  role: string;
+  currentVersion: string;
+  tradingStyle?: string;
+  researchStyle?: string;
+  riskAppetite?: 'low' | 'medium' | 'high';
+  capitalBindings: EntityReference[];
+  activeStrategies: EntityReference[];
+  allowedToolsCount: number;
+  allowedMcpToolsCount: number;
+  allowedSkillsCount: number;
+  policyViolationsCount: number;
+  runningJobsCount: number;
+  latestEvaluationScore?: string;
+  performanceRank?: number;
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## 6.4 Route Policy
+
+```ts
+interface RoutePolicy {
+  id: string;
+  personaId: string;
+  version: string;
+  status: 'draft' | 'active' | 'pending_review' | 'deprecated' | 'rolled_back';
+  toolPermissions: CapabilityPermission[];
+  mcpPermissions: CapabilityPermission[];
+  skillPermissions: CapabilityPermission[];
+  consultRules: ConsultRule[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CapabilityPermission {
+  capabilityId: string;
+  capabilityType: 'tool' | 'mcp_tool' | 'skill' | 'workflow_template';
+  displayName: string;
+  allowed: boolean;
+  requiresApproval: boolean;
+  allowedEnvironments: EnvironmentCode[];
+  allowedStrategyStates?: StrategyStatus[];
+  rateLimit?: string;
+  parameterRestrictions?: Record<string, unknown>;
+}
+
+interface ConsultRule {
+  targetPersonaId: string;
+  allowed: boolean;
+  maxPerDay?: number;
+  requiresApproval?: boolean;
+}
+```
+
+## 6.5 Capital Pool
+
+```ts
+interface CapitalPool {
+  id: string;
+  type: 'capital_pool';
+  displayName: string;
+  status: 'draft' | 'active' | 'frozen' | 'rebalancing' | 'restricted' | 'retired';
+  mandate: string;
+  totalCapital: MoneyAmount;
+  allocatedCapital: MoneyAmount;
+  availableCapital: MoneyAmount;
+  riskBudgetPct: string;
+  maxDrawdownPct?: string;
+  linkedPersonas: EntityReference[];
+  linkedStrategies: EntityReference[];
+  currentRebalance?: EntityReference;
+  riskLevel: RiskLevel;
+  openAlertsCount: number;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## 6.6 Ranking Formula
+
+```ts
+interface RankingFormula {
+  id: string;
+  type: 'ranking_formula';
+  displayName: string;
+  scope: 'persona' | 'strategy' | 'alpha_family' | 'capital_pool';
+  version: string;
+  status: 'draft' | 'testing' | 'approved' | 'active' | 'deprecated' | 'retired';
+  metrics: FormulaMetricWeight[];
+  normalizationMethod: 'z_score' | 'min_max' | 'rank_percentile' | 'none';
+  outlierHandling?: string;
+  capsAndFloors?: Record<string, unknown>;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+}
+
+interface FormulaMetricWeight {
+  metricCode: string;
+  labelKey: string;
+  weight: string;
+  direction: 'positive' | 'negative';
+  hardConstraint?: boolean;
+}
+```
+
+## 6.7 Quarterly Rebalance
+
+```ts
+interface QuarterlyRebalance {
+  id: string;
+  type: 'rebalance';
+  displayName: string;
+  quarter: string;
+  status:
+    | 'draft'
+    | 'metrics_freezing'
+    | 'metrics_frozen'
+    | 'ranking_calculated'
+    | 'simulation_ready'
+    | 'under_review'
+    | 'approved'
+    | 'scheduled'
+    | 'applied'
+    | 'rolled_back'
+    | 'cancelled';
+  capitalPool: EntityReference;
+  formula: EntityReference;
+  metricFreezeAt?: string;
+  effectiveAt?: string;
+  rankingSummary?: RankingSummary;
+  allocationSimulation?: AllocationSimulation;
+  openApproval?: EntityReference;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+}
+
+interface RankingSummary {
+  totalEntities: number;
+  topEntity?: EntityReference;
+  formulaVersion: string;
+  calculatedAt: string;
+}
+
+interface AllocationSimulation {
+  currentAllocation: AllocationRow[];
+  recommendedAllocation: AllocationRow[];
+  riskImpactSummary?: string;
+  constraintsPassed: boolean;
+}
+
+interface AllocationRow {
+  entity: EntityReference;
+  allocationPct: string;
+  capitalAmount?: MoneyAmount;
+}
+```
+
+## 6.8 Evolution Program
+
+```ts
+interface EvolutionProgram {
+  id: string;
+  type: 'evolution_program';
+  displayName: string;
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'under_review' | 'retired';
+  targetAlphaFamily?: string;
+  ownerPersona?: EntityReference;
+  fitnessFormula?: EntityReference;
+  activeRunsCount: number;
+  bestCandidate?: EntityReference;
+  constraintsSummary?: string;
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+}
+```
+
+## 6.9 Experiment
+
+```ts
+interface Experiment {
+  id: string;
+  type: 'experiment';
+  displayName: string;
+  status: 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'invalidated' | 'attached_to_review' | 'archived';
+  experimentType: 'backtest' | 'oos' | 'stress_test' | 'ablation' | 'parameter_sweep' | 'simulation' | 'rl_training' | 'policy_evaluation';
+  engine: 'qlib' | 'vectorbt' | 'statmodels' | 'finrl' | 'rllib' | 'custom';
+  strategy?: EntityReference;
+  ownerPersona?: EntityReference;
+  dataset?: string;
+  period?: string;
+  metrics?: PerformanceMetricSummary;
+  producedArtifacts: EntityReference[];
+  job?: EntityReference;
+  reproducibilityHash?: string;
+  availableActions: ActionDescriptor[];
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## 6.10 Review Request
+
+```ts
+interface ReviewRequest {
+  id: string;
+  type: 'review_request';
+  displayName: string;
+  reviewType:
+    | 'strategy_review'
+    | 'patch_review'
+    | 'artifact_review'
+    | 'paper_promotion'
+    | 'live_promotion'
+    | 'capital_rebalance'
+    | 'persona_policy'
+    | 'skill_approval'
+    | 'mcp_approval'
+    | 'evolution_program';
+  status: ReviewStatus;
+  target: EntityReference;
+  requestedBy: ActorReference;
+  reviewers: ActorReference[];
+  validatorResults: ValidatorResult[];
+  riskLevel: RiskLevel;
+  dueAt?: string;
+  availableActions: ActionDescriptor[];
+  auditSummary: AuditSummary;
+}
+
+interface ValidatorResult {
+  id: string;
+  validatorType: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'warning';
+  messageKey?: string;
+  details?: Record<string, unknown>;
+}
+```
+
+## 6.11 Deployment / Runtime / Alert / Incident / Job
+
+```ts
+interface Deployment {
+  id: string;
+  type: 'deployment';
+  displayName: string;
+  environment: 'paper' | 'live';
+  status: 'draft' | 'scheduled' | 'deploying' | 'running' | 'paused' | 'failed' | 'rolled_back' | 'retired';
+  strategy: EntityReference;
+  artifact: EntityReference;
+  runtime?: EntityReference;
+  capitalPool?: EntityReference;
+  allocationPct?: string;
+  rollbackTarget?: EntityReference;
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+}
+
+interface Runtime {
+  id: string;
+  type: 'runtime';
+  displayName: string;
+  status: 'healthy' | 'degraded' | 'disconnected' | 'halted';
+  runtimeType: 'lean' | 'paper_sim' | 'custom';
+  runningStrategies: EntityReference[];
+  lastHeartbeatAt?: string;
+  cpuPct?: string;
+  memoryPct?: string;
+  brokerStatus?: 'connected' | 'degraded' | 'disconnected';
+  openIncidentsCount: number;
+  availableActions: ActionDescriptor[];
+}
+
+interface RiskAlert {
+  id: string;
+  type: 'risk_alert';
+  displayName: string;
+  status: 'new' | 'acknowledged' | 'assigned' | 'investigating' | 'mitigated' | 'resolved' | 'closed';
+  severity: RiskLevel;
+  alertType: string;
+  target: EntityReference;
+  createdAt: string;
+  assignedTo?: ActorReference;
+  availableActions: ActionDescriptor[];
+}
+
+interface Incident {
+  id: string;
+  type: 'incident';
+  displayName: string;
+  status: IncidentStatus;
+  severity: RiskLevel;
+  linkedStrategy?: EntityReference;
+  linkedRuntime?: EntityReference;
+  linkedCapitalPool?: EntityReference;
+  timeline: IncidentTimelineEvent[];
+  owner?: ActorReference;
+  postmortem?: EntityReference;
+  availableActions: ActionDescriptor[];
+}
+
+interface IncidentTimelineEvent {
+  id: string;
+  timestamp: string;
+  actor: ActorReference;
+  eventType: string;
+  description: string;
+}
+
+interface Job {
+  id: string;
+  type: 'job';
+  displayName: string;
+  jobType: string;
+  status: JobStatus;
+  progressPct: number;
+  currentStep?: string;
+  target?: EntityReference;
+  triggeredBy: ActorReference;
+  startedAt?: string;
+  completedAt?: string;
+  outputArtifacts?: EntityReference[];
+  availableActions: ActionDescriptor[];
+}
+```
+
+## 6.12 Tool / MCP / Skill
+
+```ts
+interface Tool {
+  id: string;
+  type: 'tool';
+  displayName: string;
+  toolType: 'research' | 'backtest' | 'data' | 'execution' | 'memory' | 'mcp' | 'skill' | 'notification' | 'file' | 'browser';
+  status: 'draft' | 'testing' | 'active' | 'restricted' | 'deprecated' | 'blocked' | 'retired';
+  sideEffectLevel: 'read_only' | 'write_research' | 'write_strategy' | 'write_artifact' | 'capital_affecting' | 'execution_affecting' | 'dangerous';
+  schema?: Record<string, unknown>;
+  allowedPersonas: EntityReference[];
+  lastHealthCheckAt?: string;
+  lastUsedAt?: string;
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+}
+
+interface MCPServer {
+  id: string;
+  type: 'mcp_server';
+  displayName: string;
+  status: 'draft' | 'connected' | 'healthy' | 'degraded' | 'disabled' | 'retired';
+  endpoint?: string;
+  transport: 'stdio' | 'http' | 'sse' | 'websocket';
+  toolsCount: number;
+  authType?: 'none' | 'api_key' | 'oauth' | 'custom';
+  allowedPersonas: EntityReference[];
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+}
+
+interface MCPTool {
+  id: string;
+  type: 'mcp_tool';
+  displayName: string;
+  server: EntityReference;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  sideEffectLevel: Tool['sideEffectLevel'];
+  allowedPersonas: EntityReference[];
+  requiresApproval: boolean;
+  rateLimit?: string;
+  availableActions: ActionDescriptor[];
+}
+
+interface Skill {
+  id: string;
+  type: 'skill';
+  displayName: string;
+  version: string;
+  status: 'draft' | 'sandboxed' | 'validated' | 'approved' | 'active' | 'deprecated' | 'blocked' | 'retired';
+  author?: ActorReference;
+  requiredTools: EntityReference[];
+  allowedPersonas: EntityReference[];
+  sandboxResult?: 'not_run' | 'passed' | 'failed' | 'warning';
+  riskLevel: RiskLevel;
+  availableActions: ActionDescriptor[];
+}
+```
+
+---
+
+# 7. Agora Workbench 資料模型
+
+## 7.1 Signal
+
+```ts
+interface Signal {
+  id: string;
+  type: 'signal';
+  displayName: string;
+  strategy: EntityReference;
+  assetSymbol: string;
+  direction: 'long' | 'short' | 'flat' | 'exit';
+  confidence?: string;
+  generatedAt: string;
+  explanation?: string;
+  relatedFeatures?: string[];
+  riskLevel: RiskLevel;
+  traderFeedback?: 'agree' | 'disagree' | 'flag_suspicious' | 'not_reviewed';
+  availableActions: ActionDescriptor[];
+}
+```
+
+## 7.2 Insight
+
+```ts
+interface Insight {
+  id: string;
+  type: 'insight';
+  displayName: string;
+  source: 'trader_note' | 'signal_review' | 'market_watchlist' | 'ai_response' | 'committee' | 'alert_triage' | 'decision_journal' | 'postmortem';
+  status: 'raw' | 'triaged' | 'classified' | 'linked' | 'converted_to_strategy' | 'converted_to_research_task' | 'converted_to_training_example' | 'dismissed' | 'archived';
+  summary: string;
+  linkedStrategy?: EntityReference;
+  linkedPersona?: EntityReference;
+  priority?: 'low' | 'medium' | 'high';
+  createdBy: ActorReference;
+  createdAt: string;
+  availableActions: ActionDescriptor[];
+}
+```
+
+## 7.3 Agora Session / Message
+
+```ts
+interface AgoraSession {
+  id: string;
+  type: 'agora_session';
+  displayName: string;
+  sessionType: 'trader_persona' | 'trainer_persona' | 'persona_persona' | 'committee' | 'signal_review' | 'incident_postmortem' | 'daily_brief';
+  status: 'active' | 'paused' | 'closed' | 'archived';
+  participants: ActorReference[];
+  linkedStrategy?: EntityReference;
+  linkedSignal?: EntityReference;
+  linkedIncident?: EntityReference;
+  languageMode: 'follow_ui' | 'zh-TW' | 'en-US' | 'mixed';
+  messagesCount: number;
+  createdAt: string;
+  updatedAt: string;
+  availableActions: ActionDescriptor[];
+}
+
+interface Message {
+  id: string;
+  type: 'message';
+  sessionId: string;
+  sender: ActorReference;
+  content: string;
+  contentLanguage?: LocaleCode | 'mixed';
+  createdAt: string;
+  annotations: MessageAnnotation[];
+  availableActions: ActionDescriptor[];
+}
+
+interface MessageAnnotation {
+  id: string;
+  annotationType: 'remember' | 'do_not_remember' | 'useful' | 'not_useful' | 'incorrect' | 'create_insight' | 'create_training_example' | 'attach_to_strategy';
+  createdBy: ActorReference;
+  createdAt: string;
+  note?: string;
+}
+```
+
+## 7.4 Research Note / Decision Journal
+
+```ts
+interface ResearchNote {
+  id: string;
+  type: 'research_note';
+  displayName: string;
+  noteType: 'market_observation' | 'strategy_hypothesis' | 'risk_concern' | 'model_failure' | 'paper_summary' | 'postmortem_thought' | 'trader_intuition';
+  content: string;
+  linkedEntities: EntityReference[];
+  createdBy: ActorReference;
+  createdAt: string;
+  updatedAt: string;
+  availableActions: ActionDescriptor[];
+}
+
+interface DecisionJournalEntry {
+  id: string;
+  type: 'decision_journal_entry';
+  displayName: string;
+  linkedStrategy?: EntityReference;
+  linkedSignal?: EntityReference;
+  marketContext?: string;
+  decision: string;
+  rationale: string;
+  confidence?: string;
+  expectedOutcome?: string;
+  actualOutcome?: string;
+  followUpAt?: string;
+  createdBy: ActorReference;
+  createdAt: string;
+  availableActions: ActionDescriptor[];
+}
+```
+
+## 7.5 Memory Item / Training Example
+
+```ts
+interface MemoryItem {
+  id: string;
+  type: 'memory_item';
+  displayName: string;
+  memoryType: 'core_rule' | 'private_note' | 'conversation_memory' | 'trader_feedback' | 'research_memory' | 'do_not_remember' | 'shared_knowledge' | 'policy_memory';
+  status: 'proposed' | 'approved' | 'rejected' | 'edited' | 'merged' | 'deprecated' | 'deleted' | 'sensitive';
+  persona?: EntityReference;
+  content: string;
+  source?: EntityReference;
+  confidence?: string;
+  createdAt: string;
+  availableActions: ActionDescriptor[];
+}
+
+interface TrainingExample {
+  id: string;
+  type: 'training_example';
+  displayName: string;
+  persona?: EntityReference;
+  input: string;
+  expectedResponse?: string;
+  badResponse?: string;
+  correction?: string;
+  reason?: string;
+  tags: string[];
+  source?: EntityReference;
+  status: 'draft' | 'approved' | 'rejected' | 'used_in_evaluation' | 'archived';
+  createdBy: ActorReference;
+  createdAt: string;
+  availableActions: ActionDescriptor[];
+}
+```
+
+---
+
+# 8. BFF API 路由總覽
+
+## 8.1 Strategies
+
+```http
+GET    /bff/strategies
+POST   /bff/strategies
+GET    /bff/strategies/:strategyId
+PATCH  /bff/strategies/:strategyId
+GET    /bff/strategies/:strategyId/specs
+POST   /bff/strategies/:strategyId/specs
+GET    /bff/strategies/:strategyId/experiments
+GET    /bff/strategies/:strategyId/artifacts
+GET    /bff/strategies/:strategyId/lineage
+GET    /bff/strategies/:strategyId/audit
+POST   /bff/strategies/:strategyId/actions/:actionId
+```
+
+Action examples：
+
+```text
+scaffold
+run_experiment
+submit_review
+promote_paper
+request_live_promotion
+pause
+resume
+rollback
+replace
+retire
+open_incident
+```
+
+## 8.2 Personas
+
+```http
+GET    /bff/personas
+POST   /bff/personas
+GET    /bff/personas/:personaId
+PATCH  /bff/personas/:personaId
+GET    /bff/personas/:personaId/route-policy
+GET    /bff/personas/:personaId/activity
+GET    /bff/personas/:personaId/evaluations
+GET    /bff/personas/:personaId/memory
+GET    /bff/personas/:personaId/audit
+POST   /bff/personas/:personaId/actions/:actionId
+```
+
+Action examples：
+
+```text
+activate
+restrict
+suspend
+put_on_probation
+retire
+run_evaluation
+assign_tool
+assign_mcp_tool
+assign_skill
+```
+
+## 8.3 Capital / Ranking / Rebalance
+
+```http
+GET    /bff/capital-pools
+POST   /bff/capital-pools
+GET    /bff/capital-pools/:poolId
+PATCH  /bff/capital-pools/:poolId
+POST   /bff/capital-pools/:poolId/actions/:actionId
+
+GET    /bff/ranking/formulas
+POST   /bff/ranking/formulas
+GET    /bff/ranking/formulas/:formulaId
+PATCH  /bff/ranking/formulas/:formulaId
+POST   /bff/ranking/formulas/:formulaId/actions/:actionId
+
+GET    /bff/rebalances
+POST   /bff/rebalances
+GET    /bff/rebalances/:rebalanceId
+POST   /bff/rebalances/:rebalanceId/actions/:actionId
+```
+
+Rebalance actions：
+
+```text
+freeze_metrics
+calculate_ranking
+run_simulation
+apply_override
+submit_review
+approve
+schedule
+apply
+rollback
+cancel
+```
+
+## 8.4 Evolution
+
+```http
+GET    /bff/evolution-programs
+POST   /bff/evolution-programs
+GET    /bff/evolution-programs/:programId
+PATCH  /bff/evolution-programs/:programId
+GET    /bff/evolution-programs/:programId/runs
+GET    /bff/evolution-programs/:programId/candidates
+POST   /bff/evolution-programs/:programId/actions/:actionId
+```
+
+## 8.5 Experiments
+
+```http
+GET    /bff/experiments
+POST   /bff/experiments
+GET    /bff/experiments/:experimentId
+POST   /bff/experiments/:experimentId/actions/:actionId
+GET    /bff/experiments/:experimentId/logs
+GET    /bff/experiments/:experimentId/metrics
+GET    /bff/experiments/:experimentId/artifacts
+```
+
+## 8.6 Governance
+
+```http
+GET    /bff/reviews
+POST   /bff/reviews
+GET    /bff/reviews/:reviewId
+POST   /bff/reviews/:reviewId/actions/:actionId
+GET    /bff/reviews/:reviewId/validators
+GET    /bff/reviews/:reviewId/audit
+```
+
+Review actions：
+
+```text
+run_validators
+approve
+reject
+request_changes
+escalate
+attach_memo
+```
+
+## 8.7 Deployment / Runtime / Risk / Incident
+
+```http
+GET    /bff/deployments
+GET    /bff/deployments/:deploymentId
+POST   /bff/deployments/:deploymentId/actions/:actionId
+
+GET    /bff/runtimes
+GET    /bff/runtimes/:runtimeId
+POST   /bff/runtimes/:runtimeId/actions/:actionId
+
+GET    /bff/risk/alerts
+GET    /bff/risk/alerts/:alertId
+POST   /bff/risk/alerts/:alertId/actions/:actionId
+
+GET    /bff/incidents
+POST   /bff/incidents
+GET    /bff/incidents/:incidentId
+POST   /bff/incidents/:incidentId/actions/:actionId
+```
+
+## 8.8 Tools / MCP / Skills
+
+```http
+GET    /bff/tools
+POST   /bff/tools
+GET    /bff/tools/:toolId
+PATCH  /bff/tools/:toolId
+POST   /bff/tools/:toolId/actions/:actionId
+
+GET    /bff/mcp/servers
+POST   /bff/mcp/servers
+GET    /bff/mcp/servers/:serverId
+POST   /bff/mcp/servers/:serverId/actions/:actionId
+GET    /bff/mcp/servers/:serverId/tools
+POST   /bff/mcp/tools/:toolId/actions/:actionId
+
+GET    /bff/skills
+POST   /bff/skills
+GET    /bff/skills/:skillId
+PATCH  /bff/skills/:skillId
+POST   /bff/skills/:skillId/actions/:actionId
+```
+
+Skill actions：
+
+```text
+generate_draft
+run_sandbox
+run_security_scan
+submit_approval
+approve
+assign_persona
+revoke_persona
+rollback_version
+deprecate
+retire
+```
+
+## 8.9 Jobs / Events / Audit
+
+```http
+GET    /bff/jobs
+GET    /bff/jobs/:jobId
+GET    /bff/jobs/:jobId/logs
+POST   /bff/jobs/:jobId/actions/:actionId
+
+GET    /bff/events
+GET    /bff/events/stream
+
+GET    /bff/audit/events
+GET    /bff/audit/entities/:entityType/:entityId
+```
+
+## 8.10 Agora APIs
+
+```http
+GET    /bff/agora/daily
+GET    /bff/agora/signals
+GET    /bff/agora/signals/:signalId
+POST   /bff/agora/signals/:signalId/feedback
+
+GET    /bff/agora/sessions
+POST   /bff/agora/sessions
+GET    /bff/agora/sessions/:sessionId
+GET    /bff/agora/sessions/:sessionId/messages
+POST   /bff/agora/sessions/:sessionId/messages
+POST   /bff/agora/messages/:messageId/actions/:actionId
+
+GET    /bff/agora/notes
+POST   /bff/agora/notes
+GET    /bff/agora/journal
+POST   /bff/agora/journal
+GET    /bff/agora/insights
+POST   /bff/agora/insights
+POST   /bff/agora/insights/:insightId/actions/:actionId
+
+GET    /bff/agora/memory
+POST   /bff/agora/memory/:memoryId/actions/:actionId
+GET    /bff/agora/training-examples
+POST   /bff/agora/training-examples
+```
+
+---
+
+# 9. Realtime Event Contract
+
+前端應透過 SSE 或 WebSocket 訂閱事件。
+
+```http
+GET /bff/events/stream
+```
+
+事件格式：
+
+```ts
+interface RealtimeEvent {
+  id: string;
+  eventType: string;
+  entity: EntityReference;
+  actor?: ActorReference;
+  occurredAt: string;
+  severity?: RiskLevel;
+  payload?: Record<string, unknown>;
+}
+```
+
+事件類型：
+
+```text
+job.started
+job.progress
+job.completed
+job.failed
+strategy.state_changed
+persona.policy_changed
+capital.rebalance_updated
+ranking.formula_activated
+deployment.started
+deployment.completed
+deployment.failed
+runtime.status_changed
+risk.alert_created
+risk.alert_updated
+incident.created
+incident.updated
+tool.call_completed
+mcp.call_failed
+skill.sandbox_completed
+review.requested
+review.approved
+review.rejected
+agora.insight_created
+agora.signal_feedback_created
+```
+
+---
+
+# 10. i18n Contract
+
+## 10.1 Supported Locales
+
+```text
+zh-TW
+en-US
+```
+
+## 10.2 BFF Header
+
+```http
+X-Pantheon-Locale: zh-TW
+```
+
+## 10.3 User Profile Locale
+
+```http
+GET /bff/me
+```
+
+```ts
+interface MeResponse {
+  user: {
+    id: string;
+    displayName: string;
+    role: string;
+    locale: LocaleCode;
+    permissions: string[];
+  };
+}
+```
+
+## 10.4 翻譯規則
+
+BFF 回傳 enum code、labelKey、messageKey。
+前端使用 translation dictionary 顯示。
+
+使用者產生內容，如 notes、messages、memos，不自動翻譯，但可提供：
+
+```text
+Translate View
+Summarize in Current Language
+```
+
+---
+
+# 11. Mock BFF Client 要求
+
+Lovable 初期應建立 mock BFF client：
+
+```text
+src/lib/bffClient.ts
+src/mocks/strategies.ts
+src/mocks/personas.ts
+src/mocks/capitalPools.ts
+src/mocks/experiments.ts
+src/mocks/jobs.ts
+src/mocks/alerts.ts
+src/mocks/incidents.ts
+src/mocks/tools.ts
+src/mocks/mcp.ts
+src/mocks/skills.ts
+src/mocks/agora.ts
+```
+
+Mock client 必須支援：
+
+```text
+list
+get detail
+run action
+return command response
+simulate job progress
+simulate realtime events
+return availableActions
+return localized labelKey/messageKey
+```
+
+---
+
+# 12. Acceptance Criteria for Part 6
+
+Lovable / BFF 初始實作應滿足：
+
+```text
+1. 前端所有資料都透過 BFF client 取得。
+2. 所有核心 entity 都有 id/type/status/riskLevel/availableActions。
+3. 所有 list API 支援 pagination。
+4. 所有 command API 使用 CommandResponse。
+5. 所有錯誤使用 BffError 格式。
+6. 所有 enum 使用 code + translation key，不硬寫中文或英文。
+7. 高風險操作透過 availableActions 標記 requiresConfirmation / requiresApproval。
+8. Job、alert、incident、deployment、review 都能被 realtime event 更新。
+9. Agora 產出的 insight / training example / signal feedback 能回到 Management Console。
+10. Mock BFF client 足以支撐 Management Console 與 Agora Workbench 的初版畫面。
+```
+
+---
+
+# 13. 下一份文件
+
+下一份為：
+
+```text
+Part 7 — Component System + State Machines
+```
+
+Part 7 會定義：
+
+```text
+共用元件系統
+Management Console 元件
+Agora Workbench 元件
+Strategy lifecycle state machine
+Persona lifecycle state machine
+Quarterly rebalance workflow
+Review / approval workflow
+Deployment / rollback workflow
+Skill / MCP approval workflow
+Incident workflow
+Agora insight conversion workflow
+```
+
+
+---
+
+# Part 7 — Component System + State Machines
+文件版本：v1.0  
+語系：zh-TW  
+適用對象：Lovable 前端建置、Pantheon 前端工程、BFF 設計對齊  
+關聯文件：Part 1–6
+
+---
+
+## 0. 文件目的
+
+Part 7 定義 Pantheon 前端的共用元件系統與狀態機。Lovable 在建置 `Pantheon Management Console` 與 `Pantheon Agora Workbench` 時，應以本文件作為 UI 元件、狀態標籤、工作流、按鈕權限、風險確認、即時事件顯示的基礎規格。
+
+本文件不是視覺風格指南，而是可落地的 frontend component and workflow specification。
+
+Pantheon 前端必須做到：
+
+```text
+1. 兩套前端共用同一套 platform shell 與 design primitives。
+2. Management Console 使用 object-first / state-first / action-first UI。
+3. Agora Workbench 使用 analyst/trader workflow-first UI。
+4. 所有高風險操作都由狀態機與 availableActions 控制。
+5. 所有長任務都顯示為 Job。
+6. 所有狀態、按鈕、表頭、提示、modal 都支援 zh-TW / en-US。
+7. 前端不自行推理業務規則；BFF 回傳 state、riskLevel、permissions、availableActions。
+```
+
+---
+
+## 1. 元件設計原則
+
+### 1.1 共用原則
+
+所有元件必須遵守：
+
+```text
+- i18n-first：使用 translation key，不硬編中文或英文。
+- permission-aware：依據 availableActions / permissions 顯示、禁用或隱藏操作。
+- risk-aware：高風險操作必須有風險標籤與確認流程。
+- state-driven：狀態顯示由 stable enum 轉成 localized label。
+- event-aware：能接收 BFF realtime events 進行局部更新。
+- accessible：button、modal、drawer、table、form 必須有可讀 label。
+- desktop-first：Pantheon 是管理與交易研究系統，主要支援桌面工作流。
+```
+
+### 1.2 Management Console 元件風格
+
+Management Console 應偏向：
+
+```text
+- 高資訊密度
+- 清楚狀態與風險
+- 表格 + tabs + detail drawer
+- workflow stepper
+- approval panel
+- audit timeline
+- alert / incident / job 可視化
+```
+
+### 1.3 Agora Workbench 元件風格
+
+Agora Workbench 應偏向：
+
+```text
+- 日常工作台
+- 筆記與上下文卡片
+- signal explanation
+- AI persona 協作
+- conversation canvas
+- decision journal
+- 低摩擦 feedback / insight capture
+```
+
+---
+
+## 2. 元件系統總覽
+
+Lovable 應建立以下元件層級。
+
+```text
+Component System
+├── Platform Shell Components
+├── Navigation Components
+├── Entity Components
+├── Status / Risk Components
+├── Data Display Components
+├── Action / Permission Components
+├── Workflow Components
+├── Approval / Governance Components
+├── Operations Components
+├── Capability Management Components
+├── Lineage / Audit Components
+├── Agora Collaboration Components
+├── Forms / Editors
+└── Utility Components
+```
+
+---
+
+## 3. Platform Shell Components
+
+### 3.1 `PantheonAppShell`
+
+用途：所有頁面的最外層 layout。
+
+使用頁面：Management Console、Agora Workbench 全域。
+
+結構：
+
+```text
+PantheonAppShell
+├── GlobalTopBar
+├── ProductSideNav
+├── MainContentArea
+└── RightDrawerHost
+```
+
+Props 建議：
+
+```ts
+type PantheonAppShellProps = {
+  product: 'management' | 'agora';
+  locale: 'zh-TW' | 'en-US';
+  user: UserSummary;
+  navigationItems: NavItem[];
+  children: React.ReactNode;
+};
+```
+
+需求：
+
+```text
+- 支援 /management 與 /agora route group。
+- 可顯示 sidebar collapsed / expanded。
+- 可開啟右側 drawer。
+- GlobalTopBar 必須固定。
+- 支援 locale 切換。
+```
+
+---
+
+### 3.2 `GlobalTopBar`
+
+用途：顯示全域狀態、切換產品、搜尋、通知。
+
+顯示項：
+
+```text
+Pantheon Logo
+ProductSwitcher
+EnvironmentIndicator
+GlobalSearch
+BFFStatusIndicator
+RealtimeEventIndicator
+PendingApprovalsBadge
+OpenAlertsBadge
+RunningJobsBadge
+LanguageSwitcher
+UserMenu
+```
+
+高層驗收：
+
+```text
+- 所有頁面都顯示 GlobalTopBar。
+- product switcher 可以切換 Management / Agora。
+- 語言切換後文字立即更新。
+- BFF offline 時顯示 degraded/offline 狀態。
+```
+
+---
+
+### 3.3 `ProductSwitcher`
+
+選項：
+
+```text
+Management Console
+Agora Workbench
+```
+
+i18n keys：
+
+```text
+i18n.product.management
+i18n.product.agora
+```
+
+互動：
+
+```text
+- 從 /management/* 切換到 /agora/daily。
+- 從 /agora/* 切換到 /management/command-center。
+```
+
+---
+
+### 3.4 `LanguageSwitcher`
+
+支援語系：
+
+```text
+zh-TW
+en-US
+```
+
+需求：
+
+```text
+- 顯示於 GlobalTopBar。
+- 切換後寫入 localStorage key: pantheon.locale。
+- 若 BFF user profile 有 locale，優先使用 user profile。
+- 所有 navigation、button、status、modal、empty state、error state 必須更新。
+```
+
+---
+
+### 3.5 `BFFStatusIndicator`
+
+狀態：
+
+```text
+connected
+degraded
+offline
+```
+
+顯示：
+
+```text
+Connected / 已連線
+Degraded / 連線異常
+Offline / 離線
+```
+
+操作：
+
+```text
+- 點擊打開 BFF health drawer。
+- 顯示最近 API error、event stream status、last heartbeat。
+```
+
+---
+
+## 4. Navigation Components
+
+### 4.1 `ProductSideNav`
+
+用途：依 product 顯示不同 sidebar。
+
+Management Console nav groups：
+
+```text
+Command
+Core Management
+Research & Governance
+Operations
+Capabilities
+System
+```
+
+Agora Workbench nav groups：
+
+```text
+Daily Work
+Research
+AI Collaboration
+Training
+Channels
+```
+
+Props：
+
+```ts
+type NavItem = {
+  id: string;
+  labelKey: string;
+  icon?: string;
+  route: string;
+  badgeCount?: number;
+  requiredPermissions?: string[];
+};
+```
+
+需求：
+
+```text
+- 沒有權限的 nav item 可隱藏。
+- 有待處理數量的 nav item 顯示 badge。
+- 目前 route 高亮。
+```
+
+---
+
+### 4.2 `BreadcrumbTrail`
+
+用途：Entity detail 頁顯示上下文。
+
+範例：
+
+```text
+Management / Strategies / alpha_042
+Agora / Signals / signal_9821
+```
+
+---
+
+## 5. Entity Components
+
+### 5.1 `EntityHeader`
+
+用途：所有 detail page 的標準 header。
+
+適用 entity：
+
+```text
+Strategy
+Persona
+CapitalPool
+Rebalance
+EvolutionProgram
+Experiment
+ReviewRequest
+Deployment
+Incident
+Tool
+MCPServer
+Skill
+Artifact
+AgoraSession
+Signal
+```
+
+顯示：
+
+```text
+Entity name
+Entity ID
+Entity type
+StatusBadge
+RiskBadge
+Owner
+UpdatedAt
+Linked entities summary
+Primary action
+Secondary action menu
+```
+
+Props：
+
+```ts
+type EntityHeaderProps = {
+  entity: EntitySummary;
+  status: string;
+  riskLevel?: RiskLevel;
+  owner?: UserSummary | PersonaSummary;
+  availableActions: AvailableAction[];
+  onAction: (actionId: string) => void;
+};
+```
+
+需求：
+
+```text
+- Primary action 由 availableActions 中 priority 最高且 enabled 的 action 決定。
+- 高風險 action 顯示 RiskBadge。
+- disabled action 顯示 disabledReason。
+```
+
+---
+
+### 5.2 `EntitySummaryCard`
+
+用途：列表、overview、related entities 區塊。
+
+顯示：
+
+```text
+Name
+ID
+Status
+Risk
+Owner
+Key metrics
+Open alerts / jobs
+Quick actions
+```
+
+---
+
+### 5.3 `LinkedEntitiesPanel`
+
+用途：顯示該物件關聯。
+
+例如 Strategy 關聯：
+
+```text
+Owner Persona
+Capital Pool
+Experiments
+Artifacts
+Reviews
+Deployments
+Incidents
+Agora Notes
+```
+
+---
+
+## 6. Status / Risk Components
+
+### 6.1 `StatusBadge`
+
+用途：顯示 entity 狀態。
+
+輸入：
+
+```ts
+type StatusBadgeProps = {
+  domain: 'strategy' | 'persona' | 'experiment' | 'review' | 'deployment' | 'incident' | 'job' | 'skill' | 'mcp' | 'rebalance' | 'evolution' | 'memory' | 'agoraSession';
+  status: string;
+};
+```
+
+需求：
+
+```text
+- status enum 不直接顯示。
+- 依 locale 使用 translation key。
+- 使用一致顏色映射。
+```
+
+---
+
+### 6.2 `RiskBadge`
+
+風險等級：
+
+```text
+none
+low
+medium
+high
+critical
+blocked
+```
+
+顯示：
+
+```text
+zh-TW: 無 / 低 / 中 / 高 / 重大 / 已阻擋
+en-US: None / Low / Medium / High / Critical / Blocked
+```
+
+---
+
+### 6.3 `LifecycleStepper`
+
+用途：顯示 Strategy lifecycle。
+
+狀態：
+
+```text
+discovered
+scaffolded
+replicated
+approved
+paper
+live
+retired
+```
+
+需求：
+
+```text
+- current step 高亮。
+- passed steps 顯示 completed。
+- blocked step 顯示 blocker icon。
+- 點擊 step 可顯示該 state 的條件與歷史。
+```
+
+---
+
+### 6.4 `HealthIndicator`
+
+用途：runtime、BFF、MCP server、tool、job workers 等健康狀態。
+
+狀態：
+
+```text
+healthy
+degraded
+offline
+unknown
+paused
+```
+
+---
+
+## 7. Data Display Components
+
+### 7.1 `PantheonDataTable`
+
+用途：所有列表頁通用 table。
+
+需求：
+
+```text
+- sorting
+- filtering
+- pagination
+- row selection
+- bulk actions
+- column visibility
+- saved views optional
+- empty state
+- loading skeleton
+- error state
+```
+
+Props：
+
+```ts
+type PantheonDataTableProps<T> = {
+  data: T[];
+  columns: TableColumn<T>[];
+  filters?: FilterConfig[];
+  rowActions?: AvailableAction[] | ((row: T) => AvailableAction[]);
+  bulkActions?: AvailableAction[];
+  isLoading?: boolean;
+  error?: ApiError | null;
+  emptyState?: EmptyStateConfig;
+};
+```
+
+---
+
+### 7.2 `MetricCard`
+
+用途：顯示關鍵指標。
+
+範例：
+
+```text
+Sharpe
+Max Drawdown
+Risk Budget Usage
+Open Incidents
+Running Jobs
+Capital Allocation
+Ranking Score
+```
+
+Props：
+
+```ts
+type MetricCardProps = {
+  labelKey: string;
+  value: string | number;
+  trend?: 'up' | 'down' | 'flat';
+  status?: 'good' | 'warning' | 'bad' | 'neutral';
+  descriptionKey?: string;
+};
+```
+
+---
+
+### 7.3 `FilterBar`
+
+用途：列表頁的標準 filter。
+
+支援：
+
+```text
+status
+riskLevel
+owner
+persona
+capitalPool
+date range
+tag
+state
+```
+
+---
+
+### 7.4 `TabbedDetailLayout`
+
+用途：detail page 標準 layout。
+
+結構：
+
+```text
+EntityHeader
+SummaryStrip
+Tabs
+RightDrawer optional
+```
+
+---
+
+## 8. Action / Permission Components
+
+### 8.1 `PermissionAwareButton`
+
+用途：依 BFF `availableActions` 顯示可執行、不可執行、需審批、隱藏。
+
+AvailableAction 格式：
+
+```ts
+type AvailableAction = {
+  id: string;
+  labelKey: string;
+  enabled: boolean;
+  hidden?: boolean;
+  disabledReasonKey?: string;
+  riskLevel?: RiskLevel;
+  requiresApproval?: boolean;
+  requiresConfirmation?: boolean;
+  confirmationType?: 'standard' | 'highRisk' | 'destructive';
+  priority?: 'primary' | 'secondary' | 'danger';
+};
+```
+
+行為：
+
+```text
+- hidden = true 時不顯示。
+- enabled = false 時 disabled，hover/click 顯示 disabled reason。
+- requiresConfirmation = true 時打開 ConfirmationModal。
+- requiresApproval = true 時顯示 approval badge。
+```
+
+---
+
+### 8.2 `ActionMenu`
+
+用途：secondary actions。
+
+需求：
+
+```text
+- 將 dangerous action 分隔顯示。
+- 高風險 action 顯示 RiskBadge。
+- disabled action 不應完全消失，除非 hidden=true。
+```
+
+---
+
+### 8.3 `HighRiskConfirmationModal`
+
+用途：所有高風險操作確認。
+
+必備欄位：
+
+```text
+Operation name
+Target object
+Current state
+New state / expected result
+Affected strategy
+Affected persona
+Affected capital pool
+Affected runtime
+Risk impact
+Rollback target if any
+Required approval if any
+Audit memo input
+Confirm button
+Cancel button
+```
+
+需求：
+
+```text
+- zh-TW / en-US 完整翻譯。
+- 確認前 audit memo 必填。
+- critical operation 可要求輸入 confirm phrase。
+```
+
+---
+
+## 9. Workflow Components
+
+### 9.1 `WorkflowStepper`
+
+用途：顯示季度調倉、審批、deployment、skill approval、MCP approval 等流程。
+
+Props：
+
+```ts
+type WorkflowStep = {
+  id: string;
+  labelKey: string;
+  status: 'not_started' | 'active' | 'completed' | 'blocked' | 'failed' | 'skipped';
+  requiredRole?: string;
+  blockerReasonKey?: string;
+};
+```
+
+---
+
+### 9.2 `StateTransitionPanel`
+
+用途：detail page 顯示可用 transition。
+
+顯示：
+
+```text
+Current state
+Allowed next states
+Blocked transitions
+Required evidence
+Required approval
+```
+
+---
+
+### 9.3 `BlockerList`
+
+用途：顯示為什麼不能進下一步。
+
+例：
+
+```text
+- OOS experiment missing
+- Risk check failed
+- Committee memo missing
+- Capital pool not assigned
+```
+
+---
+
+## 10. Governance Components
+
+### 10.1 `ApprovalPanel`
+
+用途：Review / Promotion / Rebalance / Skill / MCP approval detail。
+
+顯示：
+
+```text
+Request summary
+Target object
+Before / after
+Evidence
+Validator results
+Required approvers
+Decision history
+Decision memo
+Approve / Reject / Request Changes
+```
+
+---
+
+### 10.2 `ValidatorResultList`
+
+Validator 狀態：
+
+```text
+passed
+warning
+failed
+not_run
+```
+
+支援：
+
+```text
+Schema Validator
+Scope Validator
+Risk Check
+Data Leakage Check
+Reproducibility Check
+Capital Compatibility Check
+Tool Permission Check
+```
+
+---
+
+### 10.3 `DecisionMemoEditor`
+
+用途：所有審批決策與高風險操作 audit memo。
+
+需求：
+
+```text
+- required for approve/reject/high-risk command。
+- 支援 markdown。
+- 顯示 linked evidence。
+```
+
+---
+
+## 11. Operations Components
+
+### 11.1 `JobDrawer`
+
+用途：顯示長任務進度。
+
+顯示：
+
+```text
+Job ID
+Type
+Target
+Triggered by
+Status
+Progress
+Current step
+Logs
+Output artifacts
+Actions: cancel / retry / clone / open target
+```
+
+Job 狀態：
+
+```text
+queued
+running
+waiting_for_approval
+completed
+failed
+cancelled
+retrying
+```
+
+---
+
+### 11.2 `AlertCard`
+
+顯示：
+
+```text
+Severity
+Alert type
+Linked object
+Summary
+Created time
+Status
+Suggested actions
+```
+
+Alert 狀態：
+
+```text
+new
+acknowledged
+assigned
+investigating
+mitigated
+resolved
+closed
+```
+
+---
+
+### 11.3 `IncidentTimeline`
+
+用途：Incident detail。
+
+顯示：
+
+```text
+Created
+Assigned
+Investigation notes
+Mitigation actions
+Rollback events
+Postmortem updates
+Closed
+```
+
+---
+
+### 11.4 `RuntimeHealthCard`
+
+顯示：
+
+```text
+Runtime ID
+Status
+Heartbeat
+Running strategies
+CPU / memory
+Broker status
+Order latency
+Open incidents
+```
+
+---
+
+### 11.5 `EventStreamPanel`
+
+用途：即時事件流。
+
+支援事件：
+
+```text
+job.started
+job.progress
+job.completed
+strategy.state_changed
+risk.alert_created
+incident.updated
+deployment.started
+mcp.call_failed
+skill.sandbox_completed
+rebalance.applied
+```
+
+---
+
+## 12. Capability Management Components
+
+### 12.1 `PermissionMatrix`
+
+用途：Persona × Tool / MCP / Skill permission matrix。
+
+欄位：
+
+```text
+Capability
+Persona A
+Persona B
+Persona C
+Approval Mode
+Scope
+Rate Limit
+```
+
+狀態：
+
+```text
+allowed
+requires_approval
+blocked
+sandbox_only
+```
+
+---
+
+### 12.2 `PolicyMatrix`
+
+用途：Route Policy 管理。
+
+維度：
+
+```text
+Capability
+Allowed strategy state
+Allowed environment
+Requires approval
+Rate limit
+Parameter constraints
+```
+
+---
+
+### 12.3 `SchemaViewer`
+
+用途：Tool / MCP / Skill input/output schema。
+
+需求：
+
+```text
+- 顯示 JSON schema。
+- 可切換 raw / friendly view。
+- 可顯示 required fields。
+```
+
+---
+
+### 12.4 `SkillSandboxPanel`
+
+用途：Skill draft sandbox 測試。
+
+顯示：
+
+```text
+Skill draft
+Input test payload
+Sandbox result
+Security scan
+Risk classification
+Submit approval
+```
+
+---
+
+## 13. Formula / Rebalance Components
+
+### 13.1 `FormulaBuilder`
+
+用途：績效排名公式與 fitness formula 編輯。
+
+功能：
+
+```text
+Metric selection
+Weight editing
+Penalty editing
+Normalization method
+Caps / floors
+Outlier handling
+Formula preview
+Test calculation
+```
+
+需求：
+
+```text
+- 支援 no-code builder。
+- 支援 read-only formula expression preview。
+- 修改後公式狀態為 draft。
+```
+
+---
+
+### 13.2 `ScoreBreakdownPanel`
+
+用途：解釋 ranking score / fitness score。
+
+顯示：
+
+```text
+Metric
+Raw value
+Normalized value
+Weight
+Contribution
+Penalty
+Final score
+```
+
+---
+
+### 13.3 `AllocationSimulationPanel`
+
+用途：季度調倉模擬。
+
+顯示：
+
+```text
+Current allocation
+Recommended allocation
+Delta
+Risk impact
+Constraint violations
+Manual overrides
+```
+
+---
+
+## 14. Lineage / Audit Components
+
+### 14.1 `LineageGraph`
+
+用途：顯示 Strategy / Artifact / Experiment / Review / Deployment lineage。
+
+節點類型：
+
+```text
+Insight
+Strategy
+Spec
+Experiment
+Artifact
+Review
+Promotion
+Deployment
+Runtime
+Telemetry
+Incident
+Postmortem
+```
+
+需求：
+
+```text
+- 節點可點擊打開 Inspector。
+- 支援 filter by persona / strategy / time / status。
+```
+
+---
+
+### 14.2 `AuditTimeline`
+
+用途：所有 entity detail 的 audit。
+
+顯示：
+
+```text
+Timestamp
+Actor
+Action
+Before / after optional
+Risk level
+Decision memo
+Linked approval
+```
+
+---
+
+## 15. Agora Collaboration Components
+
+### 15.1 `ConversationCanvas`
+
+用途：Ask Personas、Committee Room、Session detail。
+
+功能：
+
+```text
+Message list
+Persona avatar
+Thread / reply
+Annotation bar
+Save as note
+Create insight
+Create training example
+Start committee
+```
+
+---
+
+### 15.2 `MessageAnnotationBar`
+
+每則訊息可操作：
+
+```text
+Useful
+Not useful
+Incorrect
+Save as note
+Remember
+Do not remember
+Create insight
+Create training example
+Attach to strategy
+```
+
+這些動作會自然捕捉有用資料。
+
+---
+
+### 15.3 `SignalReviewPanel`
+
+用途：Strategy Signal Review。
+
+顯示：
+
+```text
+Signal summary
+Strategy context
+Market context
+Feature explanation
+Similar historical cases
+Persona opinions
+Agree / Disagree / Flag
+Trader rationale
+```
+
+---
+
+### 15.4 `ResearchNotebookEditor`
+
+功能：
+
+```text
+Markdown editing
+Attach signal
+Attach strategy
+Attach chart
+Ask persona to expand
+Ask persona to critique
+Convert to insight
+Convert to research task
+Convert to strategy idea
+```
+
+---
+
+### 15.5 `DecisionJournalEditor`
+
+欄位：
+
+```text
+Market context
+Linked signal
+Linked strategy
+Decision
+Rationale
+Confidence
+Expected outcome
+Follow-up date
+Actual outcome
+Persona consulted
+```
+
+---
+
+### 15.6 `CommitteeRoomPanel`
+
+功能：
+
+```text
+Select target
+Select personas
+Load evidence pack
+Structured rounds
+Capture disagreement
+Generate committee memo
+Submit to governance
+```
+
+---
+
+## 16. Forms / Editors
+
+### 16.1 `StructuredForm`
+
+需求：
+
+```text
+- 支援 localized labels。
+- 支援 validation messages。
+- 支援 dirty state。
+- 支援 submit / cancel。
+```
+
+### 16.2 `MarkdownEditor`
+
+用於：
+
+```text
+Research notes
+Decision memo
+Postmortem
+Committee memo
+Strategy thesis
+```
+
+### 16.3 `JsonSchemaForm`
+
+用於：
+
+```text
+Tool schema
+MCP schema
+Experiment config
+Skill test payload
+```
+
+---
+
+# 17. State Machines
+
+以下狀態機是 Lovable 建置 UI 的基礎。前端不應自行判斷 transition 是否允許；BFF 應回傳 `availableActions`，但 UI 必須能依狀態顯示正確 stepper、badge、workflow。
+
+---
+
+## 17.1 Strategy Lifecycle State Machine
+
+狀態：
+
+```text
+discovered
+scaffolded
+replicated
+approved
+paper
+live
+degraded
+replaced
+retired
+archived
+```
+
+主要 transition：
+
+| From | To | Action | Requires Approval | UI Pattern |
+|---|---|---|---|---|
+| discovered | scaffolded | scaffold_spec | No | standard action |
+| scaffolded | replicated | run_replication | No | create job |
+| replicated | approved | submit_review / approve | Yes | review workflow |
+| approved | paper | promote_paper | Yes | confirmation + job |
+| paper | live | promote_live | Yes | high-risk modal |
+| live | degraded | mark_degraded | Yes | risk workflow |
+| live | replaced | replace_strategy | Yes | high-risk modal |
+| live | retired | retire_live | Yes | high-risk modal |
+| live | paper | rollback_to_paper | Yes | rollback modal |
+| any | archived | archive | Yes | destructive modal |
+
+UI 顯示：
+
+```text
+- LifecycleStepper 顯示 discovered → scaffolded → replicated → approved → paper → live → retired。
+- degraded / replaced 是 live 旁支狀態，應以 warning banner 顯示。
+```
+
+---
+
+## 17.2 Persona Lifecycle State Machine
+
+狀態：
+
+```text
+draft
+sandbox
+active
+probation
+restricted
+suspended
+retired
+archived
+```
+
+transition：
+
+| From | To | Action | Requires Approval |
+|---|---|---|---|
+| draft | sandbox | create_sandbox | No |
+| sandbox | active | activate_persona | Yes |
+| active | probation | put_on_probation | Yes |
+| active | restricted | restrict_persona | Yes |
+| active | suspended | suspend_persona | Yes |
+| probation | active | restore_active | Yes |
+| restricted | active | remove_restriction | Yes |
+| active | retired | retire_persona | Yes |
+| retired | archived | archive_persona | Yes |
+
+UI 注意：
+
+```text
+- restricted 狀態要在 Tools/MCP/Skills tabs 顯示限制 banner。
+- probation 狀態要在 Capital Binding tab 顯示 capital cap warning。
+```
+
+---
+
+## 17.3 Capital Pool Lifecycle
+
+狀態：
+
+```text
+draft
+active
+frozen
+rebalancing
+restricted
+retired
+```
+
+transition：
+
+| From | To | Action | Requires Approval |
+|---|---|---|---|
+| draft | active | activate_pool | Yes |
+| active | frozen | freeze_pool | Yes |
+| frozen | active | unfreeze_pool | Yes |
+| active | rebalancing | start_rebalance | Yes |
+| rebalancing | active | apply_rebalance | Yes |
+| active | restricted | restrict_pool | Yes |
+| active | retired | retire_pool | Yes |
+
+---
+
+## 17.4 Ranking Formula Lifecycle
+
+狀態：
+
+```text
+draft
+testing
+approved
+active
+deprecated
+retired
+```
+
+transition：
+
+| From | To | Action |
+|---|---|---|
+| draft | testing | test_formula |
+| testing | approved | submit_formula_review / approve |
+| approved | active | activate_formula |
+| active | deprecated | deprecate_formula |
+| deprecated | retired | retire_formula |
+
+UI 注意：
+
+```text
+- active formula 不可直接編輯，只能 clone new draft。
+- FormulaBuilder 在 active 狀態為 read-only。
+```
+
+---
+
+## 17.5 Quarterly Rebalance Workflow
+
+狀態：
+
+```text
+draft
+metrics_freezing
+metrics_frozen
+ranking_calculated
+simulation_ready
+under_review
+approved
+scheduled
+applied
+rolled_back
+cancelled
+```
+
+流程：
+
+```text
+draft
+→ metrics_freezing
+→ metrics_frozen
+→ ranking_calculated
+→ simulation_ready
+→ under_review
+→ approved
+→ scheduled
+→ applied
+```
+
+可逆 / 例外：
+
+```text
+applied → rolled_back
+any pre-applied state → cancelled
+metrics_frozen → metrics_freezing if unfreeze requested
+```
+
+UI 元件：
+
+```text
+WorkflowStepper
+MetricFreezePanel
+RankingResultViewer
+AllocationSimulationPanel
+OverrideManager
+ApprovalPanel
+```
+
+---
+
+## 17.6 Evolution Program State Machine
+
+狀態：
+
+```text
+draft
+active
+paused
+under_review
+completed
+retired
+```
+
+transition：
+
+| From | To | Action |
+|---|---|---|
+| draft | under_review | submit_evolution_review |
+| under_review | active | approve_program |
+| active | paused | pause_program |
+| paused | active | resume_program |
+| active | completed | complete_program |
+| completed | retired | retire_program |
+
+Evolution Run 狀態：
+
+```text
+queued
+running
+paused
+completed
+failed
+cancelled
+```
+
+---
+
+## 17.7 Experiment Workflow
+
+狀態：
+
+```text
+draft
+queued
+running
+completed
+failed
+invalidated
+attached_to_review
+archived
+```
+
+transition：
+
+| From | To | Action |
+|---|---|---|
+| draft | queued | run_experiment |
+| queued | running | job_started |
+| running | completed | job_completed |
+| running | failed | job_failed |
+| completed | attached_to_review | attach_to_review |
+| completed | invalidated | invalidate_result |
+| failed | queued | retry |
+| completed | archived | archive |
+
+---
+
+## 17.8 Review / Approval Workflow
+
+狀態：
+
+```text
+draft
+submitted
+validator_running
+in_review
+changes_requested
+approved
+rejected
+cancelled
+```
+
+transition：
+
+```text
+draft → submitted
+submitted → validator_running
+validator_running → in_review
+in_review → approved
+in_review → rejected
+in_review → changes_requested
+changes_requested → submitted
+submitted / in_review → cancelled
+```
+
+UI 元件：
+
+```text
+ApprovalPanel
+ValidatorResultList
+DecisionMemoEditor
+EvidencePackViewer
+```
+
+---
+
+## 17.9 Deployment Workflow
+
+狀態：
+
+```text
+draft
+submitted
+under_review
+approved
+scheduled
+deploying
+deployed
+failed
+rolled_back
+cancelled
+```
+
+transition：
+
+```text
+draft → submitted → under_review → approved → scheduled → deploying → deployed
+failed → rolled_back
+ deployed → rolled_back
+pre-deploy states → cancelled
+```
+
+UI 注意：
+
+```text
+- promote_live、rollback、emergency_kill 都必須 high-risk modal。
+- deployed 狀態 detail 應顯示 runtime、artifact、capital pool、rollback target。
+```
+
+---
+
+## 17.10 Risk Alert Workflow
+
+狀態：
+
+```text
+new
+acknowledged
+assigned
+investigating
+mitigated
+resolved
+closed
+```
+
+transition：
+
+```text
+new → acknowledged
+acknowledged → assigned
+assigned → investigating
+investigating → mitigated
+mitigated → resolved
+resolved → closed
+```
+
+可從任意未關閉狀態：
+
+```text
+→ create_incident
+```
+
+---
+
+## 17.11 Incident Workflow
+
+狀態：
+
+```text
+open
+assigned
+investigating
+mitigation_in_progress
+mitigated
+postmortem_required
+closed
+```
+
+transition：
+
+```text
+open → assigned → investigating → mitigation_in_progress → mitigated → postmortem_required → closed
+```
+
+UI 必備：
+
+```text
+IncidentTimeline
+LinkedObjectsPanel
+MitigationActions
+PostmortemEditor
+AuditTimeline
+```
+
+---
+
+## 17.12 Tool Lifecycle
+
+狀態：
+
+```text
+draft
+testing
+active
+restricted
+deprecated
+blocked
+retired
+```
+
+transition：
+
+```text
+draft → testing → active
+active → restricted
+active → deprecated → retired
+active → blocked
+restricted → active
+```
+
+---
+
+## 17.13 MCP Server Lifecycle
+
+狀態：
+
+```text
+draft
+connected
+healthy
+degraded
+disabled
+retired
+```
+
+transition：
+
+```text
+draft → connected → healthy
+healthy → degraded
+healthy / degraded → disabled
+disabled → healthy
+any → retired
+```
+
+MCP Tool permission 狀態：
+
+```text
+not_granted
+granted
+requires_approval
+sandbox_only
+blocked
+```
+
+---
+
+## 17.14 Skill Lifecycle
+
+狀態：
+
+```text
+draft
+sandboxed
+validated
+approved
+active
+deprecated
+blocked
+retired
+```
+
+transition：
+
+```text
+draft → sandboxed → validated → approved → active
+active → deprecated → retired
+active → blocked
+blocked → sandboxed if reopened
+```
+
+UI 元件：
+
+```text
+SkillSandboxPanel
+SchemaViewer
+PermissionMatrix
+ApprovalPanel
+```
+
+---
+
+## 17.15 Memory Review Workflow
+
+狀態：
+
+```text
+proposed
+approved
+rejected
+edited
+merged
+deprecated
+deleted
+sensitive
+```
+
+transition：
+
+```text
+proposed → approved
+proposed → rejected
+approved → edited
+approved → merged
+approved → sensitive
+approved → deprecated
+any → deleted with permission
+```
+
+---
+
+## 17.16 Insight Workflow
+
+狀態：
+
+```text
+raw
+triaged
+classified
+linked
+converted_to_strategy
+converted_to_research_task
+converted_to_training_example
+dismissed
+archived
+```
+
+transition：
+
+```text
+raw → triaged → classified
+classified → linked
+classified → converted_to_strategy
+classified → converted_to_research_task
+classified → converted_to_training_example
+any → dismissed
+any → archived
+```
+
+---
+
+## 17.17 Agora Session Workflow
+
+狀態：
+
+```text
+open
+active
+waiting_for_user
+summary_generated
+submitted_to_management
+closed
+archived
+```
+
+transition：
+
+```text
+open → active
+active → waiting_for_user
+waiting_for_user → active
+active → summary_generated
+summary_generated → submitted_to_management
+active / summary_generated → closed
+closed → archived
+```
+
+---
+
+## 17.18 Job Workflow
+
+狀態：
+
+```text
+queued
+running
+waiting_for_approval
+completed
+failed
+cancelled
+retrying
+```
+
+transition：
+
+```text
+queued → running
+running → completed
+running → failed
+running → waiting_for_approval
+waiting_for_approval → running
+failed → retrying → running
+queued / running → cancelled
+```
+
+UI：
+
+```text
+JobDrawer
+JobProgressBar
+JobLogViewer
+```
+
+---
+
+# 18. Localization Requirements for Components
+
+所有元件必須：
+
+```text
+- 接收 labelKey，而不是固定文字。
+- enum 狀態轉譯由 i18n dictionary 控制。
+- 高風險 modal、empty state、error state 必須有 zh-TW / en-US。
+- 使用者產生內容不強制翻譯，但可以提供 Translate / Summarize action。
+```
+
+範例 keys：
+
+```text
+status.strategy.discovered
+status.strategy.scaffolded
+status.strategy.replicated
+status.strategy.approved
+status.strategy.paper
+status.strategy.live
+status.strategy.retired
+
+action.submitReview
+action.promotePaper
+action.promoteLive
+action.rollback
+action.retire
+
+risk.low
+risk.medium
+risk.high
+risk.critical
+```
+
+---
+
+# 19. Lovable Build Instructions for Part 7
+
+Lovable 應依本文件建立：
+
+```text
+1. Shared component library。
+2. Management / Agora 共用 AppShell。
+3. StatusBadge / RiskBadge / LifecycleStepper。
+4. PermissionAwareButton / ActionMenu / HighRiskConfirmationModal。
+5. PantheonDataTable / MetricCard / FilterBar。
+6. JobDrawer / AlertCard / IncidentTimeline / EventStreamPanel。
+7. FormulaBuilder / AllocationSimulationPanel。
+8. PermissionMatrix / PolicyMatrix / SchemaViewer / SkillSandboxPanel。
+9. LineageGraph / AuditTimeline。
+10. ConversationCanvas / SignalReviewPanel / Notebook / DecisionJournal / CommitteeRoom。
+11. State machine constants and localized labels。
+```
+
+前端可先以 mock state machines 與 mock BFF availableActions 運作。
+
+---
+
+# 20. Acceptance Criteria
+
+Part 7 完成後，Lovable 的前端應滿足：
+
+```text
+1. 兩套前端共用同一套 AppShell。
+2. 所有 navigation、button、status、risk label 都可切換 zh-TW / en-US。
+3. Management entity detail page 可使用 EntityHeader、StatusBadge、RiskBadge、ActionMenu。
+4. Strategy lifecycle 可用 LifecycleStepper 顯示。
+5. High-risk actions 必須打開 confirmation modal。
+6. Disabled actions 顯示 disabled reason。
+7. JobDrawer 可顯示 mock job progress。
+8. Alert / Incident 元件可顯示狀態與反應操作。
+9. FormulaBuilder 可呈現 formula draft UI。
+10. PermissionMatrix 可呈現 persona × tool/MCP/skill 權限。
+11. ConversationCanvas 可支援 message annotation。
+12. State machine enum 與 UI badge 對應一致。
+13. 前端不硬編任何業務 transition；實際可用操作以 BFF availableActions 為準。
+```
+
+---
+
+# 21. 下一份文件
+
+下一份文件是：
+
+```text
+Part 8 — Lovable Build Prompts + Mock Data + QA Checklist
+```
+
+Part 8 將直接提供：
+
+```text
+- 可貼給 Lovable 的 build prompts
+- Management Console mock data
+- Agora Workbench mock data
+- demo scenarios
+- QA checklist
+- acceptance test cases
+```
+
+
+---
+
+# Part 8 — Lovable Build Prompts + Mock Data + QA Checklist
+文件版本：v1.0  
+語系：zh-TW  
+適用對象：Lovable、前端工程師、BFF 工程師、產品設計師、Pantheon 系統負責人
+
+---
+
+## 0. 本文件目的
+
+本文件是 Pantheon 前端規劃文件的第 8 部分，目標是讓 Lovable 可以開始實作前端。
+
+本文件包含：
+
+```text
+1. Lovable 建置策略
+2. Lovable 可直接使用的建置 Prompt
+3. 前端路由與建置順序
+4. Mock BFF client 規格
+5. Mock data 規格
+6. Demo scenarios
+7. QA checklist
+8. Acceptance criteria
+9. 不可違反的產品邊界
+```
+
+本文件承接前 7 份規格：
+
+```text
+Part 01 — Master Blueprint
+Part 02 — Management Console Process Inventory
+Part 03 — Management Console Page & Feature Design
+Part 04 — Agora Workbench User Workflow Inventory
+Part 05 — Agora Workbench Page & Feature Design
+Part 06 — Shared Data Model + BFF API Contract
+Part 07 — Component System + State Machines
+```
+
+---
+
+## 1. Lovable 建置總策略
+
+Pantheon 前端必須建成同一個 platform shell 下的兩套前端系統：
+
+```text
+Pantheon Management Console
+Pantheon Agora Workbench
+```
+
+兩套系統使用者不同，因此 UI 風格與互動邏輯必須不同。
+
+---
+
+## 1.1 Management Console 的建置目標
+
+Management Console 是管理者、研究主管、風控、資金配置者、系統操作員使用的控制台。
+
+它必須支援：
+
+```text
+策略與 Alpha 管理
+AI 人格管理
+資金池管理
+績效排序公式管理
+季度調倉管理
+演化方向管理
+研究與實驗管理
+審批與治理
+部署、runtime、風險與 incident 管理
+工具、MCP、Skill 管理
+知識、artifact、lineage 管理
+jobs、events、audit 管理
+```
+
+Management Console 不是展示頁，而是管理與反應系統。每個頁面都要顯示：
+
+```text
+目前狀態
+風險狀態
+可執行操作
+審批要求
+running jobs
+open alerts
+open incidents
+audit timeline
+```
+
+---
+
+## 1.2 Agora Workbench 的建置目標
+
+Agora Workbench 是分析師、交易者、AI 訓練師每天使用的工作台。
+
+它必須支援：
+
+```text
+每日交易工作台
+市場與 watchlist
+策略 signal review
+研究筆記
+詢問 AI personas
+Multi-persona committee
+決策日誌
+Alert triage
+Insight inbox
+Trainer Studio
+Memory Review
+Skill Coaching
+Persona Lab
+Evaluations
+Channels
+```
+
+Agora 的重點不是管理，而是讓分析師與交易者覺得有用，並在日常使用中自然產生有價值資料：
+
+```text
+trader notes
+signal feedback
+decision rationale
+persona feedback
+training examples
+research tasks
+strategy ideas
+committee memos
+```
+
+---
+
+## 1.3 共用建置原則
+
+Lovable 必須遵守：
+
+```text
+Frontend only
+BFF APIs 先用 mock client
+不直接串 Pantheon backend
+不實作真實交易操作
+不保存真實 secret
+所有高風險操作用 mock command + confirmation modal
+所有 UI text 使用 i18n translation keys
+支援 zh-TW 與 en-US 語系切換
+```
+
+---
+
+## 2. Lovable 建置順序
+
+建議 Lovable 分階段建置。
+
+```text
+Phase 1 — Shared Platform Shell
+Phase 2 — Management Console Core Pages
+Phase 3 — Management Console Deep Management Pages
+Phase 4 — Agora Workbench Daily Workflow Pages
+Phase 5 — Agora AI Collaboration / Trainer Pages
+Phase 6 — Realtime events, jobs, audit, final polish
+```
+
+---
+
+## 2.1 Phase 1 — Shared Platform Shell
+
+先建共用外框：
+
+```text
+AppShell
+GlobalTopBar
+ProductSwitcher
+LanguageSwitcher
+BFF Status Indicator
+Notification Center
+Global Search
+Role Menu
+Management Sidebar
+Agora Sidebar
+Right Drawer / Inspector
+Mock BFF Client
+Mock Event Feed
+```
+
+驗收：
+
+```text
+可以在 /management 與 /agora 之間切換。
+可以切換 zh-TW / en-US。
+Top bar 顯示 environment、BFF status、alerts、jobs、approvals。
+Sidebar 依 product 顯示不同 navigation。
+所有文字不能硬寫死，必須使用 translation key。
+```
+
+---
+
+## 2.2 Phase 2 — Management Console Core Pages
+
+先建 Management 的核心頁：
+
+```text
+/management/command-center
+/management/strategies
+/management/strategies/:strategyId
+/management/personas
+/management/personas/:personaId
+/management/capital
+/management/rebalance
+/management/governance
+/management/jobs
+```
+
+這些頁面要先能跑完整 demo scenario。
+
+---
+
+## 2.3 Phase 3 — Management Console Deep Management Pages
+
+再建深層管理功能：
+
+```text
+/management/ranking
+/management/evolution
+/management/experiments
+/management/deployment
+/management/runtimes
+/management/risk
+/management/incidents
+/management/tools
+/management/mcp
+/management/skills
+/management/artifacts
+/management/lineage
+/management/audit
+/management/settings
+```
+
+---
+
+## 2.4 Phase 4 — Agora Workbench Daily Workflow Pages
+
+先建交易者與分析師每天會用的頁：
+
+```text
+/agora/daily
+/agora/markets
+/agora/watchlist
+/agora/signals
+/agora/signals/:signalId
+/agora/notebook
+/agora/ask
+/agora/journal
+/agora/triage
+/agora/insights
+```
+
+---
+
+## 2.5 Phase 5 — Agora AI Collaboration / Trainer Pages
+
+再建 AI 協作與訓練頁：
+
+```text
+/agora/committee
+/agora/committee/:sessionId
+/agora/trainer
+/agora/trainer/:personaId
+/agora/memory
+/agora/skill-coaching
+/agora/persona-lab
+/agora/evaluations
+/agora/channels
+```
+
+---
+
+## 2.6 Phase 6 — Realtime / Polish
+
+最後補強：
+
+```text
+Realtime event simulation
+Job drawer behavior
+Notification behavior
+Audit timeline
+Empty states
+Loading states
+Error states
+High-risk confirmation modal
+Role-based action disabling
+Responsive desktop layout
+```
+
+---
+
+## 3. Lovable Master Prompt — Platform Shell
+
+以下可直接給 Lovable 使用。
+
+```text
+Build a frontend-only web application named Pantheon Platform.
+
+The app has two product areas under one shared platform shell:
+
+1. Pantheon Management Console
+   Route group: /management
+   Users: admins, research leads, risk officers, capital managers, system operators.
+   Purpose: manage strategies, AI personas, capital pools, performance ranking formulas, quarterly rebalancing, evolution programs, experiments, governance approvals, deployments, runtimes, risk, incidents, tools, MCP servers, skills, artifacts, jobs, events, and audit.
+
+2. Pantheon Agora Workbench
+   Route group: /agora
+   Users: analysts, traders, AI trainers.
+   Purpose: support daily market analysis, strategy signal review, research notes, AI persona collaboration, committee discussions, decision journals, alert triage, insight capture, training feedback, memory review, and skill coaching.
+
+Create a shared AppShell with:
+- Global top bar
+- Product switcher: Management / Agora
+- Language switcher: zh-TW / en-US
+- Environment indicator: Research / Paper / Live
+- BFF connection status
+- Pending approvals count
+- Open alerts count
+- Running jobs count
+- Notification center
+- User role menu
+- Global search
+- Right-side contextual drawer / inspector
+
+Use mock BFF client functions only. Do not call a real backend.
+Use mock data for all screens.
+Use translation keys and dictionaries for zh-TW and en-US. Do not hardcode visible UI strings.
+Use desktop-first responsive layout.
+Use professional fintech UI style.
+Management Console should feel like a high-density operational control plane.
+Agora Workbench should feel like an analyst/trader AI workbench, not an admin dashboard.
+```
+
+---
+
+## 4. Lovable Prompt — Management Console
+
+```text
+Build the Pantheon Management Console under /management.
+
+This console combines management, monitoring, response, approvals, deployment, rollback, and audit into one system because the same operational users manage these workflows.
+
+Create the following Management navigation groups:
+
+Command
+- Command Center
+
+Core Management
+- Strategies & Alphas
+- Personas
+- Capital & Allocation
+- Performance Ranking
+- Quarterly Rebalance
+- Evolution Steering
+
+Research & Governance
+- Experiments
+- Governance & Approvals
+- Knowledge & Artifacts
+- Lineage
+
+Operations
+- Deployment
+- Runtimes
+- Risk Center
+- Incidents
+- Jobs
+
+Capabilities
+- Tools
+- MCP
+- Skills
+
+System
+- Audit
+- Settings
+
+For each page, include:
+- Page title
+- Status summary cards
+- Primary data table or working canvas
+- Filters
+- Right drawer / inspector for selected objects
+- Primary and secondary actions
+- Empty state
+- Loading state
+- Error state
+- Mock BFF API calls
+- Mock realtime events where relevant
+- Role-based disabled actions
+- High-risk confirmation modal for dangerous actions
+
+Core requirement:
+Every management object should show its current state, risk state, available actions, linked entities, running jobs, open alerts/incidents, and audit summary.
+```
+
+---
+
+## 5. Lovable Prompt — Agora Workbench
+
+```text
+Build the Pantheon Agora Workbench under /agora.
+
+Agora is not an admin system. It is a daily AI-assisted workbench for analysts, traders, and AI trainers.
+
+Create the following Agora navigation groups:
+
+Daily Work
+- Daily Trading Cockpit
+- Market & Watchlist
+- Signal Review
+- Alert Triage
+
+Research
+- Research Notebook
+- Insight Inbox
+- Decision Journal
+
+AI Collaboration
+- Ask Personas
+- Committee Room
+
+Training
+- Trainer Studio
+- Memory Review
+- Skill Coaching
+- Persona Lab
+- Evaluations
+
+Channels
+- Channels
+
+Design principles:
+- Friendly to analysts and traders.
+- Help users understand markets, signals, strategy behavior, and risks.
+- Make it easy to ask AI personas contextual questions.
+- Make it easy to write notes, record decisions, and convert ideas into structured insights.
+- Capture useful data naturally through daily workflow actions.
+- Do not allow direct live deployment, capital rebalance, rollback, or MCP/Skill production approval in Agora.
+- Agora can create proposals, insights, training examples, research tasks, and committee memos that flow into the Management Console.
+
+For each page, include:
+- Main work area
+- Context cards
+- AI persona assistance panel where appropriate
+- One-click capture actions: Save as Note, Create Insight, Create Research Task, Create Training Example, Send to Management
+- Empty/loading/error states
+- i18n support for zh-TW and en-US
+```
+
+---
+
+## 6. Required Routes
+
+### 6.1 Management Routes
+
+```text
+/management
+/management/command-center
+/management/strategies
+/management/strategies/:strategyId
+/management/personas
+/management/personas/:personaId
+/management/capital
+/management/capital/:poolId
+/management/ranking
+/management/ranking/formulas
+/management/rebalance
+/management/rebalance/:rebalanceId
+/management/evolution
+/management/evolution/:programId
+/management/experiments
+/management/experiments/:experimentId
+/management/governance
+/management/governance/:reviewId
+/management/deployment
+/management/runtimes
+/management/risk
+/management/incidents
+/management/incidents/:incidentId
+/management/tools
+/management/mcp
+/management/skills
+/management/artifacts
+/management/lineage
+/management/jobs
+/management/audit
+/management/settings
+```
+
+### 6.2 Agora Routes
+
+```text
+/agora
+/agora/daily
+/agora/markets
+/agora/watchlist
+/agora/signals
+/agora/signals/:signalId
+/agora/notebook
+/agora/ask
+/agora/committee
+/agora/committee/:sessionId
+/agora/journal
+/agora/triage
+/agora/insights
+/agora/trainer
+/agora/trainer/:personaId
+/agora/memory
+/agora/skill-coaching
+/agora/persona-lab
+/agora/evaluations
+/agora/channels
+```
+
+---
+
+## 7. Mock Data Requirements
+
+Lovable should create mock data in a local mock BFF layer.
+
+Suggested folder structure:
+
+```text
+/src/lib/mockBff
+  strategies.ts
+  personas.ts
+  capitalPools.ts
+  rankingFormulas.ts
+  rebalances.ts
+  evolutionPrograms.ts
+  experiments.ts
+  governance.ts
+  deployments.ts
+  runtimes.ts
+  alerts.ts
+  incidents.ts
+  jobs.ts
+  tools.ts
+  mcp.ts
+  skills.ts
+  artifacts.ts
+  agora.ts
+  events.ts
+  audit.ts
+```
+
+---
+
+## 7.1 Mock Strategies
+
+```ts
+export const mockStrategies = [
+  {
+    id: "alpha_042",
+    displayName: "Taiwan ETF Basket Mean Reversion",
+    type: "strategy",
+    lifecycleState: "replicated",
+    ownerPersonaId: "persona_a",
+    capitalPoolId: "pool_alpha",
+    paperStatus: "not_deployed",
+    liveStatus: "not_deployed",
+    currentArtifactId: "artifact_042_v3",
+    riskLevel: "medium",
+    rankingScore: 82.4,
+    latestMetrics: {
+      quarterlyReturn: 0.084,
+      sharpe: 1.62,
+      sortino: 1.91,
+      maxDrawdown: 0.071,
+      turnover: 0.32
+    },
+    openAlertIds: [],
+    runningJobIds: ["job_backtest_042"],
+    blockerIds: ["blocker_committee_memo_missing"],
+    availableActions: [
+      { id: "run_oos", labelKey: "action.runOos", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "submit_review", labelKey: "action.submitReview", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "promote_live", labelKey: "action.promoteLive", riskLevel: "high", enabled: false, requiresApproval: true, disabledReasonKey: "disabled.strategyMustBeApprovedAndPaperTested" }
+    ]
+  },
+  {
+    id: "alpha_017",
+    displayName: "US Tech Momentum Rotation",
+    type: "strategy",
+    lifecycleState: "live",
+    ownerPersonaId: "persona_b",
+    capitalPoolId: "pool_growth",
+    paperStatus: "completed",
+    liveStatus: "running",
+    currentArtifactId: "artifact_017_v8",
+    riskLevel: "high",
+    rankingScore: 74.1,
+    latestMetrics: {
+      quarterlyReturn: 0.052,
+      sharpe: 1.21,
+      sortino: 1.36,
+      maxDrawdown: 0.112,
+      turnover: 0.48
+    },
+    openAlertIds: ["alert_dd_017"],
+    runningJobIds: [],
+    blockerIds: [],
+    availableActions: [
+      { id: "pause", labelKey: "action.pause", riskLevel: "high", enabled: true, requiresApproval: true },
+      { id: "rollback", labelKey: "action.rollback", riskLevel: "critical", enabled: true, requiresApproval: true },
+      { id: "open_incident", labelKey: "action.openIncident", riskLevel: "medium", enabled: true, requiresApproval: false }
+    ]
+  }
+];
+```
+
+---
+
+## 7.2 Mock Personas
+
+```ts
+export const mockPersonas = [
+  {
+    id: "persona_a",
+    displayName: "Athena",
+    role: "Statistical Arbitrage Researcher",
+    status: "active",
+    currentVersion: "v12",
+    performanceRank: 1,
+    capitalPoolIds: ["pool_alpha"],
+    ownedStrategyIds: ["alpha_042"],
+    allowedToolIds: ["tool_qlib", "tool_vectorbt", "tool_research_notes"],
+    allowedMcpToolIds: ["mcp_market_data.read", "mcp_backtest.run"],
+    allowedSkillIds: ["skill_signal_explainer"],
+    riskLevel: "low",
+    policyViolationCount: 0,
+    activeSessionIds: ["session_signal_042"],
+    runningJobIds: ["job_backtest_042"],
+    availableActions: [
+      { id: "edit_policy", labelKey: "action.editRoutePolicy", riskLevel: "medium", enabled: true, requiresApproval: true },
+      { id: "run_evaluation", labelKey: "action.runEvaluation", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "restrict_tools", labelKey: "action.restrictTools", riskLevel: "high", enabled: true, requiresApproval: true }
+    ]
+  },
+  {
+    id: "persona_b",
+    displayName: "Hermes",
+    role: "Momentum Strategy Operator",
+    status: "probation",
+    currentVersion: "v7",
+    performanceRank: 3,
+    capitalPoolIds: ["pool_growth"],
+    ownedStrategyIds: ["alpha_017"],
+    allowedToolIds: ["tool_market_summary", "tool_signal_review"],
+    allowedMcpToolIds: ["mcp_market_data.read"],
+    allowedSkillIds: ["skill_daily_brief"],
+    riskLevel: "medium",
+    policyViolationCount: 2,
+    activeSessionIds: [],
+    runningJobIds: [],
+    availableActions: [
+      { id: "review_policy_violation", labelKey: "action.reviewPolicyViolation", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "suspend", labelKey: "action.suspend", riskLevel: "high", enabled: true, requiresApproval: true }
+    ]
+  }
+];
+```
+
+---
+
+## 7.3 Mock Capital Pools
+
+```ts
+export const mockCapitalPools = [
+  {
+    id: "pool_alpha",
+    displayName: "Alpha Research Pool",
+    status: "active",
+    mandate: "Risk-adjusted allocation to validated alpha strategies.",
+    totalCapital: 10000000,
+    availableCapital: 2800000,
+    allocatedCapital: 7200000,
+    riskBudget: {
+      maxDrawdown: 0.12,
+      maxConcentration: 0.35,
+      minCashReserve: 0.15
+    },
+    linkedPersonaIds: ["persona_a"],
+    linkedStrategyIds: ["alpha_042"],
+    currentRebalanceId: "rebalance_2026_q2_pool_alpha",
+    riskLevel: "medium",
+    availableActions: [
+      { id: "create_rebalance", labelKey: "action.createRebalance", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "freeze_pool", labelKey: "action.freezePool", riskLevel: "high", enabled: true, requiresApproval: true }
+    ]
+  }
+];
+```
+
+---
+
+## 7.4 Mock Ranking Formula
+
+```ts
+export const mockRankingFormulas = [
+  {
+    id: "formula_persona_rank_v3",
+    displayName: "Persona Risk-Adjusted Quarterly Ranking v3",
+    scope: "persona",
+    status: "active",
+    version: "v3",
+    metrics: [
+      { key: "quarterly_return", weight: 0.2 },
+      { key: "sharpe", weight: 0.2 },
+      { key: "sortino", weight: 0.1 },
+      { key: "stability", weight: 0.1 },
+      { key: "capacity", weight: 0.1 },
+      { key: "max_drawdown", weight: -0.2 },
+      { key: "risk_violation_count", weight: -0.1 }
+    ],
+    normalization: "z_score",
+    outlierHandling: "winsorize_5_95",
+    effectiveFrom: "2026-04-01",
+    availableActions: [
+      { id: "clone_formula", labelKey: "action.cloneFormula", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "retire_formula", labelKey: "action.retireFormula", riskLevel: "high", enabled: true, requiresApproval: true }
+    ]
+  }
+];
+```
+
+---
+
+## 7.5 Mock Quarterly Rebalance
+
+```ts
+export const mockRebalances = [
+  {
+    id: "rebalance_2026_q2_pool_alpha",
+    displayName: "2026 Q2 Alpha Research Pool Rebalance",
+    quarter: "2026-Q2",
+    capitalPoolId: "pool_alpha",
+    formulaId: "formula_persona_rank_v3",
+    status: "simulation_ready",
+    metricFreezeStatus: "frozen",
+    rankingStatus: "calculated",
+    simulationStatus: "ready",
+    approvalStatus: "not_submitted",
+    recommendedAllocations: [
+      { entityId: "persona_a", entityType: "persona", currentWeight: 0.24, recommendedWeight: 0.32, score: 88.2 },
+      { entityId: "persona_b", entityType: "persona", currentWeight: 0.18, recommendedWeight: 0.12, score: 69.4 }
+    ],
+    constraints: [
+      { id: "max_concentration", status: "pass", messageKey: "constraint.maxConcentrationPass" },
+      { id: "cash_reserve", status: "pass", messageKey: "constraint.cashReservePass" }
+    ],
+    availableActions: [
+      { id: "submit_review", labelKey: "action.submitReview", riskLevel: "high", enabled: true, requiresApproval: true },
+      { id: "rerun_simulation", labelKey: "action.rerunSimulation", riskLevel: "low", enabled: true, requiresApproval: false }
+    ]
+  }
+];
+```
+
+---
+
+## 7.6 Mock Alerts and Incidents
+
+```ts
+export const mockAlerts = [
+  {
+    id: "alert_dd_017",
+    type: "drawdown_breach",
+    severity: "high",
+    status: "new",
+    titleKey: "alert.drawdownBreach.title",
+    description: "alpha_017 live drawdown exceeded warning threshold.",
+    linkedStrategyId: "alpha_017",
+    linkedRuntimeId: "runtime_b",
+    linkedCapitalPoolId: "pool_growth",
+    createdAt: "2026-05-03T09:12:00+08:00",
+    availableActions: [
+      { id: "acknowledge", labelKey: "action.acknowledge", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "open_incident", labelKey: "action.openIncident", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "rollback", labelKey: "action.rollback", riskLevel: "critical", enabled: true, requiresApproval: true }
+    ]
+  }
+];
+
+export const mockIncidents = [
+  {
+    id: "incident_017_dd",
+    severity: "high",
+    status: "investigating",
+    displayName: "alpha_017 drawdown investigation",
+    linkedStrategyId: "alpha_017",
+    linkedAlertIds: ["alert_dd_017"],
+    ownerUserId: "risk_001",
+    timeline: [
+      { ts: "2026-05-03T09:12:00+08:00", event: "Alert created" },
+      { ts: "2026-05-03T09:20:00+08:00", event: "Risk officer assigned" }
+    ],
+    availableActions: [
+      { id: "ask_persona_analysis", labelKey: "action.askPersonaAnalysis", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "create_postmortem", labelKey: "action.createPostmortem", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "close_incident", labelKey: "action.closeIncident", riskLevel: "medium", enabled: true, requiresApproval: true }
+    ]
+  }
+];
+```
+
+---
+
+## 7.7 Mock Agora Signals
+
+```ts
+export const mockSignals = [
+  {
+    id: "signal_042_20260503",
+    strategyId: "alpha_042",
+    asset: "0050.TW",
+    direction: "long",
+    confidence: 0.74,
+    status: "pending_review",
+    generatedAt: "2026-05-03T10:30:00+08:00",
+    explanation: "Mean reversion signal triggered after basket spread exceeded threshold.",
+    relatedFeatureIds: ["feature_zscore_spread", "feature_volume_filter"],
+    personaOpinionIds: ["opinion_persona_a_signal_042", "opinion_persona_b_signal_042"],
+    availableActions: [
+      { id: "agree", labelKey: "action.agree", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "disagree", labelKey: "action.disagree", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "flag_suspicious", labelKey: "action.flagSuspicious", riskLevel: "medium", enabled: true, requiresApproval: false },
+      { id: "create_research_task", labelKey: "action.createResearchTask", riskLevel: "low", enabled: true, requiresApproval: false }
+    ]
+  }
+];
+```
+
+---
+
+## 7.8 Mock Agora Sessions
+
+```ts
+export const mockAgoraSessions = [
+  {
+    id: "session_signal_042",
+    type: "signal_review",
+    title: "Signal review for alpha_042 / 0050.TW",
+    linkedStrategyId: "alpha_042",
+    linkedSignalId: "signal_042_20260503",
+    participantPersonaIds: ["persona_a", "persona_b"],
+    humanParticipantIds: ["trader_001"],
+    status: "active",
+    languageMode: "follow_ui",
+    createdAt: "2026-05-03T10:35:00+08:00",
+    messageIds: ["msg_001", "msg_002", "msg_003"],
+    availableActions: [
+      { id: "generate_summary", labelKey: "action.generateSummary", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "create_insight", labelKey: "action.createInsight", riskLevel: "low", enabled: true, requiresApproval: false },
+      { id: "send_to_management", labelKey: "action.sendToManagement", riskLevel: "medium", enabled: true, requiresApproval: false }
+    ]
+  }
+];
+```
+
+---
+
+## 8. Demo Scenarios
+
+Lovable should implement mock UI flows for the following demo scenarios.
+
+---
+
+## 8.1 Scenario A — Strategy Review Flow
+
+```text
+Goal:
+Show a replicated strategy being submitted for review.
+
+Steps:
+1. User opens /management/strategies.
+2. User selects alpha_042.
+3. Strategy detail shows lifecycle state = replicated.
+4. Overview shows blocker: missing committee memo.
+5. User opens Governance tab.
+6. User clicks Submit Review.
+7. A confirmation / review request drawer opens.
+8. User attaches mock evidence pack.
+9. User submits.
+10. Strategy state updates to under_review or review_submitted.
+11. Job / event appears in Jobs and Event Stream.
+```
+
+Acceptance:
+
+```text
+Submit Review action is visible only when enabled.
+Audit event is created.
+Notification appears.
+Review request appears in Governance queue.
+```
+
+---
+
+## 8.2 Scenario B — Live Drawdown Alert to Incident to Rollback
+
+```text
+Goal:
+Show Management Console handling an execution issue.
+
+Steps:
+1. User opens /management/command-center.
+2. High severity alert appears for alpha_017.
+3. User opens Alert Inspector.
+4. User clicks Open Incident.
+5. Incident detail page opens.
+6. User asks Persona B for analysis.
+7. Mock analysis appears in incident timeline.
+8. User clicks Rollback.
+9. High-risk confirmation modal appears.
+10. User enters audit memo and confirms.
+11. Mock rollback job starts.
+12. Runtime / strategy status updates after job completion.
+```
+
+Acceptance:
+
+```text
+Rollback requires high-risk modal.
+Rollback creates a job.
+Incident timeline updates.
+Audit trail records the action.
+```
+
+---
+
+## 8.3 Scenario C — Quarterly Ranking and Capital Rebalance
+
+```text
+Goal:
+Show capital manager running a quarterly rebalance.
+
+Steps:
+1. User opens /management/rebalance.
+2. Selects rebalance_2026_q2_pool_alpha.
+3. Page shows metrics frozen, ranking calculated, simulation ready.
+4. User reviews ranking result.
+5. User opens allocation simulation.
+6. User applies a manual override.
+7. User submits rebalance for review.
+8. Governance request is created.
+9. After approval, user applies rebalance.
+10. Capital pool allocation changes.
+```
+
+Acceptance:
+
+```text
+Formula version is visible.
+Score breakdown is visible.
+Manual override requires reason.
+Apply Rebalance is high-risk and requires confirmation.
+```
+
+---
+
+## 8.4 Scenario D — New Persona Tool / MCP / Skill Permission
+
+```text
+Goal:
+Show persona permission management.
+
+Steps:
+1. User opens /management/personas/persona_a.
+2. User opens Tools / MCP / Skills tab.
+3. Permission matrix shows current permissions.
+4. User grants new MCP tool permission.
+5. System shows approval required.
+6. Approval request appears in Governance queue.
+7. After approval, persona permission updates.
+```
+
+Acceptance:
+
+```text
+Permission matrix supports grant / revoke.
+MCP permission change creates approval request.
+Audit timeline records before / after.
+```
+
+---
+
+## 8.5 Scenario E — Agora Signal Review to Research Task
+
+```text
+Goal:
+Show trader using Agora and creating valuable structured feedback.
+
+Steps:
+1. Trader opens /agora/signals.
+2. Selects signal_042_20260503.
+3. Signal detail shows explanation and persona opinions.
+4. Trader clicks Disagree.
+5. Trader enters rationale: market regime changed after macro event.
+6. Trader clicks Create Research Task.
+7. System creates insight / research task handoff.
+8. Management Command Center shows incoming item.
+```
+
+Acceptance:
+
+```text
+Trader feedback is captured as structured signal_feedback.
+No live trading action is possible in Agora.
+Handoff item appears in Management mock data.
+```
+
+---
+
+## 8.6 Scenario F — Skill Draft to Sandbox to Approval
+
+```text
+Goal:
+Show Agora Skill Coaching creating a draft and Management approving it.
+
+Steps:
+1. AI Trainer opens /agora/skill-coaching.
+2. Creates skill idea: explain signal using similar historical cases.
+3. AI draft appears.
+4. Trainer edits description.
+5. Runs mock sandbox test.
+6. Sends skill draft to Management.
+7. Management /skills shows draft pending approval.
+8. Capability Admin reviews risk classification.
+9. Approves skill.
+10. Skill becomes active and assignable to personas.
+```
+
+Acceptance:
+
+```text
+Skill cannot become active directly from Agora.
+Sandbox result is visible.
+Approval is required in Management.
+```
+
+---
+
+## 9. Translation Dictionary Requirements
+
+Lovable must include a basic translation dictionary.
+
+### 9.1 Required locale keys
+
+```text
+nav.management.commandCenter
+nav.management.strategies
+nav.management.personas
+nav.management.capital
+nav.management.ranking
+nav.management.rebalance
+nav.management.evolution
+nav.management.experiments
+nav.management.governance
+nav.management.deployment
+nav.management.runtimes
+nav.management.risk
+nav.management.incidents
+nav.management.tools
+nav.management.mcp
+nav.management.skills
+nav.management.artifacts
+nav.management.lineage
+nav.management.jobs
+nav.management.audit
+nav.management.settings
+
+nav.agora.daily
+nav.agora.markets
+nav.agora.watchlist
+nav.agora.signals
+nav.agora.notebook
+nav.agora.ask
+nav.agora.committee
+nav.agora.journal
+nav.agora.triage
+nav.agora.insights
+nav.agora.trainer
+nav.agora.memory
+nav.agora.skillCoaching
+nav.agora.personaLab
+nav.agora.evaluations
+nav.agora.channels
+```
+
+### 9.2 Action keys
+
+```text
+action.create
+action.edit
+action.clone
+action.submitReview
+action.approve
+action.reject
+action.requestChanges
+action.promotePaper
+action.promoteLive
+action.rollback
+action.pause
+action.resume
+action.retire
+action.openIncident
+action.acknowledge
+action.askPersonaAnalysis
+action.createResearchTask
+action.createInsight
+action.createTrainingExample
+action.sendToManagement
+action.runSandbox
+action.grantPermission
+action.revokePermission
+action.applyRebalance
+action.rerunSimulation
+```
+
+### 9.3 Status keys
+
+```text
+status.strategy.discovered
+status.strategy.scaffolded
+status.strategy.replicated
+status.strategy.approved
+status.strategy.paper
+status.strategy.live
+status.strategy.retired
+
+status.job.queued
+status.job.running
+status.job.completed
+status.job.failed
+
+status.alert.new
+status.alert.acknowledged
+status.alert.investigating
+status.alert.resolved
+
+risk.low
+risk.medium
+risk.high
+risk.critical
+```
+
+---
+
+## 10. QA Checklist — Global
+
+```text
+[ ] App has /management and /agora route groups.
+[ ] Product switcher works.
+[ ] Language switcher supports zh-TW and en-US.
+[ ] Locale persists in local storage.
+[ ] Sidebar labels switch language.
+[ ] Button labels switch language.
+[ ] Status badges switch language.
+[ ] Risk badges switch language.
+[ ] Empty states switch language.
+[ ] Error states switch language.
+[ ] High-risk confirmation modal switches language.
+[ ] Mock BFF client is used for all data.
+[ ] No real backend calls are made.
+[ ] No real trading operation is possible.
+[ ] All major entities include availableActions.
+[ ] Disabled actions show disabled reason.
+[ ] Job drawer exists.
+[ ] Notification center exists.
+[ ] Right inspector drawer exists.
+```
+
+---
+
+## 11. QA Checklist — Management Console
+
+```text
+[ ] Command Center shows lifecycle bottlenecks.
+[ ] Command Center shows pending approvals.
+[ ] Command Center shows open incidents.
+[ ] Command Center shows running jobs.
+[ ] Command Center shows Agora incoming queue.
+
+[ ] Strategy list shows lifecycle state, owner persona, capital pool, risk, paper/live status.
+[ ] Strategy detail has overview, spec, experiments, performance, execution, risk, incidents, artifacts, governance, lineage, audit.
+[ ] Strategy high-risk actions require confirmation.
+
+[ ] Persona list shows status, rank, capital binding, active strategies, tool permissions, policy violations.
+[ ] Persona detail supports route policy, tools/MCP/skills, capital binding, activity monitor, training, evaluation.
+
+[ ] Capital pool detail shows mandate, risk budget, exposure, persona binding, strategy binding, rebalance history.
+[ ] Ranking formula page supports formula weights, penalties, normalization, compare, approval state.
+[ ] Quarterly rebalance supports metric freeze, ranking result, allocation simulation, manual override, review, apply, rollback.
+
+[ ] Evolution program page shows direction, fitness formula, mutation rules, active runs, candidates.
+[ ] Experiments page shows running/completed/failed experiments and jobs.
+[ ] Governance queue shows all approval types.
+[ ] Runtime / Risk / Incident pages support response actions.
+[ ] Tools / MCP / Skills pages support registry, permissions, audit.
+[ ] Jobs page shows progress, logs, cancel/retry.
+[ ] Audit page shows entity timeline.
+```
+
+---
+
+## 12. QA Checklist — Agora Workbench
+
+```text
+[ ] Daily Trading Cockpit is the default Agora entry page.
+[ ] Daily page shows market summary, signals, alerts, persona brief, research questions.
+[ ] Market / Watchlist page supports annotations and create insight.
+[ ] Signal Review supports agree, disagree, flag suspicious, ask persona, create research task.
+[ ] Research Notebook supports note creation and convert to insight / strategy idea / experiment request.
+[ ] Ask Personas supports persona selection and context selection.
+[ ] Committee Room supports multiple personas, evidence pack, discussion, memo generation.
+[ ] Decision Journal supports linked signal/strategy, rationale, confidence, outcome follow-up.
+[ ] Alert Triage supports acknowledge, dismiss, escalate, ask persona.
+[ ] Insight Inbox supports promote to strategy idea, attach to strategy, create research task, create training example.
+[ ] Trainer Studio supports feedback queue, behavior rules, evaluation, drift monitor.
+[ ] Memory Review supports approve/reject/edit/merge/move memory.
+[ ] Skill Coaching supports draft, sandbox, send to Management.
+[ ] Agora never exposes direct live deploy, rollback, capital rebalance, or production MCP/Skill approval actions.
+```
+
+---
+
+## 13. High-Risk Action QA
+
+High-risk actions must show confirmation modal.
+
+```text
+[ ] Promote to Live shows confirmation.
+[ ] Rollback shows confirmation.
+[ ] Apply Rebalance shows confirmation.
+[ ] Freeze Capital Pool shows confirmation.
+[ ] Change Ranking Formula active version shows confirmation.
+[ ] Grant MCP Tool shows approval / confirmation.
+[ ] Approve Skill shows confirmation.
+[ ] Suspend Persona shows confirmation.
+[ ] Emergency Kill shows critical confirmation.
+```
+
+Confirmation modal must include:
+
+```text
+[ ] Operation name
+[ ] Target object
+[ ] Current state
+[ ] New state / expected effect
+[ ] Risk impact
+[ ] Required approval
+[ ] Audit memo field
+[ ] Confirm / cancel buttons
+```
+
+---
+
+## 14. Final Acceptance Criteria
+
+Lovable output is acceptable when:
+
+```text
+1. The app clearly separates Management Console and Agora Workbench.
+2. Management Console combines management, monitoring, response, approval, deployment, rollback, and audit.
+3. Agora Workbench is friendly to analysts and traders, not an admin dashboard.
+4. All major pages run with mock data.
+5. All actions call mock BFF client functions.
+6. All major entity cards and detail pages show state, risk, linked entities, available actions, jobs, alerts, and audit summary.
+7. High-risk actions are protected by confirmation modal.
+8. zh-TW / en-US language switching works across both products.
+9. Agora can create insights, research tasks, training examples, and management handoff items.
+10. Agora cannot directly execute live or capital-affecting actions.
+11. Management receives handoff items from Agora in Command Center.
+12. Demo scenarios A-F can be clicked through with mock data.
+```
+
+---
+
+## 15. Final Lovable Instruction Summary
+
+```text
+Build Pantheon Platform as a frontend-only, bilingual, mock-BFF-driven web app.
+
+Create two product areas:
+1. Pantheon Management Console for operational management and control.
+2. Pantheon Agora Workbench for analyst/trader/AI trainer daily workflows.
+
+Use all route maps, mock data models, components, state machines, and QA criteria described in Parts 1-8.
+
+Prioritize clarity, role-based UX, action safety, and complete workflow coverage over decorative UI.
+```
+
+
+---
+
+# Part 10 — SA/SD Gap Remediation 2026-05-05-B Medium / Low
+
+# Pantheon Frontend Build Spec — SA/SD Gap Remediation 2026-05-05-B
+## Medium / Low Complete Definitions
+
+> 本文件是 `2026-05-05-A` remediation pack 的續補，專門處理原本只標 patch target、尚未給實際 schema 的 Medium / Low gaps。此文件為 normative addendum，優先於 Part 1–8 中較籠統的描述。
+
+## 修正範圍
+
+- Medium gaps: 41 條
+- Low gaps: 23 條
+- 本次補齊：G06, G07, G08, G09, G10, G11, G12, G20, G21, G22, G23, G24, G25, G26, G27, G34, G35, G36, G37, G38, G39, G40, G41, G42, G43, G44, G45, G46, G47, G50, G51, G52, G53, G54, G55, G59, G60, G61, G62, G63, G64, G65, G69, G70, G71, G72, G73, G74, G75, G76, G77, G79, G80, G81, G82, G83, G84, G85, G87, G88, G89, G90, G91, G92。
+
+## Hard rule
+
+任何 Lovable / frontend implementation 不得再以 mock 推測補齊本文件已定義之項目。若 implementation 與本文件不一致，以本文件為準。
+
+
+---
+
+## 1. G06 — 語系切換與 Persona 回應語言規則
+
+### 決議
+
+UI 語系與 Persona 回應語言分開管理，但預設 Persona 回應語言跟隨 UI 語系。
+
+### TypeScript contract
+
+```ts
+export type LocaleCode = "zh-TW" | "en-US";
+export type PersonaResponseLanguageMode = "follow_ui" | "zh-TW" | "en-US" | "mixed_original";
+
+export interface UserLocalePreferenceDTO {
+  uiLocale: LocaleCode;
+  personaResponseLanguage: PersonaResponseLanguageMode;
+}
+
+export interface AgoraSessionLanguageDTO {
+  sessionId: string;
+  responseLanguage: PersonaResponseLanguageMode;
+  lockedByUser: boolean;
+}
+```
+
+### fallback priority
+
+| 優先序 | 來源 | 說明 |
+|---:|---|---|
+| 1 | session.responseLanguage | 使用者在 session 內指定時優先 |
+| 2 | user.personaResponseLanguage | 使用者個人偏好 |
+| 3 | user.uiLocale | 預設跟隨 UI 語系 |
+| 4 | `zh-TW` | 系統 fallback |
+
+### UI rule
+
+- `Ask Personas`、`Committee Room`、`Trainer Studio` 必須顯示 session language selector。
+- 切換 UI locale 不得覆蓋已鎖定的 session response language。
+- 使用者產生內容不自動翻譯；提供 `Translate View` 與 `Summarize in Current Language`。
+
+
+---
+
+## 2. G07 — Notification 類型與 payload schema
+
+### NotificationType enum
+
+```ts
+export type NotificationType =
+  | "approval_required"
+  | "approval_decision"
+  | "risk_alert"
+  | "incident_update"
+  | "job_completed"
+  | "job_failed"
+  | "deployment_event"
+  | "rollback_event"
+  | "rebalance_event"
+  | "persona_policy_violation"
+  | "handoff_incoming"
+  | "mention"
+  | "system_health";
+
+export interface NotificationDTO {
+  id: string;
+  type: NotificationType;
+  severity: "info" | "warning" | "critical";
+  titleKey: string;
+  bodyKey: string;
+  titleParams?: Record<string, string | number>;
+  bodyParams?: Record<string, string | number>;
+  createdAt: string;
+  readAt: string | null;
+  actor?: LinkedEntityRef;
+  target: LinkedEntityRef;
+  route: string;
+  actionId?: string;
+  requiresUserAction: boolean;
+  expiresAt?: string | null;
+}
+```
+
+
+### Notification routing table
+
+| type | route | requiresUserAction | default severity |
+|---|---|---:|---|
+| approval_required | `/management/governance/:reviewId` | true | warning |
+| approval_decision | target entity route | false | info |
+| risk_alert | `/management/risk?alertId=:id` | true | warning |
+| incident_update | `/management/incidents/:incidentId` | true | warning |
+| job_completed | `/management/jobs/:jobId` | false | info |
+| job_failed | `/management/jobs/:jobId` | true | warning |
+| deployment_event | `/management/deployment/:deploymentId` | true | warning |
+| rollback_event | `/management/deployment/:deploymentId` | true | critical |
+| rebalance_event | `/management/rebalance/:rebalanceId` | true | warning |
+| persona_policy_violation | `/management/personas/:personaId?tab=violations` | true | critical |
+| handoff_incoming | Management queue destination | true | info |
+| mention | originating session or object route | false | info |
+| system_health | `/management/command-center` | true | warning |
+
+### BFF endpoints
+
+```http
+GET /bff/notifications?status=unread|all&limit=50
+POST /bff/notifications/<built-in function id>/actions/mark-read
+POST /bff/notifications/actions/mark-all-read
+```
+
+
+---
+
+## 3. G08 — Right Drawer Surface enum
+
+```ts
+export type RightDrawerSurface =
+  | "strategy_inspector"
+  | "persona_inspector"
+  | "capital_pool_inspector"
+  | "job_inspector"
+  | "alert_inspector"
+  | "incident_inspector"
+  | "signal_inspector"
+  | "message_inspector"
+  | "artifact_inspector"
+  | "tool_call_inspector"
+  | "persona_quick_ask"
+  | "handoff_inspector"
+  | "audit_event_inspector";
+
+export interface RightDrawerState {
+  open: boolean;
+  surface: RightDrawerSurface | null;
+  entityRef?: LinkedEntityRef;
+  payload?: Record<string, unknown>;
+  sourceRoute: string;
+}
+```
+
+### Surface behavior
+
+| surface | opened from | required payload |
+|---|---|---|
+| strategy_inspector | any strategy link | `entityRef.type=strategy` |
+| persona_inspector | persona links | `entityRef.type=persona` |
+| capital_pool_inspector | pool links | `entityRef.type=capital_pool` |
+| job_inspector | job row / notification | `entityRef.type=job` |
+| alert_inspector | alert card | `entityRef.type=risk_alert` |
+| incident_inspector | incident card | `entityRef.type=incident` |
+| signal_inspector | Agora signal | `entityRef.type=signal` |
+| message_inspector | Agora message | `entityRef.type=message` |
+| artifact_inspector | artifact link | `entityRef.type=artifact` |
+| tool_call_inspector | tool call row | `payload.callId` |
+| persona_quick_ask | any context action | `payload.contextRef` |
+| handoff_inspector | handoff queue | `entityRef.type=handoff` |
+| audit_event_inspector | audit timeline | `entityRef.type=audit_event` |
+
+
+---
+
+## 4. G09 — Global Search 搜尋範圍與排序規則
+
+```ts
+export type SearchEntityType =
+  | "strategy" | "persona" | "capital_pool" | "experiment" | "artifact"
+  | "review_request" | "deployment" | "runtime" | "incident" | "tool"
+  | "mcp_server" | "mcp_tool" | "skill" | "insight" | "research_note"
+  | "agora_session" | "decision_journal_entry" | "job" | "audit_event";
+
+export interface SearchResultDTO {
+  id: string;
+  type: SearchEntityType;
+  title: string;
+  subtitle?: string;
+  status?: string;
+  riskLevel?: RiskLevel;
+  owner?: LinkedEntityRef;
+  updatedAt: string;
+  route: string;
+  score: number;
+  matchedFields: string[];
+}
+
+export const SEARCH_SCORE_WEIGHTS = {
+  exactId: 100,
+  exactTitle: 90,
+  prefixTitle: 75,
+  fuzzyTitle: 55,
+  linkedEntity: 35,
+  noteBody: 15,
+  recencyBoostMax: 10,
+  openAlertBoost: 8,
+  liveRiskBoost: 8
+} as const;
+```
+
+### Search request
+
+```http
+GET /bff/search?q={query}&types=strategy,persona&limit=20
+```
+
+### Sorting rule
+
+`score = textMatchScore + recencyBoost + riskBoost + openWorkBoost`。BFF 必須回傳已排序結果；前端不可自行重新排序，只可在同分時用 `updatedAt desc`。
+
+### Product switching
+
+- 從 Management 搜尋到 Agora 物件時，結果仍可顯示，但 route 必須指向 `/agora/...`。
+- 從 Agora 搜尋到 Management 高風險物件時，只能開 readonly inspector，除非使用者有 Management role。
+
+
+---
+
+## 5. G10 — Locked decisions / ADR versioning
+
+### ADR schema
+
+```ts
+export interface ArchitectureDecisionRecordDTO {
+  adrId: string;           // e.g. ADR-FE-0007
+  title: string;
+  decision: string;
+  status: "proposed" | "accepted" | "superseded" | "rejected";
+  decidedAt: string;
+  decidedBy: LinkedEntityRef;
+  supersedes?: string[];
+  supersededBy?: string | null;
+  affectedSpecParts: string[];
+}
+```
+
+### Required ADRs
+
+| ADR | 決議 |
+|---|---|
+| ADR-FE-0001 | Management + Operations 合併為 Management Console |
+| ADR-FE-0002 | Agora Workbench 不能直接執行 live / capital high-risk action |
+| ADR-FE-0003 | BFF 回傳 `availableActions: ActionDescriptor[]` |
+| ADR-FE-0004 | `/management/risk` 是 canonical route |
+| ADR-FE-0005 | Strategy lifecycle 使用 8 個 canonical lifecycle status |
+
+
+---
+
+## 6. G11 G81 — Design token 對應表
+
+### Required tokens
+
+| Semantic token | Tailwind / CSS variable | 用途 |
+|---|---|---|
+| `--pantheon-risk-critical` | `bg-red-600 text-white` | critical risk badge / destructive action |
+| `--pantheon-risk-high` | `bg-orange-500 text-white` | high risk |
+| `--pantheon-risk-medium` | `bg-amber-400 text-black` | medium risk |
+| `--pantheon-risk-low` | `bg-slate-300 text-slate-900` | low risk |
+| `--pantheon-status-live` | `bg-emerald-600 text-white` | live deployment |
+| `--pantheon-status-paper` | `bg-yellow-500 text-black` | paper deployment |
+| `--pantheon-status-retired` | `bg-zinc-500 text-white` | retired / archived |
+| `--pantheon-surface-console` | `bg-slate-950` | Management Console background |
+| `--pantheon-surface-workbench` | `bg-neutral-50` | Agora Workbench background |
+
+### Rule
+
+StatusBadge 與 RiskBadge 必須只使用 semantic tokens，不得在元件內硬寫顏色值。
+
+
+---
+
+## 7. G12 G74 — i18n 驗收工具與錯誤訊息規格
+
+```ts
+export interface BffError {
+  code: string;
+  message: string;
+  i18nKey: string;
+  i18nParams?: Record<string, string | number>;
+  severity: "info" | "warning" | "error" | "critical";
+  retryable: boolean;
+  details?: Record<string, unknown>;
+}
+```
+
+### i18n tooling requirements
+
+- Build 必須在缺 translation key 時 fail。
+- 必須提供 pseudo-locale `en-XA` 給 QA 檢查 layout overflow。
+- BFF error 必須回 `i18nKey`，前端顯示 localized message。
+- 若找不到 key，顯示 `message`，並在 development 顯示 missing key warning。
+
+### Accept-Language fallback
+
+見 G71。
+
+
+---
+
+## 8. G20 G80 — Incident mitigation / training feedback / attachment schema
+
+```ts
+export type IncidentStatus = "new" | "acknowledged" | "assigned" | "investigating" | "mitigated" | "resolved" | "postmortem_required" | "closed";
+export type MitigationActionType = "pause_strategy" | "reduce_allocation" | "rollback" | "disable_tool" | "restrict_persona" | "open_research_task" | "manual_note";
+
+export interface IncidentTimelineEventDTO {
+  id: string;
+  incidentId: string;
+  occurredAt: string;
+  actor: LinkedEntityRef;
+  eventType: "created" | "acknowledged" | "assigned" | "mitigation_applied" | "status_changed" | "note_added" | "attachment_added" | "closed";
+  summary: string;
+  attachments: IncidentAttachmentDTO[];
+}
+
+export interface IncidentAttachmentDTO {
+  id: string;
+  fileName: string;
+  mimeType: "text/plain" | "application/json" | "text/markdown" | "image/png" | "application/pdf";
+  sizeBytes: number;
+  storageUrl: string;
+}
+
+export interface IncidentTrainingFeedbackDTO {
+  id: string;
+  incidentId: string;
+  targetPersonaId?: string;
+  targetStrategyId?: string;
+  feedbackType: "persona_behavior" | "strategy_failure_mode" | "risk_rule" | "tool_misuse";
+  summary: string;
+  recommendedAction: "create_training_example" | "update_memory" | "update_route_policy" | "update_evolution_constraint";
+  status: "proposed" | "accepted" | "rejected";
+}
+```
+
+### Workflow
+
+`new → acknowledged → assigned → investigating → mitigated → resolved → postmortem_required → closed`。`mitigated` 後若 impact 為 high 或 critical，必須產生 postmortem。
+
+
+---
+
+## 9. G21 G61 — Memory 與 Training Update 連結規則
+
+```ts
+export type MemoryStatus = "proposed" | "active" | "quarantined" | "rejected" | "deprecated" | "deleted";
+export type TrainingUpdateStatus = "draft" | "evaluation_required" | "under_review" | "approved" | "published" | "rejected" | "rolled_back";
+
+export interface MemoryTrainingLinkDTO {
+  id: string;
+  memoryId: string;
+  trainingExampleId?: string;
+  trainerFeedbackId?: string;
+  updateId?: string;
+  relationship: "created_from_feedback" | "requires_training_example" | "conflicts_with_training" | "approved_by_update";
+}
+```
+
+### Rules
+
+| Memory transition | Required role | Side effect |
+|---|---|---|
+| proposed → active | AI Trainer or Research Lead | may create training example |
+| proposed → quarantined | AI Trainer | creates review task |
+| quarantined → active | AI Trainer + Reviewer if linked to live strategy | creates audit event |
+| active → deprecated | AI Trainer | creates memory invalidation event |
+| any → deleted | Admin | high-risk action if linked to live deployment |
+
+
+---
+
+## 10. G22 G39 G40 — Tool / MCP / Skill entity 差異與欄位
+
+### Entity separation
+
+| Entity | Purpose | Has server connection | Has executable code | Has schema | Has sandbox | Has persona permission |
+|---|---|---:|---:|---:|---:|---:|
+| Tool | Internal capability wrapper | false | false | true | optional | true |
+| MCPServer | External MCP endpoint | true | false | false | health test only | server-level allowlist |
+| MCPTool | Tool discovered from MCP server | true | false | true | call dry-run | true |
+| Skill | Pantheon skill package / workflow | optional | true or workflow steps | true | required | true |
+
+### List columns
+
+| List | Required columns |
+|---|---|
+| Tool List | toolId, name, type, sideEffectLevel, status, allowedPersonasCount, lastUsedAt, errorRate |
+| MCP Server List | serverId, name, transport, status, toolsCount, authType, lastHealthCheckAt |
+| MCP Tool List | mcpToolId, serverId, name, sideEffectLevel, schemaVersion, allowedPersonasCount, lastCallAt |
+| Skill List | skillId, name, version, status, riskLevel, sandboxStatus, allowedPersonasCount, lastUsedAt |
+
+
+---
+
+## 11. G23 — Insight lineage 欄位
+
+```ts
+export interface InsightLineageDTO {
+  insightId: string;
+  sourceType: "trader_note" | "signal_feedback" | "persona_response" | "committee_memo" | "alert_triage" | "market_event" | "postmortem";
+  sourceRef: LinkedEntityRef;
+  createdBy: LinkedEntityRef;
+  linkedStrategyIds: string[];
+  linkedSignalIds: string[];
+  linkedPersonaIds: string[];
+  convertedTo?: LinkedEntityRef[];
+  parentInsightIds: string[];
+  childInsightIds: string[];
+}
+```
+
+### UI rule
+
+Insight Detail 必須顯示 source、linked entities、conversion history、parent/child insight chain。
+
+
+---
+
+## 12. G24 G25 G73 — Job types input/output payload、async 判定、progress throttling
+
+```ts
+export type JobType =
+  | "backtest" | "oos" | "stress_test" | "parameter_sweep" | "artifact_build"
+  | "validator_run" | "formula_recalculation" | "rebalance_simulation"
+  | "evolution_run" | "mcp_discovery" | "skill_sandbox" | "persona_evaluation"
+  | "deployment" | "rollback" | "postmortem_generation";
+
+export interface JobDTO<TInput = unknown, TOutput = unknown> {
+  id: string;
+  type: JobType;
+  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "retrying";
+  target: LinkedEntityRef;
+  triggeredBy: LinkedEntityRef;
+  persona?: LinkedEntityRef | null;
+  input: TInput;
+  output?: TOutput | null;
+  progress: {
+    percent: number;
+    currentStep: string;
+    totalSteps: number;
+    completedSteps: number;
+    messageKey?: string;
+    updatedAt: string;
+  };
+  logsUrl?: string;
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  error?: BffError | null;
+}
+
+export interface BacktestJobInput {
+  strategyId: string;
+  specVersionId: string;
+  engine: "qlib" | "vectorbt" | "statmodels" | "custom";
+  datasetId: string;
+  startDate: string;
+  endDate: string;
+  costModelId: string;
+  parameterSetId?: string;
+}
+export interface BacktestJobOutput {
+  experimentId: string;
+  artifactIds: string[];
+  metrics: StrategyMetrics;
+  reproducibilityHash: string;
+}
+
+export interface OosJobInput extends BacktestJobInput {
+  trainStartDate: string;
+  trainEndDate: string;
+  oosStartDate: string;
+  oosEndDate: string;
+}
+export interface OosJobOutput extends BacktestJobOutput {
+  oosMetrics: StrategyMetrics;
+  trainOosGap: number;
+}
+
+export interface StressTestJobInput {
+  strategyId: string;
+  scenarioIds: string[];
+  artifactId: string;
+}
+export interface StressTestJobOutput {
+  experimentId: string;
+  scenarioResults: Array<{ scenarioId: string; passed: boolean; metrics: StrategyMetrics }>;
+}
+
+export interface ParameterSweepJobInput {
+  strategyId: string;
+  parameterGrid: Record<string, Array<string | number | boolean>>;
+  objectiveMetric: string;
+  maxRuns: number;
+}
+export interface ParameterSweepJobOutput {
+  experimentId: string;
+  bestParameterSetId: string;
+  leaderboard: Array<{ parameterSetId: string; score: number; metrics: StrategyMetrics }>;
+}
+
+export interface ArtifactBuildJobInput {
+  strategyId: string;
+  experimentId: string;
+  artifactType: "model" | "signal" | "policy" | "config" | "report";
+}
+export interface ArtifactBuildJobOutput {
+  artifactId: string;
+  artifactVersion: string;
+  hash: string;
+}
+
+export interface ValidatorRunJobInput {
+  reviewRequestId: string;
+  validatorIds: string[];
+}
+export interface ValidatorRunJobOutput {
+  reviewRequestId: string;
+  results: ValidatorResultDTO[];
+}
+
+export interface FormulaRecalculationJobInput {
+  formulaId: string;
+  scope: RankingScope;
+  periodStart: string;
+  periodEnd: string;
+  entityIds: string[];
+}
+export interface FormulaRecalculationJobOutput {
+  rankingPublicationId: string;
+  rows: RankingRowDTO[];
+}
+
+export interface RebalanceSimulationJobInput {
+  rebalanceId: string;
+  rankingPublicationId: string;
+  constraintSetId: string;
+}
+export interface RebalanceSimulationJobOutput {
+  rebalanceId: string;
+  allocationRows: AllocationSimulationRowDTO[];
+  constraintViolations: ConstraintViolationDTO[];
+}
+
+export interface EvolutionRunJobInput {
+  programId: string;
+  generationCount: number;
+  populationSize: number;
+  parentStrategyIds: string[];
+  mutationRuleIds: string[];
+}
+export interface EvolutionRunJobOutput {
+  runId: string;
+  candidateStrategyIds: string[];
+  bestCandidateId?: string;
+  bestScore?: number;
+}
+
+export interface McpDiscoveryJobInput { serverId: string; refreshSchemas: boolean; }
+export interface McpDiscoveryJobOutput { discoveredToolIds: string[]; schemaVersion: string; }
+
+export interface SkillSandboxJobInput {
+  skillId: string;
+  skillVersion: string;
+  fixtureId: string;
+  timeoutMs: number;
+}
+export interface SkillSandboxJobOutput {
+  sandboxRunId: string;
+  passed: boolean;
+  logsUrl: string;
+  producedArtifacts: string[];
+}
+
+export interface PersonaEvaluationJobInput {
+  personaId: string;
+  personaVersion: string;
+  suiteId: string;
+}
+export interface PersonaEvaluationJobOutput {
+  evaluationRunId: string;
+  score: number;
+  failedCaseIds: string[];
+}
+
+export interface DeploymentJobInput {
+  promotionRequestId: string;
+  strategyId: string;
+  artifactId: string;
+  runtimeId: string;
+  capitalPoolId: string;
+}
+export interface DeploymentJobOutput {
+  deploymentId: string;
+  runtimeId: string;
+  deployedAt: string;
+}
+
+export interface RollbackJobInput {
+  deploymentId: string;
+  targetArtifactId: string;
+  reason: string;
+  confirmToken: string;
+}
+export interface RollbackJobOutput {
+  deploymentId: string;
+  previousArtifactId: string;
+  activeArtifactId: string;
+  rolledBackAt: string;
+}
+
+export interface PostmortemGenerationJobInput { incidentId: string; language: LocaleCode; }
+export interface PostmortemGenerationJobOutput { postmortemId: string; noteId: string; }
+```
+
+### Async job threshold
+
+Any operation must become a Job when at least one condition is true:
+
+| Condition | Rule |
+|---|---|
+| expected duration | greater than 2 seconds |
+| produces artifact | always async |
+| affects deployment/runtime | always async |
+| calls external MCP discovery | always async |
+| runs sandbox/evaluation | always async |
+| runs experiment/backtest/OOS | always async |
+
+### Progress event rule
+
+- SSE progress update minimum interval: 1000 ms.
+- `progress.messageKey` must be localized by frontend.
+- Log chunks must be fetched by URL, not embedded in SSE payload.
+- Max SSE payload size: 16 KB.
+
+
+---
+
+## 13. G26 G48 G52 G65 — Agora handoff schema、SLA、attach to strategy
+
+```ts
+export type AgoraHandoffType =
+  | "trader_insight_to_strategy"
+  | "signal_feedback_to_research_task"
+  | "committee_memo_to_review_evidence"
+  | "trainer_feedback_to_persona_update"
+  | "skill_draft_to_skill_approval"
+  | "mcp_tool_request_to_permission_review"
+  | "alert_triage_to_incident";
+
+export type HandoffStatus = "draft" | "submitted" | "accepted" | "rejected" | "rerouted" | "expired";
+
+export interface AgoraHandoffDTO<TPayload = unknown> {
+  id: string;
+  handoffType: AgoraHandoffType;
+  status: HandoffStatus;
+  source: {
+    app: "agora";
+    route: string;
+    entity: LinkedEntityRef;
+  };
+  destination: {
+    app: "management";
+    route: string;
+    queue: "insight" | "research" | "governance" | "persona" | "capability" | "incident";
+  };
+  priority: "low" | "normal" | "high" | "urgent";
+  slaDueAt: string;
+  rerouteCount: number;
+  payload: TPayload;
+  createdBy: LinkedEntityRef;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### Type-specific payloads
+
+```ts
+export interface TraderInsightToStrategyPayload { insightId: string; proposedTitle: string; thesis: string; suggestedPersonaId?: string; }
+export interface SignalFeedbackToResearchTaskPayload { signalId: string; strategyId: string; feedbackId: string; requestedExperimentType: "backtest" | "oos" | "stress_test" | "ablation"; }
+export interface CommitteeMemoToReviewEvidencePayload { committeeSessionId: string; memoId: string; reviewRequestId?: string; }
+export interface TrainerFeedbackToPersonaUpdatePayload { personaId: string; feedbackIds: string[]; proposedChangeSummary: string; }
+export interface SkillDraftToSkillApprovalPayload { skillDraftId: string; sandboxRunId?: string; requestedAllowedPersonaIds: string[]; }
+export interface McpToolRequestToPermissionReviewPayload { serverId: string; mcpToolId: string; requestedPersonaIds: string[]; reason: string; }
+export interface AlertTriageToIncidentPayload { alertId: string; triageNoteId: string; severityRecommendation: "info" | "warning" | "critical"; }
+```
+
+### SLA by priority
+
+| priority | SLA |
+|---|---|
+| low | 7 calendar days |
+| normal | 2 business days |
+| high | 1 business day |
+| urgent | 4 hours |
+
+### Attach to strategy endpoint
+
+```http
+POST /bff/insights/{insightId}/actions/attach-strategy
+```
+
+Request:
+
+```json
+{ "strategyId": "alpha_042", "relationship": "supporting_evidence", "note": "Linked from signal review." }
+```
+
+
+---
+
+## 14. G27 G43 — Audit retention、export 行為
+
+### Retention policy
+
+| Audit category | Retention |
+|---|---|
+| live deployment / rollback / emergency kill | 7 years |
+| capital allocation / rebalance / formula changes | 7 years |
+| persona policy / tool permission / MCP permission | 5 years |
+| skill sandbox / skill approval | 5 years |
+| Agora notes / session annotations | 3 years |
+| notification read state | 180 days |
+| job logs | 1 year, unless linked to incident then 7 years |
+
+### Export endpoint
+
+```http
+GET /bff/audit/export?format=csv&from=2026-01-01&to=2026-03-31&entityType=strategy&entityId=alpha_042
+```
+
+CSV columns: `eventId, occurredAt, actorId, actorRole, entityType, entityId, action, beforeHash, afterHash, memo, ipAddress, userAgent`.
+
+
+---
+
+## 15. G34 — Command Center KPI 定義
+
+### KPI definitions
+
+| KPI | Formula | Source |
+|---|---|---|
+| Lifecycle Bottleneck Count | count(strategy where daysInCurrentState > stateSlaDays) | Strategy Registry |
+| Pending Approval Count | count(review where status in submitted, validator_running, in_review) | Governance |
+| Live Risk Warning Count | count(alert where targetEnvironment=live and status not closed) | Risk Center |
+| Running Job Count | count(job where status in queued,running,retrying) | Job System |
+| Persona Violation Count | count(policyViolation where status != closed) | Persona Directorate |
+| Capital Exposure Utilization | allocatedCapital / totalCapital | Capital Pool |
+| Agora Incoming Count | count(handoff where status=submitted) | Handoff Queue |
+| Runtime Health Score | percentage(runtime where status=healthy) | Runtime Monitor |
+
+
+---
+
+## 16. G35 — Strategies List sort / filter 規格
+
+### Filters
+
+```ts
+export interface StrategyListFilters {
+  lifecycleStatus?: StrategyLifecycleStatus[];
+  reviewStatus?: StrategyReviewStatus[];
+  deploymentStatus?: StrategyDeploymentStatus[];
+  ownerPersonaIds?: string[];
+  capitalPoolIds?: string[];
+  riskLevel?: RiskLevel[];
+  hasOpenAlerts?: boolean;
+  hasOpenJobs?: boolean;
+  text?: string;
+}
+```
+
+### Sort keys
+
+`updatedAt`, `displayName`, `lifecycleStatus`, `riskLevel`, `rankingScore`, `openAlertsCount`, `runningJobsCount`, `capitalAllocation`。
+
+BFF endpoint:
+
+```http
+GET /bff/strategies?filter=...&sort=rankingScore:desc&page=1&pageSize=50
+```
+
+
+---
+
+## 17. G36 — Run Experiment action input schema
+
+```ts
+export interface RunExperimentRequest {
+  strategyId: string;
+  experimentType: "backtest" | "oos" | "stress_test" | "ablation" | "parameter_sweep";
+  engine: "qlib" | "vectorbt" | "statmodels" | "finrl" | "rllib" | "custom";
+  datasetId: string;
+  timeRange: { startDate: string; endDate: string };
+  costModelId: string;
+  parameterSetId?: string;
+  validationMode: "single_period" | "walk_forward" | "k_fold" | "rolling_window";
+  computeTarget: "local" | "worker_pool" | "cloud";
+}
+```
+
+Endpoint:
+
+```http
+POST /bff/strategies/{strategyId}/actions/run-experiment
+```
+
+Response: `CommandResponse<JobDTO>`。
+
+
+---
+
+## 18. G37 G38 — Risk / Review source of truth
+
+### Risk source of truth
+
+Strategy Risk tab and Risk Center must query the same `RiskAlertDTO` source.
+
+```http
+GET /bff/risk/alerts?strategyId=alpha_042
+GET /bff/risk/alerts
+```
+
+Strategy tab only applies `strategyId` filter. It must not create a separate alert object.
+
+### Review source of truth
+
+Strategy Governance tab and Governance page must query the same `ReviewRequestDTO` source.
+
+```http
+GET /bff/reviews?strategyId=alpha_042
+GET /bff/reviews/{reviewId}
+```
+
+Creating review from Strategy Detail must call:
+
+```http
+POST /bff/strategies/{strategyId}/actions/submit-review
+```
+
+The BFF creates one `ReviewRequestDTO`. Both pages reference the same `reviewId`.
+
+
+---
+
+## 19. G41 — Skill sandbox input / output schema
+
+```ts
+export interface SkillSandboxRequest {
+  skillId: string;
+  skillVersion: string;
+  fixtureId: string;
+  personaId?: string;
+  timeoutMs: number;
+  dryRun: true;
+  inputPayload: Record<string, unknown>;
+}
+
+export interface SkillSandboxResultDTO {
+  sandboxRunId: string;
+  skillId: string;
+  skillVersion: string;
+  status: "queued" | "running" | "passed" | "failed" | "timed_out";
+  startedAt: string;
+  completedAt?: string;
+  stdoutPreview: string;
+  stderrPreview: string;
+  outputPayload?: Record<string, unknown>;
+  producedArtifacts: LinkedEntityRef[];
+  securityFindings: Array<{ severity: RiskLevel; ruleId: string; message: string }>;
+}
+```
+
+Endpoint:
+
+```http
+POST /bff/skills/{skillId}/actions/sandbox-eval
+```
+
+
+---
+
+## 20. G42 — LineageGraph 規模上限與互動
+
+### Limits
+
+| Limit | Value |
+|---|---:|
+| max nodes in initial render | 200 |
+| max edges in initial render | 600 |
+| max expansion depth per click | 2 |
+| max node label length | 48 characters |
+
+### Required interactions
+
+- pan
+- zoom
+- fit-to-screen
+- filter by entity type
+- expand node
+- collapse node
+- open inspector
+- copy lineage path
+- export SVG
+
+If graph exceeds max size, BFF must return `truncated: true` and `nextExpansionHints`.
+
+
+---
+
+## 21. G44 G72 — SSE diagnostic 與 SSE channel catalog
+
+```ts
+export type SseEventType =
+  | "job.started" | "job.progress" | "job.completed" | "job.failed"
+  | "strategy.state_changed" | "strategy.alert_created"
+  | "persona.policy_changed" | "persona.evaluation_completed"
+  | "deployment.started" | "deployment.completed" | "deployment.failed" | "deployment.rollback_completed"
+  | "risk.alert_created" | "risk.alert_updated"
+  | "incident.created" | "incident.updated" | "incident.closed"
+  | "tool.call_completed" | "mcp.call_failed" | "skill.sandbox_completed"
+  | "rebalance.metrics_frozen" | "rebalance.ranking_calculated" | "rebalance.approved" | "rebalance.applied"
+  | "handoff.created" | "handoff.accepted" | "handoff.rejected"
+  | "notification.created" | "audit.event_created";
+
+export interface SseEnvelope<T = unknown> {
+  id: string;
+  type: SseEventType;
+  occurredAt: string;
+  actor?: LinkedEntityRef;
+  target?: LinkedEntityRef;
+  payload: T;
+}
+
+export interface JobProgressPayload { jobId: string; percent: number; currentStep: string; messageKey?: string; }
+export interface StrategyStateChangedPayload { strategyId: string; from: StrategyLifecycleStatus; to: StrategyLifecycleStatus; }
+export interface AlertCreatedPayload { alertId: string; severity: "info" | "warning" | "critical"; target: LinkedEntityRef; }
+export interface IncidentUpdatedPayload { incidentId: string; status: IncidentStatus; timelineEventId?: string; }
+export interface HandoffCreatedPayload { handoffId: string; handoffType: AgoraHandoffType; destinationRoute: string; }
+```
+
+### SSE diagnostic endpoint
+
+```http
+GET /bff/events/diagnostics
+```
+
+Response:
+
+```ts
+export interface SseDiagnosticDTO {
+  connected: boolean;
+  lastEventAt?: string;
+  subscribedChannels: SseEventType[];
+  droppedEventsCount: number;
+  reconnectCount: number;
+  serverTime: string;
+}
+```
+
+
+---
+
+## 22. G45 G46 G47 — Empty / Loading / Error / Acceptance Criteria 模板
+
+### Page state templates
+
+| State | Required UI |
+|---|---|
+| Empty table | title, explanation, primary setup action, secondary documentation link |
+| Empty detail | entity not found message, back button, search action |
+| Loading table | skeleton rows matching column count |
+| Loading graph | centered spinner + node count placeholder |
+| Loading long job | JobDrawer with progress state |
+| Error query | localized error, retry button, copy request id |
+| Error command | localized error, audit memo preserved, retry if retryable |
+
+### Acceptance criteria template per page
+
+Every page spec must include:
+
+1. Route renders with mock BFF data.
+2. Required primary table/cards are visible.
+3. All availableActions render through PermissionAwareButton.
+4. Empty/loading/error states are implemented.
+5. i18n keys exist for zh-TW and en-US.
+6. Realtime event refresh rule is defined.
+7. At least one QA scenario covers the page.
+
+
+---
+
+## 23. G50 — Persona Ask Modes prompt scope
+
+```ts
+export type PersonaAskMode = "explain" | "critique" | "propose" | "red_team" | "summarize" | "compare";
+
+export interface PersonaAskRequest {
+  personaId: string;
+  mode: PersonaAskMode;
+  contextRefs: LinkedEntityRef[];
+  userQuestion: string;
+  responseLanguage: PersonaResponseLanguageMode;
+  saveAsInsight: boolean;
+}
+```
+
+### Prompt scope table
+
+| mode | system scope | allowed output actions |
+|---|---|---|
+| explain | explain selected context, no new strategy proposal unless asked | save_note, create_insight |
+| critique | identify risks, missing evidence, contradictions | create_research_task, create_insight |
+| propose | propose next research step or strategy idea | create_strategy_proposal, create_research_task |
+| red_team | adversarial review, focus on failure modes | create_review_question, create_risk_feedback |
+| summarize | concise summary of selected context | save_note |
+| compare | compare selected strategies/signals/notes | save_note, create_research_task |
+
+
+---
+
+## 24. G51 G58 — Committee template evidence pack schema
+
+```ts
+export interface EvidencePackDTO {
+  id: string;
+  title: string;
+  target: LinkedEntityRef;
+  evidenceItems: EvidenceItemDTO[];
+  uploadedFiles: EvidenceFileDTO[];
+  createdBy: LinkedEntityRef;
+  createdAt: string;
+}
+
+export type EvidenceItemType =
+  | "strategy_spec" | "experiment_result" | "artifact" | "signal" | "market_note"
+  | "incident" | "postmortem" | "research_note" | "external_link";
+
+export interface EvidenceItemDTO {
+  id: string;
+  type: EvidenceItemType;
+  ref?: LinkedEntityRef;
+  title: string;
+  summary: string;
+  url?: string;
+}
+
+export interface EvidenceFileDTO {
+  id: string;
+  fileName: string;
+  mimeType: "application/pdf" | "text/markdown" | "text/plain" | "image/png" | "image/jpeg" | "application/json";
+  sizeBytes: number;
+  storageUrl: string;
+  uploadedAt: string;
+}
+
+export const EVIDENCE_UPLOAD_LIMITS = {
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  maxFilesPerPack: 20,
+  allowedMimeTypes: ["application/pdf", "text/markdown", "text/plain", "image/png", "image/jpeg", "application/json"]
+} as const;
+```
+
+### Committee templates
+
+| template | required evidence |
+|---|---|
+| strategy_review | strategy_spec, experiment_result, artifact |
+| live_promotion | paper_deployment_metrics, risk_summary, rollback_target |
+| incident_review | incident, runtime_logs, market_note, postmortem draft |
+| signal_dispute | signal, similar_cases, trader_note, persona_response |
+
+
+---
+
+## 25. G53 G62 G63 — Trainer evaluation suite schema 與 publish gate
+
+```ts
+export type EvaluationSuiteType = "persona_behavior" | "risk_scenario" | "tool_use" | "memory_consistency" | "skill_execution";
+
+export interface EvaluationSuiteDTO {
+  id: string;
+  type: EvaluationSuiteType;
+  name: string;
+  targetType: "persona" | "skill";
+  cases: EvaluationCaseDTO[];
+  passingScore: number; // 0-100
+  requiredForPublish: boolean;
+}
+
+export interface EvaluationCaseDTO {
+  id: string;
+  input: string;
+  expectedBehavior: string;
+  prohibitedBehavior: string[];
+  scoringRubric: Array<{ criterion: string; maxPoints: number }>;
+}
+```
+
+### Ownership rule
+
+- Trainer Studio uses suites where `targetType=persona`.
+- Skill Coaching uses suites where `targetType=skill`.
+- They share `EvaluationSuiteDTO` but are filtered by `targetType`.
+
+### Publish gate
+
+Persona or Skill publish is blocked unless all `requiredForPublish=true` suites have latest run score `>= passingScore`.
+
+
+---
+
+## 26. G54 G55 — Agora 禁止操作表與 role default route
+
+### Agora prohibited actions
+
+| Action | Behavior in Agora |
+|---|---|
+| promote_to_live | not shown; can create promotion request handoff only |
+| apply_rebalance | not shown |
+| rollback_live | not shown; can escalate alert to incident |
+| emergency_kill | not shown |
+| change_capital_allocation | not shown |
+| grant_mcp_permission | request-only handoff |
+| approve_skill | request-only handoff |
+| change_route_policy | request-only handoff |
+
+### Default route by role
+
+| Role | Default route |
+|---|---|
+| Analyst | `/agora/daily` |
+| Trader | `/agora/daily` |
+| AI Trainer | `/agora/trainer` |
+| Research Assistant | `/agora/notebook` |
+| Observer | `/agora/markets` |
+
+
+---
+
+## 27. G56 — Daily Brief KPI 公式
+
+### Daily Trading Cockpit KPI formulas
+
+| KPI | Formula |
+|---|---|
+| Market Event Count | count(marketEvents where occurredAt within last 24h and severity >= medium) |
+| Important Signal Count | count(signals where createdAt within last 24h and importanceScore >= 70) |
+| Strategy Attention Count | count(strategies where openAlerts > 0 or signalDisagreementCount > 0 or paperLiveGap > threshold) |
+| Watchlist Movement Count | count(watchlistItems where abs(dayReturn) >= user.watchlistMoveThreshold) |
+| Persona Brief Count | count(personaBriefs where createdAt within current trading day) |
+| Human Judgment Required Count | count(items where requiresHumanJudgment=true and status=open) |
+
+`importanceScore` must be BFF-calculated using signal confidence, strategy risk, capital exposure, and recent volatility.
+
+
+---
+
+## 28. G57 G49 — Signal feedback endpoint、confidence scale、write behavior
+
+```ts
+export type SignalFeedbackType = "agree" | "disagree" | "flag_suspicious" | "needs_research" | "dismiss";
+
+export interface SignalFeedbackRequest {
+  signalId: string;
+  strategyId: string;
+  feedbackType: SignalFeedbackType;
+  confidence: 1 | 2 | 3 | 4 | 5;
+  rationale?: string;
+  createResearchTask?: boolean;
+}
+```
+
+Endpoint:
+
+```http
+POST /bff/agora/signals/{signalId}/feedback
+```
+
+### Write rule
+
+- Each click writes immediately.
+- If the same user submits feedback again within 30 minutes, BFF creates a revision, not a duplicate.
+- `confidence` is fixed to 1–5.
+- BFF must emit `handoff.created` if `createResearchTask=true`.
+
+
+---
+
+## 29. G59 — Notebook markdown extension 規格
+
+### Supported markdown extensions
+
+| Extension | Enabled | Notes |
+|---|---:|---|
+| GitHub-flavored markdown | yes | tables, task lists, strikethrough |
+| Math / KaTeX | yes | inline and block math |
+| Mermaid | yes | rendered readonly; export as SVG |
+| Embedded charts | yes | via linked chartRef, not raw JS |
+| Inline citations | yes | `[[ref:entityType/entityId]]` |
+| Raw HTML | no | sanitized and blocked |
+
+### Note schema extension
+
+```ts
+export interface ResearchNoteBlockRef { blockId: string; refs: LinkedEntityRef[]; }
+```
+
+
+---
+
+## 30. G60 — Persona Lab sandbox commit 流程
+
+### Persona draft commit workflow
+
+```text
+sandbox_draft → evaluation_required → handoff_submitted → management_review → approved → published
+```
+
+```ts
+export interface PersonaSandboxCommitRequest {
+  personaDraftId: string;
+  basePersonaId?: string;
+  evaluationRunIds: string[];
+  changeSummary: string;
+  requestedRoutePolicyId?: string;
+}
+```
+
+Endpoint:
+
+```http
+POST /bff/agora/persona-lab/{draftId}/actions/submit-commit
+```
+
+Response creates `AgoraHandoffDTO<TrainerFeedbackToPersonaUpdatePayload>`.
+
+
+---
+
+## 31. G64 — Channel detail 欄位
+
+```ts
+export type ChannelType = "web" | "telegram" | "discord" | "webhook";
+export type ChannelStatus = "disabled" | "enabled" | "degraded";
+
+export interface ChannelDTO {
+  id: string;
+  type: ChannelType;
+  name: string;
+  status: ChannelStatus;
+  boundPersonaIds: string[];
+  allowedUserRoles: string[];
+  allowedActions: string[];
+  retentionDays: number;
+  auditEnabled: boolean;
+  rateLimitPerMinute: number;
+  lastMessageAt?: string;
+  error?: string | null;
+}
+```
+
+
+---
+
+## 32. G69 — Agora Session / Message attachment 與 inline citation schema
+
+```ts
+export interface AgoraMessageDTO {
+  id: string;
+  sessionId: string;
+  sender: LinkedEntityRef;
+  role: "user" | "persona" | "system" | "trainer";
+  content: string;
+  language: LocaleCode;
+  attachments: MessageAttachmentDTO[];
+  citations: InlineCitationDTO[];
+  annotations: MessageAnnotationDTO[];
+  createdAt: string;
+}
+
+export interface MessageAttachmentDTO {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageUrl: string;
+  previewUrl?: string;
+}
+
+export interface InlineCitationDTO {
+  id: string;
+  label: string;
+  ref: LinkedEntityRef;
+  quote?: string;
+  range?: { start: number; end: number };
+}
+```
+
+
+---
+
+## 33. G70 — 缺漏 BFF endpoints 定義
+
+### Required endpoints
+
+```http
+POST /bff/strategies/{strategyId}/dry-run
+POST /bff/personas/{personaId}/test-prompt
+POST /bff/skills/{skillId}/sandbox-eval
+POST /bff/memory/{memoryId}/actions/quarantine
+GET  /bff/audit/export?format=csv
+```
+
+### Request / response
+
+```ts
+export interface StrategyDryRunRequest { strategyId: string; specVersionId: string; fixtureId: string; }
+export interface StrategyDryRunResponse { jobId: string; expectedDurationMs: number; }
+
+export interface PersonaTestPromptRequest { personaId: string; prompt: string; contextRefs: LinkedEntityRef[]; responseLanguage: PersonaResponseLanguageMode; }
+export interface PersonaTestPromptResponse { responseText: string; citations: InlineCitationDTO[]; safetyFlags: string[]; }
+
+export interface QuarantineMemoryRequest { reason: string; linkedFeedbackId?: string; }
+export interface QuarantineMemoryResponse { memoryId: string; status: "quarantined"; reviewTaskId: string; }
+```
+
+
+---
+
+## 34. G71 — Accept-Language fallback chain
+
+### Request priority
+
+| Priority | Source |
+|---:|---|
+| 1 | explicit `?locale=` query parameter on preview / diagnostic endpoints |
+| 2 | `X-Pantheon-Locale` header |
+| 3 | user profile locale from auth session |
+| 4 | `Accept-Language` header first supported locale |
+| 5 | `zh-TW` |
+
+### Supported locales
+
+`zh-TW`, `en-US`。Unsupported locale must fallback to `zh-TW` and BFF must include `resolvedLocale` in response envelope.
+
+
+---
+
+## 35. G75 G76 — 日期時間與金額顯示策略
+
+### Date / time
+
+- BFF returns ISO 8601 UTC string.
+- Frontend displays in user profile timezone.
+- Default timezone: `Asia/Taipei`.
+- Table compact format: `YYYY-MM-DD HH:mm`.
+- Audit exact format: `YYYY-MM-DD HH:mm:ss z`.
+
+### Money
+
+```ts
+export interface MoneyDTO { amount: string; currency: "USD" | "TWD" | "JPY" | "EUR"; }
+```
+
+Display precision:
+
+| Currency | Precision |
+|---|---:|
+| USD | 2 |
+| TWD | 0 |
+| JPY | 0 |
+| EUR | 2 |
+
+Percent display: 2 decimal places by default, 4 decimal places in formula/debug views.
+
+
+---
+
+## 36. G77 — Review cc / observer 欄位
+
+```ts
+export interface ReviewParticipantDTO {
+  userId: string;
+  role: "requester" | "reviewer" | "approver" | "cc" | "observer";
+  required: boolean;
+  decision?: "approved" | "rejected" | "changes_requested" | null;
+}
+
+export interface ReviewRequestDTO {
+  id: string;
+  target: LinkedEntityRef;
+  status: ReviewStatus;
+  participants: ReviewParticipantDTO[];
+  evidenceRefs: LinkedEntityRef[];
+  decisionMemo?: string;
+}
+```
+
+Observers can view and comment. CC participants receive notifications but cannot decide.
+
+
+---
+
+## 37. G79 — HighRiskConfirmationModal memo 字數限制
+
+### Memo limits
+
+| Action category | min chars | max chars | required |
+|---|---:|---:|---:|
+| live deployment / rollback / emergency kill | 20 | 2000 | yes |
+| capital rebalance / allocation override | 20 | 2000 | yes |
+| formula activation / rollback | 10 | 1500 | yes |
+| persona policy / MCP / skill permission | 10 | 1500 | yes |
+| non-high-risk confirmation | 0 | 1000 | no |
+
+Frontend must preserve memo on command failure.
+
+
+---
+
+## 38. G82 — FormulaBuilder keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl/Cmd + S` | Save draft |
+| `Ctrl/Cmd + Enter` | Run formula preview |
+| `Ctrl/Cmd + Shift + C` | Compare with active formula |
+| `Esc` | Close editor drawer if no unsaved changes |
+| `Alt + ↑/↓` | Move selected metric row |
+
+All shortcuts must be disabled while focus is inside code editor text selection mode unless explicitly supported by the editor.
+
+
+---
+
+## 39. G83 — Component namespacing
+
+### Namespacing rule
+
+Shared components live under `components/shared/*`. Product-specific components must be prefixed:
+
+| Product | Prefix | Example |
+|---|---|---|
+| Management | `Management` | `ManagementMessageAuditPanel` |
+| Agora | `Agora` | `AgoraMessageAnnotationBar` |
+| Shared | no product prefix | `StatusBadge` |
+
+`MessageAnnotationBar` is reserved for Agora only and must be named `AgoraMessageAnnotationBar`.
+
+
+---
+
+## 40. G84 — EventStreamPanel retain count
+
+### Retention in UI
+
+| Stream | Max retained events in memory | Older behavior |
+|---|---:|---|
+| global topbar stream | 100 | drop oldest |
+| command center stream | 300 | drop oldest |
+| entity detail stream | 200 | drop oldest |
+| audit page | server paginated | no client cap besides current page |
+
+EventStreamPanel must show `Showing latest N events` when capped.
+
+
+---
+
+## 41. G85 — Form / editor validation strategy
+
+### Validation rules
+
+- All forms must use schema validation before submit.
+- BFF validation errors must map by field path.
+- Client validation must not replace server validation.
+- Dirty form navigation must show confirmation.
+- Autosave is allowed only for notes and drafts, not high-risk configuration.
+
+```ts
+export interface FieldValidationErrorDTO { path: string; i18nKey: string; message: string; }
+```
+
+
+---
+
+## 42. G87 G92 — Mock data schema alignment 與命名規則
+
+### Mock naming convention
+
+| Entity | ID format |
+|---|---|
+| Strategy | `alpha_001` |
+| Persona | `persona_001` |
+| CapitalPool | `pool_001` |
+| RankingFormula | `formula_001` |
+| Rebalance | `rebalance_2026Q2_pool_001` |
+| Experiment | `exp_001` |
+| Job | `job_001` |
+| Signal | `signal_001` |
+| AgoraSession | `session_001` |
+
+### Mock rule
+
+Mock objects must satisfy Part 6 interfaces and include `availableActions: ActionDescriptor[]` for every Management entity that supports actions.
+
+
+---
+
+## 43. G88 G89 — Demo scenario × page acceptance 對應與 phase × page 表
+
+### Demo scenario coverage
+
+| Scenario | Required routes |
+|---|---|
+| A Strategy replicated → review → paper | `/management/strategies/:id`, `/management/governance/:id`, `/management/deployment` |
+| B Live drawdown alert → incident → rollback | `/management/risk`, `/management/incidents/:id`, `/management/deployment` |
+| C Quarterly ranking → rebalance | `/management/ranking`, `/management/rebalance/:id`, `/management/capital/:id` |
+| D New persona → route policy → MCP/Skill permission | `/management/personas/:id`, `/management/mcp`, `/management/skills` |
+| E Agora signal review → research task | `/agora/signals/:id`, `/agora/insights`, `/management/experiments` |
+| F Skill draft → sandbox → approval | `/agora/skill-coaching`, `/management/skills`, `/management/governance/:id` |
+
+### Build phases
+
+| Phase | Pages |
+|---|---|
+| 1 | Shared shell, Management Command Center, Jobs, Audit |
+| 2 | Strategies, Strategy Detail, Experiments |
+| 3 | Personas, Capital, Ranking, Rebalance |
+| 4 | Evolution, Governance, Deployment/Risk/Incidents |
+| 5 | Tools, MCP, Skills, Artifacts/Lineage |
+| 6 | Agora Daily, Signals, Notebook, Ask Personas, Committee |
+| 7 | Agora Journal, Triage, Insights, Trainer, Memory, Skill Coaching |
+
+
+---
+
+## 44. G90 — Lovable prompt token budget
+
+### Prompt budget
+
+| Prompt type | Max tokens | Rule |
+|---|---:|---|
+| global shell prompt | 4,000 | app shell and routing only |
+| page group prompt | 6,000 | one module at a time |
+| component prompt | 3,000 | one component family at a time |
+| remediation prompt | 5,000 | targeted patch only |
+
+Do not paste the full spec into one Lovable message. Use the English build prompt plus the relevant Part file.
+
+
+---
+
+## 45. G91 — Dynamic route parameter schema
+
+### Route param patterns
+
+| Param | Pattern | Example |
+|---|---|---|
+| `strategyId` | `alpha_[0-9]{3,}` | `alpha_042` |
+| `personaId` | `persona_[0-9]{3,}` | `persona_001` |
+| `poolId` | `pool_[0-9]{3,}` | `pool_001` |
+| `rebalanceId` | `rebalance_[0-9]{4}Q[1-4]_pool_[0-9]{3,}` | `rebalance_2026Q2_pool_001` |
+| `experimentId` | `exp_[0-9]{3,}` | `exp_001` |
+| `incidentId` | `incident_[0-9]{3,}` | `incident_001` |
+| `sessionId` | `session_[0-9]{3,}` | `session_001` |
+
+Invalid params must render entity not found state, not crash.
+
+
+---
+
+# Acceptance Criteria
+
+1. G06–G12, G20–G27, G34–G47, G50–G55, G59–G65, G69–G77, G79–G85, G87–G92 不得再標示為「下版補」。
+2. Lovable 必須依本文 schema 更新 mock data、BFF stubs、SSE mock、permission-aware UI、job drawer、notification center、Agora handoff、skill sandbox、committee evidence pack。
+3. `Pantheon_Frontend_Build_Spec_v2_INDEX.md` 的 gap 統計必須改為 H=28 / M=41 / L=23。
+4. 所有新增 enum、DTO、endpoint、route param pattern 必須納入 Part 6 / Part 7 / Part 8 的後續整合版本。

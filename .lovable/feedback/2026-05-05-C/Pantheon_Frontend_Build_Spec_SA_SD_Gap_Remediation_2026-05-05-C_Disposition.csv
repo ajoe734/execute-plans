@@ -1,0 +1,79 @@
+cid,severity,category,title,status,section,implementation_directive
+C001,H,Spec governance,Legacy → v3 mapping table,RESOLVED_BY_PACK_C,§C001,Implement according to Pack C section §C001
+C002,H,Spec governance,Dual-write and apiVersion policy,RESOLVED_BY_PACK_C,§C002,Implement according to Pack C section §C002
+C003,M,Spec governance,Tab migration table,RESOLVED_BY_PACK_C,§C003,Implement according to Pack C section §C003
+C004,L,Spec governance,Reverse gap index,RESOLVED_BY_PACK_C,§C004,Implement according to Pack C section §C004
+C005,L,Spec governance,INDEX section anchors,RESOLVED_BY_PACK_C,§C005,Implement according to Pack C section §C005
+C006,H,State machines,Failure / timeout / cancellation transitions,RESOLVED_BY_PACK_C,§C006,Implement according to Pack C section §C006
+C007,H,State machines,Admin force-transition,RESOLVED_BY_PACK_C,§C007,Implement according to Pack C section §C007
+C008,H,State machines,Strategy three-axis invariants,RESOLVED_BY_PACK_C,§C008,Implement according to Pack C section §C008
+C009,M,State machines,Terminal retention and purge SLA,RESOLVED_BY_PACK_C,§C009,Implement according to Pack C section §C009
+C010,M,State machines,Concurrency and optimistic locking,RESOLVED_BY_PACK_C,§C010,Implement according to Pack C section §C010
+C011,M,State machines,Branching return paths,RESOLVED_BY_PACK_C,§C011,Implement according to Pack C section §C011
+C012,L,State machines,LifecycleStepper render hints,RESOLVED_BY_PACK_C,§C012,Implement according to Pack C section §C012
+C013,H,Permissions,Complete role-action matrices,RESOLVED_BY_PACK_C,§C013,Implement according to Pack C section §C013
+C014,H,ActionDescriptor,disabledReasonI18nKey convention,RESOLVED_BY_PACK_C,§C014,Implement according to Pack C section §C014
+C015,M,ActionDescriptor,requiresEnv / two-man / ttl / idempotency fields,RESOLVED_BY_PACK_C,§C015,Implement according to Pack C section §C015
+C016,M,Permissions,Emergency override,RESOLVED_BY_PACK_C,§C016,Implement according to Pack C section §C016
+C017,L,Permissions,Role lattice,RESOLVED_BY_PACK_C,§C017,Implement according to Pack C section §C017
+C018,L,Permissions,Single-tenant scope declaration,RESOLVED_BY_PACK_C,§C018,Implement according to Pack C section §C018
+C019,H,High-risk,Confirm token revoke / reuse / idempotency,RESOLVED_BY_PACK_C,§C019,Implement according to Pack C section §C019
+C020,H,High-risk,Catalog × approval cross-check,RESOLVED_BY_PACK_C,§C020,Implement according to Pack C section §C020
+C021,M,High-risk,Memo schema,RESOLVED_BY_PACK_C,§C021,Implement according to Pack C section §C021
+C022,M,High-risk,Two-man rule on each action,RESOLVED_BY_PACK_C,§C022,Implement according to Pack C section §C022
+C023,L,High-risk,Cooldown per action,RESOLVED_BY_PACK_C,§C023,Implement according to Pack C section §C023
+C024,H,BFF,availableActions ordering and grouping,RESOLVED_BY_PACK_C,§C024,Implement according to Pack C section §C024
+C025,H,BFF,Cursor pagination,RESOLVED_BY_PACK_C,§C025,Implement according to Pack C section §C025
+C026,M,BFF,Filter and sort query style,RESOLVED_BY_PACK_C,§C026,Implement according to Pack C section §C026
+C027,M,BFF,Error envelope semantics,RESOLVED_BY_PACK_C,§C027,Implement according to Pack C section §C027
+C028,M,BFF,Idempotency header,RESOLVED_BY_PACK_C,§C028,Implement according to Pack C section §C028
+C029,M,Realtime,SSE reconnect protocol,RESOLVED_BY_PACK_C,§C029,Implement according to Pack C section §C029
+C030,L,BFF,X-Request-Id propagation,RESOLVED_BY_PACK_C,§C030,Implement according to Pack C section §C030
+C031,L,BFF,Bulk operation policy,RESOLVED_BY_PACK_C,§C031,Implement according to Pack C section §C031
+C032,L,Realtime,"SSE now, WebSocket future",RESOLVED_BY_PACK_C,§C032,Implement according to Pack C section §C032
+C033,H,Handoff,SLA start point,RESOLVED_BY_PACK_C,§C033,Implement according to Pack C section §C033
+C034,H,Handoff,Escalation chain,RESOLVED_BY_PACK_C,§C034,Implement according to Pack C section §C034
+C035,M,Handoff,Reject reply schema,RESOLVED_BY_PACK_C,§C035,Implement according to Pack C section §C035
+C036,M,Handoff,Attachment constraints,RESOLVED_BY_PACK_C,§C036,Implement according to Pack C section §C036
+C037,L,Handoff,Threading policy,RESOLVED_BY_PACK_C,§C037,Implement according to Pack C section §C037
+C038,H,Capital,Mandate breach monitor,RESOLVED_BY_PACK_C,§C038,Implement according to Pack C section §C038
+C039,M,Ranking,Metric metadata,RESOLVED_BY_PACK_C,§C039,Implement according to Pack C section §C039
+C040,M,Rebalance,Backward transitions,RESOLVED_BY_PACK_C,§C040,Implement according to Pack C section §C040
+C041,M,Rebalance,Approval quorum,RESOLVED_BY_PACK_C,§C041,Implement according to Pack C section §C041
+C042,L,Capital,Currency / FX,RESOLVED_BY_PACK_C,§C042,Implement according to Pack C section §C042
+C043,M,Evolution,Constraints validation,RESOLVED_BY_PACK_C,§C043,Implement according to Pack C section §C043
+C044,M,Experiment,Promote gating,RESOLVED_BY_PACK_C,§C044,Implement according to Pack C section §C044
+C045,L,Evolution,Reproducibility,RESOLVED_BY_PACK_C,§C045,Implement according to Pack C section §C045
+C046,M,i18n,Mixed-locale UGC,RESOLVED_BY_PACK_C,§C046,Implement according to Pack C section §C046
+C047,M,i18n,Date / number / currency formats,RESOLVED_BY_PACK_C,§C047,Implement according to Pack C section §C047
+C048,L,i18n,Region split,RESOLVED_BY_PACK_C,§C048,Implement according to Pack C section §C048
+C049,L,i18n,Pluralization,RESOLVED_BY_PACK_C,§C049,Implement according to Pack C section §C049
+C050,M,Design tokens,Dark mode,RESOLVED_BY_PACK_C,§C050,Implement according to Pack C section §C050
+C051,M,Design tokens,Density,RESOLVED_BY_PACK_C,§C051,Implement according to Pack C section §C051
+C052,M,Components,Skeleton specs,RESOLVED_BY_PACK_C,§C052,Implement according to Pack C section §C052
+C053,M,Components,LineageGraph limits,RESOLVED_BY_PACK_C,§C053,Implement according to Pack C section §C053
+C054,L,Components,RightDrawer stacking,RESOLVED_BY_PACK_C,§C054,Implement according to Pack C section §C054
+C055,L,Components,CommandPalette ranking,RESOLVED_BY_PACK_C,§C055,Implement according to Pack C section §C055
+C056,H,Accessibility,WCAG 2.1 AA baseline,RESOLVED_BY_PACK_C,§C056,Implement according to Pack C section §C056
+C057,M,Accessibility,Keyboard shortcuts,RESOLVED_BY_PACK_C,§C057,Implement according to Pack C section §C057
+C058,L,Accessibility,Reduced motion,RESOLVED_BY_PACK_C,§C058,Implement according to Pack C section §C058
+C059,H,Acceptance,Cross-page E2E scenarios,RESOLVED_BY_PACK_C,§C059,Implement according to Pack C section §C059
+C060,M,Mock,Seed scale,RESOLVED_BY_PACK_C,§C060,Implement according to Pack C section §C060
+C061,M,Mock,Given/When/Then scenarios,RESOLVED_BY_PACK_C,§C061,Implement according to Pack C section §C061
+C062,M,Testing,Contract tests,RESOLVED_BY_PACK_C,§C062,Implement according to Pack C section §C062
+C063,M,Performance,Performance budgets,RESOLVED_BY_PACK_C,§C063,Implement according to Pack C section §C063
+C064,H,Security,Security baseline,RESOLVED_BY_PACK_C,§C064,Implement according to Pack C section §C064
+C065,M,Security,Audit immutability,RESOLVED_BY_PACK_C,§C065,Implement according to Pack C section §C065
+C066,L,Testing,Visual regression future,RESOLVED_BY_PACK_C,§C066,Implement according to Pack C section §C066
+C067,M,Spec,Glossary,RESOLVED_BY_PACK_C,§C067,Implement according to Pack C section §C067
+C068,M,Spec,Mermaid diagrams,RESOLVED_BY_PACK_C,§C068,Implement according to Pack C section §C068
+C069,L,Spec,Spec semver and changelog,RESOLVED_BY_PACK_C,§C069,Implement according to Pack C section §C069
+C070,L,Spec,Owner per section,RESOLVED_BY_PACK_C,§C070,Implement according to Pack C section §C070
+C071,M,Strategy,Costs / Calendar tab schema,RESOLVED_BY_PACK_C,§C071,Implement according to Pack C section §C071
+C072,M,Persona,Persona Lab tab details,RESOLVED_BY_PACK_C,§C072,Implement according to Pack C section §C072
+C073,M,Capital,Ranking Inputs tab,RESOLVED_BY_PACK_C,§C073,Implement according to Pack C section §C073
+C074,M,Rebalance,Step UI components,RESOLVED_BY_PACK_C,§C074,Implement according to Pack C section §C074
+C075,M,Signal,Confidence scale labels,RESOLVED_BY_PACK_C,§C075,Implement according to Pack C section §C075
+C076,L,Committee,Evidence pack templates,RESOLVED_BY_PACK_C,§C076,Implement according to Pack C section §C076
+C077,L,DailyBrief,KPI timezone and null handling,RESOLVED_BY_PACK_C,§C077,Implement according to Pack C section §C077
+C078,L,CommandCenter,Lifecycle bucket colors,RESOLVED_BY_PACK_C,§C078,Implement according to Pack C section §C078
