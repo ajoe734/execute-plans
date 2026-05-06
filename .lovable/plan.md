@@ -116,14 +116,14 @@ src/lib/v4/
 
 `src/lib/v4/index.ts` re-export 全部，並在 README 標註 **v4 > v3** 衝突解決規則。`src/lib/v3/` 保留但內部標 `@deprecated`，凡 Pack C 收斂的型別都加 `// superseded by v4`。
 
-## E. 落地分批（建議拆 6 個 PR / 階段）
+## E. 落地分批（已完成全部 6 階段）
 
-1. **歸檔 + INDEX 升 v4 + 建 v4 骨架（無行為改動）**
-2. **Pack C-H1**：C001/C002/C006/C008/C010/C013/C014/C015/C019/C020/C024/C025/C027/C028/C029（最會破壞 type 的 14 條 H）
-3. **Pack C-H2**：C033/C034/C038/C056/C059/C064（handoff/security/a11y/E2E）
-4. **Pack C-M**：38 條 M（含 design token、skeleton、metric metadata、rebalance quorum、SignalConfidence、PersonaLab schema 等）
-5. **Pack C-L**：26 條 L（render hint、bucket color、glossary、reduced motion、format token 等）
-6. **驗收**：vitest 全綠、E2E 10+5 scenario、mock seed 達標、a11y axe smoke、跑 `recalculate` 對照 OpenAPI（暫以 zod 驗 mock）
+1. ✅ 歸檔 + INDEX 升 v4 + 建 v4 骨架
+2. ✅ Pack C-H1（C001/C002/C006/C008/C010/C013/C014/C015/C019/C020/C024/C025/C027/C028/C029）
+3. ✅ Pack C-H2（C033/C034/C038/C056/C059/C064）
+4. ✅ Pack C-M（38 條）—— `src/lib/v4/h2-m-wiring.test.ts`
+5. ✅ Pack C-L（26 條）—— `src/lib/v4/l-wiring.test.ts`
+6. ✅ 驗收：vitest **175/175** 全綠（13 test files）；E2E `src/test/e2e-scenarios.test.ts` 10 happy + 5 incident；mock seed 達 C060 標（Strategy 24 / Persona 12 / CapitalPool 6 / RankingFormula 6 / Rebalance 4 / Evolution 6 / Experiment 24 / Job 30 / Alert 20 / Incident 10 / Tool 12 / MCPServer 6 / Skill 12）；a11y axe smoke `src/test/a11y-axe-smoke.test.tsx`；ranking `recalculate` 以 zod 驗 mock envelope（在 E2E happy 4/10）。
 
 ## F. 不做（與 Pack C 一致）
 

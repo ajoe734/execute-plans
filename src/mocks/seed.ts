@@ -629,6 +629,218 @@ export const rebalanceWorkflowSteps = (rebalanceId: string): RebalanceStep[] => 
 };
 
 
+// ----- Pack C §C060 mock seed top-up. Generated entries to satisfy the
+//       minimum entity counts and lifecycle-status coverage required by the
+//       v4 acceptance section. -----
+
+const _lifecycle = [
+  "discovered","scaffolded","replicated","approved",
+  "paper","live","degraded","retired",
+] as const;
+
+// Bring Strategy total to 24 with all 8 lifecycle statuses represented.
+for (let i = 0; i < 19; i++) {
+  const lc = _lifecycle[i % _lifecycle.length];
+  strategies.push({
+    id: `stg_g${(i + 100).toString(36)}`,
+    name: `Synthetic Strategy ${i + 6}`,
+    alpha: `alpha_syn_${i % 5}`,
+    capitalPoolId: i % 2 ? "cp_alpha" : "cp_beta",
+    personaIds: ["per_quant"],
+    owner: ["alice","bob","carol","dan"][i % 4],
+    updatedAt: ago(i + 1),
+    state: i % 4 === 0 ? "draft" : "deployed",
+    risk: (["low","medium","high","critical"] as const)[i % 4],
+    pnl30d: (i % 10) / 100,
+    sharpe: 0.5 + (i % 7) * 0.2,
+    drawdown: -0.01 - (i % 8) * 0.01,
+    lifecycleStatus: lc,
+    reviewStatus: lc === "discovered" || lc === "scaffolded" ? "none" : "approved",
+    deploymentStatus: lc === "live" ? "live_running" : lc === "paper" ? "paper_running" : lc === "retired" ? "stopped" : "none",
+    lockVersion: 1,
+  });
+}
+
+// Persona → 12.
+for (let i = 0; i < 8; i++) {
+  personas.push({
+    id: `per_g${i + 5}`,
+    name: `Synthetic Persona ${i + 5}`,
+    archetype: ["Quant","Macro","Risk","RedTeam","Capital"][i % 5],
+    owner: ["alice","bob","carol","dan"][i % 4],
+    updatedAt: ago(i + 2),
+    state: i % 3 === 0 ? "review" : "deployed",
+    risk: (["low","medium","high"] as const)[i % 3],
+    routedStrategies: i,
+    successRate: 0.5 + (i % 5) * 0.08,
+  });
+}
+
+// CapitalPool → 6.
+for (let i = 0; i < 3; i++) {
+  capitalPools.push({
+    id: `cp_g${i + 1}`,
+    name: `Synthetic Pool ${i + 1}`,
+    currency: (["USD","USDT","TWD"] as const)[i % 3],
+    allocated: 1_000_000 * (i + 2),
+    utilized: 800_000 * (i + 1),
+    riskBudget: 0.03 + 0.01 * i,
+    owner: "capital",
+    updatedAt: ago(i + 5),
+    state: "deployed",
+    risk: (["low","medium","high"] as const)[i % 3],
+  });
+}
+
+// RankingFormula → 6.
+for (let i = 0; i < 4; i++) {
+  rankingFormulas.push({
+    id: `rf_g${i + 3}`,
+    name: `Synthetic Formula ${i + 3}`,
+    expression: `w${i}*sharpe - ${i + 1}*drawdown`,
+    appliedTo: i + 1,
+    owner: "alice",
+    updatedAt: ago(i * 24 + 24),
+    state: i % 2 ? "review" : "deployed",
+    risk: "low",
+  });
+}
+
+// Rebalance → 4.
+for (let i = 0; i < 2; i++) {
+  rebalances.push({
+    id: `rb_g${i + 1}`,
+    name: `Synthetic Rebalance ${i + 1}`,
+    quarter: i ? "2025-Q4" : "2025-Q3",
+    targetPoolId: "cp_beta",
+    proposedDelta: 0.05,
+    owner: "capital",
+    updatedAt: ago(720 * (i + 2)),
+    state: "deployed",
+    risk: "medium",
+  });
+}
+
+// EvolutionProgram → 6.
+for (let i = 0; i < 4; i++) {
+  evolutionPrograms.push({
+    id: `ev_g${i + 3}`,
+    name: `Synthetic Evolution ${i + 3}`,
+    generation: i + 1,
+    population: 16 * (i + 1),
+    bestFitness: 0.8 + 0.05 * i,
+    parentAlpha: "alpha_syn",
+    progress: (i + 1) / 5,
+    owner: "ai_trainer",
+    updatedAt: ago(i + 1),
+    state: "deployed",
+    risk: "low",
+  });
+}
+
+// ResearchExperiment → 24.
+for (let i = 0; i < 21; i++) {
+  researchExperiments.push({
+    id: `rx_g${i + 1}`,
+    name: `Synthetic Experiment ${i + 1}`,
+    hypothesis: `Hypothesis #${i + 1}`,
+    status: (["queued","running","review","concluded"] as const)[i % 4],
+    metric: i % 2 ? "Sharpe" : "IR",
+    metricValue: (i % 9) * 0.05,
+    owner: ["alice","bob","carol"][i % 3],
+    updatedAt: ago(i * 4 + 1),
+    state: i % 3 === 0 ? "draft" : "review",
+    risk: (["low","medium","high"] as const)[i % 3],
+  });
+}
+
+// Job → 30.
+for (let i = 0; i < 26; i++) {
+  jobs.push({
+    id: `job_g${i + 1}`,
+    kind: ["backtest","ingest.market","training.eval","ranking.recalc","rebalance.simulate"][i % 5],
+    status: (["pending","running","success","warning","failed"] as const)[i % 5],
+    startedAt: ago(i * 0.5 + 0.1),
+    durationMs: 1_000 + i * 500,
+    owner: ["alice","ops","ai_trainer","capital"][i % 4],
+  });
+}
+
+// Alert → 20.
+for (let i = 0; i < 17; i++) {
+  alerts.push({
+    id: `al_g${i + 1}`,
+    severity: (["low","medium","high","critical"] as const)[i % 4],
+    title: `Synthetic alert #${i + 1}`,
+    source: ["risk","runtime","ops"][i % 3],
+    openedAt: ago(i * 0.5 + 0.1),
+    acknowledged: i % 3 === 0,
+  });
+}
+
+// Incident → 10.
+for (let i = 0; i < 9; i++) {
+  incidents.push({
+    id: `in_g${i + 1}`,
+    severity: (["low","medium","high","critical"] as const)[i % 4],
+    title: `Synthetic incident #${i + 1}`,
+    status: (["open","mitigating","resolved"] as const)[i % 3],
+    openedAt: ago(i * 1.2 + 0.5),
+  });
+}
+
+// Tool → 12.
+for (let i = 0; i < 7; i++) {
+  tools.push({
+    id: `tl_g${i + 1}`,
+    name: `synthetic.tool.${i + 1}`,
+    category: (["data","execution","research","communication","analysis"] as const)[i % 5],
+    version: `1.${i}.0`,
+    inputs: i + 1,
+    description: `Synthetic tool ${i + 1}`,
+    usedBy: i,
+    owner: "research",
+    updatedAt: ago(i * 24 + 1),
+    state: "deployed",
+    risk: (["low","medium","high"] as const)[i % 3],
+  });
+}
+
+// MCP server → 6.
+for (let i = 0; i < 3; i++) {
+  mcpServers.push({
+    id: `mcp_g${i + 1}`,
+    name: `synthetic-mcp-${i + 1}`,
+    endpoint: `https://mcp-syn${i}.pantheon.internal`,
+    region: ["ap-east-1","eu-central-1","us-west-1"][i],
+    toolCount: 6 + i,
+    envAllowed: ["research", "paper"],
+    health: "running",
+    owner: "ops",
+    updatedAt: ago(i + 1),
+    state: "deployed",
+    risk: "low",
+  });
+}
+
+// Skill → 12.
+for (let i = 0; i < 8; i++) {
+  skills.push({
+    id: `sk_g${i + 1}`,
+    name: `synthetic_skill_${i + 1}`,
+    version: `0.${i + 1}.0`,
+    archetype: ["Quant","Macro","Risk","Capital"][i % 4],
+    description: `Synthetic skill ${i + 1}`,
+    draft: i % 2 === 0,
+    evalScore: 0.6 + 0.04 * i,
+    usedByPersonas: i % 3,
+    owner: "ai_trainer",
+    updatedAt: ago(i * 6 + 1),
+    state: i % 3 === 0 ? "draft" : "deployed",
+    risk: "low",
+  });
+}
+
 export const searchableObjects = () => [
   ...strategies.map((s) => ({ id: s.id, type: "Strategy", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
   ...personas.map((s) => ({ id: s.id, type: "Persona", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
