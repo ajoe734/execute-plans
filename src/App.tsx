@@ -77,9 +77,11 @@ import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
 import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
 import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
 import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
-import { LoopsPage, SentinelPage, InterventionsPage } from "@/management/pages/v5/V5Pages";
+import { LoopsPage, InterventionsPage } from "@/management/pages/v5/V5Pages";
 import { ControlRoomPage } from "@/management/pages/v5/ControlRoom";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
+import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
+import { SentinelPage } from "@/management/pages/v5/Sentinel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
