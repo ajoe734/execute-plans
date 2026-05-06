@@ -1,7 +1,9 @@
-# Spec Conflict Audit — 2026-05-06-E
+# Spec Conflict Audit — 2026-05-06-E (RESOLVED 2026-05-06)
 
 **範圍**：v5 SA + SD（Pantheon Closed-Loop Supervisor OS）vs. 既有 v4 normative / Pack D OPEN gaps / SD 內部一致性。
-**結論**：19 條 OPEN，須由規劃團隊回應後始能進入 Pack E 落地（E0 types + mock）。
+**結論**：19 條 RESOLVED — 由規劃團隊 2026-05-06 disposition 全數處置（28/28）。E0 已落地於 `src/lib/v5/` + `src/lib/bff/v5.ts`。
+
+> Disposition 來源：`.lovable/feedback/2026-05-06-E/Pack_E_Disposition.csv` / `.lovable/feedback/2026-05-06-E/Pack_E_Planner_Response_2026-05-06.md`
 
 ## 嚴重度說明
 
@@ -13,117 +15,116 @@
 
 ## A. v5 ↔ v4 normative 衝突
 
-### E01 [Blocker] v5 enum 是否覆蓋 v4 status enum
-- **衝突**：SD §7.1 自定 `LoopStatus` / `HealthStatus` / `InterventionSeverity` / `AutonomyMode` / `RemediationMode`；v4 已有 `StrategyReviewStatus`(4) / `StrategyDeploymentStatus`(5) / `ActionDescriptor`。
-- **影響**：若 v5 type 與 v4 同名概念雙來源，將出現 PersonaCard 與 StrategyDetail 顯示不一致。
-- **建議**：v5 type re-export v4 enum，或在 SD 明訂「v5 enum 為 view-model 專用，不對外暴露為 BFF DTO 欄位」。
-- **對應**：SD §7.1 / v4 `src/lib/v4/types.ts`
+### E01 [Blocker] v5 enum 是否覆蓋 v4 status enum — **RESOLVED (Q2)**
+- **處置**：v5 enum 為 view-model 專用；domain state 一律對應 v4 normative type，不取代。
+- **落地**：`src/lib/v5/enums.ts` 註明 view-model only。
 
-### E02 [Blocker] v5 BFF facade 路徑未定
-- **衝突**：SD §3.2 / §27 都列為 Open Decision；現行慣例是 `src/lib/bff/*`。
-- **建議**：採 `src/lib/bff/v5.ts` 並在 `src/lib/bff/client.ts` 掛 `bff.v5 = …`，不在 `src/lib/v5/` 自建 client。
-- **對應**：SD §27 row 5
+### E02 [Blocker] v5 BFF facade 路徑未定 — **RESOLVED (Q3)**
+- **處置**：`src/lib/bff/v5.ts`，掛 `bff.v5.*`；`src/lib/v5/` 只放 types/selectors/adapters/health/remediation/events。
+- **落地**：`src/lib/bff/v5.ts` + `src/lib/bff/client.ts` 已掛 `bff.v5`。
 
 ---
 
 ## B. v5 ↔ Pack D OPEN blockers
 
-### E03 [Blocker] LoopRun.nextAutomaticAction / stage timeout 缺基礎
-- **衝突**：SD §7.2/§7.3 假設 `stage.timeoutMs`、`nextAction`，但 Pack D **D05** 狀態機 timeout/failureState 未定。
-- **建議**：等 Pack D D05 回應後，v5 stage 共用同一套 timeout enum。
+### E03 [Blocker] LoopRun stage timeout — **RESOLVED (Q12, transitional)**
+- **處置**：`timeoutPolicy=v0-mock`；UI-only blocked/failed，`source=mockTimeoutPolicy`。Pack D D05 settles 後替換。
+- **落地**：`src/lib/v5/timeoutPolicy.ts`。
 
-### E04 [Blocker] RemediationAction.requiresHumanApproval 對應 role gate 未定
-- **衝突**：SD §7.8；Pack D **D12** Role × Capability bundle 未定。
-- **建議**：等 D12，v5 `requiredRoles` 直接引用 capability id。
+### E04 [Blocker] RemediationAction role gate — **RESOLVED (Q13/Q20, transitional)**
+- **處置**：`requiredRoles` 用既有 role 字串 + `usePermissions()`；保留 `requiredCapabilities?` 預留欄位。
+- **落地**：`RemediationAction.requiredCapabilities?` 已預留。
 
-### E05 [Blocker] ControlRoomSummary 需 currentUser / featureFlags
-- **衝突**：SD §7.11 + §12 假設可取 currentUser 與 tenant；Pack D **D59 / D51** `/bff/me` DTO 未定。
-- **建議**：等 D59，`bff.v5.controlRoom.get()` 回傳結構引用 `MeDto`。
+### E05 [Blocker] ControlRoomSummary 需 MeDto — **RESOLVED (Q14, transitional)**
+- **處置**：不依賴 `/bff/me`；用最小 `V5SessionContext`（tenantId="demo", env/locale 取自 platform store）。
+- **落地**：`bff.v5.session.get()` 與 `controlRoom.get()`。
 
-### E06 [Blocker] v5 typed event payload 未對齊 SSE channel
-- **衝突**：SD §9 列 13+ 種 `loop.run.*` / `sentinel.finding.*` / `intervention.*` event；Pack D **D26** SSE channel payload schema 未列。
-- **建議**：等 D26，v5 event 共用 envelope；否則 mock realtime 將與後續真實 SSE 不相容。
+### E06 [Blocker] v5 typed event vs SSE schema — **RESOLVED (Q15/Q19, transitional)**
+- **處置**：envelope `{id, schemaVersion:1, channel, type, occurredAt, correlationId, payload}`；channel `v5.{loop|sentinel|intervention|execution|optimization}.*`；transport 復用 `src/lib/bff/realtime.ts`。
+- **落地**：`src/lib/v5/events.ts`。
 
-### E07 [High] LoopRuns / Findings 列表 totalCount 未定
-- **衝突**：SD §13 列表需 pagination；Pack D **D22** totalCount 行為未定。
-- **建議**：等 D22；mock 先 deterministic count。
+### E07 [High] LoopRuns totalCount — **RESOLVED (Q16)**
+- **處置**：`V5ListResponse<T> = {items, totalCount, totalCountExact:true}`；adapter 隔離。
+- **落地**：`src/lib/v5/list.ts`。
 
 ---
 
 ## C. v5 ↔ 既有 IA / Command Center
 
-### E08 [High] Control Room 與 Command Center 過渡期 nav 失蹤
-- **衝突**：SD §27 第一條決議「coexist first」，但 §6 nav 已把 Command Center 從一級 group 移除。
-- **建議**：Phase E1 將 Command Center 暫時掛 Legacy group，避免「route 在但無入口」。
+### E08 [High] Command Center 過渡期 nav — **RESOLVED (Q17/Q23)**
+- **處置**：E1 將 Command Center 掛 Legacy/Advanced；E2 acceptance 後 `/management` index 預設 control-room；E7 處置 redirect 或藏 legacy。
+- **落地時點**：E1。
 
-### E09 [Medium] Personas 雙入口（Execution Loop + Multi-Persona System）
-- **衝突**：SD §6 / §6.2 自承重複，E1 接受、E7 才整理。
-- **建議**：E1 nav 加 deduplication tag，避免 sidebar active state 雙重高亮。
+### E09 [Medium] Personas 雙入口 — **RESOLVED (Q18/Q26)**
+- **處置**：E1 用 `dedupeKey="personas"` 避免 sidebar 雙重 active；E7 收斂。
+- **落地時點**：E1。
 
 ---
 
 ## D. SD 內部不一致
 
-### E10 [High] PersonaExecutionHealth.mode enum 內部矛盾
-- **衝突**：§7.4 列 `live | paper | shadow | paused`；§15.6 又用 `health.mode = suspended`；既有 seed 用 `active | paper | retired`。
-- **建議**：SD canonical 為 `live | paper | shadow | suspended`；§7.4 加 `suspended`、§15.6 改 `shadow`/`suspended` 對應；seed adapter 將 `active→live`、`retired→suspended`。
+### E10 [High] PersonaExecutionHealth.mode — **RESOLVED (Q4)**
+- **Canonical**：`live | paper | shadow | suspended`（移除 `paused`）。
+- **Mapping**：active/deployed→live, draft/sandbox/review→shadow, retired/paused→suspended。
+- **落地**：`src/lib/v5/adapters/persona.ts` `mapStateToMode()`。
 
-### E11 [High] SentinelFinding.status 與 SA 不一致
-- **衝突**：SA = `open | accepted | dismissed | executing | resolved | superseded`；SD §7.9 = `open | acknowledged | action_pending | mitigating | resolved | dismissed`。
-- **建議**：以 SD 為 canonical（更貼近 UI 狀態），但需 SA addendum 補註並提供 SA→SD 對照表。
+### E11 [High] SentinelFinding.status — **RESOLVED (Q5)**
+- **Canonical**：SD 版 6 值。SA accepted→acknowledged, executing→mitigating；superseded 不在 E0；以 `supersededByFindingId` 表達。
+- **落地**：`src/lib/v5/types.ts` `SentinelFinding` + `enums.ts`。
 
-### E12 [Medium] RemediationAction.mode vs SA.automationLevel 欄位名不一致
-- **衝突**：SD `mode: RemediationMode` vs SA `automationLevel`。
-- **建議**：採 SD `mode`，SA 加 alias 註記。
+### E12 [Medium] RemediationAction.mode vs automationLevel — **RESOLVED (Q6)**
+- **Canonical**：`mode: advisory | guarded_automation | emergency_override`；`automationLevel` deprecated。
+- **落地**：`src/lib/v5/types.ts` `RemediationAction.mode`。
 
-### E13 [Medium] InterventionItem 欄位增刪未說明
-- **衝突**：SD §7.10 移除 SA 的 `modifyAllowed` / `evidenceRefs` / `recommendation`，新增 `requiredRoles` / `linkedApprovalId/FindingId/IncidentId`。
-- **建議**：規劃團隊明確 supersede 並補理由。
+### E13 [Medium] InterventionItem 欄位 — **RESOLVED (Q7)**
+- **Canonical**：SD 版 + 復原 `evidenceRefs?`；`recommendation` → `recommendedDecision`；`modifyAllowed` derived。
+- **落地**：`src/lib/v5/types.ts` `InterventionItem` + `adapters/intervention.ts deriveModifyAllowed()`。
 
 ---
 
 ## E. 缺細節 / 不清楚
 
-### E14 [High] Health score 公式無權重數值
-- **缺**：SD §20.2 只描述 input；無權重、無閾值（healthy/watch/degraded/critical 切點）。
-- **建議**：規劃團隊補預設權重表（mock 可標 `mock formula v0`）。
+### E14 [High] Health score 公式 — **RESOLVED (Q8/Q25)**
+- **權重**：Persona perf 25 / risk 25 / exec 20 / decision 15 / policy 10 / sentinelPenalty 5；Strategy perf 30 / risk 25 / exec 20 / lifecycle 10 / sentinelIncidentPenalty 15。
+- **閾值**：healthy ≥80 / watch 65–79 / degraded 45–64 / critical <45；critical override 強制 critical。
+- **落地**：`src/lib/v5/health.ts`，標 `formulaVersion="v0-mock"`。
 
-### E15 [High] Sentinel mock 派生規則
-- **缺**：SD §8.2 說從 alerts/incidents 派生，但 confidence / blastRadius / recommendedActions 無派生規則。
-- **建議**：補 `derivation map`（如 incident.severity=critical → finding.severity=critical / confidence=0.9）。
+### E15 [High] Sentinel mock 派生 — **RESOLVED (Q9)**
+- **Severity map**：critical 0.88 / high 0.76 / medium 0.62 / low 0.45；每 corroborating evidence +0.04，cap 0.95。
+- **Action map**：drawdown/slippage→reduce_allocation+switch_persona_to_shadow+start_evolution_run；runtime/MCP→route_to_backup_runtime+open_incident；capital→freeze_rebalance+request_human_approval；critical incident→pause_persona_routing+emergency_rollback。
+- **落地**：`src/lib/v5/sentinel.ts`。
 
-### E16 [High] Emergency mock action 對既有 seed 副作用範圍
-- **缺**：§15.6 / §21.2 說會 audit + realtime event；未說 `pause_persona_routing` 是否真改 seed.persona（影響 PersonaDetail 看到變化）。
-- **建議**：明訂「v5 mock action 只更動 v5 layer 的 derived state，不寫回 seed」。
+### E16 [High] Emergency action 對 seed 副作用 — **RESOLVED (Q10/Q24)**
+- **處置**：v5 mock action 只動 `v5ActionOverlay`（in-memory, 30 min TTL），不寫回 seed；emergency_override 必走 HighRiskConfirm。
+- **落地**：`src/lib/v5/overlay.ts` + `bff.v5.remediation.execute()`。
 
-### E17 [Medium] Realtime bus 復用否
-- **缺**：SD §9 未說明是否復用 `src/lib/bff/realtime.ts` mock SSE bus。
-- **建議**：復用；新增 v5 channel topic prefix。
+### E17 [Medium] Realtime bus 復用 — **RESOLVED (Q19)**
+- **處置**：復用 `src/lib/bff/realtime.ts`；topic prefix `v5.*`。
+- **落地**：`src/lib/v5/events.ts`。
 
-### E18 [Medium] Permission 模型
-- **缺**：v5 page 用既有 `usePermissions()` 還是新建 v5 capability list？
-- **建議**：復用，待 Pack D D12 回應後再對齊。
+### E18 [Medium] Permission 模型 — **RESOLVED (Q20)**
+- **處置**：沿用 `usePermissions()`；emergency 走 HighRiskConfirm；`requiredCapabilities?` 為 D12 預留。
+- **落地時點**：E5/E6。
 
-### E19 [Medium] /management/alpha-factory route 未定義
-- **缺**：SD §6 nav 出現 `/management/alpha-factory` 但既有 App.tsx 無此 route。
-- **建議**：規劃團隊明確此 route 是新增 stub（Phase E1）或已存在頁面 rename。
+### E19 [Medium] /management/alpha-factory route — **RESOLVED (Q21, no-op)**
+- **處置**：route 已存在於 main，不需新建/rename。
 
 ---
 
-## 對應 phase gating
+## 對應 phase gating（更新）
 
-| Phase | 必須先解 |
+| Phase | 狀態 |
 |---|---|
-| E0 types + mock | E01, E02, E10, E11, E12, E13, E14, E15 |
-| E1 routing + nav | E08, E09, E19 |
-| E3 Execution Loop | E03, E10, E16 |
-| E5 Sentinel | E06, E15, E16 |
-| E6 HIQ | E04, E13 |
-| E7 IA stabilization | E08, E09 |
+| **E0 types + mock** | ✅ DONE — `src/lib/v5/*` + `src/lib/bff/v5.ts` + 18 tests passing |
+| E1 routing + nav | unblocked — Q17/Q18/Q21 已答 |
+| E3 Execution Loop | unblocked — Q12 v0-mock timeout / Q10 overlay |
+| E5 Sentinel | unblocked — Q9 mapping / Q15 envelope |
+| E6 HIQ | unblocked — Q11 coexist / Q7 InterventionItem |
+| E7 IA stabilization | E2/E5/E6 完成後 |
 
 ## 統計
 
-- Blocker：6（E01, E02, E03, E04, E05, E06）
-- High：7（E07, E08, E10, E11, E14, E15, E16）
-- Medium：6（E09, E12, E13, E17, E18, E19）
-- 合計：19
+- Blocker：6（全部 RESOLVED）
+- High：7（全部 RESOLVED，含 transitional）
+- Medium：6（全部 RESOLVED）
+- 合計：19 / 19 RESOLVED
