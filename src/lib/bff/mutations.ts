@@ -193,7 +193,7 @@ export const mutations = {
 
     // Pack C C028 — idempotency-key replay (same key returns prior result within 24h).
     if (input.idempotencyKey) {
-      const replay = idempotencyReplay(input.idempotencyKey);
+      const replay = idempotencyReplay<MutationResult>(input.idempotencyKey);
       if (replay) return delay(replay);
     }
     // Pack C C010 — optimistic lock check.
