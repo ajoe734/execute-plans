@@ -59,6 +59,7 @@ import { PersonaLab } from "@/agora/pages/PersonaLab";
 import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
 import { AgoraChannels } from "@/agora/pages/AgoraChannels";
 import { QAChecklist } from "@/platform/pages/QAChecklist";
+import { AuditViewer } from "@/platform/pages/AuditViewer";
 import { SettingsPage } from "@/management/pages/phase2/Settings";
 import { LineageExplorerPage } from "@/management/pages/phase2/LineageExplorer";
 import { KnowledgeInboxPage } from "@/management/pages/phase2/KnowledgeInbox";
@@ -195,6 +196,7 @@ const App = () => (
             </Route>
 
             <Route path="/qa" element={<QAChecklist />} />
+            <Route path="/audits" element={<AuditViewer />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
