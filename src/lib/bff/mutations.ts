@@ -104,14 +104,18 @@ export type RunActionInput = {
   /** New lifecycle state to write (when applicable). */
   newState?: LifecycleState | string;
   memo?: string;
+  /** Pack C C010 — optimistic-lock guard. */
+  expectedVersion?: number;
+  /** Pack C C028 — replay guard. */
+  idempotencyKey?: string;
 };
 
 export type MutationResult = {
   ok: boolean;
   audit: AuditEvent;
   message?: string;
-  /** When the transition guard rejected the action. */
-  rejected?: "illegal_transition" | "unknown_entity";
+  /** When a guard rejected the action. */
+  rejected?: "illegal_transition" | "unknown_entity" | "state_conflict" | "invariant_violation";
 };
 
 const SEED_COLLECTIONS: Record<string, readonly { id: string; state?: string }[]> = {
