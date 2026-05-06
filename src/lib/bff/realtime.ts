@@ -44,11 +44,16 @@ class RealtimeBus {
   emit(topic: string, payload: unknown) {
     if (!this.connected) return; // simulate dropped events while offline
     this.lastEventAt = Date.now();
-    this.recent.unshift({ topic, ts: new Date().toISOString(), payload });
+    const id = `${this.lastEventAt.toString(36)}-${(++this.eventSeq).toString(36)}`.toUpperCase();
+    this.lastEventId = id;
+    this.recent.unshift({ topic, ts: new Date().toISOString(), payload, id });
     if (this.recent.length > 40) this.recent.pop();
     this.listeners.get(topic)?.forEach((h) => h(payload));
     this.notifyStatus();
   }
+
+  /** Pack C C029 — Last-Event-Id for SSE reconnect. */
+  getLastEventId(): string { return this.lastEventId; }
 
   // ---- status / introspection ----
   onStatus(h: () => void): () => void {
