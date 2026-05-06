@@ -7,6 +7,7 @@ import * as seed from "@/mocks/seed";
 import { mutations } from "./mutations";
 import { realtime } from "./realtime";
 import { usePlatform } from "@/platform/store";
+import { bffV5 } from "./v5";
 
 const acceptLanguage = (): string => {
   const l = usePlatform.getState().locale;
@@ -27,6 +28,8 @@ export const bff = {
   /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
   getAcceptLanguage: acceptLanguage,
   mutations,
+  /** Pack E — v5 closed-loop OS facade (Q3). View-model layer; does not replace v4 normative DTOs. */
+  v5: bffV5,
   /** v3 §6.2 high-risk confirmation token issuance. */
   commands: {
     requestConfirmToken: mutations.requestConfirmToken,
