@@ -102,6 +102,7 @@ const App = () => (
               <Route path="control-room" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
+              <Route path="loops/optimization" element={<OptimizationLoopPage />} />
               <Route path="loops/:kind" element={<LoopsPage />} />
               <Route path="sentinel" element={<SentinelPage />} />
               <Route path="interventions" element={<InterventionsPage />} />
