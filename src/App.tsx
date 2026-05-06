@@ -77,6 +77,7 @@ import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
 import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
 import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
 import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
+import { ControlRoomPage, LoopsPage, SentinelPage, InterventionsPage } from "@/management/pages/v5/V5Pages";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -93,7 +94,12 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<CommandCenter />} />
+              <Route index element={<ControlRoomPage />} />
+              <Route path="control-room" element={<ControlRoomPage />} />
+              <Route path="loops" element={<LoopsPage />} />
+              <Route path="loops/:kind" element={<LoopsPage />} />
+              <Route path="sentinel" element={<SentinelPage />} />
+              <Route path="interventions" element={<InterventionsPage />} />
               <Route path="overview" element={<ManagementOverview />} />
               <Route path="command-center" element={<CommandCenter />} />
               <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
