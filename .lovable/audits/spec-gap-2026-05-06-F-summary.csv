@@ -1,0 +1,5 @@
+id,severity,scope,files,suggested_owner_pack
+F01,High,List page Create button is no-op placeholder across 9 list pages,"src/management/pages/ObjectListPage.tsx; src/management/pages/Lists.tsx",Pack D (overlaps D05) or Pack F
+F02,Medium,ObjectListPage / CapitalPoolsList forwardRef warning,"src/management/pages/ObjectListPage.tsx; src/management/pages/Lists.tsx",impl-only (bundle with F01)
+F03,Medium,v4 PersonasList vs v5 PersonaHealthMatrix entry-point overlap,"src/management/pages/Lists.tsx; src/management/pages/v5/PersonaHealthMatrix.tsx; src/App.tsx",Pack F (IA convergence)
+F04,Low,Pack E smoke report claims regression-clean but covers only read paths,".lovable/feedback/2026-05-06-E/; /mnt/documents/PackE_Smoke_Report_2026-05-06.md",audit-only
