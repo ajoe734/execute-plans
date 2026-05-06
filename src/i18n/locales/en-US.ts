@@ -147,7 +147,7 @@ export default {
       findings: "Findings",
       formula: "Formula",
     },
-    sentinel: { subtitle: "Findings derived from alerts, incidents, runtime and persona health.", confidence: "Confidence", actions: "Recommended" },
+    
     interventions: { subtitle: "Unified queue across approvals, sentinel, incidents and policy exceptions.", coexist: "Approvals page remains accessible for legacy workflows.", roles: "Required roles" },
     kpi: {
       loopsRunning: "Loops running",
