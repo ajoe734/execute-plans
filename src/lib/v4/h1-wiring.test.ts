@@ -31,7 +31,7 @@ describe("Pack C-H1 wiring", () => {
     const reuse = redeemConfirmToken({ tokenId: t.tokenId, entityType: "deployment", entityId: "d1",
       actionId: "emergency_kill", expectedVersion: 1, idempotencyKey: "k1" });
     expect(reuse.ok).toBe(false);
-    if (!reuse.ok) expect(reuse.error.code).toBe("CONFIRM_TOKEN_REUSED");
+    expect((reuse as { error: { code: string } }).error.code).toBe("CONFIRM_TOKEN_REUSED");
 
     const t2 = issueConfirmTokenV4(
       { entityType: "deployment", entityId: "d2", actionId: "emergency_kill",
@@ -51,6 +51,6 @@ describe("Pack C-H1 wiring", () => {
     const mismatch = redeemConfirmToken({ tokenId: t3.tokenId, entityType: "deployment", entityId: "d3",
       actionId: "emergency_kill", expectedVersion: 6, idempotencyKey: "k3" });
     expect(mismatch.ok).toBe(false);
-    if (!mismatch.ok) expect(mismatch.error.code).toBe("CONFIRM_TOKEN_BINDING_MISMATCH");
+    expect((mismatch as { error: { code: string } }).error.code).toBe("CONFIRM_TOKEN_BINDING_MISMATCH");
   });
 });
