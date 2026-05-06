@@ -129,6 +129,8 @@ export default {
     empty: "Nothing to show.",
     transitional: { controlRoom: "Mock session (tenantId=demo) until /bff/me lands." },
   },
+  risk: { low: "Low", medium: "Medium", high: "High", critical: "Critical" },
+  status: {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
