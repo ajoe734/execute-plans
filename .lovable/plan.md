@@ -1,97 +1,141 @@
 
-# 規劃：Spec Gap Audit 2026-05-05-C（實作後反饋）
+# Pack C 接收、歸檔與落地計畫
 
-## 目標
+## A. 文件歸檔（read-only 階段先確認、build mode 執行）
 
-在完成 Pack A（28 H）+ Pack B（64 M/L）共 92 條 spec 修補、並走過階段 1A–3 實作後，盤點「實作期間 v3 spec 仍無法獨立支撐落地」的 deeper gaps。輸出一份新的、獨立命名的稽核文件給規劃團隊。
+將 `/tmp/v4/` 10 份檔案歸檔到專案：
 
-## 命名與檔案
+```
+.lovable/spec/v4/
+  Pantheon_Frontend_Build_Spec_FULL_v4_zh-TW.md
+  Pantheon_Frontend_Build_Spec_FULL_v4_en-US.md
+  Pantheon_Frontend_Build_Spec_v4_INDEX.md
+.lovable/feedback/2026-05-05-C/
+  Pantheon_Frontend_Build_Spec_SA_SD_Gap_Remediation_2026-05-05-C_All_zh-TW.md
+  Pantheon_Frontend_Build_Spec_SA_SD_Gap_Remediation_2026-05-05-C_All_en-US.md
+  Pantheon_Frontend_Build_Spec_SA_SD_Gap_Remediation_2026-05-05-C_Disposition.csv
+  Lovable_Immediate_Remediation_Prompt_2026-05-05-C_All_zh-TW.md
+  Lovable_Immediate_Remediation_Prompt_2026-05-05-C_All_en-US.md
+.lovable/audits/
+  spec-gap-2026-05-05-C.md  (規劃團隊版本，與我們 audit 同名，存為 *-planner.md 避免覆蓋)
+  spec-gap-2026-05-05-C-summary.csv → *-planner.csv
+```
 
-- 主報告：`.lovable/audits/spec-gap-2026-05-05-C.md`（zh-TW 完整詳列）
-- 試算表摘要：`.lovable/audits/spec-gap-2026-05-05-C-summary.csv`（id, area, severity, spec_ref, gap, impact, suggested_resolution）
-- 同步更新 `.lovable/audits/INDEX.md` 加入 2026-05-05-C 列（不覆蓋 A/B 既有列）
+並更新：
+- `.lovable/spec/INDEX.md`：把 v4 列為最高優先級，調整衝突解決順序為 **v4 → v3 → v2 → v1**。
+- `.lovable/audits/INDEX.md`：把 audit C 標記為 `RESOLVED_BY_PACK_C (v4 / 2026-05-05-C)`。
 
-> 命名遵循既有規則 `spec-gap-YYYY-MM-DD-{流水序}`，C 為今日第三輪。
+## B. 規劃團隊回應內容檢視結論
 
-## 內容範圍（Audit C 11 大分區）
+Pack C 78 條 **全數有具體 SA/SD 級回應**，沒有未答項。每條都給了 schema、表格或裁定（如 single-tenant、SSE-only、bulk = future work）。我提的 11 大區塊全被覆蓋。
 
-每條目格式：`C### · [Severity] · Area · Spec ref · Gap · Impact · Suggested resolution`。
+## C. Pack C ↔ 目前 v3 實作的「規範性不一致」清單
 
-### 1. 跨層 Normative 衝突（v1 / v2 / v3 三層）
-- 同一 enum 在三層出現不同字面值（例：lifecycle vs state、quarantined vs isolated）但 v3 §2 僅說「v3 wins」，未提供完整 mapping table 與遷移期 BFF dual-write 規則。
-- v3 §13 page tab 修正未列出被刪除 tab 的資料遷移目的地。
-- Disposition.csv 條目與 v3 章節未做 1:1 reverse index。
+Pack C 明確聲明「優先於 v3」，因此以下不一致必須以 Pack C 為準、回頭修我們的 v3 程式碼：
 
-### 2. 狀態機完整性
-- 18 狀態機僅列 happy-path transition，未定義：error / timeout / cancellation / 強制 admin override 路徑。
-- 缺少 terminal state 之後 archive / purge SLA。
-- 缺少並發 transition（同一 entity 兩個 actor 同時 dispatch）的衝突解決規則（optimistic lock token？version？）。
-- Strategy 的 lifecycle × review × deployment 三軸合法組合矩陣未列出（理論 8×4×5 = 160 組合，需要白名單）。
+| # | 位置 | v3 現況 | Pack C 規範 | 必要動作 |
+|---|---|---|---|---|
+| 1 | `src/lib/v3/status.ts` `StrategyReviewStatus` | 9 值 (draft/submitted/validator_running/in_review/changes_requested/approved/rejected/cancelled/none) | 4 值 `none\|pending\|changes_requested\|approved` (C008) | 收斂 enum、增加 mapping helper、改所有引用點 |
+| 2 | `src/lib/v3/status.ts` `StrategyDeploymentStatus` | 8 值 (not_deployed/scheduled/deploying/running/paused/rolling_back/failed/stopped) | 5 值 `none\|paper_running\|live_running\|stopped\|rollback_required` (C008) | 收斂 enum + paper/live 拆分 |
+| 3 | Strategy 三軸合法組合 | 無白名單 | C008 提供 8×N 白名單 + `validateStrategyTriple()` | 新增 `strategyInvariants.ts` + 在 mutations 驗證 |
+| 4 | `src/lib/stateMachines/*` | 只有 happy path | C006 規定 `TransitionDescriptor` (timeoutMs, onFailure, onCancel, retryable) + 8 機器預設 | 改 `Transition` 型別、補 transient/failure 狀態 |
+| 5 | `ActionDescriptor` (`src/lib/v3/availableActions.ts`) | 缺 group/order/disabledReasonCode/cooldownSec/ttlSec/idempotencyKeyRequired | C014–C015 完整 schema | 擴 schema + 全站 button 渲染順序 |
+| 6 | High-risk catalog (`src/lib/v3/highRiskActions.ts`) | 5 條，無 cooldown/memo.minLen/refType | C020–C023 19 條 + memo schema (`HighRiskMemo`) | 重寫 catalog；補 confirm-token revoke endpoint |
+| 7 | BFF list endpoints (`src/lib/bff/*`) | offset 風格 | C024–C026 cursor + filter[]/sort | 改 mock BFF + hooks |
+| 8 | Error envelope | `BffError` 只有 code/i18nKey | C027 加 `retryable/userActionable/correlationId` | 擴 type + toast 邏輯 |
+| 9 | SSE (`src/lib/bff/realtime.ts`) | 無 Last-Event-Id / heartbeat / resync | C029 完整協定 | 重寫 reconnect loop |
+| 10 | Handoff (`src/lib/v3/agoraHandoff.ts`) | 無 SLA escalation / reject DTO / attachment 限制 | C033–C036 | 補 7 種 SLA 表 + `HandoffRejectDTO` + attachment validator |
+| 11 | Capital mandate | 無 breach monitor | C038 `MandateMonitor` 預設值 | 新增 monitor + Risk Center alert hook |
+| 12 | Ranking metrics | 無 unit/direction/normalization | C039 `RankingMetricDefinition` | 擴 metric library |
+| 13 | Rebalance | 無 quorum/rollback | C040–C041 7 step 表 | 擴 workflow 定義 |
+| 14 | Evolution constraints | 無 min/max validator + dry-run | C043 + `dry-run` endpoint | 補 validator + mock endpoint |
+| 15 | Strategy `lifecycleStatus` `degraded` 與 v3 §13 Persona `degraded → restricted` | v3 直接用 degraded | C001 規定 Persona `degraded` 為 invalid → `restricted` | Persona type bridge 加 mapping |
+| 16 | i18n locales | 已是 zh-TW/en-US | C047 ICU pattern + format token table | 新增 `formatTokens.ts` |
+| 17 | Design tokens | 無 dark/density | C050–C051 token + theme/density preference | 擴 tailwind config + ThemeProvider |
+| 18 | A11y / Security / Performance | 無對應章節 | C056/C063/C064 baseline | 新增 `src/lib/v4/a11y.ts`, `security.ts`, `perf-budget.ts` + `PlatformShell` 套用 |
+| 19 | E2E scenarios | 只有單頁測 | C059 10 happy + 5 incident | 新增 `src/test/e2e-scenarios.test.ts`（mock-driven）|
+| 20 | Mock seed scale | 較少 | C060 明定每 entity 數量 | 擴 `src/mocks/seed.ts` |
+| 21 | Signal confidence | 1–5 無 reason 規則 | C075 表 | 擴 SignalFeedback validator + UI |
+| 22 | DailyBrief tz/null | 無一致規則 | C077 | 改 KPI render |
+| 23 | CommandCenter bucket colors | 自訂 | C078 token mapping | 改 token map |
 
-### 3. 權限矩陣與 ActionDescriptor
-- §5 Truth table 僅覆蓋 5 個主要 entity；Tool/MCP/Skill/Memory/Insight/Artifact/Job 的細部 action × role 未列。
-- ActionDescriptor 未定義：disabled reason 的 i18nKey 命名空間、ttl、requiresEnv、requiresTwoMan 規則。
-- 「emergency override」誰能授予、留痕欄位未定。
+### 與規劃團隊的待澄清項（次要，不阻擋落地）
 
-### 4. 高風險動作 / Confirm Token
-- §6.2 token API 缺 token 撤銷、token reuse 偵測、token 與 idempotency key 關係。
-- Memo 必填的最小語意檢查規則（字數、是否引用 incident id）僅在 Pack B G77 提到上限，未定下限/格式。
-- Two-man rule 觸發條件清單不完整（只列 5 條 high-risk，實際 §6.1 有更多）。
+- C019 token TTL 預設 120s、critical 60s——我們現有 `confirmTokens` 預設多少需確認後對齊。
+- C040 Rebalance step 名稱（Pack C 用 `metric_freeze/ranking_calculation/...`）與我們 `src/lib/v3/rebalanceWorkflow.ts` 既有 step id 需 1:1 mapping，若不一致以 Pack C 為準並補 alias。
+- C002 `apiVersion: 'v3'`（Pack C 仍稱 v3）但文件叫 v4——確認是否升 `apiVersion: 'v4'` 或維持字面 `'v3'`。**建議實作：維持 Pack C 字面 `'v3'`。**
 
-### 5. BFF API Contract
-- `availableActions` 只規定「必含」，未規定排序、分組（primary / secondary / destructive），UI 無法穩定渲染。
-- 分頁、排序、過濾的 query 參數命名約定（offset/limit vs cursor）未統一。
-- Error envelope（`BffError.i18nKey` 已定）但 retryable / userActionable / correlationId 欄位語意未定。
-- SSE 重連時的 last-event-id / replay window 未定。
-- Idempotency key header、request id propagation 未定。
+## D. 新建 v4 normative 層
 
-### 6. Agora ↔ Management Handoff
-- 7 種 handoff type 已定，但 SLA 計時起點（建立時 vs 接手時）、逾期升級行為（升級到誰）未定。
-- 接手後若 Management 拒絕，回信給 Agora 的欄位 schema 未定。
-- Handoff 內含 attachment 大小 / mime / 病毒掃描規則未定。
+```
+src/lib/v4/
+  index.ts
+  legacyMapping.ts          # C001
+  envelope.ts               # C002 BffEnvelope
+  tabMigration.ts           # C003
+  transitions.ts            # C006/C007 TransitionDescriptor + force
+  strategyInvariants.ts     # C008 三軸白名單
+  retention.ts              # C009
+  optimisticLock.ts         # C010
+  branching.ts              # C011
+  renderHints.ts            # C012
+  permissionsMatrix.ts      # C013 11 entity × action
+  actionDescriptor.ts       # C014–C015 (取代 v3 版)
+  emergencyOverride.ts      # C016
+  confirmToken.ts           # C019 + revoke
+  highRiskCatalog.ts        # C020–C023 19 條
+  pagination.ts             # C024–C026
+  errorEnvelope.ts          # C027
+  idempotency.ts            # C028
+  sseProtocol.ts            # C029 + channel catalog
+  handoffSla.ts             # C033–C037
+  mandateMonitor.ts         # C038
+  rankingMetric.ts          # C039
+  rebalanceQuorum.ts        # C040–C041
+  fxPolicy.ts               # C042
+  evolutionLimits.ts        # C043
+  experimentGate.ts         # C044
+  reproducibility.ts        # C045
+  i18nFormat.ts             # C046–C049
+  designTokens.ts           # C050–C051 (CSS var 註冊)
+  componentSpecs.ts         # C052–C055
+  a11y.ts                   # C056–C058
+  security.ts               # C064–C065
+  perfBudget.ts             # C063
+  glossary.ts               # C067
+  ownerMap.ts               # C070
+  strategyTabs.ts           # C071
+  personaLab.ts             # C072
+  rankingInputs.ts          # C073
+  rebalanceUiPatterns.ts    # C074
+  signalConfidence.ts       # C075
+  committeeTemplates.ts     # C076
+  dailyBriefKpi.ts          # C077
+  lifecycleBucketColors.ts  # C078
+```
 
-### 7. Capital / Ranking / Rebalance
-- Mandate JSON schema 已定，但 mandate breach 偵測週期、breach 後自動動作未定。
-- Ranking formula 的 metric 缺 unit、direction（higher-better）、normalization 規則。
-- Rebalance 6/9 step 之間的回退（step 5 → step 3）合法性未列。
-- Reviewer / Approver quorum 規則（最少幾人、是否需跨角色）未列。
+`src/lib/v4/index.ts` re-export 全部，並在 README 標註 **v4 > v3** 衝突解決規則。`src/lib/v3/` 保留但內部標 `@deprecated`，凡 Pack C 收斂的型別都加 `// superseded by v4`。
 
-### 8. Evolution / Experiment
-- Constraints / Alerts / Approvals schema 僅列欄位，未列驗證器與限制（如 max population, max cost budget）。
-- Experiment 結果 → Strategy promote 的 gating 標準（min sample, p-value）未列。
+## E. 落地分批（建議拆 6 個 PR / 階段）
 
-### 9. i18n / Locale
-- Persona response language fallback 鏈已定，但 mixed-locale UGC（user 中英混打）儲存與顯示策略未定。
-- Date / number / currency 格式 token 未列 ICU pattern。
-- 地區（region）與語言分離（zh-TW vs zh-HK）未討論。
+1. **歸檔 + INDEX 升 v4 + 建 v4 骨架（無行為改動）**
+2. **Pack C-H1**：C001/C002/C006/C008/C010/C013/C014/C015/C019/C020/C024/C025/C027/C028/C029（最會破壞 type 的 14 條 H）
+3. **Pack C-H2**：C033/C034/C038/C056/C059/C064（handoff/security/a11y/E2E）
+4. **Pack C-M**：38 條 M（含 design token、skeleton、metric metadata、rebalance quorum、SignalConfidence、PersonaLab schema 等）
+5. **Pack C-L**：26 條 L（render hint、bucket color、glossary、reduced motion、format token 等）
+6. **驗收**：vitest 全綠、E2E 10+5 scenario、mock seed 達標、a11y axe smoke、跑 `recalculate` 對照 OpenAPI（暫以 zod 驗 mock）
 
-### 10. UI 元件 / Design Tokens
-- 9 design tokens 已定，但 dark mode、reduced motion、density（compact/comfortable）未定。
-- Empty / Loading / Error 模板已定，但 skeleton 對 table / card / chart 各別規格未定。
-- LineageGraph 節點上限、效能 budget 未定。
-- RightDrawer 多開、堆疊行為未定。
+## F. 不做（與 Pack C 一致）
 
-### 11. 測試 / 驗收 / Mock 資料
-- Acceptance Criteria 寫在每頁底部，但缺 cross-page acceptance（端到端 scenario）。
-- Mock seed 量級（每 entity 應有幾筆？涵蓋多少 state？）未列。
-- Demo scenario 僅有名稱，未列 step-by-step 預期結果。
-- 沒有 contract test / consumer-driven contract 規範。
-- 沒有 a11y（WCAG level）/ performance（LCP/TTI 目標）/ security（CSP, auth token storage）chapter。
+- Bulk mutation UI（C031 future）
+- WebSocket（C032 future）
+- 多 tenant 切換（C018 future）
+- zh-HK/zh-CN 區隔（C048 future）
+- 視覺回歸（C066 future）
 
-## 預估數量
+## 確認事項
 
-預估 60–90 條新缺漏。Severity 分布粗估：H 10–15、M 30–40、L 20–35。
-
-## 工作步驟（進入 build mode 後執行）
-
-1. 重讀 v3 spec §1–§21（Pack A）與 §22–§45（Pack B）對照實作，逐區列出條目。
-2. 寫 `spec-gap-2026-05-05-C.md`（每區 H2，每條 H3，含 Impact 與 Suggested resolution）。
-3. 寫 `spec-gap-2026-05-05-C-summary.csv`。
-4. 更新 `.lovable/audits/INDEX.md` 加入新列。
-5. 不修改任何程式碼，不動 v3 spec 文件。
-
-## 不做
-
-- 不直接修補 spec（這份是反饋給規劃團隊）。
-- 不覆蓋 A / B 報告。
-- 不在程式碼新增 placeholder。
+請確認：
+1. 接受 Pack C **完全覆蓋** v3 的型別收斂（特別是 Strategy review/deployment 9→4、8→5）。
+2. 接受新增 `src/lib/v4/` 目錄，v3 進入 deprecated 維護模式。
+3. 同意按 6 階段分批落地（每階段一個 user message 觸發）。
