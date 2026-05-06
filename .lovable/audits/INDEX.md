@@ -14,10 +14,13 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `feedback-2026-05-05-B` | 2026-05-05 | Medium / Low severity 解決方案 | 64 | 0 / 41 / 23 | RESOLVED — 已實作 | v3 Part 10 |
 | `spec-gap-2026-05-05-C` | 2026-05-05 | 實作後 deeper-gap 反饋 | 78 | 14 / 38 / 26 | **RESOLVED by Pack C (v4 / 2026-05-05-C)** | 規劃團隊版 = `*-planner.md` |
 | `feedback-2026-05-05-C` | 2026-05-05 | Pack C 78 條規範回應 | 78 | 14 / 38 / 26 | RESOLVED — 進入實作 | 對應 v4 spec，存於 `.lovable/feedback/2026-05-05-C/` |
+| `spec-gap-2026-05-06-D` | 2026-05-06 | Pack C 落地後 second-order gaps | 63 | 21 / 28 / 14 | **OPEN — 待 Pack D 規範回應** | 5 條 blockers 另存 `*-blockers.md` |
 
 ## 累計覆蓋
 
-170 / 170 SA-SD gaps 已於 spec 層收斂（92 原始 + 78 deeper）。實作層由 `.lovable/plan.md` 追蹤。
+170 / 170 SA-SD gaps 已於 spec 層收斂（92 原始 + 78 deeper）。
+另有 63 條 second-order gaps（Audit D）OPEN，待 Pack D 規範回應；其中 5 條為實作 blockers。
+實作層由 `.lovable/plan.md` 追蹤。
 
 ## 使用建議
 

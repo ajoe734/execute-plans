@@ -1,0 +1,65 @@
+id,severity,area,title,current_state,gap,recommendation,related_pack_c_id,status
+D01,High,StateMachine,Strategy 三軸狀態白名單未交叉定義,v4 收斂三軸 enum 但未列合法組合,缺禁止組合與聯動規則,補 3D truth table 或 2D + constraints,C002,OPEN
+D02,High,StateMachine,Persona retired 是否可 reactivate 未定義,有 retired 終態但未說單向,reactivate 路徑與權限未定,標註終態語意並補 audit reason code,C006,OPEN
+D03,High,StateMachine,CapitalPool frozen 狀態未列入狀態機,規範文字提及但未列舉,state vs flag 未選定,擇一並補 transition 與 disabledReasonCode,C008,OPEN
+D04,High,StateMachine,Incident 與 Deployment rollback 雙寫順序未定義,incident 可觸發 rollback 但順序未列,失敗補償與 idempotency 未明,給 sequence diagram + saga compensation,C014;C019,OPEN
+D05,High,StateMachine,10+ 狀態機缺 timeoutMs / failureState,多數 async transition 無 timeout,UI SLA 倒數與失敗態無法實作,每個 async transition 必補 timeoutMs/failureState/failureReasonCode,C001;C010,OPEN
+D06,Medium,Evolution,EvolutionRun pause 期間是否消耗 quota 未定義,規範未提及,quota 計算不一致,定義 quota 是否扣除暫停時段,C015,OPEN
+D07,Medium,Invariant,Triple-Axis 不變式觸發 transition 未列舉,只說必須維持,違反時 reject vs auto-correct 未定,每條不變式給 validateOn 列表,C002,OPEN
+D08,Medium,StateMachine,Job cancel 後 retry 規則未定義,未明確 jobId 是否複用,審計 chain 不一致,給明確 retry 策略,C020,OPEN
+D08b,Low,Memory,quarantine 期間是否影響 RAG 檢索未定,未提及,檢索行為不一致,明訂 RAG include 規則,C006,OPEN
+D09,High,Permission,Strategy entity 缺核心 action 列,permissionsMatrix 缺 6 個核心 action,UI 無法判 disabled,補完 Strategy 全 action × role,C013,OPEN
+D10,High,Permission,Persona entity 缺核心 action 列,同上,同上,補完 Persona 全 action × role,C013,OPEN
+D11,High,Permission,Channel/Watchlist/Notebook 未列入 entity,完全缺,3 個 entity 無 RBAC,補三個 entity 全列,C013,OPEN
+D12,High,Permission,Role × Capability bundle 對應未明確,有 capability 欄但無 role 對應表,IdP capability 反查 role 失敗,給 RoleCapabilityBundle 與命名規則,C013,OPEN
+D13,High,Permission,disabledReasonCode 未列舉 enum,型別為 string,i18n 與一致性失控,定義固定 enum (INSUFFICIENT_ROLE 等),C013,OPEN
+D14,Medium,Permission,requiresEnv 不符時的提示文案未定,未列,文案各頁不一,給 i18nKey 與標準文案,C013,OPEN
+D15,Medium,Permission,cooldown 倒數 ground truth 未定,client vs server clock 未明,跨頁倒數不一致,以 server time 為準並回 serverNow,C013,OPEN
+D16,Low,Permission,capability namespace 大小寫敏感未定,未列,實作差異風險,固定 lowercase dot.case,C013,OPEN
+D17,High,API,cursor 失效 fallback 未定,未列 error code,client 卡死,定義 CURSOR_EXPIRED/INVALID 與降級策略,C024,OPEN
+D18,High,API,filter operator grammar 未定,只說支援 filter,各端發明語法,定義 eq/in/gt/gte/lt/lte/contains/between,C024,OPEN
+D19,High,API,sort 多欄與 null 排序行為未定,未列,排序結果不一致,定義 multi-sort grammar 與 nulls-last,C024,OPEN
+D20,High,API,error envelope details schema 未定,details 為自由型,跨 service 不一致,給 details 子 schema (validation 等),C027,OPEN
+D21,High,API,平台 error code master list 不存在,散落各模組,i18n 與處理不一,建立 ErrorCode enum 與 i18nKey 表,C027,OPEN
+D22,High,API,list 是否回 totalCount 未定,cursor pagination 預設無,UI X of Y 無法顯示,定義 estimatedTotal/totalCountExact,C024,OPEN
+D23,Medium,API,部分成功 envelope 未定,bulk 動作無規範,前端結果展示不一,定義 207-style envelope,C025,OPEN
+D24,Medium,API,attachment multipart 規格未定,未列大小/類型限制,上傳行為不一,定義 mime/size/scan 規則,C033,OPEN
+D25,Medium,API,X-RateLimit-* header 未列入規範,未列,UI 無法提示限流,加入標準 rate limit headers,C027,OPEN
+D26,High,SSE,channel 事件 payload schema 未列,只列 channel 名,handler 無法 type-safe,每 channel 給 discriminated union schema,C028,OPEN
+D27,Medium,SSE,Last-Event-Id 過期視窗未定,未列秒數,replay 行為不一,給 replayWindowSec 預設值,C029,OPEN
+D28,Medium,SSE,heartbeat 間隔與超時門檻未明訂,未列,reconnect 行為不一,給 heartbeatSec 與 timeoutSec,C029,OPEN
+D29,Medium,SSE,resync_required 後 client 行為未列,未列要 refetch 哪個 endpoint,前端各頁實作不一,給 perChannel resyncEndpoint,C029,OPEN
+D30,High,Handoff,reopen 後 SLA 是否重置未定,未列,SLA 計算不一致,給 slaResetOnReopen 預設與 audit code,C034,OPEN
+D31,High,Mandate,CapitalPool breach 計算公式未列,只有 breach 概念,實作各自發明,給 breachFormula 與 breachWindow,C038,OPEN
+D32,High,Ranking,metric canonical id 未列,只有文案名,跨頁無法穩定引用,給 metric registry 與 id schema,C038,OPEN
+D33,Medium,Rebalance,quorum 未達時續延規則未定,未列,流程卡死,給 quorumExtensionPolicy,C038,OPEN
+D34,Medium,Evolution,fitness formula 中 metric 缺值策略未定,未列,run 失敗或誤判,給 missingMetricPolicy (fail/penalty),C015,OPEN
+D35,Medium,Approval,Two-Man 兩人是否可同 role 未定,未列,合規風險,明訂 distinct role 規則,C013,OPEN
+D36,Medium,Token,confirm token TTL 與 cooldown 衝突優先序未定,未列,UX 不一致,以 cooldown 優先,C019,OPEN
+D37,Low,Audit,reason 欄位最大長度未定,未列,跨後端截斷不一,給 maxLen 與 truncate 規則,C033,OPEN
+D38,Low,Skill,rollback 與 deprecate 同時操作未定,未列,狀態衝突,明訂互斥或順序,C015,OPEN
+D39,High,Tokens,spacing/typography scale 未列具體值,只說用 token,跨頁尺寸亂,給 4-pt spacing 與 type scale,C046,OPEN
+D40,High,Tokens,risk severity color token 未唯一定義,各頁自行配色,語意不一致,給五階固定 HSL 與 dark mode,C046,OPEN
+D41,Medium,UI,Toast 位置/時長/stacking 未定,未列,跨頁不一,給標準規格,C047,OPEN
+D42,Medium,UI,Form validation 觸發時機未定,未列 onBlur/onChange/onSubmit,UX 不一,給標準時機與例外,C048,OPEN
+D43,Medium,UI,Skeleton threshold 未定,未列,閃爍 / 顯示策略不一,給 >200ms threshold,C047,OPEN
+D44,Medium,UI,Empty state 必含元素未列為規範,各頁差異大,UX 不一,規範 icon+title+desc+cta,C047,OPEN
+D45,Medium,UI,Confirm dialog 與 confirm token flow 整合未圖示化,未列,實作差異,給統一流程圖,C019,OPEN
+D46,Medium,A11y,Reduced motion 下哪些動畫保留未列,未列,a11y 不達標,逐動畫標 keep/remove,C046,OPEN
+D47,Medium,A11y,Focus ring token 未定,未列,鍵盤可達性風險,給顏色與粗細 token,C056,OPEN
+D48,Low,Format,number/date/currency format token 未列,未列 locale fallback,跨頁顯示不一,給 Intl 設定 token,C048,OPEN
+D49,Low,Glossary,key 命名規則未定,未列,i18n 鍵衝突風險,固定 dot.case namespace,C048,OPEN
+D50,Low,Tokens,bucket color 五階配色未定,未列,圖表不一致,給五階固定 HSL,C046,OPEN
+D51,High,Session,/bff/me DTO 未列,未列欄位,UI 無 session 來源,定義 MeResponse 與 cache,C059,OPEN
+D52,High,Auth,token refresh 與 401 retry 行為未定,未列,session 中斷風險,給 refresh + retry 策略,C059,OPEN
+D53,High,Tenant,tenant scope 來源優先順序未定,URL/header/token 三來源未排序,scope 衝突,明訂優先序,C018,OPEN
+D54,Medium,Auth,logout 要 invalidate 哪些 cache 未列,未列,殘留資料風險,給 invalidate 列表,C059,OPEN
+D55,Medium,i18n,locale 是 user-pref 還是 tenant-pref 未定,未列,UX 不一致,user-pref 優先 tenant fallback,C048,OPEN
+D56,Medium,i18n,locale fallback chain 未定,zh-TW/en-US 以外未列,未來擴充風險,給 fallback chain,C048,OPEN
+D57,Medium,Time,UI 時區用 tenant 還是 user TZ 未定,未列,時間顯示不一,user TZ 優先 tenant fallback,C048,OPEN
+D58,Low,Format,numeric locale 是否綁 i18n locale 未定,未列,千位顯示不一,綁定 i18n locale,C048,OPEN
+D59,High,Session,/bff/me 缺欄位 featureFlags/env/capabilities/tenantId,同 D51,實作猜測,參見 D51,C059,OPEN
+D60,Medium,Audit,審計事件含 correlationId chain 未定,未列,跨 service 串流困難,給 chain 規則,C064,OPEN
+D61,Low,QA,E2E scenario 命名與 fixture seed 對應未列,未列,測試漂移,給命名與對應規則,C064,OPEN
+D62,Low,A11y,axe-core rule subset 與允收清單未列,未列,CI 紅綠不一,給規範 subset,C056,OPEN
+D63,Low,Perf,單頁 LCP/TTI 數值未列,未列,無 budget 可量,給每頁類型 budget,C056,OPEN
