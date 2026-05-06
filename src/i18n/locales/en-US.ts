@@ -88,6 +88,14 @@ export default {
     hooks: "Hooks & Cron",
     alphaFactory: "Alpha Factory",
     studios: "Studios",
+    // Pack E v5 closed-loop OS
+    controlRoom: "Control Room",
+    loops: "Loop Runs",
+    loopResearch: "Research Loop",
+    loopExecution: "Execution Loop",
+    loopOptimization: "Optimization Loop",
+    sentinel: "Sentinel Findings",
+    interventions: "Human Intervention Queue",
   },
   groups: {
     overview: "Overview",
@@ -103,6 +111,23 @@ export default {
     system: "System",
     aiCollab: "AI Collaboration",
     channels: "Channels",
+    closedLoopOs: "Closed-Loop OS",
+    legacy: "Legacy",
+  },
+  v5: {
+    controlRoom: { subtitle: "Pantheon Control Room — unified KPIs, loops, sentinel, interventions.", topLoops: "Top Loop Runs" },
+    loops: {
+      subtitle: "Closed-loop runs across research, execution and optimization.",
+      research: { title: "Research Loop Runs" },
+      execution: { title: "Execution Loop Runs" },
+      optimization: { title: "Optimization Loop Runs" },
+    },
+    sentinel: { subtitle: "Findings derived from alerts, incidents, runtime and persona health.", confidence: "Confidence", actions: "Recommended" },
+    interventions: { subtitle: "Unified queue across approvals, sentinel, incidents and policy exceptions.", coexist: "Approvals page remains accessible for legacy workflows.", roles: "Required roles" },
+    kpi: { loopsRunning: "Loops running", loopsBlocked: "Loops blocked", openFindings: "Open findings", pendingInterventions: "Pending interventions" },
+    col: { subject: "Subject", kind: "Kind", status: "Status", next: "Next action", total: "Total" },
+    empty: "Nothing to show.",
+    transitional: { controlRoom: "Mock session (tenantId=demo) until /bff/me lands." },
   },
   risk: { low: "Low", medium: "Medium", high: "High", critical: "Critical" },
   status: {
