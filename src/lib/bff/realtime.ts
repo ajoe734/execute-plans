@@ -1,5 +1,7 @@
 // Lightweight pub/sub for mock realtime events.
 // Phase 16: connection status, last-event tracking, disconnect simulator.
+// Pack C v4 §C029: lastEventId + heartbeat exposed for reconnect protocol.
+import { SSE_HEARTBEAT_INTERVAL_MS } from "@/lib/v4/sseProtocol";
 type Handler = (payload: unknown) => void;
 
 export type RealtimeStatus = "live" | "stale" | "offline";
@@ -8,6 +10,8 @@ interface RecentEvent {
   topic: string;
   ts: string;
   payload: unknown;
+  /** Pack C C029 — monotonically sortable event id used for replay (Last-Event-Id). */
+  id: string;
 }
 
 class RealtimeBus {
@@ -15,13 +19,19 @@ class RealtimeBus {
   private statusListeners = new Set<() => void>();
   private connected = true;
   private lastEventAt: number = Date.now();
+  private lastEventId: string = "";
   private recent: RecentEvent[] = [];
   private staleAfterMs = 30_000;
   private staleTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private eventSeq = 0;
 
   constructor() {
     if (typeof window !== "undefined") {
       this.staleTimer = setInterval(() => this.notifyStatus(), 5_000);
+      this.heartbeatTimer = setInterval(() => {
+        if (this.connected) this.lastEventAt = this.lastEventAt; // heartbeat keeps timestamp
+      }, SSE_HEARTBEAT_INTERVAL_MS);
     }
   }
 
@@ -34,11 +44,16 @@ class RealtimeBus {
   emit(topic: string, payload: unknown) {
     if (!this.connected) return; // simulate dropped events while offline
     this.lastEventAt = Date.now();
-    this.recent.unshift({ topic, ts: new Date().toISOString(), payload });
+    const id = `${this.lastEventAt.toString(36)}-${(++this.eventSeq).toString(36)}`.toUpperCase();
+    this.lastEventId = id;
+    this.recent.unshift({ topic, ts: new Date().toISOString(), payload, id });
     if (this.recent.length > 40) this.recent.pop();
     this.listeners.get(topic)?.forEach((h) => h(payload));
     this.notifyStatus();
   }
+
+  /** Pack C C029 — Last-Event-Id for SSE reconnect. */
+  getLastEventId(): string { return this.lastEventId; }
 
   // ---- status / introspection ----
   onStatus(h: () => void): () => void {
@@ -71,6 +86,7 @@ class RealtimeBus {
         topic: "system",
         ts: new Date().toISOString(),
         payload: { event: "reconnect" },
+        id: `sys-${Date.now().toString(36)}-${(++this.eventSeq).toString(36)}`,
       });
       this.listeners.get("data")?.forEach((h) => h({ kind: "*" }));
     } else {
@@ -78,6 +94,7 @@ class RealtimeBus {
         topic: "system",
         ts: new Date().toISOString(),
         payload: { event: "disconnect" },
+        id: `sys-${Date.now().toString(36)}-${(++this.eventSeq).toString(36)}`,
       });
     }
     this.notifyStatus();

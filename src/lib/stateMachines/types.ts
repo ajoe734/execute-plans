@@ -22,6 +22,13 @@ export interface Transition<S extends string = string> {
   uiPattern?: UiPattern;
   /** Optional human-readable explanation of guards / required evidence. */
   guardKey?: string;
+  // ----- Pack C C006 (v4) optional descriptor extensions -----
+  transientState?: S;
+  timeoutMs?: number;
+  onFailure?: "rollback_to_source" | "stay_in_transient" | "move_to_failed" | "manual_recovery_required";
+  failureState?: S;
+  onCancel?: "rollback_to_source" | "stay_in_transient" | "move_to_cancelled";
+  retryable?: boolean;
 }
 
 export interface StateMachine<S extends string = string> {
