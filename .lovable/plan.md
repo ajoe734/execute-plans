@@ -109,3 +109,23 @@ v5 SD 假設這些東西「已存在」並大量使用：
 - 不動任何 `src/` 與 `.lovable/spec/v4/`
 
 核准後即進入 default mode 執行上述檔案建立 / 更新。
+
+---
+
+## F. Pack E intake — 已完成（2026-05-06）
+
+新增/更新檔案：
+
+- `.lovable/spec/v5/Pantheon_v5_Closed_Loop_Supervisor_OS_SA_2026-05-06.md`（複製）
+- `.lovable/spec/v5/Pantheon_v5_Closed_Loop_Supervisor_OS_SD_2026-05-06.md`（複製）
+- `.lovable/spec/v5/Pantheon_v5_INDEX.md`（新建）
+- `.lovable/spec/INDEX.md`（更新：加 v5 段）
+- `.lovable/audits/spec-conflict-2026-05-06-E.md`（新建，19 條）
+- `.lovable/audits/spec-conflict-2026-05-06-E-summary.csv`（新建）
+- `.lovable/audits/INDEX.md`（更新：加 Pack E 列）
+- `.lovable/feedback/2026-05-06-E/Pack_E_Intake_Notes.md`（新建，28 條）
+- `mem://index.md`（更新：加 v5 Core 規則）
+- `mem://features/v5-loop-os.md`（新建）
+
+下一步：等規劃團隊回 `.lovable/feedback/2026-05-06-E/Pack_E_Disposition.csv`（28 條），始能啟動 E0。
+
