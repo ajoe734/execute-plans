@@ -2,9 +2,8 @@
 // Critical override: any critical open incident, emergency Sentinel finding, or
 // hard risk breach forces critical regardless of numeric score.
 
-import type {
-  HealthStatus, PersonaHealthInputs, StrategyHealthInputs,
-} from "./types";
+import type { PersonaHealthInputs, StrategyHealthInputs } from "./types";
+import type { HealthStatus } from "./enums";
 
 export const HEALTH_FORMULA_VERSION = "v0-mock" as const;
 
