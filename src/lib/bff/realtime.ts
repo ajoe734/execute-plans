@@ -1,7 +1,9 @@
 // Lightweight pub/sub for mock realtime events.
 // Phase 16: connection status, last-event tracking, disconnect simulator.
 // Pack C v4 §C029: lastEventId + heartbeat exposed for reconnect protocol.
+// Pack D D26 (Batch III): emitEnvelope wraps payload in SseEventEnvelope (schemaVersion=1).
 import { SSE_HEARTBEAT_INTERVAL_MS } from "@/lib/v4/sseProtocol";
+import { makeSseEnvelope, type SseChannelKind, type SseEventEnvelope } from "@/lib/v4/sseEnvelope";
 type Handler = (payload: unknown) => void;
 
 export type RealtimeStatus = "live" | "stale" | "offline";
@@ -54,6 +56,28 @@ class RealtimeBus {
 
   /** Pack C C029 — Last-Event-Id for SSE reconnect. */
   getLastEventId(): string { return this.lastEventId; }
+
+  /** Pack D D26 — emit a typed SseEventEnvelope on the named topic. */
+  emitEnvelope<T>(args: {
+    topic: string;
+    channel: SseChannelKind;
+    type: string;
+    payload: T;
+    correlationId?: string;
+    causationId?: string;
+  }): SseEventEnvelope<T> {
+    const id = `${Date.now().toString(36)}-${(++this.eventSeq).toString(36)}`.toUpperCase();
+    const envelope = makeSseEnvelope({
+      id,
+      channel: args.channel,
+      type: args.type,
+      payload: args.payload,
+      correlationId: args.correlationId,
+      causationId: args.causationId,
+    });
+    this.emit(args.topic, envelope);
+    return envelope;
+  }
 
   // ---- status / introspection ----
   onStatus(h: () => void): () => void {
