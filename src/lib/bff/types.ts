@@ -5,7 +5,9 @@ import type {
   PersonaStatus,
 } from "@/lib/v3/status";
 
-export type RiskLevel = "low" | "medium" | "high" | "critical";
+// Pack D D40 — 5-tier risk severity (spec-conflict-G C1: `info` added).
+export type RiskLevel = "info" | "low" | "medium" | "high" | "critical";
+export const RISK_LEVELS: readonly RiskLevel[] = ["info", "low", "medium", "high", "critical"] as const;
 export type LifecycleState = "draft" | "review" | "approved" | "deployed" | "paused" | "retired";
 export type RunState = "pending" | "running" | "success" | "warning" | "failed" | "paused";
 

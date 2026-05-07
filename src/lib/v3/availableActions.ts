@@ -27,7 +27,7 @@ export interface ActionDescriptor {
   labelKey: string;
   entityType: EntityType;
   actionType: "query" | "command" | "job_command" | "approval_command" | "navigation";
-  riskLevel: "low" | "medium" | "high" | "critical";
+  riskLevel: "info" | "low" | "medium" | "high" | "critical";
   enabled: boolean;
   disabledReasonKey?: string;
   disabledReasonParams?: Record<string, string | number | boolean>;
