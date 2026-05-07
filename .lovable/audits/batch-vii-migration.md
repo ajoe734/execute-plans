@@ -1,6 +1,6 @@
 # Batch VII — Legacy `src/lib/bff/` Migration Plan
 
-**Status:** Soft-deprecation phase (2026-05-07).
+**Status:** B1g landed 2026-05-07 — deprecated files relocated to `src/lib/bff-v1/_legacy/` (single ownership boundary). 92 call sites still use `legacyBff/legacyRunActionSafe/legacyUseLiveList` re-exports; physical deletion deferred until v1 surface covers all seed accessors.
 **Goal:** Reduce direct `@/lib/bff/client`, `@/lib/bff/runAction`, `@/lib/useLiveList` imports to zero outside `src/lib/bff-v1/`.
 
 ## Deprecation Strategy
