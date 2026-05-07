@@ -129,6 +129,51 @@ export const bffV5 = {
       return delay(v5List(kind ? loopRunsByKind(all, kind) : all));
     },
     get: (id: string): Promise<LoopRun | undefined> => delay(allLoopRuns().find((r) => r.id === id)),
+    /** E3 — advance currently running stage. */
+    advance: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      const run = allLoopRuns().find((r) => r.id === id);
+      if (!run) return delay({ ok: false, reason: "not_found" } as const);
+      const patch = advanceLoopRun(run);
+      emitV5Event({
+        channel: `v5.loop.${run.loopKind}` as const,
+        type: "loop.run.advanced",
+        payload: { runId: id, runStatus: patch.runStatus, stageStatuses: patch.stageStatuses },
+      });
+      return delay({ ok: true } as const);
+    },
+    pause: (id: string, reason?: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      const run = allLoopRuns().find((r) => r.id === id);
+      if (!run) return delay({ ok: false, reason: "not_found" } as const);
+      const patch = pauseLoopRun(run, reason);
+      emitV5Event({
+        channel: `v5.loop.${run.loopKind}` as const,
+        type: "loop.run.paused",
+        payload: { runId: id, reason, runStatus: patch.runStatus },
+      });
+      return delay({ ok: true } as const);
+    },
+    resume: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      const run = allLoopRuns().find((r) => r.id === id);
+      if (!run) return delay({ ok: false, reason: "not_found" } as const);
+      const patch = resumeLoopRun(run);
+      emitV5Event({
+        channel: `v5.loop.${run.loopKind}` as const,
+        type: "loop.run.resumed",
+        payload: { runId: id, runStatus: patch.runStatus },
+      });
+      return delay({ ok: true } as const);
+    },
+    cancel: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      const run = allLoopRuns().find((r) => r.id === id);
+      if (!run) return delay({ ok: false, reason: "not_found" } as const);
+      const patch = cancelLoopRun(run);
+      emitV5Event({
+        channel: `v5.loop.${run.loopKind}` as const,
+        type: "loop.run.cancelled",
+        payload: { runId: id, runStatus: patch.runStatus },
+      });
+      return delay({ ok: true } as const);
+    },
   },
 
   // ---- Personas / Strategies (execution health) ----
