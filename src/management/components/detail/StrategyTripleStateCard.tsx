@@ -7,10 +7,8 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import {
   validateStrategyTriple,
   explainTripleViolation,
-  type StrategyLifecycleStatus,
-  type StrategyReviewStatus,
-  type StrategyDeploymentStatus,
 } from "@/lib/v4/strategyInvariants";
+import { deriveStrategyTriple } from "@/lib/v4/strategyTripleDerive";
 
 const lifecycleCls: Record<string, string> = {
   discovered: "bg-muted text-muted-foreground border-border",
@@ -36,13 +34,6 @@ const deployCls: Record<string, string> = {
   rollback_required: "bg-status-failed/15 text-status-failed border-status-failed/30",
 };
 
-const LIFECYCLE_FROM_LEGACY: Record<string, StrategyLifecycleStatus> = {
-  draft: "discovered", review: "replicated", approved: "approved",
-  deployed: "live", paused: "paper", retired: "retired",
-  discovered: "discovered", scaffolded: "scaffolded", replicated: "replicated",
-  paper: "paper", live: "live", degraded: "degraded",
-};
-
 export interface StrategyTripleStateCardProps {
   /** Pack D canonical fields when present */
   lifecycleStatus?: string;
@@ -55,18 +46,12 @@ export interface StrategyTripleStateCardProps {
 export const StrategyTripleStateCard = ({
   lifecycleStatus, reviewStatus, deploymentStatus, legacyState,
 }: StrategyTripleStateCardProps) => {
-  const lifecycle = (lifecycleStatus as StrategyLifecycleStatus | undefined)
-    ?? LIFECYCLE_FROM_LEGACY[legacyState ?? ""]
-    ?? "discovered";
-  const review = (reviewStatus as StrategyReviewStatus | undefined) ?? "none";
-  const deployment = (deploymentStatus as StrategyDeploymentStatus | undefined) ?? "none";
-
-  const valid = validateStrategyTriple({
-    lifecycleStatus: lifecycle, reviewStatus: review, deploymentStatus: deployment,
+  const triple = deriveStrategyTriple({
+    state: legacyState, lifecycleStatus, reviewStatus, deploymentStatus,
   });
-  const violation = valid ? null : explainTripleViolation({
-    lifecycleStatus: lifecycle, reviewStatus: review, deploymentStatus: deployment,
-  });
+  const { lifecycleStatus: lifecycle, reviewStatus: review, deploymentStatus: deployment } = triple;
+  const valid = validateStrategyTriple(triple);
+  const violation = valid ? null : explainTripleViolation(triple);
 
   return (
     <Card className="p-3 space-y-2">
