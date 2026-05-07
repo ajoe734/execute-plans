@@ -90,6 +90,13 @@ export default {
     loopOptimization: "最佳化迴圈",
     sentinel: "Sentinel 監測",
     interventions: "人為介入佇列",
+    // Pack F F03 — registry vs loop view boundary
+    personaRegistry: "Persona 列表",
+    personaTradingHealth: "Persona 交易健康",
+    strategyRegistry: "Strategy 列表",
+    liveStrategyMonitor: "Live Strategy 監測",
+    deploymentRegistry: "部署列表",
+    deploymentMonitor: "部署監測",
   },
   groups: {
     overview: "總覽",
