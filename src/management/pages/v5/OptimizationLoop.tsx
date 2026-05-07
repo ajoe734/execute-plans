@@ -1,8 +1,10 @@
 // Pack E E4 — /management/loops/optimization
 // Optimization loop runs derived from v5 LoopRun (kind=optimization). Each run is
 // linked to a rebalance/approval; we surface stage progress and approval target.
+// Pack F 短板 1+2 — handle ?intent=create + ?focus=rebalance|approval
 
-import { Link } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -10,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
+import { toast } from "sonner";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",
