@@ -10,9 +10,13 @@ import {
 import { fetchMe, invalidateMe, mockMe, hasCapability } from "../session/me";
 
 describe("Pack D Batch II — errorCodes", () => {
-  it("ERROR_CODES contains 23 canonical entries", () => {
-    expect(ERROR_CODES.length).toBe(23);
-    expect(new Set(ERROR_CODES).size).toBe(23);
+  it("ERROR_CODES contains 26 canonical entries (D21 + H2 superset)", () => {
+    expect(ERROR_CODES.length).toBe(26);
+    expect(new Set(ERROR_CODES).size).toBe(26);
+    // H2 additions aligned with v1 BFF DTO §3.1
+    expect(ERROR_CODES).toContain("RESOURCE_NOT_FOUND");
+    expect(ERROR_CODES).toContain("APPROVAL_REQUIRED");
+    expect(ERROR_CODES).toContain("CONFIRM_TOKEN_REVOKED");
   });
   it("isErrorCode narrows correctly", () => {
     expect(isErrorCode("VALIDATION_FAILED")).toBe(true);
