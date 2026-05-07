@@ -14,16 +14,16 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `feedback-2026-05-05-B` | 2026-05-05 | Medium / Low severity 解決方案 | 64 | 0 / 41 / 23 | RESOLVED — 已實作 | v3 Part 10 |
 | `spec-gap-2026-05-05-C` | 2026-05-05 | 實作後 deeper-gap 反饋 | 78 | 14 / 38 / 26 | **RESOLVED by Pack C (v4 / 2026-05-05-C)** | 規劃團隊版 = `*-planner.md` |
 | `feedback-2026-05-05-C` | 2026-05-05 | Pack C 78 條規範回應 | 78 | 14 / 38 / 26 | RESOLVED — 進入實作 | 對應 v4 spec，存於 `.lovable/feedback/2026-05-05-C/` |
-| `spec-gap-2026-05-06-D` | 2026-05-06 | Pack C 落地後 second-order gaps | 63 | 21 / 28 / 14 | **OPEN — 待 Pack D 規範回應** | 5 條 blockers 另存 `*-blockers.md` |
+| `spec-gap-2026-05-06-D` | 2026-05-06 | Pack C 落地後 second-order gaps | 63 | 21 / 28 / 14 | **RESOLVED BY PACK D DISPOSITION (8 sub-packs D-A~D-H)** | disposition 於 `.lovable/feedback/2026-05-06-D/`；canonical contracts 於 `.lovable/spec/v4/pack-d/`（7 份）|
 | `spec-conflict-2026-05-06-E` | 2026-05-06 | v5 SA+SD vs v4 / Pack D / SD 內部一致性 | 19 | 6 Blocker / 7 High / 6 Medium | **RESOLVED (28/28) — E0 已落地** | disposition 於 `.lovable/feedback/2026-05-06-E/Pack_E_Disposition.csv` |
 | `spec-gap-2026-05-06-F` | 2026-05-06 | 實作層 placeholder / no-op（list 頁建立按鈕等） | 4 | 1 / 2 / 1 | **RESOLVED by Pack F (disposition + impl landed)** | disposition 於 `.lovable/feedback/2026-05-06-F/Pack_F_Disposition.md` |
-| `spec-gap-2026-05-06-G` | 2026-05-06 | Pack F 落地後第三輪 second-order gaps | 14 | 4 / 5 / 5 | **OPEN — 待 Pack G disposition / 部分 impl-fixable** | 6 條 impl-fixable 已標註於 summary |
+| `spec-conflict-2026-05-06-G` | 2026-05-06 | Pack D canonical vs 當前 src/ 衝突 | 14 | 4 / 5 / 5 | **6 RESOLVED + 8 OPEN（impl-pending，分 Batch II/III/IV）** | 改名自 spec-gap-G；詳見 `spec-conflict-2026-05-06-G.md` |
 
 ## 累計覆蓋
 
-170 / 170 SA-SD gaps 已於 spec 層收斂（92 原始 + 78 deeper）。
-另有 63 條 second-order gaps（Audit D）+ 4 條實作層缺口（Audit F）OPEN，待 Pack D / 後續 disposition；其中 5 條為實作 blockers。
-實作層由 `.lovable/plan.md` 追蹤。
+233 / 233 spec-level gaps 已收斂（92 Pack A+B + 78 Pack C + 63 Pack D + 19 Pack E - 已 RESOLVED）。
+4 條 Audit F 實作層 RESOLVED；8 條 spec-conflict-G 為 impl-pending（不影響 spec 完整度）。
+實作層分 Batch II / III / IV 推進，由 `.lovable/plan.md` 追蹤。
 
 ## 使用建議
 
