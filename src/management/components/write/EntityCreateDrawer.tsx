@@ -50,7 +50,7 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
   }
 };
 
-function coerce(entity: CreatableEntity, raw: Record<string, unknown>): CreateInputMap[CreatableEntity] {
+function coerce(entity: CreatableEntity, raw: Record<string, unknown>): Record<string, unknown> {
   const out = { ...raw } as Record<string, unknown>;
   if (entity === "strategy" && typeof out.personaIds === "string") {
     out.personaIds = (out.personaIds as string).split(",").map((s) => s.trim()).filter(Boolean);
@@ -62,7 +62,7 @@ function coerce(entity: CreatableEntity, raw: Record<string, unknown>): CreateIn
   if (entity === "rebalance") out.proposedDelta = Number(out.proposedDelta);
   if (entity === "evolutionProgram") out.population = Number(out.population);
   if (entity === "artifact" && out.sizeMb !== undefined && out.sizeMb !== "") out.sizeMb = Number(out.sizeMb);
-  return out as CreateInputMap[CreatableEntity];
+  return out;
 }
 
 export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
