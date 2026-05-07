@@ -91,6 +91,6 @@ describe("E3 bff.v5.loops mutations", () => {
   it("returns not_found for unknown id", async () => {
     const r = await bff.v5.loops.pause("lr_does_not_exist");
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe("not_found");
+    if (r.ok === false) expect(r.reason).toBe("not_found");
   });
 });
