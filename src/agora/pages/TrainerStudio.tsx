@@ -11,7 +11,7 @@ import {
   Brain, Wand2, FlaskConical, Beaker, Radio, ArrowRight, GraduationCap,
   ArrowLeft, Plus, Play, Check, X,
 } from "lucide-react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { Persona, MemoryUpdate, Skill, RoutePolicy } from "@/lib/bff/types";
 import { toast } from "sonner";

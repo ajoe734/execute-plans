@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { EvolutionProgram, MutationRule } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";

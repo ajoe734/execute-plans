@@ -4,7 +4,7 @@ import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Alert, ApprovalRequest, Job } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";

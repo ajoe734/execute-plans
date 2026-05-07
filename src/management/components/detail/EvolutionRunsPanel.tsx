@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { toast } from "sonner";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";

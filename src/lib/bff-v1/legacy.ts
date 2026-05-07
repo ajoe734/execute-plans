@@ -1,25 +1,28 @@
-// Batch VII — Centralized escape hatch for legacy `src/lib/bff/` consumers.
+// Batch VII — Mock-mode seed accessors for the v1 BFF surface.
 //
-// New code MUST import from `@/lib/bff-v1` (typed v1 client). Existing call
-// sites that still need the mock seed accessors (`bff.strategies.list()`,
-// `bff.runtimes.list()`, etc.) should import from this module instead of
-// reaching into `@/lib/bff/client` directly. This makes the migration
-// boundary visible in code review and ESLint reports.
+// Until the v1 typed client (lists/writes/sse) covers every entity, UI code
+// reads/writes through these stable names exposed under `@/lib/bff-v1`:
+//
+//   - `bff`            — mock seed accessor (read + mutate seed objects)
+//   - `runActionSafe`  — toast-aware wrapper around `tryRunAction`
+//   - `useLiveList`    — legacy realtime list hook (returns `rows`)
+//   - `useRealtimeStatus` — connection status store
+//
+// These NAMES are canonical for v0/mock mode. When the typed v1 surface
+// gains coverage for a given entity, swap the call site to `bffV1.*` /
+// `useLiveListV1` / `tryRunAction` directly. Until then, importing from
+// `@/lib/bff-v1` is the supported boundary.
 //
 // Tracked migration plan: `.lovable/audits/batch-vii-migration.md`.
 
-/** @deprecated Use `bffV1.*` typed client. Read-only seed accessors still allowed via this re-export until Batch VII lands. */
+export { bff } from "./_legacy/client";
+export { runActionSafe } from "./_legacy/runAction";
+export { useLiveList, useRealtimeStatus } from "./_legacy/useLiveList";
+
+// ---- Deprecated `legacy*` aliases (kept one release for incremental migrations) ----
+/** @deprecated Use `bff` from `@/lib/bff-v1`. */
 export { bff as legacyBff } from "./_legacy/client";
-
-/** @deprecated Use `tryRunAction` / `runActionV1` from `@/lib/bff-v1`. */
+/** @deprecated Use `runActionSafe` from `@/lib/bff-v1`. */
 export { runActionSafe as legacyRunActionSafe } from "./_legacy/runAction";
-
-/** @deprecated Use `bffV1.lists.useLiveList` (cursor + ListClass aware). */
+/** @deprecated Use `useLiveList` from `@/lib/bff-v1`. */
 export { useLiveList as legacyUseLiveList } from "./_legacy/useLiveList";
-
-/**
- * Realtime connection status hook. Stays canonical for now (no v1 replacement
- * yet — SSE bridge uses this same store). Re-exported here so consumers
- * don't import the @deprecated `@/lib/useLiveList` module directly.
- */
-export { useRealtimeStatus } from "./_legacy/useLiveList";

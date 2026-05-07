@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";

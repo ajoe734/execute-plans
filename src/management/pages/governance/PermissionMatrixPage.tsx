@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { PermissionInstance, PermissionMatrix as Matrix } from "@/lib/bff/types";
 import { PermissionMatrix } from "@/management/components/governance/PermissionMatrix";
 import { useT } from "@/platform/hooks";

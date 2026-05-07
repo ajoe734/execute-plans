@@ -10,7 +10,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type {
   Strategy, Persona, CapitalPool, Runtime, Tool, McpServer, Skill,
   Alert, Incident, RiskLevel,

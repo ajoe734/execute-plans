@@ -9,7 +9,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { ApprovalRequest } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";

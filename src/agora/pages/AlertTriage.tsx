@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Bell, CheckCircle2, AlertTriangle, MessageSquare } from "lucide-react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Alert } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";

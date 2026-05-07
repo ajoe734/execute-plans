@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { AuditEvent, Channel } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";

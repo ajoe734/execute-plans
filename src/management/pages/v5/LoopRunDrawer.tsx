@@ -15,7 +15,7 @@ import {
   type LoopRun,
   type LoopStage,
 } from "@/lib/v5";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
 
 const stageTone: Record<string, string> = {

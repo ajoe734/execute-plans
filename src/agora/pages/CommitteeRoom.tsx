@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, MessageCircle, FileText, Vote, Send, Users } from "lucide-react";
 import { useT } from "@/platform/hooks";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Persona } from "@/lib/bff/types";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";

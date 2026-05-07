@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, GitCompare } from "lucide-react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Persona, PolicyVersion, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { RoutePolicyEditor } from "@/management/components/governance/RoutePolicyEditor";

@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/platform/hooks";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Channel } from "@/lib/bff/types";
 import { Radio, Send, Settings2 } from "lucide-react";
 import { toast } from "sonner";

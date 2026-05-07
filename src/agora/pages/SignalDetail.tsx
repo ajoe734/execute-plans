@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ThumbsUp, ThumbsDown, Flag, MessageSquare, Send, ArrowRight } from "lucide-react";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { useHandoff } from "@/lib/handoff";

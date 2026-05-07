@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";

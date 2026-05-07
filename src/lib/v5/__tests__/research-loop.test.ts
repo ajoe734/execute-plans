@@ -1,6 +1,6 @@
 // E3 follow-up — research loop derivation + B3 H2 i18n strings.
 import { describe, it, expect } from "vitest";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { ERROR_CODES, errorI18nKey } from "@/lib/v4/errorCodes";
 import enUS from "@/i18n/locales/en-US";
 import zhTW from "@/i18n/locales/zh-TW";

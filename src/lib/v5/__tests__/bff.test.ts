@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { v5ActionOverlay } from "@/lib/v5/overlay";
 
 describe("bff.v5 facade (Q3/Q14/Q16/Q24)", () => {
