@@ -109,8 +109,19 @@ export const ExecutionLoopPage = () => {
                   <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
                 </tr>
               ))}
-              {items.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
+              {!runs.data && (
+                <tr><td colSpan={5} className="px-3 py-4">
+                  <SkeletonThreshold loading fallback={<Skeleton className="h-12 w-full" />}>{null}</SkeletonThreshold>
+                </td></tr>
+              )}
+              {runs.data && items.length === 0 && (
+                <tr><td colSpan={5} className="px-3 py-6">
+                  <EmptyState
+                    icon={<Activity className="h-8 w-8" />}
+                    title={t("v5.loops.execution.emptyTitle", { defaultValue: "No execution loops" })}
+                    description={t("v5.loops.execution.emptyDesc", { defaultValue: "No runs match the current focus. Trigger a run from a Strategy or Deployment to see it here." })}
+                  />
+                </td></tr>
               )}
             </tbody>
           </table>
