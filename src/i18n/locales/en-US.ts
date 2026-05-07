@@ -1426,4 +1426,52 @@ export default {
       validator: { schema: "Schema check", consistency: "Consistency", impact: "Impact analysis", precedence: "Precedence", coverage: "Coverage" },
     },
   },
+  // spec-conflict-G G10 — single i18n source for EntityCreateDrawer.
+  entityCreate: {
+    footerNote: "v0 mock create · 30-min overlay TTL · not persisted to seed",
+    required: "Required",
+    submitting: "Submitting…",
+    entity: {
+      strategy: "Strategy", persona: "Persona", capitalPool: "Capital Pool",
+      rankingFormula: "Ranking Formula", rebalance: "Rebalance", deployment: "Deployment",
+      evolutionProgram: "Evolution Program", researchExperiment: "Research Experiment", artifact: "Artifact",
+    },
+    field: {
+      name: "Name", owner: "Owner", memo: "Memo",
+      alpha: "Alpha (slug)", capitalPoolId: "Capital Pool ID", personaIds: "Persona IDs",
+      archetype: "Archetype", description: "Description", initialMode: "Initial mode",
+      currency: "Currency", allocated: "Allocated", riskBudget: "Risk budget",
+      expression: "Expression",
+      quarter: "Quarter (YYYY-Qn)", targetPoolId: "Target Pool ID", proposedDelta: "Proposed delta",
+      strategyId: "Strategy ID", artifactId: "Artifact ID", target: "Target environment", version: "Version", previousVersion: "Previous version",
+      parentAlpha: "Parent alpha", population: "Population",
+      hypothesis: "Hypothesis", metric: "Metric",
+      kind: "Kind", sourceExperimentId: "Source experiment ID",
+    },
+    hint: {
+      personaIds: "Comma-separated, ≥ 1 persona id",
+      riskBudget: "0 < value ≤ 1 (fraction of pool)",
+      quarter: "Format: YYYY-Qn, e.g. 2026-Q2",
+      alpha: "Lowercase slug, e.g. alpha-momentum",
+    },
+    placeholder: {
+      alpha: "alpha-momentum", quarter: "2026-Q2", expression: "0.6*sharpe-0.3*|dd|",
+      version: "v1.0.0", archetype: "trader / analyst",
+    },
+    select: {
+      currency: { USD: "USD", USDT: "USDT", TWD: "TWD" },
+      target: { research: "Research", paper: "Paper", live: "Live" },
+      kind: { model: "Model", dataset: "Dataset", report: "Report", container: "Container" },
+      initialMode: { shadow: "Shadow", suspended: "Suspended" },
+    },
+    error: {
+      required: "Required",
+      nameLength: "Name length must be 3–120",
+      slugFormat: "Must be slug format",
+      atLeastOnePersona: "At least 1 persona id required",
+      gtZero: "Must be > 0",
+      riskBudgetRange: "Must be in (0, 1]",
+      quarterFormat: "Format YYYY-Qn",
+    },
+  },
 };

@@ -1412,4 +1412,52 @@ export default {
       validator: { schema: "Schema 檢查", consistency: "一致性", impact: "影響分析", precedence: "優先順序", coverage: "涵蓋率" },
     },
   },
+  // spec-conflict-G G10 — EntityCreateDrawer 單一 i18n 來源
+  entityCreate: {
+    footerNote: "v0 mock 建立 · overlay 30 分鐘 TTL · 不寫入 seed",
+    required: "必填",
+    submitting: "送出中…",
+    entity: {
+      strategy: "策略", persona: "Persona", capitalPool: "資金池",
+      rankingFormula: "排序公式", rebalance: "季度調倉", deployment: "部署",
+      evolutionProgram: "演化方向", researchExperiment: "研究實驗", artifact: "Artifact",
+    },
+    field: {
+      name: "名稱", owner: "Owner", memo: "備註",
+      alpha: "Alpha (slug)", capitalPoolId: "資金池 ID", personaIds: "Persona IDs",
+      archetype: "Archetype", description: "描述", initialMode: "初始模式",
+      currency: "幣別", allocated: "配置額度", riskBudget: "風險預算",
+      expression: "公式表達式",
+      quarter: "季度 (YYYY-Qn)", targetPoolId: "目標資金池 ID", proposedDelta: "提議變動",
+      strategyId: "策略 ID", artifactId: "Artifact ID", target: "目標環境", version: "版本", previousVersion: "前一版本",
+      parentAlpha: "父 Alpha", population: "族群數",
+      hypothesis: "假設", metric: "指標",
+      kind: "類型", sourceExperimentId: "來源實驗 ID",
+    },
+    hint: {
+      personaIds: "逗號分隔，至少 1 個 persona id",
+      riskBudget: "範圍 0 < value ≤ 1（資金池占比）",
+      quarter: "格式：YYYY-Qn，例如 2026-Q2",
+      alpha: "小寫 slug，例如 alpha-momentum",
+    },
+    placeholder: {
+      alpha: "alpha-momentum", quarter: "2026-Q2", expression: "0.6*sharpe-0.3*|dd|",
+      version: "v1.0.0", archetype: "trader / analyst",
+    },
+    select: {
+      currency: { USD: "USD", USDT: "USDT", TWD: "TWD" },
+      target: { research: "研究", paper: "模擬", live: "正式" },
+      kind: { model: "Model", dataset: "Dataset", report: "Report", container: "Container" },
+      initialMode: { shadow: "Shadow", suspended: "Suspended" },
+    },
+    error: {
+      required: "必填",
+      nameLength: "名稱長度需介於 3–120",
+      slugFormat: "需為 slug 格式",
+      atLeastOnePersona: "至少需 1 個 persona id",
+      gtZero: "需大於 0",
+      riskBudgetRange: "需介於 (0, 1]",
+      quarterFormat: "格式需為 YYYY-Qn",
+    },
+  },
 };
