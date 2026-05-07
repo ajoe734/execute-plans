@@ -9,17 +9,17 @@
 // Tracked migration plan: `.lovable/audits/batch-vii-migration.md`.
 
 /** @deprecated Use `bffV1.*` typed client. Read-only seed accessors still allowed via this re-export until Batch VII lands. */
-export { bff as legacyBff } from "@/lib/bff/client";
+export { bff as legacyBff } from "./_legacy/client";
 
 /** @deprecated Use `tryRunAction` / `runActionV1` from `@/lib/bff-v1`. */
-export { runActionSafe as legacyRunActionSafe } from "@/lib/bff/runAction";
+export { runActionSafe as legacyRunActionSafe } from "./_legacy/runAction";
 
 /** @deprecated Use `bffV1.lists.useLiveList` (cursor + ListClass aware). */
-export { useLiveList as legacyUseLiveList } from "@/lib/useLiveList";
+export { useLiveList as legacyUseLiveList } from "./_legacy/useLiveList";
 
 /**
  * Realtime connection status hook. Stays canonical for now (no v1 replacement
  * yet — SSE bridge uses this same store). Re-exported here so consumers
  * don't import the @deprecated `@/lib/useLiveList` module directly.
  */
-export { useRealtimeStatus } from "@/lib/useLiveList";
+export { useRealtimeStatus } from "./_legacy/useLiveList";
