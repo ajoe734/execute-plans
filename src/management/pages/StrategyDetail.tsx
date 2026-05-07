@@ -27,6 +27,7 @@ import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
+import { StrategyTripleStateCard } from "@/management/components/detail/StrategyTripleStateCard";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
 import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
@@ -144,9 +145,15 @@ export const StrategyDetail = () => {
             content: (
               <>
                 <Section>
-                  <div className="mb-4">
+                  <div className="mb-4 space-y-3">
                     <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>
                     <LifecycleStepper machine={strategyMachine} current={machineState} i18nPrefix="lifecycle.strategy" />
+                    <StrategyTripleStateCard
+                      lifecycleStatus={s.lifecycleStatus as string | undefined}
+                      reviewStatus={s.reviewStatus as string | undefined}
+                      deploymentStatus={s.deploymentStatus as string | undefined}
+                      legacyState={s.state}
+                    />
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="Alpha" value={s.alpha} mono />
