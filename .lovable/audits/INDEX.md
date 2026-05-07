@@ -17,6 +17,7 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `spec-gap-2026-05-06-D` | 2026-05-06 | Pack C 落地後 second-order gaps | 63 | 21 / 28 / 14 | **OPEN — 待 Pack D 規範回應** | 5 條 blockers 另存 `*-blockers.md` |
 | `spec-conflict-2026-05-06-E` | 2026-05-06 | v5 SA+SD vs v4 / Pack D / SD 內部一致性 | 19 | 6 Blocker / 7 High / 6 Medium | **RESOLVED (28/28) — E0 已落地** | disposition 於 `.lovable/feedback/2026-05-06-E/Pack_E_Disposition.csv` |
 | `spec-gap-2026-05-06-F` | 2026-05-06 | 實作層 placeholder / no-op（list 頁建立按鈕等） | 4 | 1 / 2 / 1 | **RESOLVED by Pack F (disposition + impl landed)** | disposition 於 `.lovable/feedback/2026-05-06-F/Pack_F_Disposition.md` |
+| `spec-gap-2026-05-06-G` | 2026-05-06 | Pack F 落地後第三輪 second-order gaps | 14 | 4 / 5 / 5 | **OPEN — 待 Pack G disposition / 部分 impl-fixable** | 6 條 impl-fixable 已標註於 summary |
 
 ## 累計覆蓋
 
