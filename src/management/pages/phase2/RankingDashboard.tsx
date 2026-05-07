@@ -17,6 +17,7 @@ import type { Strategy, RankingFormula, Persona, CapitalPool } from "@/lib/bff/t
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { RefreshCw, Snowflake, Send, GitCompare, Sliders } from "lucide-react";
+import { isLive, isPaper } from "@/lib/v4/strategyTripleDerive";
 
 type Scope = "persona" | "strategy" | "alphaFamily" | "capitalPool" | "paper" | "live";
 const SCOPES: Scope[] = ["persona", "strategy", "alphaFamily", "capitalPool", "paper", "live"];
@@ -69,8 +70,8 @@ export const RankingDashboardPage = () => {
 
     let raw: Row[] = [];
     if (scope === "strategy") raw = strategies.map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
-    else if (scope === "paper") raw = strategies.filter((s) => s.state !== "deployed").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
-    else if (scope === "live") raw = strategies.filter((s) => s.state === "deployed").map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
+    else if (scope === "paper") raw = strategies.filter((s) => isPaper(s)).map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
+    else if (scope === "live") raw = strategies.filter((s) => isLive(s)).map((s) => mkRow(s.id, s.name, s.sharpe, s.pnl30d, s.drawdown));
     else if (scope === "persona") {
       raw = personas.map((p) => {
         const owned = strategies.filter((s) => s.personaIds.includes(p.id));

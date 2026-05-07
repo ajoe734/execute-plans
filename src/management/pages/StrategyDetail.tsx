@@ -28,6 +28,7 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
 import { StrategyTripleStateCard } from "@/management/components/detail/StrategyTripleStateCard";
+import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
 import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
@@ -75,11 +76,11 @@ export const StrategyDetail = () => {
   }, [id]);
 
   const machineState: StrategyState = useMemo(() => {
-    const map: Record<string, StrategyState> = {
-      draft: "discovered", review: "replicated", approved: "approved",
-      deployed: "live", paused: "paper", retired: "retired",
-    };
-    return s ? (map[s.state] ?? "live") : "discovered";
+    if (!s) return "discovered";
+    // Pack C C008: derive lifecycle bucket from canonical triple (or legacy fallback).
+    const lc = lifecycleOf(s);
+    // strategyMachine still uses v3 lifecycle vocabulary — these names already align.
+    return lc as StrategyState;
   }, [s]);
 
   const transitions = useMemo(

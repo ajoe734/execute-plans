@@ -23,6 +23,7 @@ import { AllocationLimitsManager } from "../components/detail/AllocationLimitsMa
 import { FreezeUnfreezePanel } from "../components/detail/FreezeUnfreezePanel";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { assessBreach } from "@/lib/v4/capitalBreach";
+import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { findMetric } from "@/lib/v4/metricRegistry";
 import { Badge } from "@/components/ui/badge";
 
@@ -54,7 +55,7 @@ export const CapitalPoolDetail = () => {
   const lineageNodes: LineageNode[] = [
     { id: c.id, label: c.name, type: "CapitalPool", state: c.state, risk: c.risk, highlight: true },
     ...rebalances.map((r) => ({ id: r.id, label: r.name, type: "Rebalance", state: r.state, risk: r.risk })),
-    ...strats.map((s) => ({ id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk })),
+    ...strats.map((s) => ({ id: s.id, label: s.name, type: "Strategy", state: lifecycleOf(s), risk: s.risk })),
   ];
   const lineageEdges: LineageEdge[] = [
     ...rebalances.map((r) => ({ from: c.id, to: r.id, label: "rebalance" })),
