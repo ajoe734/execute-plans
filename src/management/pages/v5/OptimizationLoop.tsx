@@ -1,8 +1,10 @@
 // Pack E E4 — /management/loops/optimization
 // Optimization loop runs derived from v5 LoopRun (kind=optimization). Each run is
 // linked to a rebalance/approval; we surface stage progress and approval target.
+// Pack F 短板 1+2 — handle ?intent=create + ?focus=rebalance|approval
 
-import { Link } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -10,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { bff } from "@/lib/bff/client";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
+import { toast } from "sonner";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",
@@ -30,8 +33,29 @@ const stageDotCls: Record<string, string> = {
 
 export const OptimizationLoopPage = () => {
   const t = useT();
+  const [params, setParams] = useSearchParams();
+  const intent = params.get("intent");
+  const focus = params.get("focus"); // "rebalance" | "approval"
   const runs = useV5Live(() => bff.v5.loops.list("optimization"));
   const items = runs.data?.items ?? [];
+  const runsRef = useRef<HTMLDivElement | null>(null);
+  const approvalRef = useRef<HTMLTableSectionElement | null>(null);
+
+  useEffect(() => {
+    if (intent === "create") {
+      toast.info(t("v5.optimization.createIntent", {
+        defaultValue: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
+      }));
+      const next = new URLSearchParams(params);
+      next.delete("intent");
+      setParams(next, { replace: true });
+    }
+  }, [intent]);
+
+  useEffect(() => {
+    if (focus === "approval") approvalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (focus === "rebalance") runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focus]);
 
   const running = items.filter((r) => r.status === "running").length;
   const blocked = items.filter((r) => r.status === "blocked").length;
@@ -50,12 +74,12 @@ export const OptimizationLoopPage = () => {
         </div>
 
         <Card className="p-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
+          <div ref={runsRef} className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.optimization.runs")}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.optimization.runsHint")}</p>
           </div>
           <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground bg-muted/40">
+            <thead ref={approvalRef} className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
                 <th className="text-left px-3 py-2">{t("v5.col.status")}</th>

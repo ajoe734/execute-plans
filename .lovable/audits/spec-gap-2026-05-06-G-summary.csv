@@ -1,0 +1,15 @@
+id,severity,area,title,recommendation,depends_on,status
+G01,High,WriteIntent,CreateIntentResult 缺 async transition 欄位,併入 Pack D D05,D05,OPEN
+G02,High,IA,redirect intent contract 未定,改 query ?intent=create + 列每頁 onMount 行為,-,OPEN (impl-fixable)
+G03,High,UI,Drawer 缺 per-entity 受控 component,拆子元件 + Select/Multi-select/Slider,-,OPEN
+G04,High,Permission,Drawer 無 RBAC guard,接 usePermissions().can(entity.create),-,OPEN (impl-fixable)
+G05,Medium,Audit,overlay TTL 與 audit append 不對稱,audit 也走 overlay 或 overlay 不過期,-,OPEN
+G06,Medium,SSE,ENTITY_TO_LIVE_KIND 寫死未綁 channel,等 D26 後從 SSE_CHANNELS 導出,D26,OPEN
+G07,Medium,IA,loops focus 對稱性不全,定義 focus enum per loop,-,OPEN (impl-fixable)
+G08,Medium,IA,SideNav/Header/Breadcrumb 文案三層未統一,單一 i18n key 來源,-,OPEN
+G09,Medium,WriteIntent,Drawer 缺 idempotency-key / optimistic-lock,drawer 開啟時 mint key,-,OPEN
+G10,Low,i18n,Drawer labels 未走 i18n,補 entityCreate.* keys,-,OPEN (impl-fixable)
+G11,Low,A11y,Drawer errors 缺 aria-describedby,列入 D62 axe 範圍,D62,OPEN
+G12,Low,Overlay,GC 僅在 add/list 觸發,加 interval GC,-,OPEN (impl-fixable)
+G13,Low,Audit,unshift 不算 prevHash,mock 加 placeholder 欄位,-,OPEN
+G14,Low,Sort,withOverlay prepend 跳過排序,merge 後重排,-,OPEN (impl-fixable)

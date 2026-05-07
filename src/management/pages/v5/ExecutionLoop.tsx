@@ -34,7 +34,7 @@ const stageDotCls: Record<string, string> = {
 export const ExecutionLoopPage = () => {
   const t = useT();
   const [params] = useSearchParams();
-  const focus = params.get("focus"); // "personas" | "strategies" | "deployments"
+  const focus = params.get("focus"); // "personas" | "strategies" | "deployments" | "capital"
   const personasRef = useRef<HTMLDivElement | null>(null);
   const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => bff.v5.loops.list("execution"));
@@ -42,7 +42,9 @@ export const ExecutionLoopPage = () => {
 
   useEffect(() => {
     if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (focus === "strategies" || focus === "deployments") runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (focus === "strategies" || focus === "deployments" || focus === "capital") {
+      runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }, [focus]);
 
   const items = runs.data?.items ?? [];

@@ -24,6 +24,7 @@ export const FormulaStudio = () => {
   const [activeId, setActiveId] = useState<string | undefined>(params.get("id") ?? undefined);
   const [expr, setExpr] = useState("");
   const [compareId, setCompareId] = useState<string | undefined>();
+  const intent = params.get("intent");
 
   useEffect(() => {
     bff.rankingFormulas.list().then((rows) => {
@@ -31,6 +32,18 @@ export const FormulaStudio = () => {
       if (!activeId && rows[0]) setActiveId(rows[0].id);
     });
   }, []);
+
+  // Pack F 短板 1 — receive ?intent=create (G02)
+  useEffect(() => {
+    if (intent === "create") {
+      toast.info(t("studios.createIntent.formula", {
+        defaultValue: "Compose a new ranking formula by editing the expression below, then save as a new variant.",
+      }));
+      const next = new URLSearchParams(params);
+      next.delete("intent");
+      setParams(next, { replace: true });
+    }
+  }, [intent]);
 
   const active = useMemo(() => formulas.find((f) => f.id === activeId), [formulas, activeId]);
   const compare = useMemo(() => formulas.find((f) => f.id === compareId), [formulas, compareId]);
