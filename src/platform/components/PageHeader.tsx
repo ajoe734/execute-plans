@@ -1,14 +1,67 @@
 import { ReactNode } from "react";
+import { useLocation, Link } from "react-router-dom";
+import { useT } from "@/platform/hooks";
+import {
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { buildBreadcrumb, lookupRouteLabel } from "@/lib/v4/routeLabels";
 
-export const PageHeader = ({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) => (
-  <div className="border-b border-border bg-card px-6 py-4 flex items-start justify-between gap-4">
-    <div>
-      <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-      {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
+interface PageHeaderProps {
+  /** When omitted, falls back to the route registry (G08 single source). */
+  title?: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  /** Hide breadcrumb if route registry lookup is intentionally not desired. */
+  hideBreadcrumb?: boolean;
+}
+
+export const PageHeader = ({ title, subtitle, actions, hideBreadcrumb }: PageHeaderProps) => {
+  const t = useT();
+  const { pathname } = useLocation();
+  const route = lookupRouteLabel(pathname);
+  const resolvedTitle = title ?? (route ? t(route.i18nKey) : "");
+  const resolvedSubtitle = subtitle ?? (route?.subtitleKey ? t(route.subtitleKey) : undefined);
+
+  return (
+    <div className="border-b border-border bg-card px-6 py-4 flex items-start justify-between gap-4">
+      <div>
+        {!hideBreadcrumb && route && <PageBreadcrumb pathname={pathname} />}
+        <h1 className="text-xl font-semibold tracking-tight">{resolvedTitle}</h1>
+        {resolvedSubtitle && <p className="text-sm text-muted-foreground mt-0.5">{resolvedSubtitle}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
-    {actions && <div className="flex items-center gap-2">{actions}</div>}
-  </div>
-);
+  );
+};
+
+const PageBreadcrumb = ({ pathname }: { pathname: string }) => {
+  const t = useT();
+  const chain = buildBreadcrumb(pathname);
+  if (chain.length < 2) return null;
+  return (
+    <Breadcrumb className="mb-1">
+      <BreadcrumbList>
+        {chain.map((node, i) => {
+          const isLast = i === chain.length - 1;
+          return (
+            <span key={node.path} className="contents">
+              <BreadcrumbItem>
+                {isLast ? (
+                  <BreadcrumbPage>{t(node.i18nKey)}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink asChild>
+                    <Link to={node.path}>{t(node.i18nKey)}</Link>
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+              {!isLast && <BreadcrumbSeparator />}
+            </span>
+          );
+        })}
+      </BreadcrumbList>
+    </Breadcrumb>
+  );
+};
 
 export const PageBody = ({ children }: { children: ReactNode }) => (
   <div className="p-6 space-y-6">{children}</div>
