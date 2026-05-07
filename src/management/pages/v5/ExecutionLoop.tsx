@@ -2,6 +2,8 @@
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
 // Timeout policy uses v0-mock (Q12) until D05 lands.
 
+import { useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -31,8 +33,17 @@ const stageDotCls: Record<string, string> = {
 
 export const ExecutionLoopPage = () => {
   const t = useT();
+  const [params] = useSearchParams();
+  const focus = params.get("focus"); // "personas" | "strategies" | "deployments"
+  const personasRef = useRef<HTMLDivElement | null>(null);
+  const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => bff.v5.loops.list("execution"));
   const personas = useV5Live(() => bff.v5.personas.health());
+
+  useEffect(() => {
+    if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (focus === "strategies" || focus === "deployments") runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focus]);
 
   const items = runs.data?.items ?? [];
   const running = items.filter((r) => r.status === "running").length;
