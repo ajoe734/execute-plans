@@ -999,6 +999,7 @@ export default {
       reflectionPh: "What did you learn? Would you do the same again?",
     },
     evaluation: { prompt: "Prompt", expected: "Expected", observed: "Observed" },
+    evaluations: { subtitle: "Regression suites for personas and skills. Failed cases gate publish workflows." },
     insightInbox: {
       subtitle: "Patterns, anomalies, ideas, and coaching suggestions surfaced by Pantheon. Triage to grow research and skill backlog.",
       promote: "Promote", handoff: "Handoff", discuss: "Discuss", dismiss: "Dismiss",
