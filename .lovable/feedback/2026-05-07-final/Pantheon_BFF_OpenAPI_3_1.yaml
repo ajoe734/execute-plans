@@ -1,0 +1,5556 @@
+openapi: 3.1.0
+info:
+  title: Pantheon Frontend-facing BFF API
+  version: 2026-05-07-final
+  description: Generated from Pantheon BFF Contract Final bundle. The final override file has highest priority over base and
+    B patch. This OpenAPI covers REST-like endpoints; SSE event catalog is in Pantheon_BFF_AsyncAPI_SSE.md.
+servers:
+- url: https://api.pantheon.example
+  description: Production placeholder
+- url: http://localhost:3000
+  description: Local placeholder
+security:
+- BearerAuth: []
+paths:
+  /bff/me:
+    get:
+      tags:
+      - Session
+      summary: Get current user, tenant, roles, capabilities, env, feature flags, server time
+      responses:
+        '200':
+          description: Me
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400': &id001
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '401': &id002
+          description: Authentication required / token expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '403': &id003
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '409': &id004
+          description: Conflict / approval or two-man precondition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '428': &id005
+          description: Confirm token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '429': &id006
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+  /bff/auth/refresh:
+    post:
+      tags:
+      - Session
+      summary: Silent token refresh
+      responses:
+        '200':
+          description: Refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/logout:
+    post:
+      tags:
+      - Session
+      summary: Logout
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/healthz:
+    get:
+      tags:
+      - Platform
+      summary: BFF liveness
+      responses:
+        '200':
+          description: BFF liveness
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/readyz:
+    get:
+      tags:
+      - Platform
+      summary: BFF readiness
+      responses:
+        '200':
+          description: BFF readiness
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/capabilities:
+    get:
+      tags:
+      - Platform
+      summary: Capability catalog
+      responses:
+        '200':
+          description: Capability catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityCatalogResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/feature-flags:
+    get:
+      tags:
+      - Platform
+      summary: Feature flags
+      responses:
+        '200':
+          description: Feature flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagsResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/switch-tenant:
+    post:
+      tags:
+      - Platform
+      summary: Switch tenant
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchTenantRequest'
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/me/locale:
+    patch:
+      tags:
+      - Platform
+      summary: Update user locale
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocaleRequest'
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/audit/export:
+    post:
+      tags:
+      - Audit
+      summary: Queue audit export
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditExportRequest'
+      responses:
+        '202':
+          description: Export queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/strategies:
+    get:
+      tags:
+      - Strategy
+      summary: List Strategy
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Strategy
+      summary: Create Strategy
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategyCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/strategies/{id}:
+    get:
+      tags:
+      - Strategy
+      summary: Get Strategy
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Strategy
+      summary: Update Strategy
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/personas:
+    get:
+      tags:
+      - Persona
+      summary: List Persona
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Persona
+      summary: Create Persona
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonaCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/personas/{id}:
+    get:
+      tags:
+      - Persona
+      summary: Get Persona
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Persona
+      summary: Update Persona
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/capital-pools:
+    get:
+      tags:
+      - CapitalPool
+      summary: List CapitalPool
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapitalPoolDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - CapitalPool
+      summary: Create CapitalPool
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapitalPoolCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/capital-pools/{id}:
+    get:
+      tags:
+      - CapitalPool
+      summary: Get CapitalPool
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapitalPoolDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - CapitalPool
+      summary: Update CapitalPool
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/ranking-formulas:
+    get:
+      tags:
+      - RankingFormula
+      summary: List RankingFormula
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingFormulaDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - RankingFormula
+      summary: Create RankingFormula
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RankingFormulaCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/ranking-formulas/{id}:
+    get:
+      tags:
+      - RankingFormula
+      summary: Get RankingFormula
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingFormulaDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - RankingFormula
+      summary: Update RankingFormula
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/rebalances:
+    get:
+      tags:
+      - Rebalance
+      summary: List Rebalance
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalanceDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Rebalance
+      summary: Create Rebalance
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebalanceCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/rebalances/{id}:
+    get:
+      tags:
+      - Rebalance
+      summary: Get Rebalance
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalanceDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Rebalance
+      summary: Update Rebalance
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/deployments:
+    get:
+      tags:
+      - Deployment
+      summary: List Deployment
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Deployment
+      summary: Create Deployment
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/deployments/{id}:
+    get:
+      tags:
+      - Deployment
+      summary: Get Deployment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Deployment
+      summary: Update Deployment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/evolution-programs:
+    get:
+      tags:
+      - Evolution
+      summary: List Evolution
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvolutionProgramDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Evolution
+      summary: Create Evolution
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvolutionProgramCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/evolution-programs/{id}:
+    get:
+      tags:
+      - Evolution
+      summary: Get Evolution
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvolutionProgramDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Evolution
+      summary: Update Evolution
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/research-experiments:
+    get:
+      tags:
+      - Research
+      summary: List Research
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchExperimentDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Research
+      summary: Create Research
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchExperimentCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/research-experiments/{id}:
+    get:
+      tags:
+      - Research
+      summary: Get Research
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchExperimentDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Research
+      summary: Update Research
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/artifacts:
+    get:
+      tags:
+      - Artifact
+      summary: List Artifact
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    post:
+      tags:
+      - Artifact
+      summary: Create Artifact
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/artifacts/{id}:
+    get:
+      tags:
+      - Artifact
+      summary: Get Artifact
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    patch:
+      tags:
+      - Artifact
+      summary: Update Artifact
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/runtimes:
+    get:
+      tags:
+      - Runtime
+      summary: List runtimes
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/runtimes/{id}:
+    get:
+      tags:
+      - Runtime
+      summary: Get runtimes
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/jobs:
+    get:
+      tags:
+      - Job
+      summary: List jobs
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/jobs/{id}:
+    get:
+      tags:
+      - Job
+      summary: Get jobs
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/alerts:
+    get:
+      tags:
+      - Alert
+      summary: List alerts
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/alerts/{id}:
+    get:
+      tags:
+      - Alert
+      summary: Get alerts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents:
+    get:
+      tags:
+      - Incident
+      summary: List incidents
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents/{id}:
+    get:
+      tags:
+      - Incident
+      summary: Get incidents
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/approvals:
+    get:
+      tags:
+      - Approval
+      summary: List approvals
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/approvals/{id}:
+    get:
+      tags:
+      - Approval
+      summary: Get approvals
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/audit:
+    get:
+      tags:
+      - Audit
+      summary: List audit
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/tools:
+    get:
+      tags:
+      - Tool
+      summary: List tools
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/tools/{id}:
+    get:
+      tags:
+      - Tool
+      summary: Get tools
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/mcp-servers:
+    get:
+      tags:
+      - MCP
+      summary: List mcp-servers
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/mcp-servers/{id}:
+    get:
+      tags:
+      - MCP
+      summary: Get mcp-servers
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/mcp-tools:
+    get:
+      tags:
+      - MCP
+      summary: List mcp-tools
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpToolDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/mcp-tools/{id}:
+    get:
+      tags:
+      - MCP
+      summary: Get mcp-tools
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpToolDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/skills:
+    get:
+      tags:
+      - Skill
+      summary: List skills
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/skills/{id}:
+    get:
+      tags:
+      - Skill
+      summary: Get skills
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/channels:
+    get:
+      tags:
+      - Channel
+      summary: List channels
+      parameters:
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/channels/{id}:
+    get:
+      tags:
+      - Channel
+      summary: Get channels
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/actions/{entityType}/{entityId}/{actionId}:
+    post:
+      tags:
+      - Actions
+      summary: Execute canonical BFF action. requires_* preconditions return non-2xx BffErrorEnvelope, not success statuses.
+      parameters:
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: actionId
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionCommandRequest'
+      responses:
+        '200':
+          description: Action accepted/queued/completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/alerts/{id}/acknowledge:
+    post:
+      tags:
+      - Alert
+      summary: Acknowledge alert
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/alerts/{id}/escalate-incident:
+    post:
+      tags:
+      - Alert
+      summary: Escalate alert to incident
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents/{id}/start-mitigation:
+    post:
+      tags:
+      - Incident
+      summary: Start incident mitigation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents/{id}/resolve:
+    post:
+      tags:
+      - Incident
+      summary: Resolve incident
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents/{id}/append-postmortem:
+    post:
+      tags:
+      - Incident
+      summary: Append postmortem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/incidents/{id}/rollback-deployment:
+    post:
+      tags:
+      - Incident
+      summary: Trigger deployment rollback saga
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/approvals/{id}/decide:
+    post:
+      tags:
+      - Approval
+      summary: Decide approval
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/approvals/batch-decide:
+    post:
+      tags:
+      - Approval
+      summary: Batch decide approvals
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/mcp-servers/{id}/import-tools:
+    post:
+      tags:
+      - MCP
+      summary: Import/discover MCP tools from server schema
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpToolImportRequest'
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/confirm-tokens:
+    post:
+      tags:
+      - ConfirmTokens
+      summary: Issue confirm token
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmTokenRequest'
+      responses:
+        '201':
+          description: Confirm token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmTokenDTO'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/confirm-tokens/{tokenId}:
+    get:
+      tags:
+      - ConfirmTokens
+      summary: Get confirm token
+      parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Confirm token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmTokenDTO'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+    delete:
+      tags:
+      - ConfirmTokens
+      summary: Revoke confirm token
+      parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/confirm-tokens/{tokenId}/redeem:
+    post:
+      tags:
+      - ConfirmTokens
+      summary: Redeem confirm token
+      parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Redeemed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/control-room:
+    get:
+      tags:
+      - v5
+      summary: Control Room aggregation
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlRoomSummary'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/loop-runs:
+    get:
+      tags:
+      - v5
+      summary: List loop runs
+      parameters:
+      - name: loopKind
+        in: query
+        schema:
+          type: string
+          enum:
+          - research
+          - execution
+          - optimization
+      - name: status
+        in: query
+        schema:
+          type: string
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Loop runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoopRunListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/loop-runs/{id}:
+    get:
+      tags:
+      - v5
+      summary: Get loop run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoopRun'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/execution/persona-health:
+    get:
+      tags:
+      - v5
+      summary: Persona execution health
+      responses:
+        '200':
+          description: Persona health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaExecutionHealthListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/execution/strategy-health:
+    get:
+      tags:
+      - v5
+      summary: Strategy execution health
+      responses:
+        '200':
+          description: Strategy health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyExecutionHealthListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/sentinel/findings:
+    get:
+      tags:
+      - v5 Sentinel
+      summary: List Sentinel findings
+      parameters:
+      - name: severity
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          type: string
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SentinelFindingListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/sentinel/findings/{id}:
+    get:
+      tags:
+      - v5 Sentinel
+      summary: Get Sentinel finding
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SentinelFinding'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/sentinel/findings/{id}/status:
+    post:
+      tags:
+      - v5 Sentinel
+      summary: Set finding status
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSentinelFindingStatusRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/sentinel/remediation/build:
+    post:
+      tags:
+      - v5 Sentinel
+      summary: Build remediation action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - kind
+              properties:
+                findingId:
+                  type: string
+                kind:
+                  type: string
+                targetKind:
+                  type: string
+                targetId:
+                  type: string
+      responses:
+        '200':
+          description: Action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationAction'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/sentinel/remediation/{actionId}/execute:
+    post:
+      tags:
+      - v5 Sentinel
+      summary: Execute remediation action
+      parameters:
+      - name: actionId
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRemediationRequest'
+      responses:
+        '200':
+          description: Executed/queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions:
+    get:
+      tags:
+      - v5 HIQ
+      summary: Human Intervention Queue
+      responses:
+        '200':
+          description: Interventions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionItemListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}:
+    get:
+      tags:
+      - v5 HIQ
+      summary: Get intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionItem'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}/claim:
+    post:
+      tags:
+      - v5 HIQ
+      summary: Claim intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}/release:
+    post:
+      tags:
+      - v5 HIQ
+      summary: Release intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}/escalate:
+    post:
+      tags:
+      - v5 HIQ
+      summary: Escalate intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - escalateTo
+              - memo
+              properties:
+                escalateTo:
+                  type: string
+                memo:
+                  type: string
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}/decide:
+    post:
+      tags:
+      - v5 HIQ
+      summary: Decide intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterventionDecisionRequest'
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/v5/interventions/{id}/two-man-sign:
+    post:
+      tags:
+      - v5 HIQ
+      summary: Two-man sign intervention
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwoManSignRequest'
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/signals:
+    get:
+      tags:
+      - Agora
+      summary: List signals
+      responses:
+        '200':
+          description: Signals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalDTOListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/signals/{id}:
+    get:
+      tags:
+      - Agora
+      summary: Get signal
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalDTO'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BffErrorEnvelope'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/signals/{id}/feedback:
+    post:
+      tags:
+      - Agora
+      summary: Signal feedback
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalFeedbackRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/ask:
+    post:
+      tags:
+      - Agora
+      summary: Ask personas
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskPersonasRequest'
+      responses:
+        '202':
+          description: Ask session started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/journal/{id}:
+    patch:
+      tags:
+      - Agora
+      summary: Update decision journal with JSON Merge Patch RFC 7396
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/JournalEntryMergePatch'
+      responses:
+        '200':
+          description: Updated journal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/inbox:
+    get:
+      tags:
+      - Agora
+      summary: Insight inbox
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/journal:
+    get:
+      tags:
+      - Agora
+      summary: Decision journal
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/ask/sessions:
+    get:
+      tags:
+      - Agora
+      summary: Ask sessions
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/skill-coaching/sessions:
+    get:
+      tags:
+      - Agora
+      summary: Skill coaching sessions
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/persona-lab/runs:
+    get:
+      tags:
+      - Agora
+      summary: Persona lab runs
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/alerts/triage:
+    get:
+      tags:
+      - Agora
+      summary: Alert triage
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/postmortems:
+    get:
+      tags:
+      - Agora
+      summary: Postmortems
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/evaluation-suites:
+    get:
+      tags:
+      - Agora
+      summary: Evaluation suites
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/agora/evaluation-runs:
+    get:
+      tags:
+      - Agora
+      summary: Evaluation runs
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '428': *id005
+        '429': *id006
+  /bff/events/stream:
+    get:
+      tags:
+      - SSE
+      summary: Server-sent event stream. Uses SseEventEnvelope schemaVersion=1; Last-Event-Id supported.
+      parameters:
+      - $ref: '#/components/parameters/LastEventId'
+      - name: channels
+        in: query
+        schema:
+          type: string
+        description: Comma-separated channels, e.g. strategy,approval,ask,sentinel
+      responses:
+        '200':
+          description: text/event-stream with SseEventEnvelope payloads
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+      description: 'Comma multi-sort. Example: -updatedAt,name. Nulls last by default.'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Required for every write/action endpoint. Never place in request body.
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      schema:
+        type: string
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      schema:
+        type: string
+    BffApiVersion:
+      name: X-BFF-Api-Version
+      in: header
+      schema:
+        type: string
+        default: '2026-05-07'
+    LastEventId:
+      name: Last-Event-Id
+      in: header
+      schema:
+        type: string
+  schemas:
+    RiskLevel:
+      type: string
+      enum:
+      - info
+      - low
+      - medium
+      - high
+      - critical
+    Role:
+      type: string
+    Capability:
+      type: string
+      description: lowercase dot.case capability, namespace.* wildcard, or *
+    Cursor:
+      type: object
+      properties:
+        next:
+          type: string
+        prev:
+          type: string
+    ListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items: {}
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        estimatedTotal:
+          type: integer
+          minimum: 0
+        totalCountExact:
+          type: boolean
+      description: Generic list envelope. Typed list schemas below specialize items.
+    ErrorCode:
+      type: string
+      enum:
+      - VALIDATION_FAILED
+      - AUTH_REQUIRED
+      - TOKEN_EXPIRED
+      - REFRESH_FAILED
+      - PERMISSION_DENIED
+      - CAPABILITY_MISSING
+      - TENANT_SCOPE_MISMATCH
+      - FEATURE_DISABLED
+      - STATE_CONFLICT
+      - ILLEGAL_TRANSITION
+      - CONFIRM_TOKEN_REQUIRED
+      - CONFIRM_TOKEN_REVOKED
+      - CONFIRM_TOKEN_REUSED
+      - CONFIRM_TOKEN_EXPIRED
+      - CONFIRM_TOKEN_BINDING_MISMATCH
+      - TWO_MAN_REQUIRED
+      - APPROVAL_REQUIRED
+      - COOLDOWN_ACTIVE
+      - CURSOR_EXPIRED
+      - CURSOR_INVALID
+      - RATE_LIMITED
+      - IDEMPOTENCY_CONFLICT
+      - BACKEND_UNAVAILABLE
+      - SSE_REPLAY_UNAVAILABLE
+      - RESOURCE_NOT_FOUND
+      - UNKNOWN_ERROR
+    BffErrorEnvelope:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          $ref: '#/components/schemas/BffErrorPayload'
+    BffErrorPayload:
+      type: object
+      required:
+      - code
+      - i18nKey
+      - message
+      - retryable
+      - userActionable
+      - correlationId
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        i18nKey:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+        userActionable:
+          type: boolean
+        correlationId:
+          type: string
+        cause:
+          type: string
+        details:
+          oneOf:
+          - $ref: '#/components/schemas/ValidationErrorDetails'
+          - $ref: '#/components/schemas/PermissionErrorDetails'
+          - $ref: '#/components/schemas/ConfirmTokenErrorDetails'
+          - $ref: '#/components/schemas/TransitionErrorDetails'
+          - $ref: '#/components/schemas/IdempotencyErrorDetails'
+    ValidationErrorDetails:
+      type: object
+      required:
+      - kind
+      - fields
+      properties:
+        kind:
+          const: validation
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    PermissionErrorDetails:
+      type: object
+      required:
+      - kind
+      - missingCapabilities
+      properties:
+        kind:
+          const: permission
+        missingCapabilities:
+          type: array
+          items:
+            type: string
+    ConfirmTokenErrorDetails:
+      type: object
+      required:
+      - kind
+      - reason
+      properties:
+        kind:
+          const: confirm_token
+        tokenId:
+          type: string
+        reason:
+          type: string
+        actionId:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+    TransitionErrorDetails:
+      type: object
+      required:
+      - kind
+      - from
+      - action
+      - allowedActions
+      properties:
+        kind:
+          const: transition
+        from:
+          type: string
+        action:
+          type: string
+        allowedActions:
+          type: array
+          items:
+            type: string
+    IdempotencyErrorDetails:
+      type: object
+      required:
+      - kind
+      - idempotencyKey
+      - replayed
+      properties:
+        kind:
+          const: idempotency
+        idempotencyKey:
+          type: string
+        replayed:
+          type: boolean
+    CommandResponse:
+      type: object
+      required:
+      - ok
+      - data
+      - correlationId
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data: {}
+        auditEventId:
+          type: string
+        correlationId:
+          type: string
+        idempotencyKey:
+          type: string
+        replayed:
+          type: boolean
+        lockVersion:
+          type: integer
+        message:
+          type: string
+      description: Success-only. data is required; use null when no business payload. Errors are non-2xx BffErrorEnvelope.
+    BulkActionResponse:
+      type: object
+      required:
+      - ok
+      - partial
+      - summary
+      - results
+      properties:
+        ok:
+          type: boolean
+        partial:
+          type: boolean
+        summary:
+          type: object
+          required:
+          - requested
+          - succeeded
+          - failed
+          properties:
+            requested:
+              type: integer
+            succeeded:
+              type: integer
+            failed:
+              type: integer
+        results:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - ok
+            properties:
+              id:
+                type: string
+              ok:
+                type: boolean
+              data: {}
+              error:
+                $ref: '#/components/schemas/BffErrorPayload'
+    BaseObjectDTO:
+      type: object
+      required:
+      - id
+      - name
+      - owner
+      - updatedAt
+      - risk
+      - lockVersion
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        lockVersion:
+          type: integer
+        actionDescriptors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionDescriptor'
+    ActionDescriptor:
+      type: object
+      required:
+      - id
+      - entityType
+      - labelKey
+      - group
+      - order
+      - enabled
+      - riskLevel
+      - requiresApproval
+      - requiresConfirmToken
+      - requiresTwoMan
+      - idempotencyKeyRequired
+      properties:
+        id:
+          type: string
+        entityType:
+          type: string
+        labelKey:
+          type: string
+        group:
+          type: string
+          enum:
+          - primary
+          - secondary
+          - destructive
+        order:
+          type: integer
+        enabled:
+          type: boolean
+        disabledReasonCode:
+          type: string
+        disabledReasonI18nKey:
+          type: string
+        riskLevel:
+          type: string
+          enum:
+          - none
+          - low
+          - medium
+          - high
+          - critical
+        requiresApproval:
+          type: boolean
+        requiresConfirmToken:
+          type: boolean
+        requiresTwoMan:
+          type: boolean
+        requiresEnv:
+          type: string
+          enum:
+          - research
+          - paper
+          - live
+        ttlSec:
+          type: integer
+        cooldownSec:
+          type: integer
+        cooldownEndsAt:
+          type: string
+          format: date-time
+        idempotencyKeyRequired:
+          type: boolean
+    MeResponse:
+      type: object
+      required:
+      - user
+      - tenant
+      - roles
+      - capabilities
+      - env
+      - featureFlags
+      - serverTime
+      - sessionExpiresAt
+      - permissionsVersion
+      properties:
+        user:
+          type: object
+          required:
+          - id
+          - displayName
+          - email
+          properties:
+            id:
+              type: string
+            displayName:
+              type: string
+            email:
+              type: string
+            avatarUrl:
+              type: string
+        tenant:
+          type: object
+          required:
+          - id
+          - name
+          - tz
+          - locale
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            tz:
+              type: string
+            locale:
+              type: string
+            baseCurrency:
+              type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        env:
+          type: string
+          enum:
+          - dev
+          - staging
+          - prod
+        featureFlags:
+          type: object
+          additionalProperties:
+            type: boolean
+        serverTime:
+          type: string
+          format: date-time
+        sessionExpiresAt:
+          type: string
+          format: date-time
+        permissionsVersion:
+          type: string
+        counters:
+          type: object
+          properties:
+            pendingInterventionsCount:
+              type: integer
+            unreadAuditCount:
+              type: integer
+            openFindingsCount:
+              type: integer
+    HealthResponse:
+      type: object
+      required:
+      - ok
+      - service
+      - version
+      - serverTime
+      properties:
+        ok:
+          type: boolean
+        service:
+          const: bff
+        version:
+          type: string
+        buildSha:
+          type: string
+        serverTime:
+          type: string
+          format: date-time
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+            - ok
+            - degraded
+            - down
+    CapabilityCatalogResponse:
+      type: object
+      required:
+      - capabilities
+      - roleBundles
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - labelKey
+            - namespace
+            properties:
+              id:
+                $ref: '#/components/schemas/Capability'
+              labelKey:
+                type: string
+              description:
+                type: string
+              namespace:
+                type: string
+        roleBundles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/Capability'
+    FeatureFlagsResponse:
+      type: object
+      required:
+      - flags
+      - serverTime
+      properties:
+        flags:
+          type: object
+          additionalProperties:
+            type: boolean
+        serverTime:
+          type: string
+          format: date-time
+    StrategyDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          alpha:
+            type: string
+            items:
+              type: string
+          capitalPoolId:
+            type: string
+            items:
+              type: string
+          personaIds:
+            type: array
+            items:
+              type: string
+          pnl30d:
+            type: string
+            items:
+              type: string
+          sharpe:
+            type: string
+            items:
+              type: string
+          drawdown:
+            type: string
+            items:
+              type: string
+          lifecycleStatus:
+            type: string
+            items:
+              type: string
+          reviewStatus:
+            type: string
+            items:
+              type: string
+          deploymentStatus:
+            type: string
+            items:
+              type: string
+    PersonaDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          archetype:
+            type: string
+            items:
+              type: string
+          routedStrategies:
+            type: string
+            items:
+              type: string
+          successRate:
+            type: string
+            items:
+              type: string
+          mode:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    CapitalPoolDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          currency:
+            type: string
+            items:
+              type: string
+          allocated:
+            type: string
+            items:
+              type: string
+          utilized:
+            type: string
+            items:
+              type: string
+          riskBudget:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    RankingFormulaDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          expression:
+            type: string
+            items:
+              type: string
+          appliedTo:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    RebalanceDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          quarter:
+            type: string
+            items:
+              type: string
+          targetPoolId:
+            type: string
+            items:
+              type: string
+          proposedDelta:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+          lines:
+            type: array
+            items:
+              type: string
+    DeploymentDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          target:
+            type: string
+            items:
+              type: string
+          artifactId:
+            type: string
+            items:
+              type: string
+          strategyId:
+            type: string
+            items:
+              type: string
+          version:
+            type: string
+            items:
+              type: string
+          previousVersion:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+          rollbackAvailable:
+            type: string
+            items:
+              type: string
+    EvolutionProgramDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          generation:
+            type: string
+            items:
+              type: string
+          population:
+            type: string
+            items:
+              type: string
+          bestFitness:
+            type: string
+            items:
+              type: string
+          parentAlpha:
+            type: string
+            items:
+              type: string
+          progress:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    ResearchExperimentDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          hypothesis:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+          metric:
+            type: string
+            items:
+              type: string
+          metricValue:
+            type: string
+            items:
+              type: string
+          artifactId:
+            type: string
+            items:
+              type: string
+    ArtifactDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          kind:
+            type: string
+            items:
+              type: string
+          version:
+            type: string
+            items:
+              type: string
+          sourceExperimentId:
+            type: string
+            items:
+              type: string
+          sizeMb:
+            type: string
+            items:
+              type: string
+          hash:
+            type: string
+            items:
+              type: string
+          scanStatus:
+            type: string
+            items:
+              type: string
+    RuntimeDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          kind:
+            type: string
+            items:
+              type: string
+          env:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+          cpu:
+            type: string
+            items:
+              type: string
+          memory:
+            type: string
+            items:
+              type: string
+          latencyP95Ms:
+            type: string
+            items:
+              type: string
+          uptimePct:
+            type: string
+            items:
+              type: string
+          region:
+            type: string
+            items:
+              type: string
+    ToolDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          category:
+            type: string
+            items:
+              type: string
+          version:
+            type: string
+            items:
+              type: string
+          description:
+            type: string
+            items:
+              type: string
+          usedBy:
+            type: string
+            items:
+              type: string
+          scope:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    McpServerDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          endpoint:
+            type: string
+            items:
+              type: string
+          region:
+            type: string
+            items:
+              type: string
+          toolCount:
+            type: string
+            items:
+              type: string
+          envAllowed:
+            type: array
+            items:
+              type: string
+          health:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    McpToolDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          serverId:
+            type: string
+            items:
+              type: string
+          description:
+            type: string
+            items:
+              type: string
+          scope:
+            type: string
+            items:
+              type: string
+          envGrants:
+            type: array
+            items:
+              type: string
+          callsLast24h:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    SkillDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          version:
+            type: string
+            items:
+              type: string
+          archetype:
+            type: string
+            items:
+              type: string
+          description:
+            type: string
+            items:
+              type: string
+          draft:
+            type: string
+            items:
+              type: string
+          publishedAt:
+            type: string
+            items:
+              type: string
+          evalScore:
+            type: string
+            items:
+              type: string
+          usedByPersonas:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    ChannelDTO:
+      allOf:
+      - $ref: '#/components/schemas/BaseObjectDTO'
+      - type: object
+        properties:
+          kind:
+            type: string
+            items:
+              type: string
+          destination:
+            type: string
+            items:
+              type: string
+          subscribers:
+            type: string
+            items:
+              type: string
+          filters:
+            type: string
+            items:
+              type: string
+          status:
+            type: string
+            items:
+              type: string
+    JobDTO:
+      type: object
+      required:
+      - id
+      - kind
+      - status
+      - startedAt
+      - owner
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        owner:
+          type: string
+        retryOf:
+          type: string
+        attempt:
+          type: integer
+        maxAttempts:
+          type: integer
+    AlertDTO:
+      type: object
+      required:
+      - id
+      - severity
+      - title
+      - source
+      - openedAt
+      - acknowledged
+      properties:
+        id:
+          type: string
+        severity:
+          $ref: '#/components/schemas/RiskLevel'
+        title:
+          type: string
+        source:
+          type: string
+        openedAt:
+          type: string
+          format: date-time
+        acknowledged:
+          type: boolean
+        description:
+          type: string
+        relatedTarget:
+          type: string
+        metric:
+          type: string
+        threshold:
+          type: string
+        observed:
+          type: string
+        suggestedAction:
+          type: string
+    IncidentDTO:
+      type: object
+      required:
+      - id
+      - severity
+      - title
+      - status
+      - openedAt
+      properties:
+        id:
+          type: string
+        severity:
+          $ref: '#/components/schemas/RiskLevel'
+        title:
+          type: string
+        status:
+          type: string
+        openedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+        affected:
+          type: array
+          items:
+            type: string
+        commander:
+          type: string
+        correlationId:
+          type: string
+    ApprovalRequestDTO:
+      type: object
+      required:
+      - id
+      - kind
+      - subject
+      - requester
+      - state
+      - riskLevel
+      - createdAt
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        subject:
+          type: string
+        requester:
+          type: string
+        state:
+          type: string
+        riskLevel:
+          $ref: '#/components/schemas/RiskLevel'
+        createdAt:
+          type: string
+          format: date-time
+        rationale:
+          type: string
+        diffSummary:
+          type: string
+        stages:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              state:
+                type: string
+              slaHours:
+                type: integer
+              startedAt:
+                type: string
+                format: date-time
+              decidedBy:
+                type: string
+              decidedAt:
+                type: string
+                format: date-time
+              memo:
+                type: string
+              escalated:
+                type: boolean
+              escalateTo:
+                type: string
+    AuditEventDTO:
+      type: object
+      required:
+      - id
+      - actor
+      - action
+      - target
+      - ts
+      - correlationId
+      properties:
+        id:
+          type: string
+        actor:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        memo:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+        outcome:
+          type: string
+        correlationId:
+          type: string
+        causationId:
+          type: string
+    StrategyCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    PersonaCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    CapitalPoolCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    RankingFormulaCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    RebalanceCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    DeploymentCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    EvolutionProgramCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    ResearchExperimentCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    ArtifactCreateInput:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        owner:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskLevel'
+        memo:
+          type: string
+      description: See DTO catalog for entity-specific required fields. This OpenAPI skeleton preserves endpoint shape.
+    EvidenceRef:
+      type: object
+      required:
+      - id
+      - kind
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - alert
+          - incident
+          - job
+          - audit
+          - metric
+          - strategy
+          - persona
+          - deployment
+          - runtime
+          - policy
+          - approval
+          - artifact
+          - signal
+          - journal
+          - postmortem
+        label:
+          type: string
+        uri:
+          type: string
+        hash:
+          type: string
+        snapshot:
+          type: object
+    RedactedEvidenceRef:
+      type: object
+      required:
+      - id
+      - kind
+      - redacted
+      - redactionReasonCode
+      - requiredCapability
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        redacted:
+          const: true
+        redactionReasonCode:
+          const: INSUFFICIENT_CAPABILITY
+        requiredCapability:
+          $ref: '#/components/schemas/Capability'
+    LoopStage:
+      type: object
+      required:
+      - id
+      - name
+      - status
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - blocked
+          - succeeded
+          - failed
+          - skipped
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    LoopRun:
+      type: object
+      required:
+      - id
+      - loopKind
+      - status
+      - startedAt
+      - updatedAt
+      - triggeredBy
+      - stages
+      properties:
+        id:
+          type: string
+        loopKind:
+          type: string
+          enum:
+          - research
+          - execution
+          - optimization
+        status:
+          type: string
+          enum:
+          - idle
+          - running
+          - blocked
+          - succeeded
+          - failed
+          - cancelled
+        startedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        triggeredBy:
+          type: string
+        subjectKind:
+          type: string
+        subjectId:
+          type: string
+        subjectName:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoopStage'
+        currentStageId:
+          type: string
+        nextAction:
+          type: object
+        evidence:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/EvidenceRef'
+            - $ref: '#/components/schemas/RedactedEvidenceRef'
+    PersonaExecutionHealth:
+      type: object
+      required:
+      - personaId
+      - personaName
+      - mode
+      - status
+      - score
+      - formulaVersion
+      - inputs
+      - routedStrategies
+      - openFindings
+      - updatedAt
+      properties:
+        personaId:
+          type: string
+        personaName:
+          type: string
+        mode:
+          type: string
+          enum:
+          - live
+          - paper
+          - shadow
+          - suspended
+        status:
+          type: string
+          enum:
+          - healthy
+          - watch
+          - degraded
+          - critical
+        score:
+          type: number
+        formulaVersion:
+          type: string
+        inputs:
+          type: object
+        routedStrategies:
+          type: integer
+        openFindings:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+    StrategyExecutionHealth:
+      type: object
+      required:
+      - strategyId
+      - strategyName
+      - status
+      - score
+      - formulaVersion
+      - inputs
+      - pnl30d
+      - drawdown
+      - openFindings
+      - updatedAt
+      properties:
+        strategyId:
+          type: string
+        strategyName:
+          type: string
+        status:
+          type: string
+          enum:
+          - healthy
+          - watch
+          - degraded
+          - critical
+        score:
+          type: number
+        formulaVersion:
+          type: string
+        inputs:
+          type: object
+        pnl30d:
+          type: number
+        drawdown:
+          type: number
+        openFindings:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+    SentinelFinding:
+      type: object
+      required:
+      - id
+      - status
+      - severity
+      - confidence
+      - title
+      - summary
+      - source
+      - detectedAt
+      - updatedAt
+      - blastRadius
+      - evidence
+      - recommendedActionIds
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - acknowledged
+          - action_pending
+          - mitigating
+          - resolved
+          - dismissed
+        severity:
+          type: string
+          enum:
+          - info
+          - watch
+          - warning
+          - critical
+        confidence:
+          type: number
+        title:
+          type: string
+        summary:
+          type: string
+        source:
+          type: string
+        detectedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        blastRadius:
+          type: object
+        evidence:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/EvidenceRef'
+            - $ref: '#/components/schemas/RedactedEvidenceRef'
+        recommendedActionIds:
+          type: array
+          items:
+            type: string
+    RemediationAction:
+      type: object
+      required:
+      - id
+      - kind
+      - mode
+      - label
+      - requiredRoles
+      - requiresHumanApproval
+      - requiresHighRiskConfirm
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        mode:
+          type: string
+          enum:
+          - advisory
+          - guarded_automation
+          - emergency_override
+        label:
+          type: string
+        description:
+          type: string
+        requiredRoles:
+          type: array
+          items:
+            type: string
+        requiredCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        requiresHumanApproval:
+          type: boolean
+        targetKind:
+          type: string
+        targetId:
+          type: string
+        requiresHighRiskConfirm:
+          type: boolean
+    InterventionItem:
+      type: object
+      required:
+      - id
+      - source
+      - severity
+      - priority
+      - title
+      - createdAt
+      - updatedAt
+      - requiredRoles
+      - allowedDecisions
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        severity:
+          type: string
+        priority:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+        slaDeadline:
+          type: string
+          format: date-time
+        claimedBy:
+          type: string
+        claimedAt:
+          type: string
+          format: date-time
+        requiredRoles:
+          type: array
+          items:
+            type: string
+        requiredCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        linkedApprovalId:
+          type: string
+        linkedFindingId:
+          type: string
+        linkedIncidentId:
+          type: string
+        recommendedDecision:
+          type: string
+        allowedDecisions:
+          type: array
+          items:
+            type: string
+        evidenceRefs:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/EvidenceRef'
+            - $ref: '#/components/schemas/RedactedEvidenceRef'
+    ControlRoomSummary:
+      type: object
+      required:
+      - generatedAt
+      - session
+      - kpi
+      - topFindings
+      - topInterventions
+      - loopRuns
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        session:
+          type: object
+        kpi:
+          type: object
+        topFindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SentinelFinding'
+        topInterventions:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterventionItem'
+        loopRuns:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoopRun'
+    SignalDTO:
+      type: object
+      required:
+      - id
+      - title
+      - source
+      - severity
+      - confidence
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        severity:
+          type: string
+          enum:
+          - info
+          - watch
+          - warning
+          - critical
+        confidence:
+          type: number
+        symbols:
+          type: array
+          items:
+            type: string
+        drivers:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SignalFeedbackRequest:
+      type: object
+      required:
+      - rating
+      properties:
+        rating:
+          type: string
+          enum:
+          - useful
+          - not_useful
+          - needs_review
+        memo:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    AskPersonasRequest:
+      type: object
+      required:
+      - prompt
+      - mode
+      properties:
+        prompt:
+          type: string
+        personaIds:
+          type: array
+          items:
+            type: string
+        contextRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceRef'
+        mode:
+          type: string
+          enum:
+          - single
+          - committee
+          - debate
+    ActionCommandRequest:
+      type: object
+      properties:
+        expectedVersion:
+          type: integer
+        memo:
+          type: string
+        confirmTokenId:
+          type: string
+        parameters:
+          type: object
+    ActionCommandResponseData:
+      type: object
+      required:
+      - entityType
+      - entityId
+      - actionId
+      - status
+      properties:
+        entityType:
+          type: string
+        entityId:
+          type: string
+        actionId:
+          type: string
+        status:
+          type: string
+          enum:
+          - accepted
+          - queued
+          - completed
+        jobId:
+          type: string
+        approvalId:
+          type: string
+    SetSentinelFindingStatusRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - acknowledged
+          - mitigating
+          - resolved
+          - dismissed
+        memo:
+          type: string
+    ExecuteRemediationRequest:
+      type: object
+      required:
+      - action
+      properties:
+        findingId:
+          type: string
+        action:
+          $ref: '#/components/schemas/RemediationAction'
+        memo:
+          type: string
+        confirmTokenId:
+          type: string
+    InterventionDecisionRequest:
+      type: object
+      required:
+      - decision
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+          - request_changes
+          - escalate
+          - defer
+        memo:
+          type: string
+        modifications:
+          type: object
+    TwoManSignRequest:
+      type: object
+      required:
+      - decision
+      - memo
+      - expectedVersion
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+        memo:
+          type: string
+        confirmTokenId:
+          type: string
+        expectedVersion:
+          type: integer
+    McpToolImportRequest:
+      type: object
+      properties:
+        schemaUrl:
+          type: string
+        schemaJson: {}
+        memo:
+          type: string
+    JournalEntryMergePatch:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        body:
+          type: string
+          maxLength: 20000
+        tags:
+          type: array
+          items:
+            type: string
+        linkedStrategyIds:
+          type: array
+          items:
+            type: string
+        linkedPersonaIds:
+          type: array
+          items:
+            type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - team
+          - tenant
+    ConfirmTokenRequest:
+      type: object
+      required:
+      - entityType
+      - entityId
+      - actionId
+      - expectedVersion
+      - memo
+      properties:
+        entityType:
+          type: string
+        entityId:
+          type: string
+        actionId:
+          type: string
+        expectedVersion:
+          type: integer
+        memo:
+          type: string
+          minLength: 40
+    ConfirmTokenDTO:
+      type: object
+      required:
+      - tokenId
+      - expiresAt
+      - boundTo
+      - used
+      properties:
+        tokenId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        boundTo:
+          type: object
+        used:
+          type: boolean
+    SwitchTenantRequest:
+      type: object
+      required:
+      - tenantId
+      properties:
+        tenantId:
+          type: string
+    UpdateLocaleRequest:
+      type: object
+      required:
+      - locale
+      properties:
+        locale:
+          type: string
+    AuditExportRequest:
+      type: object
+      required:
+      - format
+      properties:
+        format:
+          type: string
+          enum:
+          - csv
+          - jsonl
+        filter:
+          type: object
+    StrategyDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrategyDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    PersonaDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    CapitalPoolDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapitalPoolDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    RankingFormulaDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingFormulaDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    RebalanceDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RebalanceDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    DeploymentDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeploymentDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    EvolutionProgramDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvolutionProgramDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    ResearchExperimentDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResearchExperimentDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    ArtifactDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    RuntimeDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    ToolDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    McpServerDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    McpToolDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpToolDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    SkillDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    ChannelDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    JobDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    AlertDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    IncidentDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    ApprovalRequestDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRequestDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    AuditEventDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEventDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    LoopRunListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoopRun'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    PersonaExecutionHealthListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaExecutionHealth'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    StrategyExecutionHealthListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrategyExecutionHealth'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    SentinelFindingListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SentinelFinding'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    InterventionItemListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterventionItem'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+    SignalDTOListResponse:
+      type: object
+      required:
+      - items
+      - cursor
+      - pageSize
+      - totalCountExact
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalDTO'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        pageSize:
+          type: integer
+        estimatedTotal:
+          type: integer
+        totalCountExact:
+          type: boolean
+tags:
+- name: Session
+- name: Platform
+- name: Strategy
+- name: Persona
+- name: CapitalPool
+- name: RankingFormula
+- name: Rebalance
+- name: Deployment
+- name: Evolution
+- name: Research
+- name: Artifact
+- name: Runtime
+- name: Job
+- name: Alert
+- name: Incident
+- name: Approval
+- name: Audit
+- name: Tool
+- name: MCP
+- name: Skill
+- name: Channel
+- name: Actions
+- name: ConfirmTokens
+- name: v5
+- name: v5 Sentinel
+- name: v5 HIQ
+- name: Agora
+- name: SSE
