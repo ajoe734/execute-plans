@@ -1,92 +1,36 @@
-# Plan：BFF Contract Spec 2026-05-07-B Patch
+# Plan: BFF Contract Patch 2026-05-07-C Follow-up Questions
 
-產出單一檔案 `/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07-B.md`，作為 2026-05-07 spec 的 **normative 補丁**（非取代）。後端可直接 append。
+選項 B：先回 planner，等 disposition，spec 一次到位、不留小債。
 
-## 範圍（covering P0 + P1，共 9 區塊）
+## 產出
 
-### Block 1 — Missing DTOs（P0 #1, #2）
-補齊 §7 已宣告但 §8 缺的 DTO：
-- `RuntimeDTO` / `RuntimeKind` / `RuntimeEnv` / `RuntimeHealth`
-- `ToolDTO` / `ToolCategory` / `ToolScope`
-- `McpServerDTO` / `McpServerHealth` / `McpToolDTO`
-- `SkillDTO` / `SkillArchetype`
-- `ChannelDTO` / `ChannelKind`
-全部對齊 `src/lib/bff/types.ts` 既有形狀 + Pack D status enum。
+**1. `/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07-C_Followup_Questions.md`**
 
-補 v5 引用但未定義的型別：
-- `LoopStage` enum（對齊 v5 SD §3）
-- `EvidenceRef`（id / kind / uri / hash）
-- `Role` / `Capability`（對齊 Pack D Permission Contract）
+結構：
 
-### Block 2 — Error Envelope 對齊（P0 #3）
-廢除 `CommandResponse.error: string`；統一改為：
-- 成功：`{ ok: true, data, lockVersion?, idempotencyKey? }`
-- 失敗：throw `BffErrorEnvelope`（§4.1 既有形狀）+ `ErrorDetails` discriminated union（援引 Pack D D20）
-補 §4.2 `ErrorCode` master list（援引 Pack D D21，含 `CONFIRM_TOKEN_REVOKED` / `CONFIRM_TOKEN_REUSED` / `CONFIRM_TOKEN_BINDING_MISMATCH`）。
+- **Header** — 對 base 2026-05-07 + patch 2026-05-07-B 的 follow-up；列出 8 個待裁示項，請 planner 以 Accept / Modify / Reject + rationale 回應。
+- **§C.P0 — 規範內部矛盾（3 條，blocker）**
+  - C.1 `ActionCommandResponse.status` 與 `ErrorCode` 雙軌定義 `requires_confirm_token` / `requires_approval`：建議改成「失敗一律走 `BffErrorEnvelope` + `CONFIRM_TOKEN_REQUIRED` / `TWO_MAN_REQUIRED`」，刪除 success-path 的 `requires_*` status。附 before/after TS snippet。
+  - C.2 §7.6 two-man-sign request 把 `idempotencyKey` 放 body：違反 §5.2 / Pack D D23 既定的 `Idempotency-Key` HTTP header 慣例。建議移到 header；body 只留 business payload。
+  - C.3 §3.2 `CommandResponse.data?: T` 改為 optional：與 v4 envelope `data: T` (required) 衝突，會破壞所有 BFF client narrow type。請確認意圖；若是為了 error case 不帶 data，建議改成 discriminated union (`{ ok: true; data: T } | { ok: false; error: BffErrorPayload }`)。
+- **§C.P1 — 缺漏（3 條）**
+  - C.4 SSE catalog (§8.3) 缺 `approval` 與 `ask` channel：`ApprovalRequest.stages[]` 多階段 stage 變化、`AskPersonas` streaming response 都沒對應 channel。提議補表格列：channel name / payload shape / replay policy / auth scope。
+  - C.5 Action table (§5.3) 與 `src/lib/v3/availableActions.ts` / `src/lib/v4/actionDescriptor.ts` 來源衝突未明示。請宣告 spec table = canonical，前端 TS 必須對齊；並列出對齊機制（codegen 或 lint）。
+  - C.6 §4.3 EntityCreate 缺 `McpToolCreateInput`：§2.2 已加 `McpToolDTO`、§5.3 列了 MCP Tool grant/revoke actions，但 create payload 只有 `ToolCreateInput`。請補或明示「MCP Tool 不支援獨立 create，只能透過 McpServer discover」。
+- **§C.P2 — 一致性（2 條）**
+  - C.7 `EvidenceKind` 擴增到 15 種（§2.2 加了 `journal`/`postmortem`/`signal`）：請與 Pack D Permission Contract (`Pantheon_Pack_D_Permission_Contract.md`) 交叉驗證，確認 RBAC capability 涵蓋這些新 evidence kind，避免 UI 顯示但 RBAC 拒絕。
+  - C.8 §6.3 `PATCH /bff/agora/journal/{id}` body 格式未指定：planner 把 JSON Patch vs Merge 歸 P2 deferred，但既然 endpoint 已經出現 PATCH，建議至少先鎖 default = **JSON Merge Patch (RFC 7396)**，正式選型後再升級。
+- **§C.Disposition Template** — 給 planner 填的格子：`Item / Decision (Accept|Modify|Reject) / Rationale / Spec section to update`。
+- **§C.Cross-ref**
+  - Pack D D17–D32（BFF API + Permission contract）
+  - `src/lib/v4/errorEnvelope.ts`、`src/lib/bff/types.ts`、`src/lib/v3/availableActions.ts`
+  - 既有 `Pantheon_BFF_Contract_Spec_2026-05-07-B.md` §3.2 / §5.2 / §6.3 / §7.6 / §8.3
 
-### Block 3 — Pack F EntityCreate 對齊（P0 #4）
-§9 補齊 9 個 entity 的 `EntityCreateInput<T>` schema（Strategy/Persona/CapitalPool/RankingFormula/Rebalance/Tool/McpServer/Skill/Channel），與前端 `src/lib/writeIntents/createDefaults.ts` + `EntityCreateDrawer` 完全對齊。
+**2. `.lovable/feedback/2026-05-07-C/INDEX.md`**
 
-### Block 4 — §11 Action Table（P1 #6）
-補齊所有 entity 的 lifecycle actions（含 endpoint / method / requiresConfirm / requiresTwoMan / cooldown / idempotency）：
-- CapitalPool: freeze/unfreeze/adjustLimit
-- Deployment: promote/rollback/pause/resume
-- Artifact: publish/deprecate/sign
-- Job: cancel/retry
-- Runtime: restart/scale/drain
-- Tool/McpServer/McpTool/Skill/Channel: lifecycle CRUD + enable/disable
-- Research: queue/conclude/attach
-- Evolution: start/pause/promote/discard
-
-### Block 5 — Agora (v5 IA) Endpoints（P1 #7）
-新增 §15 Agora API：
-- `/agora/signals`、`/agora/signals/:id/feedback`
-- `/agora/inbox`（InsightInbox）
-- `/agora/journal`（DecisionJournal CRUD）
-- `/agora/ask`（AskPersonas）
-- `/agora/skill-coaching`、`/agora/persona-lab`
-- `/agora/alerts/triage`、`/agora/postmortems`
-- `/agora/evaluation-suites`
-全部對齊前端 `src/agora/pages/*` 既有資料形狀。
-
-### Block 6 — HIQ Layer（P1 #8）
-新增 §16 Human-In-Queue：
-- `QueueItemDTO`（含 priority / claimedBy / slaDeadline）
-- `/hiq/queue`、`/hiq/claim`、`/hiq/release`、`/hiq/escalate`
-- Two-man approval：`/hiq/approve` 雙簽 token 流程
-- SLA 計時規則對齊 Pack D StateMachine §SLA
-
-### Block 7 — SSE Channel Catalog（P1 #9）
-新增 §17 SSE channels（援引 Pack D SSE Event Contract D26-D32）：
-- 列出全部 13 channel：artifact / runtime / mcp / skill / channel / tool / ranking / rebalance / evolution / research / signal / inbox / journal / postmortem
-- 每 channel 的 event types + payload schema
-- Reconnect protocol（Last-Event-Id / heartbeat / replay）
-
-### Block 8 — Platform Endpoints（P1 補強）
-新增 §18：
-- `/healthz`、`/capabilities`、`/feature-flags`
-- `/me`（補 serverTimezone / roles / pendingInterventionsCount / unreadAuditCount）
-- `/switch-tenant`、`/locale`、`/audit/export`
-- `ConfirmToken` 完整生命週期（POST/GET/DELETE + cooldown）
-
-### Block 9 — Cross-cutting Conventions（P1 補強）
-新增 §19：
-- API versioning：URL path `/v1/...` + `apiVersion` header（援引 v4 envelope）
-- Pagination cursor opacity（base64 opaque，TTL 15min，援引 Pack D D17/D22）
-- Bulk endpoint envelope（援引 Pack D D23）
-- Attachment policy（援引 Pack D D24）
-- Rate limit headers（援引 Pack D D25）
-- i18n key namespace lock：`bff.<entity>.<action>` / `errors.<ErrorCode>`
-
-## P2 處理方式
-P2 #15/#18/#19/#20 在 Block 9 一併補；其餘 P2 列為 spec-B 結尾「Open Questions」附錄，不阻塞。
-
-## 交付
-- 單一 markdown 檔：`/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07-B.md`
-- 結尾附錄：對應 Pack D 條款交叉表 + 與前端檔案 anchor 對照表
-- 同步在 `.lovable/feedback/2026-05-07-B/` 建立索引條目
+- Artifact path / scope / 8 items 一覽 / 等 planner disposition / blocker for patch apply。
 
 ## 不做
-- 不改前端代碼
-- 不改 Pack D / v5 spec（只引用）
-- 不處理 P2 中與業務未定的部分（artifact upload 路徑、bulk request 細節）
+
+- 不修改 Spec B 檔案、不改任何 `src/` 程式碼。
+- 不更新 memory（等 planner 回覆後再一次更新）。
