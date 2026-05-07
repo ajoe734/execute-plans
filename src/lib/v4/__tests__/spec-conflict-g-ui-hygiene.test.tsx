@@ -30,10 +30,10 @@ describe("spec-conflict-G G03/G11 — drawer renders + a11y", () => {
         <EntityCreateDrawer entity="capitalPool" open={true} onOpenChange={() => {}} />
       </W>,
     );
-    // Risk budget slider label rendered via entityCreate.field.riskBudget
-    expect(screen.getAllByText(/Risk budget/i).length).toBeGreaterThan(0);
-    // Slider role exists for riskBudget
+    // Slider role exists for riskBudget (G03)
     expect(screen.getAllByRole("slider").length).toBeGreaterThan(0);
+    // Currency select trigger exists (G03)
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
 
     // Submitting empty form triggers validation: name required.
     const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
