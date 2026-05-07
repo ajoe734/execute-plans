@@ -22,6 +22,9 @@ import { BindingsMatrix } from "../components/detail/BindingsMatrix";
 import { AllocationLimitsManager } from "../components/detail/AllocationLimitsManager";
 import { FreezeUnfreezePanel } from "../components/detail/FreezeUnfreezePanel";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
+import { assessBreach } from "@/lib/v4/capitalBreach";
+import { findMetric } from "@/lib/v4/metricRegistry";
+import { Badge } from "@/components/ui/badge";
 
 export const CapitalPoolDetail = () => {
   const { id } = useParams();
