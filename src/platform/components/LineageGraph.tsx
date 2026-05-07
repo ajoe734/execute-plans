@@ -30,6 +30,7 @@ const COL_GAP = 64;
 const ROW_GAP = 24;
 
 const riskFill: Record<RiskLevel, string> = {
+  info: "hsl(var(--muted) / 0.30)",
   low: "hsl(var(--status-success) / 0.10)",
   medium: "hsl(var(--status-warning) / 0.12)",
   high: "hsl(var(--status-failed) / 0.10)",

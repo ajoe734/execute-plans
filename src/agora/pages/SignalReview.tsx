@@ -30,7 +30,7 @@ interface Signal {
   conviction: number;
   rationale: string;
   generatedAt: string;
-  risk: "low" | "medium" | "high" | "critical";
+  risk: "info" | "low" | "medium" | "high" | "critical";
 }
 
 const mockSignals = (strategies: Strategy[]): Signal[] => {

@@ -28,7 +28,7 @@ interface SignalView {
   conviction: number;
   rationale: string;
   generatedAt: string;
-  risk: "low" | "medium" | "high" | "critical";
+  risk: "info" | "low" | "medium" | "high" | "critical";
 }
 
 export const SignalDetail = () => {

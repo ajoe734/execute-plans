@@ -18,7 +18,7 @@ import type {
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 
-const RISK_WEIGHT: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+const RISK_WEIGHT: Record<RiskLevel, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
 export const RiskCenter = () => {
   const t = useT();
@@ -43,7 +43,7 @@ export const RiskCenter = () => {
     const all = [
       ...data.strategies, ...data.personas, ...data.pools, ...data.tools, ...data.mcp, ...data.skills,
     ];
-    const counts: Record<RiskLevel, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+    const counts: Record<RiskLevel, number> = { info: 0, low: 0, medium: 0, high: 0, critical: 0 };
     all.forEach((o) => { counts[o.risk] = (counts[o.risk] ?? 0) + 1; });
     const utilBreaches = data.pools.filter((p) => p.utilized / p.allocated > 0.9).length;
     const drawdownBreaches = data.strategies.filter((s) => s.drawdown < -0.1).length;
