@@ -146,7 +146,7 @@ export const PersonaDetail = () => {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Suspend persona — ${p.name}`}
-        description="Suspending this persona will stop routing strategies through it."
+        description={t("detail.confirm.suspendPersona")}
         actionId="persona.suspend"
         confirmEntity={{ type: "persona", id: p.id }}
         target={{ type: "Persona", id: p.id, name: p.name }}

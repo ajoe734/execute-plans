@@ -62,7 +62,7 @@ export const PersonaLab = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.personaLab")} subtitle="Compose and test personas with skills, tools, and memory routes before publishing." />
+      <PageHeader title={t("nav.personaLab")} subtitle={t("agora.personaLab.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <Card className="lg:col-span-3 p-5 space-y-4">
@@ -163,10 +163,11 @@ export const PersonaLab = () => {
 };
 
 const RouteAdder = ({ onAdd }: { onAdd: (s: string) => void }) => {
+  const t = useT();
   const [v, setV] = useState("");
   return (
     <div className="flex gap-2">
-      <Input value={v} onChange={(e) => setV(e.target.value)} placeholder="Add memory route…" className="h-8 text-sm" />
+      <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={t("agora.personaLab.memoryRoutePh")} className="h-8 text-sm" />
       <Button size="sm" variant="outline" onClick={() => { onAdd(v); setV(""); }}><Plus className="h-3 w-3" /></Button>
     </div>
   );

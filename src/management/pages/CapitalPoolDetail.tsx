@@ -103,7 +103,7 @@ export const CapitalPoolDetail = () => {
                     />
                     <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
                   </div>
-                  <Section title="Pack D · Breach assessment">
+                  <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <Badge variant="outline" className={breachToneCls[breach.level]}>{breach.level.toUpperCase()}</Badge>
                       {breach.riskBudgetUsagePct != null && rbuMetric && (
@@ -230,7 +230,7 @@ export const CapitalPoolDetail = () => {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Adjust Risk Budget — ${c.name}`}
-        description="Changing the risk budget will affect every strategy assigned to this pool."
+        description={t("detail.confirm.changeRiskBudget")}
         actionId="capital_pool.set_risk_budget"
         confirmEntity={{ type: "pool", id: c.id }}
         target={{ type: "CapitalPool", id: c.id, name: c.name }}

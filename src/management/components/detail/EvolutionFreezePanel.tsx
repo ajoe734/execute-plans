@@ -46,7 +46,7 @@ export const EvolutionFreezePanel = ({ program }: { program: EvolutionProgram })
         open={open}
         onOpenChange={setOpen}
         title={`${t("phase13.evolution.freeze.action")} — ${program.name}`}
-        description="Halts new generations. Historical runs and candidates remain inspectable but no new evolution will run until unfrozen."
+        description={t("detail.confirm.freezeEvolution")}
         confirmToken="FREEZE-GEN"
         destructive
         onConfirm={async (memo) => {

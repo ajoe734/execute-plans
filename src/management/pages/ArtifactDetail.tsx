@@ -58,7 +58,7 @@ export const ArtifactDetail = () => {
                   <StatCard label="Size" value={`${a.sizeMb.toLocaleString()} MB`} />
                   <StatCard label={t("table.owner")} value={a.owner} />
                 </div>
-                <Section title="Hash">
+                <Section title={t("detail.section.hash")}>
                   <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{a.hash}</pre>
                 </Section>
               </>
@@ -120,7 +120,7 @@ export const ArtifactDetail = () => {
         open={retireOpen}
         onOpenChange={setRetireOpen}
         title={`Retire Artifact — ${a.name}`}
-        description="Retiring will mark this artifact as deprecated and prevent new deployments from using it."
+        description={t("detail.confirm.retireArtifact")}
         confirmToken="RETIRE"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }); toast.success("Retirement requested"); }}

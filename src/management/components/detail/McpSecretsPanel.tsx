@@ -45,7 +45,7 @@ export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
         open={!!rotate}
         onOpenChange={(o) => !o && setRotate(null)}
         title={`${t("phase13.mcp.secrets.rotate")} — ${rotate?.name ?? ""}`}
-        description="Generates a new secret value and invalidates the previous one. In-flight requests using the old key will fail until the rotation propagates."
+        description={t("detail.confirm.rotateSecret")}
         confirmToken="ROTATE"
         destructive
         onConfirm={async (memo) => {

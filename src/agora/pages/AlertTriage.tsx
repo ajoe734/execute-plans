@@ -37,7 +37,7 @@ export const AlertTriage = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.triage")} subtitle="Operator triage view. Acknowledge, comment, or escalate to incident." />
+      <PageHeader title={t("nav.triage")} subtitle={t("agora.alertTriage.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 space-y-3">
@@ -104,7 +104,7 @@ export const AlertTriage = () => {
                 <Textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Add a triage note (saved as alert_response)…"
+                  placeholder={t("agora.alertTriage.notePh")}
                   className="min-h-[80px] mb-3"
                 />
 

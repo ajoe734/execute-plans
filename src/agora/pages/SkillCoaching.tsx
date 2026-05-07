@@ -103,7 +103,7 @@ export const SkillCoaching = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.skillCoaching")} subtitle="Refine in-flight skill drafts. Each example becomes a training_example used by the trainer to fine-tune behavior." />
+      <PageHeader title={t("nav.skillCoaching")} subtitle={t("agora.skillCoaching.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-1 space-y-2">
@@ -161,8 +161,8 @@ export const SkillCoaching = () => {
               </div>
 
               <div className="border-t border-border mt-4 pt-4 space-y-2">
-                <Textarea value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder="New user prompt…" className="min-h-[60px]" />
-                <Textarea value={newExpected} onChange={(e) => setNewExpected(e.target.value)} placeholder="Expected response…" className="min-h-[60px]" />
+                <Textarea value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder={t("agora.skillCoaching.newPromptPh")} className="min-h-[60px]" />
+                <Textarea value={newExpected} onChange={(e) => setNewExpected(e.target.value)} placeholder={t("agora.skillCoaching.expectedPh")} className="min-h-[60px]" />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="outline" onClick={() => toast("Sent to draft preview")}><Send className="h-3 w-3 mr-1" />{t("agora.skillCoaching.testDraft")}</Button>
                   <Button size="sm" onClick={addExample}><Plus className="h-3 w-3 mr-1" />{t("agora.skillCoaching.addExample")}</Button>

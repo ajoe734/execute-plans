@@ -93,7 +93,7 @@ export const RankingFormulaDetail = () => {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Activate Ranking Formula — ${f.name}`}
-        description="Activating this formula will replace the current production ranking and may rebalance allocations."
+        description={t("detail.confirm.activateFormula")}
         actionId="ranking_formula.activate"
         confirmEntity={{ type: "formula", id: f.id }}
         target={{ type: "RankingFormula", id: f.id, name: f.name }}

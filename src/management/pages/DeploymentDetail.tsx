@@ -89,7 +89,7 @@ export const DeploymentDetail = () => {
                   <StatCard label="Previous" value={d.previousVersion ?? "—"} />
                   <StatCard label="Promoted" value={d.promotedAt ? new Date(d.promotedAt).toLocaleString() : "—"} />
                 </div>
-                <Section title="Linked objects">
+                <Section title={t("detail.section.linkedObjects")}>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <Field label="Strategy" value={
                       d.strategyId
@@ -138,7 +138,7 @@ export const DeploymentDetail = () => {
         open={promoteOpen}
         onOpenChange={setPromoteOpen}
         title={`Promote to Live — ${d.name}`}
-        description="Promotes this deployment to the LIVE environment. Generates an approval request that requires risk and ops sign-off."
+        description={t("detail.confirm.promoteLive")}
         confirmToken="PROMOTE"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }); toast.success("Promotion request submitted"); }}

@@ -87,7 +87,7 @@ export const EvolutionDetail = () => {
                   <StatCard label="Best Fitness" value={e.bestFitness.toFixed(3)} tone="success" />
                   <StatCard label="Progress" value={`${(e.progress * 100).toFixed(0)}%`} />
                 </div>
-                <Section title="Generation Progress">
+                <Section title={t("detail.section.generationProgress")}>
                   <Progress value={e.progress * 100} className="h-2" />
                 </Section>
                 <Section title={t("lifecycle.title")}>
@@ -200,7 +200,7 @@ export const EvolutionDetail = () => {
         open={stopOpen}
         onOpenChange={setStopOpen}
         title={`Stop Evolution Program — ${e.name}`}
-        description="Stopping will halt all running generations and discard in-flight candidates."
+        description={t("detail.confirm.stopEvolution")}
         confirmToken="STOP"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }); toast.success("Stop requested"); }}

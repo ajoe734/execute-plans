@@ -82,7 +82,7 @@ export const EvaluationSuites = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.eval")} subtitle="Regression suites for personas and skills. Failed cases gate publish workflows." />
+      <PageHeader title={t("nav.eval")} subtitle={t("agora.evaluations.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 space-y-2">

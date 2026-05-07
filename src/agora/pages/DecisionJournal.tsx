@@ -101,7 +101,7 @@ export const DecisionJournal = () => {
     <>
       <PageHeader
         title={t("nav.decisions")}
-        subtitle="Long-form record of judgment calls. Used to coach AI personas and reflect on operator skill."
+        subtitle={t("agora.decisionJournal.subtitle")}
         actions={!creating && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4 mr-1" />{t("agora.decisionJournal.newDecision")}</Button>}
       />
       <PageBody>
@@ -131,11 +131,11 @@ export const DecisionJournal = () => {
 
         {creating && (
           <Card className="p-4 space-y-3 border-accent/40">
-            <Input placeholder="Decision title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-            <Textarea placeholder="Context — what was happening?" value={draft.context} onChange={(e) => setDraft({ ...draft, context: e.target.value })} />
-            <Textarea placeholder="Decision — what did you do?" value={draft.decision} onChange={(e) => setDraft({ ...draft, decision: e.target.value })} />
-            <Textarea placeholder="Rationale — why?" value={draft.rationale} onChange={(e) => setDraft({ ...draft, rationale: e.target.value })} />
-            <Input placeholder="Tags (comma-separated)" value={draft.tags} onChange={(e) => setDraft({ ...draft, tags: e.target.value })} />
+            <Input placeholder={t("agora.decisionJournal.titlePh")} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+            <Textarea placeholder={t("agora.decisionJournal.contextPh")} value={draft.context} onChange={(e) => setDraft({ ...draft, context: e.target.value })} />
+            <Textarea placeholder={t("agora.decisionJournal.decisionPh")} value={draft.decision} onChange={(e) => setDraft({ ...draft, decision: e.target.value })} />
+            <Textarea placeholder={t("agora.decisionJournal.rationalePh")} value={draft.rationale} onChange={(e) => setDraft({ ...draft, rationale: e.target.value })} />
+            <Input placeholder={t("agora.decisionJournal.tagsPh")} value={draft.tags} onChange={(e) => setDraft({ ...draft, tags: e.target.value })} />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setCreating(false)}>{t("actions.cancel")}</Button>
               <Button onClick={save}>{t("actions.save")}</Button>
