@@ -70,7 +70,7 @@ export const LoopRunDrawer = ({ run, onClose }: Props) => {
         toast({ title: t(`v5.loops.execution.action.${kind}.ok`, { defaultValue: kind }) });
         if (kind === "pause") setReason("");
       } else {
-        toast({ title: t(`v5.loops.execution.action.${kind}.err`, { defaultValue: r.reason }), variant: "destructive" });
+        toast({ title: t(`v5.loops.execution.action.${kind}.err`, { defaultValue: "reason" in r ? r.reason : kind }), variant: "destructive" });
       }
     } finally { setBusy(false); }
   };
