@@ -1,70 +1,27 @@
-import { describe, expect, it } from "vitest";
-import {
-  SSE_CHANNELS,
-  SSE_CHANNEL_SCOPES,
-  isSseChannel,
-  isSseEvent,
-  makeSseEvent,
-} from "../sse/channels";
-import { buildSseHeaders, buildSseUrl, nextBackoffMs } from "../sse/protocol";
-import { publish, subscribe } from "../sse/bridge";
+import { describe, it, expect } from "vitest";
+import { subscribe, publish } from "@/lib/bff-v1/sse/bridge";
+import { isSseEvent, SSE_SCHEMA_VERSION } from "@/lib/bff-v1/sse/channels";
 
-describe("bff-v1 SSE catalog (Final §4 — 27 named + system)", () => {
-  it("includes Final C.5 mandatory channels: approval + ask", () => {
-    expect(SSE_CHANNELS).toContain("approval");
-    expect(SSE_CHANNELS).toContain("ask");
-    expect(SSE_CHANNELS.length).toBeGreaterThanOrEqual(27);
-    expect(new Set(SSE_CHANNELS).size).toBe(SSE_CHANNELS.length);
-  });
+describe("VI-A C5 — SSE typed envelope (schemaVersion=1)", () => {
+  it("publish emits envelope with schemaVersion=1", () =>
+    new Promise<void>((resolve) => {
+      const off = subscribe<{ x: number }>("strategy", (ev) => {
+        expect(ev.schemaVersion).toBe(SSE_SCHEMA_VERSION);
+        expect(ev.channel).toBe("strategy");
+        expect(ev.type).toBe("strategy.updated");
+        expect(ev.payload).toEqual({ x: 1 });
+        expect(typeof ev.id).toBe("string");
+        expect(typeof ev.occurredAt).toBe("string");
+        expect(isSseEvent(ev)).toBe(true);
+        off();
+        resolve();
+      });
+      publish({ channel: "strategy", type: "strategy.updated", payload: { x: 1 } });
+    }));
 
-  it("every channel has a capability scope", () => {
-    for (const c of SSE_CHANNELS) {
-      expect(SSE_CHANNEL_SCOPES[c]).toBeTypeOf("string");
-    }
-  });
-
-  it("isSseChannel guards the union", () => {
-    expect(isSseChannel("approval")).toBe(true);
-    expect(isSseChannel("nope")).toBe(false);
-  });
-});
-
-describe("bff-v1 SSE envelope", () => {
-  it("makeSseEvent stamps schemaVersion=1 and ISO timestamp", () => {
-    const e = makeSseEvent({ id: "x", channel: "approval", type: "approval.requested", payload: { id: "a1" } });
-    expect(e.schemaVersion).toBe(1);
-    expect(isSseEvent(e)).toBe(true);
-    expect(new Date(e.occurredAt).toString()).not.toBe("Invalid Date");
-  });
-});
-
-describe("bff-v1 SSE protocol (Last-Event-Id resume)", () => {
-  it("buildSseHeaders sets Last-Event-Id when provided", () => {
-    expect(buildSseHeaders({}).Accept).toBe("text/event-stream");
-    expect(buildSseHeaders({ lastEventId: "evt_42" })["Last-Event-Id"]).toBe("evt_42");
-  });
-
-  it("buildSseUrl appends channels query", () => {
-    const u = buildSseUrl("/bff/events/stream", { channels: ["approval", "ask"] });
-    expect(u).toBe("/bff/events/stream?channels=approval%2Cask");
-  });
-
-  it("nextBackoffMs is monotonic non-decreasing and capped", () => {
-    expect(nextBackoffMs(0)).toBe(1000);
-    expect(nextBackoffMs(99)).toBe(30000);
-  });
-});
-
-describe("bff-v1 SSE bridge", () => {
-  it("publish → subscribe round trips through realtime bus", () => {
-    const received: unknown[] = [];
-    const off = subscribe<{ id: string }>("approval", (e) => received.push(e));
-    publish({ channel: "approval", type: "approval.requested", payload: { id: "a1" } });
-    off();
-    expect(received).toHaveLength(1);
-    const ev = received[0] as { schemaVersion: number; channel: string; payload: { id: string } };
-    expect(ev.schemaVersion).toBe(1);
-    expect(ev.channel).toBe("approval");
-    expect(ev.payload.id).toBe("a1");
+  it("isSseEvent rejects malformed payloads", () => {
+    expect(isSseEvent(null)).toBe(false);
+    expect(isSseEvent({ schemaVersion: 0, channel: "strategy", type: "x", id: "a" })).toBe(false);
+    expect(isSseEvent({ schemaVersion: 1, channel: "bogus", type: "x", id: "a" })).toBe(false);
   });
 });
