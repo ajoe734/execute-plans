@@ -1,40 +1,52 @@
-# BFF Contract v1 — Freeze & Commit Plan
+# Batch V — v1 BFF Contract Frontend Wiring
 
-## Goal
-把驗證通過的 4 份 BFF handoff 檔案落入 repo、標記為 FROZEN，並把 3 個 nice-to-have 登記到 H 版 follow-up backlog。
+Implement the typed client layer that conforms to the FROZEN v1 BFF contract (`.lovable/feedback/2026-05-07-final/` 4-file bundle). Adds a new `src/lib/bff-v1/` namespace alongside existing `src/lib/bff/` mocks; does NOT rip out current call sites.
 
-## Actions
+## Scope
 
-### 1. Commit handoff bundle to repo
-Copy 4 uploaded files into `.lovable/feedback/2026-05-07-final/`：
-- `Pantheon_BFF_OpenAPI_3_1.yaml`
-- `Pantheon_BFF_AsyncAPI_SSE.md`
-- `Pantheon_BFF_DTO_Catalog.md`
-- `Pantheon_BFF_Backend_Handoff.md`
+### 1. New `src/lib/bff-v1/` module
+- **`dto.ts`** — TS interfaces mirroring DTO Catalog (9 core + 9 v5/Agora). Includes `CommandResponse<T>` (with required `data`), `ListEnvelope<T>`, `RedactedEvidenceRef`, `EvidenceKind`, action descriptors, status enums.
+- **`errors.ts`** — `BffErrorEnvelope`, `ErrorCode` union (re-export from `src/lib/v4/errorCodes.ts` + add v1-only codes), `BffError` class for throwing typed errors. Maps 428 → `CONFIRM_TOKEN_REQUIRED` / `APPROVAL_REQUIRED`, 409 → `STATE_CONFLICT` / `IDEMPOTENCY_CONFLICT`.
+- **`headers.ts`** — Helpers: `idempotencyKey()`, `acceptLanguage()` (reuse platform locale), `xRequestId()`, `ifMatch(version)`, plus stub `xBffApiVersion()` flagged H-backlog.
+- **`paths.ts`** — Typed path builders for the 94 OpenAPI endpoints (grouped by resource: strategies, personas, capitalPools, rebalances, deployments, evolution, approvals, commands, sse, agora, v5).
+- **`sse/channels.ts`** — Discriminated union for the 28 SSE channels per AsyncAPI doc; `SseEvent<K>` envelope with `id`, `channel`, `ts`, `payload`. Includes new `approval.*` and `ask.*` channels.
+- **`sse/protocol.ts`** — `Last-Event-Id` resume contract, heartbeat interval, `resync_required` handling.
 
-並同步鏡像到 `/mnt/documents/` 方便下載。
+### 2. `src/lib/bff-v1/client.ts`
+- `fetch` wrapper with mode switch via `import.meta.env.VITE_BFF_MODE` (`mock` default, `live`).
+- Auto-injects required headers on mutations (Idempotency-Key, X-Request-Id, If-Match, Accept-Language).
+- Parses `BffErrorEnvelope` and throws `BffError` (preserves `correlationId`, `retryable`, `userActionable`, `i18nKey`).
+- In `mock` mode delegates to adapter layer (step 3); in `live` mode hits real BFF base URL.
 
-### 2. Update `.lovable/feedback/2026-05-07-final/INDEX.md`
-- Status: `CANDIDATE FINAL` → **`FROZEN — v1 BFF Contract`**
-- 列出 4 份 handoff 檔案 + 結構驗證結果（94 paths / 102 schemas / 28 SSE channels / C.1–C.8 全綠）
-- 附「H 版 follow-up」section 指向新建 backlog 檔
+### 3. Mock adapters `src/lib/bff-v1/mocks/`
+- Thin shims that wrap existing `src/lib/bff/client.ts` outputs into v1 wire shapes:
+  - lists → `ListEnvelope<T>` (cursor pagination)
+  - mutations → `CommandResponse<T>` with `status: 'accepted' | 'queued' | 'completed'`
+  - high-risk paths return 428 `BffErrorEnvelope` with `requires_confirm_token` / `requires_approval`
+- Reuses `src/lib/bff/writeOverlay.ts` (30min TTL) — no seed writes.
 
-### 3. Create `.lovable/feedback/2026-05-07-final/H_VERSION_BACKLOG.md`
-登記 3 條非阻塞 follow-up：
-1. `X-BFF-Api-Version` global header（OpenAPI servers / parameters）
-2. Pack D D21 ErrorCode master 補 `RESOURCE_NOT_FOUND`
-3. OpenAPI 抽出 named `ActionCommandStatus` schema 對齊 DTO Catalog
+### 4. SSE bridge `src/lib/bff-v1/sse/bridge.ts`
+- Adapts existing `realtime` bus events → v1 `SseEvent` envelopes on the 28 channels.
+- Exposes `subscribe(channel, handler)` API.
 
-### 4. Update `mem://index.md` Core
-把 BFF handoff source 從 single Final.md 改為 4-file bundle，狀態改 `FROZEN v1`。
+### 5. Tests `src/lib/bff-v1/__tests__/`
+- `envelope.test.ts` — `CommandResponse.data` required; error envelope shape; 428/409 mapping.
+- `headers.test.ts` — Idempotency-Key injection on mutations only; Accept-Language follows locale.
+- `sse.test.ts` — Channel discriminated union; Last-Event-Id resume.
+- `paths.test.ts` — Spot-check 10 representative path builders.
 
-## Out of scope
-- 任何 `src/` code 改動（留 Pack D Batch V）
-- Pack D 7 份 canonical contract 修改（留 H 版）
-- 真實 BFF client 實作
+### 6. Memory
+- Create `mem://features/bff-v1-client` — describes module layout, mode flag, mock-vs-live boundary.
+- Update `mem://index.md` Core — add line: `v1 BFF client at src/lib/bff-v1/; VITE_BFF_MODE=mock|live; existing src/lib/bff/ remains until call sites migrate.`
+
+## Out of scope (later batches)
+- Migrating existing `bff.*` call sites to `bffV1.*` (Batch VI).
+- Real backend wiring / network code beyond the fetch wrapper skeleton.
+- H-version follow-ups (X-BFF-Api-Version enforcement, RESOURCE_NOT_FOUND, named `ActionCommandStatus`) — tracked in `H_VERSION_BACKLOG.md`.
+- Pack D 7 canonical contract edits.
 
 ## Acceptance
-- 4 份檔案在 repo `.lovable/feedback/2026-05-07-final/` 可見
-- INDEX 標 FROZEN
-- H_VERSION_BACKLOG.md 存在且列 3 項
-- memory index Core 更新
+- `src/lib/bff-v1/` compiles, exports typed `bffV1` client.
+- New tests green; existing 268 tests stay green.
+- `VITE_BFF_MODE=mock` (default) routes through adapters; `live` skeleton present but unused.
+- Memory updated.
