@@ -9,7 +9,7 @@
 // Existing detail pages keep calling `runActionSafe(...)` and `bff.commands.*`;
 // they auto-inherit these guarantees because both delegate here.
 
-import { bff } from "./_legacy/client";
+import { bff } from "./seed";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
 import type { CommandResponse, ActionCommandResponseData } from "./dto";
 import { idempotencyKey as mintIdemKey } from "./headers";
