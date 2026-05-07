@@ -171,6 +171,7 @@ export const ExecutionLoopPage = () => {
             : <div className="text-sm text-muted-foreground">{t("common.loading")}</div>}
         </div>
       </PageBody>
+      <LoopRunDrawer run={activeRun} onClose={closeRun} />
     </>
   );
 };
