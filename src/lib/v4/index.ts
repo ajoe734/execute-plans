@@ -96,3 +96,23 @@ export type {
   SseEventEnvelope,
   SseChannelKind,
 } from "./sseEnvelope";
+
+// Pack D Batch IV additions (provisional v0-mock)
+export {
+  newUuid,
+  newCorrelationId,
+  newCausationFromEvent,
+  deriveChild,
+  rootCorrelation,
+} from "./correlation";
+export type { CorrelationFields } from "./correlation";
+export { assessBreach } from "./capitalBreach";
+export type { BreachLevel, BreachInputs, BreachAssessment } from "./capitalBreach";
+export {
+  ASYNC_TRANSITION_DEFAULTS,
+  findTransition,
+  transitionTimeoutFor,
+} from "./asyncTransitions";
+export type { AsyncTransitionDescriptor, FailureReasonCode } from "./asyncTransitions";
+export { METRIC_REGISTRY, findMetric } from "./metricRegistry";
+export type { MetricDef, MetricUnit } from "./metricRegistry";
