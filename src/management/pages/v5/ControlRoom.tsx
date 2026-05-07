@@ -109,13 +109,15 @@ const LoopLane = ({ kind, runs, route }: { kind: LoopKind; runs: LoopRun[]; rout
       <ul className="space-y-1.5">
         {sub.slice(0, 4).map((r) => (
           <li key={r.id} className="text-xs border-b border-border last:border-0 pb-1.5 last:pb-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium truncate">{r.subjectName ?? r.id}</span>
-              <Badge variant="outline" className={loopStatusTone(r.status)}>{r.status}</Badge>
-            </div>
-            <div className="text-muted-foreground truncate mt-0.5">
-              {t("v5.col.next")}: {r.nextAction?.label ?? r.nextAction?.kind ?? "—"}
-            </div>
+            <Link to={`${route}?run=${encodeURIComponent(r.id)}`} className="block hover:bg-muted/40 rounded px-1 -mx-1 py-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium truncate">{r.subjectName ?? r.id}</span>
+                <Badge variant="outline" className={loopStatusTone(r.status)}>{r.status}</Badge>
+              </div>
+              <div className="text-muted-foreground truncate mt-0.5">
+                {t("v5.col.next")}: {r.nextAction?.label ?? r.nextAction?.kind ?? "—"}
+              </div>
+            </Link>
           </li>
         ))}
         {sub.length === 0 && (

@@ -2,7 +2,7 @@
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
 // Timeout policy uses v0-mock (Q12) until D05 lands.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
@@ -12,7 +12,8 @@ import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { PersonaHealthMatrix } from "./PersonaHealthMatrix";
-import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "@/lib/v5";
+import { LoopRunDrawer } from "./LoopRunDrawer";
+import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION, type LoopRun } from "@/lib/v5";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,12 +38,14 @@ const stageDotCls: Record<string, string> = {
 
 export const ExecutionLoopPage = () => {
   const t = useT();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const focus = params.get("focus"); // "personas" | "strategies" | "deployments" | "capital"
+  const runParam = params.get("run");
   const personasRef = useRef<HTMLDivElement | null>(null);
   const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => bff.v5.loops.list("execution"));
   const personas = useV5Live(() => bff.v5.personas.health());
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -51,7 +54,30 @@ export const ExecutionLoopPage = () => {
     }
   }, [focus]);
 
+  // Deep-link sync: ?run=<id>
+  useEffect(() => {
+    if (runParam && runParam !== activeRunId) setActiveRunId(runParam);
+    else if (!runParam && activeRunId) setActiveRunId(null);
+  }, [runParam, activeRunId]);
+
   const items = runs.data?.items ?? [];
+  const activeRun: LoopRun | null = useMemo(
+    () => items.find((r) => r.id === activeRunId) ?? null,
+    [items, activeRunId],
+  );
+  const openRun = (id: string) => {
+    setActiveRunId(id);
+    const next = new URLSearchParams(params);
+    next.set("run", id);
+    setParams(next, { replace: true });
+  };
+  const closeRun = () => {
+    setActiveRunId(null);
+    const next = new URLSearchParams(params);
+    next.delete("run");
+    setParams(next, { replace: true });
+  };
+
   const running = items.filter((r) => r.status === "running").length;
   const blocked = items.filter((r) => r.status === "blocked").length;
   const failed = items.filter((r) => r.status === "failed").length;
@@ -90,7 +116,14 @@ export const ExecutionLoopPage = () => {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id} className="border-t border-border">
+                <tr
+                  key={r.id}
+                  className={`border-t border-border cursor-pointer hover:bg-muted/40 ${activeRunId === r.id ? "bg-primary/5" : ""}`}
+                  onClick={() => openRun(r.id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id); } }}
+                  aria-label={t("v5.loops.execution.openRun", { defaultValue: "Open run details" })}
+                >
                   <td className="px-3 py-2">
                     <div className="font-medium">{r.subjectName ?? r.id}</div>
                     <div className="text-xs text-muted-foreground">{r.triggeredBy}</div>
@@ -138,6 +171,7 @@ export const ExecutionLoopPage = () => {
             : <div className="text-sm text-muted-foreground">{t("common.loading")}</div>}
         </div>
       </PageBody>
+      <LoopRunDrawer run={activeRun} onClose={closeRun} />
     </>
   );
 };
