@@ -1,14 +1,12 @@
-/**
- * @deprecated Batch VII — Use `tryRunAction` / `runActionV1` from `@/lib/bff-v1`.
- * Kept for in-flight migration; see `.lovable/audits/batch-vii-migration.md`.
- */
-// VI-2 — UI wrapper around the v1 mutations seam.
-//   1. Auto-stamps correlationId + idempotencyKey at the seam (writes.ts).
+// BFF Contract v1 — toast-aware mutation wrapper (canonical surface).
+//
+// `runActionSafe` is the UI-facing wrapper around `tryRunAction` (writes.ts):
+//   1. Auto-stamps correlationId + idempotencyKey at the seam.
 //   2. Surfaces illegal_transition / state_conflict via toast.error.
 //   3. Keeps the typed legacy MutationResult for callers that need it.
 //
-// Use this in any component that previously called bff.mutations.runAction
-// directly. Identical signature; behaviour upgraded.
+// Use this in any component that mutates state. For result-style call sites
+// (no toast, custom UI), import `tryRunAction` from `@/lib/bff-v1` directly.
 
 import { toast } from "sonner";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";

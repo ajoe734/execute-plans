@@ -102,3 +102,16 @@ names directly:
 cycle so any in-flight branch keeps compiling. Once the v1 typed surface
 covers each entity, swap call sites to `bffV1.*` / `useLiveListV1` /
 `tryRunAction`. Tests: 323 green.
+
+## B1i — canonical surface promotion (2026-05-07)
+
+`src/lib/bff-v1/_legacy/` directory removed. Files promoted to canonical
+v1 surface:
+- `_legacy/client.ts` → `seed.ts` (mock seed accessor; exports `bff`)
+- `_legacy/runAction.ts` → `runActionSafe.ts`
+- `_legacy/useLiveList.ts` → `useLiveList.ts`
+
+`@deprecated` headers replaced with canonical-surface docs. `legacy.ts`
+keeps `legacy*` aliases as @deprecated re-exports for one cycle. No call
+site changes required (everything imports from `@/lib/bff-v1`). Tests:
+323 green; tsc clean.

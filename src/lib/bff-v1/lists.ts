@@ -7,7 +7,7 @@
 // legacy `bff.*` until VI-2 / VI-3.
 // C6 (spec-conflict-G): totalCountExact rules now follow D22 matrix per entity.
 
-import { bff } from "./_legacy/client";
+import { bff } from "./seed";
 import type { ListEnvelope } from "./dto";
 import type { BaseObject } from "@/lib/bff/types";
 
