@@ -1,0 +1,73 @@
+import { describe, it, expect } from "vitest";
+import { runAction, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
+import { BffError } from "@/lib/bff-v1";
+
+describe("VI-2 writes seam", () => {
+  it("runAction returns CommandResponse envelope with correlationId + idempotencyKey", async () => {
+    const env = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" });
+    expect(env.ok).toBe(true);
+    expect(env.data.status).toBe("completed");
+    expect(env.data.actionId).toMatch(/^au_/);
+    expect(env.correlationId).toMatch(/^corr_/);
+    expect(env.idempotencyKey).toMatch(/^idk_/);
+    expect(env.auditEventId).toBe(env.data.actionId);
+  });
+
+  it("preserves caller-supplied correlationId + idempotencyKey", async () => {
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_001", action: "noop" },
+      { correlationId: "corr_test_xyz", idempotencyKey: "idk_test_xyz" },
+    );
+    expect(env.correlationId).toBe("corr_test_xyz");
+    expect(env.idempotencyKey).toBe("idk_test_xyz");
+  });
+
+  it("audit event carries correlationId + idempotencyKey", async () => {
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_001", action: "noop" },
+      { correlationId: "corr_audit_chk", idempotencyKey: "idk_audit_chk" },
+    );
+    expect(env.legacy.audit.correlationId).toBe("corr_audit_chk");
+    expect(env.legacy.audit.idempotencyKey).toBe("idk_audit_chk");
+  });
+
+  it("idempotent replay returns same audit id", async () => {
+    const key = `idk_replay_${Date.now()}`;
+    const a = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" }, { idempotencyKey: key });
+    const b = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" }, { idempotencyKey: key });
+    expect(b.legacy.audit.id).toBe(a.legacy.audit.id);
+  });
+
+  it("tryRunAction returns Result without throwing", async () => {
+    const r = await tryRunAction({ kind: "Strategy", id: "stg_001", action: "noop" });
+    expect(r.ok).toBe(true);
+  });
+
+  it("requestConfirmToken issues an envelope with TTL data", async () => {
+    const env = await requestConfirmToken({
+      actionId: "strategy.deploy_live",
+      entityType: "strategy",
+      entityId: "stg_001",
+      payloadHash: "mock",
+      tradingEnvironment: "live",
+      platformEnvironment: "production",
+    });
+    expect(env.ok).toBe(true);
+    expect(env.data.confirmToken).toBeTruthy();
+    expect(env.data.requiredPhrase).toBeTruthy();
+    expect(env.correlationId).toMatch(/^corr_/);
+  });
+
+  it("requestConfirmToken throws BffError for unknown action", async () => {
+    await expect(
+      requestConfirmToken({
+        actionId: "unknown.bogus_action",
+        entityType: "strategy",
+        entityId: "x",
+        payloadHash: "mock",
+        tradingEnvironment: "live",
+        platformEnvironment: "production",
+      }),
+    ).rejects.toBeInstanceOf(BffError);
+  });
+});
