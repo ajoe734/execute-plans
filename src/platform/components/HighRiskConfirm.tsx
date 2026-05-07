@@ -24,7 +24,7 @@ import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { RiskLevel } from "@/lib/bff/types";
-import { bff } from "@/lib/bff/client";
+import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 
 export interface AffectedRefs {
@@ -112,7 +112,7 @@ export const HighRiskConfirm = ({
     setIssuing(true);
     const entityType = confirmEntity?.type ?? target?.type ?? "entity";
     const entityId = confirmEntity?.id ?? target?.id ?? "—";
-    bff.commands.requestConfirmToken(
+    requestConfirmTokenV1(
       {
         actionId: actionId!,
         entityType,
@@ -124,11 +124,9 @@ export const HighRiskConfirm = ({
       { [`${entityType}Id`]: entityId },
     ).then((r) => {
       if (myReq !== reqIdRef.current) return;
-      if (r.ok) {
-        setIssuedToken(r.response.confirmToken);
-        setRequiredPhrase(r.response.requiredPhrase);
-        setExpiresAt(Date.parse(r.response.expiresAt));
-      }
+      setIssuedToken(r.data.confirmToken);
+      setRequiredPhrase(r.data.requiredPhrase);
+      setExpiresAt(Date.parse(r.data.expiresAt));
       setIssuing(false);
     }).catch(() => setIssuing(false));
   }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);

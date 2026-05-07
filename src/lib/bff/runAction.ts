@@ -1,20 +1,20 @@
-// Phase 14/15 — UI wrapper around bff.mutations.runAction that:
-//   1. surfaces illegal_transition rejections via toast.error
-//   2. keeps the typed MutationResult for callers that need it
+// VI-2 — UI wrapper around the v1 mutations seam.
+//   1. Auto-stamps correlationId + idempotencyKey at the seam (writes.ts).
+//   2. Surfaces illegal_transition / state_conflict via toast.error.
+//   3. Keeps the typed legacy MutationResult for callers that need it.
 //
 // Use this in any component that previously called bff.mutations.runAction
-// directly, so users get consistent feedback when a state-machine guard fires
-// or when a mutation lands.
+// directly. Identical signature; behaviour upgraded.
 
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
+import { tryRunAction, type RunActionV1Options } from "@/lib/bff-v1";
 import i18n from "@/i18n";
 
 const ttl = (key: string, fallback: string) =>
   i18n.exists(key) ? i18n.t(key) : fallback;
 
-export interface RunActionSafeOpts {
+export interface RunActionSafeOpts extends RunActionV1Options {
   /** Suppress the success toast (rejection toasts are always shown). */
   silent?: boolean;
   /** Override the success toast title. */
@@ -27,19 +27,38 @@ export async function runActionSafe(
   input: RunActionInput,
   opts: RunActionSafeOpts = {},
 ): Promise<MutationResult> {
-  const result = await bff.mutations.runAction(input);
-  if (!result.ok && result.rejected === "illegal_transition") {
-    toast.error(ttl("toast.illegalTransition", "Illegal state transition"), {
-      description: `${input.kind} · ${input.action}`,
-    });
-  } else if (!result.ok) {
-    toast.error(ttl("toast.failed", "Action failed"), {
-      description: result.message,
-    });
-  } else if (!opts.silent) {
-    toast.success(opts.successTitle ?? ttl("toast.actionApplied", "Action applied"), {
-      description: opts.successDescription ?? `${input.kind} · ${input.action}`,
+  const { silent, successTitle, successDescription, ...v1opts } = opts;
+  const r = await tryRunAction(input, v1opts);
+  if (!r.ok) {
+    const isIllegal = r.error.details?.reason === "illegal_transition";
+    toast.error(
+      isIllegal
+        ? ttl("toast.illegalTransition", "Illegal state transition")
+        : ttl("toast.failed", "Action failed"),
+      { description: isIllegal ? `${input.kind} · ${input.action}` : r.error.message },
+    );
+    // Preserve the legacy MutationResult contract for callers.
+    // Reconstruct from the error so existing checks (.ok / .rejected) keep working.
+    return {
+      ok: false,
+      audit: {
+        id: "au_failed",
+        actor: "—",
+        action: `${input.kind.toLowerCase()}.${input.action}`,
+        target: input.id,
+        ts: new Date().toISOString(),
+        outcome: "rejected",
+        correlationId: r.error.correlationId,
+      },
+      message: r.error.message,
+      rejected: isIllegal ? "illegal_transition" : (r.error.details?.reason as MutationResult["rejected"]),
+      correlationId: r.error.correlationId,
+    };
+  }
+  if (!silent) {
+    toast.success(successTitle ?? ttl("toast.actionApplied", "Action applied"), {
+      description: successDescription ?? `${input.kind} · ${input.action}`,
     });
   }
-  return result;
+  return r.envelope.legacy;
 }
