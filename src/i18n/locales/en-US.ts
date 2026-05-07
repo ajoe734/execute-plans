@@ -966,6 +966,8 @@ export default {
   },
   agora: {
     alertTriage: {
+      subtitle: "Operator triage view. Acknowledge, comment, or escalate to incident.",
+      notePh: "Add a triage note (saved as alert_response)…",
       allClear: "All clear.",
       suggestedAction: "Suggested Action",
       escalate: "Escalate",
@@ -973,11 +975,17 @@ export default {
       noAlertSelected: "No alert selected.",
     },
     askPersonas: {
+      subtitle: "Single or multi-persona committee",
+      attachPh: "Attach signal id, strategy id, or note id… e.g. sig_4421",
+      askPh: "Ask anything…",
       personas: "Personas",
       committeeMode: "Committee mode",
       hint: "Start a conversation. Pantheon will capture each response into your decision context.",
     },
     decisionJournal: {
+      subtitle: "Long-form record of judgment calls. Used to coach AI personas and reflect on operator skill.",
+      titlePh: "Decision title", contextPh: "Context — what was happening?", decisionPh: "Decision — what did you do?",
+      rationalePh: "Rationale — why?", tagsPh: "Tags (comma-separated)",
       newDecision: "New decision",
       context: "Context",
       decision: "Decision",

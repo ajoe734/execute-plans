@@ -951,6 +951,8 @@ export default {
   },
   agora: {
     alertTriage: {
+      subtitle: "操作員告警處理檢視：確認、留言或升級為事件。",
+      notePh: "新增處理備註（會儲存為 alert_response）…",
       allClear: "目前無告警。",
       suggestedAction: "建議動作",
       escalate: "升級",
@@ -958,11 +960,17 @@ export default {
       noAlertSelected: "尚未選擇告警。",
     },
     askPersonas: {
+      subtitle: "單一或多 Persona 委員會",
+      attachPh: "附加 signal id、strategy id 或 note id… 例如 sig_4421",
+      askPh: "請輸入問題…",
       personas: "Persona 列表",
       committeeMode: "委員會模式",
       hint: "開始對話，Pantheon 會把每則回覆收進你的決策脈絡。",
     },
     decisionJournal: {
+      subtitle: "判斷決策的長文紀錄，用於指導 AI Persona 與檢視操作員技能。",
+      titlePh: "決策標題", contextPh: "情境 — 當時發生什麼？", decisionPh: "決策 — 你做了什麼？",
+      rationalePh: "理由 — 為什麼？", tagsPh: "標籤（逗號分隔）",
       newDecision: "新增決策",
       context: "脈絡",
       decision: "決策",
