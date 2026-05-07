@@ -7,6 +7,8 @@ import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDr
 import { ROUTE_LABELS, lookupRouteLabel, buildBreadcrumb } from "@/lib/v4/routeLabels";
 import enUS from "@/i18n/locales/en-US";
 
+void i18n.changeLanguage("en-US");
+
 const W = ({ children }: { children: React.ReactNode }) => (
   <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
 );
