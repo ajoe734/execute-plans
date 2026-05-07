@@ -216,6 +216,10 @@ export interface AuditEvent {
   after?: string;
   /** Phase 15 — outcome of the mutation; "rejected" written when guard blocked it. */
   outcome?: "ok" | "rejected";
+  /** Pack D D60 / VI-2 — correlationId chain id stamped by the v1 mutations seam. */
+  correlationId?: string;
+  /** VI-2 — idempotency key (when caller supplied one or the seam minted one). */
+  idempotencyKey?: string;
 }
 
 export interface SearchResult {
