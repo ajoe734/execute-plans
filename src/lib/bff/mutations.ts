@@ -200,6 +200,10 @@ export const mutations = {
     const col = SEED_COLLECTIONS[kind];
     const obj = col ? findById(col, id) as { state?: string; lockVersion?: number; lifecycleStatus?: string; reviewStatus?: string; deploymentStatus?: string } | undefined : undefined;
     const before = snap(obj);
+    // VI-2 — every mutation carries a correlationId chain; seam mints when caller omits.
+    const correlationId = input.correlationId ?? `corr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const idempotencyKey = input.idempotencyKey;
+    const auditExtras = { correlationId, idempotencyKey };
 
     // Pack C C028 — idempotency-key replay (same key returns prior result within 24h).
     if (input.idempotencyKey) {
@@ -212,20 +216,21 @@ export const mutations = {
       const audit = pushAudit(
         `${kind.toLowerCase()}.optimistic_lock_failed`, id,
         `expected v${input.expectedVersion}, actual v${obj.lockVersion}`,
-        { before, outcome: "rejected" },
+        { before, outcome: "rejected", ...auditExtras },
       );
       const errorCode: ErrorCode = "STATE_CONFLICT";
       const result: MutationResult = { ok: false, audit, rejected: "state_conflict",
-        message: `${errorCode}: expected v${input.expectedVersion}, got v${obj.lockVersion}` };
+        message: `${errorCode}: expected v${input.expectedVersion}, got v${obj.lockVersion}`,
+        correlationId, idempotencyKey };
       return delay(result);
     }
     const guard = validateTransition(kind, id, action, newState);
     if (guard.ok === false) {
       const audit = pushAudit(
         `${kind.toLowerCase()}.illegal_transition`, id, `${action}: ${guard.reason}`,
-        { before, outcome: "rejected" },
+        { before, outcome: "rejected", ...auditExtras },
       );
-      const result: MutationResult = { ok: false, audit, rejected: "illegal_transition", message: guard.reason };
+      const result: MutationResult = { ok: false, audit, rejected: "illegal_transition", message: guard.reason, correlationId, idempotencyKey };
       if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
       return delay(result);
     }
@@ -245,9 +250,9 @@ export const mutations = {
       if (violation) {
         const audit = pushAudit(
           "strategy.invariant_violation", id, violation,
-          { before, after: snap(obj), outcome: "rejected" },
+          { before, after: snap(obj), outcome: "rejected", ...auditExtras },
         );
-        const result: MutationResult = { ok: false, audit, rejected: "invariant_violation", message: violation };
+        const result: MutationResult = { ok: false, audit, rejected: "invariant_violation", message: violation, correlationId, idempotencyKey };
         if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
         return delay(result);
       }
@@ -256,11 +261,14 @@ export const mutations = {
     if (obj && guard.resolvedState !== undefined) {
       obj.lockVersion = (obj.lockVersion ?? 0) + 1;
     }
+    const memoWithToken = input.confirmToken
+      ? `${memo ?? ""}${memo ? " · " : ""}token=${input.confirmToken.slice(0, 12)}…`
+      : memo;
     const audit = pushAudit(
-      `${kind.toLowerCase()}.${action}`, id, memo,
-      { before, after: snap(obj), outcome: "ok" },
+      `${kind.toLowerCase()}.${action}`, id, memoWithToken,
+      { before, after: snap(obj), outcome: "ok", ...auditExtras },
     );
-    const result: MutationResult = { ok: true, audit, message: `${action} applied` };
+    const result: MutationResult = { ok: true, audit, message: `${action} applied`, correlationId, idempotencyKey };
     if (input.idempotencyKey) idempotencyRemember(input.idempotencyKey, result);
     return delay(result);
   },
