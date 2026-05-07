@@ -2,7 +2,7 @@
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
 // Timeout policy uses v0-mock (Q12) until D05 lands.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
@@ -12,7 +12,8 @@ import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { PersonaHealthMatrix } from "./PersonaHealthMatrix";
-import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "@/lib/v5";
+import { LoopRunDrawer } from "./LoopRunDrawer";
+import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION, type LoopRun } from "@/lib/v5";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
