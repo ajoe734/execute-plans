@@ -28,15 +28,15 @@ describe("Pack D Batch III — listEnvelope", () => {
 
   it("rejects unknown cursor with CURSOR_EXPIRED", () => {
     const r = paginate([1, 2, 3], { cursor: "cur_bogus" });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("CURSOR_EXPIRED");
+    if (r.ok) throw new Error("expected failure");
+    expect(r.code).toBe("CURSOR_EXPIRED");
   });
 
   it("invalidates cursor when filterHash mismatches", () => {
     const c = issueCursor(5, "hashA");
     const read = readCursor(c, "hashB");
-    expect(read.ok).toBe(false);
-    if (!read.ok) expect(read.code).toBe("CURSOR_INVALID");
+    if (read.ok) throw new Error("expected failure");
+    expect(read.code).toBe("CURSOR_INVALID");
   });
 
   it("non-exact list omits estimatedTotal", () => {
