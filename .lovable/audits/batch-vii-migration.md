@@ -1,0 +1,89 @@
+# Batch VII — Legacy `src/lib/bff/` Migration Plan
+
+**Status:** Soft-deprecation phase (2026-05-07).
+**Goal:** Reduce direct `@/lib/bff/client`, `@/lib/bff/runAction`, `@/lib/useLiveList` imports to zero outside `src/lib/bff-v1/`.
+
+## Deprecation Strategy
+
+1. **Soft layer (this batch — DONE)**
+   - `src/lib/bff-v1/legacy.ts` re-exports `bff`, `runActionSafe`, `useLiveList` as `legacy*` symbols.
+   - JSDoc `@deprecated` tags on `src/lib/bff/client.ts`, `runAction.ts`, `useLiveList.ts`.
+   - This audit file lists every call site to migrate.
+   - **No behavioral change.** All 311 tests stay green.
+
+2. **Hard migration (later batches)**
+   - Migrate by feature area (Platform → Management detail → Agora → Studios).
+   - Each batch must keep the test suite green and resolve any regressions before merging.
+   - When the count below reaches 0, delete `legacy.ts` and the deprecated files.
+
+## Call-site inventory (94 files, snapshot 2026-05-07)
+
+### Platform shell (4) — **Migrate first** (small surface, high traffic)
+- `src/platform/components/TopBar.tsx`
+- `src/platform/components/NotificationCenter.tsx`
+- `src/platform/components/CommandPalette.tsx`
+- `src/platform/components/JobProgressDrawer.tsx`
+- `src/platform/components/RealtimeStatusBadge.tsx`
+- `src/platform/components/RightDrawer.tsx`
+- `src/platform/pages/QAChecklist.tsx`
+
+### Management detail panels (~35)
+- All files under `src/management/components/detail/*.tsx`
+- All files under `src/management/components/governance/*.tsx`
+
+### Management pages (~25)
+- All files under `src/management/pages/**/*.tsx` that touch `bff.*`
+
+### Agora pages (10)
+- All files under `src/agora/pages/*.tsx`
+
+### Studios (6)
+- `src/management/pages/studios/*.tsx`
+
+### v5 surface (5)
+- `src/management/pages/v5/*.tsx`
+
+### Tests (3) — leave for last; migrate when contract diff is zero
+- `src/lib/v4/__tests__/batch-iii.test.ts`
+- `src/lib/v4/h1-wiring.test.ts`
+- `src/lib/v5/__tests__/bff.test.ts`
+
+## Migration recipe (per file)
+
+```ts
+// Before
+import { bff } from "@/lib/bff/client";
+const rows = await bff.strategies.list();
+
+// After (Phase 1 — typed read)
+import { bffV1 } from "@/lib/bff-v1";
+const env = await bffV1.lists.list("strategies", { limit: 50 });
+const rows = env.items;
+```
+
+```ts
+// Before
+import { runActionSafe } from "@/lib/bff/runAction";
+
+// After
+import { tryRunAction } from "@/lib/bff-v1";
+const r = await tryRunAction({ kind, id, action }, { confirmToken });
+```
+
+```ts
+// Before
+import { useLiveList } from "@/lib/useLiveList";
+
+// After
+import { useLiveListV1 } from "@/lib/bff-v1";
+const { rows, pending, refresh } = useLiveListV1("strategies", ["strategy"]);
+```
+
+## Lint guidance
+
+Until ESLint rule lands, treat any new import of:
+- `@/lib/bff/client`
+- `@/lib/bff/runAction`
+- `@/lib/useLiveList`
+
+…in code review as a blocker. Use `@/lib/bff-v1` (or `legacy*` re-exports if the v1 surface is genuinely missing the call).
