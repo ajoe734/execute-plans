@@ -81,6 +81,7 @@ import { LoopsPage } from "@/management/pages/v5/V5Pages";
 import { ControlRoomPage } from "@/management/pages/v5/ControlRoom";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
 import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
+import { ResearchLoopPage } from "@/management/pages/v5/ResearchLoop";
 import { SentinelPage } from "@/management/pages/v5/Sentinel";
 import { InterventionsPage } from "@/management/pages/v5/Interventions";
 import NotFound from "./pages/NotFound";
