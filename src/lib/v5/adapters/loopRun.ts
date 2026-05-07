@@ -1,7 +1,7 @@
 // Q27 — LoopRun is derived view-model. No DB / localStorage.
 // Derived from seed jobs / approvals / alerts / incidents + v5 overlay.
 
-import type { Job, ApprovalRequest, Alert, Incident, Strategy, Rebalance } from "@/lib/bff/types";
+import type { Job, ApprovalRequest, Alert, Incident, Strategy, Rebalance, ResearchExperiment } from "@/lib/bff/types";
 import type { LoopRun, LoopStage } from "../types";
 import type { LoopKind, LoopStatus, LoopStageStatus } from "../enums";
 import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "../timeoutPolicy";
@@ -32,6 +32,7 @@ interface DeriveCtx {
   approvals: ApprovalRequest[];
   alerts: Alert[];
   incidents: Incident[];
+  research?: ResearchExperiment[];
 }
 
 export function deriveLoopRuns(ctx: DeriveCtx): LoopRun[] {
