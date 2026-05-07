@@ -222,6 +222,10 @@ export default {
       dismissed: "Finding dismissed",
       actionExecuted: "Remediation executed",
       status: "Status",
+      noFindingsTitle: "No findings",
+      noFindingsDesc: "Sentinel hasn't surfaced any findings for the current scope.",
+      noMatchTitle: "No matches",
+      noMatchDesc: "Adjust the search or severity filter to see more findings.",
     },
     remediation: {
       advisory: "Advisory",

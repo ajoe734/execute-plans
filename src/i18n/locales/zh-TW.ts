@@ -216,6 +216,10 @@ export default {
       dismissed: "已駁回",
       actionExecuted: "處置已執行",
       status: "狀態",
+      noFindingsTitle: "暫無監測項",
+      noFindingsDesc: "目前範圍下 Sentinel 尚未產出任何 finding。",
+      noMatchTitle: "無符合項目",
+      noMatchDesc: "調整搜尋或嚴重度過濾條件以查看更多 finding。",
     },
     remediation: {
       advisory: "建議",
