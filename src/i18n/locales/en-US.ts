@@ -229,7 +229,7 @@ export default {
       run: "Run",
     },
   },
-  risk: { low: "Low", medium: "Medium", high: "High", critical: "Critical" },
+  risk: { info: "Info", low: "Low", medium: "Medium", high: "High", critical: "Critical" },
   status: {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",

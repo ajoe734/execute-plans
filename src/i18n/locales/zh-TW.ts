@@ -223,7 +223,7 @@ export default {
       run: "執行",
     },
   },
-  risk: { low: "低", medium: "中", high: "高", critical: "極高" },
+  risk: { info: "資訊", low: "低", medium: "中", high: "高", critical: "極高" },
   status: {
     pending: "待處理", running: "執行中", success: "成功",
     warning: "警告", failed: "失敗", paused: "暫停",

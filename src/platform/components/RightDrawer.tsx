@@ -22,7 +22,7 @@ export interface InspectorTarget {
   type: string;             // e.g. "Strategy"
   name: string;
   state?: string;
-  risk?: "low" | "medium" | "high" | "critical";
+  risk?: "info" | "low" | "medium" | "high" | "critical";
   owner?: string;
   updatedAt?: string;
   availableActions?: string[];

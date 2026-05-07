@@ -24,6 +24,7 @@ import {
 } from "@/lib/v3/highRiskActions";
 import { idempotencyReplay, idempotencyRemember } from "@/lib/v4/idempotency";
 import { explainTripleViolation } from "@/lib/v4/strategyInvariants";
+import { type ErrorCode } from "@/lib/v4/errorCodes";
 
 const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
@@ -204,8 +205,9 @@ export const mutations = {
         `expected v${input.expectedVersion}, actual v${obj.lockVersion}`,
         { before, outcome: "rejected" },
       );
+      const errorCode: ErrorCode = "STATE_CONFLICT";
       const result: MutationResult = { ok: false, audit, rejected: "state_conflict",
-        message: `STATE_CONFLICT: expected v${input.expectedVersion}, got v${obj.lockVersion}` };
+        message: `${errorCode}: expected v${input.expectedVersion}, got v${obj.lockVersion}` };
       return delay(result);
     }
     const guard = validateTransition(kind, id, action, newState);

@@ -13,12 +13,13 @@ interface SeedCtx {
   runtimes?: Runtime[];
 }
 
-function severityFor(level: "critical" | "high" | "medium" | "low"): { sev: SentinelSeverity; conf: number } {
+function severityFor(level: "critical" | "high" | "medium" | "low" | "info"): { sev: SentinelSeverity; conf: number } {
   switch (level) {
     case "critical": return { sev: "critical", conf: 0.88 };
     case "high":     return { sev: "warning",  conf: 0.76 };
     case "medium":   return { sev: "watch",    conf: 0.62 };
     case "low":      return { sev: "info",     conf: 0.45 };
+    case "info":     return { sev: "info",     conf: 0.30 };
   }
 }
 
