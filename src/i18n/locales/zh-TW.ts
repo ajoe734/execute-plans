@@ -7,6 +7,7 @@ export default {
   ui: {
     pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
     a11y: { close: "關閉", toggleSidebar: "切換側邊欄" },
+    loading: "載入中…",
   },
   env: {
     research: "研究", paper: "模擬", live: "正式", label: "環境",
@@ -134,8 +135,13 @@ export default {
         subtitle: "即時執行迴圈、Persona 路由健康度與 v0-mock timeout 政策。",
         runs: "Loop runs",
         runsHint: "一個 active strategy 對應一條 run。階段點顯示 pipeline 進度。",
+        emptyTitle: "暫無執行迴圈",
+        emptyDesc: "目前條件下沒有執行紀錄。請從 Strategy 或 Deployment 觸發新的 run。",
       },
-      optimization: { title: "最佳化迴圈" },
+      optimization: {
+        title: "最佳化迴圈",
+        subtitle: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
+      },
     },
     matrix: {
       title: "Persona 健康度矩陣",

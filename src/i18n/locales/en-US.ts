@@ -7,6 +7,7 @@ export default {
   ui: {
     pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
     a11y: { close: "Close", toggleSidebar: "Toggle Sidebar" },
+    loading: "Loading…",
   },
   env: {
     research: "Research",
@@ -140,8 +141,13 @@ export default {
         subtitle: "Live execution loops, persona routing health, and v0-mock timeout policy.",
         runs: "Loop runs",
         runsHint: "One run per active strategy. Stage dots show pipeline progression.",
+        emptyTitle: "No execution loops",
+        emptyDesc: "No runs match the current focus. Trigger a run from a Strategy or Deployment to see it here.",
       },
-      optimization: { title: "Optimization Loop Runs" },
+      optimization: {
+        title: "Optimization Loop Runs",
+        subtitle: "One run per pending rebalance. Approval is the gating stage.",
+      },
     },
     matrix: {
       title: "Persona Health Matrix",
