@@ -30,10 +30,18 @@ export default {
           "live-accent": "hsl(var(--env-live-accent))",
         },
         risk: {
+          info: "hsl(var(--risk-info))",
           low: "hsl(var(--risk-low))",
           medium: "hsl(var(--risk-medium))",
           high: "hsl(var(--risk-high))",
           critical: "hsl(var(--risk-critical))",
+        },
+        bucket: {
+          1: "hsl(var(--bucket-1))",
+          2: "hsl(var(--bucket-2))",
+          3: "hsl(var(--bucket-3))",
+          4: "hsl(var(--bucket-4))",
+          5: "hsl(var(--bucket-5))",
         },
         status: {
           pending: "hsl(var(--status-pending))",
