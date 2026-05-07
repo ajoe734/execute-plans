@@ -9,7 +9,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type {
   ControlRoomSummary, LoopRun, SentinelFinding, InterventionItem,

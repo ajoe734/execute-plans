@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { legacyBff as bff } from "@/lib/bff-v1";
-import { legacyRunActionSafe as runActionSafe } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
+import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
 import { Pause, Edit, Beaker, Play, Lock } from "lucide-react";

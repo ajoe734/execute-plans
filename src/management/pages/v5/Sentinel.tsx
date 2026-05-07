@@ -14,7 +14,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";

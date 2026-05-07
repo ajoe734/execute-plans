@@ -4,7 +4,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";

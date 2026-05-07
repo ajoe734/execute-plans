@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Skill, Tool } from "@/lib/bff/types";
 import { FlaskConical, Save, Play, Plus, X } from "lucide-react";
 import { toast } from "sonner";

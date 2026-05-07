@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { Strategy } from "@/lib/bff/types";
-import { legacyBff as bff } from "@/lib/bff-v1";
-import { legacyRunActionSafe as runActionSafe } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
+import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
 interface ParamRow { key: string; value: string; note: string; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { FeatureSet } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { useT } from "@/platform/hooks";

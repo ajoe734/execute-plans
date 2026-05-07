@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { Strategy, RankingFormula, Persona, CapitalPool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";

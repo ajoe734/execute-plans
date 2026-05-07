@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { legacyBff as bff } from "@/lib/bff-v1";
-import { legacyRunActionSafe as runActionSafe } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
+import { runActionSafe } from "@/lib/bff-v1";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";

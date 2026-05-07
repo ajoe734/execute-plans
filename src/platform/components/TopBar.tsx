@@ -10,7 +10,7 @@ import { usePlatform, type Locale, type UserRole } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 

@@ -10,7 +10,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type {
   Alert, ApprovalRequest, Job, Strategy, Incident, CapitalPool, AuditEvent, Persona,
 } from "@/lib/bff/types";

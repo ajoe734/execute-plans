@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { Rebalance } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { AllocationSimulationPanel } from "@/management/components/detail/AllocationSimulationPanel";

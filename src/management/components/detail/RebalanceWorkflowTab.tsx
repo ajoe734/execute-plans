@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { WorkflowStep } from "@/lib/bff/types";
 import { WorkflowStepper } from "./WorkflowStepper";

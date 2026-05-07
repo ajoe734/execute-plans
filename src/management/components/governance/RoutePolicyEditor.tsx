@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { RoutePolicy, RoutePolicyRule, RouteTargetKind } from "@/lib/bff/types";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
 const ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];

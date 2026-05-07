@@ -13,7 +13,7 @@ import { StatusBadge } from "./StatusBadge";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { useEffect, useState } from "react";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import type { AuditEvent } from "@/lib/bff/types";
 import { useNavigate } from "react-router-dom";
 

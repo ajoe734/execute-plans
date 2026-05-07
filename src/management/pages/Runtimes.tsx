@@ -5,7 +5,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { legacyBff as bff } from "@/lib/bff-v1";
+import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import type { Runtime } from "@/lib/bff/types";
