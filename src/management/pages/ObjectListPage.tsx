@@ -77,8 +77,9 @@ export function ObjectListPage<T extends BaseObject>({
     }
     if (createBehavior.kind === "redirect") {
       const { to, intent } = createBehavior;
+      const url = intent ? `${to}${to.includes("?") ? "&" : "?"}intent=${encodeURIComponent(intent)}` : to;
       return (
-        <Button size="sm" onClick={() => navigate(to, { state: { intent } })}>
+        <Button size="sm" onClick={() => navigate(url)}>
           <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
         </Button>
       );
