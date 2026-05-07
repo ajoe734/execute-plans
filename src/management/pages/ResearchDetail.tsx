@@ -59,7 +59,7 @@ export const ResearchDetail = () => {
                   <StatCard label={t("table.owner")} value={x.owner} />
                   <StatCard label="Artifact" value={x.artifactId ?? "—"} />
                 </div>
-                <Section title="Hypothesis">
+                <Section title={t("detail.section.hypothesis")}>
                   <p className="text-sm leading-relaxed">{x.hypothesis}</p>
                 </Section>
               </>
@@ -112,7 +112,7 @@ export const ResearchDetail = () => {
         open={promoteOpen}
         onOpenChange={setPromoteOpen}
         title={`Promote Experiment — ${x.name}`}
-        description="Promoting will scaffold a new strategy from this experiment's artifact and route it for review."
+        description={t("detail.confirm.promoteResearch")}
         confirmToken="PROMOTE"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "Research", id: x.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}

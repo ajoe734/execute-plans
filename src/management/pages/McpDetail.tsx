@@ -133,7 +133,7 @@ export const McpServerDetail = () => {
         {
           value: "health", label: "Health",
           content: (
-            <Section title="Runtime health">
+            <Section title={t("detail.section.runtimeHealth")}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
                 <StatCard label="Uptime" value="99.9%" tone="success" />
@@ -146,7 +146,7 @@ export const McpServerDetail = () => {
         {
           value: "permissions", label: t("section.permissions"),
           content: (
-            <Section title="Allowed environments">
+            <Section title={t("detail.section.allowedEnvs")}>
               <div className="flex gap-1">
                 {s.envAllowed.map((e) => (
                   <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
@@ -255,7 +255,7 @@ export const McpToolDetail = () => {
         open={grantOpen}
         onOpenChange={setGrantOpen}
         title={`Grant LIVE access — ${tool.name}`}
-        description="Authorizes this destructive tool to execute against the LIVE environment. Requires dual approval (risk + ops) before taking effect."
+        description={t("detail.confirm.authorizeLive")}
         confirmToken="GRANT-LIVE"
         destructive
         onConfirm={async (memo) => { await runActionSafe({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success(t("toast.actionQueued")); }}

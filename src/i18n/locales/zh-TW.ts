@@ -293,6 +293,7 @@ export default {
       breachAssessment: "Pack D · 違限評估",
       generationProgress: "世代進度",
       linkedObjects: "關聯對象",
+      hash: "雜湊值",
     },
     field: {
       artifact: "產出物", subscribers: "訂閱數", destination: "目的地", filters: "過濾條件",

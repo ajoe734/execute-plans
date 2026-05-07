@@ -119,7 +119,7 @@ export const ToolDetail = () => {
                 <Section title={t("table.description")}>
                   <p className="text-sm leading-relaxed">{tool.description}</p>
                 </Section>
-                <Section title="Schema">
+                <Section title={t("detail.section.schema")}>
                   <Field label="Tool ID" value={tool.id} mono />
                   <Field label={t("table.owner")} value={tool.owner} mono />
                 </Section>

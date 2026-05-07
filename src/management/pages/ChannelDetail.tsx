@@ -50,7 +50,7 @@ export const ChannelDetail = () => {
                 <StatCard label={t("table.owner")} value={c.owner} />
                 <StatCard label={t("table.state")} value={c.state} />
               </div>
-              <Section title="Routing">
+              <Section title={t("detail.section.routing")}>
                 <Field label="Destination" value={c.destination} mono />
                 <Field label="Filters" value={c.filters ?? "—"} mono />
               </Section>

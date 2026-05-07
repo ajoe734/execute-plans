@@ -77,7 +77,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           open={!!unfreezeTarget}
           onOpenChange={(o) => !o && setUnfreezeTarget(null)}
           title={`Unfreeze — ${unfreezeTarget.reason}`}
-          description="Unfreezing restores allocation flow. Confirm with audit memo."
+          description={t("detail.confirm.unfreezePool")}
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
             await bff.mutations.unfreezePool(poolId, unfreezeTarget.id, memo);

@@ -299,6 +299,7 @@ export default {
       breachAssessment: "Pack D · Breach assessment",
       generationProgress: "Generation progress",
       linkedObjects: "Linked objects",
+      hash: "Hash",
     },
     field: {
       artifact: "Artifact", subscribers: "Subscribers", destination: "Destination", filters: "Filters",
