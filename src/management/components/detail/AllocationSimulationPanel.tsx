@@ -5,7 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { Rebalance } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 

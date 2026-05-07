@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { useHandoff } from "@/lib/handoff";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 
 interface Note { id: string; title: string; body: string; tags: string[]; artifactId?: string; ts: string; }
 

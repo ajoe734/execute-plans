@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 

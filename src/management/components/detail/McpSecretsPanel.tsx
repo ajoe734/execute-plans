@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { McpSecret, McpServer } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";

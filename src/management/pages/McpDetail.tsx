@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { bff } from "@/lib/bff/client";
-import { runActionSafe } from "@/lib/bff/runAction";
+import { legacyBff as bff } from "@/lib/bff-v1";
+import { legacyRunActionSafe as runActionSafe } from "@/lib/bff-v1";
 import type { McpServer, McpTool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";

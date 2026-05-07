@@ -6,7 +6,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { Persona, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 

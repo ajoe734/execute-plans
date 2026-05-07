@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { PerformanceSeries } from "@/lib/bff/types";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";

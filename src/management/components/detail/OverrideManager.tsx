@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { RebalanceOverride, Strategy } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff/client";
-import { runActionSafe } from "@/lib/bff/runAction";
+import { legacyBff as bff } from "@/lib/bff-v1";
+import { legacyRunActionSafe as runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
 import { Beaker, Package } from "lucide-react";

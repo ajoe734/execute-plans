@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";
