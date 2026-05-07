@@ -270,7 +270,7 @@ export default {
     memoHint: "備註至少 8 字才能送出。",
   },
   common: {
-    owner: "負責人", updated: "更新時間", state: "狀態",
+    owner: "負責人", updated: "更新時間", state: "狀態", name: "名稱", createNotConfigured: "尚未設定建立流程",
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部", back: "返回", risk: "風險", successRate: "成功率", none: "無",
     justNow: "剛剛",

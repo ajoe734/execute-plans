@@ -276,7 +276,7 @@ export default {
     memoHint: "Memo must be at least 8 characters.",
   },
   common: {
-    owner: "Owner", updated: "Last updated", state: "State",
+    owner: "Owner", updated: "Last updated", state: "State", name: "Name", createNotConfigured: "Create flow not configured",
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All", back: "Back", risk: "Risk", successRate: "Success", none: "None",
     justNow: "just now",
