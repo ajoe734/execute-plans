@@ -80,7 +80,7 @@ describe("writeIntents validation — parametric matrix (9 entities)", () => {
       expect(r.errors[String(c.expectErrorKey)]).toBeDefined();
     });
     it(`${c.entity} flags missing/short name`, () => {
-      const bad = { ...(c.valid as Record<string, unknown>), name: "ab" };
+      const bad = { ...(c.valid as unknown as Record<string, unknown>), name: "ab" };
       const r = validateCreate(c.entity, bad as never);
       expect(r.errors.name).toBeDefined();
     });
