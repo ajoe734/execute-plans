@@ -28,8 +28,8 @@ export function acceptLanguage(locale?: string): string {
   return "en-US";
 }
 
-/** H-backlog: enforce X-BFF-Api-Version once OpenAPI normalizes it. */
-export const BFF_API_VERSION = "v1";
+/** H1 closed — aligned with OpenAPI `components.parameters.BffApiVersion.default`. */
+export const BFF_API_VERSION = "2026-05-07";
 export function xBffApiVersion(): string {
   return BFF_API_VERSION;
 }
