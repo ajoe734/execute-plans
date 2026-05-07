@@ -1,7 +1,8 @@
 import { ObjectListPage } from "./ObjectListPage";
-import { bff } from "@/lib/bff/client";
+import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
+import type { Tool, McpServer, Skill, Channel } from "@/lib/bff/types";
 
 const envBadge = (env: string) => {
   if (env === "live") return "bg-env-live-bg text-status-success border-status-success/30";
@@ -18,9 +19,9 @@ const scopeTone = (s: string) => {
 export const ToolsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Tool>
       title={t("nav.tools")}
-      loader={() => bff.tools.list()}
+      loader={lists.tools}
       basePath="/management/tools" liveKinds={["Tool"]}
       extraColumns={[
         { key: "cat", header: t("table.category"), cell: (r) => <span className="text-xs tracking-wide text-muted-foreground">{r.category}</span> },
@@ -35,9 +36,9 @@ export const ToolsList = () => {
 export const McpServersList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<McpServer>
       title={t("nav.mcp")}
-      loader={() => bff.mcpServers.list()}
+      loader={lists.mcpServers}
       basePath="/management/mcp" liveKinds={["McpServer","McpSecret"]}
       extraColumns={[
         { key: "ep", header: t("table.endpoint"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.endpoint}</span> },
@@ -58,9 +59,9 @@ export const McpServersList = () => {
 export const SkillsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Skill>
       title={t("nav.skills")}
-      loader={() => bff.skills.list()}
+      loader={lists.skills}
       basePath="/management/skills" liveKinds={["Skill"]}
       extraColumns={[
         { key: "arch", header: "Archetype", cell: (r) => r.archetype },
@@ -76,9 +77,9 @@ export const SkillsList = () => {
 export const ChannelsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Channel>
       title={t("nav.channels")}
-      loader={() => bff.channels.list()}
+      loader={lists.channels}
       basePath="/management/channels" liveKinds={["Channel"]}
       extraColumns={[
         { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs tracking-wide">{r.kind}</span> },
