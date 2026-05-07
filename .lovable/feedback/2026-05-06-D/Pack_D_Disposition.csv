@@ -1,0 +1,65 @@
+id,severity,sub_pack,blocker,disposition_summary,status
+D01,High,D-A,No,Strategy 三軸 (lifecycle×review×deployment) canonical whitelist; live/paper/degraded 必須 reviewStatus=approved; legacy state 僅 adapter,RESOLVED
+D02,High,D-A,No,Persona retired 為終態; 不允許 reactivate; 用 fork_persona_from_retired 帶 lineage,RESOLVED
+D03,High,D-A,No,CapitalPool frozen 為 state (draft/active/frozen/rebalancing/restricted/retired); 另存 FreezeRecord,RESOLVED
+D04,High,D-A,No,Incident↔Deployment rollback 採 Saga + idempotencyKey=rollback:{incidentId}:{deploymentId}:{targetVersion},RESOLVED
+D05,High,D-A,Yes,所有 async transition 必須使用 AsyncTransitionDescriptor (timeoutMs/failureState/failureReasonCode); 12 條 v0 default,RESOLVED
+D06,Medium,D-A,No,EvolutionRun pause: pauseConsumesComputeQuota=false / pauseConsumesSla=true,RESOLVED
+D07,Medium,D-A,No,Triple-Axis invariant validateOn 9 trigger; 違反 reject 不 auto-correct; legacy adapter 加 migrationWarning,RESOLVED
+D08,Medium,D-A,No,Job cancelled 終態; retry 建立新 jobId 帶 retryOf/parentJobId; maxAttempts=3,RESOLVED
+D08b,Low,D-A,No,quarantined memory 預設排除於 RAG; admin/risk_officer/research_lead 可 override 並 audit,RESOLVED
+D09,High,D-B,No,Strategy 17 個 canonical action catalog; 每個帶 capability/allowedRoles/requiresApproval/riskLevel,RESOLVED
+D10,High,D-B,No,Persona 17 個 canonical action catalog,RESOLVED
+D11,High,D-B,No,Channel/Watchlist/Notebook 三 entity 加入 RBAC action catalog,RESOLVED
+D12,High,D-B,Yes,capabilities 為 source of truth; roles 僅 default bundle hint; ROLE_CAPABILITIES 8 role bundle,RESOLVED
+D13,High,D-B,No,DisabledReasonCode 15-enum (INSUFFICIENT_CAPABILITY/INVALID_STATE/...); i18n key actions.disabled.<code>,RESOLVED
+D14,Medium,D-B,No,requiresEnv 不符提示文案 + i18n key actions.disabled.WRONG_ENVIRONMENT,RESOLVED
+D15,Medium,D-B,No,cooldown 倒數 ground truth = serverTime; client local clock 不得作判定依據,RESOLVED
+D16,Low,D-B,No,capability namespace = lowercase dot.case + 大小寫敏感,RESOLVED
+D17,High,D-C,No,Cursor TTL=15min; 失效回 CURSOR_EXPIRED/CURSOR_INVALID; UI fallback 重抓首頁保留 filter,RESOLVED
+D18,High,D-C,No,Filter operator 採 bracket grammar filter[field][op]=value; 12 ops (eq/in/gte/contains/...),RESOLVED
+D19,High,D-C,No,sort=field,-updatedAt comma multi; null default last; override sort=field:asc:nullsFirst,RESOLVED
+D20,High,D-C,No,ErrorDetails 7 種 discriminated union (validation/state_conflict/permission/cursor/rate_limit/transition/idempotency),RESOLVED
+D21,High,D-C,No,ErrorCode master 23 項 enum; i18n errors.<ErrorCode>,RESOLVED
+D22,High,D-C,Yes,ListResponse envelope: items+cursor+pageSize+estimatedTotal+totalCountExact; registry/governance true / feed false,RESOLVED
+D23,Medium,D-C,No,BulkActionResponse partial success envelope; HTTP 207 Multi-Status preferred,RESOLVED
+D24,Medium,D-C,No,Attachment policy: image 10MB / document 25MB / artifact metadata 100MB / model pre-signed; scanRequired,RESOLVED
+D25,Medium,D-C,No,X-RateLimit-Limit/Remaining/Reset/Scope + Retry-After; remaining<10% warn / 429 countdown,RESOLVED
+D26,High,D-D,Yes,SseEventEnvelope schemaVersion=1 + channel/type/correlationId/payload; 必須 discriminated union; 不得 payload:unknown,RESOLVED
+D27,Medium,D-D,No,Last-Event-Id replayWindowSec=86400 / replayMaxEvents=10000; 過期 emit resync_required,RESOLVED
+D28,Medium,D-D,No,heartbeatSec=15 / staleAfterSec=30 / timeoutSec=45 / reconnect backoff [1,2,5,10,30]s,RESOLVED
+D29,Medium,D-D,No,resync_required 每 channel 對應 resync endpoint table,RESOLVED
+D30,High,D-E,No,Handoff reopen slaResetOnReopen=false; 加 SlaSegment; 重置 SLA 需 approval+audit,RESOLVED
+D31,High,D-E,No,CapitalPool breach formula: utilizationPct/riskBudgetUsagePct/concentrationPct + breach 門檻; window current/30d/24h,RESOLVED
+D32,High,D-E,No,Metric registry canonical id 14 項 + MetricDef (unit/higherIsBetter/precision),RESOLVED
+D33,Medium,D-E,No,Quorum maxExtensions=1 / extensionHours=24; 第二次未達 escalate 至 committee/risk_officer/admin,RESOLVED
+D34,Medium,D-E,No,Missing metric: required→fail_run; optional→penalty(-0.1); 可選 impute,RESOLVED
+D35,Medium,D-E,No,Two-Man 必須 distinct userId; live deploy/capital apply/emergency 需 risk_officer + non-risk role,RESOLVED
+D36,Medium,D-E,No,confirm token vs cooldown: cooldown 優先; cooldown active 不 issue token; redeem 失敗回 COOLDOWN_ACTIVE,RESOLVED
+D37,Low,D-E,No,audit reason min 40 (high-risk) / max 2000; server reject 不 silent truncate; UI 240 chars 折疊,RESOLVED
+D38,Low,D-E,No,Skill rollback / deprecate 互斥; incident block 時 rollback 優先,RESOLVED
+D39,High,D-F,No,Spacing 4pt scale (0/4/8/12/16/20/24/32/40/48/64); type scale xs-3xl + mono-xs,RESOLVED
+D40,High,D-F,No,Risk severity 5 階 HSL token (info/low/medium/high/critical); dark mode +8-12% lightness,RESOLVED
+D41,Medium,D-F,No,Toast: top-right desktop / bottom-center mobile; duration 4-8s; critical sticky; max stack 5; dedupeKey,RESOLVED
+D42,Medium,D-F,No,Form validation: onBlur + touched onChange + onSubmit full; high-risk memo 顯示剩餘字數,RESOLVED
+D43,Medium,D-F,No,Skeleton threshold 200ms; min 300ms; >2s 顯示 Still loading; >10s 顯示 retry,RESOLVED
+D44,Medium,D-F,No,Empty state 4 元素: icon+title+description+CTA(or reason); read-only disabled+tooltip,RESOLVED
+D45,Medium,D-F,No,Confirm dialog + token flow 8 步 (impact→memo→token→exact phrase→idempotencyKey→execute→audit→realtime),RESOLVED
+D46,Medium,D-F,No,prefers-reduced-motion: 移除 spinner/gradient/marquee/pulse; 保留 ≤100ms opacity / focus ring,RESOLVED
+D47,Medium,D-F,No,focus.ring color hsl(210,90%,55%) / width 2px / offset 2px / radius inherit,RESOLVED
+D48,Low,D-F,No,Format tokens: Intl.DateTimeFormat / Intl.NumberFormat (dateShort/dateTime/relativeTime/numberCompact/percent/currency),RESOLVED
+D49,Low,D-F,No,Glossary key dot.case namespace (nav.controlRoom / v5.loop.execution.title / actions.<entity>.<action>.label),RESOLVED
+D50,Low,D-F,No,Bucket color 5 階 chart token (bucket.1-5) 與 risk severity 對齊,RESOLVED
+D51,High,D-G,Yes,/bff/me MeResponse DTO: user/tenant/roles/capabilities/env/featureFlags/serverTime/sessionExpiresAt/permissionsVersion; cache 30s,RESOLVED
+D52,High,D-G,No,401 single silent refresh + retry once; concurrent 401 share refresh promise; 不得 infinite,RESOLVED
+D53,High,D-G,No,Tenant scope priority: route param > session > token default > deny if ambiguous; X-Tenant-Id header,RESOLVED
+D54,Medium,D-G,No,Logout invalidate: query/bff/v5ActionOverlay/SSE/permission/confirmToken/session; 保留 theme/locale,RESOLVED
+D55,Medium,D-G,No,Locale priority: user pref > tenant default > browser > zh-TW,RESOLVED
+D56,Medium,D-G,No,Locale fallback chain: resolved→language family→tenant.locale→zh-TW→en-US; zh-Hant→zh-TW,RESOLVED
+D57,Medium,D-G,No,UI TZ priority: user.tz > tenant.tz > browser tz > UTC; audit timestamps store UTC ISO,RESOLVED
+D58,Low,D-G,No,Numeric/currency format 綁 resolvedLocale; currency code from entity/tenant baseCurrency,RESOLVED
+D59,High,D-G,Yes,/bff/me 必填 tenant.id/env/featureFlags/capabilities/roles/serverTime/sessionExpiresAt; 併入 D51,RESOLVED
+D60,Medium,D-E,No,Audit event correlationId chain: user click 建 correlationId; child 帶 causationId; loop/finding/intervention 必曝光,RESOLVED
+D61,Low,D-H,No,E2E scenario 命名 e2e.<surface>.<flow>.<expected>; fixture id prefix 11 種 (stg_/per_/cp_/...),RESOLVED
+D62,Low,D-F,No,axe-core CI: critical/serious 違規 fail; moderate warn 除非 allowlist (需 owner+expiry),RESOLVED
+D63,Low,D-F,No,Perf budget 5 page class: Control Room/Entity List/Detail/Heavy Studio/Sentinel-HIQ (LCP 2.0-3.5s / TTI 2.5-4.5s),RESOLVED

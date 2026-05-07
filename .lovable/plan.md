@@ -1,146 +1,130 @@
 
-# Pantheon 全量缺口盤點 — Pack F 落地後
+# Pack D Disposition 歸檔 + 實作方案
 
-範圍：盤點截至 2026-05-06 Pack F 實作完成後，**所有層級** 仍 OPEN 的缺口；分 spec / impl / QA 三軸。本份不實作，僅交付清單與優先序建議。
+Pack D disposition 已完整看過：63 條全 RESOLVED，分 8 個 sub-pack（D-A ~ D-H），§13 明確指示**先做 spec addendum，不改 src/**，衝突另記 `spec-conflict-2026-05-06-G.md`。Audit G 因此正名為 spec-conflict 文件。
 
 ---
 
-## 1. Spec 層 OPEN（需規劃團隊回應）
+## 0. 嚴格遵循 §13 Lovable Prompt
 
-### 1.1 Audit D — 63 條 second-order gaps（**全數 OPEN**）
+> "Implement Pack D disposition as spec addendum only first.
+> Do not modify UI implementation yet unless explicitly requested."
 
-來源：`.lovable/audits/spec-gap-2026-05-06-D.md` + `-summary.csv` + `-blockers.md`
+→ **本次只落 docs / spec，src/ 完全不動**（包含 src/lib/v4/、writeIntents/）。所有 TypeScript 型別只寫在 spec markdown code block，不產生 .ts。
 
-分類聚合：
+---
 
-| 分類 | 條目數 | 嚴重度（H/M/L） | 代表條目 |
+## 1. F0 — Disposition 歸檔（§12 指定路徑）
+
+新增：
+- `.lovable/feedback/2026-05-06-D/Pack_D_Disposition.md` — 從 user-uploads 完整複製
+- `.lovable/feedback/2026-05-06-D/Pack_D_Disposition.csv` — 63 條 (id, severity, sub_pack, disposition_summary, blocker, status)
+
+---
+
+## 2. F1 — Pack D spec addendum 6 份（§12 指定）
+
+新建 `.lovable/spec/v4/pack-d/`，6 份 markdown 各自摘錄對應條目的 canonical 決議（zh-TW，與既有 v4 spec 風格一致）：
+
+| 檔案 | 涵蓋 | 重點 |
+|---|---|---|
+| `Pantheon_Pack_D_StateMachine_Contract.md` | D01-D08b (D-A) | Strategy 三軸白名單、Persona retired 終態、CapitalPool frozen state、Incident↔Rollback Saga、AsyncTransitionDescriptor + 12 條 v0 timeout default、quarantine RAG policy |
+| `Pantheon_Pack_D_Permission_Contract.md` | D09-D16 (D-B) | Strategy/Persona/Channel/Watchlist/Notebook 5 entity action catalog、ROLE_CAPABILITIES bundle、DisabledReasonCode 15-enum、cooldown serverTime ground truth、capability lowercase dot.case |
+| `Pantheon_Pack_D_BFF_API_Contract.md` | D17-D25 (D-C) | Cursor TTL 15min + 失效 fallback、filter bracket grammar、multi-sort + nulls-last、ErrorDetails discriminated union、ErrorCode master 23 項、ListResponse envelope、BulkActionResponse 207、Attachment policy、X-RateLimit headers |
+| `Pantheon_Pack_D_SSE_Event_Contract.md` | D26-D29 (D-D) | SseEventEnvelope schemaVersion=1、StrategyEvent / DeploymentEvent / IncidentEvent / LoopEvent discriminated union、replayWindow 86400s、heartbeat 15s/timeout 45s、resync endpoints per channel |
+| `Pantheon_Pack_D_Session_Auth_Tenant_Contract.md` | D51-D59 (D-G) | MeResponse 完整 DTO、cache TTL 30s、401 silent refresh once、tenant scope priority 4 級、logout invalidate list、locale fallback chain、user TZ 優先 |
+| `Pantheon_Pack_D_UI_Tokens_A11y_QA.md` | D39-D50, D62, D63 (D-F) + D61 (D-H) | 4pt spacing scale、type scale、5 階 risk severity HSL、Toast 規格、validation 觸發時機、Skeleton 200ms、Empty state 4 元素、focus ring、Intl format、glossary dot.case、bucket color、axe-core CI gate、5 類 perf budget、E2E naming + fixture prefixes |
+
+每份檔案開頭 metadata 指明：版本、對應 Audit D ID、屬於 Pack D-x sub-pack、不取代 v4 normative type（v5 view-model 仍 view-model only）。
+
+額外 `Pantheon_Pack_D_DomainRules_Contract.md`（§7 D30-D38 + D60，原 §12 沒列但內容存在 disposition）放在同 dir 補齊：Handoff slaResetOnReopen、CapitalPool breach formula、metric registry 14 項、quorum extension、missing metric policy、two-man distinct user、confirm token vs cooldown 優先、audit reason length、Skill rollback/deprecate 互斥、correlationId chain。
+
+---
+
+## 3. F2 — Audit / Spec Index 更新
+
+- `.lovable/audits/INDEX.md`
+  - Audit D 行：狀態改 `RESOLVED BY PACK D DISPOSITION (8 sub-packs)`，備註加 disposition 路徑
+  - Audit G 行：title 改 `spec-conflict-2026-05-06-G`，狀態改 `OPEN — Pack F 落地後第三輪盤點，6 條 impl-fixable 已實作，待併入 Pack G/D 後續 disposition`
+  - 累計覆蓋段更新：170 + 63 = 233 條 spec-level RESOLVED
+- `.lovable/spec/INDEX.md`
+  - 新增 `v4/pack-d/` 段，列 7 份 contract 檔
+  - 規範 normative order：v5 IA + loop view-model > v4 + Pack D normative > v3/v2/v1 archived
+
+---
+
+## 4. F3 — Spec conflict 文件（§13.6）
+
+新增 `.lovable/audits/spec-conflict-2026-05-06-G.md`（rename from spec-gap-2026-05-06-G.md），列出當前 src/ 與 Pack D canonical 的具體衝突點：
+
+| 衝突 | 當前 src/ | Pack D canonical | 處理 |
 |---|---|---|---|
-| StateMachine | 8 (D01–D08b) | 5/2/1 | D01 三軸組合白名單、D04 Incident↔Rollback 雙寫、**D05 timeoutMs/failureState** |
-| Permission | 8 (D09–D16) | 5/2/1 | D09–D11 缺 entity action 列、**D12 Role×Capability bundle**、D13 disabledReasonCode enum |
-| API | 9 (D17–D25) | 5/3/1 | D17 cursor 失效、D18 filter grammar、D19 sort/null、D20 error envelope、D21 ErrorCode master、**D22 totalCount** |
-| SSE | 4 (D26–D29) | 1/3/0 | **D26 channel payload schema**、D27 Last-Event-Id 視窗 |
-| Domain（Handoff/Mandate/Ranking/Rebalance/Evolution/Approval/Token/Skill/Audit/Memory） | 10 (D30–D38, D60) | 4/5/1 | D30 reopen SLA、D31 breach 公式、D32 metric registry、D35 two-man same-role |
-| Tokens / UI / A11y / Format / Glossary | 12 (D39–D50, D62, D63) | 2/8/2 | D39 spacing scale、D40 risk severity color、D41 Toast 規格、D44 Empty state、D47 focus ring |
-| Session / Auth / Tenant / i18n / Time | 9 (D51–D59) | 4/4/1 | **D51/D59 /bff/me DTO**、D52 401 retry、D53 tenant scope 優先序 |
-| QA | 2 (D61, D63) | 0/0/2 | E2E fixture、Perf budget |
+| C1 | `writeIntents/types.ts` BaseCreateInput.risk: "low\|medium\|high\|critical" | D40 五階加 `info` | impl 階段補 |
+| C2 | `writeOverlay.ts` audit `auditEvents.unshift` 無 correlationId | D60 必填 | impl 階段補 |
+| C3 | `EntityCreateDrawer` 無 idempotencyKey / serverTime cooldown | D45 confirm flow / D15 | impl 階段補 |
+| C4 | 無 `/bff/me` endpoint，currentUser 散落 | D51/D59 MeResponse | impl 階段建 |
+| C5 | `bff.realtime.emit("data", { kind, ... })` 無 SseEventEnvelope schemaVersion | D26 typed envelope | impl 階段包裝 |
+| C6 | `ListResponse` 無 estimatedTotal/totalCountExact | D22 envelope | impl 階段補 |
+| C7 | ErrorCode / DisabledReasonCode 散落 string | D13/D21 enum | impl 階段集中 |
+| C8 | Strategy state 在 src 用單一 `state`，未三軸並用 | D01 三軸白名單 | v4 已有三軸欄位，UI 層需顯式校驗 |
 
-**5 條 blockers（pack-D-blockers.md 已抽出）**：D05、D12、D22、D26、D51/D59
-建議優先序：D51/D59 → D26 → D05 → D12 → D22
-
-### 1.2 Audit E / F
-
-* Audit E（v5 SA+SD 19 條 spec-conflict）— **RESOLVED 28/28**（Pack E disposition 已落地）
-* Audit F（4 條實作層 gap）— **RESOLVED**（Pack F 已實作）
-* **無 OPEN 條目**
-
-### 1.3 待產生但尚未啟動的 Audit
-
-* **Audit G (擬)**：Pack F 落地後第三輪盤點 — 預期會浮現 write-intent / IA boundary 引發的新 second-order gap（例：drawer validation 規則跨 entity 一致性、PersonaHealthMatrix focus query 與 deep-link permission、createBehavior redirect 後 intent 的傳遞契約）
-* **Audit H (擬)**：v5 Sentinel / Loop / HIQ 升級層落地後對 v4 normative DTO 的影響盤點（目前只在 spec 層宣告 view-model only，尚未在實作層全面驗證）
+合併原 Audit G 14 條：G02/G04/G07/G10/G12/G14 已在 Pack F 短板處理，標 RESOLVED；其餘併入 Pack D 對應條目（G01→D05、G06→D26、G05/G09/G13→D60+D45）。
 
 ---
 
-## 2. Impl 層 OPEN（已知未做或受 spec 缺口阻塞）
+## 5. F4 — Memory 更新
 
-### 2.1 直接受 D blockers 阻塞，無法實作
-
-| 模組 | 阻塞於 | 現況 | 影響 |
-|---|---|---|---|
-| `/bff/me` session bootstrap | D51 / D59 | 全站用 mock currentUser，無 tenantId / featureFlags / serverTime | 無法做真 RBAC、cooldown、env switcher |
-| Cooldown 倒數 | D15 + D51 | 用 client clock | 跨頁倒數不一致 |
-| SSE type-safe handler | D26 | `src/lib/bff/realtime.ts` 事件型別為寬鬆 union | reducer 無法 exhaustive check |
-| Async transition timeout UI | D05 | 所有 async 動作無 SLA 倒數、無自動歸位 | Deployment / Job / Skill scan 永遠 pending |
-| List 「X of Y」/分頁總數 | D22 | 多數 list 不顯示總數 | UX 不一致 |
-| Permission disabled tooltip 文案 | D13 / D14 | reasonCode 為 string | i18n key 散落 |
-
-### 2.2 Pack F 已實作但**尚為 mock**，未來必補
-
-* `src/lib/bff/writeOverlay.ts` 30min TTL，**無真後端 CRUD**
-* `EntityCreateDrawer` 9 entity 共用 form，**未拆 per-entity 進階欄位**（spec §2.5 後續會擴）
-* `Ranking Formulas` / `Rebalances` 走 redirect，但目標頁（Formula Studio / Optimization Loop）的 `intent=create` 接收端**尚未實作**
-* Audit / realtime emit 是本機事件，**未對接後端 audit pipeline**
-
-### 2.3 v5 升級層對齊度
-
-* `src/lib/v5/` 已落地 enums / events / health / sentinel / overlay / timeoutPolicy / list / remediation
-* **未驗證**：v5 view-model enums 是否在所有 list / detail 頁都正確 fall back 到 v4 DTO（僅 18 個 v5 test 覆蓋核心路徑）
-* **未實作**：HIQ（Human-in-Queue）升級層的 `/management/approvals` 與新 HIQ 入口共存的「跨入口決策同步」（Pack E 已宣告 coexist，但實作只有路由共存）
-* `/loops/execution?focus=personas` 已加入，但 `?focus=strategies` / `?focus=capital` 等對稱 deep-link **尚未補齊**
-
-### 2.4 Console / a11y / i18n
-
-* Pack F F4 修了 ObjectListPage / CapitalPoolsList 的 forwardRef warning，但**未全站掃描**：仍可能在 v5 卡片（PersonaHealthMatrix、Sentinel 卡片）有 Radix Slot ref warning
-* `scripts/check-i18n.ts` 通過，但**未啟用 CI gate**
-* 無 axe-core CI（D62）
-* 無 LCP/TTI budget（D63）
-
-### 2.5 路由 / IA
-
-* `src/App.tsx` `/management/personas` = registry，已驗證
-* **未做**：v5 Pack E 宣告的「Pantheon 產品名」全站品牌套用（仍多處顯示舊名 / 通用字樣）
-* **未做**：SideNav `dedupeKey` 機制（spec §4 提到，目前以 label 差異化代替）
+- `mem://index.md` Core：
+  - 改寫 Audit D 段為 `RESOLVED BY PACK D DISPOSITION (2026-05-06)，63/63 收斂為 8 sub-packs (D-A~D-H)`
+  - 新增一條：`Pack D 實作必須分階段，不可單次大改。立即可做：D39-D50 tokens / D13-D16 enum / D51 MeResponse mock。需與 BFF spec 同做：D17-D29、D51-D60。不可前端自由實作：D04/D30/D31/D35/D36 (provisional v0-mock 可，但需標註)`
+- `mem://audits/open-gaps`：D 全移到 RESOLVED；新增 spec-conflict-G 區塊列 8 條 (C1-C8)
+- 新增 `mem://reference/pack-d-contracts`：路徑指向 `.lovable/spec/v4/pack-d/` 7 份契約
 
 ---
 
-## 3. QA 層 OPEN
+## 6. F5 — 不會做的事（嚴守 §13 / §11.3）
 
-### 3.1 Smoke 覆蓋
-
-* Pack E smoke report 僅 read-path-clean（已在 Audit F F04 標註）
-* Pack F smoke report 採 5-tier，但：
-  - `loop-action-clean` 只跑了 4 個 loop 入口
-  - `full-regression-clean` 標 PASS 是基於 201 unit tests，**未跑端到端 E2E**
-* 無 visual regression
-* 無 mobile viewport 驗收
-
-### 3.2 Test gap
-
-* 既有 201 vitest 全綠，但：
-  - writeOverlay TTL 過期路徑只有 1 個 case
-  - EntityCreateDrawer 9 entity × validation matrix 未 parametric 測試
-  - PersonaHealthMatrix focus query 無 test
-  - SideNav dedupe 無 test
-* 無 contract test（mock vs spec 對焊）
-* 無 perf test
+- **不寫任何 src/ 程式碼**（型別、enum、DTO、helper 全部不動）
+- 不刪 / 改 v5 既有檔案（v5 仍是 IA / view-model layer）
+- 不執行測試（無 src 變動）
+- 不產 smoke report（沒實作可 smoke）
+- 不做 §11.3 列管項目（D04/D30/D31/D35/D36）的具體實作
+- 不在 spec markdown 內加超出 disposition 範圍的決議（必須 1:1 摘錄）
 
 ---
 
-## 4. 文件 / 流程
+## 7. 後續實作建議分批（不在本 plan 範圍，僅標出供下一輪選擇）
 
-| 項目 | 狀態 |
-|---|---|
-| `.lovable/spec/v5/` SA+SD 雙文件 | ✅ 已落 |
-| `.lovable/spec/v4/` zh-TW + en-US | ✅ 已落 |
-| `.lovable/audits/INDEX.md` | ✅ 已更新到 Pack F |
-| `.lovable/plan.md` | ✅ Pack F 段已寫 |
-| `mem://index.md` Pack F Core | ✅ 已更新 |
-| **Audit G/H 啟動文件** | ❌ 未建立 |
-| **Pack D disposition 收件追蹤** | ❌ 未建（規劃團隊回應 ETA 不明） |
-| **Pantheon 品牌準則文件** | ❌ 未建（Pack E 宣告產品名但無視覺準則） |
+依 §11.1 / §11.2 切：
 
----
+**Batch I（純 docs，可立即）**：本 plan F0-F4
+**Batch II（Lovable 可獨立 impl，無需 BFF）**：
+- D39-D50 tokens 落到 `index.css` / `tailwind.config.ts`
+- D13/D21 enum 落到 `src/lib/v4/`
+- D44 Empty state 元件、D43 Skeleton threshold、D47 focus ring、D46 reduced motion
+- D61 fixture prefix 改造
+- spec-conflict G 的 C1（risk 五階補 info）
 
-## 5. 建議下一步（優先序）
+**Batch III（需 BFF 同步）**：
+- D17-D29 envelope 改造（withOverlay → ListResponse）
+- D51 MeResponse mock + 替換散落 currentUser
+- D26 SseEventEnvelope wrapper
 
-依「阻塞下游程度」排序：
+**Batch IV（provisional 可先 mock）**：
+- D05 AsyncTransitionDescriptor + 12 transition default
+- D31 breach formula、D32 metric registry
+- D45 confirm dialog + token flow、D15 cooldown serverTime
 
-1. **等規劃團隊送 Pack D disposition** — 解 63 條 spec 缺口，特別是 5 個 blockers（D51/D59 → D26 → D05 → D12 → D22）。在此之前，impl 層有 2.1 表中所有項目無法收斂。
-2. **啟動 Audit G**（Pack F 後第三輪盤點）— 不依賴 Pack D，可在本 build loop 內做；產出 `.lovable/audits/spec-gap-2026-05-06-G.md`，預估 8–15 條新 second-order gap。
-3. **補 Pack F mock 短板**（不需新規範）：
-   - Ranking / Rebalance redirect 目標頁 `intent=create` 接收
-   - PersonaHealthMatrix 對稱 focus deep-link（strategies / capital / deployments）
-   - 全站 Radix forwardRef sweep
-   - writeOverlay TTL / EntityCreateDrawer parametric test 補強
-4. **Pantheon 品牌套用** — 無外部依賴，可獨立做：全站文案 / title / favicon / OG meta。
-5. **CI gate 強化** — i18n check / axe-core / 至少 1 個 E2E flow。
+每 batch 結束後重跑 vitest，並產對應 smoke report（5-tier）。
 
 ---
 
-## 6. 一句話結論
+## 8. 預估與交付
 
-> Spec 層：Audit D 63 條全 OPEN（5 blockers 阻塞 Pack D），E/F 已 RESOLVED。
-> Impl 層：Pack F mock 已可用，但 6 大模組（session/SSE/timeout/totalCount/permission tooltip/cooldown）受 D blockers 阻塞，加上 4 項 Pack F 短板可獨立補。
-> QA 層：5-tier smoke 已採用，但 E2E / visual / mobile / contract test 全缺。
-> 下一個關鍵動作 = 啟動 **Audit G** + 等 **Pack D disposition**。
+- 7 份 spec markdown，每份 200-400 行（zh-TW，code block 內 TS schema 可英文）
+- 1 份 disposition copy + 1 份 csv summary
+- 3 份 index 更新（audits/INDEX、spec/INDEX、plan.md）
+- 3 份 memory 更新
+- 0 個 src/ 改動
 
-需要我啟動 Audit G、或先補 Pack F 4 項短板，請指示。
+預估 1 build loop。
