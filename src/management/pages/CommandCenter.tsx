@@ -18,6 +18,7 @@ import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, AlertOctagon, Activity, Wallet, Inbox } from "lucide-react";
+import { isLive, lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 
 const relTime = (iso: string, locale: string, justNow: string) => {
   const diffMs = new Date(iso).getTime() - Date.now();
@@ -76,7 +77,7 @@ export const CommandCenter = () => {
     const openIncidents = d.incidents.filter((i) => i.status !== "resolved").length;
     const pendingApprovals = d.approvals.filter((a) => a.state === "pending").length;
     const runningJobs = d.jobs.filter((j) => j.status === "running").length;
-    const liveRisk = d.strategies.filter((s) => s.state === "deployed" && (s.risk === "high" || s.risk === "critical")).length;
+    const liveRisk = d.strategies.filter((s) => isLive(s) && (s.risk === "high" || s.risk === "critical")).length;
     const utilPct = d.pools.length
       ? Math.round((d.pools.reduce((acc, p) => acc + p.utilized / p.allocated, 0) / d.pools.length) * 100)
       : 0;
@@ -85,7 +86,10 @@ export const CommandCenter = () => {
 
   const bottlenecks = useMemo(() => {
     const groups: Record<string, number> = {};
-    d.strategies.forEach((s) => { groups[s.state] = (groups[s.state] ?? 0) + 1; });
+    d.strategies.forEach((s) => {
+      const lc = lifecycleOf(s);
+      groups[lc] = (groups[lc] ?? 0) + 1;
+    });
     return Object.entries(groups).map(([state, count]) => ({ state, count }));
   }, [d.strategies]);
 
