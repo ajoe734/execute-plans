@@ -163,6 +163,7 @@ export const PersonaLab = () => {
 };
 
 const RouteAdder = ({ onAdd }: { onAdd: (s: string) => void }) => {
+  const t = useT();
   const [v, setV] = useState("");
   return (
     <div className="flex gap-2">
