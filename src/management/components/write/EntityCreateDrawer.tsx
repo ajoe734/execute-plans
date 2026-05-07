@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/platform/hooks";
-import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
+import type { CreatableEntity } from "@/lib/writeIntents/types";
 import { validateCreate } from "@/lib/writeIntents/validation";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import { writeOverlay } from "@/lib/bff/writeOverlay";
