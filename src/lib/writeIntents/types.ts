@@ -13,7 +13,9 @@ export type CreatableEntity =
   | "researchExperiment"
   | "artifact";
 
-export type RiskDefault = "low" | "medium" | "high" | "critical";
+// Pack D D40 — 5-tier risk severity (info added in spec-conflict-G C1).
+export type RiskDefault = "info" | "low" | "medium" | "high" | "critical";
+export const RISK_LEVELS: readonly RiskDefault[] = ["info", "low", "medium", "high", "critical"] as const;
 
 export interface BaseCreateInput {
   name: string;

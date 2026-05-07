@@ -47,3 +47,6 @@ export * from "./signalConfidence";
 export * from "./committeeTemplates";
 export * from "./dailyBriefKpi";
 export * from "./lifecycleBucketColors";
+// Pack D Batch II additions
+export * from "./errorCodes";
+export * from "./session/me";

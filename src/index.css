@@ -46,11 +46,24 @@
     --env-live-bg: 142 60% 92%;
     --env-live-accent: 0 75% 50%;
 
-    /* Risk levels */
-    --risk-low: 142 71% 45%;
-    --risk-medium: 38 92% 50%;
-    --risk-high: 24 95% 53%;
-    --risk-critical: 0 75% 50%;
+    /* Risk levels (Pack D D40, 5-tier incl. info) */
+    --risk-info: 210 80% 50%;
+    --risk-low: 145 60% 42%;
+    --risk-medium: 38 90% 50%;
+    --risk-high: 25 90% 52%;
+    --risk-critical: 0 72% 52%;
+
+    /* Bucket colors (Pack D D50) */
+    --bucket-1: 210 70% 55%;
+    --bucket-2: 145 55% 45%;
+    --bucket-3: 38 88% 52%;
+    --bucket-4: 25 88% 52%;
+    --bucket-5: 0 70% 52%;
+
+    /* Focus ring (Pack D D47) */
+    --focus-ring-color: 210 90% 55%;
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 2px;
 
     /* Status */
     --status-pending: 220 10% 46%;
@@ -104,6 +117,19 @@
     --env-paper-bg: 38 60% 18%;
     --env-live-bg: 142 50% 16%;
 
+    /* Risk + bucket dark mode (lightness +10%) */
+    --risk-info: 210 80% 60%;
+    --risk-low: 145 60% 52%;
+    --risk-medium: 38 90% 60%;
+    --risk-high: 25 90% 62%;
+    --risk-critical: 0 72% 62%;
+    --bucket-1: 210 70% 65%;
+    --bucket-2: 145 55% 55%;
+    --bucket-3: 38 88% 62%;
+    --bucket-4: 25 88% 62%;
+    --bucket-5: 0 70% 62%;
+    --focus-ring-color: 210 90% 65%;
+
     --sidebar-background: 222 50% 4%;
     --sidebar-foreground: 220 14% 80%;
     --sidebar-primary: 217 91% 60%;
@@ -127,5 +153,22 @@
 @layer utilities {
   .text-mono {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  /* Pack D D47 — unified focus ring token */
+  .focus-ring {
+    outline: var(--focus-ring-width) solid hsl(var(--focus-ring-color));
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+/* Pack D D46 — reduced motion: keep opacity transitions only */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 100ms !important;
+    scroll-behavior: auto !important;
   }
 }
