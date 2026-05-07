@@ -20,9 +20,13 @@ class ResizeObserverShim {
   unobserve() {}
   disconnect() {}
 }
-// @ts-expect-error - jsdom polyfill
-globalThis.ResizeObserver = globalThis.ResizeObserver ?? ResizeObserverShim;
-// @ts-expect-error - jsdom polyfill
-if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
-// @ts-expect-error - jsdom polyfill
-if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+const g = globalThis as unknown as {
+  ResizeObserver?: unknown;
+};
+g.ResizeObserver = g.ResizeObserver ?? (ResizeObserverShim as unknown);
+const ep = Element.prototype as unknown as {
+  hasPointerCapture?: () => boolean;
+  scrollIntoView?: () => void;
+};
+if (!ep.hasPointerCapture) ep.hasPointerCapture = () => false;
+if (!ep.scrollIntoView) ep.scrollIntoView = () => {};
