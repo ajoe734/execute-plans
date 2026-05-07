@@ -18,6 +18,10 @@ import { useT } from "@/platform/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
 import type { SentinelFinding, RemediationAction } from "@/lib/v5";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ShieldCheck } from "lucide-react";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
@@ -84,33 +88,52 @@ export const SentinelPage = () => {
           ))}
         </div>
 
-        <ul className="space-y-2">
-          {visible.map((f) => (
-            <li key={f.id}>
-              <button
-                onClick={() => setActive(f)}
-                className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium text-sm truncate">{f.title}</div>
-                  <div className="flex gap-2 shrink-0">
-                    <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
-                    <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+        <SkeletonThreshold
+          loading={!findings.data}
+          fallback={
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          }
+        >
+          <ul className="space-y-2">
+            {visible.map((f) => (
+              <li key={f.id}>
+                <button
+                  onClick={() => setActive(f)}
+                  className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium text-sm truncate">{f.title}</div>
+                    <div className="flex gap-2 shrink-0">
+                      <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
+                      <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
-                <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
-                  <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
-                  <span>{t("v5.sentinel.source")}: {f.source}</span>
-                  <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
-                </div>
-              </button>
-            </li>
-          ))}
-          {visible.length === 0 && (
-            <li className="text-sm text-muted-foreground">{t("v5.empty")}</li>
-          )}
-        </ul>
+                  <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
+                  <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
+                    <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
+                    <span>{t("v5.sentinel.source")}: {f.source}</span>
+                    <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+            {visible.length === 0 && (
+              <li>
+                <EmptyState
+                  icon={<ShieldCheck className="h-8 w-8" />}
+                  title={all.length === 0 ? t("v5.sentinel.noFindingsTitle", { defaultValue: "No findings" }) : t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
+                  description={all.length === 0
+                    ? t("v5.sentinel.noFindingsDesc", { defaultValue: "Sentinel hasn't surfaced any findings for the current scope." })
+                    : t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter to see more findings." })}
+                />
+              </li>
+            )}
+          </ul>
+        </SkeletonThreshold>
       </PageBody>
 
       <FindingDrawer finding={active} onClose={() => setActive(null)} onActed={findings.refresh} />
