@@ -328,20 +328,7 @@ export default {
       rotateSecret: "Generates a new secret value and invalidates the previous one. In-flight requests using the old key will fail until the rotation propagates.",
     },
   },
-  agora: {
-    skillCoaching: { subtitle: "Refine in-flight skill drafts. Each example becomes a training_example used by the trainer to fine-tune behavior.", newPrompt: "New user prompt…", expected: "Expected response…" },
-    signalReview: { subtitle: "Review live strategy signals before capital is committed. Every decision is captured into signal_feedback for training." },
-    askPersonas: { subtitle: "Single or multi-persona committee", attachPh: "Attach signal id, strategy id, or note id… e.g. sig_4421", askPh: "Ask anything…" },
-    decisionJournal: {
-      subtitle: "Long-form record of judgment calls. Used to coach AI personas and reflect on operator skill.",
-      titlePh: "Decision title", contextPh: "Context — what was happening?", decisionPh: "Decision — what did you do?",
-      rationalePh: "Rationale — why?", tagsPh: "Tags (comma-separated)",
-    },
-    evaluations: { subtitle: "Regression suites for personas and skills. Failed cases gate publish workflows." },
-    alertTriage: { subtitle: "Operator triage view. Acknowledge, comment, or escalate to incident.", notePh: "Add a triage note (saved as alert_response)…" },
-    insightInbox: { subtitle: "Patterns, anomalies, ideas, and coaching suggestions surfaced by Pantheon. Triage to grow research and skill backlog." },
-    personaLab: { subtitle: "Compose and test personas with skills, tools, and memory routes before publishing.", memoryRoutePh: "Add memory route…" },
-  },
+  _agora_extras_moved_below: 0 as never,
   permission: {
     requireAction: "Requires permission: {{action}}",
     requireRoles: "Requires role: {{roles}}",
