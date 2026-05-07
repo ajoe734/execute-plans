@@ -1198,6 +1198,7 @@ export default {
     noEvolution: "No evolution programs derived from {{alpha}} yet.",
     startEvolution: "Start an evolution program",
     noGovernance: "No governance requests linked to this strategy.",
+    costsTab: "Costs & Slippage",
   },
   settings: {
     subtitle: "Personal preferences, workspace, integrations, locale, theme, and feature flags.",
@@ -1322,6 +1323,9 @@ export default {
       maxLeverage: "Max leverage", queued: "Limit change queued.",
     },
     freezePool: { title: "Pool freeze", hint: "Halt new allocations from this pool.", queued: "Pool freeze queued." },
+    createIntent: {
+      formula: "Compose a new ranking formula by editing the expression below, then save as a new variant.",
+    },
   },
   phase13: {
     persona: {

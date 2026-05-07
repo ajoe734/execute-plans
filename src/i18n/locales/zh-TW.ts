@@ -1184,6 +1184,7 @@ export default {
     noEvolution: "尚未從 {{alpha}} 衍生任何演化程式。",
     startEvolution: "開始演化程式",
     noGovernance: "此策略尚無治理請求。",
+    costsTab: "成本與滑價",
   },
   settings: {
     subtitle: "個人偏好、Workspace、整合、語言、佈景與功能旗標。",
@@ -1308,6 +1309,9 @@ export default {
       maxLeverage: "最大槓桿", queued: "上限變更已送出。",
     },
     freezePool: { title: "資金池凍結", hint: "暫停此池所有新配置。", queued: "資金池凍結已送出。" },
+    createIntent: {
+      formula: "在下方編輯表達式以撰寫新的排名公式，再另存為新變體。",
+    },
   },
   phase13: {
     persona: {
