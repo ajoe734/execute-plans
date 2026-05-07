@@ -91,7 +91,7 @@ export function paginate<T>(items: readonly T[], opts: PaginateOptions = {}): Pa
   const pageSize = Math.max(1, Math.min(opts.pageSize ?? 50, 200));
   const exact = opts.exact !== false;
   const read = readCursor(opts.cursor, opts.filterHash);
-  if (!read.ok) {
+  if (read.ok !== true) {
     return { ok: false, code: read.code };
   }
   const start = read.offset;
