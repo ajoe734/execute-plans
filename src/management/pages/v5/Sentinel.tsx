@@ -2,7 +2,8 @@
 // High-fidelity findings list + remediation drawer with Q24 advisory /
 // guarded_automation / emergency_override flow. Emergency wraps HighRiskConfirm.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -51,6 +52,23 @@ export const SentinelPage = () => {
   const [active, setActive] = useState<SentinelFinding | null>(null);
   const [filter, setFilter] = useState("");
   const [sevFilter, setSevFilter] = useState<string>("all");
+  const [params, setParams] = useSearchParams();
+
+  // E2 drill-down: ?finding=<id> auto-opens the matching finding drawer.
+  useEffect(() => {
+    const id = params.get("finding");
+    if (!id || !findings.data) return;
+    const match = findings.data.items.find((f) => f.id === id);
+    if (match) setActive(match);
+  }, [params, findings.data]);
+
+  const closeActive = () => {
+    setActive(null);
+    if (params.get("finding")) {
+      params.delete("finding");
+      setParams(params, { replace: true });
+    }
+  };
 
   const all = findings.data?.items ?? [];
   const visible = useMemo(() => all.filter((f) => {
@@ -136,7 +154,7 @@ export const SentinelPage = () => {
         </SkeletonThreshold>
       </PageBody>
 
-      <FindingDrawer finding={active} onClose={() => setActive(null)} onActed={findings.refresh} />
+      <FindingDrawer finding={active} onClose={closeActive} onActed={findings.refresh} />
     </>
   );
 };
