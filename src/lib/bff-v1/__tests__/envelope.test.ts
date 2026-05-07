@@ -32,7 +32,7 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
       body: {},
     });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected failure");
+    if (result.ok === true) throw new Error("expected failure");
     expect(result.error).toBeInstanceOf(BffError);
     expect(result.error.status).toBe(428);
     expect(result.error.code).toBe("CONFIRM_TOKEN_REQUIRED");
@@ -48,7 +48,7 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
       body: { confirmToken: "tkn_x" },
     });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected failure");
+    if (result.ok === true) throw new Error("expected failure");
     expect(result.error.code).toBe("APPROVAL_REQUIRED");
     expect(result.error.requiresApproval()).toBe(true);
     expect(result.error.details?.approvalId).toBeTypeOf("string");
@@ -64,7 +64,7 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
   it("unknown path → RESOURCE_NOT_FOUND", async () => {
     const result = await bffRequest({ method: "GET", path: "/bff/no-such-route" });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected failure");
+    if (result.ok === true) throw new Error("expected failure");
     expect(result.error.code).toBe("RESOURCE_NOT_FOUND");
   });
 });
