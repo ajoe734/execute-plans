@@ -1,14 +1,19 @@
 // Generic object list page generator for the Management Console
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable, type Column } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
 import { useLiveList } from "@/lib/useLiveList";
+import type { CreateBehavior } from "@/lib/writeIntents/types";
+import { withOverlay } from "@/lib/bff/writeOverlay";
+import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
 
 interface Props<T extends BaseObject> {
   title: string;
@@ -17,12 +22,20 @@ interface Props<T extends BaseObject> {
   extraColumns?: Column<T>[];
   /** Realtime data:{kind} events that should refresh this list. */
   liveKinds?: string[];
+  /** Pack F F01 — describes the Create button behavior. */
+  createBehavior?: CreateBehavior;
 }
 
-export function ObjectListPage<T extends BaseObject>({ title, loader, basePath, extraColumns = [], liveKinds = [] }: Props<T>) {
+export function ObjectListPage<T extends BaseObject>({
+  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior,
+}: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
-  const { rows, pending, refresh } = useLiveList<T>(loader, liveKinds, { auto: false });
+  const wrappedLoader = createBehavior?.kind === "drawer"
+    ? withOverlay<T>(createBehavior.entity, loader)
+    : loader;
+  const { rows, pending, refresh } = useLiveList<T>(wrappedLoader, liveKinds, { auto: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const columns: Column<T>[] = [
     { key: "name", header: "Name", cell: (r) => <div className="font-medium">{r.name}</div> },
@@ -33,12 +46,61 @@ export function ObjectListPage<T extends BaseObject>({ title, loader, basePath, 
     { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</span> },
   ];
 
+  const renderCreateAction = () => {
+    if (!createBehavior) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0}>
+              <Button size="sm" disabled>
+                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Create flow not configured</TooltipContent>
+        </Tooltip>
+      );
+    }
+    if (createBehavior.kind === "disabled") {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0}>
+              <Button size="sm" disabled>
+                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey })}</TooltipContent>
+        </Tooltip>
+      );
+    }
+    if (createBehavior.kind === "redirect") {
+      const { to, intent } = createBehavior;
+      return (
+        <Button size="sm" onClick={() => navigate(to, { state: { intent } })}>
+          <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+        </Button>
+      );
+    }
+    // drawer
+    return (
+      <>
+        <Button size="sm" onClick={() => setDrawerOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+        </Button>
+        <EntityCreateDrawer
+          entity={createBehavior.entity}
+          open={drawerOpen}
+          onOpenChange={(v) => { setDrawerOpen(v); if (!v) refresh(); }}
+        />
+      </>
+    );
+  };
+
   return (
     <>
-      <PageHeader
-        title={title}
-        actions={<Button size="sm"><Plus className="h-4 w-4 mr-1" />{t("actions.create")}</Button>}
-      />
+      <PageHeader title={title} actions={renderCreateAction()} />
       <PageBody>
         {pending > 0 && (
           <button
