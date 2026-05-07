@@ -1,8 +1,9 @@
-/**
- * @deprecated Batch VII — Use `useLiveListV1` from `@/lib/bff-v1` (cursor + ListClass aware).
- * Kept for in-flight migration; see `.lovable/audits/batch-vii-migration.md`.
- */
-// Phase 16 — realtime helpers for UI.
+// BFF Contract v1 — realtime list hook (canonical, T[]-shaped).
+//
+// `useLiveList(loader, kinds)` returns `{ rows, pending, refresh }` and
+// auto-refetches on the legacy realtime bus. For envelope-aware
+// (`ListEnvelope<T>`) usage with cursor + estimatedTotal, use
+// `useLiveListV1` instead.
 import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { realtime, type RealtimeStatus } from "@/lib/bff/realtime";
 
