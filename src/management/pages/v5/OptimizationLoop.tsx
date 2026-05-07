@@ -74,12 +74,12 @@ export const OptimizationLoopPage = () => {
         </div>
 
         <Card className="p-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
+          <div ref={runsRef} className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.optimization.runs")}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.optimization.runsHint")}</p>
           </div>
           <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground bg-muted/40">
+            <thead ref={approvalRef} className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
                 <th className="text-left px-3 py-2">{t("v5.col.status")}</th>
