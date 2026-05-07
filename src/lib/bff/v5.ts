@@ -66,6 +66,7 @@ function allLoopRuns(): LoopRun[] {
     approvals: seed.approvals,
     alerts: seed.alerts,
     incidents: seed.incidents,
+    research: seed.researchExperiments,
   }));
 }
 
