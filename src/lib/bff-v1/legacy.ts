@@ -16,3 +16,10 @@ export { runActionSafe as legacyRunActionSafe } from "@/lib/bff/runAction";
 
 /** @deprecated Use `bffV1.lists.useLiveList` (cursor + ListClass aware). */
 export { useLiveList as legacyUseLiveList } from "@/lib/useLiveList";
+
+/**
+ * Realtime connection status hook. Stays canonical for now (no v1 replacement
+ * yet — SSE bridge uses this same store). Re-exported here so consumers
+ * don't import the @deprecated `@/lib/useLiveList` module directly.
+ */
+export { useRealtimeStatus } from "@/lib/useLiveList";

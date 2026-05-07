@@ -9,7 +9,7 @@ import { clearPersisted, persistNow } from "@/lib/bff/persistence";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { realtime } from "@/lib/bff/realtime";
-import { useRealtimeStatus } from "@/lib/useLiveList";
+import { useRealtimeStatus } from "@/lib/bff-v1";
 import { ScenarioRunnerCard } from "@/platform/components/ScenarioRunnerCard";
 
 type Item = { id: string; label: string; detail?: string };

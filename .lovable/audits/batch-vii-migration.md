@@ -16,16 +16,16 @@
    - Each batch must keep the test suite green and resolve any regressions before merging.
    - When the count below reaches 0, delete `legacy.ts` and the deprecated files.
 
-## Call-site inventory (94 files, snapshot 2026-05-07)
+## Call-site inventory (snapshot 2026-05-07, post-B1a)
 
-### Platform shell (4) — **Migrate first** (small surface, high traffic)
-- `src/platform/components/TopBar.tsx`
-- `src/platform/components/NotificationCenter.tsx`
-- `src/platform/components/CommandPalette.tsx`
-- `src/platform/components/JobProgressDrawer.tsx`
-- `src/platform/components/RealtimeStatusBadge.tsx`
-- `src/platform/components/RightDrawer.tsx`
-- `src/platform/pages/QAChecklist.tsx`
+### Platform shell (7) — ✅ MIGRATED 2026-05-07 (B1a)
+- `src/platform/components/TopBar.tsx` → `legacyBff` via `@/lib/bff-v1`
+- `src/platform/components/NotificationCenter.tsx` → `legacyBff`
+- `src/platform/components/CommandPalette.tsx` → `legacyBff`
+- `src/platform/components/JobProgressDrawer.tsx` → `legacyBff`
+- `src/platform/components/RightDrawer.tsx` → `legacyBff`
+- `src/platform/components/RealtimeStatusBadge.tsx` → `useRealtimeStatus` from `@/lib/bff-v1`
+- `src/platform/pages/QAChecklist.tsx` → `useRealtimeStatus` from `@/lib/bff-v1`
 
 ### Management detail panels (~35)
 - All files under `src/management/components/detail/*.tsx`

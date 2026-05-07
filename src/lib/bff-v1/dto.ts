@@ -35,13 +35,8 @@ export interface BulkActionResponse<T> {
 
 // ---------- Section 3: Errors (re-exported from errors.ts for convenience) ----------
 
-/** v1 ErrorCode union — superset of v4 (adds APPROVAL_REQUIRED, RESOURCE_NOT_FOUND,
- *  CONFIRM_TOKEN_REVOKED). H-backlog: align v4 errorCodes.ts with this list. */
-export type ErrorCode =
-  | V4ErrorCode
-  | "APPROVAL_REQUIRED"
-  | "CONFIRM_TOKEN_REVOKED"
-  | "RESOURCE_NOT_FOUND";
+/** v1 ErrorCode union — now identical to v4 ERROR_CODES superset (H2 closed). */
+export type ErrorCode = V4ErrorCode;
 
 export interface ErrorDetails {
   field?: string;
@@ -70,10 +65,15 @@ export interface BffErrorEnvelope {
   error: BffErrorPayload;
 }
 
-// ---------- Section: Action command ----------
+// ---------- Section: Action command (H3 — named ActionCommandStatus) ----------
 
-/** H-backlog: name this `ActionCommandStatus` in OpenAPI. */
-export type ActionCommandStatus = "accepted" | "queued" | "completed";
+/** H3 closed — named enum aligned with OpenAPI components.schemas.ActionCommandStatus. */
+export const ACTION_COMMAND_STATUSES = ["accepted", "queued", "completed"] as const;
+export type ActionCommandStatus = (typeof ACTION_COMMAND_STATUSES)[number];
+
+export function isActionCommandStatus(v: unknown): v is ActionCommandStatus {
+  return typeof v === "string" && (ACTION_COMMAND_STATUSES as readonly string[]).includes(v);
+}
 
 export interface ActionCommandResponseData {
   actionId: string;

@@ -25,6 +25,11 @@ export const ERROR_CODES = [
   "BACKEND_UNAVAILABLE",
   "SSE_REPLAY_UNAVAILABLE",
   "UNKNOWN_ERROR",
+  // H2 — added 2026-05-07: superset to align with v1 BFF Contract DTO Catalog §3.1.
+  // Pack D D21 master will be refreshed in H version to mirror this list.
+  "RESOURCE_NOT_FOUND",
+  "APPROVAL_REQUIRED",
+  "CONFIRM_TOKEN_REVOKED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
