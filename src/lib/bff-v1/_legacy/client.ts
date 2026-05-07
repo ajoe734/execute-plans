@@ -11,10 +11,10 @@
 // surfaces the current value via `bff.getAcceptLanguage()` and logs locale
 // changes onto the realtime bus for observability parity with a real fetch BFF.
 import * as seed from "@/mocks/seed";
-import { mutations } from "./mutations";
-import { realtime } from "./realtime";
+import { mutations } from "@/lib/bff/mutations";
+import { realtime } from "@/lib/bff/realtime";
 import { usePlatform } from "@/platform/store";
-import { bffV5 } from "./v5";
+import { bffV5 } from "@/lib/bff/v5";
 import { fetchMe, invalidateMe, type MeResponse } from "@/lib/v4/session/me";
 
 const acceptLanguage = (): string => {
