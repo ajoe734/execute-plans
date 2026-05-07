@@ -1447,7 +1447,7 @@ export default {
       currency: "幣別", allocated: "配置額度", riskBudget: "風險預算",
       expression: "公式表達式",
       quarter: "季度 (YYYY-Qn)", targetPoolId: "目標資金池 ID", proposedDelta: "提議變動",
-      strategyId: "策略 ID", artifactId: "Artifact ID", target: "目標環境", version: "版本", previousVersion: "前一版本",
+      strategyId: "策略 ID", artifactId: "產出物 ID", target: "目標環境", version: "版本", previousVersion: "前一版本",
       parentAlpha: "父 Alpha", population: "族群數",
       hypothesis: "假設", metric: "指標",
       kind: "類型", sourceExperimentId: "來源實驗 ID",
