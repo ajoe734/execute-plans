@@ -47,6 +47,26 @@ export * from "./signalConfidence";
 export * from "./committeeTemplates";
 export * from "./dailyBriefKpi";
 export * from "./lifecycleBucketColors";
-// Pack D Batch II additions
-export * from "./errorCodes";
-export * from "./session/me";
+// Pack D Batch II additions (selective re-export to avoid name clashes)
+export {
+  ERROR_CODES,
+  isErrorCode,
+  errorI18nKey,
+  DISABLED_REASON_CODES,
+  isDisabledReasonCode,
+  disabledReasonI18nKey,
+} from "./errorCodes";
+export type { ErrorCode } from "./errorCodes";
+export {
+  mockMe,
+  fetchMe,
+  invalidateMe,
+  useMe,
+  hasCapability,
+} from "./session/me";
+export type {
+  MeResponse,
+  MeUser,
+  MeTenant,
+  Capability as MeCapability,
+} from "./session/me";
