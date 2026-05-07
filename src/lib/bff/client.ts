@@ -8,6 +8,7 @@ import { mutations } from "./mutations";
 import { realtime } from "./realtime";
 import { usePlatform } from "@/platform/store";
 import { bffV5 } from "./v5";
+import { fetchMe, invalidateMe, type MeResponse } from "@/lib/v4/session/me";
 
 const acceptLanguage = (): string => {
   const l = usePlatform.getState().locale;
@@ -30,6 +31,11 @@ export const bff = {
   mutations,
   /** Pack E — v5 closed-loop OS facade (Q3). View-model layer; does not replace v4 normative DTOs. */
   v5: bffV5,
+  /** Pack D D51/D59 (Batch III) — single source of session/user/tenant. */
+  me: {
+    get: (force = false): Promise<MeResponse> => fetchMe(force),
+    invalidate: (): void => invalidateMe(),
+  },
   /** v3 §6.2 high-risk confirmation token issuance. */
   commands: {
     requestConfirmToken: mutations.requestConfirmToken,
