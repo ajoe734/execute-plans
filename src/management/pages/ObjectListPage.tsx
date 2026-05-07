@@ -1,4 +1,5 @@
 // Generic object list page generator for the Management Console
+// VI-1 — migrated to bffV1: loader returns ListEnvelope<T>; refresh via useLiveListV1.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -10,14 +11,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Plus, RefreshCw } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
-import { useLiveList } from "@/lib/useLiveList";
+import { useLiveListV1, type ListEnvelope } from "@/lib/bff-v1";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import { withOverlay } from "@/lib/bff/writeOverlay";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
 
 interface Props<T extends BaseObject> {
   title: string;
-  loader: () => Promise<T[]>;
+  /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
+  loader: () => Promise<ListEnvelope<T>>;
   basePath: string;
   extraColumns?: Column<T>[];
   /** Realtime data:{kind} events that should refresh this list. */
@@ -31,10 +33,12 @@ export function ObjectListPage<T extends BaseObject>({
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
-  const wrappedLoader = createBehavior?.kind === "drawer"
-    ? withOverlay<T>(createBehavior.entity, loader)
+  const wrappedLoader: () => Promise<ListEnvelope<T>> = createBehavior?.kind === "drawer"
+    ? (() => withOverlay<T>(createBehavior.entity, async () => (await loader()).items)().then((items) => ({
+        items, cursor: {}, pageSize: items.length, estimatedTotal: items.length, totalCountExact: true,
+      })))
     : loader;
-  const { rows, pending, refresh } = useLiveList<T>(wrappedLoader, liveKinds, { auto: false });
+  const { items: rows, pending, refresh } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const columns: Column<T>[] = [
