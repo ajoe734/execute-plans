@@ -36,6 +36,8 @@ Companion feedback packs:
 - `.lovable/feedback/2026-05-05-A/` — Pack A (28 High)
 - `.lovable/feedback/2026-05-05-B/` — Pack B (64 M/L)
 - `.lovable/feedback/2026-05-05-C/` — Pack C (78 deeper gaps from Audit C)
+- `.lovable/feedback/2026-05-06-E/` — Pack E (v5 conflicts disposition)
+- `.lovable/feedback/2026-05-06-F/` — Pack F (write-intent + IA boundary + QA semantics)
 
 ## v3 (superseded for Pack-C topics)
 
