@@ -984,6 +984,7 @@ export default {
       reflectionPh: "你學到了什麼？再來一次會做一樣的決定嗎？",
     },
     evaluation: { prompt: "提示詞", expected: "預期", observed: "實際" },
+    evaluations: { subtitle: "Persona 與技能的回歸測試套件，失敗案例會擋下發布流程。" },
     insightInbox: {
       subtitle: "Pantheon 浮現的模式、異常、想法與教練建議。經分流後納入研究與技能待辦。",
       promote: "升級", handoff: "交接", discuss: "討論", dismiss: "忽略",
