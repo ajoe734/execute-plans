@@ -29,7 +29,7 @@ export async function runActionSafe(
 ): Promise<MutationResult> {
   const { silent, successTitle, successDescription, ...v1opts } = opts;
   const r = await tryRunAction(input, v1opts);
-  if (r.ok) {
+  if (r.ok === true) {
     if (!silent) {
       toast.success(successTitle ?? ttl("toast.actionApplied", "Action applied"), {
         description: successDescription ?? `${input.kind} · ${input.action}`,
@@ -37,12 +37,13 @@ export async function runActionSafe(
     }
     return r.envelope.legacy;
   }
-  const isIllegal = r.error.details?.reason === "illegal_transition";
+  const err = r.error;
+  const isIllegal = err.details?.reason === "illegal_transition";
   toast.error(
     isIllegal
       ? ttl("toast.illegalTransition", "Illegal state transition")
       : ttl("toast.failed", "Action failed"),
-    { description: isIllegal ? `${input.kind} · ${input.action}` : r.error.message },
+    { description: isIllegal ? `${input.kind} · ${input.action}` : err.message },
   );
   return {
     ok: false,
@@ -53,10 +54,10 @@ export async function runActionSafe(
       target: input.id,
       ts: new Date().toISOString(),
       outcome: "rejected",
-      correlationId: r.error.correlationId,
+      correlationId: err.correlationId,
     },
-    message: r.error.message,
-    rejected: isIllegal ? "illegal_transition" : (r.error.details?.reason as MutationResult["rejected"]),
-    correlationId: r.error.correlationId,
+    message: err.message,
+    rejected: isIllegal ? "illegal_transition" : (err.details?.reason as MutationResult["rejected"]),
+    correlationId: err.correlationId,
   };
 }
