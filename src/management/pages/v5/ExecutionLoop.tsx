@@ -2,6 +2,8 @@
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
 // Timeout policy uses v0-mock (Q12) until D05 lands.
 
+import { useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -31,8 +33,17 @@ const stageDotCls: Record<string, string> = {
 
 export const ExecutionLoopPage = () => {
   const t = useT();
+  const [params] = useSearchParams();
+  const focus = params.get("focus"); // "personas" | "strategies" | "deployments"
+  const personasRef = useRef<HTMLDivElement | null>(null);
+  const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => bff.v5.loops.list("execution"));
   const personas = useV5Live(() => bff.v5.personas.health());
+
+  useEffect(() => {
+    if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (focus === "strategies" || focus === "deployments") runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focus]);
 
   const items = runs.data?.items ?? [];
   const running = items.filter((r) => r.status === "running").length;
@@ -55,6 +66,7 @@ export const ExecutionLoopPage = () => {
         </div>
 
         {/* Loop runs */}
+        <div ref={runsRef} />
         <Card className="p-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.loops.execution.runs")}</h2>
@@ -99,7 +111,7 @@ export const ExecutionLoopPage = () => {
         </Card>
 
         {/* Persona health matrix */}
-        <div>
+        <div ref={personasRef}>
           <div className="mb-2">
             <h2 className="text-sm font-semibold">{t("v5.matrix.title")}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.matrix.subtitle")}</p>

@@ -96,6 +96,13 @@ export default {
     loopOptimization: "Optimization Loop",
     sentinel: "Sentinel Findings",
     interventions: "Human Intervention Queue",
+    // Pack F F03 — registry vs loop view boundary
+    personaRegistry: "Persona Registry",
+    personaTradingHealth: "Persona Trading Health",
+    strategyRegistry: "Strategy Registry",
+    liveStrategyMonitor: "Live Strategy Monitor",
+    deploymentRegistry: "Deployment Registry",
+    deploymentMonitor: "Deployment Monitor",
   },
   groups: {
     overview: "Overview",

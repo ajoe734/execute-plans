@@ -1,0 +1,5 @@
+id,answer,addendum_to,notes
+F01,Implement Pack F v0 write-intent layer; Create buttons must use drawer/redirect/disabled-tooltip and never no-op,.lovable/audits/spec-gap-2026-05-06-F.md,"Create DTOs defined for 9 entities; write to overlay not seed; audit+realtime required"
+F02,Fix immediately as impl-only bug; bundle with F01,.lovable/audits/spec-gap-2026-05-06-F.md,"No spec needed; acceptance = no forwardRef warning on capital/personas/strategies list pages"
+F03,Keep /management/personas as Persona Registry; keep PersonaHealthMatrix inside /management/loops/execution,.lovable/audits/spec-gap-2026-05-06-F.md,"Registry route and loop health view must be semantically separate; update nav labels/dedupe"
+F04,Update smoke report taxonomy; do not claim full regression-clean for read-only smoke,.lovable/audits/spec-gap-2026-05-06-F.md,"Use read-path-clean/write-path-clean/loop-action-clean/console-warning-clean/full-regression-clean"

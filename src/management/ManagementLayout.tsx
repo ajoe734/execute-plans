@@ -19,16 +19,19 @@ export const ManagementLayout = () => {
       { to: "/management/loops", label: t("nav.loops"), icon: Workflow, dedupeKey: "loops" },
       { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical, dedupeKey: "loops" },
       { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target, dedupeKey: "loops" },
+      // Pack F F03 — Persona Trading Health is a loop view, not a registry
+      { to: "/management/loops/execution?focus=personas", label: t("nav.personaTradingHealth"), icon: Users },
+      { to: "/management/loops/execution?focus=strategies", label: t("nav.liveStrategyMonitor"), icon: Boxes },
+      { to: "/management/loops/execution?focus=deployments", label: t("nav.deploymentMonitor"), icon: Rocket },
       { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch, dedupeKey: "loops" },
       { to: "/management/sentinel", label: t("nav.sentinel"), icon: ShieldAlert },
       { to: "/management/interventions", label: t("nav.interventions"), icon: Eye },
     ]},
     { label: t("groups.coreManagement"), items: [
-      { to: "/management/strategies", label: t("nav.strategies"), icon: Boxes },
+      // Pack F F03 — registry routes (entity management). Distinct from loop monitors above.
+      { to: "/management/strategies", label: t("nav.strategyRegistry"), icon: Boxes },
       { to: "/management/alpha-factory", label: t("nav.alphaFactory"), icon: Factory },
-      // Pack E Q18 — Personas remains canonical entry. Execution Loop persona view
-      // shares dedupeKey="personas" so the sidebar does not double-highlight.
-      { to: "/management/personas", label: t("nav.personas"), icon: Users, dedupeKey: "personas" },
+      { to: "/management/personas", label: t("nav.personaRegistry"), icon: Users, dedupeKey: "personas" },
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
       { to: "/management/rebalance", label: t("nav.rebalance"), icon: Repeat },

@@ -1,33 +1,112 @@
-# Audit F — 把實作層 placeholder / no-op 缺口寫成規格條目
 
-## 結論先講
-你看到的「建立沒反應」**不是 Pack E 退化**，是 v3/v4 期間 `ObjectListPage` 第 40 行的「建立」按鈕從來就沒接 `onClick`，9 個 list 頁（personas / capital / strategies / ranking / rebalances / deployments / evolution / research / artifacts）共用同一個 placeholder。同檔還帶了一個 pre-Pack-E 的 `forwardRef` warning。Pack E disposition 28 條沒覆蓋這個範圍，所以我會依你的選擇 —— **先記成 Audit F、等規格回應，src/ 一字不動**。
+# Pack F 實作計畫
 
-## 要新增 / 修改的檔案
+Pack F Disposition 已完整看過。Pack F = **Write Intent + IA Boundary + QA Semantics** 修正包。本份計畫嚴格依 disposition §6 切分，並對齊既有檔案結構（`src/lib/v5/overlay.ts` 已存在 action overlay，但 disposition 要求另立 entity-write overlay；兩者不混用）。
 
-1. **新增** `.lovable/audits/spec-gap-2026-05-06-F.md`
-   - 4 條缺口：F01 list 頁建立按鈕無 onClick / F02 ObjectListPage forwardRef warning / F03 v4 PersonasList 與 v5 PersonaHealthMatrix 入口重複 / F04 Pack E smoke 報告未涵蓋寫入路徑
-   - 每條標 severity、影響檔案、推測 Pack 歸屬、建議 disposition
-   - Cross-ref Audit D blockers（D05 = entity write contract，與 F01 重疊）與 Pack E Q11 / Q17 / Q23
+---
 
-2. **新增** `.lovable/audits/spec-gap-2026-05-06-F-summary.csv`
-   - 4 列：id, severity, scope, files, suggested_owner_pack
+## F0 — 落 disposition 檔案
 
-3. **編輯** `.lovable/audits/INDEX.md`
-   - 新增一列：`spec-gap-2026-05-06-F | 2026-05-06 | 實作層 placeholder / no-op | 4 | 1 / 2 / 1 | OPEN | 待 Pack D F-disposition`
+新增：
+- `.lovable/feedback/2026-05-06-F/Pack_F_Disposition.md`（從 user-uploads 複製）
+- `.lovable/feedback/2026-05-06-F/Pack_F_Disposition.csv`（取自 §8）
 
-4. **編輯** `mem://audits/open-gaps`
-   - 在 Audit D blockers 段落後追加 Audit F 的 4 條 OPEN 項
+更新：
+- `.lovable/audits/INDEX.md` — Audit F 狀態改 `RESOLVED by Pack F (disposition received)`
+- `.lovable/spec/INDEX.md` — 加 Pack F feedback 路徑
+- `mem://index.md` Core — 改寫 Audit F 段，標記 disposition 已收到、Pack F implementation in progress
+- `mem://audits/open-gaps` — Audit F 4 條移到 RESOLVED 區
 
-5. **更新** `mem://index.md`
-   - Core 段加一句：`Audit F (2026-05-06) 4 條實作層 OPEN — list 頁建立按鈕為 v3/v4 placeholder，待規格 disposition；不主動補實作。`
+---
+
+## F1 — Write-Intent 基礎建設
+
+新增：
+- `src/lib/writeIntents/types.ts` — `CreatableEntity`、`BaseCreateInput`、9 個 Per-entity `*CreateInput`、`CreateIntentResult<T>`、`EntityUpdateInput<T>`、`CreateBehavior` discriminated union（依 §2.4 / §2.5 / §2.6 / §2.8）
+- `src/lib/writeIntents/createDefaults.ts` — 各 entity 預設值（state=draft、risk default、shadow mode 等）
+- `src/lib/writeIntents/validation.ts` — pure validator（回 `{ ok, errors }`），覆蓋 §2.5 各條 validation 規則
+- `src/lib/bff/writeOverlay.ts` — entity-level overlay（與 `src/lib/v5/overlay.ts` action overlay **分檔**，避免 v5 memory 規則衝突）：
+  - `MockWriteOverlay`：`created/updated/deleted` per `CreatableEntity`
+  - TTL 30 分鐘、refresh 清空
+  - export `mergeOverlay(seed, kind)` 給 list loaders
+  - 每次 mutate emit `audit` event + realtime data event（透過既有 `src/lib/bff/realtime.ts`）
+- `src/lib/writeIntents/__tests__/validation.test.ts` + `writeOverlay.test.ts`
+
+新增 UI：
+- `src/management/components/write/EntityCreateDrawer.tsx` — 統一 drawer，依 `CreatableEntity` render 對應欄位（switch render，內部組件分檔），submit → validation → overlay → toast → realtime emit
+
+---
+
+## F2 — ObjectListPage + 9 個 list 接 createBehavior
+
+調整：
+- `src/management/pages/ObjectListPage.tsx`
+  - 新增 `createBehavior?: CreateBehavior` prop
+  - Render 規則依 §2.8（undefined / drawer / redirect / disabled）
+  - 順手把 `Button` ref 鏈修正（解 F02 forwardRef warning，§3.2）
+  - Loader 走 `mergeOverlay(loader, kind)`
+- `src/management/pages/Lists.tsx` — 9 個 list 各自宣告 `createBehavior`：
+
+| List | Behavior |
+|---|---|
+| Personas | drawer:`persona` |
+| Strategies | drawer:`strategy` |
+| Capital Pools | drawer:`capitalPool` |
+| Research | drawer:`researchExperiment` |
+| Artifacts | drawer:`artifact` |
+| Ranking Formulas | redirect → Formula Studio（intent=`create`） |
+| Rebalances | redirect → Optimization loop（intent=`create`） |
+| Deployments | drawer:`deployment` |
+| Evolution | drawer:`evolutionProgram` |
+
+驗收依 §2.9：no-op 全消、create 成功 list 立即可見、toast、audit、realtime、validation error 顯示、高風險 create 不直接 live。
+
+---
+
+## F3 — IA Boundary（registry vs loop view）
+
+依 §4.2 / §4.3 / §4.4：
+
+- `src/App.tsx` 路由保持 `/management/personas` = `PersonasList`（已是現況），確認 `PersonaHealthMatrix` **不被掛在** `/management/personas`。檢查並（若有）移除任何 v5 PersonaHealthMatrix 對 `/management/personas` 的 hijack。
+- 把 `PersonaHealthMatrix` 整合進 `/management/loops/execution` 的 `?focus=personas` query view（在 `ExecutionLoopPage` 加 query-driven panel switch）。
+- `src/platform/components/SideNav.tsx` 與 i18n locales：
+  - Multi-Persona System 群組下 label 改成 `Persona Registry` / `Persona 列表`
+  - Execution Loop 群組新增 `Persona Trading Health` → `/management/loops/execution?focus=personas`
+  - 同步 strategies / deployments 採 registry-vs-loop 命名
+  - 若同 route 出現在兩個 nav group，加 `dedupeKey` 或差異化 label
+
+---
+
+## F4 — Console clean
+
+- 把 `ObjectListPage` / `CapitalPoolsList` 中傳給 Radix `asChild` / Tooltip / Slot 的 wrapper 包 `React.forwardRef`
+- 跑 `bunx vitest run` + 手動進 `/management/capital`、`/management/strategies`、`/management/personas` 確認 console 無 `Function components cannot be given refs` warning
+
+---
+
+## F5 — Smoke report taxonomy
+
+新增：
+- `/mnt/documents/PackF_Smoke_Report_2026-05-06.md`，採用 §5.3 五級標籤（read-path-clean / write-path-clean / loop-action-clean / console-warning-clean / full-regression-clean）
+- 跑 §5.4 11 條 checklist
+- 不再單獨使用無限定語的 `regression-clean`
+
+---
 
 ## 不會做的事
 
-- **不**修 `ObjectListPage.tsx` 的 onClick（等 F01 disposition）
-- **不**修 forwardRef warning（F02 與 F01 綁一起，避免重工）
-- **不**動 SideNav / 路由 / `src/` 任何檔案
-- **不**重發 Pack E smoke report
+- 不改 `src/lib/v5/overlay.ts`（v5 action overlay 與 entity write overlay 分檔，避免破壞既有 18 個 v5 test）
+- 不寫真正後端 CRUD contract（v0 mock only）
+- 不刪 v5 PersonaHealthMatrix 元件本身，只搬 IA 入口
+- 不重發 Pack E smoke report
 
-## 為何這樣排
-你已經明確選「把缺口記成 Audit E 條目，等規格回應」（實際編號接續為 F，因 E 已被 v5 disposition 用掉）。這份 plan 的工作量約 10 分鐘，全部在 `.lovable/` 底下。等你核准後切回 build 模式即可一次寫完。
+---
+
+## 技術備註
+
+- Test：新增 validation / overlay / drawer 單元測試；既有 v5 18 tests + v4 tests 應保持綠燈
+- Overlay 命名衝突防範：`src/lib/bff/writeOverlay.ts`（entity）與 `src/lib/v5/overlay.ts`（v5 action）為不同概念，import 路徑差異即可區分
+- audit event：透過既有 `src/lib/bff/persistence.ts` / `realtime.ts` 機制，不新建 audit pipeline
+- i18n：所有新 label 必走 i18n key，`scripts/check-i18n.ts` 須通過
+
+預估 1 個 build loop 內完成。
