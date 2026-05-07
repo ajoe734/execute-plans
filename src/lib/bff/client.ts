@@ -1,3 +1,10 @@
+/**
+ * @deprecated Batch VII — Use `bffV1` from `@/lib/bff-v1` for typed v1 contract access.
+ * This module remains as the mock seed-accessor backing for legacy call sites
+ * (see `.lovable/audits/batch-vii-migration.md`). New code MUST NOT import
+ * directly from here. If you genuinely need the seed accessor during migration,
+ * import `legacyBff` from `@/lib/bff-v1/legacy`.
+ */
 // Mock BFF client. Returns promises with simulated latency.
 // Phase P2 — every request "carries" the active locale (Accept-Language) so
 // downstream services can respond in the operator's language. The mock layer
