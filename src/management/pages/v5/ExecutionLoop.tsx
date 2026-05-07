@@ -116,7 +116,14 @@ export const ExecutionLoopPage = () => {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id} className="border-t border-border">
+                <tr
+                  key={r.id}
+                  className={`border-t border-border cursor-pointer hover:bg-muted/40 ${activeRunId === r.id ? "bg-primary/5" : ""}`}
+                  onClick={() => openRun(r.id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id); } }}
+                  aria-label={t("v5.loops.execution.openRun", { defaultValue: "Open run details" })}
+                >
                   <td className="px-3 py-2">
                     <div className="font-medium">{r.subjectName ?? r.id}</div>
                     <div className="text-xs text-muted-foreground">{r.triggeredBy}</div>
