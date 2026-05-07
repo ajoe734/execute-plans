@@ -29,6 +29,8 @@ export interface ActionDescriptor {
   actionType: "query" | "command" | "job_command" | "approval_command" | "navigation";
   riskLevel: "info" | "low" | "medium" | "high" | "critical";
   enabled: boolean;
+  /** Pack D D14 — DisabledReasonCode enum key (e.g. `disabledReasons.PERMISSION_DENIED`).
+   *  Free-form string accepted for back-compat; new code SHOULD pass enum-derived key. */
   disabledReasonKey?: string;
   disabledReasonParams?: Record<string, string | number | boolean>;
   requiresApproval: boolean;
