@@ -85,3 +85,41 @@ const top = [...byFile.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
 console.log("\n=== Hard-coded English candidates (top files) ===");
 top.forEach(([f, n]) => console.log(`  ${n.toString().padStart(3)}  ${f}`));
 console.log(`Total candidates: ${hardCoded.length}`);
+
+// === zh-TW values that look untranslated (English-only, no CJK) ===
+const ALLOW_EN = new Set([
+  "Pantheon","Persona","Sharpe","Alpha","Memo","Token","PnL","VaR","Beta","Hypothesis",
+  "Sandbox","Risk","Severity","Backtest","Score","Findings","MCP","BFF","SSE","API",
+  "Workspace","Trace","Backtest","Workflow","Schema","Skill","Watchlist","Studios",
+  "Postmortem","Runtime","Canary","Shadow","Suspended","Artifact","Model","Dataset",
+  "Report","Container","System Prompt",
+]);
+function flattenWithValues(obj: any, prefix = "", out: Array<[string, string]> = []): Array<[string, string]> {
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === "object") flattenWithValues(v, key, out);
+    else if (typeof v === "string") out.push([key, v]);
+  }
+  return out;
+}
+const CJK = /[\u4e00-\u9fff]/;
+const HAS_LATIN = /[A-Za-z]/;
+const PLACEHOLDER = /^\{\{[^}]+\}\}$/;
+const CODE_LIKE = /^[a-z0-9._\-*|/+\s]+$/; // formula / slug
+const zhFlat = flattenWithValues(zh);
+const suspect = zhFlat.filter(([k, v]) => {
+  if (CJK.test(v)) return false;
+  if (!HAS_LATIN.test(v)) return false;
+  if (v.length <= 2) return false;
+  if (PLACEHOLDER.test(v)) return false;
+  if (/\{\{/.test(v)) return false;
+  if (CODE_LIKE.test(v) && /[*|.]/.test(v)) return false; // expressions
+  if (/^v\d/.test(v)) return false; // versions
+  // strip whitespace tokens; allow if every token is in allowlist
+  const tokens = v.replace(/[—–\-,/()\[\]]/g, " ").split(/\s+/).filter(Boolean);
+  if (tokens.every((t) => ALLOW_EN.has(t) || /^[\d.%]+$/.test(t) || /^Δ/.test(t))) return false;
+  return true;
+});
+console.log(`\n=== zh-TW values that look untranslated: ${suspect.length} ===`);
+suspect.slice(0, 40).forEach(([k, v]) => console.log(`  ${k}\t${v}`));
+
