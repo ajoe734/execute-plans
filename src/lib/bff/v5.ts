@@ -59,14 +59,14 @@ function allFindings(): SentinelFinding[] {
 }
 
 function allLoopRuns(): LoopRun[] {
-  return deriveLoopRuns({
+  return applyLoopOverlay(deriveLoopRuns({
     strategies: seed.strategies,
     rebalances: seed.rebalances,
     jobs: seed.jobs,
     approvals: seed.approvals,
     alerts: seed.alerts,
     incidents: seed.incidents,
-  });
+  }));
 }
 
 function allInterventions(): InterventionItem[] {
