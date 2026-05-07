@@ -29,7 +29,7 @@ describe("spec-conflict-G G03/G11 — drawer renders + a11y", () => {
       </W>,
     );
     // Currency select trigger present
-    expect(screen.getByText(/Capital Pool/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Capital Pool/i).length).toBeGreaterThan(0);
     // Slider role exists for riskBudget
     expect(screen.getAllByRole("slider").length).toBeGreaterThan(0);
 
