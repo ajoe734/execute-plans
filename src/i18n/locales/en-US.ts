@@ -328,7 +328,7 @@ export default {
       rotateSecret: "Generates a new secret value and invalidates the previous one. In-flight requests using the old key will fail until the rotation propagates.",
     },
   },
-  _agora_extras_moved_below: 0 as never,
+  
   permission: {
     requireAction: "Requires permission: {{action}}",
     requireRoles: "Requires role: {{roles}}",

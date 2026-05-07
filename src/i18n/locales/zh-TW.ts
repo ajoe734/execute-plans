@@ -322,20 +322,6 @@ export default {
       rotateSecret: "產生新的密鑰值並使舊密鑰失效。輪替未完成前，仍使用舊密鑰的請求會失敗。",
     },
   },
-  agora: {
-    skillCoaching: { subtitle: "微調進行中的技能草稿。每個範例會成為訓練器用來微調行為的 training_example。", newPrompt: "新的使用者提示…", expected: "預期回覆…" },
-    signalReview: { subtitle: "在資金投入前審查即時策略訊號。每筆決策都會寫入 signal_feedback 供訓練使用。" },
-    askPersonas: { subtitle: "單一或多 Persona 委員會", attachPh: "附加 signal id、strategy id 或 note id… 例如 sig_4421", askPh: "請輸入問題…" },
-    decisionJournal: {
-      subtitle: "判斷決策的長文紀錄，用於指導 AI Persona 與檢視操作員技能。",
-      titlePh: "決策標題", contextPh: "情境 — 當時發生什麼？", decisionPh: "決策 — 你做了什麼？",
-      rationalePh: "理由 — 為什麼？", tagsPh: "標籤（逗號分隔）",
-    },
-    evaluations: { subtitle: "Persona 與技能的回歸測試套件，失敗案例會擋下發布流程。" },
-    alertTriage: { subtitle: "操作員告警處理檢視：確認、留言或升級為事件。", notePh: "新增處理備註（會儲存為 alert_response）…" },
-    insightInbox: { subtitle: "Pantheon 浮現的模式、異常、想法與教練建議。經分流後納入研究與技能待辦。" },
-    personaLab: { subtitle: "在發布前以技能、工具與記憶路由組合並測試 Persona。", memoryRoutePh: "新增記憶路由…" },
-  },
   permission: {
     requireAction: "需要權限：{{action}}",
     requireRoles: "需要角色：{{roles}}",
