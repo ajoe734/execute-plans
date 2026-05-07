@@ -29,36 +29,34 @@ export async function runActionSafe(
 ): Promise<MutationResult> {
   const { silent, successTitle, successDescription, ...v1opts } = opts;
   const r = await tryRunAction(input, v1opts);
-  if (!r.ok) {
-    const isIllegal = r.error.details?.reason === "illegal_transition";
-    toast.error(
-      isIllegal
-        ? ttl("toast.illegalTransition", "Illegal state transition")
-        : ttl("toast.failed", "Action failed"),
-      { description: isIllegal ? `${input.kind} · ${input.action}` : r.error.message },
-    );
-    // Preserve the legacy MutationResult contract for callers.
-    // Reconstruct from the error so existing checks (.ok / .rejected) keep working.
-    return {
-      ok: false,
-      audit: {
-        id: "au_failed",
-        actor: "—",
-        action: `${input.kind.toLowerCase()}.${input.action}`,
-        target: input.id,
-        ts: new Date().toISOString(),
-        outcome: "rejected",
-        correlationId: r.error.correlationId,
-      },
-      message: r.error.message,
-      rejected: isIllegal ? "illegal_transition" : (r.error.details?.reason as MutationResult["rejected"]),
+  if (r.ok) {
+    if (!silent) {
+      toast.success(successTitle ?? ttl("toast.actionApplied", "Action applied"), {
+        description: successDescription ?? `${input.kind} · ${input.action}`,
+      });
+    }
+    return r.envelope.legacy;
+  }
+  const isIllegal = r.error.details?.reason === "illegal_transition";
+  toast.error(
+    isIllegal
+      ? ttl("toast.illegalTransition", "Illegal state transition")
+      : ttl("toast.failed", "Action failed"),
+    { description: isIllegal ? `${input.kind} · ${input.action}` : r.error.message },
+  );
+  return {
+    ok: false,
+    audit: {
+      id: "au_failed",
+      actor: "—",
+      action: `${input.kind.toLowerCase()}.${input.action}`,
+      target: input.id,
+      ts: new Date().toISOString(),
+      outcome: "rejected",
       correlationId: r.error.correlationId,
-    };
-  }
-  if (!silent) {
-    toast.success(successTitle ?? ttl("toast.actionApplied", "Action applied"), {
-      description: successDescription ?? `${input.kind} · ${input.action}`,
-    });
-  }
-  return r.envelope.legacy;
+    },
+    message: r.error.message,
+    rejected: isIllegal ? "illegal_transition" : (r.error.details?.reason as MutationResult["rejected"]),
+    correlationId: r.error.correlationId,
+  };
 }
