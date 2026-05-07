@@ -66,6 +66,7 @@ export const ExecutionLoopPage = () => {
         </div>
 
         {/* Loop runs */}
+        <div ref={runsRef} />
         <Card className="p-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.loops.execution.runs")}</h2>
@@ -110,7 +111,7 @@ export const ExecutionLoopPage = () => {
         </Card>
 
         {/* Persona health matrix */}
-        <div>
+        <div ref={personasRef}>
           <div className="mb-2">
             <h2 className="text-sm font-semibold">{t("v5.matrix.title")}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.matrix.subtitle")}</p>
