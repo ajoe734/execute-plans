@@ -73,7 +73,7 @@ export const InsightInbox = () => {
     <>
       <PageHeader
         title={t("nav.insights")}
-        subtitle="Patterns, anomalies, ideas, and coaching suggestions surfaced by Pantheon. Triage to grow research and skill backlog."
+        subtitle={t("agora.insightInbox.subtitle")}
         actions={
           <div className="flex gap-1">
             {(["all", "pattern", "anomaly", "research_idea", "skill_suggestion"] as const).map((k) => (

@@ -65,7 +65,7 @@ export const AskPersonas = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.askPersonas")} subtitle="Single or multi-persona committee" />
+      <PageHeader title={t("nav.askPersonas")} subtitle={t("agora.askPersonas.subtitle")} />
       <PageBody>
         <Card className="p-4">
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{t("agora.askPersonas.personas")}</div>
@@ -98,7 +98,7 @@ export const AskPersonas = () => {
             <Input
               value={ctxInput}
               onChange={(e) => setCtxInput(e.target.value)}
-              placeholder="Attach signal id, strategy id, or note id… e.g. sig_4421"
+              placeholder={t("agora.askPersonas.attachPh")}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCtx(); } }}
             />
             <Button variant="outline" size="sm" onClick={addCtx}><Paperclip className="h-4 w-4" /></Button>
@@ -138,7 +138,7 @@ export const AskPersonas = () => {
         </Card>
 
         <div className="flex gap-2">
-          <Textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask anything…" className="min-h-[60px]" />
+          <Textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={t("agora.askPersonas.askPh")} className="min-h-[60px]" />
           <Button onClick={send}><Send className="h-4 w-4" /></Button>
         </div>
       </PageBody>

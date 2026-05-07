@@ -90,7 +90,7 @@ export const SignalReview = () => {
 
   return (
     <>
-      <PageHeader title={t("nav.signals")} subtitle="Review live strategy signals before capital is committed. Every decision is captured into signal_feedback for training." />
+      <PageHeader title={t("nav.signals")} subtitle={t("agora.signalReview.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 space-y-2">
