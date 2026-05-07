@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { Strategy, ObjectVersion } from "@/lib/bff/types";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { VersionDiffViewer } from "./VersionDiffViewer";

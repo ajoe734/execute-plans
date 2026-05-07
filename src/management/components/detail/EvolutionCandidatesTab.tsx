@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 

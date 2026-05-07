@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { MemoryUpdate, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 

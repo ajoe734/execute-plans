@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useInspector } from "@/platform/components/RightDrawer";
 import { useT } from "@/platform/hooks";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { Strategy } from "@/lib/bff/types";
 import { resolveEntity, decisionsHref, auditHref } from "@/lib/entityLinks";
 import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";

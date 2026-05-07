@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { __resetIdempotencyForTests } from "@/lib/v4/idempotency";
 import {
   issueConfirmTokenV4, redeemConfirmToken, revokeConfirmToken,

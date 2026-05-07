@@ -7,7 +7,7 @@ import {
 } from "../listEnvelope";
 import { makeSseEnvelope, isSseEventEnvelope, SSE_SCHEMA_VERSION } from "../sseEnvelope";
 import { realtime } from "@/lib/bff/realtime";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 
 describe("Pack D Batch III — listEnvelope", () => {
   beforeEach(() => clearCursorStore());

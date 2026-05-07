@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Artifact } from "@/lib/bff/types";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 

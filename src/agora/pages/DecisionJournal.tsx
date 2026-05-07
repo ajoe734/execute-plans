@@ -10,7 +10,7 @@ import { Plus, BookMarked, Send, GitBranch, ArrowUpRight, X } from "lucide-react
 import { useT } from "@/platform/hooks";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { DecisionJournalEntry } from "@/lib/bff/types";
 import { resolveEntity, lineageHref, auditHref } from "@/lib/entityLinks";
 

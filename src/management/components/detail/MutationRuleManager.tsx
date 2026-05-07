@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import type { MutationRule } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";

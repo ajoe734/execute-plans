@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { toast } from "sonner";
 
 const Section = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (

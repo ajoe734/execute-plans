@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import type { Strategy, Alert, ApprovalRequest } from "@/lib/bff/types";

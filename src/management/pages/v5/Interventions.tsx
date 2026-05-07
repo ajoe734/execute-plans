@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { bff } from "@/lib/bff/client";
+import { legacyBff as bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "@/components/ui/use-toast";
