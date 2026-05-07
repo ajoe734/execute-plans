@@ -1000,6 +1000,7 @@ export default {
     },
     evaluation: { prompt: "Prompt", expected: "Expected", observed: "Observed" },
     insightInbox: {
+      subtitle: "Patterns, anomalies, ideas, and coaching suggestions surfaced by Pantheon. Triage to grow research and skill backlog.",
       promote: "Promote", handoff: "Handoff", discuss: "Discuss", dismiss: "Dismiss",
       empty: "Inbox zero.",
       promoteToStrategy: "Promote to strategy idea",
@@ -1030,12 +1031,15 @@ export default {
       queued: "Research task queued via {{id}}",
     },
     personaLab: {
+      subtitle: "Compose and test personas with skills, tools, and memory routes before publishing.",
+      memoryRoutePh: "Add memory route…",
       draft: "Persona draft", archetype: "Archetype", systemPrompt: "System Prompt",
       skills: "Skills", tools: "Tools", memoryRoutes: "Memory Routes",
       saveDraft: "Save draft", submitReview: "Submit for review",
       testBench: "Test bench", response: "Response",
     },
     signalReview: {
+      subtitle: "Review live strategy signals before capital is committed. Every decision is captured into signal_feedback for training.",
       conviction: "Conviction", alpha: "Alpha", rationale: "Rationale",
       approve: "Approve", reject: "Reject", flagReview: "Flag for review",
       openDetail: "Open Detail", selectSignal: "Select a signal.",
@@ -1044,6 +1048,8 @@ export default {
       agree: "Agree", disagree: "Disagree", flag: "Flag suspicious",
     },
     skillCoaching: {
+      subtitle: "Refine in-flight skill drafts. Each example becomes a training_example used by the trainer to fine-tune behavior.",
+      newPromptPh: "New user prompt…", expectedPh: "Expected response…",
       systemPrompt: "System Prompt", saveDraft: "Save draft",
       expected: "Expected", testDraft: "Test draft", addExample: "Add example",
       sendForApproval: "Send for approval", approvalCreated: "Approval request created",

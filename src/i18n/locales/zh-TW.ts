@@ -985,6 +985,7 @@ export default {
     },
     evaluation: { prompt: "提示詞", expected: "預期", observed: "實際" },
     insightInbox: {
+      subtitle: "Pantheon 浮現的模式、異常、想法與教練建議。經分流後納入研究與技能待辦。",
       promote: "升級", handoff: "交接", discuss: "討論", dismiss: "忽略",
       empty: "收件匣已清空。",
       promoteToStrategy: "升級為策略構想",
@@ -1015,12 +1016,15 @@ export default {
       queued: "研究任務已透過 {{id}} 排入",
     },
     personaLab: {
+      subtitle: "在發布前以技能、工具與記憶路由組合並測試 Persona。",
+      memoryRoutePh: "新增記憶路由…",
       draft: "Persona 草稿", archetype: "原型", systemPrompt: "系統提示詞",
       skills: "技能", tools: "工具", memoryRoutes: "記憶路由",
       saveDraft: "儲存草稿", submitReview: "送出審核",
       testBench: "測試台", response: "回覆",
     },
     signalReview: {
+      subtitle: "在資金投入前審查即時策略訊號。每筆決策都會寫入 signal_feedback 供訓練使用。",
       conviction: "信心", alpha: "Alpha", rationale: "理由",
       approve: "核准", reject: "駁回", flagReview: "標記複審",
       openDetail: "開啟詳情", selectSignal: "請選擇一筆訊號。",
@@ -1029,6 +1033,8 @@ export default {
       agree: "同意", disagree: "不同意", flag: "標記可疑",
     },
     skillCoaching: {
+      subtitle: "微調進行中的技能草稿。每個範例會成為訓練器用來微調行為的 training_example。",
+      newPromptPh: "新的使用者提示…", expectedPh: "預期回覆…",
       systemPrompt: "系統提示詞", saveDraft: "儲存草稿",
       expected: "預期", testDraft: "測試草稿", addExample: "新增範例",
       sendForApproval: "送交審批", approvalCreated: "審批請求已建立",
