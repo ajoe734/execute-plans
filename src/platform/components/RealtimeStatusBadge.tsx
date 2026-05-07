@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, Activity, Plug, PlugZap } from "lucide-react";
-import { useRealtimeStatus } from "@/lib/useLiveList";
+import { useRealtimeStatus } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
 
