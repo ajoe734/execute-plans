@@ -1,56 +1,57 @@
-## 翻譯完整性檢查結果
+## 你發現的對 — zh-TW 還有大量未中文化字串
 
-跑了 `bunx tsx scripts/check-i18n.ts`，現況：
+從你提供的截圖（左側欄「Control Room / Loop Runs」）可看到 v5 IA 一票標籤仍是英文。我用腳本掃描 `src/i18n/locales/zh-TW.ts`，**還有 ~30 個 user-facing 字串沒翻**（其餘 25 個非 CJK 值是 Persona / Sharpe / Alpha / VaR / Δ Sharpe / 範例值 v1.0.0 / 公式 `0.6*sharpe-...` 這類**刻意保留的專有名詞或代碼樣本**，不該翻）。
 
-- en-US **1696 keys** ／ zh-TW **1696 keys** — **數量對稱、無單側遺漏** ✅
-- t() 共參照 **1391** 個 key
-- **缺失 12 個 key**（兩個語系都沒有，目前靠 `defaultValue` 撐著）
-- 硬編碼英文候選 **4 處**
+之前 i18n 檢查腳本只比對 key 對稱與缺失，**沒檢查 zh-TW 值是否仍是英文**，所以漏掉了。
 
----
+### 1) zh-TW 待翻譯字串（en-US 保持英文不動）
 
-### 1) 12 個缺失 key（會在兩個語系同時補齊）
+| 位置 | key | 現值 (zh) | 改為 |
+|---|---|---|---|
+| sideNav | `signals` | Signal Review | 訊號審查 |
+| sideNav | `watchlist` / `markets/watchlist` | Watchlist | 觀察清單 |
+| sideNav | `studios` / `phase16.hub` | Studios | 工作室 |
+| sideNav | `controlRoom` | Control Room | 控制中心 |
+| sideNav | `loops` | Loop Runs | 閉環執行 |
+| sideNav | `postmortems` | Postmortem 知識庫 | 事後檢討知識庫 |
+| v5.loops.execution | `runs` | Loop runs | 執行紀錄 |
+| v5.matrix | `findings` | Findings | 監測項 |
+| v5.findings | `affectedRuntime` | Runtime | 執行環境 |
+| timeline (l.545) | `postmortem` | Postmortem | 事後檢討 |
+| persona draft (971/985) | `systemPrompt` | System Prompt | 系統提示詞 |
+| settings.tab/workspace | `workspace` / `workspace.title` | Workspace | 工作區 |
+| skill (1268) | `discovered/scaffolded/replicated` | Discovered/Scaffolded/Replicated | 已探索 / 已搭建 / 已複製 |
+| sandbox (1300) | `trace` | Trace | 追蹤紀錄 |
+| deployment stages (1401) | `canary` | Canary | 金絲雀 |
+| timeline (1441) | `artifact` | Artifact | 產出物 |
+| artifact kinds (1468) | `model/dataset/report/container` | Model/Dataset/Report/Container | 模型 / 資料集 / 報告 / 容器 |
+| deployment initialMode (1469) | `shadow/suspended` | Shadow/Suspended | 影子模式 / 暫停 |
 
-| 命名空間 | key | 使用處 | 英文 | 中文 |
-|---|---|---|---|---|
-| `ui` | `loading` | `v5/V5Pages.tsx` | Loading… | 載入中… |
-| `v5.loops.execution` | `emptyTitle` | `v5/ExecutionLoop.tsx` | No execution loops | 暫無執行迴圈 |
-| `v5.loops.execution` | `emptyDesc` | 同上 | No runs match the current focus. Trigger a run from a Strategy or Deployment to see it here. | 目前條件下沒有執行紀錄。請從 Strategy 或 Deployment 觸發新的 run。 |
-| `v5.loops.optimization` | `subtitle` | `v5/OptimizationLoop.tsx` | One run per pending rebalance. Approval is the gating stage. | 一個 pending rebalance 對應一條 run，approval 為門檻階段。 |
-| `v5.optimization` | `createIntent` | 同上 | Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop. | 請先在 /management/rebalance 建立新的調倉，再回到此處監控最佳化迴圈。 |
-| `v5.sentinel` | `noFindingsTitle` | `v5/Sentinel.tsx` | No findings | 暫無監測項 |
-| `v5.sentinel` | `noFindingsDesc` | 同上 | Sentinel hasn't surfaced any findings for the current scope. | 目前範圍下 Sentinel 尚未產出任何 finding。 |
-| `v5.sentinel` | `noMatchTitle` | 同上 | No matches | 無符合項目 |
-| `v5.sentinel` | `noMatchDesc` | 同上 | Adjust the search or severity filter to see more findings. | 調整搜尋或嚴重度過濾條件以查看更多 finding。 |
-| `studios.createIntent` | `formula` | `studios/FormulaStudio.tsx` | Compose a new ranking formula by editing the expression below, then save as a new variant. | 在下方編輯表達式以撰寫新的排名公式，再另存為新變體。 |
-| `capital` | `rankingInputs` | `CapitalPoolDetail.tsx` | Ranking Inputs | 排名輸入 |
-| `strategyDetail` | `costsTab` | `StrategyDetail.tsx` | Costs & Slippage | 成本與滑價 |
+### 2) 刻意保留為英文的字串（**不翻**，避免與 spec 名詞表脫節）
 
-→ 在 en-US.ts / zh-TW.ts 對應命名空間插入：
-- `ui.loading`（top-level 既有 `ui` 區塊內）
-- `v5.loops.execution.emptyTitle/emptyDesc`、`v5.loops.optimization.subtitle`、`v5.optimization.createIntent`、`v5.sentinel.no*`（既有 v5 子樹）
-- `studios.createIntent.formula`（既有 studios 區塊新增子物件）
-- 新增 top-level `capital: { rankingInputs }`（zh/en 兩側）
-- `strategyDetail.costsTab`（既有 strategyDetail 區塊）
+- 角色/契約名詞：`Persona`、`Sharpe`、`Alpha`、`Memo`、`Token`、`PnL`、`VaR 95%`、`Beta`、`Δ Sharpe`、`Δ DD`、`Hypothesis`、`Sandbox`、`Risk`、`Severity`、`Backtest`、`Score`、`Findings`（key 名）
+- 範例/代碼：`v1.0.0`、`alpha-momentum`、`0.6*sharpe-0.3*|dd|`、`trader / analyst`、`Persona IDs`、`Alpha (slug)`
+- 樣板字串：`{{action}} — {{name}}`、`Accept-Language`
+- 既有混合詞：`MCP 伺服器`、`Pantheon`、`Watchlist` 已改為「觀察清單」但保留品牌詞 `Pantheon`
 
-### 2) 4 個硬編碼英文候選（移到 i18n）
+### 3) sideNav 文案 ↔ Route labels 一致性
 
-| 檔案 | 內容 | 處理 |
-|---|---|---|
-| `management/components/detail/StrategyPerformanceTab.tsx` (×2) | 圖表內聯英文標籤 | 移至 `strategyDetail.perf.*` |
-| `management/pages/ObjectListPage.tsx` | 表頭/狀態文字 | 改用既有 `common.*` / `status.*` |
-| `platform/pages/AuditViewer.tsx` | 列頭文字 | 移至 `audit.*` 或 `common.*` |
+`src/lib/v4/routeLabels.ts` 是 G08 落地的 PageHeader/breadcrumb 單一來源，**它已經透過 i18n key 解析**，所以 sideNav 改 zh-TW 值後，PageHeader 與 Breadcrumb 會自動同步，不需動 routeLabels.ts。
 
-實際展開時會逐檔讀取確認原文後 1:1 替換為 `t(...)`。
+### 4) 強化 i18n 檢查腳本（防止再漏）
 
-### 3) 驗證
+在 `scripts/check-i18n.ts` 加入第三項檢查：
+- 列出 zh-TW 中**值含 [A-Za-z] 且不含 CJK** 的 key（排除一份允許清單 = 上面第 (2) 點專有名詞）
+- 同樣輸出，exit 0（informational）
 
-完成後再跑：
-- `bunx tsx scripts/check-i18n.ts` → 預期：Missing 0、Only-en 0、Only-zh 0、Hard-coded 0
-- `bunx vitest run` → 預期 268+ passed，無回歸
-- 寫入 `.lovable/audits/i18n-completeness-2026-05-07.md` 紀錄結果
+### 5) 驗證
 
-### 4) 不在範圍
+- `bunx tsx scripts/check-i18n.ts` → Missing 0 + 新增的「zh-TW 疑似未翻」清單應只剩 allowlist
+- `bunx vitest run` → 270 tests 應仍全綠
+- 截圖驗：切到 zh-TW 後，左側欄應顯示「控制中心 / 閉環執行 / 訊號審查 / 觀察清單」等
+- 寫入 `.lovable/audits/i18n-zh-tw-pass2-2026-05-07.md`
 
-- `defaultValue` 機制本身不是 bug：目前 12 個缺 key 在 runtime 還是會顯示英文預設，使用者不會看到 raw key。本輪只是把它們轉為正式 zh-TW 翻譯。
-- 未動到 v5 SA+SD 任何契約，純 UI 字串補齊。
+### 不在範圍
+
+- 程式註解 `// ---------- Control Room ----------` 等（非使用者可見）
+- spec / audit markdown 文件（與 IA spec 名詞表保持一致）
