@@ -1,3 +1,7 @@
+/**
+ * @deprecated Batch VII — Use `tryRunAction` / `runActionV1` from `@/lib/bff-v1`.
+ * Kept for in-flight migration; see `.lovable/audits/batch-vii-migration.md`.
+ */
 // VI-2 — UI wrapper around the v1 mutations seam.
 //   1. Auto-stamps correlationId + idempotencyKey at the seam (writes.ts).
 //   2. Surfaces illegal_transition / state_conflict via toast.error.

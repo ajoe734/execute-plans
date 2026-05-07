@@ -14,3 +14,5 @@ export * from "./lists";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
+// Batch VII — escape hatch for legacy seed accessors during migration.
+export * from "./legacy";
