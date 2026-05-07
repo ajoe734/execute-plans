@@ -97,6 +97,48 @@ export function deriveLoopRuns(ctx: DeriveCtx): LoopRun[] {
     });
   }
 
+  // Research loop runs — one per active experiment
+  for (const e of (ctx.research ?? []).filter((x) => x.status === "queued" || x.status === "running" || x.status === "review")) {
+    const stages: LoopStage[] = [
+      { id: `stg_${e.id}_design`,  name: "Design",   status: "succeeded" },
+      { id: `stg_${e.id}_collect`, name: "Collect",  status: e.status === "queued" ? "pending" : "succeeded" },
+      {
+        id: `stg_${e.id}_analyze`, name: "Analyze",
+        status: e.status === "running" ? "running" : e.status === "review" ? "succeeded" : "pending",
+        startedAt: e.status === "running" ? e.updatedAt : undefined,
+        timeoutPolicySource: V5_TIMEOUT_POLICY_VERSION,
+        warnAfterMs: DEFAULT_TIMEOUT_POLICY.runningWarnMs,
+      },
+      {
+        id: `stg_${e.id}_review`, name: "Review",
+        status: e.status === "review" ? "running" : "pending",
+        startedAt: e.status === "review" ? e.updatedAt : undefined,
+        timeoutPolicySource: V5_TIMEOUT_POLICY_VERSION,
+        warnAfterMs: DEFAULT_TIMEOUT_POLICY.runningWarnMs,
+      },
+    ];
+    const status = aggregate(stages);
+    runs.push({
+      id: `lr_res_${e.id}`,
+      loopKind: "research",
+      status,
+      startedAt: e.updatedAt,
+      updatedAt: e.updatedAt,
+      triggeredBy: e.owner,
+      subjectKind: "research",
+      subjectId: e.id,
+      subjectName: e.name,
+      stages,
+      currentStageId: stages.find((st) => st.status === "running")?.id,
+      nextAction: e.status === "review"
+        ? { kind: "awaiting_human_decision", label: "Reviewer decision" }
+        : e.status === "queued"
+          ? { kind: "automatic", label: "Awaiting collection" }
+          : { kind: "automatic" },
+      evidence: e.artifactId ? [{ kind: "audit", id: e.artifactId, snapshot: { label: e.metric, value: e.metricValue } }] : [],
+    });
+  }
+
   return runs;
 }
 
