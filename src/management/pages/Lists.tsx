@@ -1,13 +1,14 @@
 import { ObjectListPage } from "./ObjectListPage";
-import { bff } from "@/lib/bff/client";
+import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
+import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
 
 export const StrategiesList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Strategy>
       title={t("nav.strategies")}
-      loader={() => bff.strategies.list()}
+      loader={lists.strategies}
       basePath="/management/strategies" liveKinds={["Strategy"]}
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       extraColumns={[
@@ -22,9 +23,9 @@ export const StrategiesList = () => {
 export const PersonasList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Persona>
       title={t("nav.personas")}
-      loader={() => bff.personas.list()}
+      loader={lists.personas}
       basePath="/management/personas" liveKinds={["Persona"]}
       createBehavior={{ kind: "drawer", entity: "persona" }}
       extraColumns={[
@@ -39,9 +40,9 @@ export const PersonasList = () => {
 export const CapitalPoolsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<CapitalPool>
       title={t("nav.capitalPools")}
-      loader={() => bff.capitalPools.list()}
+      loader={lists.capitalPools}
       basePath="/management/capital-pools" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
@@ -57,9 +58,9 @@ export const CapitalPoolsList = () => {
 export const RankingFormulasList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<RankingFormula>
       title={t("nav.rankingFormulas")}
-      loader={() => bff.rankingFormulas.list()}
+      loader={lists.rankingFormulas}
       basePath="/management/ranking-formulas" liveKinds={["RankingFormula"]}
       createBehavior={{ kind: "redirect", to: "/management/studios/formula", intent: "create" }}
       extraColumns={[
@@ -73,9 +74,9 @@ export const RankingFormulasList = () => {
 export const RebalancesList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Rebalance>
       title={t("nav.rebalances")}
-      loader={() => bff.rebalances.list()}
+      loader={lists.rebalances}
       basePath="/management/rebalances" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
       extraColumns={[
@@ -89,9 +90,9 @@ export const RebalancesList = () => {
 export const DeploymentsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Deployment>
       title={t("nav.deployments")}
-      loader={() => bff.deployments.list()}
+      loader={lists.deployments}
       basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       createBehavior={{ kind: "drawer", entity: "deployment" }}
       extraColumns={[
@@ -105,9 +106,9 @@ export const DeploymentsList = () => {
 export const EvolutionList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<EvolutionProgram>
       title={t("nav.evolution")}
-      loader={() => bff.evolution.list()}
+      loader={lists.evolution}
       basePath="/management/evolution" liveKinds={["Evolution","Promotion"]}
       createBehavior={{ kind: "drawer", entity: "evolutionProgram" }}
       extraColumns={[
@@ -123,9 +124,9 @@ export const EvolutionList = () => {
 export const ResearchList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<ResearchExperiment>
       title={t("nav.research")}
-      loader={() => bff.research.list()}
+      loader={lists.research}
       basePath="/management/research" liveKinds={["Research"]}
       createBehavior={{ kind: "drawer", entity: "researchExperiment" }}
       extraColumns={[
@@ -140,9 +141,9 @@ export const ResearchList = () => {
 export const ArtifactsList = () => {
   const t = useT();
   return (
-    <ObjectListPage
+    <ObjectListPage<Artifact>
       title={t("nav.artifacts")}
-      loader={() => bff.artifacts.list()}
+      loader={lists.artifacts}
       basePath="/management/artifacts" liveKinds={["Artifact"]}
       createBehavior={{ kind: "drawer", entity: "artifact" }}
       extraColumns={[
