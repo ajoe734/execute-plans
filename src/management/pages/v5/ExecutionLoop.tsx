@@ -38,12 +38,14 @@ const stageDotCls: Record<string, string> = {
 
 export const ExecutionLoopPage = () => {
   const t = useT();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const focus = params.get("focus"); // "personas" | "strategies" | "deployments" | "capital"
+  const runParam = params.get("run");
   const personasRef = useRef<HTMLDivElement | null>(null);
   const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => bff.v5.loops.list("execution"));
   const personas = useV5Live(() => bff.v5.personas.health());
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -52,7 +54,30 @@ export const ExecutionLoopPage = () => {
     }
   }, [focus]);
 
+  // Deep-link sync: ?run=<id>
+  useEffect(() => {
+    if (runParam && runParam !== activeRunId) setActiveRunId(runParam);
+    else if (!runParam && activeRunId) setActiveRunId(null);
+  }, [runParam, activeRunId]);
+
   const items = runs.data?.items ?? [];
+  const activeRun: LoopRun | null = useMemo(
+    () => items.find((r) => r.id === activeRunId) ?? null,
+    [items, activeRunId],
+  );
+  const openRun = (id: string) => {
+    setActiveRunId(id);
+    const next = new URLSearchParams(params);
+    next.set("run", id);
+    setParams(next, { replace: true });
+  };
+  const closeRun = () => {
+    setActiveRunId(null);
+    const next = new URLSearchParams(params);
+    next.delete("run");
+    setParams(next, { replace: true });
+  };
+
   const running = items.filter((r) => r.status === "running").length;
   const blocked = items.filter((r) => r.status === "blocked").length;
   const failed = items.filter((r) => r.status === "failed").length;
