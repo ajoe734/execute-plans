@@ -87,3 +87,18 @@ Until ESLint rule lands, treat any new import of:
 - `@/lib/useLiveList`
 
 …in code review as a blocker. Use `@/lib/bff-v1` (or `legacy*` re-exports if the v1 surface is genuinely missing the call).
+
+## B1h — legacy-alias collapse (2026-05-07)
+
+All 92 call sites that imported `legacyBff as bff` / `legacyRunActionSafe as runActionSafe`
+/ `legacyUseLiveList as useLiveList` from `@/lib/bff-v1` now import the canonical
+names directly:
+
+- `bff` → mock seed accessor (still backed by `_legacy/client`)
+- `runActionSafe` → toast-aware mutation wrapper (delegates to `tryRunAction`)
+- `useLiveList` → realtime list hook (delegates to legacy `realtime` bus)
+
+`legacy*` aliases remain in `legacy.ts` as `@deprecated` re-exports for one
+cycle so any in-flight branch keeps compiling. Once the v1 typed surface
+covers each entity, swap call sites to `bffV1.*` / `useLiveListV1` /
+`tryRunAction`. Tests: 323 green.
