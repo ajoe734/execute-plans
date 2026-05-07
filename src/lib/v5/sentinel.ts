@@ -19,6 +19,7 @@ function severityFor(level: "critical" | "high" | "medium" | "low" | "info"): { 
     case "high":     return { sev: "warning",  conf: 0.76 };
     case "medium":   return { sev: "watch",    conf: 0.62 };
     case "low":      return { sev: "info",     conf: 0.45 };
+    case "info":     return { sev: "info",     conf: 0.30 };
   }
 }
 
