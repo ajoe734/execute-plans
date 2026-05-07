@@ -3,14 +3,14 @@ import { describe, it, expect } from "vitest";
 import { validateCreate } from "@/lib/writeIntents/validation";
 import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
 
-type Case<K extends CreatableEntity> = {
-  entity: K;
-  valid: CreateInputMap[K];
-  invalid: CreateInputMap[K];
-  expectErrorKey: keyof CreateInputMap[K] | "name";
+type AnyCase = {
+  entity: CreatableEntity;
+  valid: CreateInputMap[CreatableEntity];
+  invalid: CreateInputMap[CreatableEntity];
+  expectErrorKey: string;
 };
 
-const cases: Case<CreatableEntity>[] = [
+const cases: AnyCase[] = [
   {
     entity: "strategy",
     valid: { name: "OK Strategy", alpha: "a-mom", capitalPoolId: "cp_1", personaIds: ["p1"] },
