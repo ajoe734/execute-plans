@@ -7,6 +7,7 @@ export default {
   ui: {
     pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
     a11y: { close: "關閉", toggleSidebar: "切換側邊欄" },
+    loading: "載入中…",
   },
   env: {
     research: "研究", paper: "模擬", live: "正式", label: "環境",
@@ -134,8 +135,13 @@ export default {
         subtitle: "即時執行迴圈、Persona 路由健康度與 v0-mock timeout 政策。",
         runs: "Loop runs",
         runsHint: "一個 active strategy 對應一條 run。階段點顯示 pipeline 進度。",
+        emptyTitle: "暫無執行迴圈",
+        emptyDesc: "目前條件下沒有執行紀錄。請從 Strategy 或 Deployment 觸發新的 run。",
       },
-      optimization: { title: "最佳化迴圈" },
+      optimization: {
+        title: "最佳化迴圈",
+        subtitle: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
+      },
     },
     matrix: {
       title: "Persona 健康度矩陣",
@@ -190,6 +196,7 @@ export default {
       runs: "最佳化執行",
       runsHint: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
       evidence: "核准單",
+      createIntent: "請先在 /management/rebalance 建立新的調倉，再回到此處監控最佳化迴圈。",
     },
     sentinel: {
       subtitle: "由告警、事件、執行環境與 persona 健康度推導的監測項。",
@@ -209,6 +216,10 @@ export default {
       dismissed: "已駁回",
       actionExecuted: "處置已執行",
       status: "狀態",
+      noFindingsTitle: "暫無監測項",
+      noFindingsDesc: "目前範圍下 Sentinel 尚未產出任何 finding。",
+      noMatchTitle: "無符合項目",
+      noMatchDesc: "調整搜尋或嚴重度過濾條件以查看更多 finding。",
     },
     remediation: {
       advisory: "建議",
@@ -259,7 +270,7 @@ export default {
     memoHint: "備註至少 8 字才能送出。",
   },
   common: {
-    owner: "負責人", updated: "更新時間", state: "狀態",
+    owner: "負責人", updated: "更新時間", state: "狀態", name: "名稱", createNotConfigured: "尚未設定建立流程",
     actions: "動作", noResults: "無結果", loading: "載入中…",
     all: "全部", back: "返回", risk: "風險", successRate: "成功率", none: "無",
     justNow: "剛剛",
@@ -876,6 +887,9 @@ export default {
       restrictToast: "工具已暫時限制",
     },
   },
+  capital: {
+    rankingInputs: "排名輸入",
+  },
   capitalPool: {
     mandate: {
       charter: "資金池章程", bindingRules: "綁定規則",
@@ -1173,6 +1187,7 @@ export default {
     noEvolution: "尚未從 {{alpha}} 衍生任何演化程式。",
     startEvolution: "開始演化程式",
     noGovernance: "此策略尚無治理請求。",
+    costsTab: "成本與滑價",
   },
   settings: {
     subtitle: "個人偏好、Workspace、整合、語言、佈景與功能旗標。",
@@ -1297,6 +1312,9 @@ export default {
       maxLeverage: "最大槓桿", queued: "上限變更已送出。",
     },
     freezePool: { title: "資金池凍結", hint: "暫停此池所有新配置。", queued: "資金池凍結已送出。" },
+    createIntent: {
+      formula: "在下方編輯表達式以撰寫新的排名公式，再另存為新變體。",
+    },
   },
   phase13: {
     persona: {

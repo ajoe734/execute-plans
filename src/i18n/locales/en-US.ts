@@ -7,6 +7,7 @@ export default {
   ui: {
     pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
     a11y: { close: "Close", toggleSidebar: "Toggle Sidebar" },
+    loading: "Loading…",
   },
   env: {
     research: "Research",
@@ -140,8 +141,13 @@ export default {
         subtitle: "Live execution loops, persona routing health, and v0-mock timeout policy.",
         runs: "Loop runs",
         runsHint: "One run per active strategy. Stage dots show pipeline progression.",
+        emptyTitle: "No execution loops",
+        emptyDesc: "No runs match the current focus. Trigger a run from a Strategy or Deployment to see it here.",
       },
-      optimization: { title: "Optimization Loop Runs" },
+      optimization: {
+        title: "Optimization Loop Runs",
+        subtitle: "One run per pending rebalance. Approval is the gating stage.",
+      },
     },
     matrix: {
       title: "Persona Health Matrix",
@@ -196,6 +202,7 @@ export default {
       runs: "Optimization runs",
       runsHint: "One run per pending rebalance. Approval is the gating stage.",
       evidence: "Approval",
+      createIntent: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
     },
     sentinel: {
       subtitle: "Findings derived from alerts, incidents, runtime and persona health.",
@@ -215,6 +222,10 @@ export default {
       dismissed: "Finding dismissed",
       actionExecuted: "Remediation executed",
       status: "Status",
+      noFindingsTitle: "No findings",
+      noFindingsDesc: "Sentinel hasn't surfaced any findings for the current scope.",
+      noMatchTitle: "No matches",
+      noMatchDesc: "Adjust the search or severity filter to see more findings.",
     },
     remediation: {
       advisory: "Advisory",
@@ -265,7 +276,7 @@ export default {
     memoHint: "Memo must be at least 8 characters.",
   },
   common: {
-    owner: "Owner", updated: "Last updated", state: "State",
+    owner: "Owner", updated: "Last updated", state: "State", name: "Name", createNotConfigured: "Create flow not configured",
     actions: "Actions", noResults: "No results", loading: "Loading…",
     all: "All", back: "Back", risk: "Risk", successRate: "Success", none: "None",
     justNow: "just now",
@@ -890,6 +901,9 @@ export default {
       restrictToast: "Tools temporarily restricted",
     },
   },
+  capital: {
+    rankingInputs: "Ranking Inputs",
+  },
   capitalPool: {
     mandate: {
       charter: "Mandate charter", bindingRules: "Binding rules",
@@ -1187,6 +1201,7 @@ export default {
     noEvolution: "No evolution programs derived from {{alpha}} yet.",
     startEvolution: "Start an evolution program",
     noGovernance: "No governance requests linked to this strategy.",
+    costsTab: "Costs & Slippage",
   },
   settings: {
     subtitle: "Personal preferences, workspace, integrations, locale, theme, and feature flags.",
@@ -1311,6 +1326,9 @@ export default {
       maxLeverage: "Max leverage", queued: "Limit change queued.",
     },
     freezePool: { title: "Pool freeze", hint: "Halt new allocations from this pool.", queued: "Pool freeze queued." },
+    createIntent: {
+      formula: "Compose a new ranking formula by editing the expression below, then save as a new variant.",
+    },
   },
   phase13: {
     persona: {

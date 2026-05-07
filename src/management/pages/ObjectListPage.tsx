@@ -38,9 +38,9 @@ export function ObjectListPage<T extends BaseObject>({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const columns: Column<T>[] = [
-    { key: "name", header: "Name", cell: (r) => <div className="font-medium">{r.name}</div> },
+    { key: "name", header: t("common.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
     { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
-    { key: "risk", header: "Risk", cell: (r) => <RiskBadge level={r.risk} /> },
+    { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
     ...extraColumns,
     { key: "owner", header: t("common.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
     { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</span> },
@@ -57,7 +57,7 @@ export function ObjectListPage<T extends BaseObject>({
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Create flow not configured</TooltipContent>
+          <TooltipContent>{t("common.createNotConfigured")}</TooltipContent>
         </Tooltip>
       );
     }
