@@ -1,36 +1,45 @@
-# Plan: BFF Contract Patch 2026-05-07-C Follow-up Questions
 
-選項 B：先回 planner，等 disposition，spec 一次到位、不留小債。
+# Plan: 套用 2026-05-07-C Planner Disposition + 合併產出 B+C Final Spec
+
+Planner 已 APPROVED 全部 8 條 follow-up（C.1/C.3 Modify、其餘 Accept / Accept-with-clarification）。本輪：spec/docs only，不動 `src/`。
 
 ## 產出
 
-**1. `/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07-C_Followup_Questions.md`**
+### 1. `/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07-C_Planner_Disposition.md`
+直接落 user 上傳的 disposition 全文到 documents（artifact 鏡射），方便後續引用。
 
-結構：
+### 2. `/mnt/documents/Pantheon_BFF_Contract_Spec_2026-05-07_Final.md`（B+C merged）
+以 base 2026-05-07 + B patch 為底，套用 C disposition 的 8 點修正後的「可交給後端的 final 版」：
 
-- **Header** — 對 base 2026-05-07 + patch 2026-05-07-B 的 follow-up；列出 8 個待裁示項，請 planner 以 Accept / Modify / Reject + rationale 回應。
-- **§C.P0 — 規範內部矛盾（3 條，blocker）**
-  - C.1 `ActionCommandResponse.status` 與 `ErrorCode` 雙軌定義 `requires_confirm_token` / `requires_approval`：建議改成「失敗一律走 `BffErrorEnvelope` + `CONFIRM_TOKEN_REQUIRED` / `TWO_MAN_REQUIRED`」，刪除 success-path 的 `requires_*` status。附 before/after TS snippet。
-  - C.2 §7.6 two-man-sign request 把 `idempotencyKey` 放 body：違反 §5.2 / Pack D D23 既定的 `Idempotency-Key` HTTP header 慣例。建議移到 header；body 只留 business payload。
-  - C.3 §3.2 `CommandResponse.data?: T` 改為 optional：與 v4 envelope `data: T` (required) 衝突，會破壞所有 BFF client narrow type。請確認意圖；若是為了 error case 不帶 data，建議改成 discriminated union (`{ ok: true; data: T } | { ok: false; error: BffErrorPayload }`)。
-- **§C.P1 — 缺漏（3 條）**
-  - C.4 SSE catalog (§8.3) 缺 `approval` 與 `ask` channel：`ApprovalRequest.stages[]` 多階段 stage 變化、`AskPersonas` streaming response 都沒對應 channel。提議補表格列：channel name / payload shape / replay policy / auth scope。
-  - C.5 Action table (§5.3) 與 `src/lib/v3/availableActions.ts` / `src/lib/v4/actionDescriptor.ts` 來源衝突未明示。請宣告 spec table = canonical，前端 TS 必須對齊；並列出對齊機制（codegen 或 lint）。
-  - C.6 §4.3 EntityCreate 缺 `McpToolCreateInput`：§2.2 已加 `McpToolDTO`、§5.3 列了 MCP Tool grant/revoke actions，但 create payload 只有 `ToolCreateInput`。請補或明示「MCP Tool 不支援獨立 create，只能透過 McpServer discover」。
-- **§C.P2 — 一致性（2 條）**
-  - C.7 `EvidenceKind` 擴增到 15 種（§2.2 加了 `journal`/`postmortem`/`signal`）：請與 Pack D Permission Contract (`Pantheon_Pack_D_Permission_Contract.md`) 交叉驗證，確認 RBAC capability 涵蓋這些新 evidence kind，避免 UI 顯示但 RBAC 拒絕。
-  - C.8 §6.3 `PATCH /bff/agora/journal/{id}` body 格式未指定：planner 把 JSON Patch vs Merge 歸 P2 deferred，但既然 endpoint 已經出現 PATCH，建議至少先鎖 default = **JSON Merge Patch (RFC 7396)**，正式選型後再升級。
-- **§C.Disposition Template** — 給 planner 填的格子：`Item / Decision (Accept|Modify|Reject) / Rationale / Spec section to update`。
-- **§C.Cross-ref**
-  - Pack D D17–D32（BFF API + Permission contract）
-  - `src/lib/v4/errorEnvelope.ts`、`src/lib/bff/types.ts`、`src/lib/v3/availableActions.ts`
-  - 既有 `Pantheon_BFF_Contract_Spec_2026-05-07-B.md` §3.2 / §5.2 / §6.3 / §7.6 / §8.3
+- **C.1 §3/§5** — `ActionCommandStatus = "accepted" | "queued" | "completed"`；移除 `requires_*` success status；`CONFIRM_TOKEN_REQUIRED` 走 428 / `APPROVAL_REQUIRED` 與 `TWO_MAN_REQUIRED` 走 409，全部用 `BffErrorEnvelope`。新增 `APPROVAL_REQUIRED` 進 ErrorCode master（Pack D D21 補登）。
+- **C.2 §5.2 + 全 write/action** — body `idempotencyKey` 全部移除，改 `Idempotency-Key` HTTP header；列出受影響 7 個 request type（ActionCommand / InterventionDecision / ExecuteRemediation / ConfirmToken / TwoManSign / AuditExport / Bulk decision）。
+- **C.3 §3.2** — `CommandResponse<T>.data: T` 必填，無 payload 用 `CommandResponse<null>`；錯誤一律 non-2xx `BffErrorEnvelope`；`BulkActionResponse.results[]` 是唯一例外（per-item ok）。
+- **C.4 §8.3** — SSE catalog 補 `approval` / `ask` 兩 channel：完整 event union（`approval.created/stage.changed/decided/sla.escalated`、`ask.session.started/message.delta/tool.called/message.completed/session.completed/session.failed`）+ replay / resync endpoint / auth scope。
+- **C.5 §5.3** — 明示「BFF action table = canonical；v4 `ActionDescriptor` = frontend DTO target；v3 `availableActions` = back-compat only」+ 三階段對齊機制（manual → codegen → CI lint）+ 留下 frontend contract test 的 placeholder。
+- **C.6 §2/§4.3** — MCP Tool 不獨立 create；新增 `POST /bff/mcp-servers/{id}/import-tools` + `McpToolImportRequest/Response`；列出 grant / revoke / disable / test 4 endpoints；`McpToolCreateInput` 標 future / not v1。
+- **C.7 §2.2 + §15** — 新增 `EvidenceKind → Capability` 對照表（15 條）+ `RedactedEvidenceRef` DTO + 「return redacted refs, do not silently omit」規則。
+- **C.8 §6.3** — `PATCH /bff/agora/journal/{id}` body 鎖 `application/merge-patch+json` (RFC 7396)；定義 `JournalEntryMergePatch` shape + validation + audit `before/after diff` 要求；保留 future `application/json-patch+json` upgrade path。
 
-**2. `.lovable/feedback/2026-05-07-C/INDEX.md`**
+### 3. `.lovable/feedback/2026-05-07-C/INDEX.md`（更新）
+- 狀態：`BLOCKER` → `RESOLVED`。
+- 加 disposition artifact 路徑、Final spec artifact 路徑。
+- 解除「B patch blocked」標記，註記「B+C merged final 已產出，可交後端 P0 review」。
 
-- Artifact path / scope / 8 items 一覽 / 等 planner disposition / blocker for patch apply。
+### 4. `.lovable/feedback/2026-05-07-B/INDEX.md`（更新）
+- 加一行：「Superseded by `2026-05-07_Final.md` (B+C merged, applies C disposition)」。
+- 列出 C disposition 改動的 8 個 §（避免後端誤抓 B 單版）。
+
+### 5. `mem://index.md` Core 補一行
+> BFF Contract: 後端 handoff source = `2026-05-07_Final.md` (B+C merged, C disposition applied)；C 8 條 follow-up RESOLVED；Idempotency-Key = HTTP header；`CommandResponse<T>.data` required；`requires_*` 走 BffErrorEnvelope (428/409)；MCP Tool 不獨立 create。
 
 ## 不做
 
-- 不修改 Spec B 檔案、不改任何 `src/` 程式碼。
-- 不更新 memory（等 planner 回覆後再一次更新）。
+- 不動 `src/` 任何檔案（需要時下一輪 Pack D Batch V 再實作 ErrorCode 補 `APPROVAL_REQUIRED` / SSE channel runtime / EvidenceKind capability map）。
+- 不改 Pack D canonical 檔（待 H 版 Pack 升級時一起更新 Permission Contract、SSE Contract、ErrorCode master）。
+- 不做 OpenAPI / AsyncAPI 產出（planner §12 列為下一批 H 版工作）。
+
+## 後續（不在本 plan）
+
+- Pack D refresh：把 C disposition 的 `APPROVAL_REQUIRED`、`approval`/`ask` SSE channel、EvidenceKind capability map 灌回 Pack D D21 / SSE Contract / Permission Contract。
+- `src/lib/v4/errorCodes.ts` 補 `APPROVAL_REQUIRED`（一行 enum + i18n key）。
+- BFF code 端：runAction / overlay / writeOverlay 改成 header-based idempotency（目前是函式參數，不是 HTTP，所以非 blocker）。
