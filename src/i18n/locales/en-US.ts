@@ -202,6 +202,7 @@ export default {
       runs: "Optimization runs",
       runsHint: "One run per pending rebalance. Approval is the gating stage.",
       evidence: "Approval",
+      createIntent: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
     },
     sentinel: {
       subtitle: "Findings derived from alerts, incidents, runtime and persona health.",

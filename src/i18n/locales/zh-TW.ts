@@ -196,6 +196,7 @@ export default {
       runs: "最佳化執行",
       runsHint: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
       evidence: "核准單",
+      createIntent: "請先在 /management/rebalance 建立新的調倉，再回到此處監控最佳化迴圈。",
     },
     sentinel: {
       subtitle: "由告警、事件、執行環境與 persona 健康度推導的監測項。",
