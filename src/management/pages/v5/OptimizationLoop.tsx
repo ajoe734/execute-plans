@@ -33,8 +33,29 @@ const stageDotCls: Record<string, string> = {
 
 export const OptimizationLoopPage = () => {
   const t = useT();
+  const [params, setParams] = useSearchParams();
+  const intent = params.get("intent");
+  const focus = params.get("focus"); // "rebalance" | "approval"
   const runs = useV5Live(() => bff.v5.loops.list("optimization"));
   const items = runs.data?.items ?? [];
+  const runsRef = useRef<HTMLDivElement | null>(null);
+  const approvalRef = useRef<HTMLTableSectionElement | null>(null);
+
+  useEffect(() => {
+    if (intent === "create") {
+      toast.info(t("v5.optimization.createIntent", {
+        defaultValue: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
+      }));
+      const next = new URLSearchParams(params);
+      next.delete("intent");
+      setParams(next, { replace: true });
+    }
+  }, [intent]);
+
+  useEffect(() => {
+    if (focus === "approval") approvalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (focus === "rebalance") runsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focus]);
 
   const running = items.filter((r) => r.status === "running").length;
   const blocked = items.filter((r) => r.status === "blocked").length;
