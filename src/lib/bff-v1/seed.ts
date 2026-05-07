@@ -1,10 +1,15 @@
-/**
- * @deprecated Batch VII — Use `bffV1` from `@/lib/bff-v1` for typed v1 contract access.
- * This module remains as the mock seed-accessor backing for legacy call sites
- * (see `.lovable/audits/batch-vii-migration.md`). New code MUST NOT import
- * directly from here. If you genuinely need the seed accessor during migration,
- * import `legacyBff` from `@/lib/bff-v1/legacy`.
- */
+// BFF Contract v1 — mock seed accessor (canonical mock-mode surface).
+//
+// `bff` is the stable name UI code imports from `@/lib/bff-v1`. In mock mode
+// it reads from the in-process seed; when VITE_BFF_MODE=live the typed
+// `bffV1.*` client (lists/writes/sse) takes over per-entity. Until that
+// migration completes, every list/get/forSubject helper here is a public
+// part of the v1 surface — adding a new accessor is a deliberate API change.
+//
+// Mutations route through `bff.mutations` → `runActionSafe` → `tryRunAction`
+// (writes.ts) so correlationId/idempotencyKey are auto-stamped regardless of
+// caller path.
+//
 // Mock BFF client. Returns promises with simulated latency.
 // Phase P2 — every request "carries" the active locale (Accept-Language) so
 // downstream services can respond in the operator's language. The mock layer
