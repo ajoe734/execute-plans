@@ -133,7 +133,7 @@ export default {
       execution: {
         title: "執行迴圈",
         subtitle: "即時執行迴圈、Persona 路由健康度與 v0-mock timeout 政策。",
-        runs: "Loop runs",
+        runs: "執行紀錄",
         runsHint: "一個 active strategy 對應一條 run。階段點顯示 pipeline 進度。",
         emptyTitle: "暫無執行迴圈",
         emptyDesc: "目前條件下沒有執行紀錄。請從 Strategy 或 Deployment 觸發新的 run。",
@@ -151,7 +151,7 @@ export default {
       status: "狀態",
       score: "分數",
       routed: "路由數",
-      findings: "Findings",
+      findings: "監測項",
       formula: "公式",
     },
     
@@ -262,7 +262,7 @@ export default {
     affectedStrategy: "策略",
     affectedPersona: "Persona",
     affectedCapital: "資金池",
-    affectedRuntime: "Runtime",
+    affectedRuntime: "執行環境",
     rollback: "回滾目標",
     approval: "需要審批",
     memo: "稽核備註",
@@ -542,7 +542,7 @@ export default {
       affected: "影響範圍",
       root: "根因",
       mitigation: "緩解",
-      postmortem: "Postmortem",
+      postmortem: "事後檢討",
       training: "訓練回饋",
       constraint: "演化限制",
       audit: "稽核",
@@ -968,7 +968,7 @@ export default {
       queued: "研究任務已透過 {{id}} 排入",
     },
     personaLab: {
-      draft: "Persona 草稿", archetype: "原型", systemPrompt: "System Prompt",
+      draft: "Persona 草稿", archetype: "原型", systemPrompt: "系統提示詞",
       skills: "技能", tools: "工具", memoryRoutes: "記憶路由",
       saveDraft: "儲存草稿", submitReview: "送出審核",
       testBench: "測試台", response: "回覆",
@@ -982,7 +982,7 @@ export default {
       agree: "同意", disagree: "不同意", flag: "標記可疑",
     },
     skillCoaching: {
-      systemPrompt: "System Prompt", saveDraft: "儲存草稿",
+      systemPrompt: "系統提示詞", saveDraft: "儲存草稿",
       expected: "預期", testDraft: "測試草稿", addExample: "新增範例",
       sendForApproval: "送交審批", approvalCreated: "審批請求已建立",
       needExamples: "送出前請至少新增一個範例。",
@@ -1190,10 +1190,10 @@ export default {
     costsTab: "成本與滑價",
   },
   settings: {
-    subtitle: "個人偏好、Workspace、整合、語言、佈景與功能旗標。",
-    tab: { profile: "個人", workspace: "Workspace", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標" },
+    subtitle: "個人偏好、工作區、整合、語言、佈景與功能旗標。",
+    tab: { profile: "個人", workspace: "工作區", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標" },
     profile: { title: "個人資料", displayName: "顯示名稱", email: "電子郵件" },
-    workspace: { title: "Workspace", name: "名稱", tz: "時區" },
+    workspace: { title: "工作區", name: "名稱", tz: "時區" },
     theme: { title: "佈景", dark: "深色模式", darkHint: "預設適用低光環境作業。", density: "密度" },
     integrations: { title: "整合", hint: "已串接到 Pantheon 的外部服務。", manage: "管理", connect: "連接" },
     api: { title: "API 金鑰", hint: "用於程式化存取 BFF。", create: "建立金鑰", rotate: "輪替" },
@@ -1265,13 +1265,13 @@ export default {
     subtitle: "Alpha 流水線看板 — 發現候選、Scaffolded 實驗、已重現的策略。",
     openList: "開啟策略列表",
     scaffold: "建檔", replicate: "重現",
-    col: { discovered: "Discovered", scaffolded: "Scaffolded", replicated: "Replicated" },
+    col: { discovered: "已探索", scaffolded: "已建檔", replicated: "已重現" },
     discovered: { note: "由研究訊號浮現,需建檔成回測。" },
     scaffolded: { note: "回測已建檔,等待重現審查。" },
     replicated: { note: "已重現為正式策略。" },
   },
   studios: {
-    hub: "Studios",
+    hub: "工作室",
     hubSubtitle: "排名、適應度、演化、配置、資金、技能等專用編輯與模擬表面。",
     formula: "公式 Studio",
     formulaSubtitle: "從指標庫組合排名表達式並即時驗證。",
@@ -1297,8 +1297,8 @@ export default {
     aSide: "變體 A", bSide: "變體 B",
     pickFormula: "選擇要比較的公式。",
     sandbox: {
-      input: "輸入內容", run: "執行沙盒", trace: "Trace", output: "輸出",
-      executed: "沙盒執行完成。", emptyTrace: "執行技能以檢視 trace。",
+      input: "輸入內容", run: "執行沙盒", trace: "追蹤紀錄", output: "輸出",
+      executed: "沙盒執行完成。", emptyTrace: "執行技能以檢視追蹤紀錄。",
     },
     freeze: {
       title: "指標凍結", hint: "凍結再平衡指標以確保模擬結果可重現。",
@@ -1398,7 +1398,7 @@ export default {
     },
     deployment: {
       tabs: { rollback: "回滾" },
-      stages: { canary: "Canary", promote: "升級", queued: "階段升級已送出。", health: "健康" },
+      stages: { canary: "金絲雀", promote: "升級", queued: "階段升級已送出。", health: "健康" },
       rollback: { pickVersion: "選擇要回滾到的版本", queued: "回滾已送出。" },
     },
   },
@@ -1438,7 +1438,7 @@ export default {
     entity: {
       strategy: "策略", persona: "Persona", capitalPool: "資金池",
       rankingFormula: "排序公式", rebalance: "季度調倉", deployment: "部署",
-      evolutionProgram: "演化方向", researchExperiment: "研究實驗", artifact: "Artifact",
+      evolutionProgram: "演化方向", researchExperiment: "研究實驗", artifact: "產出物",
     },
     field: {
       name: "名稱", owner: "Owner", memo: "備註",
@@ -1465,8 +1465,8 @@ export default {
     select: {
       currency: { USD: "USD", USDT: "USDT", TWD: "TWD" },
       target: { research: "研究", paper: "模擬", live: "正式" },
-      kind: { model: "Model", dataset: "Dataset", report: "Report", container: "Container" },
-      initialMode: { shadow: "Shadow", suspended: "Suspended" },
+      kind: { model: "模型", dataset: "資料集", report: "報告", container: "容器" },
+      initialMode: { shadow: "影子模式", suspended: "暫停" },
     },
     error: {
       required: "必填",
