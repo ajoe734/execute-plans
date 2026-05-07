@@ -14,7 +14,7 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     expect(h["Idempotency-Key"]).toBeUndefined();
     expect(h["Content-Type"]).toBeUndefined();
     expect(h["X-Request-Id"]).toMatch(/^req_/);
-    expect(h["X-BFF-Api-Version"]).toBe("v1");
+    expect(h["X-BFF-Api-Version"]).toBe("2026-05-07");
   });
 
   it("POST auto-injects Idempotency-Key + Content-Type", () => {
