@@ -77,22 +77,53 @@ export const CapitalPoolDetail = () => {
         tabs={[
           {
             value: "overview", label: t("section.overview"),
-            content: (
-              <>
-                <div className="grid grid-cols-3 gap-4">
-                  <StatCard label={t("section.holdings")} value={`${c.currency} ${c.allocated.toLocaleString()}`} />
-                  <StatCard label={t("table.utilization")} value={`${c.currency} ${c.utilized.toLocaleString()}`} hint={`${utilizationPct.toFixed(1)}%`} />
-                  <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
-                </div>
-                <Section title={t("table.utilization")}>
-                  <Progress value={utilizationPct} className="h-2" />
-                  <div className="flex justify-between text-xs text-muted-foreground text-mono">
-                    <span>0</span>
-                    <span>{c.allocated.toLocaleString()}</span>
+            content: (() => {
+              const breach = assessBreach({
+                utilized: c.utilized,
+                allocated: c.allocated,
+                currentDrawdownPct: strats.length ? Math.min(...strats.map((s) => s.drawdown)) : undefined,
+                riskBudgetPct: c.riskBudget,
+              });
+              const utilMetric = findMetric("capital_utilization_pct");
+              const rbuMetric = findMetric("risk_budget_usage_pct");
+              const breachToneCls: Record<string, string> = {
+                ok: "bg-status-success/15 text-status-success border-status-success/30",
+                warn: "bg-status-warning/15 text-status-warning border-status-warning/30",
+                high: "bg-status-warning/15 text-status-warning border-status-warning/30",
+                critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
+              };
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-4">
+                    <StatCard label={t("section.holdings")} value={`${c.currency} ${c.allocated.toLocaleString()}`} />
+                    <StatCard
+                      label={utilMetric ? `Capital utilization (%)` : t("table.utilization")}
+                      value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
+                      hint={`${c.currency} ${c.utilized.toLocaleString()}`}
+                    />
+                    <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
                   </div>
-                </Section>
-              </>
-            ),
+                  <Section title="Pack D · Breach assessment">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <Badge variant="outline" className={breachToneCls[breach.level]}>{breach.level.toUpperCase()}</Badge>
+                      {breach.riskBudgetUsagePct != null && rbuMetric && (
+                        <span className="text-xs text-muted-foreground text-mono">
+                          {rbuMetric.id}={(breach.riskBudgetUsagePct * 100).toFixed(rbuMetric.precision)}%
+                        </span>
+                      )}
+                      {breach.reasons.length > 0 && (
+                        <span className="text-xs text-muted-foreground">· {breach.reasons.join(", ")}</span>
+                      )}
+                    </div>
+                    <Progress value={breach.utilizationPct * 100} className="h-2" />
+                    <div className="flex justify-between text-xs text-muted-foreground text-mono">
+                      <span>0</span>
+                      <span>{c.allocated.toLocaleString()}</span>
+                    </div>
+                  </Section>
+                </>
+              );
+            })(),
           },
           {
             value: "strategies", label: t("nav.strategies"),
