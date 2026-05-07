@@ -887,6 +887,9 @@ export default {
       restrictToast: "工具已暫時限制",
     },
   },
+  capital: {
+    rankingInputs: "排名輸入",
+  },
   capitalPool: {
     mandate: {
       charter: "資金池章程", bindingRules: "綁定規則",

@@ -901,6 +901,9 @@ export default {
       restrictToast: "Tools temporarily restricted",
     },
   },
+  capital: {
+    rankingInputs: "Ranking Inputs",
+  },
   capitalPool: {
     mandate: {
       charter: "Mandate charter", bindingRules: "Binding rules",
