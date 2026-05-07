@@ -10,7 +10,7 @@
 ## H2 — Pack D D21 ErrorCode master 補 `RESOURCE_NOT_FOUND` — ✅ FE CLOSED 2026-05-07
 - `src/lib/v4/errorCodes.ts` `ERROR_CODES` 已加入 `RESOURCE_NOT_FOUND`、`APPROVAL_REQUIRED`、`CONFIRM_TOKEN_REVOKED`，與 v1 BFF DTO §3.1 對齊。
 - `src/lib/bff-v1/dto.ts` 的 `ErrorCode` 已收斂為 `V4ErrorCode`（不再用 superset union）。
-- i18n key 規約 `errors.<ErrorCode>` 由 `errorI18nKey()` 產出；i18n 字串本體待 spec 作者於 H 版補翻譯。
+- i18n key 規約 `errors.<ErrorCode>` 由 `errorI18nKey()` 產出；en-US + zh-TW 已補齊全部 26 條翻譯（test：`research-loop.test.ts > B3 H2 — error i18n strings`）。
 
 ## H3 — OpenAPI 抽出 named `ActionCommandStatus` schema — ✅ FE CLOSED 2026-05-07
 - `src/lib/bff-v1/dto.ts` 已導出 `ACTION_COMMAND_STATUSES` 常數 + `ActionCommandStatus` named type + `isActionCommandStatus()` guard。
