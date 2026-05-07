@@ -115,3 +115,14 @@ v1 surface:
 keeps `legacy*` aliases as @deprecated re-exports for one cycle. No call
 site changes required (everything imports from `@/lib/bff-v1`). Tests:
 323 green; tsc clean.
+
+## B1j — deprecated alias removal (2026-05-07)
+
+Verified `src/lib/bff/{client,runAction}.ts` and `src/lib/useLiveList.ts`
+are physically gone (removed in B1g). No call site references them or the
+`legacyBff / legacyRunActionSafe / legacyUseLiveList` aliases.
+
+`src/lib/bff-v1/legacy.ts` collapsed to a documentation barrel that
+re-exports `bff / runActionSafe / useLiveList / useRealtimeStatus` from
+their canonical files. The `legacy*` @deprecated re-exports are removed.
+Tests: 323 green, tsc clean.
