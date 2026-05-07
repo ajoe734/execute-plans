@@ -3,8 +3,8 @@
 // Decisions go through bff.v5.interventions.decide → emits v5 event → auto refresh (Q22).
 // Approvals page coexists; HIQ links into the original source.
 
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -47,6 +47,23 @@ export const InterventionsPage = () => {
   const [active, setActive] = useState<InterventionItem | null>(null);
   const [filter, setFilter] = useState("");
   const [src, setSrc] = useState<typeof SOURCES[number]>("all");
+  const [params, setParams] = useSearchParams();
+
+  // E2 drill-down: ?item=<id> auto-opens the matching intervention drawer.
+  useEffect(() => {
+    const id = params.get("item");
+    if (!id || !list.data) return;
+    const match = list.data.items.find((i) => i.id === id);
+    if (match) setActive(match);
+  }, [params, list.data]);
+
+  const closeActive = () => {
+    setActive(null);
+    if (params.get("item")) {
+      params.delete("item");
+      setParams(params, { replace: true });
+    }
+  };
 
   const all = list.data?.items ?? [];
   const visible = useMemo(() => all.filter((it) => {
@@ -131,7 +148,7 @@ export const InterventionsPage = () => {
         </Card>
       </PageBody>
 
-      <InterventionDrawer item={active} onClose={() => setActive(null)} onActed={list.refresh} />
+      <InterventionDrawer item={active} onClose={closeActive} onActed={list.refresh} />
     </>
   );
 };
