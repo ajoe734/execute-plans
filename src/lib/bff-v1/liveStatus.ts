@@ -25,6 +25,10 @@ export interface LiveStatus {
   serverApiVersion?: string;
   /** H1+ — true when serverApiVersion mismatches client BFF_API_VERSION. */
   apiVersionMismatch?: boolean;
+  /** Planner §E7 — last echoed X-Request-Id from the server (debugging). */
+  lastRequestId?: string;
+  /** Planner §E7 — last X-Correlation-Id from the server. */
+  lastCorrelationId?: string;
 }
 
 function readEnv(): { mode: BffMode; baseUrl: string } {
@@ -86,6 +90,13 @@ export const liveStatus = {
       );
     }
     state = { ...state, serverApiVersion: serverVersion, apiVersionMismatch: mismatch };
+    notify();
+  },
+  /** Planner §E7 — record echoed request/correlation ids from response headers. */
+  reportRequestIds(requestId: string | undefined, correlationId: string | undefined): void {
+    if (!requestId && !correlationId) return;
+    if (state.lastRequestId === requestId && state.lastCorrelationId === correlationId) return;
+    state = { ...state, lastRequestId: requestId ?? state.lastRequestId, lastCorrelationId: correlationId ?? state.lastCorrelationId };
     notify();
   },
   /** Test-only reset. */
