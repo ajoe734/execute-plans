@@ -28,6 +28,7 @@ import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 import { validateMemo, MEMO_POLICY_BY_RISK, type ActionRiskClass } from "@/lib/v4/memoPolicy";
 import { DEFAULT_TWO_MAN_POLICY, HIGH_RISK_TWO_MAN_POLICY } from "@/lib/v4/twoManPolicy";
+import { canIssueConfirmToken, canRedeemConfirmToken, type CooldownState } from "@/lib/v4/cooldownPriority";
 
 export interface AffectedRefs {
   strategies?: string[];
