@@ -15,6 +15,18 @@ import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
+
+function quorumProgressFor(r: ApprovalRequest) {
+  const stages = r.stages ?? [];
+  const approved = stages.filter((s) => s.state === "approved").length;
+  const riskClass: QuorumRiskClass =
+    r.riskLevel === "critical" ? "critical"
+    : r.riskLevel === "high" ? "high"
+    : r.riskLevel === "medium" ? "medium" : "low";
+  const policy = QUORUM_POLICIES[riskClass];
+  return { approved, min: policy.minReviewers, distinctFamily: policy.distinctRoleFamily };
+}
 
 export const GovernanceQueuePage = () => {
   const t = useT();
@@ -120,6 +132,22 @@ export const GovernanceQueuePage = () => {
                 const cur = r.stages?.find((s) => s.state === "pending");
                 if (!cur) return <span className="text-mono text-xs text-muted-foreground">—</span>;
                 return <SlaCountdown startedAt={cur.startedAt} slaHours={cur.slaHours} escalated={cur.escalated} />;
+              }},
+              { key: "quorum", header: t("approval.quorum.label", { defaultValue: "Quorum" }), cell: (r) => {
+                const q = quorumProgressFor(r);
+                const reached = q.approved >= q.min;
+                return (
+                  <div className="flex items-center gap-1">
+                    <span className={`text-mono text-xs ${reached ? "text-status-success" : "text-muted-foreground"}`}>
+                      {q.approved}/{q.min}
+                    </span>
+                    {q.distinctFamily && (
+                      <span className="text-[10px] px-1 py-0.5 rounded border border-border text-muted-foreground" title="distinct role family required">
+                        2-fam
+                      </span>
+                    )}
+                  </div>
+                );
               }},
               { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
             ]}

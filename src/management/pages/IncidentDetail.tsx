@@ -19,6 +19,9 @@ import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { useOverlay } from "@/platform/overlayStore";
+import type { RollbackSagaDTO } from "@/lib/v4/rollbackSaga";
+import { findAsyncTransitionPolicy } from "@/lib/v4/asyncTransitionPolicy";
 
 export const IncidentDetail = () => {
   const t = useT();
@@ -34,6 +37,45 @@ export const IncidentDetail = () => {
   const [postmortem, setPostmortem] = useState("");
   const [mitigation, setMitigation] = useState("");
   const [constraint, setConstraint] = useState("");
+  const openRollbackSaga = useOverlay((s) => s.openRollbackSaga);
+
+  const showRollbackSaga = () => {
+    if (!incident) return;
+    const policy = findAsyncTransitionPolicy("rollback.saga");
+    const deploymentId = (incident.affected ?? [])[0] ?? "deploy-mock";
+    const now = new Date().toISOString();
+    const saga: RollbackSagaDTO = {
+      id: `saga-${incident.id}`,
+      incidentId: incident.id,
+      deploymentId,
+      status: "rolling_back",
+      currentStep: "rolling_back",
+      reasonCode: "INCIDENT_TRIGGERED",
+      requestedBy: perms.role,
+      requestedAt: now,
+      updatedAt: now,
+      timeout: {
+        id: `transition-${incident.id}`,
+        entityType: "rollbackSaga",
+        entityId: `saga-${incident.id}`,
+        actionId: "rollback.saga",
+        from: "rolling_back",
+        to: "succeeded",
+        trigger: "incident",
+        startedAt: now,
+        timeoutMs: policy?.timeoutMs ?? 900_000,
+        warnAfterMs: policy?.warnAfterMs ?? 300_000,
+        failureState: policy?.failureState ?? "failed",
+        retryable: policy?.retryable ?? true,
+        maxRetries: policy?.maxRetries ?? 1,
+        correlationId: `cid-${incident.id}`,
+        status: "running",
+      },
+      correlationId: `cid-${incident.id}`,
+      auditEventIds: [],
+    };
+    openRollbackSaga(saga);
+  };
 
   useEffect(() => {
     Promise.all([
@@ -87,6 +129,9 @@ export const IncidentDetail = () => {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
+            <Button variant="outline" size="sm" onClick={showRollbackSaga}>
+              {t("incident.viewRollbackSaga", { defaultValue: "View rollback saga" })}
+            </Button>
             {incident.status === "open" && (
               <PermissionAwareButton requiredAction="approve" size="sm" onClick={() => advance("mitigating")}>
                 {t("incident.startMitigation")}
