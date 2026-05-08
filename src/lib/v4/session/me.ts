@@ -82,11 +82,21 @@ export async function fetchMe(force = false): Promise<MeResponse> {
   const now = Date.now();
   if (!force && cache && now - cache.fetchedAt < ME_CACHE_TTL_MS) return cache.value;
   if (inflight) return inflight;
-  inflight = Promise.resolve(mockMe()).then((value) => {
+  inflight = (async () => {
+    let value: MeResponse;
+    try {
+      const { withLiveOrMock } = await import("@/lib/bff-v1/liveTransport");
+      value = await withLiveOrMock<MeResponse>(
+        { method: "GET", path: "/bff/session/me" },
+        async () => mockMe(),
+      );
+    } catch {
+      value = mockMe();
+    }
     cache = { value, fetchedAt: Date.now() };
     inflight = null;
     return value;
-  });
+  })();
   return inflight;
 }
 
