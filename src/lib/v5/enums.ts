@@ -3,6 +3,27 @@
 
 export type LoopKind = "research" | "execution" | "optimization";
 
+/** G07 — symmetric per-loop focus enum (was missing per-kind narrowing). */
+export type ResearchLoopFocus = "ideation" | "backtest" | "review" | "publish";
+export type ExecutionLoopFocus = "schedule" | "place" | "monitor" | "settle";
+export type OptimizationLoopFocus = "score" | "rebalance" | "deploy" | "audit";
+
+export type LoopFocus<K extends LoopKind = LoopKind> =
+  K extends "research" ? ResearchLoopFocus :
+  K extends "execution" ? ExecutionLoopFocus :
+  K extends "optimization" ? OptimizationLoopFocus :
+  never;
+
+export const LOOP_FOCUS_BY_KIND: {
+  research: readonly ResearchLoopFocus[];
+  execution: readonly ExecutionLoopFocus[];
+  optimization: readonly OptimizationLoopFocus[];
+} = {
+  research: ["ideation", "backtest", "review", "publish"],
+  execution: ["schedule", "place", "monitor", "settle"],
+  optimization: ["score", "rebalance", "deploy", "audit"],
+} as const;
+
 export type LoopStatus =
   | "idle"
   | "running"

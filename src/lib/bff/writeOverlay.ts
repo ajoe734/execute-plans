@@ -9,16 +9,22 @@
 import { realtime } from "@/lib/bff/realtime";
 import { auditEvents } from "@/mocks/seed";
 import type { CreatableEntity } from "@/lib/writeIntents/types";
-import { ENTITY_TO_LIVE_KIND } from "@/lib/writeIntents/createDefaults";
+import { ENTITY_TO_LIVE_KIND, ENTITY_TO_SSE_CHANNEL } from "@/lib/writeIntents/createDefaults";
+import { isSseChannel } from "@/lib/bff-v1/sse/channels";
+import type { SseChannelKind } from "@/lib/v4/sseEnvelope";
 import { newCorrelationId, newUuid } from "@/lib/v4/correlation";
 
 export const WRITE_OVERLAY_TTL_MS = 30 * 60 * 1000;
+// G12 — periodic GC so expired entries drop even when no add/list call fires.
+export const WRITE_OVERLAY_GC_INTERVAL_MS = 60 * 1000;
 
 interface OverlayItem {
   entity: CreatableEntity;
   data: Record<string, unknown>;
   expiresAt: number;
   correlationId: string;
+  /** G14 — monotonic insertion stamp for stable sort ties. */
+  insertedAt: number;
 }
 
 export interface OverlayAddOptions {
@@ -34,6 +40,8 @@ export interface OverlayAddOptions {
 class WriteOverlay {
   private created: OverlayItem[] = [];
   private idemKeys = new Map<string, string>();
+  /** G13 — last audit hash, mock-only placeholder for prevHash chain. */
+  private lastAuditHash: string | null = null;
 
   add(entity: CreatableEntity, data: Record<string, unknown>, opts: OverlayAddOptions = {}): string {
     this.gc();
@@ -50,10 +58,16 @@ class WriteOverlay {
       data,
       expiresAt: Date.now() + WRITE_OVERLAY_TTL_MS,
       correlationId,
+      insertedAt: Date.now(),
     });
 
     const auditId = `aud_${newUuid().slice(0, 8)}`;
     if (opts.idempotencyKey) this.idemKeys.set(opts.idempotencyKey, auditId);
+
+    // G13 — placeholder prevHash so downstream audit chain validators see a field.
+    const prevHash = this.lastAuditHash;
+    const hash = `h_${auditId}`;
+    this.lastAuditHash = hash;
 
     try {
       auditEvents.unshift({
@@ -64,14 +78,30 @@ class WriteOverlay {
         ts: new Date().toISOString(),
         memo: `Pack F mock create (overlay, ${WRITE_OVERLAY_TTL_MS / 60000}m TTL) corr=${correlationId}${opts.confirmTokenId ? ` ctok=${opts.confirmTokenId}` : ""}`,
         outcome: "ok",
-      });
+        // G13 placeholder — real BFF will compute Merkle-style chain.
+        prevHash,
+        hash,
+      } as Parameters<typeof auditEvents.unshift>[0]);
     } catch {
       // seed shape variation; ignore
     }
 
+    // G06 — publish to a verified SSE channel; fall back to "system" only when unmapped
+    // or not in the narrower realtime SseChannelKind taxonomy.
+    const REALTIME_CHANNELS: ReadonlySet<string> = new Set([
+      "strategy", "deployment", "incident", "loop", "job", "rebalance",
+      "capital", "persona", "review", "runtime", "risk", "session",
+      "notification", "system",
+    ]);
+    const candidate = ENTITY_TO_SSE_CHANNEL[entity];
+    const channel: SseChannelKind = (
+      isSseChannel(candidate) && REALTIME_CHANNELS.has(candidate)
+        ? candidate
+        : "system"
+    ) as SseChannelKind;
     realtime.emitEnvelope({
       topic: "data",
-      channel: "system",
+      channel,
       type: `${entity}.create`,
       payload: { kind: ENTITY_TO_LIVE_KIND[entity], action: "create", id: data.id },
       correlationId,
@@ -81,24 +111,54 @@ class WriteOverlay {
 
   list<T = Record<string, unknown>>(entity: CreatableEntity): T[] {
     this.gc();
-    return this.created.filter((c) => c.entity === entity).map((c) => c.data as T);
+    return this.created
+      .filter((c) => c.entity === entity)
+      // G14 — newest first by default; consumers can re-sort after merge.
+      .sort((a, b) => b.insertedAt - a.insertedAt)
+      .map((c) => c.data as T);
   }
 
-  clear() { this.created = []; this.idemKeys.clear(); }
+  clear() { this.created = []; this.idemKeys.clear(); this.lastAuditHash = null; }
 
   private gc() {
     const now = Date.now();
     this.created = this.created.filter((c) => c.expiresAt > now);
   }
+
+  /** G12 — call once at module load to schedule periodic GC. Test-safe. */
+  startGcTimer(intervalMs = WRITE_OVERLAY_GC_INTERVAL_MS): () => void {
+    const handle = setInterval(() => this.gc(), intervalMs);
+    if (typeof (handle as unknown as { unref?: () => void }).unref === "function") {
+      (handle as unknown as { unref: () => void }).unref();
+    }
+    return () => clearInterval(handle);
+  }
 }
 
 export const writeOverlay = new WriteOverlay();
 
-/** Wrap a list loader so overlay-created items appear merged on top. */
-export function withOverlay<T>(entity: CreatableEntity, loader: () => Promise<T[]>): () => Promise<T[]> {
+// Auto-start GC outside of test environment (vitest sets MODE='test').
+try {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  if (env?.MODE !== "test" && env?.NODE_ENV !== "test") {
+    writeOverlay.startGcTimer();
+  }
+} catch {
+  /* ignore */
+}
+
+/** Wrap a list loader so overlay-created items appear merged on top.
+ *  G14 — accepts an optional comparator so the merged list re-sorts after prepend. */
+export function withOverlay<T>(
+  entity: CreatableEntity,
+  loader: () => Promise<T[]>,
+  compare?: (a: T, b: T) => number,
+): () => Promise<T[]> {
   return async () => {
     const base = await loader();
     const extras = writeOverlay.list<T>(entity);
-    return [...extras, ...base];
+    const merged = [...extras, ...base];
+    return compare ? merged.slice().sort(compare) : merged;
   };
 }
+
