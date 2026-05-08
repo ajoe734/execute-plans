@@ -267,6 +267,17 @@ export const HighRiskConfirm = ({
               </div>
             )}
 
+            {cooldownBlocked && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {t("confirm.cooldown.title", { defaultValue: "Action under cooldown" })}
+                {cooldownSec !== null && (
+                  <span className="text-mono ml-2">
+                    · {t("confirm.cooldown.remaining", { defaultValue: "ends in {{s}}s", s: cooldownSec })}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label className="text-xs">
                 {t("confirm.memo")}
