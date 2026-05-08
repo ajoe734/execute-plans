@@ -41,6 +41,31 @@ export const MandatePanel = ({ pool }: { pool: CapitalPool }) => {
           </div>
         ))}
       </Card>
-    </div>
-  );
-};
+      <Card className="p-4 space-y-2">
+        <div className="text-sm font-semibold">{t("capitalPool.mandate.breachCadence", { defaultValue: "Breach detection cadence" })}</div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {MANDATE_BREACH_CADENCES.map((c) => (
+            <div key={c.metric} className="flex items-center justify-between rounded border border-border px-2 py-1.5">
+              <span className="text-mono">{c.metric}</span>
+              <span className="text-muted-foreground">
+                every {Math.round(c.evaluateEverySec / 60)}m{c.eventDriven ? " · event" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mt-3">
+          {t("capitalPool.mandate.autoActions", { defaultValue: "Auto-actions" })}
+        </div>
+        <div className="space-y-1">
+          {MANDATE_BREACH_AUTO_ACTIONS.map((a) => (
+            <div key={a.severity} className="flex flex-wrap items-center gap-1 text-xs">
+              <Badge variant="outline" className="text-[10px] uppercase">{a.severity}</Badge>
+              <span className="text-muted-foreground">→</span>
+              {a.actions.map((act) => (
+                <Badge key={act} variant="secondary" className="text-mono text-[10px]">{act}</Badge>
+              ))}
+              <span className="text-muted-foreground ml-1">notify: {a.notify.join(", ")}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
