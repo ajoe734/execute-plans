@@ -15,6 +15,18 @@ import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
+
+function quorumProgressFor(r: ApprovalRequest) {
+  const stages = r.stages ?? [];
+  const approved = stages.filter((s) => s.state === "approved").length;
+  const riskClass: QuorumRiskClass =
+    r.riskLevel === "critical" ? "critical"
+    : r.riskLevel === "high" ? "high"
+    : r.riskLevel === "medium" ? "medium" : "low";
+  const policy = QUORUM_POLICIES[riskClass];
+  return { approved, min: policy.minReviewers, distinctFamily: policy.distinctRoleFamily };
+}
 
 export const GovernanceQueuePage = () => {
   const t = useT();
