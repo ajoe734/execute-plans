@@ -58,6 +58,7 @@ export const SettingsPage = () => {
             <TabsTrigger value="api">{t("settings.tab.api")}</TabsTrigger>
             <TabsTrigger value="locale">{t("settings.tab.locale")}</TabsTrigger>
             <TabsTrigger value="flags">{t("settings.tab.flags")}</TabsTrigger>
+            <TabsTrigger value="breakglass">{t("settings.tab.breakglass", { defaultValue: "Break-Glass" })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
