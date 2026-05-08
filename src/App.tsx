@@ -110,7 +110,8 @@ const App = () => (
               <Route path="sentinel" element={<SentinelPage />} />
               <Route path="interventions" element={<InterventionsPage />} />
               <Route path="overview" element={<ManagementOverview />} />
-              <Route path="command-center" element={<CommandCenter />} />
+              {/* Pack E E7 (Q23) — command-center is now an alias for Control Room. */}
+              <Route path="command-center" element={<Navigate to="/management/control-room" replace />} />
               <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
               <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />
