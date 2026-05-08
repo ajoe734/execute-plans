@@ -1560,6 +1560,11 @@ export default {
     footerNote: "v0 mock 建立 · overlay 30 分鐘 TTL · 不寫入 seed",
     required: "必填",
     submitting: "送出中…",
+    cooldown: {
+      title: "請稍候",
+      desc: "請等待 {{ms}} 毫秒後再送出。",
+      button: "等待 {{s}} 秒…",
+    },
     entity: {
       strategy: "策略", persona: "Persona", capitalPool: "資金池",
       rankingFormula: "排序公式", rebalance: "季度調倉", deployment: "部署",
