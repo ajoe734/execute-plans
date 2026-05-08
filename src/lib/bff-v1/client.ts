@@ -1,10 +1,11 @@
 // BFF Contract v1 — typed fetch client with mock/live mode switch.
 // Frozen contract source: .lovable/feedback/2026-05-07-final/
 
-import { buildHeaders, isMutation } from "./headers";
+import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, isBffErrorEnvelope, makeBffError } from "./errors";
 import { bootstrapMockAdapters } from "./mocks/adapters";
 import { resolveMock } from "./mocks/registry";
+import { liveStatus } from "./liveStatus";
 
 export type BffMode = "mock" | "live";
 
@@ -106,6 +107,8 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
     init.body = JSON.stringify(req.body);
   }
   const res = await fetch(url, init);
+  // H1+ — record server-advertised api version (if any) for mismatch detection.
+  liveStatus.reportApiVersion(res.headers.get("X-BFF-Api-Version") ?? undefined, BFF_API_VERSION);
   const text = await res.text();
   const json: unknown = text ? safeJson(text) : undefined;
   if (!res.ok) {
