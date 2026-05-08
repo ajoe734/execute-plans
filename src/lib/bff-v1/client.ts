@@ -76,6 +76,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
     locale: req.locale,
     idempotency: req.idempotencyKey,
     ifMatchVersion: req.ifMatchVersion,
+    correlationId: req.correlationId,
     extra: req.headers,
   });
 
