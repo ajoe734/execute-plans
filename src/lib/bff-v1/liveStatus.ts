@@ -15,12 +15,16 @@ import { useSyncExternalStore } from "react";
 import type { BffMode } from "./client";
 
 export interface LiveStatus {
-  mode: BffMode;          // configured target
-  effective: BffMode;     // current runtime
+  mode: BffMode;
+  effective: BffMode;
   baseUrl: string;
   lastError?: string;
   lastErrorAt?: number;
   fellBackAt?: number;
+  /** H1+ — last server-reported X-BFF-Api-Version (when seen). */
+  serverApiVersion?: string;
+  /** H1+ — true when serverApiVersion mismatches client BFF_API_VERSION. */
+  apiVersionMismatch?: boolean;
 }
 
 function readEnv(): { mode: BffMode; baseUrl: string } {
