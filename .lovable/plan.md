@@ -1,161 +1,165 @@
-# 規劃團隊待補規範清單（FE 端無事可做，全部卡 spec / BFF contract）
 
-整理依據：`H_VERSION_BACKLOG.md`、`Pantheon_BFF_Contract_Spec_2026-05-07_Final.md §10/§11`、`spec-conflict-2026-05-06-G.md`、`spec-conflict-2026-05-06-E.md §B`、`spec-gap-2026-05-05-C-planner.md`、`smoke-2026-05-07-ui-hygiene.md`。
+# 規劃團隊 34 條回覆：歸檔 + 落地實作計畫
 
-FE 對每一項都已落地 transitional / mock 版本（`v0-mock` / `mockTimeoutPolicy` / superset enum / fallback banner），等規劃團隊出 canonical spec 後才能去掉 mock 標籤、刪除 fallback、收斂為 single source of truth。
+## 一、歸檔（不改現有檔）
 
----
+把上傳的 `Pantheon_System_Dev_Response_to_34_Spec_Backlog_2026-05-07.md` 整份歸檔到：
 
-## A. BFF Contract H 版（最高優先，3 條）
-
-來源：`H_VERSION_BACKLOG.md` + Final §11。
-
-### A1. OpenAPI `components.schemas.ActionCommandStatus` 抽 named enum
-- 現況：OpenAPI 仍用內聯 enum `["accepted","queued","completed"]`。
-- FE 已備：`src/lib/bff-v1/dto.ts` 導出 `ACTION_COMMAND_STATUSES` + named type + `isActionCommandStatus()` guard。
-- 規劃需做：把 `paths.*.responses` 內聯 enum 改 `$ref: '#/components/schemas/ActionCommandStatus'`，方便 codegen。
-
-### A2. Pack D D21 ErrorCode master 補 3 條
-- 現況：Pack D D21 仍是 23 條，v1 BFF DTO §3.1 已有 26 條。
-- FE 已備：`src/lib/v4/errorCodes.ts` 已 superset 為 26 條 + i18n 全補。
-- 規劃需做：Pack D-C §D21 灌回 `RESOURCE_NOT_FOUND`、`APPROVAL_REQUIRED`、`CONFIRM_TOKEN_REVOKED`，與 DTO §3.1 對齊。
-
-### A3. SSE Contract 補 channel + Permission Contract 補 capability map
-- Final §11 列示：Pack D-D 須加 `approval` / `ask` channel；Pack D-B Permission Contract 須加 `EvidenceKind → capability` map。
-- FE 已備：`src/lib/bff-v1/dto.ts` `EVIDENCE_CAPABILITY_MAP` + `RedactedEvidenceRef`。
-- 規劃需做：把 FE map 灌回 Pack D canonical contract。
-
----
-
-## B. Pack D 5 大 Critical Blockers（spec 待 canonical 化）
-
-來源：`spec-gap-2026-05-06-D-blockers.md`。FE 全部用 v0-mock 版上線中。
-
-### B1. D05 — 10+ 狀態機 `timeoutMs` / `failureState` / `failureReasonCode`
-- 影響清單：Job、Deployment、Handoff、EvolutionRun、Incident、CapitalPool、Skill scan、Memory review、Artifact promote、RoutePolicy activate、Alert ack。
-- FE 已備：`src/lib/v5/timeoutPolicy.ts` 標 `timeoutPolicy=v0-mock`。
-- 規劃需做：每個 async transition 三欄定值（建議草稿值已在 blockers brief §B1）。
-
-### B2. D12 — Role × Capability bundle 對應表
-- 規劃需做：`ROLE_CAPABILITIES: Record<Role, readonly Capability[]>`，+ `*` wildcard 規則 + roles vs capabilities 衝突時的 source of truth 宣告（建議 capabilities 為主）。
-
-### B3. D22 — list endpoint totalCount 分類
-- 規劃需做：每個 list endpoint 標 `totalCountExact: true | false | absent`。registry 必須 exact、feed 可 estimated、infinite 可 absent。FE `V5ListResponse` 已 hardcode true，需對齊。
-
-### B4. D26 — SSE 每個 channel 的 payload schema
-- 規劃需做：每 channel discriminated union + `schemaVersion`。FE `src/lib/v5/events.ts` 用 transitional envelope，等 spec 補完才能移除 `payload: unknown` 兜底。
-
-### B5. D51/D59 — `/bff/me` session DTO
-- 規劃需做：`MeResponse` 完整欄位（user / tenant / roles / capabilities / env / featureFlags / serverTime / sessionExpiresAt / locale / tz）+ cache TTL + 401 refresh 策略。FE 現用最小 `V5SessionContext` 兜（tenantId="demo"）。
-
----
-
-## C. spec-conflict-G — BFF-dependent OPEN 子項
-
-來源：`smoke-2026-05-07-ui-hygiene.md` §31。
-
-| ID | 主題 | 規劃需做 |
-|---|---|---|
-| G-C2 | Confirm token vs cooldown 語意 | 兩者觸發條件、是否疊加、cooldown 計時起點 |
-| G-C4 | Two-man approval 同人/異角色判定 | 何謂「distinct approver」（同 user？同 role？同 tenant scope？） |
-| G-C5 | PATCH journal 失敗回滾 | merge-patch 部分欄位失敗時的 audit diff 形狀 |
-| G-C6 | Bulk action partial-failure UI 規範 | partial=true 時的 toast / drawer 行為 spec |
-
-C1/C3/C7/C8 FE 已 CLOSED。
-
----
-
-## D. Pack D §11.3 BFF-dependent 4 條
-
-來源：`smoke-2026-05-07-ui-hygiene.md` §32。
-
-| ID | 主題 |
-|---|---|
-| D04 | Incident ↔ Deployment rollback **Saga state machine** 未定（補償流程、失敗點 fallback） |
-| D30 | Handoff Reopen SLA（重開後是否重計、升級對象） |
-| D35 | Two-Man Distinct（與 G-C4 重疊，需合併裁示） |
-| D36 | Confirm Token vs Cooldown 語意（與 G-C2 重疊） |
-
-建議規劃團隊把 D35↔G-C4、D36↔G-C2 兩對合併為單一 spec 段落。
-
----
-
-## E. spec-gap-2026-05-05-C-planner 中尚未裁示的 second-order gaps
-
-抽出 FE 仍待 spec 才能收斂的高影響條目：
-
-1. **狀態機 error/timeout/cancellation fallback transition**（與 B1 D05 相關，需擴大到全部 18 個狀態機）。
-2. **Admin override / force-transition 路徑與授權者**（誰能授予、留痕欄位 justification/approvers/expiry）。
-3. **同 entity 兩 actor concurrent dispatch 衝突解決**（version / etag / optimistic lock）。
-4. **Memo 下限字數 / 是否需引用 incident id / markdown / mention**。
-5. **高風險動作 cool-down 連發限制**（與 G-C2 重疊）。
-6. **SSE last-event-id replay window / heartbeat / backoff**。
-7. **`X-Request-Id` 是否前端產生 + response 回寫策略**（FE 目前單向送出）。
-8. **Bulk endpoint 是否存在 + partial-failure 形狀**（FE 已備 `BulkActionResponse<T>`，缺 spec 列哪些 endpoint 支援）。
-9. **Handoff 是否多輪對話**（Agora ↔ Management 來回）。
-10. **Mandate breach 偵測週期 + 自動動作 + 通知對象**。
-11. **Reviewer / Approver quorum**（最少幾人、跨 risk + capital 角色強制）。
-12. **Random seed / data snapshot / code commit 鎖定機制**（experiment 重現性）。
-13. **i18n ICU plural / select 用法 + Accept-Language fallback 鏈**。
-14. **DataTable density 切換 + skeleton 細部規格 per (table/card/chart/drawer)**。
-15. **LineageGraph 節點上限 / layout / >500 nodes 效能 budget**。
-16. **多 drawer 同時開 + 巢狀 + ESC 關閉順序**。
-17. **全域捷徑表**（`g s` 跳 strategies、`?` 開 help 等）。
-18. **`prefers-reduced-motion` 行為規範**。
-19. **Audit timeline 是否可編輯/刪除**。
-20. **Spec semver 規則 + changelog 格式**。
-
-完整列表 67 條在 `spec-gap-2026-05-05-C-planner.md`，這裡是 FE 影響面最大的 20 條。
-
----
-
-## F. 規劃團隊建議排序
-
-最阻塞 → 最不阻塞：
-
-```text
-A1+A2+A3 (H 版 BFF refresh)  ──┐
-B5  /bff/me DTO              ──┤  P0 — 阻塞 type-safe codegen 與 startup
-B4  SSE payload schema       ──┘
-B1  D05 timeoutMs            ──┐
-B2  D12 ROLE_CAPABILITIES     │  P1 — 阻塞測試/驗收/audit
-B3  D22 totalCount            │
-D04 Saga rollback           ──┘
-G-C2/D36 Confirm vs cooldown ──┐
-G-C4/D35 Two-man distinct    ──┤  P2 — 阻塞高風險動作驗收
-D30 Handoff Reopen SLA       ──┘
-E §1–§20 second-order gaps  ──    P3 — 逐項清單，影響面較窄
+```
+.lovable/feedback/2026-05-07-planner-response/
+  Pantheon_System_Dev_Response_to_34_Spec_Backlog_2026-05-07.md   ← 原文
+  INDEX.md                                                          ← 對照表 + 狀態
+  Disposition.csv                                                   ← 34 條 × {priority, status, FE-action, owner}
 ```
 
+並新增 memory：「34 條 Planner Response 已歸檔；A/B/C/D 全 RESOLVED_BY_CONTRACT，FE 端可開始落地 mock canonical，待 BFF endpoint 上線再翻 live。」
+
 ---
 
-## G. FE 端對應狀態（給規劃團隊參考）
+## 二、規劃團隊回覆審閱結果（issues）
 
-每一項 spec 落定後，FE 需做的最小動作（不需重新規劃）：
+整體 34 條接受、可行。發現 3 個需要回標給規劃團隊的點，**不阻塞 FE 開工**，先以 FE 現況為主、planner 為次紀錄差異：
 
-| Spec 落定 | FE 動作 |
+| # | 衝突點 | FE 現況 | Planner 文 | 建議處理 |
+|---|---|---|---|---|
+| I1 | EvidenceKind 集合 | `audit/snapshot/incident/rebalance/deployment/experiment/postmortem/loop_run/sentinel_finding/intervention/ask_session`（11 種，含 v5 closed-loop） | `alert/incident/job/audit/metric/strategy/persona/deployment/runtime/policy/approval/artifact/signal/journal/postmortem`（15 種，缺 v5 三項） | FE 取 union（≈19 種）並標 `source: planner-2026-05-07 + v5-loop`，附 ticket 請 planner 在下一版 Permission Contract 合併 |
+| I2 | RedactedEvidenceRef.reason | union 3 值（`PERMISSION_DENIED \| CAPABILITY_MISSING \| TENANT_SCOPE_MISMATCH`） | 單值 `INSUFFICIENT_CAPABILITY` | FE 保留 union（資訊量大），新增 `redactionReasonCode` alias 對齊 planner naming |
+| I3 | ROLE_CAPABILITIES 角色集 | v4 roleLattice 既有 6 角色 | planner 列 12 角色（多 risk_officer/capital_manager/strategy_manager/system_operator/reviewer/capability_admin） | 擴成 12 角色 superset，向下相容 |
+
+其餘 31 條無語意衝突，可直接落地。
+
+---
+
+## 三、實作計畫（9 階段，依 P0→P3 排序）
+
+### 階段 1 — Archive + Memory（首批，唯一純文檔）
+
+- 建 `.lovable/feedback/2026-05-07-planner-response/` 三檔
+- 寫入 `mem://features/planner-response-2026-05-07`
+- 更新 `mem://index.md` Memories 段
+
+### 階段 2 — A 組 P0：BFF Contract 對齊（無 backend dep）
+
+| 動作 | 檔案 |
 |---|---|
-| A1 ActionCommandStatus 抽 enum | 重跑 codegen，移除手寫 const |
-| A2 D21 26 條 | `errorCodes.ts` 註解移除 H2 superset 標記 |
-| A3 SSE channel + capability map | Pack D-D / D-B canonical 對齊，移除 dto.ts 註解 |
-| B1 D05 timeout | `timeoutPolicy.ts` 移除 `v0-mock` 標籤，`source` 改 `spec` |
-| B2 D12 ROLE_CAPABILITIES | 新增 `src/lib/v4/roleCapabilities.ts` + `usePermissions` 接 capability list |
-| B3 D22 totalCount 分類 | `V5ListResponse` adapter 改讀 spec table |
-| B4 D26 SSE schema | `src/lib/v5/events.ts` 移除 `payload: unknown`，灌入 union |
-| B5 /bff/me | 替換 `V5SessionContext` 為真 `MeResponse` adapter |
+| A1：在 `dto.ts` 補 OpenAPI ref 註解、移除「H3 — named ActionCommandStatus」WIP tag | `src/lib/bff-v1/dto.ts` |
+| A2：`errors.ts` 移除「H2 superset」註解、宣告與 Pack D D21 v26 對齊 | `src/lib/bff-v1/errors.ts`, `src/lib/v4/errorCodes.ts` |
+| A3：`EVIDENCE_CAPABILITY_MAP` 擴成 19 鍵 union；`RedactedEvidenceRef` 加 `redactionReasonCode` alias；新增 `approval` / `ask` SSE channel typed unions | `src/lib/bff-v1/dto.ts`, 新檔 `src/lib/bff-v1/sse/channels.ts` |
+| Tests | `src/lib/bff-v1/__tests__/dto.test.ts` 新增 evidence map / redaction 測試 |
+
+### 階段 3 — B 組 P0：Session + SSE schema canonical
+
+| 動作 | 檔案 |
+|---|---|
+| B5 `MeResponse`：擴 `src/lib/v4/session/me.ts` 至 planner 全欄位（`permissionsVersion`、`counters`、`baseCurrency`、`sessionExpiresAt`、`featureFlags`），mock provider 同步 | `src/lib/v4/session/me.ts` |
+| B4 SSE：建 `src/lib/bff-v1/sse/channels.ts` 列 31 個 channel + 7 組 typed payload union（strategy/deployment/incident/loop/approval/ask/transition/rollback/handoff/confirm_token/cooldown）；`src/lib/v5/events.ts` 由 `payload: unknown` 改 generic constrained union | `src/lib/bff-v1/sse/channels.ts`, `src/lib/v5/events.ts` |
+| 測試 | channel registry exhaustive test |
+
+### 階段 4 — B 組 P1：State / Permission / List canonical
+
+| 動作 | 檔案 |
+|---|---|
+| B1 D05：建 `src/lib/v4/asyncTransitionPolicy.ts`，搬 15 條 action 預設表（timeoutMs/warnAfterMs/failureState/failureReasonCode/retryable/maxRetries），`src/lib/v5/timeoutPolicy.ts` 改 `source: 'planner-2026-05-07'` 並 re-export | 新檔 + 改 `timeoutPolicy.ts` |
+| B2 D12：建 `src/lib/v4/roleCapabilities.ts`（12 角色 × Capability bundle + wildcard 解析）；`usePermissions()` 改 capability-first，role 為 fallback | 新檔 + `src/lib/usePermissions.ts` |
+| B3 D22：建 `src/lib/v4/listTotalCountPolicy.ts`（endpoint→`exact\|estimated\|absent` map），`src/lib/v5/list.ts` 與 `useLiveListV1` 適配 | 新檔 + 改 list adapters |
+| 測試 | 各自 unit |
+
+### 階段 5 — C 組 P2：高風險動作合約
+
+| 動作 | 檔案 |
+|---|---|
+| C1/D36：建 `src/lib/v4/cooldownPriority.ts`（cooldown > confirm token），mock confirm-token redeem 強制檢查 cooldown | 新檔 + 改 `src/lib/v4/confirmToken.ts` |
+| C2/D35：建 `src/lib/v4/twoManPolicy.ts`（RoleFamily map + distinct user/family check），mock approver flow 接入 | 新檔 |
+| C3：journal PATCH atomic — `src/lib/bff/writeOverlay.ts` merge-patch path 改「all-or-nothing」+ 失敗發 `agora.journal.update.rejected` 記號 | 改 `writeOverlay.ts` |
+| C4：建 `src/platform/components/BulkResultDrawer.tsx` + 標準 toast pattern；`BulkActionResponse<T>` 已在 dto，掛 UI | 新元件 |
+
+### 階段 6 — D 組 P1/P2：Saga + Handoff
+
+| 動作 | 檔案 |
+|---|---|
+| D04：建 `src/lib/v4/rollbackSaga.ts`（DTO + status enum + 8 步 stepper），mock `/bff/rollback-sagas/{id}` provider，platform 元件 `RollbackSagaStepper.tsx` | 新檔 + 新元件 |
+| D30：擴 `src/lib/v4/handoffSla.ts` 加 `SlaSegment[]` + `reasonCode` enum，HandoffDrawer UI 顯示 segment timeline | 改 `handoffSla.ts` + `HandoffDrawer.tsx` |
+
+### 階段 7 — E 組 P1（與前項合流）
+
+| 動作 | 檔案 |
+|---|---|
+| E3：`src/lib/v4/optimisticLock.ts` 擴 `expectedVersion` mismatch UI helper（toast + diff hook），所有 runActionSafe 帶 lockVersion | 改既有 + 新增 hook |
+| E7：`src/lib/bff-v1/client.ts` 讀 response `X-Request-Id` + `X-Correlation-Id` 回寫 console / liveStatus（同 H1+ 模式） | 改 `client.ts` |
+
+### 階段 8 — E 組 P2：governance defaults
+
+E2 break-glass / E4 memo policy / E9 handoff multi-turn / E10 mandate breach defaults / E11 quorum — 全部以「config + 型別」落地，無 UI flow：
+
+```
+src/lib/v4/forceTransitionPolicy.ts   (E2)
+src/lib/v4/memoPolicy.ts              (E4)
+src/lib/v4/handoffMultiTurn.ts        (E9)
+src/lib/v4/mandateBreachDefaults.ts   (E10)
+src/lib/v4/reviewerQuorum.ts          (E11，可能擴既有 rebalanceQuorum)
+```
+
+### 階段 9 — E 組 P3：UX polish
+
+| 動作 | 檔案 |
+|---|---|
+| E16 drawer ESC stack：`RightDrawer.tsx` 改用 stack ref，只 topmost 接 ESC | `RightDrawer.tsx` |
+| E17 全域捷徑：擴 `CommandPalette.tsx` + 新 `KeyboardShortcutsHelp.tsx`（`?` 開啟） | 改 + 新 |
+| E18 reduced-motion：`src/index.css` 加 `@media (prefers-reduced-motion)` rules，Tailwind 對應 utility | `index.css` |
+| E13 i18n ICU：i18next 改用 `i18next-icu`（已在）或補 plural rules 檢查 script | `scripts/check-i18n.ts` |
+| E14/E15 預留 spec const file | `src/lib/v4/uiBudgets.ts` |
+| E19 audit immutable：`AuditTimeline.tsx` 確認無 edit affordance + 加 `correction` row 樣式 | 改 |
+| E20 spec semver：`.lovable/spec/v4/CHANGELOG.md` 模板 | 新檔 |
 
 ---
 
-## H. 不在規劃團隊範圍（FE 端可獨立推進，本次不列）
+## 四、技術細節（給工程實作）
 
-避免混淆，以下三類**不需要規劃補規範**，是 FE 自己可以做的：
+### 命名與檔案布局原則
 
-- **Edit/Update flow**（Pack F 只做 Create）
-- **Agora/Studios 頁面功能深度**（mock data → real 接線）
-- **H2+ / H3+ 強化項**（404→envelope 轉換、`writes.ts` runtime narrowing）— 純 FE refactor
+- 所有 planner canonical 落到 `src/lib/v4/`（normative layer），v5 / bff-v1 透過 re-export 收斂
+- mock provider 永遠加 `source: 'planner-2026-05-07'` 標籤，live wiring 才換成 `source: 'spec'`
+- 不刪 `v0-mock` tag，只在新檔同名常數標 `provisional: false`
 
-要我做這幾項時可單獨開 ticket。
+### 測試策略
+
+- 每階段一支 `*.test.ts`，覆蓋型別 narrowing、wildcard 解析、cooldown vs confirm-token 順序、bulk partial-failure 三種 outcome、handoff SlaSegment 累加
+- 既有 331 tests 必須維持綠色
+
+### 不做（明確排除）
+
+- 不接 real backend（沒 endpoint）
+- 不改 v3 legacy
+- 不改 design tokens
 
 ---
 
-**結論**：規劃團隊待補項共 **A(3) + B(5) + C(4) + D(4，與 C 重疊 2) + E(20) = 34 條**，建議優先用 P0/P1 共 **8 條**換取整個 BFF live 接線可下 mock 標。
+## 五、執行順序與粒度
+
+```text
+階段 1（archive + memory）
+階段 2（A 組 P0）         ─┐ 可並行
+階段 3（B 組 P0：Me + SSE）─┘
+階段 4（B 組 P1）
+階段 5（C 組 P2）         ─┐ 可並行
+階段 6（D 組 P1/P2）       ─┘
+階段 7（E 組 P1）
+階段 8（E 組 P2 config）
+階段 9（E 組 P3 polish）
+```
+
+每階段一個 commit，可逐階段審；用戶可隨時喊停或挑階段做。
+
+---
+
+## 六、回應規劃團隊（plan 完成後一起送）
+
+把 I1/I2/I3 三點寫入 `.lovable/feedback/2026-05-07-planner-response/INDEX.md` 的「FE feedback to planner」段，下次 planner 修訂 Pack D-B Permission Contract 時納入。
+
+---
+
+## 七、給用戶的選擇
+
+預設執行：階段 1 + 2 + 3（archive + 兩個 P0 批次），約 8–12 檔。
+
+若要全部 9 階段一次走完，估 30+ 檔、數百行新增；建議分批以利 review。
