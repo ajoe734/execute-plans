@@ -86,7 +86,7 @@ const BreakGlassPanel = () => {
         <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={4} />
         <div className="text-xs text-muted-foreground text-right text-mono">{justification.length}/{policy.minJustificationChars}</div>
       </div>
-      {!result.ok && (
+      {!result.ok && "reason" in result && (
         <div className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
           Validation: {result.reason}
         </div>
