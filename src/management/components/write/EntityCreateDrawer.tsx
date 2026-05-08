@@ -373,7 +373,14 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("actions.cancel")}
           </Button>
-          <Button onClick={submit}>{t("actions.create")}</Button>
+          <Button onClick={submit} disabled={cooldownMs > 0} aria-describedby={cooldownMs > 0 ? `${errIdBase}-cooldown` : undefined}>
+            {cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t("actions.create")}
+          </Button>
+          {cooldownMs > 0 && (
+            <span id={`${errIdBase}-cooldown`} className="sr-only" role="status">
+              {t("entityCreate.cooldown.desc", { ms: cooldownMs })}
+            </span>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>
