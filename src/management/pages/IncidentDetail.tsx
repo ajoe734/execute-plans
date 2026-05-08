@@ -66,6 +66,8 @@ export const IncidentDetail = () => {
     };
     openRollbackSaga(saga);
   };
+
+  useEffect(() => {
     Promise.all([
       bff.incidents.get(id), bff.alerts.list(),
       bff.strategies.list(), bff.runtimes.list(),
