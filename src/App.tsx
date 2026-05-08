@@ -34,7 +34,7 @@ import {
 
 import { CommitteeRoom } from "@/agora/pages/CommitteeRoom";
 import { SignalDetail } from "@/agora/pages/SignalDetail";
-import { CommandCenter } from "@/management/pages/CommandCenter";
+// CommandCenter import removed — Pack E E7 redirects /management/command-center to /management/control-room.
 import { RiskCenter } from "@/management/pages/RiskCenter";
 import { IncidentDetail } from "@/management/pages/IncidentDetail";
 import { GovernanceReview } from "@/management/pages/GovernanceReview";
