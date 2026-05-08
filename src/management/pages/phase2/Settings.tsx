@@ -1,17 +1,25 @@
 // Settings — Spec Part 3 §System.
 // Workspace, integrations, locale, theme, API keys, feature flags.
+// Planner Response §E2 — adds Break-Glass tab (force-transition admin form).
+import { useState } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { bff } from "@/lib/bff-v1";
 import { toast } from "sonner";
+import {
+  DEFAULT_FORCE_TRANSITION_POLICY,
+  validateForceTransition,
+  type ForceTransitionRequest,
+} from "@/lib/v4/forceTransitionPolicy";
 
 const Section = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (
   <Card className="p-5 space-y-4">
