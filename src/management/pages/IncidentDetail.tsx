@@ -69,7 +69,7 @@ export const IncidentDetail = () => {
         retryable: policy?.retryable ?? true,
         maxRetries: policy?.maxRetries ?? 1,
         correlationId: `cid-${incident.id}`,
-        status: "in_flight",
+        status: "running",
       },
       correlationId: `cid-${incident.id}`,
       auditEventIds: [],
