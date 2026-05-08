@@ -29,12 +29,12 @@ describe("H1+ X-BFF-Api-Version mismatch detection", () => {
   });
 
   it("mismatch → flag set + console.warn fired once on rising edge", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
+    const make = () =>
       new Response(JSON.stringify({}), {
         status: 200,
         headers: { "Content-Type": "application/json", "X-BFF-Api-Version": "9999-12-31" },
-      }),
-    );
+      });
+    globalThis.fetch = vi.fn().mockImplementation(async () => make());
     await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" });
     await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" });
     expect(liveStatus.get().apiVersionMismatch).toBe(true);
