@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DATATABLE_ROW_HEIGHT_PX } from "@/lib/v4/uiBudgets";
 
 export interface Column<T> {
   key: string;
@@ -9,7 +10,20 @@ export interface Column<T> {
   className?: string;
 }
 
-export function DataTable<T extends { id: string }>({ rows, columns, onRowClick, empty }: { rows: T[]; columns: Column<T>[]; onRowClick?: (row: T) => void; empty?: string }) {
+/** Planner Response §E14 — three canonical densities. */
+export type DataTableDensity = "comfortable" | "compact" | "dense";
+
+export function DataTable<T extends { id: string }>({
+  rows, columns, onRowClick, empty, density = "comfortable",
+}: {
+  rows: T[];
+  columns: Column<T>[];
+  onRowClick?: (row: T) => void;
+  empty?: string;
+  density?: DataTableDensity;
+}) {
+  const rowH = DATATABLE_ROW_HEIGHT_PX[density];
+  const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
   return (
     <Card className="overflow-hidden">
       <Table>
@@ -24,9 +38,14 @@ export function DataTable<T extends { id: string }>({ rows, columns, onRowClick,
           {rows.length === 0 ? (
             <TableRow><TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">{empty ?? "—"}</TableCell></TableRow>
           ) : rows.map((row) => (
-            <TableRow key={row.id} className={onRowClick ? "cursor-pointer" : ""} onClick={() => onRowClick?.(row)}>
+            <TableRow
+              key={row.id}
+              className={onRowClick ? "cursor-pointer" : ""}
+              onClick={() => onRowClick?.(row)}
+              style={{ height: rowH }}
+            >
               {columns.map((c) => (
-                <TableCell key={c.key} className={c.className}>{c.cell(row)}</TableCell>
+                <TableCell key={c.key} className={`${cellPad} ${c.className ?? ""}`}>{c.cell(row)}</TableCell>
               ))}
             </TableRow>
           ))}
