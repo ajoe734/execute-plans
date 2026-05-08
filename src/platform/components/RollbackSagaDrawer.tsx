@@ -13,7 +13,7 @@ export function RollbackSagaDrawer() {
           <SheetTitle className="text-base">Rollback saga</SheetTitle>
           {saga && (
             <SheetDescription className="text-xs text-mono">
-              {saga.id} · target {saga.targetEntityType}/{saga.targetEntityId}
+              {saga.id} · deployment {saga.deploymentId} · incident {saga.incidentId}
             </SheetDescription>
           )}
         </SheetHeader>
