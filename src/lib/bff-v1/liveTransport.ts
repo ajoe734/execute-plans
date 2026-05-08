@@ -12,8 +12,19 @@
 // adding genuine live wiring.
 
 import { bffFetch, type BffRequest } from "./client";
-import { BffError } from "./errors";
+import { BffError, makeBffError } from "./errors";
 import { liveStatus, shouldUseLive } from "./liveStatus";
+
+export type FallbackMode = "auto" | "strict";
+
+function detectFallbackMode(): FallbackMode {
+  try {
+    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    return env?.VITE_BFF_FALLBACK === "strict" ? "strict" : "auto";
+  } catch {
+    return "auto";
+  }
+}
 
 export async function withLiveOrMock<T>(
   req: BffRequest,
@@ -30,6 +41,15 @@ export async function withLiveOrMock<T>(
       throw err;
     }
     const reason = err instanceof Error ? err.message : "live transport failed";
+    if (detectFallbackMode() === "strict") {
+      // Strict mode: surface transport failure as a typed BffError; do NOT mask with mock data.
+      liveStatus.reportFallback(`strict: ${reason}`);
+      if (err instanceof BffError) throw err;
+      throw makeBffError({
+        code: "UNKNOWN_ERROR",
+        message: `live transport failed (strict mode): ${reason}`,
+      });
+    }
     liveStatus.reportFallback(reason);
     return mockFn();
   }
