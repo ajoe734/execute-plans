@@ -15,6 +15,20 @@ import type { CommandResponse, ActionCommandResponseData } from "./dto";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
+import { withLiveOrMock } from "./liveTransport";
+import { paths } from "./paths";
+
+/** Map RunActionInput.kind → live action endpoint builder. */
+function actionPath(kind: RunActionInput["kind"], id: string, action: string): string | undefined {
+  switch (kind) {
+    case "Strategy":      return paths.strategyAction(id, action);
+    case "Persona":       return paths.personaAction(id, action);
+    case "CapitalPool":   return paths.capitalPoolAction(id, action);
+    case "Rebalance":     return paths.rebalanceAction(id, action);
+    case "Deployment":    return paths.deploymentAction(id, action);
+    default:              return undefined;
+  }
+}
 
 export interface RunActionEnvelope extends CommandResponse<ActionCommandResponseData> {
   /** Pass-through to the underlying mock MutationResult for legacy consumers. */
