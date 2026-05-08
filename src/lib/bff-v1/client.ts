@@ -109,6 +109,11 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   const res = await fetch(url, init);
   // H1+ — record server-advertised api version (if any) for mismatch detection.
   liveStatus.reportApiVersion(res.headers.get("X-BFF-Api-Version") ?? undefined, BFF_API_VERSION);
+  // Planner §E7 — record echoed X-Request-Id / X-Correlation-Id for debugging.
+  liveStatus.reportRequestIds(
+    res.headers.get("X-Request-Id") ?? undefined,
+    res.headers.get("X-Correlation-Id") ?? undefined,
+  );
   const text = await res.text();
   const json: unknown = text ? safeJson(text) : undefined;
   if (!res.ok) {
