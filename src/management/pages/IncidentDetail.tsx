@@ -37,8 +37,35 @@ export const IncidentDetail = () => {
   const [postmortem, setPostmortem] = useState("");
   const [mitigation, setMitigation] = useState("");
   const [constraint, setConstraint] = useState("");
+  const openRollbackSaga = useOverlay((s) => s.openRollbackSaga);
 
-  useEffect(() => {
+  const showRollbackSaga = () => {
+    if (!incident) return;
+    const policy = findAsyncTransitionPolicy("rollback.saga");
+    const deploymentId = affectedRuntimes[0]?.id ?? affectedStrategies[0]?.id ?? "deploy-mock";
+    const now = new Date().toISOString();
+    const saga: RollbackSagaDTO = {
+      id: `saga-${incident.id}`,
+      incidentId: incident.id,
+      deploymentId,
+      status: "rolling_back",
+      currentStep: "rolling_back",
+      reasonCode: "INCIDENT_TRIGGERED",
+      requestedBy: perms.role,
+      requestedAt: now,
+      updatedAt: now,
+      timeout: {
+        timeoutMs: policy?.timeoutMs ?? 900_000,
+        warnAfterMs: policy?.warnAfterMs ?? 300_000,
+        failureState: policy?.failureState ?? "failed",
+        retryable: policy?.retryable ?? true,
+        maxRetries: policy?.maxRetries ?? 1,
+      },
+      correlationId: `cid-${incident.id}`,
+      auditEventIds: [],
+    };
+    openRollbackSaga(saga);
+  };
     Promise.all([
       bff.incidents.get(id), bff.alerts.list(),
       bff.strategies.list(), bff.runtimes.list(),
