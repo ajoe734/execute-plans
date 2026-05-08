@@ -11,6 +11,7 @@ import { auditEvents } from "@/mocks/seed";
 import type { CreatableEntity } from "@/lib/writeIntents/types";
 import { ENTITY_TO_LIVE_KIND, ENTITY_TO_SSE_CHANNEL } from "@/lib/writeIntents/createDefaults";
 import { isSseChannel } from "@/lib/bff-v1/sse/channels";
+import type { SseChannelKind } from "@/lib/v4/sseEnvelope";
 import { newCorrelationId, newUuid } from "@/lib/v4/correlation";
 
 export const WRITE_OVERLAY_TTL_MS = 30 * 60 * 1000;
