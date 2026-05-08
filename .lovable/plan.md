@@ -1,139 +1,103 @@
-## 目標
+# 前端 vs 設計藍圖：完整待辦盤點 (2026-05-08)
 
-把 2026-05-08 Planner 對 Stage 2 A 組 P0 的回覆完整歸檔，並依其六條裁示調整 FE：
-**核心原則**：FE 保留 superset / alias 相容層；backend-facing canonical 必須更窄、明確標註，且不得宣稱 spec backport 已完成（要等 OpenAPI / Pack D / AsyncAPI 真的更新）。
+對照來源：v4 + Pack D + v5 SA/SD + 2026-05-07 Planner Response (34 條) + 2026-05-08 Stage 2 Audit + spec-conflict-G。
 
----
-
-## 一、歸檔（純文檔）
-
-新增到 `.lovable/feedback/2026-05-08-planner-stage2-audit/`：
-
-```
-Pantheon_Planner_Response_to_Lovable_Stage2_Audit_2026-05-08.md   ← 原文 copy
-INDEX.md                                                           ← 摘要 + 6 條裁示對照
-```
-
-並在 `.lovable/feedback/2026-05-07-planner-response/INDEX.md` 加 cross-ref：「Stage 2 A 組已收到 2026-05-08 Planner 回覆，見 `../2026-05-08-planner-stage2-audit/`」。
+整體覆蓋率 — **規格層 233/233 已收斂，FE 實作 ~95% 完成**。以下分類整理「真正還沒落地」的部分。
 
 ---
 
-## 二、文檔/狀態調整（非行為變更）
+## A. 必修 (Blocker — 立即影響 CI/品質)
 
-### 2.1 更新 `.lovable/feedback/2026-05-07-planner-response/INDEX.md`
-
-§5 三列改寫為 planner §5.1–5.3 指定文案：
-- I1：「FE accepted union = 22 values：19 canonical + 3 legacy aliases (snapshot/rebalance/experiment)。Backend SHOULD emit canonical 19 only。」
-- I2：「Backend canonical = redactionReasonCode + requiredCapability；FE alias reason + capabilityRequired 為相容欄位，由 normalizer 統一。」
-- I3：「12-role 為 BFF `/bff/me` canonical；目前 5-role FE mock 為 subset；Capabilities 為 source of truth。」
-
-### 2.2 更新 `Disposition.csv`
-
-加入或修改 6 列：
-
-```
-I1,RESOLVED_BY_COMPATIBILITY_LAYER,...
-I2,RESOLVED_BY_COMPATIBILITY_LAYER,...
-I3,ACCEPTED_STAGE4,...
-A1,FE_READY_OPENAPI_BACKPORT_PENDING,...
-A2,FE_READY_PACKD_BACKPORT_PENDING,...
-A3,FE_READY_ASYNCAPI_BACKPORT_PENDING,...
-```
-
-### 2.3 註解修正
-
-- `src/lib/bff-v1/dto.ts`：把 `redactionReasonCode alias 對齊 planner` 改為「`redactionReasonCode` + `requiredCapability` are backend canonical；`reason` / `capabilityRequired` are FE legacy aliases (normalized via `normalizeRedactedEvidenceRef`)」。
-- `src/lib/v4/errorCodes.ts`：在 26 list 上方加 `// FE_READY — Pack D D21 markdown backport pending（do not claim spec backported）`。
-- `src/lib/bff-v1/sse/channels.ts` + `payloads.ts`：在 `SseEvent.correlationId?:` 上方加註「FE compatibility-only optional；backend AsyncAPI 必須 required；mock 走 `ensureCorrelationId()`」。
+### A1. 測試模式回歸 (新發現)
+切換 dev BFF URL 後 `.env` 設 `VITE_BFF_MODE=live`，導致 vitest 也跑 live mode，4 條 envelope 測試（`RESOURCE_NOT_FOUND` / `CONFIRM_TOKEN_REQUIRED 428` / `APPROVAL_REQUIRED` / `CommandResponse.data 502`）失敗 — 全部變成 `UNKNOWN_ERROR/500/502`。
+- 修法：在 `vitest.config.ts` 或 `src/test/setup.ts` 強制 `import.meta.env.VITE_BFF_MODE = "mock"`，或於 `client.ts` 中 `if (import.meta.env.MODE === 'test')` 視為 mock。
+- 結果：357 → 361 全綠。
 
 ---
 
-## 三、程式碼落地（小幅、相容層）
+## B. 規格 backport 等待 (FE 已就緒，BE/Planner 工作)
 
-### 3.1 `src/lib/bff-v1/dto.ts` — EvidenceKind 三層化
+| ID | 等待 | FE 狀態 |
+|---|---|---|
+| A1 | OpenAPI YAML 加 `ActionCommandStatus` schema | `FE_READY_OPENAPI_BACKPORT_PENDING` |
+| A2 | Pack D D21 markdown 補齊 26 ErrorCode | `FE_READY_PACKD_BACKPORT_PENDING` |
+| A3 | AsyncAPI 把 `correlationId` 標 required | `FE_READY_ASYNCAPI_BACKPORT_PENDING`（FE 用 `ensureCorrelationId()` 補值） |
 
-宣告 named subtype（不改實際 union 成員，只是命名 + 標籤）：
-
-```ts
-export type CanonicalEvidenceKind = /* 19 values */;
-export type LegacyEvidenceKindAlias = "snapshot" | "rebalance" | "experiment";
-export type EvidenceKind = CanonicalEvidenceKind | LegacyEvidenceKindAlias;
-
-export const CANONICAL_EVIDENCE_KINDS: readonly CanonicalEvidenceKind[] = [...];
-export const LEGACY_EVIDENCE_KIND_ALIASES: readonly LegacyEvidenceKindAlias[] = [...];
-export function isLegacyEvidenceKind(k: EvidenceKind): k is LegacyEvidenceKindAlias;
-```
-
-在 `EVIDENCE_CAPABILITY_MAP` 表格註解加 `// legacy alias` 標記三項。
-
-### 3.2 `src/lib/bff-v1/dto.ts` — RedactedEvidenceRef normalizer
-
-新增 export（與既有 interface 並存，欄位不變）：
-
-```ts
-export type RedactionReasonCode =
-  | "INSUFFICIENT_CAPABILITY"
-  | "TENANT_SCOPE_MISMATCH"
-  | "POLICY_REDACTED";
-
-export interface CanonicalRedactedEvidenceRef {
-  id: string;
-  kind: EvidenceKind;
-  redacted: true;
-  redactionReasonCode: RedactionReasonCode;
-  requiredCapability?: string;
-}
-
-export function normalizeRedactedEvidenceRef(
-  input: RedactedEvidenceRef,
-): CanonicalRedactedEvidenceRef;
-```
-
-mapping 依 §2.4 表格（`PERMISSION_DENIED`/`CAPABILITY_MISSING` → `INSUFFICIENT_CAPABILITY`；`TENANT_SCOPE_MISMATCH` 同名）。
-
-### 3.3 `src/lib/bff-v1/sse/payloads.ts` — `ensureCorrelationId` helper
-
-新增 export：
-
-```ts
-export function ensureCorrelationId<E extends { id: string; correlationId?: string }>(
-  event: E,
-): E & { correlationId: string };
-```
-
-mock event bridge / `liveSse` 接收端引用，保留 `correlationId?:` 不動以維持相容。
-
-### 3.4 `src/lib/v4/roleCapabilities.ts` — 12-role superset 補齊
-
-階段 4 已落 12-role；本輪只補：
-- 確認 Role union 為 planner §3.2 12 值（現況檢查；若已對齊則僅補註解）。
-- 加註「Capabilities are source of truth；unknown role 不 crash、不推導、保留字串、dev/test 才 warn」並在 `usePermissions` 對 unknown role 加 `if (import.meta.env.DEV) console.warn(...)` 一行。
-
-### 3.5 測試
-
-新增 `src/lib/bff-v1/__tests__/plannerStage2Audit.test.ts`：
-- `CANONICAL_EVIDENCE_KINDS.length === 19`、`LEGACY... === 3`、`isLegacyEvidenceKind('snapshot')` true。
-- `normalizeRedactedEvidenceRef` 三條 mapping。
-- `ensureCorrelationId` 補值與保留原值。
-- 12-role superset 完整性。
-
-確保既有 350 tests 全綠。
+不動 FE，只在 backport 落地後改 disposition 標記。
 
 ---
 
-## 四、明確不做
+## C. spec-conflict-G impl-pending (8 條剩餘)
 
-- 不收窄任何既有 union（保 22 值 / `reason` union / `correlationId?` 全部保留）。
-- 不修改 backend-facing OpenAPI / AsyncAPI / Pack D markdown（那是 planner / BE 工作；本輪只標 *_BACKPORT_PENDING）。
-- 不改任何 UI、business logic、design token、route。
+`.lovable/audits/spec-gap-2026-05-06-G-summary.csv` 14 條中，前回收斂 6 條；剩 8 條「impl-fixable」：
+
+| ID | 主題 | 工作 |
+|---|---|---|
+| G01 | `CreateIntentResult` 缺 async transition 欄位 | D05 已落地 → 把 `asyncTransitionPolicy` 接到 `EntityCreateDrawer` 的成功 toast |
+| G05 | overlay TTL (30 min) 與 audit append (永久) 不對稱 | 決策：audit 也走 overlay 30 min，或在 audit 顯示「mock-only」標 |
+| G06 | `ENTITY_TO_LIVE_KIND` 寫死，未綁 `SSE_CHANNELS` | D26 已落地 → 從 `src/lib/bff-v1/sse/channels.ts` 導出 mapping |
+| G07 | loops focus enum 對稱性 | 補 `LoopFocus` enum per loop（research/execution/optimization）|
+| G09 | Drawer 缺 `If-Match`/expectedVersion | 接 `optimisticLock.ts`；create 場景無 expectedVersion，只需 idempotency-key（已有），update 場景補 |
+| G12 | overlay GC 只在 add/list 觸發 | 加 `setInterval` 每 60s GC |
+| G13 | audit unshift 不算 prevHash | mock 補 `prevHash` placeholder 欄位 |
+| G14 | `withOverlay` prepend 跳過排序 | merge 後依 list sort 重排 |
+
+預估 ~6-8 檔，全是純 FE。
 
 ---
 
-## 五、執行順序
+## D. v5 Phase E1–E8 落地檢查
 
-1. 歸檔原文 + INDEX（階段 A）。
-2. 文檔狀態 / CSV / 註解修正（階段 B）。
-3. 程式碼相容層 dto / payloads / roleCapabilities + 測試（階段 C）。
-4. 更新 `mem://index.md` core line（加「Stage 2 audit applied 2026-05-08：canonical/alias 分層 + normalizer + ensureCorrelationId + 12-role superset 鎖定；A1/A2/A3 spec backport pending」）。
+E0 (types+mock) 已落；route 層 E1 (control-room/loops/sentinel/interventions) 已掛。需確認：
 
-預估 ~12 檔（4 新增、6 編輯、2 memory）。一次提交、可逐項 review。
+- **E2 Control Room**：頁面是否真的 render `ControlRoomSummary` 7 區塊（Loop health, Sentinel feed, HIQ queue, Mandate, Capital, Recent decisions, Run cadence）？目前 `ControlRoomPage` 行為待 audit。
+- **E3/E4 Execution/Optimization Loop**：`LoopRun` timeline + stage detail drawer 是否完整？
+- **E5 Sentinel Findings**：列表/篩選/acknowledge/mitigate 動作是否 wire 到 `bff.v5.sentinel.*`？
+- **E6 HIQ**：`InterventionItem` 詳情 + `recommendedDecision` accept/modify/decline 三按鈕是否齊？
+- **E7 IA stabilization**：side nav grouping、breadcrumb i18n（已有 `routeLabels.ts` 單一來源）、empty/skeleton 一致性。
+- **E8 QA/a11y/polish**：axe smoke 已存在；需擴及 v5 五個新頁面。
+
+建議先跑 `bunx vitest run src/lib/v5` + 手動逛 5 個頁面，列出仍是 stub 的區塊。
+
+---
+
+## E. Planner Response 34 條 — 補 wire-up 而非新增
+
+幾個 canonical 模組已落 `src/lib/v4/`，但**未實際接到 UI/呼叫端**：
+
+| 模組 | 落地檔 | 待 wire-up |
+|---|---|---|
+| `cooldownPriority.ts` | ✅ | `EntityCreateDrawer` confirm button 套用 cooldown > confirm-token 順序 |
+| `twoManPolicy.ts` | ✅ | `HighRiskConfirm` 流程加 distinct-user 檢查 |
+| `forceTransitionPolicy.ts` | ✅ | break-glass UI（admin only）尚無入口 |
+| `mandateBreachDefaults.ts` | ✅ | Capital pool detail 套用 cadence + auto-actions hint |
+| `reviewerQuorum.ts` | ✅ | Approvals queue 顯示 quorum 進度條 |
+| `memoPolicy.ts` | ✅ | Decision Journal / Approval memo 欄位驗證 minLength |
+| `uiBudgets.ts` | ✅ | DataTable density toggle / LineageGraph node-limit warning |
+| `RollbackSagaDrawer/Stepper` | ✅ 掛 PlatformShell | 需要 IncidentDetail 提供「View Rollback Saga」按鈕呼 `openRollbackSaga()` |
+
+---
+
+## F. 雜項清理（可延後）
+
+- `src/lib/v3/` 仍存在，已被 v4 superseded — 加 deprecation header 或保留為 legacy shim，文件化即可。
+- `src/lib/v5/timeoutPolicy.ts` 已被 `v4/asyncTransitionPolicy.ts` superseded，CHANGELOG 已標 deprecated；可加 ESLint `no-restricted-imports`。
+- `.env.example` 同時保留 mock + live 範例；`.env` 目前 live；測試覆蓋見 A1。
+
+---
+
+## 建議執行順序
+
+1. **A1 修測試** (5 min)
+2. **C 八條 G impl-fixable** (1-2 hr，整批)
+3. **D v5 phase 巡檢**：先列 stub，再分批落地（E2/E5/E6 較重）
+4. **E wire-up**：每個 canonical 模組找一個 UI 入口接上
+5. **B 由 BE/Planner 接手**
+
+---
+
+## Out of Scope（不做）
+
+- 修改 backend OpenAPI / AsyncAPI / Pack D markdown（B 組）
+- 改 design token / route slug / business logic
+- 重寫 v3/v4 已 frozen 的 DTO
