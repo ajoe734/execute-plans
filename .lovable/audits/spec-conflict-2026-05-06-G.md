@@ -6,18 +6,18 @@
 
 ---
 
-## OPEN — Pack D canonical 與 src/ 衝突
+## RESOLVED — Pack D canonical 與 src/ 衝突（C1–C8 全綠）
 
-| ID | 當前 src/ | Pack D canonical | 影響 batch |
+| ID | 當前 src/ | Pack D canonical | 處置 |
 |---|---|---|---|
-| C1 | `writeIntents/types.ts` `BaseCreateInput.risk: "low\|medium\|high\|critical"` | D40 五階含 `info` | Batch II（risk 五階一致化） |
-| C2 | `writeOverlay.ts` audit `auditEvents.unshift({...})` 無 `correlationId` | D60 必填 correlationId chain | Batch IV（v0-mock generate uuid） |
-| C3 | `EntityCreateDrawer` 無 `idempotencyKey` / serverTime cooldown | D45 confirm flow / D15 cooldown | Batch IV（mock confirm token） |
-| C4 | 無 `/bff/me`，`currentUser` 散落多處 | D51/D59 MeResponse 單一來源 | Batch II（mock）→ Batch III（real） |
-| C5 | `bff.realtime.emit("data", { kind, ... })` 無 `SseEventEnvelope.schemaVersion=1` | D26 typed envelope | Batch III（wrapper） |
-| C6 | `ListResponse` 無 `estimatedTotal` / `totalCountExact` | D22 envelope | Batch III |
-| C7 | ErrorCode / DisabledReasonCode 散落 string literal | D13 / D21 enum 集中 | Batch II |
-| C8 | Strategy 部分 UI 仍判斷單一 `state` | D01 三軸並用白名單 | Batch II（lifecycle/review/deployment 顯式校驗） |
+| C1 | `writeIntents/types.ts` `BaseCreateInput.risk` 五階含 `info` | D40 五階 | RESOLVED — Batch II risk 五階一致化 |
+| C2 | `writeOverlay.ts` 已注入 `correlationId` chain（mock uuid） | D60 必填 correlationId chain | RESOLVED — Batch IV `lib/v4/correlation.newCorrelationId()` |
+| C3 | `EntityCreateDrawer` 已用 `idempotencyKey()` header helper + 1.5s confirm cooldown，i18n `entityCreate.cooldown.*` | D45 confirm flow / D15 cooldown | RESOLVED 2026-05-08 — drawer-open 級 stable Idempotency-Key + cooldown countdown + a11y `role=status` |
+| C4 | `src/lib/bff-v1/me.ts` re-exports v4 `useMe/fetchMe/MeResponse` | D51/D59 MeResponse 單一來源 | RESOLVED — Batch II mock + bff-v1 facade |
+| C5 | `realtime.emitEnvelope` + `bff-v1/sse/channels.ts SSE_SCHEMA_VERSION=1` | D26 typed envelope | RESOLVED — Batch III SseEventEnvelope wrapper |
+| C6 | `bff-v1/lists.ts` D22 list-class matrix → `estimatedTotal`/`totalCountExact` | D22 envelope | RESOLVED — Batch III ListEnvelope |
+| C7 | `bff-v1/errors.ts` ErrorCode / DisabledReasonCode enum | D13 / D21 enum 集中 | RESOLVED — Batch II |
+| C8 | Strategy UI 三軸（lifecycle/review/deployment）顯式白名單 | D01 三軸並用 | RESOLVED — Batch II `lib/v4/strategyTriple` |
 
 ---
 
@@ -26,13 +26,13 @@
 | 原 ID | 內容 | 處置 |
 |---|---|---|
 | G02 | redirect intent contract | RESOLVED — 改 query `?intent=create` |
+| G03 | Drawer per-entity controls | RESOLVED — Pack F EntityCreateDrawer Select/Slider/multi-tag |
 | G04 | Drawer RBAC guard | RESOLVED — Pack F 短板 + 後續 D-B 統一 |
 | G07 | focus 對稱 | RESOLVED — ExecutionLoop+OptimizationLoop focus param |
 | G10 | i18n key sweep | RESOLVED — Pack F 補完 |
 | G12 | overlay GC | RESOLVED — writeOverlay TTL test |
 | G14 | sort default | RESOLVED — D19 nullsLast canonical |
 | G01 | CreateIntentResult 缺 async transition | 併入 D05（AsyncTransitionDescriptor） |
-| G03 | Drawer per-entity controls | OPEN — 列為 Batch II UI 增量 |
 | G05 | overlay/audit 對稱 | 併入 D60（correlationId chain） |
 | G06 | SSE 對焊 | 併入 D26（typed envelope） |
 | G08 | IA 文案三層 | 併入 D49（glossary key） |
@@ -44,4 +44,5 @@
 
 ## 後續處置
 
-OPEN 8 條（C1–C8）按 `.lovable/plan.md` Batch II / III / IV 推進，不在本 disposition 階段實作 src/。
+C1–C8 全綠，spec-conflict-G CLOSED。後續若 BFF live mode 接線時發現 server 對 `Idempotency-Key` 處理與 v0 mock 行為不一致，回到 C3 補 server-time cooldown 校準。
+
