@@ -247,18 +247,39 @@ export const HighRiskConfirm = ({
               </div>
             )}
 
+            {twoManRequired && (
+              <div className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+                {t("confirm.twoMan.title", { defaultValue: "Two-person approval required" })} ·
+                {twoManPolicy.distinctRoleFamily
+                  ? ` ${t("confirm.twoMan.distinctFamily", { defaultValue: "distinct user + distinct role family" })}`
+                  : ` ${t("confirm.twoMan.distinctUser", { defaultValue: "distinct user (requester may not sign)" })}`}
+              </div>
+            )}
+
             <div className="space-y-1.5">
-              <Label className="text-xs">{t("confirm.memo")} <span className="text-destructive">*</span></Label>
+              <Label className="text-xs">
+                {t("confirm.memo")}
+                {memoPolicy.required && <span className="text-destructive"> *</span>}
+              </Label>
               <Textarea
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 placeholder={t("confirm.memoPlaceholder")}
                 rows={3}
-                maxLength={500}
+                maxLength={2000}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{!memoOk ? t("confirm.memoHint") : ""}</span>
-                <span className={memo.length > 500 ? "text-destructive" : ""}>{memo.length}/500</span>
+                <span>
+                  {!memoOk && memoCheck.ok === false && (
+                    memoCheck.reason === "REQUIRED" ? t("confirm.memoHint") :
+                    memoCheck.reason === "TOO_SHORT" ? t("confirm.memoTooShort", { defaultValue: "Memo must be at least {{n}} characters for {{risk}} actions", n: memoPolicy.minChars, risk: riskClass }) :
+                    memoCheck.reason === "TOO_LONG" ? t("confirm.memoTooLong", { defaultValue: "Memo exceeds 2000 characters" }) : ""
+                  )}
+                  {memoPolicy.recommendsIncidentRef && memoOk && (
+                    <span className="text-muted-foreground/80">{t("confirm.memoIncidentRef", { defaultValue: "Tip: reference an incident id (#INC-...)" })}</span>
+                  )}
+                </span>
+                <span className={memo.length > 2000 ? "text-destructive" : ""}>{memo.length}/2000</span>
               </div>
             </div>
 
