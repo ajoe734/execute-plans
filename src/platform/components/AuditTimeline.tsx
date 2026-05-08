@@ -21,6 +21,11 @@ export interface AuditEntry {
   after?: string;
   /** Phase 15 — outcome marker; rejected entries are tinted destructive. */
   outcome?: "ok" | "rejected";
+  /** spec-conflict-G G05 — entry produced by 30-min overlay (mock-only, will not persist). */
+  ephemeral?: boolean;
+  /** spec-conflict-G G13 — placeholder hash chain (mock-only). */
+  prevHash?: string | null;
+  hash?: string;
 }
 
 interface Props {
