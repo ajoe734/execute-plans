@@ -1,17 +1,25 @@
 // Settings — Spec Part 3 §System.
 // Workspace, integrations, locale, theme, API keys, feature flags.
+// Planner Response §E2 — adds Break-Glass tab (force-transition admin form).
+import { useState } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { bff } from "@/lib/bff-v1";
 import { toast } from "sonner";
+import {
+  DEFAULT_FORCE_TRANSITION_POLICY,
+  validateForceTransition,
+  type ForceTransitionRequest,
+} from "@/lib/v4/forceTransitionPolicy";
 
 const Section = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (
   <Card className="p-5 space-y-4">
@@ -33,6 +41,68 @@ const Row = ({ label, hint, children }: { label: string; hint?: string; children
   </div>
 );
 
+const BreakGlassPanel = () => {
+  const policy = DEFAULT_FORCE_TRANSITION_POLICY;
+  const [entityType, setEntityType] = useState("strategy");
+  const [entityId, setEntityId] = useState("");
+  const [fromState, setFromState] = useState("");
+  const [toState, setToState] = useState("");
+  const [justification, setJustification] = useState("");
+  const [approvers, setApprovers] = useState("");
+  const [incidentId, setIncidentId] = useState("");
+  const [liveImpact, setLiveImpact] = useState(true);
+
+  const approverIds = approvers.split(",").map((s) => s.trim()).filter(Boolean);
+  const req: ForceTransitionRequest = {
+    entityType, entityId, fromState, toState,
+    justification, approverIds,
+    incidentId: incidentId || undefined,
+    expectedVersion: 1,
+  };
+  const approverRoles: Record<string, readonly string[]> = Object.fromEntries(
+    approverIds.map((id, i) => [id, i === 0 ? ["platform_admin"] : ["risk_officer"]]),
+  );
+  const result = validateForceTransition(req, approverRoles, liveImpact, policy);
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div>
+        <div className="text-sm font-semibold">Break-Glass Force Transition</div>
+        <div className="text-xs text-muted-foreground mt-0.5">
+          Admin override per Planner §E2. Requires ≥{policy.minJustificationChars} char justification, ≥{policy.minApproversForLiveImpact} distinct approvers (including {policy.requiredApproverRoles.join(" + ")}). All actions audited; live-impact requires postmortem.
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5"><Label className="text-xs">Entity type</Label><Input value={entityType} onChange={(e) => setEntityType(e.target.value)} /></div>
+        <div className="space-y-1.5"><Label className="text-xs">Entity id</Label><Input value={entityId} onChange={(e) => setEntityId(e.target.value)} /></div>
+        <div className="space-y-1.5"><Label className="text-xs">From state</Label><Input value={fromState} onChange={(e) => setFromState(e.target.value)} /></div>
+        <div className="space-y-1.5"><Label className="text-xs">To state</Label><Input value={toState} onChange={(e) => setToState(e.target.value)} /></div>
+        <div className="space-y-1.5 col-span-2"><Label className="text-xs">Approver IDs (comma-separated, distinct users)</Label><Input value={approvers} onChange={(e) => setApprovers(e.target.value)} placeholder="alice, bob" /></div>
+        <div className="space-y-1.5"><Label className="text-xs">Incident ID (optional)</Label><Input value={incidentId} onChange={(e) => setIncidentId(e.target.value)} /></div>
+        <div className="flex items-center gap-2 mt-6"><Switch checked={liveImpact} onCheckedChange={setLiveImpact} /><Label className="text-xs">Live-impact (requires 2 approvers + postmortem)</Label></div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Justification (min {policy.minJustificationChars} chars)</Label>
+        <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={4} />
+        <div className="text-xs text-muted-foreground text-right text-mono">{justification.length}/{policy.minJustificationChars}</div>
+      </div>
+      {!result.ok && "reason" in result && (
+        <div className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+          Validation: {result.reason}
+        </div>
+      )}
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={!result.ok || !entityId || !fromState || !toState}
+        onClick={() => toast.warning("Break-glass request submitted (mock)", { description: `${entityType}/${entityId} ${fromState}→${toState}` })}
+      >
+        Submit force transition
+      </Button>
+    </Card>
+  );
+};
+
 export const SettingsPage = () => {
   const t = useT();
   const locale = usePlatform((s) => s.locale);
@@ -50,6 +120,7 @@ export const SettingsPage = () => {
             <TabsTrigger value="api">{t("settings.tab.api")}</TabsTrigger>
             <TabsTrigger value="locale">{t("settings.tab.locale")}</TabsTrigger>
             <TabsTrigger value="flags">{t("settings.tab.flags")}</TabsTrigger>
+            <TabsTrigger value="breakglass">{t("settings.tab.breakglass", { defaultValue: "Break-Glass" })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -138,6 +209,10 @@ export const SettingsPage = () => {
                 </Row>
               ))}
             </Section>
+          </TabsContent>
+
+          <TabsContent value="breakglass" className="mt-4">
+            <BreakGlassPanel />
           </TabsContent>
         </Tabs>
       </PageBody>

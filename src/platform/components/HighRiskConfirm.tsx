@@ -28,6 +28,7 @@ import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 import { validateMemo, MEMO_POLICY_BY_RISK, type ActionRiskClass } from "@/lib/v4/memoPolicy";
 import { DEFAULT_TWO_MAN_POLICY, HIGH_RISK_TWO_MAN_POLICY } from "@/lib/v4/twoManPolicy";
+import { canIssueConfirmToken, canRedeemConfirmToken, type CooldownState } from "@/lib/v4/cooldownPriority";
 
 export interface AffectedRefs {
   strategies?: string[];
@@ -78,6 +79,9 @@ export interface HighRiskConfirmProps {
   /** Entity type & id used to build the confirm phrase (e.g. {type:"strategy", id:"st_01"}). */
   confirmEntity?: { type: string; id: string };
 
+  /** Planner Response §C1/D36 — when present and active, blocks token issue/redeem. */
+  cooldown?: CooldownState;
+
   /** Receives the audit memo. With v3 actionId, also receives the issued token. */
   onConfirm: (memo: string, token?: string) => void | Promise<void>;
 }
@@ -91,6 +95,7 @@ export const HighRiskConfirm = ({
   title, description,
   confirmToken, destructive, extra,
   actionId, confirmEntity,
+  cooldown,
   onConfirm,
 }: HighRiskConfirmProps) => {
   const t = useT();
@@ -110,6 +115,8 @@ export const HighRiskConfirm = ({
 
   useEffect(() => {
     if (!open || !useV3Token) return;
+    const cooldownPre = canIssueConfirmToken(cooldown);
+    if (!cooldownPre.ok) { setIssuing(false); return; }
     const myReq = ++reqIdRef.current;
     setIssuing(true);
     const entityType = confirmEntity?.type ?? target?.type ?? "entity";
@@ -134,10 +141,10 @@ export const HighRiskConfirm = ({
   }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);
 
   useEffect(() => {
-    if (!open || !expiresAt) return;
+    if (!open || (!expiresAt && !cooldown?.endsAt)) return;
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
-  }, [open, expiresAt]);
+  }, [open, expiresAt, cooldown?.endsAt]);
 
   const op = operation ?? title ?? "action";
   const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
@@ -161,7 +168,11 @@ export const HighRiskConfirm = ({
   const tokenOk = !tokenRequired || (typed === token && token.length > 0);
   const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
   const memoMaxOk = memo.length <= 2000;
-  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && (!useV3Token || !!issuedToken);
+  const cooldownRedeem = canRedeemConfirmToken(cooldown);
+  const cooldownBlocked = !cooldownRedeem.ok;
+  const cooldownEndsAt = cooldown?.endsAt ? Date.parse(cooldown.endsAt) : null;
+  const cooldownSec = cooldownEndsAt ? Math.max(0, Math.ceil((cooldownEndsAt - now) / 1000)) : null;
+  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && !cooldownBlocked && (!useV3Token || !!issuedToken);
   const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
   const reset = () => {
@@ -253,6 +264,17 @@ export const HighRiskConfirm = ({
                 {twoManPolicy.distinctRoleFamily
                   ? ` ${t("confirm.twoMan.distinctFamily", { defaultValue: "distinct user + distinct role family" })}`
                   : ` ${t("confirm.twoMan.distinctUser", { defaultValue: "distinct user (requester may not sign)" })}`}
+              </div>
+            )}
+
+            {cooldownBlocked && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {t("confirm.cooldown.title", { defaultValue: "Action under cooldown" })}
+                {cooldownSec !== null && (
+                  <span className="text-mono ml-2">
+                    · {t("confirm.cooldown.remaining", { defaultValue: "ends in {{s}}s", s: cooldownSec })}
+                  </span>
+                )}
               </div>
             )}
 
