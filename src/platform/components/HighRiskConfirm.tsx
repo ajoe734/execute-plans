@@ -79,6 +79,9 @@ export interface HighRiskConfirmProps {
   /** Entity type & id used to build the confirm phrase (e.g. {type:"strategy", id:"st_01"}). */
   confirmEntity?: { type: string; id: string };
 
+  /** Planner Response §C1/D36 — when present and active, blocks token issue/redeem. */
+  cooldown?: CooldownState;
+
   /** Receives the audit memo. With v3 actionId, also receives the issued token. */
   onConfirm: (memo: string, token?: string) => void | Promise<void>;
 }
