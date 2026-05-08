@@ -22,8 +22,12 @@ import type { CreatableEntity } from "@/lib/writeIntents/types";
 import { validateCreate } from "@/lib/writeIntents/validation";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import { writeOverlay } from "@/lib/bff/writeOverlay";
+import { idempotencyKey } from "@/lib/bff-v1/headers";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// spec-conflict-G C3 — confirm cooldown (server-time would supersede in live mode).
+const CONFIRM_COOLDOWN_MS = 1500;
 
 interface Props {
   entity: CreatableEntity;
