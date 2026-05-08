@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildHeaders, idempotencyKey, isMutation } from "../headers";
+import { afterEach, describe, expect, it } from "vitest";
+import { buildHeaders, idempotencyKey, isMutation, setAuthProvider } from "../headers";
+
+afterEach(() => {
+  setAuthProvider({ getToken: () => null, getTenantId: () => null });
+});
 
 describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
   it("isMutation classifies methods", () => {
