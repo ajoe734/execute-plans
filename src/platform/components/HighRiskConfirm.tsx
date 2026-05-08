@@ -115,6 +115,8 @@ export const HighRiskConfirm = ({
 
   useEffect(() => {
     if (!open || !useV3Token) return;
+    const cooldownPre = canIssueConfirmToken(cooldown);
+    if (!cooldownPre.ok) { setIssuing(false); return; }
     const myReq = ++reqIdRef.current;
     setIssuing(true);
     const entityType = confirmEntity?.type ?? target?.type ?? "entity";
