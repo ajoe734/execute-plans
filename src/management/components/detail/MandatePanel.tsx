@@ -69,3 +69,6 @@ export const MandatePanel = ({ pool }: { pool: CapitalPool }) => {
           ))}
         </div>
       </Card>
+    </div>
+  );
+};
