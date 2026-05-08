@@ -187,15 +187,43 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
   const errIdBase = useId();
   const [form, setForm] = useState<Record<string, unknown>>(() => blankInput(entity));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // C3 — stable idempotencyKey per drawer-open; reset when drawer reopens.
+  const idemRef = useRef<string>(idempotencyKey());
+  const lastSubmitAtRef = useRef<number>(0);
+  const [cooldownMs, setCooldownMs] = useState(0);
 
   useEffect(() => {
-    if (open) { setForm(blankInput(entity)); setErrors({}); }
+    if (open) {
+      setForm(blankInput(entity));
+      setErrors({});
+      idemRef.current = idempotencyKey();
+      lastSubmitAtRef.current = 0;
+      setCooldownMs(0);
+    }
   }, [open, entity]);
+
+  // tick cooldown countdown
+  useEffect(() => {
+    if (cooldownMs <= 0) return;
+    const h = setTimeout(() => setCooldownMs((v) => Math.max(0, v - 250)), 250);
+    return () => clearTimeout(h);
+  }, [cooldownMs]);
 
   const fields = useMemo(() => entityFields(entity), [entity]);
   const setField = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = () => {
+    const now = Date.now();
+    const sinceLast = now - lastSubmitAtRef.current;
+    if (lastSubmitAtRef.current > 0 && sinceLast < CONFIRM_COOLDOWN_MS) {
+      const remain = CONFIRM_COOLDOWN_MS - sinceLast;
+      setCooldownMs(remain);
+      toast({
+        title: t("entityCreate.cooldown.title"),
+        description: t("entityCreate.cooldown.desc", { ms: remain }),
+      });
+      return;
+    }
     // numbers already coerced via slider/number handlers; multi-tag already array.
     const r = validateCreate(entity, form as never);
     if (!r.ok) {
@@ -205,7 +233,10 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
       return;
     }
     const built = buildEntity(entity, form as never);
-    writeOverlay.add(entity, built);
+    // C3 — pass header-style Idempotency-Key + correlationId chain into overlay.
+    writeOverlay.add(entity, built, { idempotencyKey: idemRef.current });
+    lastSubmitAtRef.current = now;
+    setCooldownMs(CONFIRM_COOLDOWN_MS);
     toast({
       title: `${t("actions.create")} — ${t(`entityCreate.entity.${entity}`)}`,
       description: String(built.name ?? built.id),
