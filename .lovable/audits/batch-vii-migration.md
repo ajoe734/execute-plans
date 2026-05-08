@@ -126,3 +126,15 @@ are physically gone (removed in B1g). No call site references them or the
 re-exports `bff / runActionSafe / useLiveList / useRealtimeStatus` from
 their canonical files. The `legacy*` @deprecated re-exports are removed.
 Tests: 323 green, tsc clean.
+
+---
+
+## E7 IA Stabilization — 2026-05-08
+
+Per Pack E disposition Q23/Q26:
+
+- `/management/command-center` → `<Navigate to="/management/control-room" replace />` (deep links survive).
+- `/management/overview` → `<Navigate to="/management/control-room" replace />`; v4 dashboard kept at `/management/overview-legacy` as ops escape hatch.
+- `CommandCenter` import removed from `App.tsx`.
+- Sidebar Legacy group reduced to a single `nav.overview` entry pointing to `/management/overview-legacy` with `dedupeKey: "controlRoom"` so it never double-highlights.
+- Acceptance: 323 tests pass; deep-link redirect verified by route table.

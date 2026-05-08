@@ -34,7 +34,7 @@ import {
 
 import { CommitteeRoom } from "@/agora/pages/CommitteeRoom";
 import { SignalDetail } from "@/agora/pages/SignalDetail";
-import { CommandCenter } from "@/management/pages/CommandCenter";
+// CommandCenter import removed — Pack E E7 redirects /management/command-center to /management/control-room.
 import { RiskCenter } from "@/management/pages/RiskCenter";
 import { IncidentDetail } from "@/management/pages/IncidentDetail";
 import { GovernanceReview } from "@/management/pages/GovernanceReview";
@@ -109,8 +109,10 @@ const App = () => (
               <Route path="loops/:kind" element={<LoopsPage />} />
               <Route path="sentinel" element={<SentinelPage />} />
               <Route path="interventions" element={<InterventionsPage />} />
-              <Route path="overview" element={<ManagementOverview />} />
-              <Route path="command-center" element={<CommandCenter />} />
+              <Route path="overview" element={<Navigate to="/management/control-room" replace />} />
+              <Route path="overview-legacy" element={<ManagementOverview />} />
+              {/* Pack E E7 (Q23) — command-center is now an alias for Control Room. */}
+              <Route path="command-center" element={<Navigate to="/management/control-room" replace />} />
               <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
               <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />

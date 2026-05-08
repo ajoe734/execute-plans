@@ -74,12 +74,12 @@ export const ManagementLayout = () => {
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},
-    // Pack E E7 — Legacy group: Command Center / Overview kept reachable
-    // for muscle memory but ranked below v5 surfaces. NOT auto-redirected
-    // (per Q17) so deep links survive.
+    // Pack E E7 (Q23) — Legacy IA stabilized: command-center/overview now redirect
+    // to /management/control-room (deep links preserved via <Navigate replace>).
+    // Legacy nav entries removed — dedupeKey would otherwise hide them anyway.
+    // overview-legacy retained as escape hatch for ops review of the v4 dashboard.
     { label: t("groups.legacy"), items: [
-      { to: "/management/command-center", label: t("nav.commandCenter"), icon: LayoutDashboard },
-      { to: "/management/overview", label: t("nav.overview"), icon: LayoutDashboard },
+      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "controlRoom" },
     ]},
   ];
 
