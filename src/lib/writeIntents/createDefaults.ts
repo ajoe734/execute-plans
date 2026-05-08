@@ -143,3 +143,19 @@ export const ENTITY_TO_LIVE_KIND: Record<CreatableEntity, string> = {
   researchExperiment: "Research",
   artifact: "Artifact",
 };
+
+// G06 — bind CreatableEntity → SSE channel (must exist in SSE_CHANNELS).
+// Derived map kept alongside ENTITY_TO_LIVE_KIND so live overlay events publish
+// to a real channel rather than a free-form string. Verified at runtime by
+// importing isSseChannel from "@/lib/bff-v1/sse/channels" in the consumer.
+export const ENTITY_TO_SSE_CHANNEL: Record<CreatableEntity, string> = {
+  strategy: "strategy",
+  persona: "persona",
+  capitalPool: "capital",
+  rankingFormula: "ranking",
+  rebalance: "rebalance",
+  deployment: "deployment",
+  evolutionProgram: "evolution",
+  researchExperiment: "research",
+  artifact: "artifact",
+};
