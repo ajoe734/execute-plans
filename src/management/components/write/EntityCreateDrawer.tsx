@@ -3,7 +3,7 @@
 // - G10: all labels / placeholders / hints / errors via `entityCreate.*` i18n keys.
 // - G11: every field error wired with aria-describedby + role="alert" for D62 axe scope.
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
