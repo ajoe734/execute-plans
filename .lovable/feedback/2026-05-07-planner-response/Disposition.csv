@@ -1,0 +1,37 @@
+id,group,title,priority,status,fe_action,depends_on
+A1,A,OpenAPI ActionCommandStatus named enum,P0,SPEC_BACKPORT_REQUIRED,Regenerate codegen; remove hand-written ACTION_COMMAND_STATUSES const,backend
+A2,A,Pack D D21 ErrorCode master 26,P0,SPEC_BACKPORT_REQUIRED,Remove H2 superset comments in errorCodes.ts,backend
+A3,A,SSE approval/ask + EvidenceKind capability map,P0,SPEC_BACKPORT_REQUIRED,Remove transitional Evidence map comments; align dto.ts,backend
+B1,B,D05 AsyncTransitionDescriptor (15 actions),P1,RESOLVED_BY_CONTRACT,timeoutPolicy.ts source: v0-mock -> spec after endpoint live,backend
+B2,B,D12 ROLE_CAPABILITIES (12 roles),P1,RESOLVED_BY_CONTRACT,Add roleCapabilities.ts; usePermissions capability-first,backend
+B3,B,D22 list totalCount classification,P1,RESOLVED_BY_CONTRACT,V5ListResponse adapter reads spec table,backend
+B4,B,D26 SSE typed payload schema,P0,RESOLVED_BY_CONTRACT,Replace payload: unknown with channel union,backend
+B5,B,/bff/me MeResponse DTO,P0,RESOLVED_BY_CONTRACT,Replace minimal V5SessionContext with MeResponse,backend
+C1,C/D,Confirm token vs cooldown semantics (=D36),P2,RESOLVED_BY_CONTRACT,Wire cooldown-priority enforcement,backend
+C2,C/D,Two-man distinct policy (=D35),P2,RESOLVED_BY_CONTRACT,Wire two-man policy/sign endpoints,backend
+C3,C,PATCH journal atomic rollback,P2,RESOLVED_BY_CONTRACT,Enforce merge-patch atomic failure UI,backend
+C4,C,Bulk action partial-failure UI,P2,RESOLVED_BY_CONTRACT,Add BulkResultDrawer; standard toast pattern,
+D04,D,Incident<->Deployment rollback Saga,P1,RESOLVED_BY_CONTRACT,Wire rollback saga endpoints + stepper,backend
+D30,D,Handoff Reopen SLA SlaSegment,P2,RESOLVED_BY_CONTRACT,Wire handoff reopen/respond/escalate; show segments,backend
+D35,D,Two-Man Distinct (=C2),P2,RESOLVED_BY_CONTRACT,merged with C2,
+D36,D,Confirm Token vs Cooldown (=C1),P2,RESOLVED_BY_CONTRACT,merged with C1,
+E1,E,State machine error/timeout/cancel fallback,P1,RESOLVED_BY_CONTRACT,merged with B1,
+E2,E,Admin override / force-transition,P2,RESOLVED_BY_CONTRACT,Add forceTransitionPolicy.ts type,backend
+E3,E,Optimistic lock / state conflict,P1,RESOLVED_BY_CONTRACT,Add expectedVersion mismatch toast + diff hook,
+E4,E,Memo lower bound / mention / markdown,P2,RESOLVED_BY_CONTRACT,Add memoPolicy.ts table,
+E5,E,Cooldown rate limit (=C1/D36),P2,RESOLVED_BY_CONTRACT,merged with C1/D36,
+E6,E,SSE last-event-id / heartbeat / backoff,P0,RESOLVED_BY_CONTRACT,already covered by B4 channels.ts,
+E7,E,X-Request-Id echo,P1,RESOLVED_BY_CONTRACT,client.ts read response X-Request-Id + X-Correlation-Id,
+E8,E,Bulk endpoint partial-failure (=C4),P2,RESOLVED_BY_CONTRACT,merged with C4,
+E9,E,Handoff multi-turn,P2,RESOLVED_BY_CONTRACT,Add handoffMultiTurn.ts DTO,backend
+E10,E,Mandate breach defaults,P2,RESOLVED_BY_CONTRACT,Add mandateBreachDefaults.ts,
+E11,E,Reviewer/Approver quorum,P2,RESOLVED_BY_CONTRACT,Extend reviewerQuorum.ts,
+E12,E,Reproducibility lock,P3,RESOLVED_BY_CONTRACT,Add reproducibilityLock.ts type,
+E13,E,i18n ICU plural/select + Accept-Language,P3,RESOLVED_BY_CONTRACT,Verify i18next-icu plural rules,
+E14,E,DataTable density + skeleton,P3,RESOLVED_BY_CONTRACT,Add uiBudgets.ts density + skeleton thresholds,
+E15,E,LineageGraph node limit / perf,P3,RESOLVED_BY_CONTRACT,Add uiBudgets.ts lineage limits,
+E16,E,Multi-drawer ESC stack,P3,RESOLVED_BY_CONTRACT,RightDrawer ESC stack handling,
+E17,E,Global keyboard shortcuts,P3,RESOLVED_BY_CONTRACT,CommandPalette + KeyboardShortcutsHelp,
+E18,E,prefers-reduced-motion,P3,RESOLVED_BY_CONTRACT,index.css media rules,
+E19,E,Audit immutable correction,P3,RESOLVED_BY_CONTRACT,AuditTimeline confirm immutable + correction style,
+E20,E,Spec semver + changelog,P3,RESOLVED_BY_CONTRACT,Add CHANGELOG.md template,
