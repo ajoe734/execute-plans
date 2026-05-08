@@ -2,7 +2,7 @@
 
 **類型**：spec-conflict（前身為 spec-gap-2026-05-06-G，依 Pack D §13.6 改名歸類）
 **對象**：當前 `src/` 實作 vs Pack D canonical contract
-**狀態**：8 條 OPEN（impl-pending）+ 6 條 RESOLVED（已併入 Pack F 短板 / 改 query intent / forwardRef sweep / TTL+matrix tests）
+**狀態**：**ALL RESOLVED**（C1/C7/C8 + Batch II/III/IV；C2/C4/C5/C6 BFF v1 落地；C3 EntityCreateDrawer Idempotency-Key + cooldown 已補齊 2026-05-08）
 
 ---
 
