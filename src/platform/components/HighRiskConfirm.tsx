@@ -142,14 +142,25 @@ export const HighRiskConfirm = ({
   const op = operation ?? title ?? "action";
   const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
 
+  // Planner Response §E4 — memo policy by risk class.
+  const riskClass: ActionRiskClass = risk === "critical"
+    ? (env === "live" ? "break_glass" : "critical")
+    : risk === "high" ? "high"
+    : risk === "medium" ? "medium" : "low";
+  const memoPolicy = MEMO_POLICY_BY_RISK[riskClass];
+  const memoCheck = validateMemo(memo, riskClass);
+  // Planner Response §C2/D35 — two-man policy hint (UI only; enforcement on BFF).
+  const twoManRequired = riskClass === "critical" || riskClass === "break_glass" || (requiredApproval?.length ?? 0) >= 2;
+  const twoManPolicy = riskClass === "break_glass" || riskClass === "critical" ? HIGH_RISK_TWO_MAN_POLICY : DEFAULT_TWO_MAN_POLICY;
+
   const tokenRequired = useV3Token || !!confirmToken || env === "live" || risk === "critical";
   const token = useV3Token
     ? (requiredPhrase ?? "")
     : (confirmToken ?? op.toUpperCase());
-  const memoOk = memo.trim().length >= 8;
+  const memoOk = memoCheck.ok;
   const tokenOk = !tokenRequired || (typed === token && token.length > 0);
   const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
-  const memoMaxOk = memo.length <= 500;
+  const memoMaxOk = memo.length <= 2000;
   const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && (!useV3Token || !!issuedToken);
   const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
