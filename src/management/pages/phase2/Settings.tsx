@@ -148,6 +148,10 @@ export const SettingsPage = () => {
               ))}
             </Section>
           </TabsContent>
+
+          <TabsContent value="breakglass" className="mt-4">
+            <BreakGlassPanel />
+          </TabsContent>
         </Tabs>
       </PageBody>
     </>
