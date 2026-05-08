@@ -91,6 +91,9 @@ export interface SseEvent<C extends SseChannel = SseChannel, P = unknown> {
   channel: C;
   type: string;
   occurredAt: string;
+  /** Planner Stage 2 Audit §4.3 — FE compatibility-only optional.
+   *  Backend AsyncAPI requires `correlationId` to be present; mock/legacy
+   *  bridges may normalize via `ensureCorrelationId()` in `./payloads`. */
   correlationId?: string;
   causationId?: string;
   payload: P;

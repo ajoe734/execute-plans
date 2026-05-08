@@ -46,15 +46,20 @@ C/D 重疊合併：
 | 8 | E 組 P2（governance config defaults） | TODO |
 | 9 | E 組 P3（UX polish） | TODO |
 
-## 5. FE Feedback to Planner（下一版 Pack D-B 修訂時納入）
+## 5. FE Feedback to Planner（已由 2026-05-08 Planner Audit 裁示）
 
-| ID | 衝突點 | FE 既有 | Planner 文 | FE 處理 |
-|---|---|---|---|---|
-| I1 | EvidenceKind 集合差異 | 11 種，含 v5 closed-loop (`loop_run`/`sentinel_finding`/`intervention`/`ask_session`) | 15 種，缺 v5 三項 | FE 取 union（≈19 種），新增註解請 planner 在下一版合併 |
-| I2 | RedactedEvidenceRef.reason 命名 | union `PERMISSION_DENIED \| CAPABILITY_MISSING \| TENANT_SCOPE_MISMATCH` | 單值 `INSUFFICIENT_CAPABILITY` | FE 保留 union（資訊量大），新增 `redactionReasonCode` alias 對齊 planner |
-| I3 | ROLE_CAPABILITIES 角色集 | v4 5 角色 | planner 12 角色 | 階段 4 擴成 12 角色 superset |
+對應回覆：`../2026-05-08-planner-stage2-audit/`（原文 + INDEX）。
+
+| ID | 裁示 | 結論 |
+|---|---|---|
+| I1 | RESOLVED_BY_COMPATIBILITY_LAYER | FE accepted union = 22 values：19 backend-canonical EvidenceKind + 3 legacy aliases (snapshot/rebalance/experiment)。Backend SHOULD emit canonical 19；FE 仍接受 aliases 給 legacy/mock。 |
+| I2 | RESOLVED_BY_COMPATIBILITY_LAYER | Backend canonical fields = `redactionReasonCode` + `requiredCapability`。FE aliases `reason` + `capabilityRequired` 保留向下相容，由 `normalizeRedactedEvidenceRef()` 統一。 |
+| I3 | ACCEPTED_STAGE4 | 12-role 為 BFF `/bff/me` canonical；目前 5-role FE mock 為合法 subset；Capabilities 為 source of truth。 |
+
+A1/A2/A3 改標為 `FE_READY_*_BACKPORT_PENDING`：FE 已對齊，spec (OpenAPI / Pack D D21 / AsyncAPI) backport 由 planner / BE 負責，未完成前不得宣稱關閉。
 
 ## 6. 對應檔案
 
-- `Pantheon_System_Dev_Response_to_34_Spec_Backlog_2026-05-07.md` — 規劃團隊原文
-- `Disposition.csv` — 34 條 × {priority, status, fe_action}
+- `Pantheon_System_Dev_Response_to_34_Spec_Backlog_2026-05-07.md` — 規劃團隊 34 條原文
+- `Disposition.csv` — 34 條 + I1–I3 audit 列
+- `../2026-05-08-planner-stage2-audit/` — 2026-05-08 planner audit 原文 + INDEX

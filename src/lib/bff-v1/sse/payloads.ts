@@ -90,3 +90,15 @@ export function isTypedSseChannel(c: SseChannel): c is TypedSseChannel {
 export type SsePayloadFor<C extends SseChannel> = C extends TypedSseChannel
   ? SseChannelPayloadMap[C]
   : unknown;
+
+// ---------- Planner Stage 2 Audit §4.3 — correlationId compatibility bridge ----------
+
+/** Ensure mock/legacy SSE event has `correlationId` (backend AsyncAPI requires it). */
+export function ensureCorrelationId<E extends { id: string; correlationId?: string }>(
+  event: E,
+): E & { correlationId: string } {
+  return {
+    ...event,
+    correlationId: event.correlationId ?? `corr_mock_${event.id}`,
+  };
+}

@@ -86,12 +86,13 @@ export interface ActionCommandResponseData {
 }
 
 // ---------- Section 9: Capability / Redaction ----------
-// A3 (Planner Response §A3, 2026-05-07) — EvidenceKind union of:
-//   - Pack D-B Permission Contract (planner 15 kinds)
-//   - v5 Closed-Loop OS evidence (4 kinds)
-// FE feedback I1: planner Permission Contract should adopt this union next revision.
+// Planner Stage 2 Audit (2026-05-08) §1 — three-layer EvidenceKind:
+//   - CanonicalEvidenceKind (19): backend BFF v1 SHOULD emit only these.
+//   - LegacyEvidenceKindAlias (3): snapshot / rebalance / experiment — FE accepts
+//     for legacy seed / v0-mock / old audit entries; backend should NOT emit.
+//   - EvidenceKind = union of the two (22 accepted at FE).
 
-export type EvidenceKind =
+export type CanonicalEvidenceKind =
   // Pack D-B planner canonical 15
   | "alert"
   | "incident"
@@ -108,19 +109,38 @@ export type EvidenceKind =
   | "signal"
   | "journal"
   | "postmortem"
-  // v5 closed-loop additions
+  // v5 closed-loop additions (4) — accepted into canonical per planner §1.2
   | "loop_run"
   | "sentinel_finding"
   | "intervention"
-  | "ask_session"
-  // legacy kept for back-compat (used elsewhere in codebase)
-  | "snapshot"
-  | "rebalance"
-  | "experiment";
+  | "ask_session";
 
-/** A3 — capability gate per evidence kind (planner §A3 + v5 + legacy). */
+export type LegacyEvidenceKindAlias = "snapshot" | "rebalance" | "experiment";
+
+export type EvidenceKind = CanonicalEvidenceKind | LegacyEvidenceKindAlias;
+
+export const CANONICAL_EVIDENCE_KINDS: readonly CanonicalEvidenceKind[] = [
+  "alert", "incident", "job", "audit", "metric", "strategy", "persona",
+  "deployment", "runtime", "policy", "approval", "artifact", "signal",
+  "journal", "postmortem",
+  "loop_run", "sentinel_finding", "intervention", "ask_session",
+] as const;
+
+export const LEGACY_EVIDENCE_KIND_ALIASES: readonly LegacyEvidenceKindAlias[] = [
+  "snapshot", "rebalance", "experiment",
+] as const;
+
+export function isLegacyEvidenceKind(kind: EvidenceKind): kind is LegacyEvidenceKindAlias {
+  return (LEGACY_EVIDENCE_KIND_ALIASES as readonly string[]).includes(kind);
+}
+
+export function isCanonicalEvidenceKind(kind: EvidenceKind): kind is CanonicalEvidenceKind {
+  return (CANONICAL_EVIDENCE_KINDS as readonly string[]).includes(kind);
+}
+
+/** Planner §1.5 — capability gate per evidence kind (canonical 19 + 3 legacy aliases). */
 export const EVIDENCE_CAPABILITY_MAP: Readonly<Record<EvidenceKind, string>> = {
-  // Pack D-B planner 15
+  // canonical 19
   alert: "risk.alert.read",
   incident: "risk.incident.read",
   job: "job.read",
@@ -136,26 +156,64 @@ export const EVIDENCE_CAPABILITY_MAP: Readonly<Record<EvidenceKind, string>> = {
   signal: "agora.signal.read",
   journal: "agora.journal.read",
   postmortem: "postmortem.read",
-  // v5 closed-loop
   loop_run: "loop.read",
   sentinel_finding: "sentinel.read",
   intervention: "intervention.read",
   ask_session: "agora.ask",
-  // legacy
-  snapshot: "artifact.read",
-  rebalance: "rebalance.read",
-  experiment: "research.read",
+  // legacy aliases (FE-only acceptance)
+  snapshot: "artifact.read",       // legacy alias — backend should emit `artifact`
+  rebalance: "rebalance.read",     // legacy alias
+  experiment: "research.read",     // legacy alias
 };
 
+/** Planner Stage 2 Audit §2.3 — backend canonical reason codes. */
+export type RedactionReasonCode =
+  | "INSUFFICIENT_CAPABILITY"
+  | "TENANT_SCOPE_MISMATCH"
+  | "POLICY_REDACTED";
+
+/** Planner Stage 2 Audit §2.3 — backend-facing canonical RedactedEvidenceRef. */
+export interface CanonicalRedactedEvidenceRef {
+  id: string;
+  kind: EvidenceKind;
+  redacted: true;
+  redactionReasonCode: RedactionReasonCode;
+  requiredCapability?: string;
+}
+
+/** FE-facing RedactedEvidenceRef.
+ *  `redactionReasonCode` + `requiredCapability` are backend canonical (planner §2.3).
+ *  `reason` + `capabilityRequired` are FE legacy aliases for richer UI text and
+ *  backward compatibility; normalize via `normalizeRedactedEvidenceRef()`.
+ */
 export interface RedactedEvidenceRef {
   kind: EvidenceKind;
   id: string;
   redacted: true;
-  /** Detailed FE-facing reason (kept as union for richer UI). */
-  reason: "PERMISSION_DENIED" | "CAPABILITY_MISSING" | "TENANT_SCOPE_MISMATCH";
-  /** Planner §A3 alias — single canonical reason name for backend handoff. */
-  redactionReasonCode?: "INSUFFICIENT_CAPABILITY";
-  capabilityRequired: string;
+  /** FE legacy alias — see normalizer mapping in §2.4. */
+  reason?: "PERMISSION_DENIED" | "CAPABILITY_MISSING" | "TENANT_SCOPE_MISMATCH";
+  /** Backend canonical reason code. */
+  redactionReasonCode?: RedactionReasonCode;
+  /** FE legacy alias for `requiredCapability`. */
+  capabilityRequired?: string;
+  /** Backend canonical capability requirement. */
+  requiredCapability?: string;
+}
+
+/** Planner Stage 2 Audit §2.5 — normalize FE alias fields to backend canonical. */
+export function normalizeRedactedEvidenceRef(input: RedactedEvidenceRef): CanonicalRedactedEvidenceRef {
+  const code: RedactionReasonCode =
+    input.redactionReasonCode ??
+    (input.reason === "TENANT_SCOPE_MISMATCH"
+      ? "TENANT_SCOPE_MISMATCH"
+      : "INSUFFICIENT_CAPABILITY");
+  return {
+    id: input.id,
+    kind: input.kind,
+    redacted: true,
+    redactionReasonCode: code,
+    requiredCapability: input.requiredCapability ?? input.capabilityRequired,
+  };
 }
 
 // ---------- Section 5: Status enums (canonical) ----------
