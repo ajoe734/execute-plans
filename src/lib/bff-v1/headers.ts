@@ -48,10 +48,10 @@ export function xBffApiVersion(): string {
   return BFF_API_VERSION;
 }
 
-// ---- Auth / Tenant providers (pluggable) ----
+// ---- Auth / Tenant providers (pluggable, synchronous) ----
 export interface AuthProvider {
-  /** Returns Bearer token (without the "Bearer " prefix), or null if unauthenticated. */
-  getToken: () => string | null | Promise<string | null>;
+  /** Returns Bearer token (without "Bearer " prefix), or null if unauthenticated. */
+  getToken: () => string | null;
   /** Returns active tenant id, or null when caller is tenant-agnostic. */
   getTenantId: () => string | null;
 }
@@ -84,7 +84,7 @@ export interface BuildHeadersInput {
   extra?: Record<string, string>;
 }
 
-export async function buildHeaders(input: BuildHeadersInput): Promise<Record<string, string>> {
+export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   const correlationId = input.correlationId ?? newCorrelationId();
   const headers: Record<string, string> = {
     "Accept": "application/json",
@@ -93,9 +93,9 @@ export async function buildHeaders(input: BuildHeadersInput): Promise<Record<str
     "X-Correlation-Id": correlationId,
     "X-BFF-Api-Version": xBffApiVersion(),
   };
-  // Auth / tenant injection (live mode). Mock mode providers return null → headers omitted.
+  // Auth / tenant injection (live mode). Mock / test providers return null → headers omitted.
   try {
-    const token = await authProvider.getToken();
+    const token = authProvider.getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const tenant = authProvider.getTenantId();
     if (tenant) headers["X-Tenant-Id"] = tenant;
