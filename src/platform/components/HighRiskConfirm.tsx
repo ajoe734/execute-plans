@@ -95,6 +95,7 @@ export const HighRiskConfirm = ({
   title, description,
   confirmToken, destructive, extra,
   actionId, confirmEntity,
+  cooldown,
   onConfirm,
 }: HighRiskConfirmProps) => {
   const t = useT();
