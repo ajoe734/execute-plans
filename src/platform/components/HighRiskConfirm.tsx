@@ -168,7 +168,11 @@ export const HighRiskConfirm = ({
   const tokenOk = !tokenRequired || (typed === token && token.length > 0);
   const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
   const memoMaxOk = memo.length <= 2000;
-  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && (!useV3Token || !!issuedToken);
+  const cooldownRedeem = canRedeemConfirmToken(cooldown);
+  const cooldownBlocked = !cooldownRedeem.ok;
+  const cooldownEndsAt = cooldown?.endsAt ? Date.parse(cooldown.endsAt) : null;
+  const cooldownSec = cooldownEndsAt ? Math.max(0, Math.ceil((cooldownEndsAt - now) / 1000)) : null;
+  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && !cooldownBlocked && (!useV3Token || !!issuedToken);
   const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
   const reset = () => {
