@@ -54,6 +54,22 @@ export function asListEnvelope<T>(
   return () => loader().then((xs) => envelope(xs, cls));
 }
 
+/**
+ * Build a list reader that prefers live BFF (when VITE_BFF_MODE=live and the
+ * runtime hasn't fallen back), and otherwise serves the in-process mock.
+ * Live response is expected to already be a `ListEnvelope<T>`; mock returns
+ * the locally wrapped envelope.
+ */
+function liveOrMockList<T>(
+  path: string,
+  loader: () => Promise<T[]>,
+  cls: ListClass,
+): () => Promise<ListEnvelope<T>> {
+  const mockFn = async (): Promise<ListEnvelope<T>> => envelope(await loader(), cls);
+  return () =>
+    withLiveOrMock<ListEnvelope<T>>({ method: "GET", path }, mockFn);
+}
+
 /** Per-entity list-class map (Pack D D22). */
 export const LIST_CLASS_BY_KEY = {
   strategies: "entityRegistry",
@@ -73,19 +89,19 @@ export const LIST_CLASS_BY_KEY = {
 
 /** Canonical entity → loader map for the 13 list pages migrated in VI-1. */
 export const lists = {
-  strategies: asListEnvelope(() => bff.strategies.list(), LIST_CLASS_BY_KEY.strategies),
-  personas: asListEnvelope(() => bff.personas.list(), LIST_CLASS_BY_KEY.personas),
-  capitalPools: asListEnvelope(() => bff.capitalPools.list(), LIST_CLASS_BY_KEY.capitalPools),
-  rankingFormulas: asListEnvelope(() => bff.rankingFormulas.list(), LIST_CLASS_BY_KEY.rankingFormulas),
-  rebalances: asListEnvelope(() => bff.rebalances.list(), LIST_CLASS_BY_KEY.rebalances),
-  deployments: asListEnvelope(() => bff.deployments.list(), LIST_CLASS_BY_KEY.deployments),
-  evolution: asListEnvelope(() => bff.evolution.list(), LIST_CLASS_BY_KEY.evolution),
-  research: asListEnvelope(() => bff.research.list(), LIST_CLASS_BY_KEY.research),
-  artifacts: asListEnvelope(() => bff.artifacts.list(), LIST_CLASS_BY_KEY.artifacts),
-  tools: asListEnvelope(() => bff.tools.list(), LIST_CLASS_BY_KEY.tools),
-  mcpServers: asListEnvelope(() => bff.mcpServers.list(), LIST_CLASS_BY_KEY.mcpServers),
-  skills: asListEnvelope(() => bff.skills.list(), LIST_CLASS_BY_KEY.skills),
-  channels: asListEnvelope(() => bff.channels.list(), LIST_CLASS_BY_KEY.channels),
+  strategies:      liveOrMockList(paths.strategies(),         () => bff.strategies.list(),       LIST_CLASS_BY_KEY.strategies),
+  personas:        liveOrMockList(paths.personas(),           () => bff.personas.list(),         LIST_CLASS_BY_KEY.personas),
+  capitalPools:    liveOrMockList(paths.capitalPools(),       () => bff.capitalPools.list(),     LIST_CLASS_BY_KEY.capitalPools),
+  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    () => bff.rankingFormulas.list(),  LIST_CLASS_BY_KEY.rankingFormulas),
+  rebalances:      liveOrMockList(paths.rebalances(),         () => bff.rebalances.list(),       LIST_CLASS_BY_KEY.rebalances),
+  deployments:     liveOrMockList(paths.deployments(),        () => bff.deployments.list(),      LIST_CLASS_BY_KEY.deployments),
+  evolution:       liveOrMockList(paths.evolutionPrograms(),  () => bff.evolution.list(),        LIST_CLASS_BY_KEY.evolution),
+  research:        liveOrMockList(paths.researchExperiments(),() => bff.research.list(),         LIST_CLASS_BY_KEY.research),
+  artifacts:       liveOrMockList(paths.artifacts(),          () => bff.artifacts.list(),        LIST_CLASS_BY_KEY.artifacts),
+  tools:           liveOrMockList(paths.tools(),              () => bff.tools.list(),            LIST_CLASS_BY_KEY.tools),
+  mcpServers:      liveOrMockList(paths.mcpServers(),         () => bff.mcpServers.list(),       LIST_CLASS_BY_KEY.mcpServers),
+  skills:          liveOrMockList(paths.skills(),             () => bff.skills.list(),           LIST_CLASS_BY_KEY.skills),
+  channels:        liveOrMockList(paths.channels(),           () => bff.channels.list(),         LIST_CLASS_BY_KEY.channels),
 } as const satisfies Record<string, () => Promise<ListEnvelope<BaseObject>>>;
 
 export type ListKey = keyof typeof lists;
