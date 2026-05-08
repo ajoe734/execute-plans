@@ -53,38 +53,54 @@ export async function runAction(
   const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
   const confirmToken = opts.confirmToken ?? input.confirmToken;
 
-  const legacy = await bff.mutations.runAction({
-    ...input,
-    correlationId,
-    idempotencyKey,
-    confirmToken,
-  });
-
-  if (!legacy.ok) {
-    throw makeBffError({
-      code: legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
-          : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
-          : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
-          : "VALIDATION_FAILED",
-      message: legacy.message ?? legacy.rejected ?? "rejected",
+  const mockBranch = async (): Promise<RunActionEnvelope> => {
+    const legacy = await bff.mutations.runAction({
+      ...input,
       correlationId,
-      details: { reason: legacy.rejected },
+      idempotencyKey,
+      confirmToken,
     });
-  }
+    if (!legacy.ok) {
+      throw makeBffError({
+        code: legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
+            : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
+            : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
+            : "VALIDATION_FAILED",
+        message: legacy.message ?? legacy.rejected ?? "rejected",
+        correlationId,
+        details: { reason: legacy.rejected },
+      });
+    }
+    const data: ActionCommandResponseData = {
+      actionId: legacy.audit.id,
+      status: "completed",
+    };
+    return {
+      ok: true,
+      data,
+      auditEventId: legacy.audit.id,
+      correlationId,
+      idempotencyKey,
+      message: legacy.message,
+      legacy,
+    };
+  };
 
-  const data: ActionCommandResponseData = {
-    actionId: legacy.audit.id,
-    status: "completed",
-  };
-  return {
-    ok: true,
-    data,
-    auditEventId: legacy.audit.id,
-    correlationId,
-    idempotencyKey,
-    message: legacy.message,
-    legacy,
-  };
+  const livePath = actionPath(input.kind, input.id, input.action);
+  if (livePath) {
+    return withLiveOrMock<RunActionEnvelope>(
+      {
+        method: "POST",
+        path: livePath,
+        body: { memo: input.memo, expectedVersion: input.expectedVersion, newState: input.newState, confirmToken },
+        idempotencyKey,
+        ifMatchVersion: input.expectedVersion,
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+    );
+  }
+  return mockBranch();
 }
 
 /** Result-style wrapper. Never throws. */
