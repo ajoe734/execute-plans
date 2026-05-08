@@ -1,12 +1,15 @@
-// Live BFF status banner — shown when configured for `live` mode but the
-// runtime has fallen back to mock due to a transport failure.
+// Live BFF status banner — shows when configured for `live` but the runtime
+// has fallen back to mock OR when the server's X-BFF-Api-Version mismatches
+// the FE-pinned BFF_API_VERSION (H1+).
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, RefreshCcw } from "lucide-react";
-import { useLiveStatus, liveStatus, connectLiveSse } from "@/lib/bff-v1";
+import { useLiveStatus, liveStatus, connectLiveSse, BFF_API_VERSION } from "@/lib/bff-v1";
 
 export const LiveBffBanner = () => {
   const s = useLiveStatus();
-  if (s.mode !== "live" || s.effective !== "mock") return null;
+  const fellBack = s.mode === "live" && s.effective === "mock";
+  const mismatch = s.mode === "live" && s.apiVersionMismatch === true;
+  if (!fellBack && !mismatch) return null;
   return (
     <div
       role="status"
@@ -15,19 +18,32 @@ export const LiveBffBanner = () => {
     >
       <div className="flex items-center gap-2">
         <AlertTriangle className="h-3.5 w-3.5" />
-        <span className="text-mono uppercase tracking-wider">live BFF unavailable</span>
-        <span className="text-foreground/70">
-          {s.lastError ?? "transport failed"} · serving mock data
-        </span>
+        {fellBack ? (
+          <>
+            <span className="text-mono uppercase tracking-wider">live BFF unavailable</span>
+            <span className="text-foreground/70">
+              {s.lastError ?? "transport failed"} · serving mock data
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-mono uppercase tracking-wider">api version mismatch</span>
+            <span className="text-foreground/70">
+              server={s.serverApiVersion} · client={BFF_API_VERSION}
+            </span>
+          </>
+        )}
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-6 px-2 text-[11px]"
-        onClick={() => { liveStatus.retry(); connectLiveSse(); }}
-      >
-        <RefreshCcw className="h-3 w-3 mr-1" />retry
-      </Button>
+      {fellBack && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-[11px]"
+          onClick={() => { liveStatus.retry(); connectLiveSse(); }}
+        >
+          <RefreshCcw className="h-3 w-3 mr-1" />retry
+        </Button>
+      )}
     </div>
   );
 };
