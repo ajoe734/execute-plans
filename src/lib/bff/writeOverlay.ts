@@ -78,6 +78,8 @@ class WriteOverlay {
         ts: new Date().toISOString(),
         memo: `Pack F mock create (overlay, ${WRITE_OVERLAY_TTL_MS / 60000}m TTL) corr=${correlationId}${opts.confirmTokenId ? ` ctok=${opts.confirmTokenId}` : ""}`,
         outcome: "ok",
+        // G05 — mark as ephemeral so AuditTimeline can surface "mock-only" badge.
+        ephemeral: true,
         // G13 placeholder — real BFF will compute Merkle-style chain.
         prevHash,
         hash,

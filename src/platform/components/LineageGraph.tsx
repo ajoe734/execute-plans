@@ -2,6 +2,7 @@
 // Auto-layouts nodes by depth (BFS layer) and renders SVG. No external deps.
 import { useMemo } from "react";
 import type { RiskLevel } from "@/lib/bff/types";
+import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
 
 export interface LineageNode {
   id: string;
@@ -99,8 +100,24 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
     );
   }
 
+  // Planner Response §E15 — node-limit budget warnings.
+  const overClient = nodes.length > LINEAGE_NODE_LIMITS.clientLayoutMax;
+  const overServer = nodes.length > LINEAGE_NODE_LIMITS.serverLayoutThreshold;
+
   return (
     <div className="rounded-md border border-border bg-muted/20 overflow-auto">
+      {(overClient || overServer) && (
+        <div
+          role="status"
+          className={`px-3 py-2 text-xs border-b ${overServer
+            ? "bg-status-failed/10 text-status-failed border-status-failed/30"
+            : "bg-status-warning/10 text-status-warning border-status-warning/30"}`}
+        >
+          {overServer
+            ? `Lineage has ${nodes.length} nodes (> ${LINEAGE_NODE_LIMITS.serverLayoutThreshold}); server-side layout / clustered summary required.`
+            : `Lineage has ${nodes.length} nodes (> ${LINEAGE_NODE_LIMITS.clientLayoutMax}); switching to virtualized rendering recommended.`}
+        </div>
+      )}
       <svg width={Math.max(width, 600)} height={h} className="block">
         <defs>
           <marker id="lin-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">

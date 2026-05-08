@@ -21,6 +21,11 @@ export interface AuditEntry {
   after?: string;
   /** Phase 15 — outcome marker; rejected entries are tinted destructive. */
   outcome?: "ok" | "rejected";
+  /** spec-conflict-G G05 — entry produced by 30-min overlay (mock-only, will not persist). */
+  ephemeral?: boolean;
+  /** spec-conflict-G G13 — placeholder hash chain (mock-only). */
+  prevHash?: string | null;
+  hash?: string;
 }
 
 interface Props {
@@ -64,6 +69,14 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                 {e.outcome === "rejected" && (
                   <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-destructive/40 text-destructive">
                     rejected
+                  </span>
+                )}
+                {e.ephemeral && (
+                  <span
+                    className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-status-warning/40 text-status-warning bg-status-warning/10"
+                    title="Mock overlay; will not persist (30-minute TTL)"
+                  >
+                    ephemeral
                   </span>
                 )}
                 {e.target && (
