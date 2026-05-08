@@ -71,6 +71,14 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                     rejected
                   </span>
                 )}
+                {e.ephemeral && (
+                  <span
+                    className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-status-warning/40 text-status-warning bg-status-warning/10"
+                    title="Mock overlay; will not persist (30-minute TTL)"
+                  >
+                    ephemeral
+                  </span>
+                )}
                 {e.target && (
                   <span className="text-xs text-muted-foreground">→ {resolved ? (
                     <Link to={resolved.route} className="text-mono text-accent hover:underline">{e.target}</Link>
