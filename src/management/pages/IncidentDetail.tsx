@@ -19,6 +19,9 @@ import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { useOverlay } from "@/platform/overlayStore";
+import type { RollbackSagaDTO } from "@/lib/v4/rollbackSaga";
+import { ASYNC_TRANSITIONS } from "@/lib/v4/asyncTransitionPolicy";
 
 export const IncidentDetail = () => {
   const t = useT();
