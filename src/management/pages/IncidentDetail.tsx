@@ -42,7 +42,7 @@ export const IncidentDetail = () => {
   const showRollbackSaga = () => {
     if (!incident) return;
     const policy = findAsyncTransitionPolicy("rollback.saga");
-    const deploymentId = affectedRuntimes[0]?.id ?? affectedStrategies[0]?.id ?? "deploy-mock";
+    const deploymentId = (incident.affected ?? [])[0] ?? "deploy-mock";
     const now = new Date().toISOString();
     const saga: RollbackSagaDTO = {
       id: `saga-${incident.id}`,
@@ -55,11 +55,21 @@ export const IncidentDetail = () => {
       requestedAt: now,
       updatedAt: now,
       timeout: {
+        id: `transition-${incident.id}`,
+        entityType: "rollbackSaga",
+        entityId: `saga-${incident.id}`,
+        actionId: "rollback.saga",
+        from: "rolling_back",
+        to: "succeeded",
+        trigger: "incident",
+        startedAt: now,
         timeoutMs: policy?.timeoutMs ?? 900_000,
         warnAfterMs: policy?.warnAfterMs ?? 300_000,
         failureState: policy?.failureState ?? "failed",
         retryable: policy?.retryable ?? true,
         maxRetries: policy?.maxRetries ?? 1,
+        correlationId: `cid-${incident.id}`,
+        status: "in_flight",
       },
       correlationId: `cid-${incident.id}`,
       auditEventIds: [],
