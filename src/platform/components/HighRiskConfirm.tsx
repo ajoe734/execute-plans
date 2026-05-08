@@ -141,10 +141,10 @@ export const HighRiskConfirm = ({
   }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);
 
   useEffect(() => {
-    if (!open || !expiresAt) return;
+    if (!open || (!expiresAt && !cooldown?.endsAt)) return;
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
-  }, [open, expiresAt]);
+  }, [open, expiresAt, cooldown?.endsAt]);
 
   const op = operation ?? title ?? "action";
   const tgt = target ?? { type: "Object", id: "—", name: title ?? "—" };
