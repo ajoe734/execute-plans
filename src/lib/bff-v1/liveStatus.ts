@@ -73,6 +73,21 @@ export const liveStatus = {
     state = { ...state, effective: "live", lastError: undefined, lastErrorAt: undefined, fellBackAt: undefined };
     notify();
   },
+  /** H1+ — record server-advertised api version for mismatch detection. */
+  reportApiVersion(serverVersion: string | undefined, clientVersion: string): void {
+    if (!serverVersion) return;
+    const mismatch = serverVersion !== clientVersion;
+    if (state.serverApiVersion === serverVersion && state.apiVersionMismatch === mismatch) return;
+    if (mismatch && state.apiVersionMismatch !== true) {
+      // Only warn on the rising edge to avoid console spam.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[bff-v1] X-BFF-Api-Version mismatch: server=${serverVersion} client=${clientVersion}`,
+      );
+    }
+    state = { ...state, serverApiVersion: serverVersion, apiVersionMismatch: mismatch };
+    notify();
+  },
   /** Test-only reset. */
   _reset(next?: Partial<LiveStatus>): void {
     const env = readEnv();
