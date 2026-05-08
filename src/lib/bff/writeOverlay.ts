@@ -86,9 +86,19 @@ class WriteOverlay {
       // seed shape variation; ignore
     }
 
-    // G06 — publish to a verified SSE channel; fall back to "system" only when unmapped.
-    const channelCandidate = ENTITY_TO_SSE_CHANNEL[entity];
-    const channel = isSseChannel(channelCandidate) ? channelCandidate : "system";
+    // G06 — publish to a verified SSE channel; fall back to "system" only when unmapped
+    // or not in the narrower realtime SseChannelKind taxonomy.
+    const REALTIME_CHANNELS: ReadonlySet<string> = new Set([
+      "strategy", "deployment", "incident", "loop", "job", "rebalance",
+      "capital", "persona", "review", "runtime", "risk", "session",
+      "notification", "system",
+    ]);
+    const candidate = ENTITY_TO_SSE_CHANNEL[entity];
+    const channel: SseChannelKind = (
+      isSseChannel(candidate) && REALTIME_CHANNELS.has(candidate)
+        ? candidate
+        : "system"
+    ) as SseChannelKind;
     realtime.emitEnvelope({
       topic: "data",
       channel,
