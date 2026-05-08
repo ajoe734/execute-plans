@@ -65,9 +65,10 @@ export interface BffErrorEnvelope {
   error: BffErrorPayload;
 }
 
-// ---------- Section: Action command (H3 — named ActionCommandStatus) ----------
+// ---------- Section: Action command (A1 — named ActionCommandStatus) ----------
 
-/** H3 closed — named enum aligned with OpenAPI components.schemas.ActionCommandStatus. */
+/** Planner Response §A1 (2026-05-07) — canonical named enum.
+ * OpenAPI: components.schemas.ActionCommandStatus. */
 export const ACTION_COMMAND_STATUSES = ["accepted", "queued", "completed"] as const;
 export type ActionCommandStatus = (typeof ACTION_COMMAND_STATUSES)[number];
 
@@ -85,40 +86,75 @@ export interface ActionCommandResponseData {
 }
 
 // ---------- Section 9: Capability / Redaction ----------
+// A3 (Planner Response §A3, 2026-05-07) — EvidenceKind union of:
+//   - Pack D-B Permission Contract (planner 15 kinds)
+//   - v5 Closed-Loop OS evidence (4 kinds)
+// FE feedback I1: planner Permission Contract should adopt this union next revision.
 
 export type EvidenceKind =
-  | "audit"
-  | "snapshot"
+  // Pack D-B planner canonical 15
+  | "alert"
   | "incident"
-  | "rebalance"
+  | "job"
+  | "audit"
+  | "metric"
+  | "strategy"
+  | "persona"
   | "deployment"
-  | "experiment"
+  | "runtime"
+  | "policy"
+  | "approval"
+  | "artifact"
+  | "signal"
+  | "journal"
   | "postmortem"
+  // v5 closed-loop additions
   | "loop_run"
   | "sentinel_finding"
   | "intervention"
-  | "ask_session";
+  | "ask_session"
+  // legacy kept for back-compat (used elsewhere in codebase)
+  | "snapshot"
+  | "rebalance"
+  | "experiment";
 
-/** Section 9 — capability gate per evidence kind. */
+/** A3 — capability gate per evidence kind (planner §A3 + v5 + legacy). */
 export const EVIDENCE_CAPABILITY_MAP: Readonly<Record<EvidenceKind, string>> = {
-  audit: "audit.read",
-  snapshot: "artifact.read",
+  // Pack D-B planner 15
+  alert: "risk.alert.read",
   incident: "risk.incident.read",
-  rebalance: "rebalance.read",
+  job: "job.read",
+  audit: "audit.read",
+  metric: "metric.read",
+  strategy: "strategy.view",
+  persona: "persona.view",
   deployment: "deployment.read",
-  experiment: "research.read",
+  runtime: "runtime.read",
+  policy: "policy.read",
+  approval: "approval.read",
+  artifact: "artifact.read",
+  signal: "agora.signal.read",
+  journal: "agora.journal.read",
   postmortem: "postmortem.read",
+  // v5 closed-loop
   loop_run: "loop.read",
   sentinel_finding: "sentinel.read",
   intervention: "intervention.read",
   ask_session: "agora.ask",
+  // legacy
+  snapshot: "artifact.read",
+  rebalance: "rebalance.read",
+  experiment: "research.read",
 };
 
 export interface RedactedEvidenceRef {
   kind: EvidenceKind;
   id: string;
   redacted: true;
+  /** Detailed FE-facing reason (kept as union for richer UI). */
   reason: "PERMISSION_DENIED" | "CAPABILITY_MISSING" | "TENANT_SCOPE_MISMATCH";
+  /** Planner §A3 alias — single canonical reason name for backend handoff. */
+  redactionReasonCode?: "INSUFFICIENT_CAPABILITY";
   capabilityRequired: string;
 }
 

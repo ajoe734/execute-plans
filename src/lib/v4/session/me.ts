@@ -28,6 +28,12 @@ export interface MeTenant {
   baseCurrency?: string;
 }
 
+export interface MeCounters {
+  pendingInterventionsCount?: number;
+  unreadAuditCount?: number;
+  openFindingsCount?: number;
+}
+
 export interface MeResponse {
   user: MeUser;
   tenant: MeTenant;
@@ -38,6 +44,8 @@ export interface MeResponse {
   serverTime: string;
   sessionExpiresAt: string;
   permissionsVersion: string;
+  /** Planner Response §B5 (2026-05-07) — optional pre-aggregated counters. */
+  counters?: MeCounters;
 }
 
 const ME_CACHE_TTL_MS = 30_000;
@@ -75,6 +83,11 @@ export function mockMe(): MeResponse {
     serverTime: now.toISOString(),
     sessionExpiresAt: exp.toISOString(),
     permissionsVersion: "v1",
+    counters: {
+      pendingInterventionsCount: 0,
+      unreadAuditCount: 0,
+      openFindingsCount: 0,
+    },
   };
 }
 

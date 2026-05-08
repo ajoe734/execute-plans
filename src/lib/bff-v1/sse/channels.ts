@@ -1,6 +1,7 @@
-// BFF Contract v1 — SSE channel catalog (28 channels).
+// BFF Contract v1 — SSE channel catalog.
 // Source: .lovable/feedback/2026-05-07-final/Pantheon_BFF_AsyncAPI_SSE.md §4
-// Final C.5: includes `approval` and `ask` channels.
+//       + Planner Response §B4 (2026-05-07) — adds confirm_token / cooldown /
+//         transition / rollback / handoff channels (32 total).
 
 export const SSE_CHANNELS = [
   "strategy",
@@ -30,6 +31,12 @@ export const SSE_CHANNELS = [
   "sentinel",
   "intervention",
   "system",
+  // Planner Response §B4 additions
+  "confirm_token",
+  "cooldown",
+  "transition",
+  "rollback",
+  "handoff",
 ] as const;
 
 export type SseChannel = (typeof SSE_CHANNELS)[number];
@@ -67,6 +74,12 @@ export const SSE_CHANNEL_SCOPES: Readonly<Record<SseChannel, string>> = {
   sentinel: "sentinel.read",
   intervention: "intervention.read",
   system: "*",
+  // Planner Response §B4
+  confirm_token: "*",
+  cooldown: "*",
+  transition: "*",
+  rollback: "deployment.rollback",
+  handoff: "approval.read",
 };
 
 /** Final §2 envelope — schemaVersion=1. */
