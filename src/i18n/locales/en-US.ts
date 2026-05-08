@@ -1575,6 +1575,11 @@ export default {
     footerNote: "v0 mock create · 30-min overlay TTL · not persisted to seed",
     required: "Required",
     submitting: "Submitting…",
+    cooldown: {
+      title: "Please wait",
+      desc: "Please wait {{ms}}ms before submitting again.",
+      button: "Wait {{s}}s…",
+    },
     entity: {
       strategy: "Strategy", persona: "Persona", capitalPool: "Capital Pool",
       rankingFormula: "Ranking Formula", rebalance: "Rebalance", deployment: "Deployment",
