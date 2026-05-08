@@ -1,7 +1,10 @@
 id,group,title,priority,status,fe_action,depends_on
-A1,A,OpenAPI ActionCommandStatus named enum,P0,SPEC_BACKPORT_REQUIRED,Regenerate codegen; remove hand-written ACTION_COMMAND_STATUSES const,backend
-A2,A,Pack D D21 ErrorCode master 26,P0,SPEC_BACKPORT_REQUIRED,Remove H2 superset comments in errorCodes.ts,backend
-A3,A,SSE approval/ask + EvidenceKind capability map,P0,SPEC_BACKPORT_REQUIRED,Remove transitional Evidence map comments; align dto.ts,backend
+A1,A,OpenAPI ActionCommandStatus named enum,P0,FE_READY_OPENAPI_BACKPORT_PENDING,FE has named const+type; OpenAPI YAML must add ActionCommandStatus schema,backend
+A2,A,Pack D D21 ErrorCode master 26,P0,FE_READY_PACKD_BACKPORT_PENDING,FE 26-code list canonical at runtime; Pack D markdown must list all 26,backend
+A3,A,SSE approval/ask + EvidenceKind capability map,P0,FE_READY_ASYNCAPI_BACKPORT_PENDING,32 channels OK; AsyncAPI must require correlationId; FE keeps optional via ensureCorrelationId,backend
+I1,A,EvidenceKind canonical/legacy split,P0,RESOLVED_BY_COMPATIBILITY_LAYER,Keep 22-value union; document 19 canonical + 3 legacy aliases (snapshot/rebalance/experiment),backend
+I2,A,RedactedEvidenceRef canonical vs alias,P0,RESOLVED_BY_COMPATIBILITY_LAYER,Add normalizeRedactedEvidenceRef; canonical=redactionReasonCode+requiredCapability,backend
+I3,B,Role canonical 12-set,P1,ACCEPTED_STAGE4,12-role canonical landed in roleCapabilities.ts; capabilities are source of truth,
 B1,B,D05 AsyncTransitionDescriptor (15 actions),P1,RESOLVED_BY_CONTRACT,timeoutPolicy.ts source: v0-mock -> spec after endpoint live,backend
 B2,B,D12 ROLE_CAPABILITIES (12 roles),P1,RESOLVED_BY_CONTRACT,Add roleCapabilities.ts; usePermissions capability-first,backend
 B3,B,D22 list totalCount classification,P1,RESOLVED_BY_CONTRACT,V5ListResponse adapter reads spec table,backend

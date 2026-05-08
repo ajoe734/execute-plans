@@ -117,3 +117,22 @@ export function effectiveCapabilities(
 }
 
 export const ROLE_CAPABILITIES_SOURCE = "planner-response-2026-05-07" as const;
+
+/** Planner Stage 2 Audit §3.4 — unknown role policy:
+ *  1. Do not crash.
+ *  2. Preserve role string for display/debug.
+ *  3. Do not infer capabilities from unknown role.
+ *  4. Use /bff/me.capabilities as source of truth.
+ *  5. Emit warning in development/test only.
+ */
+export function isKnownRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
+export function warnUnknownRole(role: string): void {
+  if (isKnownRole(role)) return;
+  if (typeof import.meta !== "undefined" && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+    // eslint-disable-next-line no-console
+    console.warn(`[roleCapabilities] unknown role '${role}' — no capabilities inferred; relying on /bff/me.capabilities`);
+  }
+}
