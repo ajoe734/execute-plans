@@ -13,6 +13,8 @@ function detectMode(): BffMode {
   try {
     // Vite-style env access; defaults to mock.
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    // Test runs (vitest sets MODE='test') always use mock to avoid hitting the live BFF.
+    if (env?.MODE === "test" || env?.NODE_ENV === "test") return "mock";
     const v = env?.VITE_BFF_MODE;
     return v === "live" ? "live" : "mock";
   } catch {
