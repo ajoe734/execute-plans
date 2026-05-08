@@ -40,6 +40,8 @@ export interface BffRequest {
   /** Override generated Idempotency-Key. */
   idempotencyKey?: string;
   ifMatchVersion?: number | string;
+  /** Override / propagate correlation id (else auto-minted). */
+  correlationId?: string;
   locale?: string;
   /** Override mode for this single call (testing). */
   mode?: BffMode;
@@ -74,6 +76,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
     locale: req.locale,
     idempotency: req.idempotencyKey,
     ifMatchVersion: req.ifMatchVersion,
+    correlationId: req.correlationId,
     extra: req.headers,
   });
 

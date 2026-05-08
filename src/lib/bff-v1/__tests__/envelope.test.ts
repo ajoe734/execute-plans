@@ -70,11 +70,20 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
 });
 
 describe("bff-v1 path builders", () => {
-  it("encodes ids and exposes 94-endpoint surface", () => {
+  it("encodes ids and exposes canonical endpoint surface (Final OpenAPI 2026-05-07)", () => {
     expect(paths.strategies()).toBe("/bff/strategies");
     expect(paths.strategy("a/b")).toBe("/bff/strategies/a%2Fb");
     expect(paths.strategyAction("s1", "promote")).toBe("/bff/strategies/s1/actions/promote");
-    expect(paths.v5InterventionDecision("iv_1")).toBe("/bff/v5/interventions/iv_1/decision");
+    expect(paths.action("strategy", "s1", "promote")).toBe("/bff/actions/strategy/s1/promote");
+    expect(paths.me()).toBe("/bff/me");
+    expect(paths.sessionMe()).toBe("/bff/me");
+    expect(paths.authRefresh()).toBe("/bff/auth/refresh");
+    expect(paths.logout()).toBe("/bff/logout");
+    expect(paths.approvalDecide("ap_1")).toBe("/bff/approvals/ap_1/decide");
+    expect(paths.approvalDecision("ap_1")).toBe("/bff/approvals/ap_1/decide");
+    expect(paths.v5InterventionDecide("iv_1")).toBe("/bff/v5/interventions/iv_1/decide");
+    expect(paths.v5InterventionDecision("iv_1")).toBe("/bff/v5/interventions/iv_1/decide");
+    expect(paths.mcpServerImportTools("srv_1")).toBe("/bff/mcp-servers/srv_1/import-tools");
     expect(paths.agoraAskSession("ask_1")).toBe("/bff/agora/ask/sessions/ask_1");
     expect(paths.sse()).toBe("/bff/events/stream");
   });

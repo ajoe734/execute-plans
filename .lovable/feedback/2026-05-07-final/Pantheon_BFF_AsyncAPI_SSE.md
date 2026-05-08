@@ -47,6 +47,36 @@ Optional query:
 channels=strategy,approval,ask,sentinel,intervention
 ```
 
+### 1.0 Stream authentication (Live-Wiring Alignment Patch 2026-05-08)
+
+The browser-native `EventSource` API CANNOT set `Authorization` headers.
+Backend MUST therefore support exactly ONE of the two modes below; the FE
+selects per-deployment via build-time config.
+
+**Mode A — Cookie session (default for in-tenant browser FE).**
+- Authentication propagated via the same HttpOnly session cookie used by
+  REST endpoints. FE opens `new EventSource(url, { withCredentials: true })`.
+- Backend MUST honour `Set-Cookie` SameSite=Lax + the existing tenant
+  resolution middleware. `X-Tenant-Id` is derived server-side from the
+  session, NOT sent by the client.
+- CORS: `Access-Control-Allow-Credentials: true` and a non-wildcard
+  `Access-Control-Allow-Origin`.
+
+**Mode B — Signed stream token (cross-origin / CLI / mobile clients).**
+- Client first calls `POST /bff/auth/refresh` (or a dedicated
+  `POST /bff/events/stream-token`) with its Bearer token to obtain a
+  short-lived `streamToken`.
+- Client then opens
+  `GET /bff/events/stream?streamToken=<jwt>&channels=...`.
+- Backend validates the token's `aud=sse`, `tenantId`, and channel
+  capabilities before subscribing.
+
+**Backend-facing correlation (unchanged).** Every emitted event MUST carry
+`correlationId` (event-level field), and every `subscribe` server log
+entry MUST include the correlation id of the originating request that
+caused the subscription (e.g. the page mount that opened the stream).
+
+
 ### 1.1 Timing
 
 ```text

@@ -59,8 +59,9 @@ export function bootstrapMockAdapters(): void {
     return ok(data, { correlationId: headers["X-Request-Id"], idempotencyKey: headers["Idempotency-Key"] });
   });
 
-  // GET /bff/session/me — minimal envelope; consumers should still use src/lib/v4/session/me
-  registerMock("GET", paths.sessionMe(), () =>
+  // GET /bff/me — canonical (Final OpenAPI). Legacy alias `/bff/session/me` resolves
+  // to the same path via paths.sessionMe().
+  registerMock("GET", paths.me(), () =>
     ok({ sub: "mock-user", roles: ["operator"], capabilities: [] }),
   );
 }

@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildHeaders, idempotencyKey, isMutation } from "../headers";
+import { afterEach, describe, expect, it } from "vitest";
+import { buildHeaders, idempotencyKey, isMutation, setAuthProvider } from "../headers";
+
+afterEach(() => {
+  setAuthProvider({ getToken: () => null, getTenantId: () => null });
+});
 
 describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
   it("isMutation classifies methods", () => {
@@ -38,5 +42,25 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
   it("Accept-Language honours explicit locale override", () => {
     const h = buildHeaders({ method: "GET", locale: "zh-TW" });
     expect(h["Accept-Language"]).toBe("zh-TW");
+  });
+
+  it("auto-mints X-Correlation-Id (or accepts caller-supplied)", () => {
+    const auto = buildHeaders({ method: "GET" });
+    expect(auto["X-Correlation-Id"]).toMatch(/^cid_/);
+    const supplied = buildHeaders({ method: "GET", correlationId: "cid_test_1" });
+    expect(supplied["X-Correlation-Id"]).toBe("cid_test_1");
+  });
+
+  it("injects Authorization + X-Tenant-Id from provider when set", () => {
+    setAuthProvider({ getToken: () => "tok-abc", getTenantId: () => "ten-1" });
+    const h = buildHeaders({ method: "GET" });
+    expect(h["Authorization"]).toBe("Bearer tok-abc");
+    expect(h["X-Tenant-Id"]).toBe("ten-1");
+  });
+
+  it("omits Authorization / X-Tenant-Id when provider returns null (mock default)", () => {
+    const h = buildHeaders({ method: "GET" });
+    expect(h["Authorization"]).toBeUndefined();
+    expect(h["X-Tenant-Id"]).toBeUndefined();
   });
 });

@@ -99,8 +99,9 @@ export async function fetchMe(force = false): Promise<MeResponse> {
     let value: MeResponse;
     try {
       const { withLiveOrMock } = await import("@/lib/bff-v1/liveTransport");
+      const { paths } = await import("@/lib/bff-v1/paths");
       value = await withLiveOrMock<MeResponse>(
-        { method: "GET", path: "/bff/session/me" },
+        { method: "GET", path: paths.me() },
         async () => mockMe(),
       );
     } catch {
