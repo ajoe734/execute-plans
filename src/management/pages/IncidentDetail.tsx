@@ -129,6 +129,9 @@ export const IncidentDetail = () => {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
+            <Button variant="outline" size="sm" onClick={showRollbackSaga}>
+              {t("incident.viewRollbackSaga", { defaultValue: "View rollback saga" })}
+            </Button>
             {incident.status === "open" && (
               <PermissionAwareButton requiredAction="approve" size="sm" onClick={() => advance("mitigating")}>
                 {t("incident.startMitigation")}
