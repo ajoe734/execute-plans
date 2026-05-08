@@ -1,8 +1,10 @@
 // CapitalPool Mandate panel (read-only stub; Phase 12 promotes to full editor).
+// Planner Response §E10 (2026-05-08) — surfaces canonical breach cadences + auto-actions.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { CapitalPool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { MANDATE_BREACH_CADENCES, MANDATE_BREACH_AUTO_ACTIONS } from "@/lib/v4/mandateBreachDefaults";
 
 export const MandatePanel = ({ pool }: { pool: CapitalPool }) => {
   const t = useT();
