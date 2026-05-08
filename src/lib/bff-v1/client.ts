@@ -1,10 +1,11 @@
 // BFF Contract v1 — typed fetch client with mock/live mode switch.
 // Frozen contract source: .lovable/feedback/2026-05-07-final/
 
-import { buildHeaders, isMutation } from "./headers";
+import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, isBffErrorEnvelope, makeBffError } from "./errors";
 import { bootstrapMockAdapters } from "./mocks/adapters";
 import { resolveMock } from "./mocks/registry";
+import { liveStatus } from "./liveStatus";
 
 export type BffMode = "mock" | "live";
 
