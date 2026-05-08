@@ -10,9 +10,12 @@ export * from "./client";
 export * from "./sse/channels";
 export * from "./sse/protocol";
 export * from "./sse/bridge";
+export * from "./sse/liveSse";
 export * from "./lists";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
+export * from "./liveStatus";
+export * from "./liveTransport";
 // Batch VII — escape hatch for legacy seed accessors during migration.
 export * from "./legacy";
