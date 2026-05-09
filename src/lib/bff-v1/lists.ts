@@ -6,10 +6,12 @@
 // VI-1 scope: read-side migration. Mutations / detail / studios remain on
 // legacy `bff.*` until VI-2 / VI-3.
 // C6 (spec-conflict-G): totalCountExact rules now follow D22 matrix per entity.
+// BFF-LUV-FE-002: extended to cover the remaining Management Console families
+// (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
+// canonical Management read surfaces have a real adapter when live mode is on.
 
 import { bff } from "./seed";
 import type { ListEnvelope } from "./dto";
-import type { BaseObject } from "@/lib/bff/types";
 import { withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
 
@@ -70,7 +72,8 @@ function liveOrMockList<T>(
     withLiveOrMock<ListEnvelope<T>>({ method: "GET", path }, mockFn);
 }
 
-/** Per-entity list-class map (Pack D D22). */
+/** Per-entity list-class map (Pack D D22).
+ *  BFF-LUV-FE-002 extends this with the remaining Management Console families. */
 export const LIST_CLASS_BY_KEY = {
   strategies: "entityRegistry",
   personas: "entityRegistry",
@@ -83,11 +86,21 @@ export const LIST_CLASS_BY_KEY = {
   artifacts: "entityRegistry",
   tools: "entityRegistry",
   mcpServers: "entityRegistry",
+  mcpTools: "entityRegistry",
   skills: "entityRegistry",
   channels: "entityRegistry",
+  jobs: "loopRun",
+  runtimes: "entityRegistry",
+  alerts: "realtimeFeed",
+  incidents: "governanceQueue",
+  approvals: "governanceQueue",
+  audit: "auditFeed",
 } as const satisfies Record<string, ListClass>;
 
-/** Canonical entity → loader map for the 13 list pages migrated in VI-1. */
+/** Canonical entity → loader map.
+ *  BFF-LUV-FE-002 covers all Management Console route families with real
+ *  live adapters; mock fallback is governed by liveTransport's `auto` /
+ *  `strict` fallback mode (VITE_BFF_FALLBACK). */
 export const lists = {
   strategies:      liveOrMockList(paths.strategies(),         () => bff.strategies.list(),       LIST_CLASS_BY_KEY.strategies),
   personas:        liveOrMockList(paths.personas(),           () => bff.personas.list(),         LIST_CLASS_BY_KEY.personas),
@@ -100,8 +113,15 @@ export const lists = {
   artifacts:       liveOrMockList(paths.artifacts(),          () => bff.artifacts.list(),        LIST_CLASS_BY_KEY.artifacts),
   tools:           liveOrMockList(paths.tools(),              () => bff.tools.list(),            LIST_CLASS_BY_KEY.tools),
   mcpServers:      liveOrMockList(paths.mcpServers(),         () => bff.mcpServers.list(),       LIST_CLASS_BY_KEY.mcpServers),
+  mcpTools:        liveOrMockList(paths.mcpTools(),           () => bff.mcpTools.list(),         LIST_CLASS_BY_KEY.mcpTools),
   skills:          liveOrMockList(paths.skills(),             () => bff.skills.list(),           LIST_CLASS_BY_KEY.skills),
   channels:        liveOrMockList(paths.channels(),           () => bff.channels.list(),         LIST_CLASS_BY_KEY.channels),
-} as const satisfies Record<string, () => Promise<ListEnvelope<BaseObject>>>;
+  jobs:            liveOrMockList(paths.jobs(),               () => bff.jobs.list(),             LIST_CLASS_BY_KEY.jobs),
+  runtimes:        liveOrMockList(paths.runtimes(),           () => bff.runtimes.list(),         LIST_CLASS_BY_KEY.runtimes),
+  alerts:          liveOrMockList(paths.alerts(),             () => bff.alerts.list(),           LIST_CLASS_BY_KEY.alerts),
+  incidents:       liveOrMockList(paths.incidents(),          () => bff.incidents.list(),        LIST_CLASS_BY_KEY.incidents),
+  approvals:       liveOrMockList(paths.approvals(),          () => bff.approvals.list(),        LIST_CLASS_BY_KEY.approvals),
+  audit:           liveOrMockList(paths.audit(),              () => bff.audit.list(),            LIST_CLASS_BY_KEY.audit),
+} as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
 
 export type ListKey = keyof typeof lists;
