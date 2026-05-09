@@ -138,3 +138,42 @@ Per Pack E disposition Q23/Q26:
 - `CommandCenter` import removed from `App.tsx`.
 - Sidebar Legacy group reduced to a single `nav.overview` entry pointing to `/management/overview-legacy` with `dedupeKey: "controlRoom"` so it never double-highlights.
 - Acceptance: 323 tests pass; deep-link redirect verified by route table.
+
+---
+
+## VII-c — v5 surface consolidation (2026-05-09)
+
+All 8 v5 surface files now import the v5 façade through a single canonical
+entrypoint:
+
+```ts
+// before
+import { bff } from "@/lib/bff-v1";
+await bff.v5.controlRoom.get();
+
+// after
+import { v5 } from "@/lib/bff-v1";
+await v5.controlRoom.get();
+```
+
+- New module: `src/lib/bff-v1/v5.ts` re-exports `bffV5` (from `@/lib/bff/v5`)
+  as `v5`. Implementation is FROZEN — only the import path moved.
+- Migrated files: `V5Pages.tsx`, `ControlRoom.tsx`, `Sentinel.tsx`,
+  `Interventions.tsx`, `ResearchLoop.tsx`, `ExecutionLoop.tsx`,
+  `OptimizationLoop.tsx`, `LoopRunDrawer.tsx`.
+- `bff.v5` accessor remains on `seed.ts` for backwards compatibility (zero
+  callers in src/ now).
+- Tests: **366 / 366 green**.
+
+### Outstanding
+
+The remaining ~76 `bff.*` call sites (management/agora/studios) are
+consumers of the canonical mock seed accessor (not legacy). They will
+migrate to the typed `bffV1.lists.list("...")` surface as each entity gets
+a typed list/write façade. Out of scope for this batch.
+
+### Single-TODO sweep (2026-05-09)
+
+- `src/lib/v5/types.ts` Q13 capability hook: TODO removed; replaced with
+  explicit "waiting on Permission Contract backport (A2)" disposition. No
+  other `TODO|FIXME|HACK` strings remain in `src/`.
