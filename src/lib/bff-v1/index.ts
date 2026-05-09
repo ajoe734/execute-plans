@@ -19,3 +19,5 @@ export * from "./liveStatus";
 export * from "./liveTransport";
 // Batch VII — escape hatch for legacy seed accessors during migration.
 export * from "./legacy";
+// Batch VII-c — v5 closed-loop OS namespace (single entrypoint).
+export * from "./v5";
