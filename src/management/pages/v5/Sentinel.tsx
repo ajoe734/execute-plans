@@ -52,6 +52,8 @@ export const SentinelPage = () => {
   const [active, setActive] = useState<SentinelFinding | null>(null);
   const [filter, setFilter] = useState("");
   const [sevFilter, setSevFilter] = useState<string>("all");
+  // D (2026-05-09) — list ↔ timeline toggle
+  const [view, setView] = useState<"list" | "timeline">("list");
   const [params, setParams] = useSearchParams();
 
   // E2 drill-down: ?finding=<id> auto-opens the matching finding drawer.
