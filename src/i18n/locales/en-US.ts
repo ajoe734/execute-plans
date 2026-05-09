@@ -163,6 +163,9 @@ export default {
       generatedAt: "Generated",
       // E2 additions — SD §12.3 layout
       openSentinel: "Open Sentinel",
+      focus: "Focus",
+      focusEmpty: "Nothing matches the current focus.",
+      focusOpt: { all: "All", warning: "Warning+", critical: "Critical only" },
       emergencyMode: "Emergency Mode",
       criticalFindings: "Critical Sentinel Findings",
       humanGates: "Blocking Human Gates",

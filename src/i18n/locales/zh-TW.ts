@@ -157,6 +157,9 @@ export default {
       generatedAt: "產出時間",
       // E2 新增 — SD §12.3 layout
       openSentinel: "開啟 Sentinel",
+      focus: "聚焦",
+      focusEmpty: "目前聚焦條件下無項目。",
+      focusOpt: { all: "全部", warning: "警告以上", critical: "僅嚴重" },
       emergencyMode: "緊急模式",
       criticalFindings: "重大 Sentinel Findings",
       humanGates: "阻塞中的人類審核",
