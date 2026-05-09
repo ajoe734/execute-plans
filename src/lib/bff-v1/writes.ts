@@ -122,6 +122,23 @@ export async function runAction(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
+      (rawData) => {
+        const d = rawData as {
+          data?: { commandId?: string; command_id?: string; receipt_id?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" };
+        return {
+          ok: true,
+          data: { actionId: commandId, status: "accepted" as const },
+          auditEventId: commandId,
+          correlationId,
+          idempotencyKey: iKey,
+          legacy: mockLegacy,
+        };
+      },
     );
   }
   return mockBranch();
@@ -143,6 +160,7 @@ export async function tryRunAction(
 // ---------- Confirm token seam ----------
 
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
+import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
 export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
 
@@ -179,6 +197,27 @@ export async function requestConfirmToken(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
+      (rawData) => {
+        const d = rawData as {
+          data?: { tokenId?: string; commandId?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const action = getHighRiskAction(req.actionId);
+        const ttl = action?.tokenTtlSeconds ?? 300;
+        const ctResp: ConfirmTokenResponse = {
+          confirmToken: tokenId,
+          expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+          ttlSeconds: ttl,
+          requiredPhrase: action
+            ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
+            : "",
+          requiresMemo: action?.memoRequired ?? false,
+          auditEventPreview: `${req.actionId}.requested`,
+        };
+        return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
+      },
     );
   }
   return mockBranch();

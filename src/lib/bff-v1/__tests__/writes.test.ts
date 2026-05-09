@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { runAction, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
 import { BffError } from "@/lib/bff-v1";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 function setWriteEnv(realWrites: boolean, token: string | null = null) {
   process.env.VITE_BFF_REAL_WRITES = realWrites ? "true" : "false";
@@ -11,6 +12,7 @@ function setWriteEnv(realWrites: boolean, token: string | null = null) {
 
 afterEach(() => {
   setWriteEnv(false, null);
+  liveStatus._reset();
   vi.restoreAllMocks();
 });
 
@@ -81,6 +83,83 @@ describe("VI-2 writes seam", () => {
         platformEnvironment: "production",
       }),
     ).rejects.toBeInstanceOf(BffError);
+  });
+});
+
+function makeLiveFetch(body: unknown, status = 202): ReturnType<typeof vi.fn> {
+  return vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+describe("VI-2 live-mode adaptLive normalization", () => {
+  it("runAction adaptLive maps commandId→actionId and provides legacy for runActionSafe", async () => {
+    setWriteEnv(true, "tok_live_test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const commandId = "cmd_abc123";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      makeLiveFetch({
+        status: "accepted",
+        data: { commandId, status: "accepted" },
+        meta: { idempotency: { idempotencyKey: "idk_from_server" } },
+      }, 202),
+    );
+
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_001", action: "activate" },
+      { correlationId: "corr_live_01", idempotencyKey: "idk_caller_01" },
+    );
+
+    expect(env.ok).toBe(true);
+    expect(env.data.actionId).toBe(commandId);
+    expect(env.auditEventId).toBe(commandId);
+    expect(env.correlationId).toBe("corr_live_01");
+    expect(env.idempotencyKey).toBe("idk_from_server");
+    // legacy must be present so runActionSafe can return r.envelope.legacy
+    expect(env.legacy).toBeDefined();
+    expect(env.legacy.ok).toBe(true);
+    expect(env.legacy.audit.id).toBe(commandId);
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("requestConfirmToken adaptLive maps tokenId→confirmToken with HighRiskConfirm fields", async () => {
+    setWriteEnv(true, "tok_live_test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const tokenId = "ct_xyz789";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      makeLiveFetch({
+        status: "accepted",
+        data: { tokenId, commandId: "cmd_ct_01" },
+        meta: { idempotency: { idempotencyKey: "idk_srv_ct" } },
+      }, 201),
+    );
+
+    const env = await requestConfirmToken(
+      {
+        actionId: "strategy.deploy_live",
+        entityType: "strategy",
+        entityId: "stg_001",
+        payloadHash: "h",
+        tradingEnvironment: "live",
+        platformEnvironment: "production",
+      },
+      {},
+      { correlationId: "corr_ct_01" },
+    );
+
+    expect(env.ok).toBe(true);
+    // HighRiskConfirm reads r.data.confirmToken
+    expect(env.data.confirmToken).toBe(tokenId);
+    // HighRiskConfirm reads r.data.requiredPhrase
+    expect(env.data.requiredPhrase).toBeTruthy();
+    // HighRiskConfirm reads r.data.expiresAt
+    expect(env.data.expiresAt).toBeTruthy();
+    expect(env.correlationId).toBe("corr_ct_01");
+    expect(env.idempotencyKey).toBe("idk_srv_ct");
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
   });
 });
 
