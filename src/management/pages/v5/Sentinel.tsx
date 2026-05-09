@@ -14,7 +14,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
@@ -48,7 +48,7 @@ const modeCls: Record<string, string> = {
 
 export const SentinelPage = () => {
   const t = useT();
-  const findings = useV5Live(() => bff.v5.sentinel.list());
+  const findings = useV5Live(() => v5.sentinel.list());
   const [active, setActive] = useState<SentinelFinding | null>(null);
   const [filter, setFilter] = useState("");
   const [sevFilter, setSevFilter] = useState<string>("all");
@@ -184,7 +184,7 @@ const FindingDrawer = ({
   if (!finding) return null;
 
   const actions: RemediationAction[] = finding.recommendedActionIds
-    .map((kind) => bff.v5.remediation.build(kind, {
+    .map((kind) => v5.remediation.build(kind, {
       targetKind: (finding.blastRadius.strategies?.[0] ? "strategy" : finding.blastRadius.personas?.[0] ? "persona" : undefined),
       targetId: finding.blastRadius.strategies?.[0] ?? finding.blastRadius.personas?.[0],
     }))
@@ -197,7 +197,7 @@ const FindingDrawer = ({
   };
 
   const execute = async (a: RemediationAction) => {
-    const r = await bff.v5.remediation.execute(a);
+    const r = await v5.remediation.execute(a);
     toast({
       title: t("v5.sentinel.actionExecuted"),
       description: `${a.label} · overlay=${r.overlayUpdated ? "updated" : "noop"}`,
@@ -206,14 +206,14 @@ const FindingDrawer = ({
   };
 
   const acknowledge = async () => {
-    await bff.v5.sentinel.setStatus(finding.id, "acknowledged");
+    await v5.sentinel.setStatus(finding.id, "acknowledged");
     toast({ title: t("v5.sentinel.acknowledged") });
     onActed();
     onClose();
   };
 
   const dismiss = async () => {
-    await bff.v5.sentinel.setStatus(finding.id, "dismissed");
+    await v5.sentinel.setStatus(finding.id, "dismissed");
     toast({ title: t("v5.sentinel.dismissed") });
     onActed();
     onClose();

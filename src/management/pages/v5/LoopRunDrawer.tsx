@@ -1,5 +1,5 @@
 // E3 — LoopRun drawer: stage timeline with timeout state badges + advance/pause/resume/cancel.
-// Mock-only via bff.v5.loops.* (overlay-backed); never mutates seed.
+// Mock-only via v5.loops.* (overlay-backed); never mutates seed.
 
 import { useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,7 +15,7 @@ import {
   type LoopRun,
   type LoopStage,
 } from "@/lib/v5";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
 
 const stageTone: Record<string, string> = {
@@ -62,10 +62,10 @@ export const LoopRunDrawer = ({ run, onClose }: Props) => {
     setBusy(true);
     try {
       const r = kind === "pause"
-        ? await bff.v5.loops.pause(run.id, reason || undefined)
-        : kind === "resume" ? await bff.v5.loops.resume(run.id)
-        : kind === "cancel" ? await bff.v5.loops.cancel(run.id)
-        : await bff.v5.loops.advance(run.id);
+        ? await v5.loops.pause(run.id, reason || undefined)
+        : kind === "resume" ? await v5.loops.resume(run.id)
+        : kind === "cancel" ? await v5.loops.cancel(run.id)
+        : await v5.loops.advance(run.id);
       if (r.ok) {
         toast({ title: t(`v5.loops.execution.action.${kind}.ok`, { defaultValue: kind }) });
         if (kind === "pause") setReason("");

@@ -9,7 +9,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type {
   ControlRoomSummary, LoopRun, SentinelFinding, InterventionItem,
@@ -31,7 +31,7 @@ function useAsync<T>(load: () => Promise<T>, deps: unknown[] = []): T | undefine
 
 export const ControlRoomPage = () => {
   const t = useT();
-  const summary = useAsync<ControlRoomSummary>(() => bff.v5.controlRoom.get());
+  const summary = useAsync<ControlRoomSummary>(() => v5.controlRoom.get());
   return (
     <>
       <PageHeader title={t("nav.controlRoom")} subtitle={t("v5.controlRoom.subtitle")} />
@@ -75,7 +75,7 @@ export const LoopsPage = () => {
   const t = useT();
   const params = useParams<{ kind?: LoopKind }>();
   const kind = params.kind;
-  const data = useAsync(() => bff.v5.loops.list(kind), [kind]);
+  const data = useAsync(() => v5.loops.list(kind), [kind]);
   return (
     <>
       <PageHeader
@@ -124,7 +124,7 @@ export const LoopsPage = () => {
 
 export const SentinelPage = () => {
   const t = useT();
-  const data = useAsync(() => bff.v5.sentinel.list());
+  const data = useAsync(() => v5.sentinel.list());
   return (
     <>
       <PageHeader title={t("nav.sentinel")} subtitle={t("v5.sentinel.subtitle")} />
@@ -162,7 +162,7 @@ export const SentinelPage = () => {
 
 export const InterventionsPage = () => {
   const t = useT();
-  const data = useAsync(() => bff.v5.interventions.list());
+  const data = useAsync(() => v5.interventions.list());
   return (
     <>
       <PageHeader title={t("nav.interventions")} subtitle={t("v5.interventions.subtitle")} />

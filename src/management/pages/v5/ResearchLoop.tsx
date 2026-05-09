@@ -8,7 +8,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { LoopRunDrawer } from "./LoopRunDrawer";
@@ -40,7 +40,7 @@ export const ResearchLoopPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const runParam = params.get("run");
-  const runs = useV5Live(() => bff.v5.loops.list("research"));
+  const runs = useV5Live(() => v5.loops.list("research"));
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
