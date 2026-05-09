@@ -925,6 +925,8 @@ export default {
     openDecisions: "Open decisions",
     openDetail: "Open detail",
     openAudit: "Open audit",
+    ephemeral: "ephemeral",
+    ephemeralTooltip: "Mock overlay event — not persisted. Auto-clears after 30 minutes (writeOverlay TTL).",
     crossLinks: "Cross-links",
     relatedDecisions: "Related decisions",
     noDecisions: "No decision journal entries for this entity.",
