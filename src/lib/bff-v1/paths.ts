@@ -100,6 +100,10 @@ export const paths = {
   // ---- Research ----
   researchExperiments: () => `${BASE}/research-experiments`,
 
+  // ---- Command confirmations (v3 §6.2) ----
+  commandConfirmations: () => `${BASE}/command-confirmations`,
+  commandConfirmation: (token: string) => `${BASE}/command-confirmations/${enc(token)}`,
+
   // ---- SSE ----
   sse: () => `${BASE}/events/stream`,
 

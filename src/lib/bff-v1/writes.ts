@@ -18,16 +18,28 @@ import { makeBffError, BffError } from "./errors";
 import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
 
-/** Map RunActionInput.kind → live action endpoint builder. */
-function actionPath(kind: RunActionInput["kind"], id: string, action: string): string | undefined {
-  switch (kind) {
-    case "Strategy":      return paths.strategyAction(id, action);
-    case "Persona":       return paths.personaAction(id, action);
-    case "CapitalPool":   return paths.capitalPoolAction(id, action);
-    case "Rebalance":     return paths.rebalanceAction(id, action);
-    case "Deployment":    return paths.deploymentAction(id, action);
-    default:              return undefined;
-  }
+/** Map RunActionInput.kind → canonical live action endpoint. */
+const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
+  Strategy: "strategy",
+  Persona: "persona",
+  CapitalPool: "capital-pool",
+  Rebalance: "rebalance",
+  Deployment: "deployment",
+  Evolution: "evolution-program",
+  Research: "research-experiment",
+  Artifact: "artifact",
+  RankingFormula: "ranking-formula",
+  Tool: "tool",
+  McpServer: "mcp-server",
+  McpTool: "mcp-tool",
+  Skill: "skill",
+  Channel: "channel",
+  Runtime: "runtime",
+};
+
+function actionPath(kind: RunActionInput["kind"], id: string, action: string): string {
+  const et = KIND_TO_ENTITY_TYPE[kind] ?? kind.toLowerCase();
+  return paths.action(et, id, action);
 }
 
 export interface RunActionEnvelope extends CommandResponse<ActionCommandResponseData> {
@@ -86,8 +98,8 @@ export async function runAction(
     };
   };
 
-  const livePath = actionPath(input.kind, input.id, input.action);
-  if (livePath && realWritesEnabled()) {
+  if (realWritesEnabled()) {
+    const livePath = actionPath(input.kind, input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
         method: "POST",
@@ -122,7 +134,8 @@ import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRis
 
 export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
 
-/** v3 §6.2 — request a confirm token via the v1 seam (envelope + correlationId). */
+/** v3 §6.2 — request a confirm token via the v1 seam (envelope + correlationId).
+ *  Live path: POST /bff/command-confirmations when real writes are enabled. */
 export async function requestConfirmToken(
   req: ConfirmTokenRequest,
   params: Record<string, string> = {},
@@ -130,22 +143,33 @@ export async function requestConfirmToken(
 ): Promise<ConfirmTokenEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
-  const r = await bff.commands.requestConfirmToken(req, params);
-  if (!r.ok) {
-    throw makeBffError({
-      code: "VALIDATION_FAILED",
-      message: `unknown high-risk action: ${req.actionId}`,
-      correlationId,
-      details: { reason: "unknown_high_risk_action" },
-    });
-  }
-  return {
-    ok: true,
-    data: r.response,
-    auditEventId: r.audit.id,
-    correlationId,
-    idempotencyKey,
+
+  const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
+    const r = await bff.commands.requestConfirmToken(req, params);
+    if (!r.ok) {
+      throw makeBffError({
+        code: "VALIDATION_FAILED",
+        message: `unknown high-risk action: ${req.actionId}`,
+        correlationId,
+        details: { reason: "unknown_high_risk_action" },
+      });
+    }
+    return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
+
+  if (realWritesEnabled()) {
+    return withLiveOrMock<ConfirmTokenEnvelope>(
+      {
+        method: "POST",
+        path: paths.commandConfirmations(),
+        body: req,
+        idempotencyKey,
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+    );
+  }
+  return mockBranch();
 }
 
 export const writes = {
