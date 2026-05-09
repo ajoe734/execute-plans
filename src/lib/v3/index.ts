@@ -1,5 +1,6 @@
-// v3 normative layer barrel export.
-// All 28 High-severity (Pack A) gaps resolved as canonical TS modules.
+// @deprecated v3 normative layer — SUPERSEDED by @/lib/v4 (2026-05-08).
+// Kept as legacy shim only; ESLint `no-restricted-imports` warns on new imports.
+// Do NOT add new symbols here. See .lovable/spec/v4/CHANGELOG.md.
 
 export * from "./status";
 export * from "./permissions";
