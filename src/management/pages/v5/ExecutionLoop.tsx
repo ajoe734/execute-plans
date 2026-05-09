@@ -8,7 +8,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { PersonaHealthMatrix } from "./PersonaHealthMatrix";
@@ -43,8 +43,8 @@ export const ExecutionLoopPage = () => {
   const runParam = params.get("run");
   const personasRef = useRef<HTMLDivElement | null>(null);
   const runsRef = useRef<HTMLDivElement | null>(null);
-  const runs = useV5Live(() => bff.v5.loops.list("execution"));
-  const personas = useV5Live(() => bff.v5.personas.health());
+  const runs = useV5Live(() => v5.loops.list("execution"));
+  const personas = useV5Live(() => v5.personas.health());
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {

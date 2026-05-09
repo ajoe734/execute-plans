@@ -13,7 +13,7 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import type {
@@ -208,9 +208,9 @@ const HIQPreview = ({ items }: { items: InterventionItem[] }) => {
 
 export const ControlRoomPage = () => {
   const t = useT();
-  const summary = useV5Live<ControlRoomSummary>(() => bff.v5.controlRoom.get());
-  const personas = useV5Live(() => bff.v5.personas.health());
-  const strategies = useV5Live(() => bff.v5.strategies.health());
+  const summary = useV5Live<ControlRoomSummary>(() => v5.controlRoom.get());
+  const personas = useV5Live(() => v5.personas.health());
+  const strategies = useV5Live(() => v5.strategies.health());
 
   // D (2026-05-09) — cross-section severity focus. Filters Sentinel + HIQ
   // previews and health snapshots simultaneously.

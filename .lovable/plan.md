@@ -1,103 +1,59 @@
-# 前端 vs 設計藍圖：完整待辦盤點 (2026-05-08)
+## 目標
 
-對照來源：v4 + Pack D + v5 SA/SD + 2026-05-07 Planner Response (34 條) + 2026-05-08 Stage 2 Audit + spec-conflict-G。
+完成上一輪盤點中的「FE 端可推進」第 2、3 項：
+1. 清掉 `src/lib/v5/types.ts` 唯一的 TODO hook 文字
+2. 推進 Batch VII migration — 把 v5 頁面（最新、最 spec-aligned）的 BFF 入口統一到 `@/lib/bff-v1`，砍掉 `@/lib/bff/v5` 的直接引用。
 
-整體覆蓋率 — **規格層 233/233 已收斂，FE 實作 ~95% 完成**。以下分類整理「真正還沒落地」的部分。
+## 範圍判定
 
----
+審計後的事實：
+- 0 個檔案還在直接 import 老路 (`@/lib/bff/client` / `@/lib/bff/runAction` / `@/lib/useLiveList`) — Batch VII soft 層已收尾。
+- 剩下的 81 個 `bff.*` call sites（management/agora/studios）並非「legacy」殘留，而是在用已正名的 mock seed accessor（`bff-v1/seed.ts`），這要等 typed v1 surface 對每個 entity 補齊才能逐一替換 — **不在本輪範圍**。
+- 真正可立即收斂的是 **v5 surface**：5 個頁面直接 `import { bff } from "@/lib/bff-v1"` 然後呼叫 `bff.v5.*`（v5 façade 來自 `src/lib/bff/v5.ts`）。把它再透過 `bff-v1` re-export 一次，所有 v5 頁面就只需經 `@/lib/bff-v1` 一個 entrypoint。
 
-## A. 必修 (Blocker — 立即影響 CI/品質)
+## 變更計畫
 
-### A1. 測試模式回歸 (新發現)
-切換 dev BFF URL 後 `.env` 設 `VITE_BFF_MODE=live`，導致 vitest 也跑 live mode，4 條 envelope 測試（`RESOURCE_NOT_FOUND` / `CONFIRM_TOKEN_REQUIRED 428` / `APPROVAL_REQUIRED` / `CommandResponse.data 502`）失敗 — 全部變成 `UNKNOWN_ERROR/500/502`。
-- 修法：在 `vitest.config.ts` 或 `src/test/setup.ts` 強制 `import.meta.env.VITE_BFF_MODE = "mock"`，或於 `client.ts` 中 `if (import.meta.env.MODE === 'test')` 視為 mock。
-- 結果：357 → 361 全綠。
+### Step 1 — TODO 收尾（10 min）
 
----
+`src/lib/v5/types.ts` L18 註解 `capabilities preserved as TODO hook` → 改為明確 disposition 註記：「Q13 — role-based gating canonical；capability-based gating 待 Permission Contract backport（A2）後接入 `EVIDENCE_CAPABILITY_MAP`，無 FE 行動」。同時 grep 一遍 src/，確認沒有其他遺漏 TODO。
 
-## B. 規格 backport 等待 (FE 已就緒，BE/Planner 工作)
+### Step 2 — v5 façade 收斂到 bff-v1（30 min）
 
-| ID | 等待 | FE 狀態 |
-|---|---|---|
-| A1 | OpenAPI YAML 加 `ActionCommandStatus` schema | `FE_READY_OPENAPI_BACKPORT_PENDING` |
-| A2 | Pack D D21 markdown 補齊 26 ErrorCode | `FE_READY_PACKD_BACKPORT_PENDING` |
-| A3 | AsyncAPI 把 `correlationId` 標 required | `FE_READY_ASYNCAPI_BACKPORT_PENDING`（FE 用 `ensureCorrelationId()` 補值） |
+A. 在 `src/lib/bff-v1/index.ts` 加入：
+```ts
+export { v5 } from "./v5";
+```
+B. 新增 `src/lib/bff-v1/v5.ts`，re-export `src/lib/bff/v5.ts` 的 `v5` namespace（不改實作，只搬入口）。
 
-不動 FE，只在 backport 落地後改 disposition 標記。
+C. 修改 5 個 v5 頁面 + LoopRunDrawer + V5Pages（共 ~6 檔），把：
+```ts
+import { bff } from "@/lib/bff-v1";
+... bff.v5.controlRoom.get();
+```
+改為：
+```ts
+import { bffV1 } from "@/lib/bff-v1";
+... bffV1.v5.controlRoom.get();
+```
+（或保留 `bff.v5.*` 直到 typed surface 對每個方法補齊；偏好 `bffV1.v5.*` 以維持 `@/lib/bff-v1` 單一入口慣例。）
 
----
+D. 更新 `.lovable/audits/batch-vii-migration.md` 加 `## VII-c — v5 surface consolidation (2026-05-09)` 段，註明 5 v5 surface 完成、剩 management/agora/studios 待 typed surface 擴張後再分批。
 
-## C. spec-conflict-G impl-pending (8 條剩餘)
+### Step 3 — 驗證
 
-`.lovable/audits/spec-gap-2026-05-06-G-summary.csv` 14 條中，前回收斂 6 條；剩 8 條「impl-fixable」：
+- `bunx vitest run` 必須維持 **366/366 green**。
+- 確認 v5 五頁在 mock 模式下渲染正常（不開 browser，靠既有 axe + 單元測試覆蓋）。
 
-| ID | 主題 | 工作 |
-|---|---|---|
-| G01 | `CreateIntentResult` 缺 async transition 欄位 | D05 已落地 → 把 `asyncTransitionPolicy` 接到 `EntityCreateDrawer` 的成功 toast |
-| G05 | overlay TTL (30 min) 與 audit append (永久) 不對稱 | 決策：audit 也走 overlay 30 min，或在 audit 顯示「mock-only」標 |
-| G06 | `ENTITY_TO_LIVE_KIND` 寫死，未綁 `SSE_CHANNELS` | D26 已落地 → 從 `src/lib/bff-v1/sse/channels.ts` 導出 mapping |
-| G07 | loops focus enum 對稱性 | 補 `LoopFocus` enum per loop（research/execution/optimization）|
-| G09 | Drawer 缺 `If-Match`/expectedVersion | 接 `optimisticLock.ts`；create 場景無 expectedVersion，只需 idempotency-key（已有），update 場景補 |
-| G12 | overlay GC 只在 add/list 觸發 | 加 `setInterval` 每 60s GC |
-| G13 | audit unshift 不算 prevHash | mock 補 `prevHash` placeholder 欄位 |
-| G14 | `withOverlay` prepend 跳過排序 | merge 後依 list sort 重排 |
+## 不做（明確 out of scope）
 
-預估 ~6-8 檔，全是純 FE。
+- 不重寫 `bff.v5.*` 實作（FROZEN，只搬位置）
+- 不動 management/agora/studios 的 ~76 sites — 等 typed v1 surface 對每個 entity 補齊（`bffV1.lists.list("strategies")` 等）後再分批，本輪不啟動。
+- 不動規格 markdown / DTO / route slug。
+- 不切換 `VITE_BFF_MODE=live`（後端 39/43 endpoint 未上線）。
 
----
+## 驗收
 
-## D. v5 Phase E1–E8 落地檢查
-
-E0 (types+mock) 已落；route 層 E1 (control-room/loops/sentinel/interventions) 已掛。需確認：
-
-- **E2 Control Room**：頁面是否真的 render `ControlRoomSummary` 7 區塊（Loop health, Sentinel feed, HIQ queue, Mandate, Capital, Recent decisions, Run cadence）？目前 `ControlRoomPage` 行為待 audit。
-- **E3/E4 Execution/Optimization Loop**：`LoopRun` timeline + stage detail drawer 是否完整？
-- **E5 Sentinel Findings**：列表/篩選/acknowledge/mitigate 動作是否 wire 到 `bff.v5.sentinel.*`？
-- **E6 HIQ**：`InterventionItem` 詳情 + `recommendedDecision` accept/modify/decline 三按鈕是否齊？
-- **E7 IA stabilization**：side nav grouping、breadcrumb i18n（已有 `routeLabels.ts` 單一來源）、empty/skeleton 一致性。
-- **E8 QA/a11y/polish**：axe smoke 已存在；需擴及 v5 五個新頁面。
-
-建議先跑 `bunx vitest run src/lib/v5` + 手動逛 5 個頁面，列出仍是 stub 的區塊。
-
----
-
-## E. Planner Response 34 條 — 補 wire-up 而非新增
-
-幾個 canonical 模組已落 `src/lib/v4/`，但**未實際接到 UI/呼叫端**：
-
-| 模組 | 落地檔 | 待 wire-up |
-|---|---|---|
-| `cooldownPriority.ts` | ✅ | `EntityCreateDrawer` confirm button 套用 cooldown > confirm-token 順序 |
-| `twoManPolicy.ts` | ✅ | `HighRiskConfirm` 流程加 distinct-user 檢查 |
-| `forceTransitionPolicy.ts` | ✅ | break-glass UI（admin only）尚無入口 |
-| `mandateBreachDefaults.ts` | ✅ | Capital pool detail 套用 cadence + auto-actions hint |
-| `reviewerQuorum.ts` | ✅ | Approvals queue 顯示 quorum 進度條 |
-| `memoPolicy.ts` | ✅ | Decision Journal / Approval memo 欄位驗證 minLength |
-| `uiBudgets.ts` | ✅ | DataTable density toggle / LineageGraph node-limit warning |
-| `RollbackSagaDrawer/Stepper` | ✅ 掛 PlatformShell | 需要 IncidentDetail 提供「View Rollback Saga」按鈕呼 `openRollbackSaga()` |
-
----
-
-## F. 雜項清理（可延後）
-
-- `src/lib/v3/` 仍存在，已被 v4 superseded — 加 deprecation header 或保留為 legacy shim，文件化即可。
-- `src/lib/v5/timeoutPolicy.ts` 已被 `v4/asyncTransitionPolicy.ts` superseded，CHANGELOG 已標 deprecated；可加 ESLint `no-restricted-imports`。
-- `.env.example` 同時保留 mock + live 範例；`.env` 目前 live；測試覆蓋見 A1。
-
----
-
-## 建議執行順序
-
-1. **A1 修測試** (5 min)
-2. **C 八條 G impl-fixable** (1-2 hr，整批)
-3. **D v5 phase 巡檢**：先列 stub，再分批落地（E2/E5/E6 較重）
-4. **E wire-up**：每個 canonical 模組找一個 UI 入口接上
-5. **B 由 BE/Planner 接手**
-
----
-
-## Out of Scope（不做）
-
-- 修改 backend OpenAPI / AsyncAPI / Pack D markdown（B 組）
-- 改 design token / route slug / business logic
-- 重寫 v3/v4 已 frozen 的 DTO
+- 0 個 v5 頁面還用 `bff.v5.` 直接路徑（全走 `bffV1.v5.`）
+- v5/types.ts 0 個 TODO 字串
+- 366/366 tests green
+- audit 更新到 batch-vii-migration.md

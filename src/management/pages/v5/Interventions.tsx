@@ -1,6 +1,6 @@
 // Pack E E6 — /management/interventions (HIQ)
 // Unified queue across approval / sentinel / incident / policy_exception.
-// Decisions go through bff.v5.interventions.decide → emits v5 event → auto refresh (Q22).
+// Decisions go through v5.interventions.decide → emits v5 event → auto refresh (Q22).
 // Approvals page coexists; HIQ links into the original source.
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "@/components/ui/use-toast";
@@ -43,7 +43,7 @@ const SOURCES: Array<"all" | InterventionItem["source"]> = [
 
 export const InterventionsPage = () => {
   const t = useT();
-  const list = useV5Live(() => bff.v5.interventions.list());
+  const list = useV5Live(() => v5.interventions.list());
   const [active, setActive] = useState<InterventionItem | null>(null);
   const [filter, setFilter] = useState("");
   const [src, setSrc] = useState<typeof SOURCES[number]>("all");
@@ -111,7 +111,7 @@ export const InterventionsPage = () => {
     setBatchRunning(true);
     let ok = 0, fail = 0;
     for (const it of selectedItems) {
-      try { await bff.v5.interventions.decide(it.id, d); ok++; }
+      try { await v5.interventions.decide(it.id, d); ok++; }
       catch { fail++; }
     }
     setBatchRunning(false);
@@ -247,7 +247,7 @@ const InterventionDrawer = ({
   const roleAllowed = item.requiredRoles.length === 0 || item.requiredRoles.includes(role);
 
   const decide = async (d: InterventionDecision) => {
-    await bff.v5.interventions.decide(item.id, d);
+    await v5.interventions.decide(item.id, d);
     toast({ title: t("v5.interventions.decided"), description: `${item.title} · ${d}` });
     onActed();
     onClose();

@@ -9,7 +9,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { toast } from "sonner";
@@ -36,7 +36,7 @@ export const OptimizationLoopPage = () => {
   const [params, setParams] = useSearchParams();
   const intent = params.get("intent");
   const focus = params.get("focus"); // "rebalance" | "approval"
-  const runs = useV5Live(() => bff.v5.loops.list("optimization"));
+  const runs = useV5Live(() => v5.loops.list("optimization"));
   const items = runs.data?.items ?? [];
   const runsRef = useRef<HTMLDivElement | null>(null);
   const approvalRef = useRef<HTMLTableSectionElement | null>(null);
