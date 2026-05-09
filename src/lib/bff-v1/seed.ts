@@ -20,7 +20,13 @@ import { mutations } from "@/lib/bff/mutations";
 import { realtime } from "@/lib/bff/realtime";
 import { usePlatform } from "@/platform/store";
 import { bffV5 } from "@/lib/bff/v5";
-import { fetchMe, invalidateMe, type MeResponse } from "@/lib/v4/session/me";
+import {
+  fetchMe,
+  invalidateMe,
+  logoutSession,
+  refreshSession,
+  type MeResponse,
+} from "@/lib/v4/session/me";
 
 const acceptLanguage = (): string => {
   const l = usePlatform.getState().locale;
@@ -46,6 +52,8 @@ export const bff = {
   /** Pack D D51/D59 (Batch III) — single source of session/user/tenant. */
   me: {
     get: (force = false): Promise<MeResponse> => fetchMe(force),
+    refresh: (): Promise<MeResponse> => refreshSession(),
+    logout: (): Promise<{ ok: true }> => logoutSession(),
     invalidate: (): void => invalidateMe(),
   },
   /** v3 §6.2 high-risk confirmation token issuance. */

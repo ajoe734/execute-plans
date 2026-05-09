@@ -17,24 +17,43 @@ import { liveStatus, shouldUseLive } from "./liveStatus";
 
 export type FallbackMode = "auto" | "strict";
 
+const truthy = (value: unknown): boolean =>
+  ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+
+function readEnv(): Record<string, string | undefined> {
+  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const nodeEnv = typeof process !== "undefined" ? process.env : {};
+  return { ...viteEnv, ...nodeEnv };
+}
+
 function detectFallbackMode(): FallbackMode {
   try {
-    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    const env = readEnv();
     return env?.VITE_BFF_FALLBACK === "strict" ? "strict" : "auto";
   } catch {
     return "auto";
   }
 }
 
-export async function withLiveOrMock<T>(
+export function realWritesEnabled(): boolean {
+  try {
+    const env = readEnv();
+    return truthy(env?.VITE_BFF_REAL_WRITES);
+  } catch {
+    return false;
+  }
+}
+
+export async function withLiveOrMock<T, TLive = T>(
   req: BffRequest,
   mockFn: () => Promise<T>,
+  adaptLive?: (data: TLive) => T,
 ): Promise<T> {
   if (!shouldUseLive()) return mockFn();
   try {
-    const data = await bffFetch<T>({ ...req, mode: "live" });
+    const data = await bffFetch<TLive>({ ...req, mode: "live" });
     liveStatus.reportSuccess();
-    return data;
+    return adaptLive ? adaptLive(data) : data as unknown as T;
   } catch (err) {
     if (err instanceof BffError && err.status < 500 && err.status !== 0) {
       // Real backend reply — caller should handle it.
@@ -53,4 +72,25 @@ export async function withLiveOrMock<T>(
     liveStatus.reportFallback(reason);
     return mockFn();
   }
+}
+
+export interface BffHealthResponse {
+  status: string;
+  service?: string;
+  version?: string;
+}
+
+export function probeLiveHealth(): Promise<BffHealthResponse> {
+  return withLiveOrMock<BffHealthResponse, unknown>(
+    { method: "GET", path: "/health" },
+    async () => ({ status: "mock", service: "execute-plans-mock-bff" }),
+    (data) => {
+      const record = data as Partial<BffHealthResponse> | undefined;
+      return {
+        status: String(record?.status ?? "ok"),
+        service: record?.service,
+        version: record?.version,
+      };
+    },
+  );
 }

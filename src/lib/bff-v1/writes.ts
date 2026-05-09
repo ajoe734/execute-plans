@@ -15,7 +15,7 @@ import type { CommandResponse, ActionCommandResponseData } from "./dto";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
-import { withLiveOrMock } from "./liveTransport";
+import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
 
 /** Map RunActionInput.kind → live action endpoint builder. */
@@ -87,7 +87,7 @@ export async function runAction(
   };
 
   const livePath = actionPath(input.kind, input.id, input.action);
-  if (livePath) {
+  if (livePath && realWritesEnabled()) {
     return withLiveOrMock<RunActionEnvelope>(
       {
         method: "POST",

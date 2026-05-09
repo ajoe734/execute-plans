@@ -5,6 +5,8 @@
 
 import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
+import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { paths } from "@/lib/bff-v1/paths";
 import {
   v5List,
   type V5ListResponse,
@@ -38,6 +40,61 @@ import {
 import type { LoopKind } from "@/lib/v5/enums";
 
 const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v), ms));
+
+type UnknownRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): UnknownRecord =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
+
+const asString = (value: unknown, fallback = ""): string => {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+};
+
+const itemsFrom = (body: unknown): unknown[] => {
+  const record = asRecord(body);
+  return Array.isArray(record.items) ? record.items : [];
+};
+
+function bffInterventionSeverity(kind: string): InterventionItem["severity"] {
+  if (kind === "risk_breach" || kind === "hiq_sentinel") return "critical";
+  if (kind === "strategy_drift" || kind === "loop_anomaly") return "warning";
+  return "watch";
+}
+
+function bffInterventionSource(kind: string): InterventionItem["source"] {
+  if (kind === "risk_breach") return "policy_exception";
+  return "sentinel";
+}
+
+function adaptBffIntervention(value: unknown, index: number): InterventionItem {
+  const item = asRecord(value);
+  const id = asString(item.intervention_id ?? item.interventionId ?? item.id, `intervention_${index}`);
+  const kind = asString(item.kind, "hiq_sentinel");
+  const targetType = asString(item.target_type ?? item.targetType, "target");
+  const targetId = asString(item.target_id ?? item.targetId, id);
+  const triggeredAt = asString(item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt, new Date().toISOString());
+  const updatedAt = asString(item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt, triggeredAt);
+  return {
+    id,
+    source: bffInterventionSource(kind),
+    severity: bffInterventionSeverity(kind),
+    title: `${kind.replaceAll("_", " ")} · ${targetType}:${targetId}`,
+    summary: asString(item.description ?? item.summary ?? item.reason),
+    createdAt: triggeredAt,
+    updatedAt,
+    requiredRoles: ["risk_officer", "system_operator"],
+    linkedFindingId: id,
+    recommendedDecision: "escalate",
+    allowedDecisions: ["escalate", "defer"],
+    evidenceRefs: [{ kind: "approval", id }],
+    modifyAllowed: true,
+  };
+}
+
+function adaptBffInterventionsResponse(body: unknown): V5ListResponse<InterventionItem> {
+  return v5List(itemsFrom(body).map(adaptBffIntervention));
+}
 
 function session(): V5SessionContext {
   const p = usePlatform.getState();
@@ -204,7 +261,12 @@ export const bffV5 = {
 
   // ---- Interventions (HIQ) ----
   interventions: {
-    list: (): Promise<V5ListResponse<InterventionItem>> => delay(v5List(allInterventions())),
+    list: (): Promise<V5ListResponse<InterventionItem>> =>
+      withLiveOrMock<V5ListResponse<InterventionItem>, unknown>(
+        { method: "GET", path: paths.v5Interventions(), query: { status: "pending" } },
+        () => delay(v5List(allInterventions())),
+        adaptBffInterventionsResponse,
+      ),
     get: (id: string): Promise<InterventionItem | undefined> => delay(allInterventions().find((i) => i.id === id)),
     decide: (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
       emitV5Event({
@@ -228,7 +290,18 @@ export const bffV5 = {
       });
     },
     /** Q10 — only mutates v5ActionOverlay. Existing seed remains untouched. */
-    execute: (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
+    execute: async (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
+      if (realWritesEnabled()) {
+        await withLiveOrMock<unknown>({
+          method: "POST",
+          path: `${paths.v5Intervention(action.id)}/remediate`,
+          body: {
+            reason: action.label,
+            remediation_action: action.kind,
+          },
+          idempotencyKey: `execute-plans-${action.id}-${Date.now()}`,
+        }, async () => ({ ok: true }));
+      }
       let overlayUpdated = false;
       if (action.targetKind === "persona" && action.targetId) {
         if (action.kind === "switch_persona_to_shadow") {
