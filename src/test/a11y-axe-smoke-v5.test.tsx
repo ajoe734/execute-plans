@@ -11,16 +11,22 @@ import "@/i18n";
 import { PersonaHealthMatrix } from "@/management/pages/v5/PersonaHealthMatrix";
 import type { PersonaExecutionHealth } from "@/lib/v5";
 
+const inputs = {
+  performance: 80, risk: 70, executionQuality: 85,
+  decisionQuality: 78, policyCompliance: 90, sentinelPenalty: 5,
+};
+
 const personas: PersonaExecutionHealth[] = [
   {
     personaId: "p_alpha", personaName: "Alpha", mode: "live",
     status: "healthy", score: 92, routedStrategies: 3, openFindings: 0,
-    formulaVersion: "v0-mock",
+    formulaVersion: "v0-mock", inputs, updatedAt: new Date(0).toISOString(),
   },
   {
     personaId: "p_beta", personaName: "Beta", mode: "shadow",
     status: "degraded", score: 58, routedStrategies: 1, openFindings: 2,
-    formulaVersion: "v0-mock", suspendedReason: "elevated drawdown",
+    formulaVersion: "v0-mock", inputs, updatedAt: new Date(0).toISOString(),
+    suspendedReason: "elevated drawdown",
   },
 ];
 
