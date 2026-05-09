@@ -226,6 +226,7 @@ export default {
       mode: "Mode",
       status: "Status",
       score: "Score",
+      trend: "Trend (12pt mock)",
       routed: "Routed",
       findings: "Findings",
       formula: "Formula",
