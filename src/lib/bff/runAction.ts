@@ -15,6 +15,7 @@
 import { mutations } from "./mutations";
 import type { RunActionInput, MutationResult } from "./mutations";
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
+import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 import { withLiveOrMock, realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import { paths } from "@/lib/bff-v1/paths";
 import {
@@ -140,6 +141,23 @@ export async function runAction(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
+      (rawData) => {
+        const d = rawData as {
+          data?: { commandId?: string; command_id?: string; receipt_id?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" };
+        return {
+          ok: true,
+          data: { actionId: commandId, status: "accepted" as const },
+          auditEventId: commandId,
+          correlationId,
+          idempotencyKey: iKey,
+          legacy: mockLegacy,
+        };
+      },
     );
   }
   return mockBranch();
@@ -203,9 +221,26 @@ export async function requestConfirmToken(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
-      (data) => {
-        const d = data as ConfirmTokenResponse;
-        return { ok: true, data: d, correlationId, idempotencyKey };
+      (rawData) => {
+        const d = rawData as {
+          data?: { tokenId?: string; commandId?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const action = getHighRiskAction(req.actionId);
+        const ttl = action?.tokenTtlSeconds ?? 300;
+        const ctResp: ConfirmTokenResponse = {
+          confirmToken: tokenId,
+          expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+          ttlSeconds: ttl,
+          requiredPhrase: action
+            ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
+            : "",
+          requiresMemo: action?.memoRequired ?? false,
+          auditEventPreview: `${req.actionId}.requested`,
+        };
+        return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
       },
     );
   }
@@ -243,7 +278,19 @@ export async function readConfirmToken(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
-      (data) => ({ ok: true, data: data as ConfirmTokenResponse, correlationId, idempotencyKey }),
+      (rawData) => {
+        const d = rawData as { data?: { tokenId?: string; id?: string } };
+        const resolvedTokenId = d.data?.tokenId ?? d.data?.id ?? tokenId;
+        const ctResp: ConfirmTokenResponse = {
+          confirmToken: resolvedTokenId,
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+          ttlSeconds: 300,
+          requiredPhrase: "",
+          requiresMemo: false,
+          auditEventPreview: "confirm_token.read",
+        };
+        return { ok: true, data: ctResp, correlationId, idempotencyKey };
+      },
     );
   }
   return mockBranch();
