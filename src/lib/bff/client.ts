@@ -121,7 +121,10 @@ const capitalPools = {
 
 const rankingFormulas = {
   list:  bffV1Lists.rankingFormulas as () => Promise<ListEnvelope<RankingFormula>>,
-  get:   liveOrMockDetail<RankingFormula>(paths.rankingFormulas, (id) => seedBff.rankingFormulas.get(id)),
+  get:   liveOrMockDetail<RankingFormula>(
+    (id) => `${paths.rankingFormulas()}/${encodeURIComponent(id)}`,
+    (id) => seedBff.rankingFormulas.get(id),
+  ),
 };
 
 const rebalances = {

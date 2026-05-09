@@ -173,6 +173,33 @@ describe("managementClient — real (strict) mode", () => {
   });
 });
 
+describe("managementClient — rankingFormulas live detail URL", () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    liveStatus._reset();
+  });
+
+  it("rankingFormulas.get calls /bff/ranking-formulas/rank_1 in live mode", async () => {
+    const mockFormula = { id: "rank_1", name: "Test Formula" };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(mockFormula), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    globalThis.fetch = fetchSpy;
+    await managementClient.rankingFormulas.get("rank_1");
+    expect(fetchSpy).toHaveBeenCalled();
+    const calledUrl = String(fetchSpy.mock.calls[0][0]);
+    expect(calledUrl).toContain("/bff/ranking-formulas/rank_1");
+  });
+});
+
 describe("managementClient — pure mock mode never hits fetch", () => {
   const realFetch = globalThis.fetch;
   beforeEach(() => {
