@@ -1,6 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { runAction, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
 import { BffError } from "@/lib/bff-v1";
+
+function setWriteEnv(realWrites: boolean, token: string | null = null) {
+  process.env.VITE_BFF_REAL_WRITES = realWrites ? "true" : "false";
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  if (token) window.sessionStorage.setItem("pantheon.bff.bearerToken", token);
+}
+
+afterEach(() => {
+  setWriteEnv(false, null);
+  vi.restoreAllMocks();
+});
 
 describe("VI-2 writes seam", () => {
   it("runAction returns CommandResponse envelope with correlationId + idempotencyKey", async () => {
@@ -69,5 +81,32 @@ describe("VI-2 writes seam", () => {
         platformEnvironment: "production",
       }),
     ).rejects.toBeInstanceOf(BffError);
+  });
+});
+
+describe("VI-2 auth gate", () => {
+  it("runAction stays in mock when VITE_BFF_REAL_WRITES=true but no bearer token", async () => {
+    setWriteEnv(true, null);
+    const fetcher = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    const env = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" });
+    expect(env.ok).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("requestConfirmToken stays in mock when VITE_BFF_REAL_WRITES=true but no bearer token", async () => {
+    setWriteEnv(true, null);
+    const fetcher = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    const env = await requestConfirmToken({
+      actionId: "strategy.deploy_live",
+      entityType: "strategy",
+      entityId: "stg_001",
+      payloadHash: "h",
+      tradingEnvironment: "live",
+      platformEnvironment: "production",
+    });
+    expect(env.ok).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

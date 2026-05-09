@@ -3,11 +3,14 @@
 // All writes are gated by VITE_BFF_REAL_WRITES=true AND a bearer token present.
 // Falls back to mock mutations when either gate is not satisfied.
 //
-// Canonical action path: /bff/actions/{entityType}/{entityId}/{actionId}
-// Confirm token path:    POST /bff/command-confirmations
-// Approval decision:     POST /bff/approvals/{id}/decide
-// Alert acknowledge:     POST /bff/alerts/{id}/acknowledge
-// Intervention decide:   POST /bff/v5/interventions/{id}/decide
+// Canonical action path:        /bff/actions/{entityType}/{entityId}/{actionId}
+// Confirm token create:         POST   /bff/confirm-tokens
+// Confirm token read:           GET    /bff/confirm-tokens/{tokenId}
+// Confirm token redeem:         POST   /bff/confirm-tokens/{tokenId}/redeem
+// Confirm token delete:         DELETE /bff/confirm-tokens/{tokenId}
+// Approval decision:            POST   /bff/approvals/{id}/decide
+// Alert acknowledge:            POST   /bff/alerts/{id}/acknowledge
+// Intervention decide:          POST   /bff/v5/interventions/{id}/decide
 
 import { mutations } from "./mutations";
 import type { RunActionInput, MutationResult } from "./mutations";
@@ -165,8 +168,8 @@ export interface ConfirmTokenOptions {
 }
 
 /**
- * v3 §6.2 — Request a confirm token.
- * Live path: POST /bff/command-confirmations.
+ * v3 §6.2 — Create a confirm token.
+ * Live path: POST /bff/confirm-tokens.
  * Falls back to mock issuance when write gate is not open.
  */
 export async function requestConfirmToken(
@@ -194,7 +197,7 @@ export async function requestConfirmToken(
     return withLiveOrMock<ConfirmTokenEnvelope>(
       {
         method: "POST",
-        path: paths.commandConfirmations(),
+        path: paths.confirmTokens(),
         body: req,
         idempotencyKey,
         headers: { "X-Correlation-Id": correlationId },
@@ -204,6 +207,120 @@ export async function requestConfirmToken(
         const d = data as ConfirmTokenResponse;
         return { ok: true, data: d, correlationId, idempotencyKey };
       },
+    );
+  }
+  return mockBranch();
+}
+
+// ---------- readConfirmToken ----------
+
+export interface ConfirmTokenReadEnvelope extends CommandResponse<ConfirmTokenResponse> {}
+
+/**
+ * v3 §6.2 — Read a confirm token by id.
+ * Live path: GET /bff/confirm-tokens/{tokenId}.
+ * Returns mock data when write gate is not open.
+ */
+export async function readConfirmToken(
+  tokenId: string,
+  opts: ConfirmTokenOptions = {},
+): Promise<ConfirmTokenReadEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+
+  const mockBranch = async (): Promise<ConfirmTokenReadEnvelope> => ({
+    ok: true,
+    data: { confirmToken: tokenId, ttlSeconds: 0, requiredPhrase: "" } as ConfirmTokenResponse,
+    correlationId,
+    idempotencyKey,
+  });
+
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenReadEnvelope>(
+      {
+        method: "GET",
+        path: paths.confirmToken(tokenId),
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+      (data) => ({ ok: true, data: data as ConfirmTokenResponse, correlationId, idempotencyKey }),
+    );
+  }
+  return mockBranch();
+}
+
+// ---------- redeemConfirmToken ----------
+
+export interface ConfirmTokenRedeemEnvelope extends CommandResponse<{ tokenId: string; redeemed: true }> {}
+
+/**
+ * v3 §6.2 — Redeem a confirm token.
+ * Live path: POST /bff/confirm-tokens/{tokenId}/redeem.
+ * Falls back to mock when write gate is not open.
+ */
+export async function redeemConfirmToken(
+  tokenId: string,
+  opts: ConfirmTokenOptions = {},
+): Promise<ConfirmTokenRedeemEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+
+  const mockBranch = async (): Promise<ConfirmTokenRedeemEnvelope> => ({
+    ok: true,
+    data: { tokenId, redeemed: true },
+    correlationId,
+    idempotencyKey,
+  });
+
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenRedeemEnvelope>(
+      {
+        method: "POST",
+        path: paths.confirmTokenRedeem(tokenId),
+        body: {},
+        idempotencyKey,
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+      () => ({ ok: true, data: { tokenId, redeemed: true }, correlationId, idempotencyKey }),
+    );
+  }
+  return mockBranch();
+}
+
+// ---------- deleteConfirmToken ----------
+
+export interface ConfirmTokenDeleteEnvelope extends CommandResponse<{ tokenId: string; deleted: true }> {}
+
+/**
+ * v3 §6.2 — Delete/revoke a confirm token.
+ * Live path: DELETE /bff/confirm-tokens/{tokenId}.
+ * Falls back to mock when write gate is not open.
+ */
+export async function deleteConfirmToken(
+  tokenId: string,
+  opts: ConfirmTokenOptions = {},
+): Promise<ConfirmTokenDeleteEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+
+  const mockBranch = async (): Promise<ConfirmTokenDeleteEnvelope> => ({
+    ok: true,
+    data: { tokenId, deleted: true },
+    correlationId,
+    idempotencyKey,
+  });
+
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenDeleteEnvelope>(
+      {
+        method: "DELETE",
+        path: paths.confirmToken(tokenId),
+        idempotencyKey,
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+      () => ({ ok: true, data: { tokenId, deleted: true }, correlationId, idempotencyKey }),
     );
   }
   return mockBranch();
@@ -356,10 +473,82 @@ export async function decideIntervention(
   return mockBranch();
 }
 
+// ---------- readConfirmToken ----------
+
+export interface ConfirmTokenReadEnvelope extends CommandResponse<ConfirmTokenResponse> {}
+
+export async function readConfirmToken(tokenId: string, opts: ConfirmTokenOptions = {}): Promise<ConfirmTokenReadEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const mockBranch = async (): Promise<ConfirmTokenReadEnvelope> => ({
+    ok: true,
+    data: { confirmToken: tokenId, ttlSeconds: 0, requiredPhrase: "" } as ConfirmTokenResponse,
+    correlationId,
+    idempotencyKey,
+  });
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenReadEnvelope>(
+      { method: "GET", path: paths.confirmToken(tokenId), headers: { "X-Correlation-Id": correlationId } },
+      mockBranch,
+      (data) => ({ ok: true, data: data as ConfirmTokenResponse, correlationId, idempotencyKey }),
+    );
+  }
+  return mockBranch();
+}
+
+// ---------- redeemConfirmToken ----------
+
+export interface ConfirmTokenRedeemEnvelope extends CommandResponse<{ tokenId: string; redeemed: true }> {}
+
+export async function redeemConfirmToken(tokenId: string, opts: ConfirmTokenOptions = {}): Promise<ConfirmTokenRedeemEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const mockBranch = async (): Promise<ConfirmTokenRedeemEnvelope> => ({
+    ok: true,
+    data: { tokenId, redeemed: true },
+    correlationId,
+    idempotencyKey,
+  });
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenRedeemEnvelope>(
+      { method: "POST", path: paths.confirmTokenRedeem(tokenId), body: {}, idempotencyKey, headers: { "X-Correlation-Id": correlationId } },
+      mockBranch,
+      () => ({ ok: true, data: { tokenId, redeemed: true }, correlationId, idempotencyKey }),
+    );
+  }
+  return mockBranch();
+}
+
+// ---------- deleteConfirmToken ----------
+
+export interface ConfirmTokenDeleteEnvelope extends CommandResponse<{ tokenId: string; deleted: true }> {}
+
+export async function deleteConfirmToken(tokenId: string, opts: ConfirmTokenOptions = {}): Promise<ConfirmTokenDeleteEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const mockBranch = async (): Promise<ConfirmTokenDeleteEnvelope> => ({
+    ok: true,
+    data: { tokenId, deleted: true },
+    correlationId,
+    idempotencyKey,
+  });
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenDeleteEnvelope>(
+      { method: "DELETE", path: paths.confirmToken(tokenId), idempotencyKey, headers: { "X-Correlation-Id": correlationId } },
+      mockBranch,
+      () => ({ ok: true, data: { tokenId, deleted: true }, correlationId, idempotencyKey }),
+    );
+  }
+  return mockBranch();
+}
+
 export const bffWrites = {
   runAction,
   tryRunAction,
   requestConfirmToken,
+  readConfirmToken,
+  redeemConfirmToken,
+  deleteConfirmToken,
   decideApproval,
   acknowledgeAlert,
   decideIntervention,

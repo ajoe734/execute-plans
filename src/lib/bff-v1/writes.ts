@@ -12,11 +12,23 @@
 import { bff } from "./seed";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
 import type { CommandResponse, ActionCommandResponseData } from "./dto";
-import { idempotencyKey as mintIdemKey } from "./headers";
+import { idempotencyKey as mintIdemKey, readBrowserAuthStorage } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
 import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
+
+function authPresent(): boolean {
+  try {
+    return readBrowserAuthStorage().token !== null;
+  } catch {
+    return false;
+  }
+}
+
+function liveWriteGated(): boolean {
+  return realWritesEnabled() && authPresent();
+}
 
 /** Map RunActionInput.kind → canonical live action endpoint. */
 const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
@@ -98,7 +110,7 @@ export async function runAction(
     };
   };
 
-  if (realWritesEnabled()) {
+  if (liveWriteGated()) {
     const livePath = actionPath(input.kind, input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
@@ -134,8 +146,8 @@ import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRis
 
 export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
 
-/** v3 §6.2 — request a confirm token via the v1 seam (envelope + correlationId).
- *  Live path: POST /bff/command-confirmations when real writes are enabled. */
+/** v3 §6.2 — create a confirm token via the v1 seam (envelope + correlationId).
+ *  Live path: POST /bff/confirm-tokens when liveWriteGated() is true. */
 export async function requestConfirmToken(
   req: ConfirmTokenRequest,
   params: Record<string, string> = {},
@@ -157,11 +169,11 @@ export async function requestConfirmToken(
     return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (realWritesEnabled()) {
+  if (liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenEnvelope>(
       {
         method: "POST",
-        path: paths.commandConfirmations(),
+        path: paths.confirmTokens(),
         body: req,
         idempotencyKey,
         headers: { "X-Correlation-Id": correlationId },

@@ -157,6 +157,44 @@ describe("decideIntervention mock branch", () => {
   });
 });
 
+// ---------- readConfirmToken (mock branch) ----------
+
+describe("readConfirmToken mock branch", () => {
+  it("returns token envelope for a given token id", async () => {
+    setEnv(false);
+    const { readConfirmToken } = await import("@/lib/bff/runAction");
+    const env = await readConfirmToken("ctok_test_123");
+    expect(env.ok).toBe(true);
+    expect(env.correlationId).toMatch(/^cid_/);
+  });
+});
+
+// ---------- redeemConfirmToken (mock branch) ----------
+
+describe("redeemConfirmToken mock branch", () => {
+  it("returns redeem envelope", async () => {
+    setEnv(false);
+    const { redeemConfirmToken } = await import("@/lib/bff/runAction");
+    const env = await redeemConfirmToken("ctok_test_456");
+    expect(env.ok).toBe(true);
+    expect(env.data.tokenId).toBe("ctok_test_456");
+    expect(env.data.redeemed).toBe(true);
+  });
+});
+
+// ---------- deleteConfirmToken (mock branch) ----------
+
+describe("deleteConfirmToken mock branch", () => {
+  it("returns delete envelope", async () => {
+    setEnv(false);
+    const { deleteConfirmToken } = await import("@/lib/bff/runAction");
+    const env = await deleteConfirmToken("ctok_test_789");
+    expect(env.ok).toBe(true);
+    expect(env.data.tokenId).toBe("ctok_test_789");
+    expect(env.data.deleted).toBe(true);
+  });
+});
+
 // ---------- smoke mode safety ----------
 
 describe("no live-capital side effects in smoke mode", () => {

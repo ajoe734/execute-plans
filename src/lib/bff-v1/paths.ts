@@ -100,9 +100,15 @@ export const paths = {
   // ---- Research ----
   researchExperiments: () => `${BASE}/research-experiments`,
 
-  // ---- Command confirmations (v3 §6.2) ----
+  // ---- Command confirmations (v3 §6.2) — submission endpoint ----
+  // /bff/command-confirmations requires confirm_token + command_id in body (submission of an already-issued token).
   commandConfirmations: () => `${BASE}/command-confirmations`,
   commandConfirmation: (token: string) => `${BASE}/command-confirmations/${enc(token)}`,
+
+  // ---- Confirm-token lifecycle (v3 §6.2 create/read/redeem/delete) ----
+  confirmTokens: () => `${BASE}/confirm-tokens`,
+  confirmToken: (tokenId: string) => `${BASE}/confirm-tokens/${enc(tokenId)}`,
+  confirmTokenRedeem: (tokenId: string) => `${BASE}/confirm-tokens/${enc(tokenId)}/redeem`,
 
   // ---- SSE ----
   sse: () => `${BASE}/events/stream`,
