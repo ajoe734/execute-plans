@@ -220,6 +220,7 @@ export default {
       mode: "模式",
       status: "狀態",
       score: "分數",
+      trend: "趨勢（12 點 mock）",
       routed: "路由數",
       findings: "監測項",
       formula: "公式",
