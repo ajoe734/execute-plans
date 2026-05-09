@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { ThumbsUp, ThumbsDown, Flag, MessageSquare, Send, ArrowRight } from "lucide-react";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bff } from "@/lib/bff-v1";
-import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
@@ -41,19 +40,9 @@ export const SignalDetail = () => {
   const [decision, setDecision] = useState<"agree" | "disagree" | "flag" | null>(null);
 
   useEffect(() => {
-    bff.strategies.list().then((ss) => {
-      const idx = Math.max(0, parseInt(id.replace(/\D/g, "")) || 0);
-      const s = ss[idx % Math.max(1, ss.length)];
-      if (!s) { setSignal(null); return; }
-      setSignal({
-        id, strategyId: s.id, strategyName: s.name, alpha: s.alpha,
-        side: idx % 2 === 0 ? "long" : "short", symbol: ["TSM", "NVDA", "AAPL", "JPM", "BTCUSD"][idx % 5],
-        size: 0.04 + idx * 0.013, conviction: 0.55 + (idx % 4) * 0.07,
-        rationale: "Composite z-score crossed +1.8 with positive earnings drift; gross to risk budget cap. Driver decomposition shows momentum (62%), earnings (28%), flow (10%).",
-        generatedAt: new Date(Date.now() - idx * 1800_000).toISOString(),
-        risk: s.risk,
-      });
-    });
+    bff.agora.signals.get(id)
+      .then((next) => setSignal(next ?? null))
+      .catch(() => setSignal(null));
   }, [id]);
 
   if (!signal) {

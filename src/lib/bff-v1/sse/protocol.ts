@@ -28,6 +28,7 @@ export function buildSseHeaders(init: SseConnectInit): Record<string, string> {
 export function buildSseUrl(base: string, init: SseConnectInit): string {
   const url = new URL(base, "http://placeholder");
   if (init.channels?.length) url.searchParams.set("channels", init.channels.join(","));
+  if (init.lastEventId) url.searchParams.set("lastEventId", init.lastEventId);
   // Strip placeholder origin if input was relative.
   return base.startsWith("http") ? url.toString() : `${url.pathname}${url.search}`;
 }

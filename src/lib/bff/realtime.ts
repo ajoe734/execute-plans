@@ -4,6 +4,7 @@
 // Pack D D26 (Batch III): emitEnvelope wraps payload in SseEventEnvelope (schemaVersion=1).
 import { SSE_HEARTBEAT_INTERVAL_MS } from "@/lib/v4/sseProtocol";
 import { makeSseEnvelope, type SseChannelKind, type SseEventEnvelope } from "@/lib/v4/sseEnvelope";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 type Handler = (payload: unknown) => void;
 
 export type RealtimeStatus = "live" | "stale" | "offline";
@@ -46,11 +47,12 @@ class RealtimeBus {
   emit(topic: string, payload: unknown) {
     if (!this.connected) return; // simulate dropped events while offline
     this.lastEventAt = Date.now();
-    const id = `${this.lastEventAt.toString(36)}-${(++this.eventSeq).toString(36)}`.toUpperCase();
+    const id = this.payloadEventId(payload) ?? `${this.lastEventAt.toString(36)}-${(++this.eventSeq).toString(36)}`.toUpperCase();
     this.lastEventId = id;
     this.recent.unshift({ topic, ts: new Date().toISOString(), payload, id });
     if (this.recent.length > 40) this.recent.pop();
     this.listeners.get(topic)?.forEach((h) => h(payload));
+    if (topic.startsWith("sse:")) this.bridgeSseEvent(payload);
     this.notifyStatus();
   }
 
@@ -101,6 +103,7 @@ class RealtimeBus {
 
   // ---- mock connection control (QA Studio) ----
   setConnected(v: boolean) {
+    if (liveStatus.get().mode === "live") return;
     if (this.connected === v) return;
     this.connected = v;
     if (v) {
@@ -125,6 +128,50 @@ class RealtimeBus {
   }
   isConnected() {
     return this.connected;
+  }
+
+  // ---- live EventSource connection control ----
+  markLiveOpen() {
+    if (liveStatus.get().mode !== "live") return;
+    this.connected = true;
+    this.lastEventAt = Date.now();
+    this.notifyStatus();
+  }
+
+  markLiveError() {
+    if (liveStatus.get().mode !== "live") return;
+    this.connected = false;
+    this.notifyStatus();
+  }
+
+  private payloadEventId(payload: unknown): string | undefined {
+    const record = payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as { id?: unknown }
+      : {};
+    const id = String(record.id ?? "").trim();
+    return id || undefined;
+  }
+
+  private bridgeSseEvent(payload: unknown) {
+    const record = payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as { channel?: unknown; type?: unknown; id?: unknown; occurredAt?: unknown; payload?: unknown; correlationId?: unknown }
+      : {};
+    const channel = String(record.channel ?? "").trim();
+    if (!channel) return;
+    const type = String(record.type ?? `${channel}.event`);
+    const dataPayload = { kind: channel, channel, type, event: payload };
+    this.listeners.get("data")?.forEach((h) => h(dataPayload));
+    if (["loop", "sentinel", "intervention"].includes(channel)) {
+      this.listeners.get("v5")?.forEach((h) => h({
+        id: String(record.id ?? this.lastEventId),
+        schemaVersion: 1,
+        channel: `v5.${channel}.live`,
+        type,
+        occurredAt: String(record.occurredAt ?? new Date().toISOString()),
+        correlationId: typeof record.correlationId === "string" ? record.correlationId : undefined,
+        payload: record.payload ?? payload,
+      }));
+    }
   }
 }
 

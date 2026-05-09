@@ -7,6 +7,7 @@ import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
 import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
 import { paths } from "@/lib/bff-v1/paths";
+import { strictDataFrom, strictItemsFrom, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import {
   v5List,
   type V5ListResponse,
@@ -43,6 +44,13 @@ const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v)
 
 type UnknownRecord = Record<string, unknown>;
 
+const livePaths = {
+  v5ControlRoom: () => "/bff/v5/control-room",
+  v5StrategyHealth: () => "/bff/v5/execution/strategy-health",
+  v5SentinelFinding: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}`,
+  v5SentinelStatus: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}/status`,
+};
+
 const asRecord = (value: unknown): UnknownRecord =>
   value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
 
@@ -51,10 +59,22 @@ const asString = (value: unknown, fallback = ""): string => {
   return text || fallback;
 };
 
-const itemsFrom = (body: unknown): unknown[] => {
-  const record = asRecord(body);
-  return Array.isArray(record.items) ? record.items : [];
+const asNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 };
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => asString(item)).filter(Boolean);
+};
+
+const itemsFrom = (body: unknown): unknown[] => {
+  return strictItemsFrom(body);
+};
+
+const isoFrom = (value: unknown, fallback = new Date().toISOString()): string =>
+  asString(value, fallback);
 
 function bffInterventionSeverity(kind: string): InterventionItem["severity"] {
   if (kind === "risk_breach" || kind === "hiq_sentinel") return "critical";
@@ -94,6 +114,232 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
 
 function adaptBffInterventionsResponse(body: unknown): V5ListResponse<InterventionItem> {
   return v5List(itemsFrom(body).map(adaptBffIntervention));
+}
+
+function adaptLoopStatus(value: unknown): LoopRun["status"] {
+  const status = asString(value).toLowerCase();
+  if (["running", "active", "open", "in_progress"].includes(status)) return "running";
+  if (["blocked", "paused", "mitigating", "awaiting_intervention"].includes(status)) return "blocked";
+  if (["succeeded", "success", "completed", "resolved", "closed"].includes(status)) return "succeeded";
+  if (["failed", "error"].includes(status)) return "failed";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  return "idle";
+}
+
+function adaptStageStatus(value: unknown, fallback: LoopRun["stages"][number]["status"] = "pending"): LoopRun["stages"][number]["status"] {
+  const status = asString(value).toLowerCase();
+  if (["running", "active", "in_progress"].includes(status)) return "running";
+  if (["blocked", "paused", "awaiting_intervention"].includes(status)) return "blocked";
+  if (["succeeded", "success", "completed", "resolved", "closed"].includes(status)) return "succeeded";
+  if (["failed", "error"].includes(status)) return "failed";
+  if (["skipped", "cancelled", "canceled"].includes(status)) return "skipped";
+  return fallback;
+}
+
+function adaptLoopKind(value: unknown): LoopKind {
+  const kind = asString(value).toLowerCase();
+  if (kind.includes("research")) return "research";
+  if (kind.includes("optim") || kind.includes("rebalance")) return "optimization";
+  return "execution";
+}
+
+function adaptBffLoopRun(value: unknown, index: number): LoopRun {
+  const item = asRecord(value);
+  const activePeriod = asRecord(item.activePeriod ?? item.active_period);
+  const id = asString(item.loop_run_id ?? item.loopRunId ?? item.id, `loop-run-${index + 1}`);
+  const status = adaptLoopStatus(item.status ?? item.runStatus ?? item.run_status);
+  const startedAt = isoFrom(item.startedAt ?? item.started_at ?? activePeriod.start ?? item.created_at ?? item.createdAt);
+  const updatedAt = isoFrom(item.updatedAt ?? item.updated_at ?? item.resolved_at ?? item.resolvedAt ?? activePeriod.end ?? startedAt);
+  const liveStages = Array.isArray(item.stages) ? item.stages : [];
+  const stages = liveStages.length > 0
+    ? liveStages.map((stage, stageIndex) => {
+      const s = asRecord(stage);
+      return {
+        id: asString(s.id ?? s.stage_id ?? s.stageId, `${id}_stage_${stageIndex + 1}`),
+        name: asString(s.name ?? s.label ?? s.kind, `Stage ${stageIndex + 1}`),
+        status: adaptStageStatus(s.status),
+        startedAt: asString(s.startedAt ?? s.started_at),
+        completedAt: asString(s.completedAt ?? s.completed_at),
+        timeoutPolicySource: "backend" as const,
+        timeoutMs: Number.isFinite(Number(s.timeoutMs ?? s.timeout_ms)) ? Number(s.timeoutMs ?? s.timeout_ms) : undefined,
+        warnAfterMs: Number.isFinite(Number(s.warnAfterMs ?? s.warn_after_ms)) ? Number(s.warnAfterMs ?? s.warn_after_ms) : undefined,
+      };
+    })
+    : [{
+      id: `${id}_status`,
+      name: asString(item.title ?? item.name ?? item.status, "BFF status"),
+      status: adaptStageStatus(status, status === "idle" ? "pending" : "running"),
+      startedAt,
+      completedAt: status === "succeeded" || status === "failed" || status === "cancelled" ? updatedAt : undefined,
+      timeoutPolicySource: "backend" as const,
+    }];
+  const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
+  return {
+    id,
+    loopKind: adaptLoopKind(item.loopKind ?? item.loop_kind ?? item.kind ?? item.title),
+    status,
+    startedAt,
+    updatedAt,
+    completedAt: asString(item.completedAt ?? item.completed_at ?? activePeriod.end),
+    triggeredBy: asString(item.triggeredBy ?? item.triggered_by ?? item.runtime_id ?? item.runtimeId, "bff"),
+    subjectKind: asString(item.subjectKind ?? item.subject_kind) as LoopRun["subjectKind"],
+    subjectId: asString(item.subjectId ?? item.subject_id ?? item.binding_id ?? item.bindingId),
+    subjectName: asString(item.subjectName ?? item.subject_name ?? item.title ?? item.name, id),
+    stages,
+    currentStageId: asString(item.currentStageId ?? item.current_stage_id) || stages.find((stage) => stage.status === "running" || stage.status === "blocked")?.id,
+    nextAction: status === "blocked"
+      ? { kind: "awaiting_human_decision", label: "Resolve BFF loop blocker" }
+      : status === "running"
+        ? { kind: "automatic", label: "BFF loop running" }
+        : { kind: "none" },
+    evidence: incidentId ? [{ kind: "incident", id: incidentId }] : [],
+  };
+}
+
+function adaptHealthStatus(value: unknown): PersonaExecutionHealth["status"] {
+  const status = asString(value).toLowerCase();
+  if (["healthy", "ok", "active"].includes(status)) return "healthy";
+  if (["watch", "warning"].includes(status)) return "watch";
+  if (["critical", "failed"].includes(status)) return "critical";
+  return "degraded";
+}
+
+function scoreForStatus(status: PersonaExecutionHealth["status"]): number {
+  if (status === "healthy") return 90;
+  if (status === "watch") return 72;
+  if (status === "critical") return 20;
+  return 50;
+}
+
+function adaptBffPersonaHealth(value: unknown, index: number): PersonaExecutionHealth {
+  const item = asRecord(value);
+  const status = adaptHealthStatus(item.status ?? item.health);
+  const score = asNumber(item.score, scoreForStatus(status));
+  return {
+    personaId: asString(item.personaId ?? item.persona_id ?? item.id, `persona-${index + 1}`),
+    personaName: asString(item.personaName ?? item.persona_name ?? item.name, `Persona ${index + 1}`),
+    mode: ["live", "paper", "shadow", "suspended"].includes(asString(item.mode)) ? asString(item.mode) as PersonaExecutionHealth["mode"] : "shadow",
+    status,
+    score,
+    formulaVersion: "v0-mock",
+    inputs: {
+      performance: score,
+      risk: score,
+      executionQuality: score,
+      decisionQuality: score,
+      policyCompliance: score,
+      sentinelPenalty: Math.max(0, 100 - score),
+    },
+    suspendedReason: asString(item.suspendedReason ?? item.suspended_reason),
+    routedStrategies: asNumber(item.routedStrategies ?? item.routed_strategies, 0),
+    openFindings: asNumber(item.openFindings ?? item.open_findings, 0),
+    updatedAt: isoFrom(item.updatedAt ?? item.updated_at),
+  };
+}
+
+function adaptBffStrategyHealth(value: unknown, index: number): StrategyExecutionHealth {
+  const item = asRecord(value);
+  const status = adaptHealthStatus(item.status ?? item.health);
+  const score = asNumber(item.score, scoreForStatus(status));
+  return {
+    strategyId: asString(item.strategyId ?? item.strategy_id ?? item.id, `strategy-${index + 1}`),
+    strategyName: asString(item.strategyName ?? item.strategy_name ?? item.name, `Strategy ${index + 1}`),
+    status,
+    score,
+    formulaVersion: "v0-mock",
+    inputs: {
+      performance: score,
+      risk: score,
+      executionQuality: score,
+      lifecycleConsistency: score,
+      sentinelIncidentPenalty: Math.max(0, 100 - score),
+    },
+    pnl30d: asNumber(item.pnl30d ?? item.pnl_30d, 0),
+    drawdown: asNumber(item.drawdown, 0),
+    openFindings: asNumber(item.openFindings ?? item.open_findings, 0),
+    updatedAt: isoFrom(item.updatedAt ?? item.updated_at),
+  };
+}
+
+function adaptSentinelStatus(value: unknown): SentinelFinding["status"] {
+  const status = asString(value).toLowerCase();
+  if (["acknowledged", "accepted"].includes(status)) return "acknowledged";
+  if (["action_pending", "pending", "active"].includes(status)) return "action_pending";
+  if (["mitigating", "executing"].includes(status)) return "mitigating";
+  if (["resolved", "closed", "completed"].includes(status)) return "resolved";
+  if (["dismissed", "rejected"].includes(status)) return "dismissed";
+  return "open";
+}
+
+function adaptSentinelSeverity(value: unknown): SentinelFinding["severity"] {
+  const severity = asString(value).toLowerCase();
+  if (severity === "critical") return "critical";
+  if (severity === "high" || severity === "warning") return "warning";
+  if (severity === "medium" || severity === "watch") return "watch";
+  return "info";
+}
+
+function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding {
+  const item = asRecord(value);
+  const id = asString(item.finding_id ?? item.findingId ?? item.id, `sentinel-finding-${index + 1}`);
+  const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
+  const severity = adaptSentinelSeverity(item.severity);
+  const confidence = Number.isFinite(Number(item.confidence))
+    ? Math.max(0, Math.min(1, Number(item.confidence)))
+    : severity === "critical" ? 0.88 : severity === "warning" ? 0.76 : severity === "watch" ? 0.62 : 0.35;
+  return {
+    id,
+    status: adaptSentinelStatus(item.status),
+    severity,
+    confidence,
+    title: asString(item.title ?? item.name, id),
+    summary: asString(item.summary ?? item.description ?? item.title, id),
+    source: ["alert", "incident", "job", "runtime", "persona-health", "policy"].includes(asString(item.source))
+      ? asString(item.source) as SentinelFinding["source"]
+      : incidentId ? "incident" : "runtime",
+    detectedAt: isoFrom(item.detectedAt ?? item.detected_at ?? item.created_at ?? item.createdAt),
+    updatedAt: isoFrom(item.updatedAt ?? item.updated_at ?? item.resolved_at ?? item.resolvedAt),
+    blastRadius: {
+      strategies: asStringArray(item.strategy_ids ?? item.strategyIds),
+      personas: asStringArray(item.persona_ids ?? item.personaIds),
+      pools: asStringArray(item.pool_ids ?? item.poolIds),
+      deployments: asStringArray(item.deployment_ids ?? item.deploymentIds),
+    },
+    evidence: incidentId ? [{ kind: "incident", id: incidentId }] : [],
+    recommendedActionIds: asStringArray(item.recommendedActionIds ?? item.recommended_action_ids),
+  };
+}
+
+function liveKpi(loopRuns: LoopRun[], findings: SentinelFinding[], interventions: InterventionItem[]): ControlRoomKpi {
+  return {
+    loopsRunning: loopRuns.filter((r) => r.status === "running").length,
+    loopsBlocked: loopRuns.filter((r) => r.status === "blocked").length,
+    openFindings: findings.filter((f) => f.status === "open").length,
+    criticalFindings: findings.filter((f) => f.severity === "critical").length,
+    pendingInterventions: interventions.length,
+    personasHealthy: 0,
+    personasDegraded: 0,
+    strategiesHealthy: 0,
+    strategiesDegraded: 0,
+  };
+}
+
+function adaptBffControlRoom(body: unknown): ControlRoomSummary {
+  const record = asRecord(body);
+  const loops = asRecord(record.loops);
+  const sentinel = asRecord(record.sentinel);
+  const interventions = asRecord(record.interventions);
+  const loopRuns = strictItemsFrom(loops).map(adaptBffLoopRun);
+  const findings = strictItemsFrom(sentinel).map(adaptBffSentinelFinding);
+  const interventionItems = strictItemsFrom(interventions).map(adaptBffIntervention);
+  return {
+    generatedAt: isoFrom(asRecord(record.meta).snapshot_at ?? record.generatedAt ?? record.generated_at),
+    session: session(),
+    kpi: liveKpi(loopRuns, findings, interventionItems),
+    topFindings: findings.slice(0, 5),
+    topInterventions: interventionItems.slice(0, 5),
+    loopRuns: loopRuns.slice(0, 8),
+  };
 }
 
 function session(): V5SessionContext {
@@ -164,29 +410,47 @@ export const bffV5 = {
 
   // ---- Control Room ----
   controlRoom: {
-    get: (): Promise<ControlRoomSummary> => {
-      const loopRuns = allLoopRuns();
-      const findings = allFindings();
-      const interventions = allInterventions();
-      const summary: ControlRoomSummary = {
-        generatedAt: new Date().toISOString(),
-        session: session(),
-        kpi: kpi(loopRuns, findings, interventions),
-        topFindings: [...findings].sort((a, b) => b.confidence - a.confidence).slice(0, 5),
-        topInterventions: interventions.slice(0, 5),
-        loopRuns: loopRuns.slice(0, 8),
-      };
-      return delay(summary);
-    },
+    get: (): Promise<ControlRoomSummary> => withStrictLiveOrMock<ControlRoomSummary>(
+      { method: "GET", path: livePaths.v5ControlRoom() },
+      async () => {
+        const loopRuns = allLoopRuns();
+        const findings = allFindings();
+        const interventions = allInterventions();
+        const summary: ControlRoomSummary = {
+          generatedAt: new Date().toISOString(),
+          session: session(),
+          kpi: kpi(loopRuns, findings, interventions),
+          topFindings: [...findings].sort((a, b) => b.confidence - a.confidence).slice(0, 5),
+          topInterventions: interventions.slice(0, 5),
+          loopRuns: loopRuns.slice(0, 8),
+        };
+        return delay(summary);
+      },
+      adaptBffControlRoom,
+    ),
   },
 
   // ---- Loops ----
   loops: {
-    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> => {
-      const all = allLoopRuns();
-      return delay(v5List(kind ? loopRunsByKind(all, kind) : all));
-    },
-    get: (id: string): Promise<LoopRun | undefined> => delay(allLoopRuns().find((r) => r.id === id)),
+    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> => withStrictLiveOrMock<V5ListResponse<LoopRun>>(
+      { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined },
+      async () => {
+        const all = allLoopRuns();
+        return delay(v5List(kind ? loopRunsByKind(all, kind) : all));
+      },
+      (data) => {
+        const items = strictItemsFrom(data).map(adaptBffLoopRun);
+        return v5List(kind ? loopRunsByKind(items, kind) : items);
+      },
+    ),
+    get: (id: string): Promise<LoopRun | undefined> => withStrictLiveOrMock<LoopRun | undefined>(
+      { method: "GET", path: paths.v5LoopRun(id) },
+      async () => delay(allLoopRuns().find((r) => r.id === id)),
+      (data) => {
+        const record = strictDataFrom(data);
+        return record ? adaptBffLoopRun(record, 0) : undefined;
+      },
+    ),
     /** E3 — advance currently running stage. */
     advance: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
       const run = allLoopRuns().find((r) => r.id === id);
@@ -237,17 +501,38 @@ export const bffV5 = {
   // ---- Personas / Strategies (execution health) ----
   personas: {
     health: (): Promise<V5ListResponse<PersonaExecutionHealth>> =>
-      delay(v5List(seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts })))),
+      withStrictLiveOrMock<V5ListResponse<PersonaExecutionHealth>>(
+        { method: "GET", path: paths.v5ExecutionPersonaHealth() },
+        async () => delay(v5List(seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts })))),
+        (data) => v5List(strictItemsFrom(data).map(adaptBffPersonaHealth)),
+      ),
   },
   strategies: {
     health: (): Promise<V5ListResponse<StrategyExecutionHealth>> =>
-      delay(v5List(seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents })))),
+      withStrictLiveOrMock<V5ListResponse<StrategyExecutionHealth>>(
+        { method: "GET", path: livePaths.v5StrategyHealth() },
+        async () => delay(v5List(seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents })))),
+        (data) => v5List(strictItemsFrom(data).map(adaptBffStrategyHealth)),
+      ),
   },
 
   // ---- Sentinel ----
   sentinel: {
-    list: (): Promise<V5ListResponse<SentinelFinding>> => delay(v5List(allFindings())),
-    get: (id: string): Promise<SentinelFinding | undefined> => delay(allFindings().find((f) => f.id === id)),
+    list: (): Promise<V5ListResponse<SentinelFinding>> =>
+      withStrictLiveOrMock<V5ListResponse<SentinelFinding>>(
+        { method: "GET", path: paths.v5SentinelFindings() },
+        async () => delay(v5List(allFindings())),
+        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding)),
+      ),
+    get: (id: string): Promise<SentinelFinding | undefined> =>
+      withStrictLiveOrMock<SentinelFinding | undefined>(
+        { method: "GET", path: livePaths.v5SentinelFinding(id) },
+        async () => delay(allFindings().find((f) => f.id === id)),
+        (data) => {
+          const record = strictDataFrom(data);
+          return record ? adaptBffSentinelFinding(record, 0) : undefined;
+        },
+      ),
     /** Q24 — mock state transition; emits typed event; does NOT touch seed. */
     setStatus: (id: string, status: SentinelFinding["status"]): Promise<{ ok: true }> => {
       emitV5Event({
@@ -262,12 +547,20 @@ export const bffV5 = {
   // ---- Interventions (HIQ) ----
   interventions: {
     list: (): Promise<V5ListResponse<InterventionItem>> =>
-      withLiveOrMock<V5ListResponse<InterventionItem>, unknown>(
+      withStrictLiveOrMock<V5ListResponse<InterventionItem>, unknown>(
         { method: "GET", path: paths.v5Interventions(), query: { status: "pending" } },
-        () => delay(v5List(allInterventions())),
+        async () => delay(v5List(allInterventions())),
         adaptBffInterventionsResponse,
       ),
-    get: (id: string): Promise<InterventionItem | undefined> => delay(allInterventions().find((i) => i.id === id)),
+    get: (id: string): Promise<InterventionItem | undefined> =>
+      withStrictLiveOrMock<InterventionItem | undefined>(
+        { method: "GET", path: paths.v5Intervention(id) },
+        async () => delay(allInterventions().find((i) => i.id === id)),
+        (data) => {
+          const record = strictDataFrom(data);
+          return record ? adaptBffIntervention(record, 0) : undefined;
+        },
+      ),
     decide: (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
       emitV5Event({
         channel: "v5.intervention.decision",

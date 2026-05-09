@@ -20,6 +20,7 @@ import { mutations } from "@/lib/bff/mutations";
 import { realtime } from "@/lib/bff/realtime";
 import { usePlatform } from "@/platform/store";
 import { bffV5 } from "@/lib/bff/v5";
+import { bffAgora } from "@/lib/bff/agora";
 import {
   fetchMe,
   invalidateMe,
@@ -47,6 +48,8 @@ export const bff = {
   /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
   getAcceptLanguage: acceptLanguage,
   mutations,
+  /** Agora read surfaces. Strict in live mode: no seeded fallback after live transport failure. */
+  agora: bffAgora,
   /** Pack E — v5 closed-loop OS facade (Q3). View-model layer; does not replace v4 normative DTOs. */
   v5: bffV5,
   /** Pack D D51/D59 (Batch III) — single source of session/user/tenant. */
@@ -196,8 +199,9 @@ export const bff = {
     forSubject: (kind: string, id: string) => delay(seed.watchers.filter((w) => w.subjectKind === kind && w.subjectId === id)),
   },
   decisionJournal: {
-    list: () => delay(seed.decisionJournal),
-    forSubject: (kind: string, id: string) => delay(seed.decisionJournal.filter((d) => d.subjectKind === kind && d.subjectId === id)),
+    list: () => bffAgora.journal.list(),
+    forSubject: (kind: string, id: string) =>
+      bffAgora.journal.list().then((items) => items.filter((d) => d.subjectKind === kind && d.subjectId === id)),
   },
   allocationLimits: {
     forPool: (id: string) => delay(seed.allocationLimits.filter((l) => l.poolId === id)),

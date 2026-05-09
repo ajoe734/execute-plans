@@ -34,6 +34,9 @@ export interface LiveStatus {
 function readEnv(): { mode: BffMode; baseUrl: string } {
   try {
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+    if (env.MODE === "test" || env.NODE_ENV === "test") {
+      return { mode: "mock", baseUrl: env.VITE_BFF_BASE_URL ?? "" };
+    }
     const mode: BffMode = env.VITE_BFF_MODE === "live" ? "live" : "mock";
     return { mode, baseUrl: env.VITE_BFF_BASE_URL ?? "" };
   } catch {
