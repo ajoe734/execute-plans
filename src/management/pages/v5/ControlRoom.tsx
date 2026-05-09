@@ -5,8 +5,9 @@
 // Drill-down: sentinel?finding=<id>, interventions?item=<id>.
 // Realtime: refreshes on any v5 event (Q22) via useV5Live.
 
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, ShieldAlert, RefreshCw, Activity, ArrowRight, Siren } from "lucide-react";
+import { Compass, ShieldAlert, RefreshCw, Activity, ArrowRight, Siren, Filter } from "lucide-react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -211,10 +212,45 @@ export const ControlRoomPage = () => {
   const personas = useV5Live(() => bff.v5.personas.health());
   const strategies = useV5Live(() => bff.v5.strategies.health());
 
+  // D (2026-05-09) — cross-section severity focus. Filters Sentinel + HIQ
+  // previews and health snapshots simultaneously.
+  type Focus = "all" | "critical" | "warning";
+  const [focus, setFocus] = useState<Focus>("all");
+
   const data = summary.data;
   const emergency = !!data && (
     data.kpi.criticalFindings >= 2 ||
     data.topInterventions.some((i) => i.source === "emergency_review")
+  );
+
+  const sevMatch = (sev: string) =>
+    focus === "all" ||
+    (focus === "critical" && sev === "critical") ||
+    (focus === "warning" && (sev === "warning" || sev === "critical"));
+
+  const filteredFindings = useMemo(
+    () => (data?.topFindings ?? []).filter((f) => sevMatch(f.severity)),
+    [data?.topFindings, focus],
+  );
+  const filteredInterventions = useMemo(
+    () => (data?.topInterventions ?? []).filter((i) => sevMatch(i.severity)),
+    [data?.topInterventions, focus],
+  );
+  const filteredPersonas = useMemo(
+    () => (personas.data?.items ?? []).filter((p) =>
+      focus === "all" ? true :
+      focus === "critical" ? p.status === "critical" :
+                             p.status === "critical" || p.status === "degraded",
+    ),
+    [personas.data, focus],
+  );
+  const filteredStrategies = useMemo(
+    () => (strategies.data?.items ?? []).filter((s) =>
+      focus === "all" ? true :
+      focus === "critical" ? s.status === "critical" :
+                             s.status === "critical" || s.status === "degraded",
+    ),
+    [strategies.data, focus],
   );
 
   return (
@@ -282,10 +318,27 @@ export const ControlRoomPage = () => {
               <LoopLane kind="optimization" runs={data.loopRuns} route="/management/loops/optimization" />
             </div>
 
+            {/* D — cross-section severity focus */}
+            <div className="flex items-center gap-2 text-xs">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">{t("v5.controlRoom.focus")}:</span>
+              {(["all", "warning", "critical"] as const).map((f) => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={focus === f ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setFocus(f)}
+                >
+                  {t(`v5.controlRoom.focusOpt.${f}`)}
+                </Button>
+              ))}
+            </div>
+
             {/* Sentinel + HIQ preview */}
             <div className="grid gap-3 lg:grid-cols-2">
-              <SentinelPreview findings={data.topFindings} />
-              <HIQPreview items={data.topInterventions} />
+              <SentinelPreview findings={filteredFindings} />
+              <HIQPreview items={filteredInterventions} />
             </div>
 
             {/* Health snapshots */}
@@ -294,7 +347,7 @@ export const ControlRoomPage = () => {
                 <h2 className="text-sm font-semibold mb-3">{t("v5.controlRoom.personaHealth")}</h2>
                 {personas.data ? (
                   <ul className="space-y-1.5">
-                    {personas.data.items.slice(0, 6).map((p: PersonaExecutionHealth) => (
+                    {filteredPersonas.slice(0, 6).map((p: PersonaExecutionHealth) => (
                       <li key={p.personaId} className="flex items-center justify-between text-sm">
                         <Link to="/management/loops/execution" className="truncate hover:underline">{p.personaName}</Link>
                         <div className="flex items-center gap-2 shrink-0">
@@ -303,6 +356,9 @@ export const ControlRoomPage = () => {
                         </div>
                       </li>
                     ))}
+                    {filteredPersonas.length === 0 && (
+                      <li className="text-xs text-muted-foreground">{t("v5.controlRoom.focusEmpty")}</li>
+                    )}
                   </ul>
                 ) : <div className="text-sm text-muted-foreground">{t("common.loading")}</div>}
               </Card>
@@ -310,12 +366,15 @@ export const ControlRoomPage = () => {
                 <h2 className="text-sm font-semibold mb-3">{t("v5.controlRoom.strategyHealth")}</h2>
                 {strategies.data ? (
                   <ul className="space-y-1.5">
-                    {strategies.data.items.slice(0, 6).map((s: StrategyExecutionHealth) => (
+                    {filteredStrategies.slice(0, 6).map((s: StrategyExecutionHealth) => (
                       <li key={s.strategyId} className="flex items-center justify-between text-sm">
                         <Link to={`/management/strategies/${s.strategyId}`} className="truncate hover:underline">{s.strategyName}</Link>
                         <Badge variant="outline" className={healthTone(s.status)}>{s.status} · {s.score.toFixed(0)}</Badge>
                       </li>
                     ))}
+                    {filteredStrategies.length === 0 && (
+                      <li className="text-xs text-muted-foreground">{t("v5.controlRoom.focusEmpty")}</li>
+                    )}
                   </ul>
                 ) : <div className="text-sm text-muted-foreground">{t("common.loading")}</div>}
               </Card>

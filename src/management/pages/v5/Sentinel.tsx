@@ -52,6 +52,8 @@ export const SentinelPage = () => {
   const [active, setActive] = useState<SentinelFinding | null>(null);
   const [filter, setFilter] = useState("");
   const [sevFilter, setSevFilter] = useState<string>("all");
+  // D (2026-05-09) — list ↔ timeline toggle
+  const [view, setView] = useState<"list" | "timeline">("list");
   const [params, setParams] = useSearchParams();
 
   // E2 drill-down: ?finding=<id> auto-opens the matching finding drawer.
@@ -104,6 +106,14 @@ export const SentinelPage = () => {
               {s}
             </Button>
           ))}
+          <div className="ml-auto inline-flex rounded-md border border-border overflow-hidden">
+            <Button size="sm" variant={view === "list" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("list")}>
+              {t("v5.sentinel.viewList")}
+            </Button>
+            <Button size="sm" variant={view === "timeline" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("timeline")}>
+              {t("v5.sentinel.viewTimeline")}
+            </Button>
+          </div>
         </div>
 
         <SkeletonThreshold
@@ -116,41 +126,45 @@ export const SentinelPage = () => {
             </div>
           }
         >
-          <ul className="space-y-2">
-            {visible.map((f) => (
-              <li key={f.id}>
-                <button
-                  onClick={() => setActive(f)}
-                  className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium text-sm truncate">{f.title}</div>
-                    <div className="flex gap-2 shrink-0">
-                      <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
-                      <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+          {view === "timeline" ? (
+            <SentinelTimelineView findings={visible} onPick={setActive} />
+          ) : (
+            <ul className="space-y-2">
+              {visible.map((f) => (
+                <li key={f.id}>
+                  <button
+                    onClick={() => setActive(f)}
+                    className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-sm truncate">{f.title}</div>
+                      <div className="flex gap-2 shrink-0">
+                        <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
+                        <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
-                  <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
-                    <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
-                    <span>{t("v5.sentinel.source")}: {f.source}</span>
-                    <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
-                  </div>
-                </button>
-              </li>
-            ))}
-            {visible.length === 0 && (
-              <li>
-                <EmptyState
-                  icon={<ShieldCheck className="h-8 w-8" />}
-                  title={all.length === 0 ? t("v5.sentinel.noFindingsTitle", { defaultValue: "No findings" }) : t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
-                  description={all.length === 0
-                    ? t("v5.sentinel.noFindingsDesc", { defaultValue: "Sentinel hasn't surfaced any findings for the current scope." })
-                    : t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter to see more findings." })}
-                />
-              </li>
-            )}
-          </ul>
+                    <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
+                    <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
+                      <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
+                      <span>{t("v5.sentinel.source")}: {f.source}</span>
+                      <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
+                    </div>
+                  </button>
+                </li>
+              ))}
+              {visible.length === 0 && (
+                <li>
+                  <EmptyState
+                    icon={<ShieldCheck className="h-8 w-8" />}
+                    title={all.length === 0 ? t("v5.sentinel.noFindingsTitle", { defaultValue: "No findings" }) : t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
+                    description={all.length === 0
+                      ? t("v5.sentinel.noFindingsDesc", { defaultValue: "Sentinel hasn't surfaced any findings for the current scope." })
+                      : t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter to see more findings." })}
+                  />
+                </li>
+              )}
+            </ul>
+          )}
         </SkeletonThreshold>
       </PageBody>
 
@@ -355,5 +369,61 @@ const ActionGroup = ({
         ))}
       </ul>
     </Card>
+  );
+};
+
+// D (2026-05-09) — Timeline view: groups findings by detected date,
+// ordered most-recent first. Same drawer interaction as the list view.
+const SentinelTimelineView = ({
+  findings, onPick,
+}: { findings: SentinelFinding[]; onPick: (f: SentinelFinding) => void }) => {
+  const t = useT();
+  if (findings.length === 0) {
+    return (
+      <EmptyState
+        icon={<ShieldCheck className="h-8 w-8" />}
+        title={t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
+        description={t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter." })}
+      />
+    );
+  }
+  const sorted = [...findings].sort(
+    (a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime(),
+  );
+  const groups = new Map<string, SentinelFinding[]>();
+  for (const f of sorted) {
+    const day = new Date(f.detectedAt).toLocaleDateString();
+    const arr = groups.get(day) ?? [];
+    arr.push(f);
+    groups.set(day, arr);
+  }
+  return (
+    <ol className="relative space-y-5 pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-px before:bg-border">
+      {[...groups.entries()].map(([day, items]) => (
+        <li key={day} className="relative">
+          <span className="absolute -left-[14px] top-0 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-[10px] text-muted-foreground">
+            {items.length}
+          </span>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{day}</div>
+          <ul className="space-y-1.5">
+            {items.map((f) => (
+              <li key={f.id}>
+                <button
+                  onClick={() => onPick(f)}
+                  className="w-full text-left border border-border rounded-md px-3 py-2 bg-card hover:bg-muted/30 transition-colors flex items-center gap-2"
+                >
+                  <span className="text-mono text-[10px] text-muted-foreground w-14 shrink-0">
+                    {new Date(f.detectedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
+                  <span className="text-sm truncate flex-1">{f.title}</span>
+                  <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
   );
 };

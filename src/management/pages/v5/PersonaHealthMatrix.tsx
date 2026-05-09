@@ -21,6 +21,48 @@ const modeCls: Record<string, string> = {
   suspended: "bg-muted text-muted-foreground border-border",
 };
 
+// D (2026-05-09) — deterministic mock score series for sparkline.
+// Replace once backend exposes PersonaExecutionHealth.history (Pack D D05+).
+function mockSeries(personaId: string, current: number): number[] {
+  let h = 0;
+  for (let i = 0; i < personaId.length; i++) h = (h * 31 + personaId.charCodeAt(i)) >>> 0;
+  const points: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    h = (h * 1664525 + 1013904223) >>> 0;
+    const drift = ((h % 21) - 10); // -10..+10
+    const decayWeight = i / 11; // last point weighted toward `current`
+    const base = current + drift * (1 - decayWeight);
+    points.push(Math.max(0, Math.min(100, base)));
+  }
+  points[points.length - 1] = current;
+  return points;
+}
+
+const Sparkline = ({ values, tone }: { values: number[]; tone: string }) => {
+  if (values.length === 0) return null;
+  const w = 80, h = 22, pad = 2;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values
+    .map((v, i) => {
+      const x = pad + (i * (w - pad * 2)) / (values.length - 1);
+      const y = pad + (h - pad * 2) * (1 - (v - min) / range);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label="score trend" className={tone}>
+      <polyline fill="none" stroke="currentColor" strokeWidth="1.25" points={pts} />
+    </svg>
+  );
+};
+
+const sparkTone = (status: string) =>
+  status === "critical" ? "text-status-failed" :
+  status === "degraded" ? "text-status-warning" :
+  status === "watch"    ? "text-accent" :
+                          "text-status-success";
+
 export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[] }) => {
   const t = useT();
   // Sort: critical → degraded → watch → healthy, then by score asc
@@ -40,6 +82,7 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
             <th className="text-left px-3 py-2">{t("v5.matrix.mode")}</th>
             <th className="text-left px-3 py-2">{t("v5.matrix.status")}</th>
             <th className="text-right px-3 py-2">{t("v5.matrix.score")}</th>
+            <th className="text-left px-3 py-2">{t("v5.matrix.trend")}</th>
             <th className="text-right px-3 py-2">{t("v5.matrix.routed")}</th>
             <th className="text-right px-3 py-2">{t("v5.matrix.findings")}</th>
             <th className="text-left px-3 py-2">{t("v5.matrix.formula")}</th>
@@ -59,6 +102,9 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
                 <Badge variant="outline" className={statusCls[p.status] ?? ""}>{p.status}</Badge>
               </td>
               <td className="px-3 py-2 text-right text-mono">{p.score.toFixed(0)}</td>
+              <td className="px-3 py-2">
+                <Sparkline values={mockSeries(p.personaId, p.score)} tone={sparkTone(p.status)} />
+              </td>
               <td className="px-3 py-2 text-right text-mono">{p.routedStrategies}</td>
               <td className="px-3 py-2 text-right text-mono">
                 <span className={p.openFindings > 0 ? "text-status-warning" : "text-muted-foreground"}>
@@ -69,7 +115,7 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
             </tr>
           ))}
           {sorted.length === 0 && (
-            <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
+            <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
           )}
         </tbody>
       </table>

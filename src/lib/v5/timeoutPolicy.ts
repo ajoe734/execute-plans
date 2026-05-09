@@ -1,5 +1,6 @@
-// Q12 — v0-mock LoopStage timeout policy. UI-only; do NOT persist as domain truth.
-// Replace once Pack D D05 settles state-machine timeout/failureState.
+// @deprecated Q12 v0-mock LoopStage timeout policy.
+// SUPERSEDED by @/lib/v4/asyncTransitionPolicy (Pack D D05). Kept as shim only;
+// ESLint `no-restricted-imports` warns on new imports.
 
 export const V5_TIMEOUT_POLICY_VERSION = "v0-mock" as const;
 

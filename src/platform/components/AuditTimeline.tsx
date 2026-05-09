@@ -5,6 +5,7 @@
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "@/platform/hooks";
 import { resolveEntity, lineageHref, decisionsHref } from "@/lib/entityLinks";
 
@@ -72,12 +73,21 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                   </span>
                 )}
                 {e.ephemeral && (
-                  <span
-                    className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-status-warning/40 text-status-warning bg-status-warning/10"
-                    title="Mock overlay; will not persist (30-minute TTL)"
-                  >
-                    ephemeral
-                  </span>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-status-warning/40 text-status-warning bg-status-warning/10 cursor-help"
+                          aria-label={t("audit.ephemeralTooltip")}
+                        >
+                          {t("audit.ephemeral")}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        {t("audit.ephemeralTooltip")}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
                 {e.target && (
                   <span className="text-xs text-muted-foreground">→ {resolved ? (

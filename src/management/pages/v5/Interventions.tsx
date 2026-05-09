@@ -48,6 +48,9 @@ export const InterventionsPage = () => {
   const [filter, setFilter] = useState("");
   const [src, setSrc] = useState<typeof SOURCES[number]>("all");
   const [params, setParams] = useSearchParams();
+  // D (2026-05-09) — batch decide selection set
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchRunning, setBatchRunning] = useState(false);
 
   // E2 drill-down: ?item=<id> auto-opens the matching intervention drawer.
   useEffect(() => {
@@ -78,6 +81,47 @@ export const InterventionsPage = () => {
     approval: all.filter((i) => i.source === "approval").length,
     sentinel: all.filter((i) => i.source === "sentinel").length,
   }), [all]);
+
+  const selectedItems = useMemo(
+    () => visible.filter((it) => selected.has(it.id)),
+    [visible, selected],
+  );
+
+  // Decisions common to every selected item (intersection of allowedDecisions).
+  const commonDecisions = useMemo<InterventionDecision[]>(() => {
+    if (selectedItems.length === 0) return [];
+    const sets = selectedItems.map((it) => new Set(it.allowedDecisions));
+    const [first, ...rest] = sets;
+    return [...first].filter((d) => rest.every((s) => s.has(d))) as InterventionDecision[];
+  }, [selectedItems]);
+
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected((prev) =>
+      prev.size === visible.length ? new Set() : new Set(visible.map((it) => it.id)),
+    );
+
+  const batchDecide = async (d: InterventionDecision) => {
+    if (selectedItems.length === 0 || batchRunning) return;
+    setBatchRunning(true);
+    let ok = 0, fail = 0;
+    for (const it of selectedItems) {
+      try { await bff.v5.interventions.decide(it.id, d); ok++; }
+      catch { fail++; }
+    }
+    setBatchRunning(false);
+    setSelected(new Set());
+    toast({
+      title: t("v5.interventions.batchDone"),
+      description: t("v5.interventions.batchDoneDesc", { ok, fail, decision: d }),
+    });
+    list.refresh();
+  };
 
   return (
     <>
@@ -114,10 +158,40 @@ export const InterventionsPage = () => {
           ))}
         </div>
 
+        {selectedItems.length > 0 && (
+          <Card className="p-2 flex flex-wrap items-center gap-2 border-accent/40 bg-accent/5">
+            <span className="text-xs text-muted-foreground px-2">
+              {t("v5.interventions.batchSelected", { count: selectedItems.length })}
+            </span>
+            {commonDecisions.length === 0 ? (
+              <span className="text-xs text-status-warning">
+                {t("v5.interventions.batchNoCommon")}
+              </span>
+            ) : (
+              commonDecisions.map((d) => (
+                <Button key={d} size="sm" variant="outline" disabled={batchRunning} onClick={() => batchDecide(d)}>
+                  {t("v5.interventions.batchApply", { decision: d })}
+                </Button>
+              ))
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={batchRunning}>
+              {t("v5.interventions.batchClear")}
+            </Button>
+          </Card>
+        )}
+
         <Card className="p-0 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
+                <th className="px-3 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label={t("v5.interventions.batchSelectAll")}
+                    checked={visible.length > 0 && selected.size === visible.length}
+                    onChange={toggleAll}
+                  />
+                </th>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
                 <th className="text-left px-3 py-2">{t("v5.interventions.source")}</th>
                 <th className="text-left px-3 py-2">{t("v5.col.status")}</th>
@@ -128,20 +202,28 @@ export const InterventionsPage = () => {
             </thead>
             <tbody>
               {visible.map((it) => (
-                <tr key={it.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => setActive(it)}>
-                  <td className="px-3 py-2">
+                <tr key={it.id} className="border-t border-border hover:bg-muted/30">
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={t("v5.interventions.batchSelectOne", { title: it.title })}
+                      checked={selected.has(it.id)}
+                      onChange={() => toggleOne(it.id)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 cursor-pointer" onClick={() => setActive(it)}>
                     <div className="font-medium">{it.title}</div>
                     {it.summary && <div className="text-xs text-muted-foreground line-clamp-1">{it.summary}</div>}
                   </td>
-                  <td className="px-3 py-2"><Badge variant="outline" className={sourceCls[it.source]}>{it.source}</Badge></td>
-                  <td className="px-3 py-2"><Badge variant="outline" className={sevCls[it.severity]}>{it.severity}</Badge></td>
-                  <td className="px-3 py-2 text-xs">{it.recommendedDecision ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{it.requiredRoles.join(", ")}</td>
-                  <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(it.updatedAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 cursor-pointer" onClick={() => setActive(it)}><Badge variant="outline" className={sourceCls[it.source]}>{it.source}</Badge></td>
+                  <td className="px-3 py-2 cursor-pointer" onClick={() => setActive(it)}><Badge variant="outline" className={sevCls[it.severity]}>{it.severity}</Badge></td>
+                  <td className="px-3 py-2 text-xs cursor-pointer" onClick={() => setActive(it)}>{it.recommendedDecision ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{it.requiredRoles.join(", ")}</td>
+                  <td className="px-3 py-2 text-right text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{new Date(it.updatedAt).toLocaleString()}</td>
                 </tr>
               ))}
               {visible.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
               )}
             </tbody>
           </table>
