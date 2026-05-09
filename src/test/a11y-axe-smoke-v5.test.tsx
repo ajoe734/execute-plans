@@ -15,12 +15,12 @@ const personas: PersonaExecutionHealth[] = [
   {
     personaId: "p_alpha", personaName: "Alpha", mode: "live",
     status: "healthy", score: 92, routedStrategies: 3, openFindings: 0,
-    formulaVersion: "v3.1.0",
+    formulaVersion: "v0-mock",
   },
   {
     personaId: "p_beta", personaName: "Beta", mode: "shadow",
     status: "degraded", score: 58, routedStrategies: 1, openFindings: 2,
-    formulaVersion: "v3.0.4", suspendedReason: "elevated drawdown",
+    formulaVersion: "v0-mock", suspendedReason: "elevated drawdown",
   },
 ];
 
