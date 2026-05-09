@@ -910,6 +910,8 @@ export default {
     openDecisions: "開啟決策日誌",
     openDetail: "開啟詳情",
     openAudit: "開啟稽核",
+    ephemeral: "暫存",
+    ephemeralTooltip: "Mock 暫存事件，30 分鐘後自動清除（writeOverlay TTL），不會持久化。",
     crossLinks: "跨頁連結",
     relatedDecisions: "相關決策",
     noDecisions: "此實體尚無決策日誌。",
