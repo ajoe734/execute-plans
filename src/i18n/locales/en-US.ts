@@ -305,6 +305,8 @@ export default {
       noFindingsDesc: "Sentinel hasn't surfaced any findings for the current scope.",
       noMatchTitle: "No matches",
       noMatchDesc: "Adjust the search or severity filter to see more findings.",
+      viewList: "List",
+      viewTimeline: "Timeline",
     },
     remediation: {
       advisory: "Advisory",

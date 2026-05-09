@@ -299,6 +299,8 @@ export default {
       noFindingsDesc: "目前範圍下 Sentinel 尚未產出任何 finding。",
       noMatchTitle: "無符合項目",
       noMatchDesc: "調整搜尋或嚴重度過濾條件以查看更多 finding。",
+      viewList: "列表",
+      viewTimeline: "時間軸",
     },
     remediation: {
       advisory: "建議",
