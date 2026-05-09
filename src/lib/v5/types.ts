@@ -147,7 +147,7 @@ export interface RemediationAction {
   mode: RemediationMode;             // Q6
   label: string;
   description?: string;
-  /** Q13 — role gating for now; capabilities preserved as TODO hook. */
+  /** Q13 — role-based gating is canonical; capability-based gating waits on Permission Contract backport (A2) → EVIDENCE_CAPABILITY_MAP. No FE action. */
   requiredRoles: string[];
   requiredCapabilities?: string[];
   requiresHumanApproval: boolean;
