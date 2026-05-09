@@ -163,6 +163,29 @@ describe("VI-2 live-mode adaptLive normalization", () => {
   });
 });
 
+describe("VI-2 confirmToken propagation to live POST body", () => {
+  it("runAction live POST body includes confirmToken from opts", async () => {
+    setWriteEnv(true, "tok_live_test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    let capturedBody: unknown;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_, init) => {
+      capturedBody = JSON.parse((init as RequestInit).body as string);
+      return new Response(
+        JSON.stringify({ status: "accepted", data: { commandId: "cmd_ct_prop" }, meta: {} }),
+        { status: 202, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    await runAction(
+      { kind: "Strategy", id: "stg_001", action: "deploy_live", memo: "approve deploy" },
+      { confirmToken: "ctok_v3_abc123" },
+    );
+
+    expect((capturedBody as Record<string, unknown>).confirmToken).toBe("ctok_v3_abc123");
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+});
+
 describe("VI-2 auth gate", () => {
   it("runAction stays in mock when VITE_BFF_REAL_WRITES=true but no bearer token", async () => {
     setWriteEnv(true, null);

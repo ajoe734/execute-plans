@@ -237,7 +237,7 @@ export const CapitalPoolDetail = () => {
         target={{ type: "CapitalPool", id: c.id, name: c.name }}
         risk="high"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }); toast.success(t("toast.actionQueued")); }}
+        onConfirm={async (memo, token) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }, { confirmToken: token }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );
