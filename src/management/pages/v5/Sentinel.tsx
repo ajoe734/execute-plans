@@ -371,3 +371,59 @@ const ActionGroup = ({
     </Card>
   );
 };
+
+// D (2026-05-09) — Timeline view: groups findings by detected date,
+// ordered most-recent first. Same drawer interaction as the list view.
+const SentinelTimelineView = ({
+  findings, onPick,
+}: { findings: SentinelFinding[]; onPick: (f: SentinelFinding) => void }) => {
+  const t = useT();
+  if (findings.length === 0) {
+    return (
+      <EmptyState
+        icon={<ShieldCheck className="h-8 w-8" />}
+        title={t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
+        description={t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter." })}
+      />
+    );
+  }
+  const sorted = [...findings].sort(
+    (a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime(),
+  );
+  const groups = new Map<string, SentinelFinding[]>();
+  for (const f of sorted) {
+    const day = new Date(f.detectedAt).toLocaleDateString();
+    const arr = groups.get(day) ?? [];
+    arr.push(f);
+    groups.set(day, arr);
+  }
+  return (
+    <ol className="relative space-y-5 pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-px before:bg-border">
+      {[...groups.entries()].map(([day, items]) => (
+        <li key={day} className="relative">
+          <span className="absolute -left-[14px] top-0 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-[10px] text-muted-foreground">
+            {items.length}
+          </span>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{day}</div>
+          <ul className="space-y-1.5">
+            {items.map((f) => (
+              <li key={f.id}>
+                <button
+                  onClick={() => onPick(f)}
+                  className="w-full text-left border border-border rounded-md px-3 py-2 bg-card hover:bg-muted/30 transition-colors flex items-center gap-2"
+                >
+                  <span className="text-mono text-[10px] text-muted-foreground w-14 shrink-0">
+                    {new Date(f.detectedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
+                  <span className="text-sm truncate flex-1">{f.title}</span>
+                  <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
+  );
+};

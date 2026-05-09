@@ -253,6 +253,9 @@ export default {
       batchSelectOne: "Select {{title}}",
       batchDone: "Batch decision applied",
       batchDoneDesc: "{{ok}} ok · {{fail}} failed · decision={{decision}}",
+    },
+    sentinelView: {
+      _placeholder: "anchor",
       decide: "Decide",
       decided: "Intervention decided",
       roleNotAllowed: "Requires role: {{roles}}",
