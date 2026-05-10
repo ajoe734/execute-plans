@@ -18,4 +18,10 @@ describe("writeOverlay", () => {
     expect(rows[0].id).toBe("ps_new");
     expect(rows[1].id).toBe("ps_seed");
   });
+
+  it("gets a newly-created overlay item by id", () => {
+    writeOverlay.add("persona", { id: "ps_detail", name: "detail persona" });
+    expect(writeOverlay.get("persona", "ps_detail")?.name).toBe("detail persona");
+    expect(writeOverlay.get("persona", "ps_missing")).toBeUndefined();
+  });
 });

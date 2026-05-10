@@ -25,24 +25,74 @@ import { PersonaStrategyOwnershipTab } from "../components/detail/PersonaStrateg
 import { PersonaPolicyViolationsTab } from "../components/detail/PersonaPolicyViolationsTab";
 import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTab";
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
+import { resolvePersonaForDetail } from "./personaDetailData";
+
+type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
 export const PersonaDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
   const [p, setP] = useState<Persona | undefined>();
+  const [loadState, setLoadState] = useState<PersonaLoadState>("loading");
   const [routed, setRouted] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    bff.personas.get(id).then(setP);
-    bff.strategies.list().then((all) => setRouted(all.filter((s) => s.personaIds.includes(id))));
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id)));
+    let cancelled = false;
+    if (!id) {
+      setP(undefined);
+      setRouted([]);
+      setAudit([]);
+      setLoadState("not-found");
+      return;
+    }
+
+    setP(undefined);
+    setRouted([]);
+    setAudit([]);
+    setLoadState("loading");
+
+    Promise.all([
+      resolvePersonaForDetail(id),
+      bff.strategies.list().catch(() => [] as Strategy[]),
+      bff.audit.list().catch(() => [] as AuditEvent[]),
+    ])
+      .then(([persona, allStrategies, allAudit]) => {
+        if (cancelled) return;
+        setP(persona);
+        setRouted(allStrategies.filter((s) => s.personaIds.includes(id)));
+        setAudit(allAudit.filter((x) => x.target === id));
+        setLoadState(persona ? "ready" : "not-found");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setP(undefined);
+        setLoadState("error");
+      });
+
+    return () => { cancelled = true; };
   }, [id]);
 
-  if (!p) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loadState === "loading") {
+    return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
+
+  if (!p) {
+    return (
+      <div className="p-6 space-y-3">
+        <div className="text-sm text-muted-foreground">
+          {loadState === "error"
+            ? t("errors.BACKEND_UNAVAILABLE")
+            : t("agora.trainerStudio.detail.notFound", { id: id ?? "" })}
+        </div>
+        <Button size="sm" variant="outline" onClick={() => navigate("/management/personas")}>
+          {t("nav.personas")}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <>

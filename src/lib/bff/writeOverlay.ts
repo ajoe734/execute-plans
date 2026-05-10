@@ -120,6 +120,10 @@ class WriteOverlay {
       .map((c) => c.data as T);
   }
 
+  get<T extends { id?: unknown } = Record<string, unknown>>(entity: CreatableEntity, id: string): T | undefined {
+    return this.list<T>(entity).find((item) => String(item.id ?? "") === id);
+  }
+
   clear() { this.created = []; this.idemKeys.clear(); this.lastAuditHash = null; }
 
   private gc() {
@@ -163,4 +167,3 @@ export function withOverlay<T>(
     return compare ? merged.slice().sort(compare) : merged;
   };
 }
-
