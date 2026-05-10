@@ -487,6 +487,26 @@ type PostmortemEvent =
 
 ## 9. Capability / Redaction for Evidence Events
 
+### 9.0 EvidenceKind canonical enum (2026-05-10 backport)
+
+Aligns with `src/lib/bff-v1/dto.ts` `CanonicalEvidenceKind` (19) + `LegacyEvidenceKindAlias` (3).
+Capability mapping is normative in `Pantheon_Pack_D_Permission_Contract.md` §D-EvidenceKind.
+
+```ts
+type CanonicalEvidenceKind =
+  | "alert" | "incident" | "job" | "audit" | "metric"
+  | "strategy" | "persona" | "deployment" | "runtime" | "policy"
+  | "approval" | "artifact" | "signal" | "journal" | "postmortem"
+  | "loop_run" | "sentinel_finding" | "intervention" | "ask_session";
+
+// Backend SHOULD NOT emit these in new APIs; FE accepts and normalizes.
+type LegacyEvidenceKindAlias = "snapshot" | "rebalance" | "experiment";
+
+type EvidenceKind = CanonicalEvidenceKind | LegacyEvidenceKindAlias;
+```
+
+
+
 When an event contains evidence references, BFF must only include evidence that the user is allowed to see or return redacted refs.
 
 ```ts
