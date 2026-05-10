@@ -85,6 +85,45 @@ describe("BFF live read adapters", () => {
     expect(signals[0].symbol).toBe("AAPL");
     expect(signals[0].reviewStatus).toBe("pending_trader_review");
   });
+
+  it("Agora signal detail resolves through the canonical list route instead of a non-contract detail path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [
+          {
+            signal_id: "sig-live-001",
+            title: "Opening auction momentum",
+            symbol: "AAPL",
+            side: "long",
+            conviction: 0.76,
+            updatedAt: "2026-05-09T10:30:00Z",
+          },
+        ],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const signal = await bff.agora.signals.get("sig-live-001");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/agora/signals");
+    expect(signal?.id).toBe("sig-live-001");
+    expect(liveStatus.get().effective).toBe("live");
+    expect(liveStatus.get().lastError).toBeUndefined();
+  });
+
+  it("Agora signal detail can render not-found without any BFF 404 response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const signal = await bff.agora.signals.get("sig_missing");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/agora/signals");
+    expect(signal).toBeUndefined();
+    expect(liveStatus.get().effective).toBe("live");
+    expect(liveStatus.get().lastError).toBeUndefined();
+  });
 });
 
 describe("live SSE realtime bridge", () => {

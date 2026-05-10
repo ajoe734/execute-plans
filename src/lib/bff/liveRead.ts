@@ -2,6 +2,15 @@ import { bffFetch, type BffRequest } from "@/lib/bff-v1/client";
 import { BffError, makeBffError } from "@/lib/bff-v1/errors";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
+export type StrictLiveErrorResult<T> = { handled: true; value: T };
+export type StrictLiveErrorHandler<T> = (err: unknown) => StrictLiveErrorResult<T> | undefined;
+
+export function strictNotFoundAsUndefined<T>(err: unknown): StrictLiveErrorResult<T | undefined> | undefined {
+  return err instanceof BffError && err.status === 404
+    ? { handled: true, value: undefined }
+    : undefined;
+}
+
 /**
  * Strict live read adapter for surfaces that must not silently fall back to
  * seeded mock data when the app is configured for live BFF mode.
@@ -10,6 +19,7 @@ export async function withStrictLiveOrMock<T, TLive = unknown>(
   req: BffRequest,
   mockFn: () => Promise<T>,
   adaptLive: (data: TLive) => T,
+  handleExpectedError?: StrictLiveErrorHandler<T>,
 ): Promise<T> {
   if (liveStatus.get().mode !== "live") return mockFn();
   try {
@@ -17,6 +27,11 @@ export async function withStrictLiveOrMock<T, TLive = unknown>(
     liveStatus.reportSuccess();
     return adaptLive(data);
   } catch (err) {
+    const expected = handleExpectedError?.(err);
+    if (expected?.handled) {
+      liveStatus.reportSuccess();
+      return expected.value;
+    }
     const reason = err instanceof Error ? err.message : "live transport failed";
     liveStatus.reportFallback(`strict: ${reason}`);
     if (err instanceof BffError) throw err;

@@ -1,7 +1,7 @@
 import * as seed from "@/mocks/seed";
 import type { DecisionJournalEntry, RiskLevel, Strategy } from "@/lib/bff/types";
 import { paths } from "@/lib/bff-v1/paths";
-import { strictDataFrom, strictItemsFrom, withStrictLiveOrMock } from "./liveRead";
+import { strictItemsFrom, withStrictLiveOrMock } from "./liveRead";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -195,12 +195,9 @@ export const bffAgora = {
       ),
     get: (id: string): Promise<AgoraSignal | undefined> =>
       withStrictLiveOrMock<AgoraSignal | undefined>(
-        { method: "GET", path: `${paths.agoraSignals()}/${encodeURIComponent(id)}` },
+        { method: "GET", path: paths.agoraSignals() },
         async () => mockSignals(seed.strategies).find((signal) => signal.id === id),
-        (data) => {
-          const record = strictDataFrom(data);
-          return record ? adaptSignal(record, 0) : undefined;
-        },
+        (data) => strictItemsFrom(data).map(adaptSignal).find((signal) => signal.id === id),
       ),
   },
   inbox: {

@@ -7,7 +7,7 @@ import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
 import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
 import { paths } from "@/lib/bff-v1/paths";
-import { strictDataFrom, strictItemsFrom, withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import {
   v5List,
   type V5ListResponse,
@@ -450,6 +450,7 @@ export const bffV5 = {
         const record = strictDataFrom(data);
         return record ? adaptBffLoopRun(record, 0) : undefined;
       },
+      strictNotFoundAsUndefined,
     ),
     /** E3 — advance currently running stage. */
     advance: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
@@ -532,6 +533,7 @@ export const bffV5 = {
           const record = strictDataFrom(data);
           return record ? adaptBffSentinelFinding(record, 0) : undefined;
         },
+        strictNotFoundAsUndefined,
       ),
     /** Q24 — mock state transition; emits typed event; does NOT touch seed. */
     setStatus: (id: string, status: SentinelFinding["status"]): Promise<{ ok: true }> => {
@@ -560,6 +562,7 @@ export const bffV5 = {
           const record = strictDataFrom(data);
           return record ? adaptBffIntervention(record, 0) : undefined;
         },
+        strictNotFoundAsUndefined,
       ),
     decide: (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
       emitV5Event({
