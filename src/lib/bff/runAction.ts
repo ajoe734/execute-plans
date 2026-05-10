@@ -178,7 +178,7 @@ export async function tryRunAction(
 
 // ---------- requestConfirmToken ----------
 
-export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
+export type ConfirmTokenEnvelope = CommandResponse<ConfirmTokenResponse>;
 
 export interface ConfirmTokenOptions {
   correlationId?: string;
@@ -249,7 +249,7 @@ export async function requestConfirmToken(
 
 // ---------- readConfirmToken ----------
 
-export interface ConfirmTokenReadEnvelope extends CommandResponse<ConfirmTokenResponse> {}
+export type ConfirmTokenReadEnvelope = CommandResponse<ConfirmTokenResponse>;
 
 /**
  * v3 §6.2 — Read a confirm token by id.
@@ -298,7 +298,7 @@ export async function readConfirmToken(
 
 // ---------- redeemConfirmToken ----------
 
-export interface ConfirmTokenRedeemEnvelope extends CommandResponse<{ tokenId: string; redeemed: true }> {}
+export type ConfirmTokenRedeemEnvelope = CommandResponse<{ tokenId: string; redeemed: true }>;
 
 /**
  * v3 §6.2 — Redeem a confirm token.
@@ -337,7 +337,7 @@ export async function redeemConfirmToken(
 
 // ---------- deleteConfirmToken ----------
 
-export interface ConfirmTokenDeleteEnvelope extends CommandResponse<{ tokenId: string; deleted: true }> {}
+export type ConfirmTokenDeleteEnvelope = CommandResponse<{ tokenId: string; deleted: true }>;
 
 /**
  * v3 §6.2 — Delete/revoke a confirm token.
@@ -377,7 +377,7 @@ export async function deleteConfirmToken(
 
 export type ApprovalDecision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
 
-export interface ApprovalDecisionEnvelope extends CommandResponse<{ approvalId: string; decision: ApprovalDecision }> {}
+export type ApprovalDecisionEnvelope = CommandResponse<{ approvalId: string; decision: ApprovalDecision }>;
 
 export interface ApprovalDecisionOptions {
   correlationId?: string;
@@ -427,7 +427,7 @@ export async function decideApproval(
 
 // ---------- acknowledgeAlert ----------
 
-export interface AlertAckEnvelope extends CommandResponse<{ alertId: string }> {}
+export type AlertAckEnvelope = CommandResponse<{ alertId: string }>;
 
 export interface AlertAckOptions {
   correlationId?: string;
@@ -471,7 +471,7 @@ export async function acknowledgeAlert(
 
 export type InterventionDecision = "acknowledge" | "approve" | "reject" | "dismiss" | "escalate";
 
-export interface InterventionDecisionEnvelope extends CommandResponse<{ interventionId: string; decision: InterventionDecision }> {}
+export type InterventionDecisionEnvelope = CommandResponse<{ interventionId: string; decision: InterventionDecision }>;
 
 export interface InterventionDecisionOptions {
   correlationId?: string;

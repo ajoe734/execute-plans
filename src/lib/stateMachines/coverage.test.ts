@@ -112,14 +112,14 @@ describe("state machine coverage (Part 7 §17)", () => {
   it("strategy: discovered → live happy path", () => {
     const order = ["discovered", "scaffolded", "replicated", "approved", "paper", "live"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(strategyMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(strategyMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
   it("strategy: any → archived (universal terminal)", () => {
     for (const s of [...strategyMachine.states, ...(strategyMachine.branchStates ?? [])]) {
       if (s === "archived") continue;
-      expect(canTransition(strategyMachine, s as any, "archived" as any)).toBe(true);
+      expect(canTransition(strategyMachine, s, "archived")).toBe(true);
     }
   });
 
@@ -128,7 +128,7 @@ describe("state machine coverage (Part 7 §17)", () => {
       "ranking_calculated", "simulation_ready", "under_review",
       "approved", "scheduled", "applied"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(rebalanceMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(rebalanceMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
@@ -137,77 +137,77 @@ describe("state machine coverage (Part 7 §17)", () => {
       "ranking_calculated", "simulation_ready", "under_review",
       "approved", "scheduled"] as const;
     for (const s of preApplied) {
-      expect(canTransition(rebalanceMachine, s as any, "cancelled" as any), `${s}→cancelled`).toBe(true);
+      expect(canTransition(rebalanceMachine, s, "cancelled"), `${s}→cancelled`).toBe(true);
     }
   });
 
   it("alert: every non-closed state can escalate via create_incident (spec §17.10)", () => {
     const escalable = ["new", "acknowledged", "assigned", "investigating", "mitigated", "resolved"] as const;
     for (const s of escalable) {
-      expect(findTransition(alertMachine, s as any, "create_incident"), `${s}:create_incident`).toBeDefined();
+      expect(findTransition(alertMachine, s, "create_incident"), `${s}:create_incident`).toBeDefined();
     }
   });
 
   it("incident: assigned → investigating → mitigation → mitigated → postmortem → closed", () => {
     const order = ["assigned", "investigating", "mitigation_in_progress", "mitigated", "postmortem_required", "closed"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(incidentMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(incidentMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
   it("approval: full happy path (draft → approved)", () => {
     const order = ["draft", "submitted", "validator_running", "in_review", "approved"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(approvalMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(approvalMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
   it("deployment: full happy path (draft → deployed)", () => {
     const order = ["draft", "submitted", "under_review", "approved", "scheduled", "deploying", "deployed"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(deploymentMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(deploymentMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
   it("experiment: queued → running → completed → attached_to_review", () => {
-    expect(canTransition(experimentMachine, "queued" as any, "running" as any)).toBe(true);
-    expect(canTransition(experimentMachine, "running" as any, "completed" as any)).toBe(true);
-    expect(canTransition(experimentMachine, "completed" as any, "attached_to_review" as any)).toBe(true);
+    expect(canTransition(experimentMachine, "queued", "running")).toBe(true);
+    expect(canTransition(experimentMachine, "running", "completed")).toBe(true);
+    expect(canTransition(experimentMachine, "completed", "attached_to_review")).toBe(true);
   });
 
   it("evolutionRun: queued → running → paused → running → completed", () => {
-    expect(canTransition(evolutionRunMachine, "queued" as any, "running" as any)).toBe(true);
-    expect(canTransition(evolutionRunMachine, "running" as any, "paused" as any)).toBe(true);
-    expect(canTransition(evolutionRunMachine, "paused" as any, "running" as any)).toBe(true);
-    expect(canTransition(evolutionRunMachine, "running" as any, "completed" as any)).toBe(true);
+    expect(canTransition(evolutionRunMachine, "queued", "running")).toBe(true);
+    expect(canTransition(evolutionRunMachine, "running", "paused")).toBe(true);
+    expect(canTransition(evolutionRunMachine, "paused", "running")).toBe(true);
+    expect(canTransition(evolutionRunMachine, "running", "completed")).toBe(true);
   });
 
   it("memory: any → deleted (privileged terminal)", () => {
     for (const s of [...memoryMachine.states, ...(memoryMachine.branchStates ?? [])]) {
       if (s === "deleted") continue;
-      expect(canTransition(memoryMachine, s as any, "deleted" as any)).toBe(true);
+      expect(canTransition(memoryMachine, s, "deleted")).toBe(true);
     }
   });
 
   it("insight: any → dismissed and any → archived (universal exits)", () => {
     for (const s of [...insightMachine.states, ...(insightMachine.branchStates ?? [])]) {
-      if (s !== "dismissed") expect(canTransition(insightMachine, s as any, "dismissed" as any)).toBe(true);
-      if (s !== "archived")  expect(canTransition(insightMachine, s as any, "archived" as any)).toBe(true);
+      if (s !== "dismissed") expect(canTransition(insightMachine, s, "dismissed")).toBe(true);
+      if (s !== "archived")  expect(canTransition(insightMachine, s, "archived")).toBe(true);
     }
   });
 
   it("agoraSession: open → active → summary → submitted_to_management", () => {
     const order = ["open", "active", "summary_generated", "submitted_to_management"] as const;
     for (let i = 0; i < order.length - 1; i++) {
-      expect(canTransition(agoraSessionMachine, order[i] as any, order[i + 1] as any)).toBe(true);
+      expect(canTransition(agoraSessionMachine, order[i], order[i + 1])).toBe(true);
     }
   });
 
   it("job: queued/running can cancel; failed → retrying → running", () => {
-    expect(canTransition(jobMachine, "queued" as any, "cancelled" as any)).toBe(true);
-    expect(canTransition(jobMachine, "running" as any, "cancelled" as any)).toBe(true);
-    expect(canTransition(jobMachine, "failed" as any, "retrying" as any)).toBe(true);
-    expect(canTransition(jobMachine, "retrying" as any, "running" as any)).toBe(true);
+    expect(canTransition(jobMachine, "queued", "cancelled")).toBe(true);
+    expect(canTransition(jobMachine, "running", "cancelled")).toBe(true);
+    expect(canTransition(jobMachine, "failed", "retrying")).toBe(true);
+    expect(canTransition(jobMachine, "retrying", "running")).toBe(true);
   });
 
   // ---- helpers contract ----

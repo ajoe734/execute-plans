@@ -33,7 +33,10 @@ class RealtimeBus {
     if (typeof window !== "undefined") {
       this.staleTimer = setInterval(() => this.notifyStatus(), 5_000);
       this.heartbeatTimer = setInterval(() => {
-        if (this.connected) this.lastEventAt = this.lastEventAt; // heartbeat keeps timestamp
+        if (this.connected) {
+          this.lastEventAt = Date.now();
+          this.notifyStatus();
+        }
       }, SSE_HEARTBEAT_INTERVAL_MS);
     }
   }

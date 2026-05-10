@@ -27,17 +27,17 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function flatten(obj: any, prefix = "", out: Set<string> = new Set()): Set<string> {
+function flatten(obj: Record<string, unknown>, prefix = "", out: Set<string> = new Set()): Set<string> {
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}.${k}` : k;
-    if (v && typeof v === "object") flatten(v, key, out);
+    if (v && typeof v === "object" && !Array.isArray(v)) flatten(v as Record<string, unknown>, key, out);
     else out.add(key);
   }
   return out;
 }
 
-const enKeys = flatten(en);
-const zhKeys = flatten(zh);
+const enKeys = flatten(en as Record<string, unknown>);
+const zhKeys = flatten(zh as Record<string, unknown>);
 const files = walk(ROOT);
 
 const usedKeys = new Set<string>();
@@ -94,10 +94,10 @@ const ALLOW_EN = new Set([
   "Postmortem","Runtime","Canary","Shadow","Suspended","Artifact","Model","Dataset",
   "Report","Container","System Prompt",
 ]);
-function flattenWithValues(obj: any, prefix = "", out: Array<[string, string]> = []): Array<[string, string]> {
+function flattenWithValues(obj: Record<string, unknown>, prefix = "", out: Array<[string, string]> = []): Array<[string, string]> {
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}.${k}` : k;
-    if (v && typeof v === "object") flattenWithValues(v, key, out);
+    if (v && typeof v === "object" && !Array.isArray(v)) flattenWithValues(v as Record<string, unknown>, key, out);
     else if (typeof v === "string") out.push([key, v]);
   }
   return out;
@@ -106,7 +106,7 @@ const CJK = /[\u4e00-\u9fff]/;
 const HAS_LATIN = /[A-Za-z]/;
 const PLACEHOLDER = /^\{\{[^}]+\}\}$/;
 const CODE_LIKE = /^[a-z0-9._\-*|/+\s]+$/; // formula / slug
-const zhFlat = flattenWithValues(zh);
+const zhFlat = flattenWithValues(zh as Record<string, unknown>);
 const suspect = zhFlat.filter(([k, v]) => {
   if (CJK.test(v)) return false;
   if (!HAS_LATIN.test(v)) return false;
@@ -116,10 +116,9 @@ const suspect = zhFlat.filter(([k, v]) => {
   if (CODE_LIKE.test(v) && /[*|.]/.test(v)) return false; // expressions
   if (/^v\d/.test(v)) return false; // versions
   // strip whitespace tokens; allow if every token is in allowlist
-  const tokens = v.replace(/[—–\-,/()\[\]]/g, " ").split(/\s+/).filter(Boolean);
+  const tokens = v.replace(/[—–,/()[\]-]/g, " ").split(/\s+/).filter(Boolean);
   if (tokens.every((t) => ALLOW_EN.has(t) || /^[\d.%]+$/.test(t) || /^Δ/.test(t))) return false;
   return true;
 });
 console.log(`\n=== zh-TW values that look untranslated: ${suspect.length} ===`);
 suspect.slice(0, 40).forEach(([k, v]) => console.log(`  ${k}\t${v}`));
-

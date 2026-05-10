@@ -23,8 +23,11 @@ export const ScenarioRunnerCard = () => {
     try {
       const r = await runScenario(id);
       setResults((prev) => ({ ...prev, [id]: r }));
-      r.ok ? toast.success(t("qa.scenario.passed", { defaultValue: "Scenario passed" }), { description: id })
-           : toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: id });
+      if (r.ok) {
+        toast.success(t("qa.scenario.passed", { defaultValue: "Scenario passed" }), { description: id });
+      } else {
+        toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: id });
+      }
     } finally { setRunning(null); }
   };
   const runAll = async () => {

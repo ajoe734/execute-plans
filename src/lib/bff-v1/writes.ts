@@ -162,7 +162,7 @@ export async function tryRunAction(
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
-export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
+export type ConfirmTokenEnvelope = CommandResponse<ConfirmTokenResponse>;
 
 /** v3 §6.2 — create a confirm token via the v1 seam (envelope + correlationId).
  *  Live path: POST /bff/confirm-tokens when liveWriteGated() is true. */

@@ -51,8 +51,9 @@ export const NotificationCenter = () => {
       const j = p as { jobId: string; kind: string; status: Job["status"]; ts: string; owner: string };
       setJobs((cur) => [{ id: j.jobId, kind: j.kind, status: j.status, startedAt: j.ts, owner: j.owner }, ...cur].slice(0, 50));
     });
-    const offData = realtime.on("data", (e: any) => {
-      if (e?.kind === "Incident") void bff.incidents.list().then(setIncidents);
+    const offData = realtime.on("data", (e) => {
+      const event = e as { kind?: string } | undefined;
+      if (event?.kind === "Incident") void bff.incidents.list().then(setIncidents);
     });
     return () => { offAlert?.(); offJob?.(); offData?.(); };
   }, [open]);
