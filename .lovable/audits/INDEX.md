@@ -1,5 +1,8 @@
 # Spec Gap Audit — Index
 
+> **Latest（2026-05-10）**：唯一最新整合狀態表 = [`fe-spec-status-2026-05-10.md`](./fe-spec-status-2026-05-10.md)；對應 spec snapshot = `.lovable/spec/current/`。
+> Supersedes：`fe-blueprint-gap-2026-05-09.md`（已加 banner）。
+
 本資料夾收錄歷次 Pantheon Frontend Build Spec 與現有實作之間的「規格缺漏 / 矛盾」盤點報告。
 
 ```
