@@ -4820,6 +4820,17 @@ components:
           type: string
         parameters:
           type: object
+    ActionCommandStatus:
+      type: string
+      enum:
+        - accepted
+        - queued
+        - completed
+      description: >
+        Success-only action command status. Missing confirm token,
+        approval, or two-man requirements MUST be returned as non-2xx
+        BffErrorEnvelope (e.g. APPROVAL_REQUIRED), never as a success
+        status. (Backported 2026-05-10 per FE_Blueprint_Gap §B1.)
     ActionCommandResponseData:
       type: object
       required:
@@ -4835,11 +4846,7 @@ components:
         actionId:
           type: string
         status:
-          type: string
-          enum:
-          - accepted
-          - queued
-          - completed
+          $ref: '#/components/schemas/ActionCommandStatus'
         jobId:
           type: string
         approvalId:
