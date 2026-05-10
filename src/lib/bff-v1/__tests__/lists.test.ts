@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { lists, useLiveListV1, asListEnvelope, type ListEnvelope } from "@/lib/bff-v1";
+import { lists, useLiveListV1, asListEnvelope, normalizeLiveListResponse, type ListEnvelope } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 
 describe("VI-1 lists facade", () => {
@@ -17,6 +17,33 @@ describe("VI-1 lists facade", () => {
     const loader = asListEnvelope(async () => [] as Array<{ id: string }>);
     const env = await loader();
     expect(env.items).toEqual([]);
+    expect(env.estimatedTotal).toBe(0);
+  });
+
+  it("normalizes live BFF data/page_info payloads into ListEnvelope shape", () => {
+    const env = normalizeLiveListResponse<{ id: string }>(
+      {
+        data: [{ id: "a" }],
+        page_info: { next_page_token: "n1", total: 7 },
+      },
+      "entityRegistry",
+    );
+
+    expect(env.items).toEqual([{ id: "a" }]);
+    expect(env.cursor.next).toBe("n1");
+    expect(env.pageSize).toBe(1);
+    expect(env.estimatedTotal).toBe(7);
+    expect(env.totalCountExact).toBe(true);
+  });
+
+  it("normalizes live BFF items/count payloads into ListEnvelope shape", () => {
+    const env = normalizeLiveListResponse<{ id: string }>(
+      { items: [], count: 0 },
+      "governanceQueue",
+    );
+
+    expect(env.items).toEqual([]);
+    expect(env.pageSize).toBe(0);
     expect(env.estimatedTotal).toBe(0);
   });
 });

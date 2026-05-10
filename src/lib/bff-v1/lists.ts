@@ -48,6 +48,56 @@ function envelope<T>(items: T[], cls: ListClass): ListEnvelope<T> {
   return out;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function firstArray<T>(...values: unknown[]): T[] {
+  for (const value of values) {
+    if (Array.isArray(value)) return value as T[];
+  }
+  return [];
+}
+
+function numberFrom(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+function cursorFrom(payload: Record<string, unknown> | null): ListEnvelope<unknown>["cursor"] {
+  const direct = asRecord(payload?.cursor);
+  const pageInfo = asRecord(payload?.page_info ?? payload?.pageInfo);
+  return {
+    next: String(direct?.next ?? pageInfo?.next_page_token ?? pageInfo?.nextPageToken ?? "").trim() || undefined,
+    prev: String(direct?.prev ?? pageInfo?.prev_page_token ?? pageInfo?.prevPageToken ?? "").trim() || undefined,
+  };
+}
+
+export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): ListEnvelope<T> {
+  const record = asRecord(payload);
+  const data = record ? record.data : undefined;
+  const dataRecord = asRecord(data);
+  const pageInfo = asRecord(record?.page_info ?? record?.pageInfo);
+  const meta = asRecord(record?.meta);
+  const items = firstArray<T>(payload, record?.items, data, dataRecord?.items);
+  const pageSize = numberFrom(record?.pageSize, record?.page_size, pageInfo?.page_size, pageInfo?.pageSize) ?? items.length;
+  const estimatedTotal = numberFrom(record?.estimatedTotal, record?.estimated_total, record?.count, pageInfo?.total, meta?.total);
+
+  const rule = LIST_CLASS_RULES[cls];
+  const out: ListEnvelope<T> = {
+    items,
+    cursor: cursorFrom(record),
+    pageSize,
+    totalCountExact: typeof record?.totalCountExact === "boolean" ? record.totalCountExact : rule.totalCountExact,
+  };
+  if (rule.emitEstimatedTotal) out.estimatedTotal = estimatedTotal ?? items.length;
+  return out;
+}
+
 /** Adapt a legacy `() => Promise<T[]>` reader into a v1 envelope reader. */
 export function asListEnvelope<T>(
   loader: () => Promise<T[]>,
@@ -69,7 +119,11 @@ function liveOrMockList<T>(
 ): () => Promise<ListEnvelope<T>> {
   const mockFn = async (): Promise<ListEnvelope<T>> => envelope(await loader(), cls);
   return () =>
-    withLiveOrMock<ListEnvelope<T>>({ method: "GET", path }, mockFn);
+    withLiveOrMock<ListEnvelope<T>, unknown>(
+      { method: "GET", path },
+      mockFn,
+      (data) => normalizeLiveListResponse<T>(data, cls),
+    );
 }
 
 /** Per-entity list-class map (Pack D D22).

@@ -4,7 +4,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bff } from "@/lib/bff-v1";
+import { bff, lists } from "@/lib/bff-v1";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,14 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 
+const loadListItems = <T,>(loader: () => Promise<{ items: T[] }>) =>
+  loader().then((envelope) => envelope.items);
+
 export const JobsPage = () => {
   const t = useT();
   const [rows, setRows] = useState<Job[]>([]);
   const [liveCount, setLiveCount] = useState(0);
-  useEffect(() => { bff.jobs.list().then(setRows); }, []);
+  useEffect(() => { loadListItems<Job>(lists.jobs).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("job", (p) => {
@@ -51,7 +54,7 @@ export const AlertsPage = () => {
   const t = useT();
   const [rows, setRows] = useState<Alert[]>([]);
   const [active, setActive] = useState<Alert | null>(null);
-  useEffect(() => { bff.alerts.list().then(setRows); }, []);
+  useEffect(() => { loadListItems<Alert>(lists.alerts).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("alert", (p) => {
@@ -126,7 +129,7 @@ export const IncidentsPage = () => {
   const [rows, setRows] = useState<Incident[]>([]);
   const [active, setActive] = useState<Incident | null>(null);
   const [resolveOpen, setResolveOpen] = useState(false);
-  useEffect(() => { bff.incidents.list().then(setRows); }, []);
+  useEffect(() => { loadListItems<Incident>(lists.incidents).then(setRows); }, []);
 
   const advance = async (id: string, status: Incident["status"], memo?: string) => {
     await bff.mutations.setIncidentStatus(id, status, memo);
@@ -207,7 +210,7 @@ export const ApprovalsPage = () => {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending">("pending");
-  useEffect(() => { bff.approvals.list().then(setRows); }, []);
+  useEffect(() => { loadListItems<ApprovalRequest>(lists.approvals).then(setRows); }, []);
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
@@ -323,7 +326,7 @@ export const AuditPage = () => {
   const [actor, setActor] = useState<string>("all");
   const [action, setAction] = useState<string>("all");
   const [outcome, setOutcome] = useState<string>("all");
-  useEffect(() => { bff.audit.list().then(setRows); }, []);
+  useEffect(() => { loadListItems<AuditEvent>(lists.audit).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("audit", (p) => {
