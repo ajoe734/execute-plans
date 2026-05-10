@@ -10,7 +10,7 @@ import { usePlatform, type Locale, type UserRole } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
-import { bff, probeLiveHealth } from "@/lib/bff-v1";
+import { lists, probeLiveHealth } from "@/lib/bff-v1";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 
@@ -30,13 +30,16 @@ export const TopBar = () => {
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
 
   useEffect(() => {
-    Promise.all([bff.approvals.list(), bff.alerts.list(), bff.jobs.list()]).then(([a, al, j]) => {
+    Promise.all([lists.approvals(), lists.alerts(), lists.jobs()]).then(([a, al, j]) => {
+      const approvals = a.items as Array<{ state?: string }>;
+      const alerts = al.items as Array<{ acknowledged?: boolean }>;
+      const jobs = j.items as Array<{ status?: string }>;
       setCounts({
-        approvals: a.filter((x) => x.state === "pending").length,
-        alerts: al.filter((x) => !x.acknowledged).length,
-        jobs: j.filter((x) => x.status === "running").length,
+        approvals: approvals.filter((x) => x.state === "pending").length,
+        alerts: alerts.filter((x) => !x.acknowledged).length,
+        jobs: jobs.filter((x) => x.status === "running").length,
       });
-    });
+    }).catch(() => setCounts({ approvals: 0, alerts: 0, jobs: 0 }));
     let cleanup: (() => void) | undefined;
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const offJob = realtime.on("job", (p) => {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { realtime } from "@/lib/bff/realtime";
-import { bff } from "@/lib/bff-v1";
+import { lists, useLiveStatus } from "@/lib/bff-v1";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,17 +48,19 @@ export const useJobDrawer = create<JobDrawerState>((set) => ({
 
 export const JobProgressDrawer = () => {
   const t = useT();
+  const live = useLiveStatus();
   const { expanded, toggle, jobs, upsert, remove, setAll } = useJobDrawer();
   const [tick, setTick] = useState(0);
+  const isMockData = live.effective === "mock";
 
   // Initial seed from BFF
   useEffect(() => {
-    void bff.jobs.list().then((rows) => setAll(
-      rows.map((r) => ({
+    void lists.jobs().then((env) => setAll(
+      (env.items as Array<{ id: string; kind: string; owner: string; startedAt: string; status: RunningJob["status"] }>).map((r) => ({
         id: r.id, kind: r.kind, owner: r.owner, startedAt: r.startedAt,
         status: r.status, progress: r.status === "success" ? 1 : Math.random() * 0.6 + 0.2,
       })),
-    ));
+    )).catch(() => setAll([]));
   }, [setAll]);
 
   // Subscribe to realtime job events
@@ -98,7 +100,8 @@ export const JobProgressDrawer = () => {
         className="w-full flex items-center gap-3 px-4 h-9 text-sm hover:bg-muted/40 transition"
       >
         <Loader2 className={`h-3.5 w-3.5 ${running.length > 0 ? "animate-spin" : ""}`} />
-        <span className="font-medium">{t("jobs.runningCount", { count: running.length })}</span>
+        <span className="font-medium">{t(isMockData ? "jobs.mockRunningCount" : "jobs.runningCount", { count: running.length })}</span>
+        {isMockData && <Badge variant="outline" className="text-[10px] text-status-warning uppercase">{t("jobs.mockBadge")}</Badge>}
         <span className="text-xs text-muted-foreground">· {jobs.length} {t("jobs.tracked")}</span>
         <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
           {expanded ? <>{t("jobs.collapse")} <ChevronDown className="h-3.5 w-3.5" /></> : <>{t("jobs.expand")} <ChevronUp className="h-3.5 w-3.5" /></>}

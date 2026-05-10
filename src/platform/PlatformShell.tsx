@@ -30,7 +30,7 @@ export const PlatformShell = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <LiveBffBanner />
       <TopBar />
-      <div className="flex-1 flex">
+      <div className="flex-1 flex pb-10">
         <Outlet />
       </div>
       <RightDrawer />

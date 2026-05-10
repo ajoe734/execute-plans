@@ -15,17 +15,19 @@ export const RealtimeStatusBadge = () => {
   const live = useLiveStatus();
   const [open, setOpen] = useState(false);
   const ageSec = Math.max(0, Math.round((Date.now() - lastEventAt) / 1000));
-  const effectiveStatus = live.mode === "live" && live.effective === "mock" ? "offline" : status;
+  const effectiveStatus = live.mode === "mock" ? "mock" : live.effective === "mock" ? "offline" : status;
 
   const tone =
     effectiveStatus === "live" ? "text-status-success"
+    : effectiveStatus === "mock" ? "text-status-warning"
     : effectiveStatus === "stale" ? "text-status-warning"
     : "text-status-failed";
   const dotTone =
     effectiveStatus === "live" ? "bg-status-success animate-pulse-dot"
+    : effectiveStatus === "mock" ? "bg-status-warning"
     : effectiveStatus === "stale" ? "bg-status-warning"
     : "bg-status-failed";
-  const Icon = effectiveStatus === "offline" ? WifiOff : Wifi;
+  const Icon = effectiveStatus === "offline" ? WifiOff : effectiveStatus === "mock" ? Activity : Wifi;
 
   const recent = realtime.getRecent();
   const recentSlice = recent.slice(0, 12);

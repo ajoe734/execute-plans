@@ -1,13 +1,13 @@
 // AlphaFactoryBoard — Spec Part 3 §6.8.
 // Discovered / Scaffolded / Replicated three-column kanban under Strategies.
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bff } from "@/lib/bff-v1";
+import { lists, useLiveListV1, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";
@@ -19,28 +19,32 @@ const COLUMNS = ["discovered", "scaffolded", "replicated"] as const;
 export const AlphaFactoryBoardPage = () => {
   const t = useT();
   const nav = useNavigate();
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  useEffect(() => { bff.strategies.list().then(setStrategies); }, []);
+  const live = useLiveStatus();
+  const { items: strategies, loading } = useLiveListV1<Strategy>(
+    lists.strategies as () => Promise<ListEnvelope<Strategy>>,
+    ["Strategy"],
+  );
+  const isMockData = live.effective === "mock";
+  const sourceKey = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
 
   const buckets = useMemo(() => {
-    // map a few strategies to "replicated"; mock the rest as discovered/scaffolded candidates
     const repl: Card3[] = strategies.slice(0, 4).map((s) => ({
       id: s.id, name: s.name, risk: s.risk, alpha: s.alpha, sharpe: s.sharpe, note: t("alphaFactory.replicated.note"),
     }));
-    const scaffolded: Card3[] = [
+    const scaffolded: Card3[] = isMockData ? [
       { id: "cand_011", name: "Short-vol carry (BTC)",  risk: "medium", alpha: "vol.carry", sharpe: 1.42, note: t("alphaFactory.scaffolded.note") },
       { id: "cand_012", name: "Cross-venue funding arb", risk: "low",    alpha: "fund.arb",  sharpe: 1.18, note: t("alphaFactory.scaffolded.note") },
       { id: "cand_013", name: "Sector rotation (US tech)", risk: "high",  alpha: "rot.us",    sharpe: 0.88, note: t("alphaFactory.scaffolded.note") },
-    ];
-    const discovered: Card3[] = [
+    ] : [];
+    const discovered: Card3[] = isMockData ? [
       { id: "disc_021", name: "Liquidity-shock divergence", risk: "low",    note: t("alphaFactory.discovered.note") },
       { id: "disc_022", name: "Macro surprise momentum",    risk: "medium", note: t("alphaFactory.discovered.note") },
       { id: "disc_023", name: "Stablecoin flow imbalance",  risk: "medium", note: t("alphaFactory.discovered.note") },
       { id: "disc_024", name: "Options skew reversion",     risk: "low",    note: t("alphaFactory.discovered.note") },
       { id: "disc_025", name: "On-chain whale accumulation", risk: "high",  note: t("alphaFactory.discovered.note") },
-    ];
+    ] : [];
     return { discovered, scaffolded, replicated: repl } as Record<typeof COLUMNS[number], Card3[]>;
-  }, [strategies, t]);
+  }, [isMockData, strategies, t]);
 
   return (
     <>
@@ -48,6 +52,10 @@ export const AlphaFactoryBoardPage = () => {
         <Button size="sm" variant="outline" onClick={() => nav("/management/strategies")}>{t("alphaFactory.openList")}</Button>
       }/>
       <PageBody>
+        <div className="mb-4 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+          <span className="font-semibold text-mono uppercase tracking-wider">{t(`alphaFactory.source.${sourceKey}`)}</span>
+          <span className="ml-2 text-foreground/70">{t("alphaFactory.source.explain")}</span>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {COLUMNS.map((col) => (
             <div key={col} className="space-y-3">
@@ -56,7 +64,11 @@ export const AlphaFactoryBoardPage = () => {
                 <Badge variant="outline">{buckets[col].length}</Badge>
               </div>
               <div className="space-y-2">
-                {buckets[col].map((c) => (
+                {loading ? (
+                  <Card className="p-3 text-xs text-muted-foreground">{t("ui.loading")}</Card>
+                ) : buckets[col].length === 0 ? (
+                  <Card className="p-3 text-xs text-muted-foreground">{t(`alphaFactory.empty.${col}`)}</Card>
+                ) : buckets[col].map((c) => (
                   <Card key={c.id} className="p-3 hover:border-accent transition cursor-pointer" onClick={() => col === "replicated" && nav(`/management/strategies/${c.id}`)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
