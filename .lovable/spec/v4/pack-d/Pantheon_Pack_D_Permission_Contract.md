@@ -182,8 +182,53 @@ lowercase dot.case；大小寫敏感。
 
 ---
 
+## D-EvidenceKind — Capability Map（2026-05-10 backport）
+
+來源：FE_Blueprint_Gap addendum 2026-05-09 §B3.6；對齊 `src/lib/bff-v1/dto.ts` `EVIDENCE_CAPABILITY_MAP`。
+凡 SSE / API 回傳的 `EvidenceRef` / `RedactedEvidenceRef`，BFF 必須以下表 capability 判定可見性。
+
+### Canonical (19)
+
+| EvidenceKind | Required capability |
+|---|---|
+| alert | `risk.alert.read` |
+| incident | `risk.incident.read` |
+| job | `job.read` |
+| audit | `audit.read` |
+| metric | `metric.read` |
+| strategy | `strategy.view` |
+| persona | `persona.view` |
+| deployment | `deployment.read` |
+| runtime | `runtime.read` |
+| policy | `policy.read` |
+| approval | `approval.read` |
+| artifact | `artifact.read` |
+| signal | `agora.signal.read` |
+| journal | `agora.journal.read` |
+| postmortem | `postmortem.read` |
+| loop_run | `loop.read` |
+| sentinel_finding | `sentinel.read` |
+| intervention | `intervention.read` |
+| ask_session | `agora.ask` |
+
+### Legacy alias (3)
+
+Backend SHOULD NOT emit these in new APIs；FE 仍接受並 normalize 至 canonical 形式。
+
+| Alias | Required capability |
+|---|---|
+| snapshot | `artifact.read` |
+| rebalance | `rebalance.read` |
+| experiment | `research.read` |
+
+缺對應 capability 時，BFF 回傳 `RedactedEvidenceRef`（kind 保留，僅 mark redacted；詳見 `Pantheon_BFF_AsyncAPI_SSE.md` §9）。
+
+---
+
 ## 落地階段建議
 
 - Batch II：D13 enum 落 `src/lib/v4/`；D14 i18n key；D16 lint rule
 - Batch III：D09–D11 ActionDescriptor 表整併；D12 ROLE_CAPABILITIES bundle 落程式碼
 - Batch IV：D15 serverTime offset hook（可先 mock `/bff/me.serverTime`）
+- 2026-05-10 backport：D-EvidenceKind capability map 已對齊 `bff-v1/dto.ts`
+
