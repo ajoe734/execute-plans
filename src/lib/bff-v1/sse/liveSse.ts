@@ -56,6 +56,7 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   es.addEventListener("open", () => {
     opened = true;
     attempt = 0;
+    realtime.markLiveOpen();
     liveStatus.reportSuccess();
   });
 
@@ -69,6 +70,7 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   });
 
   es.addEventListener("error", () => {
+    realtime.markLiveError();
     if (!opened) {
       // never opened → transport failure, fall back.
       liveStatus.reportFallback("sse_open_failed");

@@ -1,8 +1,9 @@
-// Pack D D51 + D59 — MeResponse DTO + mock provider (Batch II).
+// Pack D D51 + D59 — MeResponse DTO + session transport.
 // Source: .lovable/spec/v4/pack-d/Pantheon_Pack_D_Session_Auth_Tenant_Contract.md
-// Batch III will replace mockMe() with a real /bff/me fetch.
 
 import { useEffect, useState } from "react";
+import { paths } from "@/lib/bff-v1/paths";
+import { withLiveOrMock } from "@/lib/bff-v1/liveTransport";
 
 export type Role =
   | "platform_admin"
@@ -91,26 +92,41 @@ export function mockMe(): MeResponse {
   };
 }
 
+function isMeResponse(value: unknown): value is MeResponse {
+  const candidate = value as Partial<MeResponse> | undefined;
+  return !!candidate?.user && !!candidate?.tenant && Array.isArray(candidate.roles) && Array.isArray(candidate.capabilities);
+}
+
+function normalizeMeResponse(value: unknown): MeResponse {
+  if (isMeResponse(value)) return value;
+  const record = value as { data?: unknown; me?: unknown; session?: unknown } | undefined;
+  if (isMeResponse(record?.data)) return record.data;
+  if (isMeResponse(record?.me)) return record.me;
+  if (isMeResponse(record?.session)) return record.session;
+  throw new Error("Invalid /bff/me response shape");
+}
+
+async function loadLiveOrMockMe(): Promise<MeResponse> {
+  return withLiveOrMock<MeResponse, unknown>(
+    { method: "GET", path: paths.me() },
+    async () => mockMe(),
+    normalizeMeResponse,
+  );
+}
+
 export async function fetchMe(force = false): Promise<MeResponse> {
   const now = Date.now();
   if (!force && cache && now - cache.fetchedAt < ME_CACHE_TTL_MS) return cache.value;
   if (inflight) return inflight;
   inflight = (async () => {
-    let value: MeResponse;
-    try {
-      const { withLiveOrMock } = await import("@/lib/bff-v1/liveTransport");
-      const { paths } = await import("@/lib/bff-v1/paths");
-      value = await withLiveOrMock<MeResponse>(
-        { method: "GET", path: paths.me() },
-        async () => mockMe(),
-      );
-    } catch {
-      value = mockMe();
-    }
+    const value = await loadLiveOrMockMe();
     cache = { value, fetchedAt: Date.now() };
     inflight = null;
     return value;
-  })();
+  })().catch((error) => {
+    inflight = null;
+    throw error;
+  });
   return inflight;
 }
 
@@ -119,20 +135,49 @@ export function invalidateMe(): void {
   inflight = null;
 }
 
+export async function refreshSession(): Promise<MeResponse> {
+  const value = await withLiveOrMock<MeResponse, unknown>(
+    { method: "POST", path: paths.authRefresh() },
+    async () => mockMe(),
+    normalizeMeResponse,
+  );
+  cache = { value, fetchedAt: Date.now() };
+  inflight = null;
+  return value;
+}
+
+export async function logoutSession(): Promise<{ ok: true }> {
+  await withLiveOrMock<unknown>(
+    { method: "POST", path: paths.logout() },
+    async () => ({ ok: true }),
+  );
+  invalidateMe();
+  return { ok: true };
+}
+
 /** React hook — single source of `currentUser` per Pack D D51. */
-export function useMe(): { me: MeResponse | null; loading: boolean; refresh: () => void } {
+export function useMe(): { me: MeResponse | null; loading: boolean; error: Error | null; refresh: () => void } {
   const [me, setMe] = useState<MeResponse | null>(cache?.value ?? null);
   const [loading, setLoading] = useState<boolean>(!cache);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchMe().then((value) => {
-      if (alive) {
-        setMe(value);
-        setLoading(false);
-      }
-    });
+    fetchMe()
+      .then((value) => {
+        if (alive) {
+          setMe(value);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (alive) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setLoading(false);
+        }
+      });
     return () => {
       alive = false;
     };
@@ -141,13 +186,19 @@ export function useMe(): { me: MeResponse | null; loading: boolean; refresh: () 
   function refresh() {
     invalidateMe();
     setLoading(true);
-    fetchMe(true).then((value) => {
-      setMe(value);
-      setLoading(false);
-    });
+    refreshSession()
+      .then((value) => {
+        setMe(value);
+        setError(null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        setLoading(false);
+      });
   }
 
-  return { me, loading, refresh };
+  return { me, loading, error, refresh };
 }
 
 export function hasCapability(me: MeResponse | null, cap: Capability): boolean {

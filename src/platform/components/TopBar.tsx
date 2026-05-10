@@ -10,7 +10,7 @@ import { usePlatform, type Locale, type UserRole } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
-import { bff } from "@/lib/bff-v1";
+import { bff, probeLiveHealth } from "@/lib/bff-v1";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 
@@ -53,7 +53,14 @@ export const TopBar = () => {
       });
       cleanup = () => { offJob?.(); offAlert?.(); };
     });
-    return () => cleanup?.();
+    void probeLiveHealth().catch(() => undefined);
+    const healthTimer = window.setInterval(() => {
+      void probeLiveHealth().catch(() => undefined);
+    }, 30_000);
+    return () => {
+      cleanup?.();
+      window.clearInterval(healthTimer);
+    };
   }, []);
 
   useEffect(() => {

@@ -2,11 +2,13 @@
 // Started once at PlatformShell mount.
 import { useEffect } from "react";
 import { realtime, type RealtimeJobEvent } from "./bff/realtime";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 let started = false;
 
 export function useMockRealtimeTicker() {
   useEffect(() => {
+    if (liveStatus.get().mode === "live") return;
     if (started) return;
     started = true;
 

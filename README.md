@@ -1,7 +1,8 @@
 # Pantheon Frontend (Lovable)
 
-Pantheon 是一個雙產品（**Management Console** + **Agora Workbench**）的內部營運與研究操作介面，
-完全以 mock BFF + mock realtime 在前端跑通，可在 spec 鎖定後接到真實後端。
+Pantheon 是一個雙產品（**Management Console** + **Agora Workbench**）的內部營運與研究操作介面。
+目前支援 mock 與 Pantheon BFF live 模式；`VITE_BFF_FALLBACK=auto` 是 dev/hybrid fallback，
+`VITE_BFF_FALLBACK=strict` 是 real integration 模式，不會靜默退回 mock。
 
 > 規格唯一真實來源：`.lovable/spec/Pantheon_Frontend_Build_Spec_FULL_*.md`（zh-TW / en-US）。
 
@@ -10,11 +11,80 @@ Pantheon 是一個雙產品（**Management Console** + **Agora Workbench**）的
 ## 快速開始
 
 ```bash
-bun install
-bun run dev          # Vite 開發伺服器
-bunx vitest run      # 執行所有單元測試
-bun scripts/check-i18n.ts   # 檢查 i18n 字典與硬編碼字串
+npm install
+npm run dev          # Vite 開發伺服器
+npm run test         # 執行所有單元測試
+npm run build        # production build
+npm run lint         # lint
 ```
+
+## Lovable / Pantheon BFF 串接
+
+這個 repo 是新的 Lovable app（execute-plans），不是舊的 `front-ai-trading-system`
+專案。三個常用 env 範本：
+
+- `.env.example`：預設 mock，本地無後端時使用。
+- `.env.dev.example`：shared dev BFF，`live + auto` fallback。
+- `.env.development.example`：lupin dev BFF，`live + auto` fallback。
+- `.env.staging-live.example`：staging-live BFF，`live + strict`，驗證時不得靜默 mock。
+
+Lovable shared dev hosting 請設定：
+
+```env
+VITE_BFF_MODE=live
+VITE_BFF_BASE_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io
+VITE_BFF_FALLBACK=auto
+VITE_BFF_REAL_WRITES=false
+```
+
+Staging-live:
+
+```env
+VITE_BFF_MODE=live
+VITE_BFF_BASE_URL=https://pantheon-staging-bff.34.81.225.122.sslip.io
+VITE_BFF_FALLBACK=strict
+VITE_BFF_REAL_WRITES=false
+```
+
+`VITE_BFF_REAL_WRITES=false` 會讓 state-machine action writes 保留在前端 mock/overlay；
+只有 operator auth、approval evidence、confirm-token、two-man signing 都驗證後，才可打開。
+
+Auth/session access is explicit:
+
+- Browser cookie session：live fetch 使用 `credentials: "include"`。
+- Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
+  `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
+- Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
+
+Route-by-route live/fallback behavior:
+
+- `GET /health`
+  - live：TopBar 每 30 秒 probe 一次並更新 `LiveBffBanner` / realtime diagnostics。
+  - auto fallback：transport/network/5xx 退回 `{ status: "mock" }` 並顯示 fallback。
+  - strict：transport failure 會以 typed BFF error 浮出。
+- `GET /bff/me`
+  - live：透過 `fetchMe()` 打真 BFF，支援 cookie 或 optional bearer token。
+  - auto fallback：transport/network/5xx 退回 `mockMe()`，但 banner 會標示 fallback。
+  - strict / real：不再 catch-all 靜默 mock；4xx 與 transport failure 會讓 session hook 暴露 error。
+- `POST /bff/auth/refresh`
+  - live：`refreshSession()` 打真 BFF，成功後更新 session cache。
+  - auto fallback：退回 mock session 並更新 cache。
+  - strict：失敗會浮出 error，不會刷新成 mock。
+- `POST /bff/logout`
+  - live：`logoutSession()` 打真 BFF，成功後清 session cache。
+  - auto fallback：清本地 session cache 並回 `{ ok: true }`。
+  - strict：失敗會浮出 error。
+- `GET /bff/v5/interventions?status=pending`
+  - live：v5 intervention list 會嘗試讀 BFF 並轉成現有 UI model。
+  - auto fallback：退回 seed-derived intervention list。
+  - strict：失敗浮出 error。
+- `POST /bff/actions/{entityType}/{entityId}/{actionId}` and selected v5 remediation writes
+  - live writes only when `VITE_BFF_REAL_WRITES=true`。
+  - default false：保留 mock mutation + overlay + audit/realtime behavior。
+  - strict only affects transport once writes are explicitly enabled.
+
+其餘 execute-plans 既有 mock-spec routes 先留在 mock fallback，避免 UI 呼叫尚未交付的
+route family 時整站失效。
 
 ---
 
@@ -25,7 +95,8 @@ bun scripts/check-i18n.ts   # 檢查 i18n 字典與硬編碼字串
 | `src/platform/` | 跨產品共用的 Shell：TopBar、SideNav、Drawers、HighRiskConfirm、EntityHeader、StatusBadge、LifecycleStepper、AuditTimeline、PermissionAwareButton、QAChecklist… |
 | `src/management/` | Management Console（Strategy/Persona/Capital Pool/Rebalance/Approvals/Runtimes/Risk/Incidents/Capabilities…） |
 | `src/agora/` | Agora Workbench（DailyBrief/Signals/Notebook/AskPersonas/Committee/DecisionJournal/AlertTriage/InsightInbox/Trainer/MemoryReview/SkillCoaching） |
-| `src/lib/bff/` | Mock BFF：`client.ts`（讀）、`mutations.ts`（寫＋稽核）、`realtime.ts`（事件匯流排）、`types.ts` |
+| `src/lib/bff-v1/` | Pantheon BFF v1 live/mock transport：`client.ts`、`liveTransport.ts`、`paths.ts`、`lists.ts`、`writes.ts`、`me.ts` |
+| `src/lib/bff/` | Legacy mock seed support：`mutations.ts`（寫＋稽核）、`realtime.ts`（事件匯流排）、`types.ts`、v5 UI facade |
 | `src/lib/stateMachines/` | 18 個實體狀態機（Spec Part 7 §17） |
 | `src/lib/permissions.ts` | RBAC 權限矩陣 + `filterActions` |
 | `src/lib/handoff.ts` | Agora → Management 的工作交接 store |
@@ -36,8 +107,8 @@ bun scripts/check-i18n.ts   # 檢查 i18n 字典與硬編碼字串
 
 ## 設計原則
 
-1. **Mock-first**：所有資料、寫入、即時事件都走 `lib/bff/*`，不接真後端。
-   想替換成真 API 時，只需在 `client.ts` / `mutations.ts` / `realtime.ts` 換 transport。
+1. **BFF boundary only**：所有資料、寫入、即時事件都走 `lib/bff-v1/*` 或 legacy
+   `lib/bff/*` facade。不要在頁面元件直接 `fetch()` 真實 API。
 2. **狀態機驅動 UI**：所有可執行動作由 `nextTransitions(machine, state)` 產生，
    再經 `filterActions(role, …)` 過濾，避免 UI 與後端流程脫鉤。
 3. **高風險動作三道閘門**：
@@ -69,7 +140,7 @@ bun scripts/check-i18n.ts   # 檢查 i18n 字典與硬編碼字串
 ## 測試
 
 ```bash
-bunx vitest run
+npm run test
 ```
 
 覆蓋（30 tests, 6 files）：
@@ -106,7 +177,7 @@ bunx vitest run
 ## 開發守則
 
 - **不要**在元件裡寫硬編碼 hex/rgb/text-white 等顏色，請用 `index.css` / `tailwind.config.ts` 的 semantic tokens（`bg-background`、`text-foreground`、`border-border`、`bg-status-success` …）。
-- **不要**直接 `fetch()` 真實 API；所有讀寫一律走 `lib/bff/*`。
+- **不要**直接 `fetch()` 真實 API；所有讀寫一律走 `lib/bff-v1/*` 或 legacy `lib/bff/*` facade。
 - **不要**繞過 `mutations.runAction()` 直接改 `seed.ts`（會缺稽核 + realtime）。
 - 加新狀態機 transition 時，務必補上 `risk` / `requiresApproval` / `uiPattern`，
   UI 才會自動渲染正確的 confirm 模式。

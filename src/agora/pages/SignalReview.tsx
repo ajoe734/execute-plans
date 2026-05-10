@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ThumbsUp, ThumbsDown, MessageSquareWarning, ArrowRight } from "lucide-react";
 import { bff } from "@/lib/bff-v1";
-import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 import { RiskBadge } from "@/platform/components/RiskBadge";
@@ -33,28 +32,6 @@ interface Signal {
   risk: "info" | "low" | "medium" | "high" | "critical";
 }
 
-const mockSignals = (strategies: Strategy[]): Signal[] => {
-  if (!strategies.length) return [];
-  const symbols = ["TSM", "NVDA", "AAPL", "JPM", "BTCUSD", "XOM"];
-  return strategies.slice(0, 5).map((s, i) => ({
-    id: `sig_${i}`,
-    strategyId: s.id,
-    strategyName: s.name,
-    alpha: s.alpha,
-    side: i % 2 === 0 ? "long" : "short",
-    symbol: symbols[i % symbols.length],
-    size: 0.04 + (i * 0.013),
-    conviction: 0.55 + (i * 0.07),
-    rationale: i === 0
-      ? "Momentum z-score crossed +1.8 with positive earnings drift; gross to risk budget cap."
-      : i === 1
-      ? "Mean-reversion trigger on overbought 14d RSI; expects fade into close."
-      : "Composite score in top decile; volatility within target band.",
-    generatedAt: new Date(Date.now() - i * 1800_000).toISOString(),
-    risk: s.risk,
-  }));
-};
-
 export const SignalReview = () => {
   const t = useT();
   const navigate = useNavigate();
@@ -65,10 +42,13 @@ export const SignalReview = () => {
   const [decided, setDecided] = useState<Record<string, { decision: SignalDecision; confidence: SignalConfidence; at: number }>>({});
 
   useEffect(() => {
-    bff.strategies.list().then((s) => {
-      const sg = mockSignals(s);
+    bff.agora.signals.list().then((sg) => {
       setSignals(sg);
       setActive(sg[0] ?? null);
+    }).catch((err) => {
+      setSignals([]);
+      setActive(null);
+      toast.error(err instanceof Error ? err.message : "Agora signals unavailable");
     });
   }, []);
 

@@ -9,10 +9,16 @@ import { liveStatus } from "./liveStatus";
 
 export type BffMode = "mock" | "live";
 
+function readEnv(): Record<string, string | undefined> {
+  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const nodeEnv = typeof process !== "undefined" ? process.env : {};
+  return { ...viteEnv, ...nodeEnv };
+}
+
 function detectMode(): BffMode {
   try {
     // Vite-style env access; defaults to mock.
-    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    const env = readEnv();
     // Test runs (vitest sets MODE='test') always use mock to avoid hitting the live BFF.
     if (env?.MODE === "test" || env?.NODE_ENV === "test") return "mock";
     const v = env?.VITE_BFF_MODE;
@@ -24,7 +30,7 @@ function detectMode(): BffMode {
 
 function detectBaseUrl(): string {
   try {
-    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    const env = readEnv();
     return env?.VITE_BFF_BASE_URL ?? "";
   } catch {
     return "";
@@ -106,6 +112,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   const init: RequestInit = {
     method: req.method.toUpperCase(),
     headers,
+    credentials: "include",
     signal: req.signal,
   };
   if (isMutation(req.method) && req.body !== undefined) {

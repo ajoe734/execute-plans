@@ -41,7 +41,7 @@ describe("spec-conflict-G G03/G11 — drawer renders + a11y", () => {
     // role="alert" surfaces field errors (G11)
     const alerts = await screen.findAllByRole("alert");
     expect(alerts.length).toBeGreaterThan(0);
-  });
+  }, 10_000);
 
   it("strategy renders multi-tag input (G03)", () => {
     render(

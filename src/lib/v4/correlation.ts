@@ -11,9 +11,9 @@ export interface CorrelationFields {
   traceId?: string;
 }
 
-function rand(n: number): string {
+function randHex(n: number): string {
   let s = "";
-  for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 36).toString(36);
+  for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 16).toString(16);
   return s;
 }
 
@@ -22,7 +22,7 @@ export function newUuid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     try { return (crypto as { randomUUID: () => string }).randomUUID(); } catch { /* fall through */ }
   }
-  const a = rand(8), b = rand(4), c = "4" + rand(3), d = ((Math.floor(Math.random() * 4) + 8).toString(16)) + rand(3), e = rand(12);
+  const a = randHex(8), b = randHex(4), c = "4" + randHex(3), d = ((Math.floor(Math.random() * 4) + 8).toString(16)) + randHex(3), e = randHex(12);
   return `${a}-${b}-${c}-${d}-${e}`;
 }
 

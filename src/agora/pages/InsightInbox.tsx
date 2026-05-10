@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Lightbulb, FlaskConical, Zap, Archive, Sparkles, Send } from "lucide-re
 import { useT } from "@/platform/hooks";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
+import { bff } from "@/lib/bff-v1";
 
 interface Insight {
   id: string;
@@ -26,18 +27,23 @@ const kindMeta: Record<Insight["kind"], { icon: typeof Lightbulb; label: string;
   skill_suggestion: { icon: FlaskConical, label: "Skill", tone: "bg-status-paused/15 text-status-paused border-status-paused/30" },
 };
 
-const seed: Insight[] = [
-  { id: "ins_01", kind: "pattern", source: "ev_001", title: "Earnings drift on Asia Tech holds 4+ days post-print", body: "Across the last 8 quarters, Asia Tech names show statistically significant drift on day 4 (t=2.7). Worth productizing as a tactical strategy.", confidence: 0.86, ts: new Date(Date.now() - 3600_000).toISOString() },
-  { id: "ins_02", kind: "anomaly", source: "stg_004", title: "FX Carry slippage 2.3× expected", body: "Slippage on FX Carry Tactical exceeded modeled by 2.3× over the past week. Likely book-quality issue.", confidence: 0.78, ts: new Date(Date.now() - 7200_000).toISOString() },
-  { id: "ins_03", kind: "research_idea", source: "rx_203", title: "Cross-asset momentum blend looks robust under regime gating", body: "Preliminary backtest suggests a 0.31 Sharpe lift when blending bond/equity momentum with VIX gating.", confidence: 0.72, ts: new Date(Date.now() - 18_000_000).toISOString() },
-  { id: "ins_04", kind: "skill_suggestion", source: "ai_trainer", title: "Coach 'risk_override_review' skill", body: "Operators routinely override risk pauses without structured rationale. A new skill could prompt the right questions.", confidence: 0.81, ts: new Date(Date.now() - 86400_000).toISOString() },
-];
-
 export const InsightInbox = () => {
   const t = useT();
   const openHandoff = useHandoff((s) => s.openHandoff);
-  const [items, setItems] = useState<Insight[]>(seed);
+  const [items, setItems] = useState<Insight[]>([]);
   const [filter, setFilter] = useState<"all" | Insight["kind"]>("all");
+
+  useEffect(() => {
+    let alive = true;
+    bff.agora.inbox.list()
+      .then((next) => { if (alive) setItems(next); })
+      .catch((err) => {
+        if (!alive) return;
+        setItems([]);
+        toast.error(err instanceof Error ? err.message : "Agora inbox unavailable");
+      });
+    return () => { alive = false; };
+  }, []);
 
   const filtered = filter === "all" ? items : items.filter((i) => i.kind === filter);
   const archive = (id: string) => {

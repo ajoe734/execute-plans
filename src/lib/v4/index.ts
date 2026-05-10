@@ -60,6 +60,8 @@ export type { ErrorCode } from "./errorCodes";
 export {
   mockMe,
   fetchMe,
+  refreshSession,
+  logoutSession,
   invalidateMe,
   useMe,
   hasCapability,

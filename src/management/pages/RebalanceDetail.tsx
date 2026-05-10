@@ -200,7 +200,7 @@ export const RebalanceDetail = () => {
             confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
             confirmToken={!v3ActionId && activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo: token ? `${memo} [confirmToken=${token.slice(0, 10)}…]` : memo });
+              await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, { confirmToken: token });
               setMachineState(activeTr.to);
               toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
             }}

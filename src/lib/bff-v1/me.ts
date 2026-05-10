@@ -5,6 +5,8 @@
 export {
   useMe,
   fetchMe,
+  refreshSession,
+  logoutSession,
   invalidateMe,
   hasCapability,
   mockMe,

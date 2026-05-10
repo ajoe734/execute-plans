@@ -151,7 +151,7 @@ export const PersonaDetail = () => {
         confirmEntity={{ type: "persona", id: p.id }}
         target={{ type: "Persona", id: p.id, name: p.name }}
         risk="high"
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Persona", id: p.id, action: "suspend", memo }); toast.success(t("toast.saved")); }}
+        onConfirm={async (memo, token) => { await runActionSafe({ kind: "Persona", id: p.id, action: "suspend", memo }, { confirmToken: token }); toast.success(t("toast.saved")); }}
       />
     </>
   );

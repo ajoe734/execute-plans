@@ -496,8 +496,8 @@ export const StrategyDetail = () => {
                 kind: "Strategy", id: s.id, action: activeTr.action,
                 newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
                   ? activeTr.to : undefined,
-                memo: token ? `${memo} [confirmToken=${token.slice(0, 10)}…]` : memo,
-              });
+                memo,
+              }, { confirmToken: token });
               const fresh = await bff.strategies.get(s.id);
               if (fresh) setS(fresh);
               const a = await bff.audit.list();

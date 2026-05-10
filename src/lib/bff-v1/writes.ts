@@ -12,22 +12,46 @@
 import { bff } from "./seed";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
 import type { CommandResponse, ActionCommandResponseData } from "./dto";
-import { idempotencyKey as mintIdemKey } from "./headers";
+import { idempotencyKey as mintIdemKey, readBrowserAuthStorage } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
-import { withLiveOrMock } from "./liveTransport";
+import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
 
-/** Map RunActionInput.kind → live action endpoint builder. */
-function actionPath(kind: RunActionInput["kind"], id: string, action: string): string | undefined {
-  switch (kind) {
-    case "Strategy":      return paths.strategyAction(id, action);
-    case "Persona":       return paths.personaAction(id, action);
-    case "CapitalPool":   return paths.capitalPoolAction(id, action);
-    case "Rebalance":     return paths.rebalanceAction(id, action);
-    case "Deployment":    return paths.deploymentAction(id, action);
-    default:              return undefined;
+function authPresent(): boolean {
+  try {
+    return readBrowserAuthStorage().token !== null;
+  } catch {
+    return false;
   }
+}
+
+function liveWriteGated(): boolean {
+  return realWritesEnabled() && authPresent();
+}
+
+/** Map RunActionInput.kind → canonical live action endpoint. */
+const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
+  Strategy: "strategy",
+  Persona: "persona",
+  CapitalPool: "capital-pool",
+  Rebalance: "rebalance",
+  Deployment: "deployment",
+  Evolution: "evolution-program",
+  Research: "research-experiment",
+  Artifact: "artifact",
+  RankingFormula: "ranking-formula",
+  Tool: "tool",
+  McpServer: "mcp-server",
+  McpTool: "mcp-tool",
+  Skill: "skill",
+  Channel: "channel",
+  Runtime: "runtime",
+};
+
+function actionPath(kind: RunActionInput["kind"], id: string, action: string): string {
+  const et = KIND_TO_ENTITY_TYPE[kind] ?? kind.toLowerCase();
+  return paths.action(et, id, action);
 }
 
 export interface RunActionEnvelope extends CommandResponse<ActionCommandResponseData> {
@@ -86,8 +110,8 @@ export async function runAction(
     };
   };
 
-  const livePath = actionPath(input.kind, input.id, input.action);
-  if (livePath) {
+  if (liveWriteGated()) {
+    const livePath = actionPath(input.kind, input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
         method: "POST",
@@ -98,6 +122,23 @@ export async function runAction(
         headers: { "X-Correlation-Id": correlationId },
       },
       mockBranch,
+      (rawData) => {
+        const d = rawData as {
+          data?: { commandId?: string; command_id?: string; receipt_id?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" };
+        return {
+          ok: true,
+          data: { actionId: commandId, status: "accepted" as const },
+          auditEventId: commandId,
+          correlationId,
+          idempotencyKey: iKey,
+          legacy: mockLegacy,
+        };
+      },
     );
   }
   return mockBranch();
@@ -119,10 +160,12 @@ export async function tryRunAction(
 // ---------- Confirm token seam ----------
 
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
+import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
 export interface ConfirmTokenEnvelope extends CommandResponse<ConfirmTokenResponse> {}
 
-/** v3 §6.2 — request a confirm token via the v1 seam (envelope + correlationId). */
+/** v3 §6.2 — create a confirm token via the v1 seam (envelope + correlationId).
+ *  Live path: POST /bff/confirm-tokens when liveWriteGated() is true. */
 export async function requestConfirmToken(
   req: ConfirmTokenRequest,
   params: Record<string, string> = {},
@@ -130,22 +173,54 @@ export async function requestConfirmToken(
 ): Promise<ConfirmTokenEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
-  const r = await bff.commands.requestConfirmToken(req, params);
-  if (!r.ok) {
-    throw makeBffError({
-      code: "VALIDATION_FAILED",
-      message: `unknown high-risk action: ${req.actionId}`,
-      correlationId,
-      details: { reason: "unknown_high_risk_action" },
-    });
-  }
-  return {
-    ok: true,
-    data: r.response,
-    auditEventId: r.audit.id,
-    correlationId,
-    idempotencyKey,
+
+  const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
+    const r = await bff.commands.requestConfirmToken(req, params);
+    if (!r.ok) {
+      throw makeBffError({
+        code: "VALIDATION_FAILED",
+        message: `unknown high-risk action: ${req.actionId}`,
+        correlationId,
+        details: { reason: "unknown_high_risk_action" },
+      });
+    }
+    return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
+
+  if (liveWriteGated()) {
+    return withLiveOrMock<ConfirmTokenEnvelope>(
+      {
+        method: "POST",
+        path: paths.confirmTokens(),
+        body: req,
+        idempotencyKey,
+        headers: { "X-Correlation-Id": correlationId },
+      },
+      mockBranch,
+      (rawData) => {
+        const d = rawData as {
+          data?: { tokenId?: string; commandId?: string };
+          meta?: { idempotency?: { idempotencyKey?: string } };
+        };
+        const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
+        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+        const action = getHighRiskAction(req.actionId);
+        const ttl = action?.tokenTtlSeconds ?? 300;
+        const ctResp: ConfirmTokenResponse = {
+          confirmToken: tokenId,
+          expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+          ttlSeconds: ttl,
+          requiredPhrase: action
+            ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
+            : "",
+          requiresMemo: action?.memoRequired ?? false,
+          auditEventPreview: `${req.actionId}.requested`,
+        };
+        return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
+      },
+    );
+  }
+  return mockBranch();
 }
 
 export const writes = {

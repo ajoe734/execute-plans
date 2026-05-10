@@ -99,7 +99,7 @@ export const RankingFormulaDetail = () => {
         target={{ type: "RankingFormula", id: f.id, name: f.name }}
         risk="high"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }); toast.success("Activation requested — pending approval"); }}
+        onConfirm={async (memo, token) => { await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }, { confirmToken: token }); toast.success("Activation requested — pending approval"); }}
       />
     </>
   );

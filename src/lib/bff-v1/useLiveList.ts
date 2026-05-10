@@ -6,11 +6,18 @@
 // `useLiveListV1` instead.
 import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { realtime, type RealtimeStatus } from "@/lib/bff/realtime";
+import { liveStatus } from "./liveStatus";
+import { connectLiveSse } from "./sse/liveSse";
 
 /**
  * Subscribe to realtime status (live/stale/offline) and last-event timestamp.
  */
 export function useRealtimeStatus(): { status: RealtimeStatus; lastEventAt: number } {
+  useEffect(() => {
+    if (liveStatus.get().mode !== "live") return;
+    return connectLiveSse({ lastEventId: realtime.getLastEventId() });
+  }, []);
+
   const status = useSyncExternalStore(
     (cb) => {
       const off1 = realtime.onStatus(cb);

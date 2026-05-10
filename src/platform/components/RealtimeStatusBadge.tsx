@@ -5,25 +5,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, Activity, Plug, PlugZap } from "lucide-react";
-import { useRealtimeStatus } from "@/lib/bff-v1";
+import { useLiveStatus, useRealtimeStatus } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
 
 export const RealtimeStatusBadge = () => {
   const t = useT();
   const { status, lastEventAt } = useRealtimeStatus();
+  const live = useLiveStatus();
   const [open, setOpen] = useState(false);
   const ageSec = Math.max(0, Math.round((Date.now() - lastEventAt) / 1000));
+  const effectiveStatus = live.mode === "live" && live.effective === "mock" ? "offline" : status;
 
   const tone =
-    status === "live" ? "text-status-success"
-    : status === "stale" ? "text-status-warning"
+    effectiveStatus === "live" ? "text-status-success"
+    : effectiveStatus === "stale" ? "text-status-warning"
     : "text-status-failed";
   const dotTone =
-    status === "live" ? "bg-status-success animate-pulse-dot"
-    : status === "stale" ? "bg-status-warning"
+    effectiveStatus === "live" ? "bg-status-success animate-pulse-dot"
+    : effectiveStatus === "stale" ? "bg-status-warning"
     : "bg-status-failed";
-  const Icon = status === "offline" ? WifiOff : Wifi;
+  const Icon = effectiveStatus === "offline" ? WifiOff : Wifi;
 
   const recent = realtime.getRecent();
   const recentSlice = recent.slice(0, 12);
@@ -42,7 +44,7 @@ export const RealtimeStatusBadge = () => {
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className={`gap-1.5 px-2 ${tone}`}>
           <Icon className="h-3.5 w-3.5" />
-          <span className="text-mono text-xs uppercase tracking-wider">{t(`realtime.status.${status}`, { defaultValue: status })}</span>
+          <span className="text-mono text-xs uppercase tracking-wider">{t(`realtime.status.${effectiveStatus}`, { defaultValue: effectiveStatus })}</span>
           <span className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
         </Button>
       </PopoverTrigger>
@@ -53,7 +55,7 @@ export const RealtimeStatusBadge = () => {
             {t("realtime.title", { defaultValue: "Realtime activity" })}
           </div>
           <Badge variant="outline" className={`text-[10px] ${tone}`}>
-            {t(`realtime.status.${status}`, { defaultValue: status })}
+            {t(`realtime.status.${effectiveStatus}`, { defaultValue: effectiveStatus })}
           </Badge>
         </div>
 
@@ -70,6 +72,23 @@ export const RealtimeStatusBadge = () => {
             <div className="text-muted-foreground uppercase tracking-wider text-[9px]">{t("realtime.topics", { defaultValue: "Topics" })}</div>
             <div className="text-mono">{topicCounts.length}</div>
           </div>
+        </div>
+
+        <div className="px-3 py-2 border-b border-border text-[11px] space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground uppercase tracking-wider text-[9px]">BFF mode</span>
+            <span className="text-mono">{live.mode}/{live.effective}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground uppercase tracking-wider text-[9px]">BFF URL</span>
+            <span className="text-mono truncate">{live.baseUrl || "mock"}</span>
+          </div>
+          {live.lastError && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground uppercase tracking-wider text-[9px]">Fallback</span>
+              <span className="text-mono truncate">{live.lastError}</span>
+            </div>
+          )}
         </div>
 
         {topicCounts.length > 0 && (
