@@ -46,6 +46,19 @@ describe("VI-1 lists facade", () => {
     expect(env.pageSize).toBe(0);
     expect(env.estimatedTotal).toBe(0);
   });
+
+  it("normalizes operator alert payloads and preserves surface metadata", () => {
+    const env = normalizeLiveListResponse<{ alert_id: string }>(
+      {
+        alerts: [{ alert_id: "al_1" }],
+        meta: { surfaces: { alerts: { status: "degraded", source: "local_snapshot" } } },
+      },
+      "realtimeFeed",
+    );
+
+    expect(env.items).toEqual([{ alert_id: "al_1" }]);
+    expect(env.meta).toEqual({ surfaces: { alerts: { status: "degraded", source: "local_snapshot" } } });
+  });
 });
 
 describe("VI-1 useLiveListV1", () => {

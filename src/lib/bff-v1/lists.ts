@@ -83,7 +83,16 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
   const dataRecord = asRecord(data);
   const pageInfo = asRecord(record?.page_info ?? record?.pageInfo);
   const meta = asRecord(record?.meta);
-  const items = firstArray<T>(payload, record?.items, data, dataRecord?.items);
+  const items = firstArray<T>(
+    payload,
+    record?.items,
+    data,
+    dataRecord?.items,
+    record?.alerts,
+    dataRecord?.alerts,
+    record?.jobs,
+    dataRecord?.jobs,
+  );
   const pageSize = numberFrom(record?.pageSize, record?.page_size, pageInfo?.page_size, pageInfo?.pageSize) ?? items.length;
   const estimatedTotal = numberFrom(record?.estimatedTotal, record?.estimated_total, record?.count, pageInfo?.total, meta?.total);
 
@@ -94,6 +103,7 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
     pageSize,
     totalCountExact: typeof record?.totalCountExact === "boolean" ? record.totalCountExact : rule.totalCountExact,
   };
+  if (meta) out.meta = meta;
   if (rule.emitEstimatedTotal) out.estimatedTotal = estimatedTotal ?? items.length;
   return out;
 }

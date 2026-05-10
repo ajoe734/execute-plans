@@ -12,6 +12,7 @@ export interface ListEnvelope<T> {
   pageSize: number;
   estimatedTotal?: number;
   totalCountExact: boolean;
+  meta?: unknown;
 }
 
 /** C.2 / Section 2.2 — `data` is REQUIRED. Use CommandResponse<null> when no payload. */

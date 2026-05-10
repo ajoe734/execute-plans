@@ -51,6 +51,7 @@ export default {
     bffOnline: "連線中",
     bffOffline: "離線",
     realtime: "即時",
+    dataSource: { live: "LIVE BFF", mock: "MOCK DATA", fallback: "FALLBACK DATA", checking: "CHECKING BFF", degraded: "SNAPSHOT DATA", unverified: "UNVERIFIED BFF" },
     productSwitcher: "切換產品",
     role: "角色",
     locale: "語言",
