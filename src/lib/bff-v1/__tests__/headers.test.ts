@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildHeaders, idempotencyKey, isMutation, setAuthProvider } from "../headers";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_BFF_MODE", "mock");
+  vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "");
+});
 
 afterEach(() => {
   setAuthProvider({ getToken: () => null, getTenantId: () => null });
+  vi.unstubAllEnvs();
 });
 
 describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
@@ -62,5 +68,23 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     const h = buildHeaders({ method: "GET" });
     expect(h["Authorization"]).toBeUndefined();
     expect(h["X-Tenant-Id"]).toBeUndefined();
+  });
+
+  it("injects non-secret dev bearer fallback only in live mode", () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:reviewer");
+
+    const h = buildHeaders({ method: "GET" });
+
+    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:reviewer");
+  });
+
+  it("does not inject dev bearer fallback in mock mode", () => {
+    vi.stubEnv("VITE_BFF_MODE", "mock");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:reviewer");
+
+    const h = buildHeaders({ method: "GET" });
+
+    expect(h["Authorization"]).toBeUndefined();
   });
 });

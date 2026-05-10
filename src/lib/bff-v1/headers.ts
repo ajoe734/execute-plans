@@ -68,6 +68,12 @@ export const BFF_AUTH_STORAGE_KEYS = {
   legacyTenantId: "pantheon_tenant_id",
 } as const;
 
+function readEnv(): Record<string, string | undefined> {
+  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const nodeEnv = typeof process !== "undefined" ? process.env : {};
+  return { ...viteEnv, ...nodeEnv };
+}
+
 function browserStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -84,6 +90,13 @@ export function readBrowserAuthStorage(): { token: string | null; tenantId: stri
     token: browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
     tenantId: browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
   };
+}
+
+function devBearerTokenFromEnv(): string | null {
+  const env = readEnv();
+  if (env.VITE_BFF_MODE !== "live") return null;
+  const token = env.VITE_BFF_DEV_BEARER_TOKEN?.trim();
+  return token || null;
 }
 
 const browserProvider: AuthProvider = {
@@ -125,7 +138,7 @@ export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   };
   // Auth / tenant injection (live mode). Mock / test providers return null → headers omitted.
   try {
-    const token = authProvider.getToken();
+    const token = authProvider.getToken() || devBearerTokenFromEnv();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const tenant = authProvider.getTenantId();
     if (tenant) headers["X-Tenant-Id"] = tenant;

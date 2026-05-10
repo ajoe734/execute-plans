@@ -54,6 +54,8 @@ Auth/session access is explicit:
 - Browser cookie session：live fetch 使用 `credentials: "include"`。
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
+- Optional Lovable dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
+  dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
 Route-by-route live/fallback behavior:
