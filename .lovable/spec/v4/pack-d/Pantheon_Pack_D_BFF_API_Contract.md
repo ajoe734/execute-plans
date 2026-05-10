@@ -68,6 +68,8 @@ type ErrorDetails =
 
 ## D21 — ErrorCode Master
 
+**Canonical 26 codes**（2026-05-10 backport from FE_Blueprint_Gap addendum 2026-05-09 §B2；對齊 `src/lib/v4/errorCodes.ts` 與 `Pantheon_BFF_OpenAPI_3_1.yaml#components.schemas.ErrorCode`）。
+
 ```text
 VALIDATION_FAILED
 AUTH_REQUIRED
@@ -83,7 +85,9 @@ CONFIRM_TOKEN_REQUIRED
 CONFIRM_TOKEN_EXPIRED
 CONFIRM_TOKEN_REUSED
 CONFIRM_TOKEN_BINDING_MISMATCH
+CONFIRM_TOKEN_REVOKED
 TWO_MAN_REQUIRED
+APPROVAL_REQUIRED
 COOLDOWN_ACTIVE
 CURSOR_EXPIRED
 CURSOR_INVALID
@@ -91,10 +95,16 @@ RATE_LIMITED
 IDEMPOTENCY_CONFLICT
 BACKEND_UNAVAILABLE
 SSE_REPLAY_UNAVAILABLE
+RESOURCE_NOT_FOUND
 UNKNOWN_ERROR
 ```
 
 i18n：`errors.<ErrorCode>`。
+
+**新增 3 條（vs Pack-D-2026-05-06 原版 23）**：
+- `RESOURCE_NOT_FOUND` — 404 entity not found；取代 `BACKEND_UNAVAILABLE` 在 entity 缺失情境的誤用。
+- `APPROVAL_REQUIRED` — action precondition missing approval；`CommandResponse` 一律不返 success status，以 non-2xx envelope 表達。
+- `CONFIRM_TOKEN_REVOKED` — confirm token 被 governance 強制撤銷（與 EXPIRED / REUSED / BINDING_MISMATCH 並列為四種 confirm-token 失敗）。
 
 ---
 

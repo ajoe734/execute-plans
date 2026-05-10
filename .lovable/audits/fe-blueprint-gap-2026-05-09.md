@@ -1,3 +1,5 @@
+> **Superseded by `.lovable/audits/fe-spec-status-2026-05-10.md`**（B 組已 RESOLVED_BY_FE_BACKPORT_2026-05-10；spec snapshot at `.lovable/spec/current/`）。本檔保留為歷史。
+
 # 前端 vs 設計藍圖 — 完整盤點 (2026-05-09)
 
 對照來源：

@@ -1,9 +1,8 @@
 // Pack D D21 — ErrorCode master list (canonical at FE runtime).
-// Source: .lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md
+// Source: .lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md (D21, 26 codes).
 //
-// FE_READY — Pack D D21 markdown backport pending (Planner Stage 2 Audit §4.2, 2026-05-08).
-// Do NOT claim Pack D D21 spec backport closed in smoke reports until the markdown
-// itself lists RESOURCE_NOT_FOUND / APPROVAL_REQUIRED / CONFIRM_TOKEN_REVOKED.
+// LANDED 2026-05-10 — Pack D D21 markdown 已對齊 26 條（FE_Blueprint_Gap §B2 backport）。
+// OpenAPI components.schemas.ErrorCode 同步 26 條。
 
 export const ERROR_CODES = [
   "VALIDATION_FAILED",
