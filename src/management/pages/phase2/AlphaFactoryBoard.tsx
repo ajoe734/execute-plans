@@ -11,10 +11,7 @@ import { lists, useLiveListV1, useLiveStatus, type ListEnvelope } from "@/lib/bf
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";
-
-interface Card3 { id: string; name: string; risk: Strategy["risk"]; alpha?: string; sharpe?: number; note: string; }
-
-const COLUMNS = ["discovered", "scaffolded", "replicated"] as const;
+import { ALPHA_FACTORY_COLUMNS, buildAlphaFactoryBuckets } from "./alphaFactoryData";
 
 export const AlphaFactoryBoardPage = () => {
   const t = useT();
@@ -24,27 +21,17 @@ export const AlphaFactoryBoardPage = () => {
     lists.strategies as () => Promise<ListEnvelope<Strategy>>,
     ["Strategy"],
   );
-  const isMockData = live.effective === "mock";
+  const isConfiguredMock = live.mode === "mock";
+  const isFallbackData = live.mode === "live" && live.effective === "mock";
   const sourceKey = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
 
   const buckets = useMemo(() => {
-    const repl: Card3[] = strategies.slice(0, 4).map((s) => ({
-      id: s.id, name: s.name, risk: s.risk, alpha: s.alpha, sharpe: s.sharpe, note: t("alphaFactory.replicated.note"),
-    }));
-    const scaffolded: Card3[] = isMockData ? [
-      { id: "cand_011", name: "Short-vol carry (BTC)",  risk: "medium", alpha: "vol.carry", sharpe: 1.42, note: t("alphaFactory.scaffolded.note") },
-      { id: "cand_012", name: "Cross-venue funding arb", risk: "low",    alpha: "fund.arb",  sharpe: 1.18, note: t("alphaFactory.scaffolded.note") },
-      { id: "cand_013", name: "Sector rotation (US tech)", risk: "high",  alpha: "rot.us",    sharpe: 0.88, note: t("alphaFactory.scaffolded.note") },
-    ] : [];
-    const discovered: Card3[] = isMockData ? [
-      { id: "disc_021", name: "Liquidity-shock divergence", risk: "low",    note: t("alphaFactory.discovered.note") },
-      { id: "disc_022", name: "Macro surprise momentum",    risk: "medium", note: t("alphaFactory.discovered.note") },
-      { id: "disc_023", name: "Stablecoin flow imbalance",  risk: "medium", note: t("alphaFactory.discovered.note") },
-      { id: "disc_024", name: "Options skew reversion",     risk: "low",    note: t("alphaFactory.discovered.note") },
-      { id: "disc_025", name: "On-chain whale accumulation", risk: "high",  note: t("alphaFactory.discovered.note") },
-    ] : [];
-    return { discovered, scaffolded, replicated: repl } as Record<typeof COLUMNS[number], Card3[]>;
-  }, [isMockData, strategies, t]);
+    return buildAlphaFactoryBuckets(strategies, {
+      includeMockFixtures: isConfiguredMock,
+      includeReplicated: !isFallbackData,
+      t,
+    });
+  }, [isConfiguredMock, isFallbackData, strategies, t]);
 
   return (
     <>
@@ -57,7 +44,7 @@ export const AlphaFactoryBoardPage = () => {
           <span className="ml-2 text-foreground/70">{t("alphaFactory.source.explain")}</span>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {COLUMNS.map((col) => (
+          {ALPHA_FACTORY_COLUMNS.map((col) => (
             <div key={col} className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold uppercase tracking-wider">{t(`alphaFactory.col.${col}`)}</div>
