@@ -11,27 +11,27 @@ import { lists, useLiveListV1, useLiveStatus, type ListEnvelope } from "@/lib/bf
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";
-import { ALPHA_FACTORY_COLUMNS, buildAlphaFactoryBuckets } from "./alphaFactoryData";
+import { ALPHA_FACTORY_COLUMNS, buildAlphaFactoryBuckets, classifyAlphaFactorySource } from "./alphaFactoryData";
 
 export const AlphaFactoryBoardPage = () => {
   const t = useT();
   const nav = useNavigate();
   const live = useLiveStatus();
-  const { items: strategies, loading } = useLiveListV1<Strategy>(
+  const { items: strategies, loading, meta } = useLiveListV1<Strategy>(
     lists.strategies as () => Promise<ListEnvelope<Strategy>>,
     ["Strategy"],
   );
-  const isConfiguredMock = live.mode === "mock";
-  const isFallbackData = live.mode === "live" && live.effective === "mock";
-  const sourceKey = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
+  const sourceKey = classifyAlphaFactorySource(live, meta);
+  const isConfiguredMock = sourceKey === "mock";
+  const isLiveData = sourceKey === "live";
 
   const buckets = useMemo(() => {
     return buildAlphaFactoryBuckets(strategies, {
       includeMockFixtures: isConfiguredMock,
-      includeReplicated: !isFallbackData,
+      includeReplicated: isLiveData || isConfiguredMock,
       t,
     });
-  }, [isConfiguredMock, isFallbackData, strategies, t]);
+  }, [isConfiguredMock, isLiveData, strategies, t]);
 
   return (
     <>

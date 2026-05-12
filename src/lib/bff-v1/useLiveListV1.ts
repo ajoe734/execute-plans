@@ -16,6 +16,7 @@ export interface UseLiveListV1Result<T> {
   pageSize: number;
   estimatedTotal?: number;
   totalCountExact: boolean;
+  meta?: unknown;
   refresh: () => void;
   loading: boolean;
 }
@@ -65,6 +66,7 @@ export function useLiveListV1<T>(
     pageSize: env.pageSize,
     estimatedTotal: env.estimatedTotal,
     totalCountExact: env.totalCountExact,
+    meta: env.meta,
     refresh,
     loading,
   };

@@ -1414,6 +1414,8 @@ export default {
       mock: "MOCK 資料",
       fallback: "LIVE BFF 已退回 MOCK",
       live: "LIVE BFF",
+      degraded: "SNAPSHOT DATA",
+      unverified: "UNVERIFIED BFF",
       explain: "此頁不會再把 fixture 候選冒充為即時資料；沒有後端欄位時會顯示空狀態。",
     },
     empty: {

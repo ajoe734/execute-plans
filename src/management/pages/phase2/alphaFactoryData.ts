@@ -12,6 +12,24 @@ export interface AlphaFactoryCard {
 export const ALPHA_FACTORY_COLUMNS = ["discovered", "scaffolded", "replicated"] as const;
 export type AlphaFactoryColumn = typeof ALPHA_FACTORY_COLUMNS[number];
 export type AlphaFactoryBuckets = Record<AlphaFactoryColumn, AlphaFactoryCard[]>;
+export type AlphaFactorySourceKey = "mock" | "fallback" | "live" | "degraded" | "unverified";
+
+export function classifyAlphaFactorySource(
+  live: { mode: "mock" | "live"; effective: "mock" | "live" },
+  meta: unknown,
+): AlphaFactorySourceKey {
+  if (live.mode === "mock") return "mock";
+  if (live.effective === "mock") return "fallback";
+
+  const record = asRecord(meta);
+  const surfaces = asRecord(record?.surfaces);
+  if (!record || !surfaces || Object.keys(surfaces).length === 0) return "unverified";
+  if (record.staleness || record.degradation) return "degraded";
+  for (const surface of Object.values(surfaces)) {
+    if (!surfaceIsLive(surface)) return "degraded";
+  }
+  return "live";
+}
 
 export function buildAlphaFactoryBuckets(
   strategies: Strategy[],
@@ -38,4 +56,21 @@ export function buildAlphaFactoryBuckets(
   ] : [];
 
   return { discovered, scaffolded, replicated };
+}
+
+function surfaceIsLive(surface: unknown): boolean {
+  if (typeof surface === "string") return ["ok", "fresh", "live"].includes(surface.toLowerCase());
+  const record = asRecord(surface);
+  if (!record) return false;
+  const source = String(record.source ?? "").toLowerCase();
+  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return false;
+  const status = String(record.status ?? record.state ?? "ok").toLowerCase();
+  if (!["ok", "fresh", "live"].includes(status)) return false;
+  return !record.staleness && !record.degradation;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

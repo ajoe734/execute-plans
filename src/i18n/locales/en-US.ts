@@ -1429,6 +1429,8 @@ export default {
       mock: "MOCK DATA",
       fallback: "LIVE BFF FALLBACK TO MOCK",
       live: "LIVE BFF",
+      degraded: "SNAPSHOT DATA",
+      unverified: "UNVERIFIED BFF",
       explain: "This page no longer presents fixture candidates as live data; missing backend columns render as empty states.",
     },
     empty: {

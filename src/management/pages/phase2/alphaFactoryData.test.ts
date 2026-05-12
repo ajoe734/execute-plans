@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAlphaFactoryBuckets } from "./alphaFactoryData";
+import { buildAlphaFactoryBuckets, classifyAlphaFactorySource } from "./alphaFactoryData";
 import type { Strategy } from "@/lib/bff/types";
 
 const t = (key: string) => key;
@@ -42,5 +42,20 @@ describe("buildAlphaFactoryBuckets", () => {
     expect(buckets.discovered.length).toBeGreaterThan(0);
     expect(buckets.scaffolded.length).toBeGreaterThan(0);
     expect(buckets.replicated).toHaveLength(1);
+  });
+});
+
+describe("classifyAlphaFactorySource", () => {
+  it("classifies local snapshots as degraded instead of live", () => {
+    const source = classifyAlphaFactorySource(
+      { mode: "live", effective: "live" },
+      { surfaces: { strategies: { status: "degraded", source: "local_snapshot" } } },
+    );
+
+    expect(source).toBe("degraded");
+  });
+
+  it("classifies live fallback as fallback", () => {
+    expect(classifyAlphaFactorySource({ mode: "live", effective: "mock" }, undefined)).toBe("fallback");
   });
 });
