@@ -29,6 +29,17 @@ import type {
   CommandResponse,
   ActionCommandResponseData,
 } from "@/lib/bff-v1/dto";
+import {
+  commandClient,
+  type CommandRunActionEnvelope,
+} from "./commandClient";
+
+export { commandClient } from "./commandClient";
+export type {
+  BackendCommandResponse,
+  CommandRunActionEnvelope,
+  FinalCommandEnvelope,
+} from "./commandClient";
 
 export { liveWriteGated, sessionKindAllowsWrite };
 
@@ -69,9 +80,86 @@ export interface RunActionOptions {
   idempotencyKey?: string;
   /** v3 §6.2 confirm token issued by `requestConfirmToken`. */
   confirmToken?: string;
+  /** Attach governance approval evidence for command-path callers. */
+  approvalId?: string;
+  approvalDecisionId?: string;
+  /** Attach two-person authorization evidence for command-path callers. */
+  twoManSignatureId?: string;
+  secondOperatorId?: string;
+  headers?: Record<string, string>;
+  baseUrl?: string;
+  /** Default keeps the legacy /bff/actions adapter path until BFF-CONSOL-024. */
+  route?: "legacy-actions" | "commands";
 }
 
 // ---------- runAction ----------
+
+async function mockRunActionEnvelope(
+  input: RunActionInput,
+  resolved: { correlationId: string; idempotencyKey: string; confirmToken?: string },
+): Promise<RunActionEnvelope> {
+  const legacy = await mutations.runAction({
+    ...input,
+    correlationId: resolved.correlationId,
+    idempotencyKey: resolved.idempotencyKey,
+    confirmToken: resolved.confirmToken,
+  });
+  if (!legacy.ok) {
+    throw makeBffError({
+      code:
+        legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
+        : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
+        : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
+        : "VALIDATION_FAILED",
+      message: legacy.message ?? legacy.rejected ?? "rejected",
+      correlationId: resolved.correlationId,
+      details: { reason: legacy.rejected },
+    });
+  }
+  const data: ActionCommandResponseData = {
+    actionId: legacy.audit.id,
+    status: "completed",
+  };
+  return {
+    ok: true,
+    data,
+    auditEventId: legacy.audit.id,
+    correlationId: resolved.correlationId,
+    idempotencyKey: resolved.idempotencyKey,
+    message: legacy.message,
+    legacy,
+  };
+}
+
+/**
+ * New command caller for BFF-CONSOL-020. When the live write gate is open it
+ * posts directly to /bff/v1/commands; otherwise it returns the same mock
+ * CommandResponse envelope as the legacy caller.
+ */
+export async function runCommandAction(
+  input: RunActionInput,
+  opts: RunActionOptions = {},
+): Promise<CommandRunActionEnvelope | RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? input.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
+  const confirmToken = opts.confirmToken ?? input.confirmToken;
+
+  if (await liveWriteGated()) {
+    return commandClient.runAction(input, {
+      correlationId,
+      idempotencyKey,
+      confirmToken,
+      approvalId: opts.approvalId,
+      approvalDecisionId: opts.approvalDecisionId,
+      twoManSignatureId: opts.twoManSignatureId,
+      secondOperatorId: opts.secondOperatorId,
+      headers: opts.headers,
+      baseUrl: opts.baseUrl,
+    });
+  }
+
+  return mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
+}
 
 /**
  * Canonical live-write seam: dispatches entity actions through
@@ -82,35 +170,15 @@ export async function runAction(
   input: RunActionInput,
   opts: RunActionOptions = {},
 ): Promise<RunActionEnvelope> {
+  if (opts.route === "commands") {
+    return runCommandAction(input, opts) as Promise<RunActionEnvelope>;
+  }
+
   const correlationId = opts.correlationId ?? input.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
   const confirmToken = opts.confirmToken ?? input.confirmToken;
 
-  const mockBranch = async (): Promise<RunActionEnvelope> => {
-    const legacy = await mutations.runAction({
-      ...input,
-      correlationId,
-      idempotencyKey,
-      confirmToken,
-    });
-    if (!legacy.ok) {
-      throw makeBffError({
-        code:
-          legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
-          : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
-          : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
-          : "VALIDATION_FAILED",
-        message: legacy.message ?? legacy.rejected ?? "rejected",
-        correlationId,
-        details: { reason: legacy.rejected },
-      });
-    }
-    const data: ActionCommandResponseData = {
-      actionId: legacy.audit.id,
-      status: "completed",
-    };
-    return { ok: true, data, auditEventId: legacy.audit.id, correlationId, idempotencyKey, message: legacy.message, legacy };
-  };
+  const mockBranch = () => mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
 
   if (await liveWriteGated()) {
     const livePath = paths.action(entityType(input.kind), input.id, input.action);

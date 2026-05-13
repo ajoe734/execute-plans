@@ -1,8 +1,9 @@
 // BFF-LUV-FE-004 — Focused write-flow tests for bff/runAction.ts
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { liveWriteGated, sessionKindAllowsWrite, runAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff/runAction";
+import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff/runAction";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { BffError } from "@/lib/bff-v1/errors";
 
 // ---------- helpers ----------
 
@@ -327,6 +328,135 @@ describe("runAction live mode adapter", () => {
     expect(env.auditEventId).toBe(commandId);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toMatch(/\/bff\/me$/);
+  });
+});
+
+describe("BFF-CONSOL-020 commandClient migration", () => {
+  it("runCommandAction posts a command envelope directly to /bff/v1/commands", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    let commandUrl = "";
+    let commandInit: RequestInit | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      commandUrl = url;
+      commandInit = init;
+      return makeJsonResponse({
+        status: "accepted",
+        data: {
+          status: "accepted",
+          command: "StrategyAction",
+          receipt_id: "cmd-bff-consol-020",
+          receipt: { command_id: "cmd-bff-consol-020", status: "accepted" },
+        },
+        meta: {
+          durable: true,
+          idempotency: { key: "idk_cmd_020", idempotencyKey: "idk_cmd_020", replayed: false },
+        },
+      }, 202);
+    });
+
+    const env = await runCommandAction(
+      { kind: "Strategy", id: "stg_020", action: "promote_live", memo: "approved", expectedVersion: 7 },
+      {
+        correlationId: "cid_cmd_020",
+        idempotencyKey: "idk_cmd_020",
+        confirmToken: "ctok_modal_020",
+        approvalId: "appr_020",
+      },
+    );
+
+    expect(commandUrl.endsWith("/bff/v1/commands")).toBe(true);
+    const body = JSON.parse(String(commandInit?.body)) as Record<string, unknown>;
+    expect(body.command).toBe("StrategyAction");
+    expect(body.target).toEqual({ type: "Strategy", id: "stg_020" });
+    expect(body.action).toBe("promote_live");
+    expect(body.confirmToken).toBe("ctok_modal_020");
+    expect(body.approvalId).toBe("appr_020");
+    expect(body).not.toHaveProperty("idempotencyKey");
+    expect((body.params as Record<string, unknown>).confirmToken).toBe("ctok_modal_020");
+    expect((body.params as Record<string, unknown>).approvalId).toBe("appr_020");
+    expect((body.params as Record<string, unknown>).audit_event).toBe("strategy.promote_live");
+    expect((commandInit?.headers as Record<string, string>)["Idempotency-Key"]).toBe("idk_cmd_020");
+    expect((commandInit?.headers as Record<string, string>)["X-Confirm-Token"]).toBe("ctok_modal_020");
+    expect((commandInit?.headers as Record<string, string>)["X-Correlation-Id"]).toBe("cid_cmd_020");
+    expect(env.data.actionId).toBe("cmd-bff-consol-020");
+    expect(env.data.status).toBe("accepted");
+    expect(env.idempotencyKey).toBe("idk_cmd_020");
+    expect(env.legacy.audit.id).toBe("cmd-bff-consol-020");
+  });
+
+  it("legacy runAction still posts through the /bff/actions adapter path", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    let actionUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      actionUrl = url;
+      return makeJsonResponse({
+        status: "accepted",
+        data: { status: "accepted", command_id: "cmd-legacy-action-020" },
+        meta: { idempotency: { idempotencyKey: "idk_legacy_020" } },
+      }, 202);
+    });
+
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_020", action: "promote_paper" },
+      { correlationId: "cid_legacy_020", idempotencyKey: "idk_legacy_020" },
+    );
+
+    expect(actionUrl.endsWith("/bff/actions/strategy/stg_020/promote_paper")).toBe(true);
+    expect(env.data.actionId).toBe("cmd-legacy-action-020");
+    expect(env.data.status).toBe("accepted");
+  });
+
+  it("command route propagates typed backend precondition errors", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      return makeJsonResponse({
+        detail: {
+          error: {
+            code: "CONFIRM_TOKEN_REQUIRED",
+            message: "Confirmation token is required before this action can be accepted",
+            details: {
+              reason: "CONFIRM_TOKEN_MISSING",
+              kind: "confirm_token",
+              correlationId: "cid_cmd_err_020",
+            },
+          },
+          correlationId: "cid_cmd_err_020",
+        },
+      }, 428);
+    });
+
+    await expect(
+      runCommandAction(
+        { kind: "Runtime", id: "runtime_020", action: "stop", memo: "pause live runtime" },
+        { correlationId: "cid_cmd_err_020", idempotencyKey: "idk_cmd_err_020" },
+      ),
+    ).rejects.toMatchObject({
+      name: "BffError",
+      status: 428,
+      code: "CONFIRM_TOKEN_REQUIRED",
+      correlationId: "cid_cmd_err_020",
+    });
+
+    let caught: unknown;
+    try {
+      await runCommandAction(
+        { kind: "Runtime", id: "runtime_020", action: "stop", memo: "pause live runtime" },
+        { correlationId: "cid_cmd_err_020", idempotencyKey: "idk_cmd_err_021" },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BffError);
+    expect((caught as BffError).requiresConfirmToken()).toBe(true);
   });
 });
 
