@@ -10,7 +10,14 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:contract": "vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
+    "probe:bff:routes": "node scripts/probe-bff-routes.mjs --anonymous",
+    "probe:bff:auth": "node scripts/probe-bff-authenticated-live.mjs",
+    "probe:browser": "node scripts/probe-hosted-browser-bff.mjs",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "gate:integration": "npm run test && npm run build && npm run test:contract && npm run probe:bff:routes && npm run probe:browser && npm run e2e"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -67,7 +74,9 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
@@ -85,6 +94,7 @@
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
