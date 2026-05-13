@@ -10,6 +10,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
@@ -62,7 +63,7 @@ export const GovernanceReview = () => {
     const mapState: Record<Decision, ApprovalRequest["state"]> = {
       approve: "approved", reject: "rejected", request_changes: "pending", escalate: "pending", freeze: "pending",
     };
-    await bff.mutations.decideApproval(req.id, d, memo);
+    await mutations.decideApproval(req.id, d, memo);
     setReq({ ...req, state: mapState[d] });
     toast.success(`${t(`governance.decision.${d}`)} — ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`);
   };
@@ -213,7 +214,7 @@ export const GovernanceReview = () => {
           confirmToken={req.riskLevel === "critical" ? stageDecision?.decision.toUpperCase() : undefined}
           onConfirm={async (memo) => {
             if (!stageDecision) return;
-            const r = await bff.mutations.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
+            const r = await mutations.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
             if (r.ok) {
               toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} — ${stageDecision.stageName}`);
               await reload();

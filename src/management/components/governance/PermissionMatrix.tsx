@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 
@@ -57,7 +57,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
       const [rowId, colId] = k.split("|");
       return { rowId, colId, grant: grants.get(k) ?? "none" };
     });
-    await bff.mutations.updatePermissionMatrix(matrix.instance, updates, `${dirty.size} cell(s) updated`);
+    await mutations.updatePermissionMatrix(matrix.instance, updates, `${dirty.size} cell(s) updated`);
     toast.success(t("governance.permission.submitted"));
     setDirty(new Set());
   };

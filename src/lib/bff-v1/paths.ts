@@ -96,6 +96,7 @@ export const paths = {
   channels: () => `${BASE}/channels`,
   tools: () => `${BASE}/tools`,
   rankingFormulas: () => `${BASE}/ranking-formulas`,
+  search: () => `${BASE}/search`,
 
   // ---- Research ----
   researchExperiments: () => `${BASE}/research-experiments`,

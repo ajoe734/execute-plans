@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Snowflake } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { EvolutionProgram } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -50,7 +50,7 @@ export const EvolutionFreezePanel = ({ program }: { program: EvolutionProgram })
         confirmToken="FREEZE-GEN"
         destructive
         onConfirm={async (memo) => {
-          await bff.mutations.freezeGeneration(program.id, memo);
+          await mutations.freezeGeneration(program.id, memo);
           setFrozen(true);
           toast.success(t("phase13.evolution.freeze.queued"));
         }}

@@ -4,7 +4,8 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bff, lists } from "@/lib/bff-v1";
+import { lists } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,7 @@ export const AlertsPage = () => {
   }, []);
 
   const ack = async (id: string) => {
-    await bff.mutations.acknowledgeAlert(id);
+    await mutations.acknowledgeAlert(id);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
     setActive((a) => a && a.id === id ? { ...a, acknowledged: true } : a);
     toast.success(t("toast.alertAcknowledged", { id }));
@@ -132,7 +133,7 @@ export const IncidentsPage = () => {
   useEffect(() => { loadListItems<Incident>(lists.incidents).then(setRows); }, []);
 
   const advance = async (id: string, status: Incident["status"], memo?: string) => {
-    await bff.mutations.setIncidentStatus(id, status, memo);
+    await mutations.setIncidentStatus(id, status, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
     setActive((a) => a && a.id === id ? { ...a, status } : a);
     toast.success(t("toast.incidentAdvanced", { id, status }));
@@ -215,8 +216,8 @@ export const ApprovalsPage = () => {
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
   const decide = async (id: string, state: ApprovalRequest["state"], memo?: string) => {
-    if (state === "approved") await bff.mutations.approve(id, memo);
-    else if (state === "rejected") await bff.mutations.reject(id, memo);
+    if (state === "approved") await mutations.approve(id, memo);
+    else if (state === "rejected") await mutations.reject(id, memo);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
     setActive((a) => a && a.id === id ? { ...a, state } : a);
     toast.success(t("toast.approvalDecided", { id, state }));

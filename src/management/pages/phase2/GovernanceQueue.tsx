@@ -10,6 +10,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { ApprovalRequest } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
@@ -166,7 +167,7 @@ export const GovernanceQueuePage = () => {
           destructive={batchDecision === "reject"}
           onConfirm={async (memo) => {
             if (!batchDecision) return;
-            const r = await bff.mutations.batchDecideApproval(selectedIds, batchDecision, memo);
+            const r = await mutations.batchDecideApproval(selectedIds, batchDecision, memo);
             toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: r.results.length }));
             setSelected(new Set());
             await reload();

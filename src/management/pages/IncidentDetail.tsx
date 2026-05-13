@@ -12,6 +12,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
@@ -112,12 +113,12 @@ export const IncidentDetail = () => {
   const requirePostmortem = isHighSev && postmortem.trim().length < 20;
 
   const close = async () => {
-    await bff.mutations.setIncidentStatus(incident.id, "resolved", postmortem);
+    await mutations.setIncidentStatus(incident.id, "resolved", postmortem);
     setIncident({ ...incident, status: "resolved", timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Incident closed. Postmortem: ${postmortem.slice(0, 80)}…` }] });
     toast.success(t("incident.closed"));
   };
   const advance = async (status: Incident["status"]) => {
-    await bff.mutations.setIncidentStatus(incident.id, status);
+    await mutations.setIncidentStatus(incident.id, status);
     setIncident({ ...incident, status, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Status → ${status}` }] });
   };
 
@@ -264,7 +265,7 @@ export const IncidentDetail = () => {
               <Textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t("incident.mitigation.placeholder")} rows={3} />
               <div>
                 <Button size="sm" disabled={mitigation.trim().length < 8} onClick={async () => {
-                  await bff.mutations.appendIncidentMitigation(incident.id, mitigation);
+                  await mutations.appendIncidentMitigation(incident.id, mitigation);
                   toast.success(t("incident.mitigation.logged"));
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[mitigation] ${mitigation.slice(0, 120)}` }] });
                   setMitigation("");
@@ -287,7 +288,7 @@ export const IncidentDetail = () => {
               )}
               <div>
                 <Button size="sm" disabled={postmortem.trim().length < 10} onClick={async () => {
-                  await bff.mutations.appendPostmortem(incident.id, postmortem);
+                  await mutations.appendPostmortem(incident.id, postmortem);
                   toast.success(t("incident.postmortem.appended"));
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[postmortem] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.postmortem.add")}</Button>
@@ -304,7 +305,7 @@ export const IncidentDetail = () => {
               </ul>
               <div>
                 <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
-                  const res = await bff.mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
+                  const res = await mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
                   toast.success(t("incident.feedbackQueued"), { description: res.feedbackId });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[training-feedback ${res.feedbackId}] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.createTrainingFeedback")}</Button>
@@ -322,7 +323,7 @@ export const IncidentDetail = () => {
               <Textarea value={constraint} onChange={(e) => setConstraint(e.target.value)} placeholder={t("incident.constraint.placeholder")} rows={3} />
               <div>
                 <Button size="sm" variant="outline" disabled={constraint.trim().length < 8} onClick={async () => {
-                  const res = await bff.mutations.createEvolutionConstraint(incident.id, constraint);
+                  const res = await mutations.createEvolutionConstraint(incident.id, constraint);
                   toast.success(t("incident.constraint.created"), { description: res.constraintId });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[constraint ${res.constraintId}] ${constraint.slice(0, 80)}` }] });
                   setConstraint("");

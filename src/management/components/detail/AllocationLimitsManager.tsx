@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { AllocationLimit } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -26,7 +27,7 @@ export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
       poolId, scope, scopeRef, cap: c,
       updatedBy: "capital", updatedAt: new Date().toISOString(),
     };
-    await bff.mutations.setAllocationLimit(poolId, scope, scopeRef, c);
+    await mutations.setAllocationLimit(poolId, scope, scopeRef, c);
     setRows((r) => [lim, ...r]);
     setScopeRef("");
     toast.success(t("phase13.capital.limits.queued"));

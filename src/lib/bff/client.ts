@@ -26,7 +26,7 @@ import {
   withLiveOrMock,
   liveStatus,
 } from "@/lib/bff-v1";
-import { bff as seedBff } from "@/lib/bff-v1/seed";
+import * as seed from "@/mocks/seed";
 import type {
   Strategy,
   Persona,
@@ -106,60 +106,60 @@ function liveOrMockDetail<T>(
 
 const strategies = {
   list:  bffV1Lists.strategies as () => Promise<ListEnvelope<Strategy>>,
-  get:   liveOrMockDetail<Strategy>(paths.strategy, (id) => seedBff.strategies.get(id)),
+  get:   liveOrMockDetail<Strategy>(paths.strategy, async (id) => seed.strategies.find((item) => item.id === id)),
 };
 
 const personas = {
   list:  bffV1Lists.personas as () => Promise<ListEnvelope<Persona>>,
-  get:   liveOrMockDetail<Persona>(paths.persona, (id) => seedBff.personas.get(id)),
+  get:   liveOrMockDetail<Persona>(paths.persona, async (id) => seed.personas.find((item) => item.id === id)),
 };
 
 const capitalPools = {
   list:  bffV1Lists.capitalPools as () => Promise<ListEnvelope<CapitalPool>>,
-  get:   liveOrMockDetail<CapitalPool>(paths.capitalPool, (id) => seedBff.capitalPools.get(id)),
+  get:   liveOrMockDetail<CapitalPool>(paths.capitalPool, async (id) => seed.capitalPools.find((item) => item.id === id)),
 };
 
 const rankingFormulas = {
   list:  bffV1Lists.rankingFormulas as () => Promise<ListEnvelope<RankingFormula>>,
   get:   liveOrMockDetail<RankingFormula>(
     (id) => `${paths.rankingFormulas()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.rankingFormulas.get(id),
+    async (id) => seed.rankingFormulas.find((item) => item.id === id),
   ),
 };
 
 const rebalances = {
   list:  bffV1Lists.rebalances as () => Promise<ListEnvelope<Rebalance>>,
-  get:   liveOrMockDetail<Rebalance>(paths.rebalance, (id) => seedBff.rebalances.get(id)),
+  get:   liveOrMockDetail<Rebalance>(paths.rebalance, async (id) => seed.rebalances.find((item) => item.id === id)),
 };
 
 const deployments = {
   list:  bffV1Lists.deployments as () => Promise<ListEnvelope<Deployment>>,
-  get:   liveOrMockDetail<Deployment>(paths.deployment, (id) => seedBff.deployments.get(id)),
+  get:   liveOrMockDetail<Deployment>(paths.deployment, async (id) => seed.deployments.find((item) => item.id === id)),
 };
 
 const evolution = {
   list:  bffV1Lists.evolution as () => Promise<ListEnvelope<EvolutionProgram>>,
-  get:   liveOrMockDetail<EvolutionProgram>(paths.evolutionProgram, (id) => seedBff.evolution.get(id)),
+  get:   liveOrMockDetail<EvolutionProgram>(paths.evolutionProgram, async (id) => seed.evolutionPrograms.find((item) => item.id === id)),
 };
 
 const research = {
   list:  bffV1Lists.research as () => Promise<ListEnvelope<ResearchExperiment>>,
   get:   liveOrMockDetail<ResearchExperiment>(
     (id) => `${paths.researchExperiments()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.research.get(id),
+    async (id) => seed.researchExperiments.find((item) => item.id === id),
   ),
 };
 
 const artifacts = {
   list:  bffV1Lists.artifacts as () => Promise<ListEnvelope<Artifact>>,
-  get:   liveOrMockDetail<Artifact>(paths.artifact, (id) => seedBff.artifacts.get(id)),
+  get:   liveOrMockDetail<Artifact>(paths.artifact, async (id) => seed.artifacts.find((item) => item.id === id)),
 };
 
 const tools = {
   list:  bffV1Lists.tools as () => Promise<ListEnvelope<Tool>>,
   get:   liveOrMockDetail<Tool>(
     (id) => `${paths.tools()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.tools.get(id),
+    async (id) => seed.tools.find((item) => item.id === id),
   ),
 };
 
@@ -167,7 +167,7 @@ const mcpServers = {
   list:  bffV1Lists.mcpServers as () => Promise<ListEnvelope<McpServer>>,
   get:   liveOrMockDetail<McpServer>(
     (id) => `${paths.mcpServers()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.mcpServers.get(id),
+    async (id) => seed.mcpServers.find((item) => item.id === id),
   ),
 };
 
@@ -175,7 +175,7 @@ const mcpTools = {
   list:  bffV1Lists.mcpTools as () => Promise<ListEnvelope<McpTool>>,
   get:   liveOrMockDetail<McpTool>(
     (id) => `${paths.mcpTools()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.mcpTools.get(id),
+    async (id) => seed.mcpTools.find((item) => item.id === id),
   ),
 };
 
@@ -183,7 +183,7 @@ const skills = {
   list:  bffV1Lists.skills as () => Promise<ListEnvelope<Skill>>,
   get:   liveOrMockDetail<Skill>(
     (id) => `${paths.skills()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.skills.get(id),
+    async (id) => seed.skills.find((item) => item.id === id),
   ),
 };
 
@@ -191,7 +191,7 @@ const channels = {
   list:  bffV1Lists.channels as () => Promise<ListEnvelope<Channel>>,
   get:   liveOrMockDetail<Channel>(
     (id) => `${paths.channels()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.channels.get(id),
+    async (id) => seed.channels.find((item) => item.id === id),
   ),
 };
 
@@ -204,7 +204,7 @@ const runtimes = {
   list:  bffV1Lists.runtimes as () => Promise<ListEnvelope<Runtime>>,
   get:   liveOrMockDetail<Runtime>(
     (id) => `${paths.runtimes()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.runtimes.get(id),
+    async (id) => seed.runtimes.find((item) => item.id === id),
   ),
 };
 
@@ -212,18 +212,18 @@ const alerts = {
   list:  bffV1Lists.alerts as () => Promise<ListEnvelope<Alert>>,
   get:   liveOrMockDetail<Alert>(
     (id) => `${paths.alerts()}/${encodeURIComponent(id)}`,
-    (id) => seedBff.alerts.get(id),
+    async (id) => seed.alerts.find((item) => item.id === id),
   ),
 };
 
 const incidents = {
   list:  bffV1Lists.incidents as () => Promise<ListEnvelope<Incident>>,
-  get:   liveOrMockDetail<Incident>(paths.incident, (id) => seedBff.incidents.get(id)),
+  get:   liveOrMockDetail<Incident>(paths.incident, async (id) => seed.incidents.find((item) => item.id === id)),
 };
 
 const approvals = {
   list:  bffV1Lists.approvals as () => Promise<ListEnvelope<ApprovalRequest>>,
-  get:   liveOrMockDetail<ApprovalRequest>(paths.approval, (id) => seedBff.approvals.get(id)),
+  get:   liveOrMockDetail<ApprovalRequest>(paths.approval, async (id) => seed.approvals.find((item) => item.id === id)),
 };
 
 const audit = {

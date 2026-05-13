@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { ConsultRule, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 
@@ -59,7 +60,7 @@ export const ConsultRulesPage = () => {
   };
 
   const submit = async () => {
-    await bff.mutations.updateConsultRules(rules, `${rules.length} rule(s)`);
+    await mutations.updateConsultRules(rules, `${rules.length} rule(s)`);
     toast.success(t("governance.consult.submitted"));
     setDirty(false);
   };

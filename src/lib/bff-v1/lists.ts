@@ -10,7 +10,7 @@
 // (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
 // canonical Management read surfaces have a real adapter when live mode is on.
 
-import { bff } from "./seed";
+import * as seed from "@/mocks/seed";
 import type { ListEnvelope } from "./dto";
 import { withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
@@ -166,26 +166,26 @@ export const LIST_CLASS_BY_KEY = {
  *  live adapters; mock fallback is governed by liveTransport's `auto` /
  *  `strict` fallback mode (VITE_BFF_FALLBACK). */
 export const lists = {
-  strategies:      liveOrMockList(paths.strategies(),         () => bff.strategies.list(),       LIST_CLASS_BY_KEY.strategies),
-  personas:        liveOrMockList(paths.personas(),           () => bff.personas.list(),         LIST_CLASS_BY_KEY.personas),
-  capitalPools:    liveOrMockList(paths.capitalPools(),       () => bff.capitalPools.list(),     LIST_CLASS_BY_KEY.capitalPools),
-  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    () => bff.rankingFormulas.list(),  LIST_CLASS_BY_KEY.rankingFormulas),
-  rebalances:      liveOrMockList(paths.rebalances(),         () => bff.rebalances.list(),       LIST_CLASS_BY_KEY.rebalances),
-  deployments:     liveOrMockList(paths.deployments(),        () => bff.deployments.list(),      LIST_CLASS_BY_KEY.deployments),
-  evolution:       liveOrMockList(paths.evolutionPrograms(),  () => bff.evolution.list(),        LIST_CLASS_BY_KEY.evolution),
-  research:        liveOrMockList(paths.researchExperiments(),() => bff.research.list(),         LIST_CLASS_BY_KEY.research),
-  artifacts:       liveOrMockList(paths.artifacts(),          () => bff.artifacts.list(),        LIST_CLASS_BY_KEY.artifacts),
-  tools:           liveOrMockList(paths.tools(),              () => bff.tools.list(),            LIST_CLASS_BY_KEY.tools),
-  mcpServers:      liveOrMockList(paths.mcpServers(),         () => bff.mcpServers.list(),       LIST_CLASS_BY_KEY.mcpServers),
-  mcpTools:        liveOrMockList(paths.mcpTools(),           () => bff.mcpTools.list(),         LIST_CLASS_BY_KEY.mcpTools),
-  skills:          liveOrMockList(paths.skills(),             () => bff.skills.list(),           LIST_CLASS_BY_KEY.skills),
-  channels:        liveOrMockList(paths.channels(),           () => bff.channels.list(),         LIST_CLASS_BY_KEY.channels),
-  jobs:            liveOrMockList(paths.jobs(),               () => bff.jobs.list(),             LIST_CLASS_BY_KEY.jobs),
-  runtimes:        liveOrMockList(paths.runtimes(),           () => bff.runtimes.list(),         LIST_CLASS_BY_KEY.runtimes),
-  alerts:          liveOrMockList(paths.alerts(),             () => bff.alerts.list(),           LIST_CLASS_BY_KEY.alerts),
-  incidents:       liveOrMockList(paths.incidents(),          () => bff.incidents.list(),        LIST_CLASS_BY_KEY.incidents),
-  approvals:       liveOrMockList(paths.approvals(),          () => bff.approvals.list(),        LIST_CLASS_BY_KEY.approvals),
-  audit:           liveOrMockList(paths.audit(),              () => bff.audit.list(),            LIST_CLASS_BY_KEY.audit),
+  strategies:      liveOrMockList(paths.strategies(),         async () => seed.strategies,           LIST_CLASS_BY_KEY.strategies),
+  personas:        liveOrMockList(paths.personas(),           async () => seed.personas,             LIST_CLASS_BY_KEY.personas),
+  capitalPools:    liveOrMockList(paths.capitalPools(),       async () => seed.capitalPools,         LIST_CLASS_BY_KEY.capitalPools),
+  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    async () => seed.rankingFormulas,      LIST_CLASS_BY_KEY.rankingFormulas),
+  rebalances:      liveOrMockList(paths.rebalances(),         async () => seed.rebalances,           LIST_CLASS_BY_KEY.rebalances),
+  deployments:     liveOrMockList(paths.deployments(),        async () => seed.deployments,          LIST_CLASS_BY_KEY.deployments),
+  evolution:       liveOrMockList(paths.evolutionPrograms(),  async () => seed.evolutionPrograms,    LIST_CLASS_BY_KEY.evolution),
+  research:        liveOrMockList(paths.researchExperiments(),async () => seed.researchExperiments,  LIST_CLASS_BY_KEY.research),
+  artifacts:       liveOrMockList(paths.artifacts(),          async () => seed.artifacts,            LIST_CLASS_BY_KEY.artifacts),
+  tools:           liveOrMockList(paths.tools(),              async () => seed.tools,                LIST_CLASS_BY_KEY.tools),
+  mcpServers:      liveOrMockList(paths.mcpServers(),         async () => seed.mcpServers,           LIST_CLASS_BY_KEY.mcpServers),
+  mcpTools:        liveOrMockList(paths.mcpTools(),           async () => seed.mcpTools,             LIST_CLASS_BY_KEY.mcpTools),
+  skills:          liveOrMockList(paths.skills(),             async () => seed.skills,               LIST_CLASS_BY_KEY.skills),
+  channels:        liveOrMockList(paths.channels(),           async () => seed.channels,             LIST_CLASS_BY_KEY.channels),
+  jobs:            liveOrMockList(paths.jobs(),               async () => seed.jobs,                 LIST_CLASS_BY_KEY.jobs),
+  runtimes:        liveOrMockList(paths.runtimes(),           async () => seed.runtimes,             LIST_CLASS_BY_KEY.runtimes),
+  alerts:          liveOrMockList(paths.alerts(),             async () => seed.alerts,               LIST_CLASS_BY_KEY.alerts),
+  incidents:       liveOrMockList(paths.incidents(),          async () => seed.incidents,            LIST_CLASS_BY_KEY.incidents),
+  approvals:       liveOrMockList(paths.approvals(),          async () => seed.approvals,            LIST_CLASS_BY_KEY.approvals),
+  audit:           liveOrMockList(paths.audit(),              async () => seed.auditEvents,          LIST_CLASS_BY_KEY.audit),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
 
 export type ListKey = keyof typeof lists;
