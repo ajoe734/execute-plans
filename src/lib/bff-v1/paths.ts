@@ -44,6 +44,9 @@ export const paths = {
 
   personas: () => `${BASE}/personas`,
   persona: (id: string) => `${BASE}/personas/${enc(id)}`,
+  personaRoutePolicy: (id: string) => `${BASE}/personas/${enc(id)}/route-policy`,
+  personaEvaluations: (id: string) => `${BASE}/personas/${enc(id)}/evaluations`,
+  personaMemory: (id: string) => `${BASE}/personas/${enc(id)}/memory`,
   /** @deprecated Use `paths.action("persona", id, action)`. */
   personaAction: (id: string, action: string) => `${BASE}/personas/${enc(id)}/actions/${enc(action)}`,
 
@@ -65,6 +68,8 @@ export const paths = {
   // ---- Evolution ----
   evolutionPrograms: () => `${BASE}/evolution-programs`,
   evolutionProgram: (id: string) => `${BASE}/evolution-programs/${enc(id)}`,
+  evolutionProgramRuns: (id: string) => `${BASE}/evolution-programs/${enc(id)}/runs`,
+  evolutionProgramCandidates: (id: string) => `${BASE}/evolution-programs/${enc(id)}/candidates`,
 
   // ---- Jobs / Approvals / Incidents ----
   jobs: () => `${BASE}/jobs`,
@@ -100,6 +105,7 @@ export const paths = {
 
   // ---- Research ----
   researchExperiments: () => `${BASE}/research-experiments`,
+  strategySpecs: (id: string) => `${BASE}/strategies/${enc(id)}/specs`,
 
   // ---- Command confirmations (v3 §6.2) — submission endpoint ----
   // /bff/command-confirmations requires confirm_token + command_id in body (submission of an already-issued token).
