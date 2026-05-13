@@ -20,7 +20,7 @@ const cases: AnyCase[] = [
   {
     entity: "persona",
     valid: { name: "OK Persona", archetype: "trader" },
-    invalid: { name: "OK Persona", archetype: "" },
+    invalid: { name: "OK Persona", archetype: "" as never },
     expectErrorKey: "archetype",
   },
   {

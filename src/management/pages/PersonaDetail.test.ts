@@ -1,12 +1,18 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { writeOverlay } from "@/lib/bff/writeOverlay";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import type { Persona } from "@/lib/bff/types";
+import { getPersona } from "@/lib/bff-v1/personas";
+
+vi.mock("@/lib/bff-v1/personas", () => ({
+  getPersona: vi.fn(),
+}));
 
 describe("PersonaDetail", () => {
-  beforeEach(() => writeOverlay.clear());
+  beforeEach(() => {
+    vi.mocked(getPersona).mockReset();
+  });
 
-  it("resolves a newly-created persona from the write overlay", async () => {
+  it("resolves persona detail from the BFF persona endpoint", async () => {
     const persona: Persona = {
       id: "ps_detail",
       name: "Detail Persona",
@@ -19,11 +25,12 @@ describe("PersonaDetail", () => {
       successRate: 0,
     };
 
-    writeOverlay.add("persona", persona);
+    vi.mocked(getPersona).mockResolvedValue(persona);
 
     await expect(resolvePersonaForDetail("ps_detail")).resolves.toMatchObject({
       id: "ps_detail",
       name: "Detail Persona",
     });
+    expect(getPersona).toHaveBeenCalledWith("ps_detail");
   });
 });

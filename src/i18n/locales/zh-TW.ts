@@ -872,6 +872,7 @@ export default {
     filters: "過濾條件", subscribers: "訂閱者", destination: "目的地",
     category: "分類", inputs: "輸入", usedBy: "被使用於", endpoint: "端點",
     tools: "工具數", envs: "環境", mode: "模式", eval: "評估分數", personas: "Persona 數",
+    roleType: "角色類型",
   },
   section: {
     timeline: "時間軸", rationale: "理由", changeSummary: "變更摘要",
@@ -1109,7 +1110,7 @@ export default {
     personaLab: {
       subtitle: "在發布前以技能、工具與記憶路由組合並測試 Persona。",
       memoryRoutePh: "新增記憶路由…",
-      draft: "Persona 草稿", archetype: "原型", systemPrompt: "系統提示詞",
+      draft: "Persona 草稿", archetype: "角色類型", systemPrompt: "系統提示詞",
       skills: "技能", tools: "工具", memoryRoutes: "記憶路由",
       saveDraft: "儲存草稿", submitReview: "送出審核",
       testBench: "測試台", response: "回覆",
@@ -1605,7 +1606,7 @@ export default {
     field: {
       name: "名稱", owner: "負責人", memo: "備註",
       alpha: "Alpha 名稱（slug）", capitalPoolId: "資金池 ID", personaIds: "Persona ID 清單",
-      archetype: "原型", description: "描述", initialMode: "初始模式",
+      archetype: "角色類型", description: "描述", initialMode: "初始狀態",
       currency: "幣別", allocated: "配置額度", riskBudget: "風險預算",
       expression: "公式表達式",
       quarter: "季度 (YYYY-Qn)", targetPoolId: "目標資金池 ID", proposedDelta: "提議變動",
@@ -1619,16 +1620,22 @@ export default {
       riskBudget: "範圍 0 < value ≤ 1（資金池占比）",
       quarter: "格式：YYYY-Qn，例如 2026-Q2",
       alpha: "小寫 slug，例如 alpha-momentum",
+      archetype: "選擇 Persona 的主要工作角色；送出後仍會以 archetype 欄位寫入。",
+      initialMode: "草稿（影子觀察）不會承接資金或部署；暫停代表建立後不啟用。",
     },
     placeholder: {
       alpha: "alpha-momentum", quarter: "2026-Q2", expression: "0.6*sharpe-0.3*|dd|",
-      version: "v1.0.0", archetype: "trader / analyst",
+      version: "v1.0.0", personaArchetype: "選擇角色類型",
     },
     select: {
       currency: { USD: "USD", USDT: "USDT", TWD: "TWD" },
       target: { research: "研究", paper: "模擬", live: "正式" },
       kind: { model: "模型", dataset: "資料集", report: "報告", container: "容器" },
-      initialMode: { shadow: "影子模式", suspended: "暫停" },
+      personaArchetype: {
+        trader: "交易員", analyst: "分析師", quant: "量化研究", macro: "宏觀策略",
+        risk: "風控", redTeam: "紅隊檢查", capital: "資金配置", generalist: "通用",
+      },
+      initialMode: { shadow: "草稿（影子觀察）", suspended: "暫停（不啟用）" },
     },
     error: {
       required: "必填",
@@ -1638,6 +1645,7 @@ export default {
       gtZero: "需大於 0",
       riskBudgetRange: "需介於 (0, 1]",
       quarterFormat: "格式需為 YYYY-Qn",
+      invalidOption: "選項不合法",
     },
   },
 };

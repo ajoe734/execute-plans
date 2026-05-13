@@ -18,13 +18,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/platform/hooks";
+import { PERSONA_ARCHETYPES } from "@/lib/writeIntents/types";
 import type { CreatableEntity } from "@/lib/writeIntents/types";
 import { validateCreate } from "@/lib/writeIntents/validation";
-import { buildEntity } from "@/lib/writeIntents/createDefaults";
-import { writeOverlay } from "@/lib/bff/writeOverlay";
 import { idempotencyKey } from "@/lib/bff-v1/headers";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createEntityFromInput, type CreateEntityResult } from "./createEntity";
 
 // spec-conflict-G C3 — confirm cooldown (server-time would supersede in live mode).
 const CONFIRM_COOLDOWN_MS = 1500;
@@ -33,6 +33,7 @@ interface Props {
   entity: CreatableEntity;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onCreated?: (created: Record<string, unknown>, result: CreateEntityResult) => void;
 }
 
 type FieldType =
@@ -67,6 +68,7 @@ function mapErrorKey(raw: string): string {
     case "must be > 0": return "entityCreate.error.gtZero";
     case "must be in (0, 1]": return "entityCreate.error.riskBudgetRange";
     case "format YYYY-Qn": return "entityCreate.error.quarterFormat";
+    case "invalid option": return "entityCreate.error.invalidOption";
     default: return raw; // surface raw if not mapped
   }
 }
@@ -86,6 +88,11 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
   }
 };
 
+const personaArchetypeOptions: SelectOption[] = PERSONA_ARCHETYPES.map((value) => ({
+  value,
+  labelKey: `personaArchetype.${value === "red_team" ? "redTeam" : value}`,
+}));
+
 function entityFields(entity: CreatableEntity): FieldDef[] {
   const baseName: FieldDef = { name: "name", labelKey: "name", type: "text", required: true };
   const owner: FieldDef = { name: "owner", labelKey: "owner", type: "text" };
@@ -102,9 +109,9 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
     case "persona":
       return [
         baseName, owner,
-        { name: "archetype", labelKey: "archetype", type: "text", required: true, placeholderKey: "archetype" },
+        { name: "archetype", labelKey: "archetype", type: "select", required: true, placeholderKey: "personaArchetype", hintKey: "archetype", options: personaArchetypeOptions },
         { name: "description", labelKey: "description", type: "textarea" },
-        { name: "initialMode", labelKey: "initialMode", type: "select", options: [
+        { name: "initialMode", labelKey: "initialMode", type: "select", hintKey: "initialMode", options: [
           { value: "shadow", labelKey: "initialMode.shadow" },
           { value: "suspended", labelKey: "initialMode.suspended" },
         ] },
@@ -181,7 +188,7 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
   }
 }
 
-export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
+export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Props) => {
   const t = useT();
   const { toast } = useToast();
   const errIdBase = useId();
@@ -191,6 +198,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
   const idemRef = useRef<string>(idempotencyKey());
   const lastSubmitAtRef = useRef<number>(0);
   const [cooldownMs, setCooldownMs] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -199,6 +207,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
       idemRef.current = idempotencyKey();
       lastSubmitAtRef.current = 0;
       setCooldownMs(0);
+      setSubmitting(false);
     }
   }, [open, entity]);
 
@@ -212,7 +221,8 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
   const fields = useMemo(() => entityFields(entity), [entity]);
   const setField = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
-  const submit = () => {
+  const submit = async () => {
+    if (submitting) return;
     const now = Date.now();
     const sinceLast = now - lastSubmitAtRef.current;
     if (lastSubmitAtRef.current > 0 && sinceLast < CONFIRM_COOLDOWN_MS) {
@@ -232,16 +242,26 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
       setErrors(mapped);
       return;
     }
-    const built = buildEntity(entity, form as never);
-    // C3 — pass header-style Idempotency-Key + correlationId chain into overlay.
-    writeOverlay.add(entity, built, { idempotencyKey: idemRef.current });
-    lastSubmitAtRef.current = now;
-    setCooldownMs(CONFIRM_COOLDOWN_MS);
-    toast({
-      title: `${t("actions.create")} — ${t(`entityCreate.entity.${entity}`)}`,
-      description: String(built.name ?? built.id),
-    });
-    onOpenChange(false);
+    setSubmitting(true);
+    try {
+      const result = await createEntityFromInput(entity, form as never, { idempotencyKey: idemRef.current });
+      lastSubmitAtRef.current = now;
+      setCooldownMs(CONFIRM_COOLDOWN_MS);
+      toast({
+        title: `${t("actions.create")} — ${t(`entityCreate.entity.${entity}`)}`,
+        description: String(result.data.name ?? result.data.id),
+      });
+      onCreated?.(result.data, result);
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: t("errors.UNKNOWN_ERROR"),
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderField = (f: FieldDef) => {
@@ -283,7 +303,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
         control = (
           <Select value={String(value ?? "")} onValueChange={(v) => setField(f.name, v)}>
             <SelectTrigger id={inputId} aria-invalid={!!errKey} aria-describedby={describedBy}>
-              <SelectValue />
+              <SelectValue placeholder={f.placeholderKey ? t(`entityCreate.placeholder.${f.placeholderKey}`) : undefined} />
             </SelectTrigger>
             <SelectContent>
               {f.options?.map((o) => (
@@ -373,8 +393,8 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange }: Props) => {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("actions.cancel")}
           </Button>
-          <Button onClick={submit} disabled={cooldownMs > 0} aria-describedby={cooldownMs > 0 ? `${errIdBase}-cooldown` : undefined}>
-            {cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t("actions.create")}
+          <Button onClick={submit} disabled={cooldownMs > 0 || submitting} aria-describedby={cooldownMs > 0 ? `${errIdBase}-cooldown` : undefined}>
+            {submitting ? t("common.loading") : cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t("actions.create")}
           </Button>
           {cooldownMs > 0 && (
             <span id={`${errIdBase}-cooldown`} className="sr-only" role="status">

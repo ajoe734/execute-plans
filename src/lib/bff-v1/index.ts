@@ -15,6 +15,7 @@ export * from "./lists";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
+export * from "./personas";
 export * from "./liveStatus";
 export * from "./liveTransport";
 // Batch VII — escape hatch for legacy seed accessors during migration.

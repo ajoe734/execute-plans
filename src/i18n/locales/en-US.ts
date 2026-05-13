@@ -887,6 +887,7 @@ export default {
     filters: "Filters", subscribers: "Subscribers", destination: "Destination",
     category: "Category", inputs: "Inputs", usedBy: "Used by", endpoint: "Endpoint",
     tools: "Tools", envs: "Envs", mode: "Mode", eval: "Eval", personas: "Personas",
+    roleType: "Role type",
   },
   section: {
     timeline: "Timeline", rationale: "Rationale", changeSummary: "Change Summary",
@@ -1124,7 +1125,7 @@ export default {
     personaLab: {
       subtitle: "Compose and test personas with skills, tools, and memory routes before publishing.",
       memoryRoutePh: "Add memory route…",
-      draft: "Persona draft", archetype: "Archetype", systemPrompt: "System Prompt",
+      draft: "Persona draft", archetype: "Role type", systemPrompt: "System Prompt",
       skills: "Skills", tools: "Tools", memoryRoutes: "Memory Routes",
       saveDraft: "Save draft", submitReview: "Submit for review",
       testBench: "Test bench", response: "Response",
@@ -1620,7 +1621,7 @@ export default {
     field: {
       name: "Name", owner: "Owner", memo: "Memo",
       alpha: "Alpha (slug)", capitalPoolId: "Capital Pool ID", personaIds: "Persona IDs",
-      archetype: "Archetype", description: "Description", initialMode: "Initial mode",
+      archetype: "Role type", description: "Description", initialMode: "Initial state",
       currency: "Currency", allocated: "Allocated", riskBudget: "Risk budget",
       expression: "Expression",
       quarter: "Quarter (YYYY-Qn)", targetPoolId: "Target Pool ID", proposedDelta: "Proposed delta",
@@ -1634,16 +1635,22 @@ export default {
       riskBudget: "0 < value ≤ 1 (fraction of pool)",
       quarter: "Format: YYYY-Qn, e.g. 2026-Q2",
       alpha: "Lowercase slug, e.g. alpha-momentum",
+      archetype: "Choose the persona's main operating role. It is still stored as the archetype field.",
+      initialMode: "Draft (shadow observe) does not take capital or deploy. Suspended creates it inactive.",
     },
     placeholder: {
       alpha: "alpha-momentum", quarter: "2026-Q2", expression: "0.6*sharpe-0.3*|dd|",
-      version: "v1.0.0", archetype: "trader / analyst",
+      version: "v1.0.0", personaArchetype: "Choose a role type",
     },
     select: {
       currency: { USD: "USD", USDT: "USDT", TWD: "TWD" },
       target: { research: "Research", paper: "Paper", live: "Live" },
       kind: { model: "Model", dataset: "Dataset", report: "Report", container: "Container" },
-      initialMode: { shadow: "Shadow", suspended: "Suspended" },
+      personaArchetype: {
+        trader: "Trader", analyst: "Analyst", quant: "Quant research", macro: "Macro strategy",
+        risk: "Risk control", redTeam: "Red-team review", capital: "Capital allocation", generalist: "Generalist",
+      },
+      initialMode: { shadow: "Draft (shadow observe)", suspended: "Suspended (inactive)" },
     },
     error: {
       required: "Required",
@@ -1653,6 +1660,7 @@ export default {
       gtZero: "Must be > 0",
       riskBudgetRange: "Must be in (0, 1]",
       quarterFormat: "Format YYYY-Qn",
+      invalidOption: "Invalid option",
     },
   },
 };

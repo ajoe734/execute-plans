@@ -33,7 +33,8 @@ export function ObjectListPage<T extends BaseObject>({
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
-  const wrappedLoader: () => Promise<ListEnvelope<T>> = createBehavior?.kind === "drawer"
+  const shouldMergeOverlay = createBehavior?.kind === "drawer" && createBehavior.entity !== "persona";
+  const wrappedLoader: () => Promise<ListEnvelope<T>> = shouldMergeOverlay
     ? (() => withOverlay<T>(createBehavior.entity, async () => (await loader()).items)().then((items) => ({
         items, cursor: {}, pageSize: items.length, estimatedTotal: items.length, totalCountExact: true,
       })))
@@ -98,6 +99,13 @@ export function ObjectListPage<T extends BaseObject>({
           entity={createBehavior.entity}
           open={drawerOpen}
           onOpenChange={(v) => { setDrawerOpen(v); if (!v) refresh(); }}
+          onCreated={(created) => {
+            if (createBehavior.entity === "persona" && created.id) {
+              navigate(`${basePath}/${encodeURIComponent(String(created.id))}`);
+            } else {
+              refresh();
+            }
+          }}
         />
       </>
     );

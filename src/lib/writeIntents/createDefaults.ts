@@ -25,18 +25,23 @@ const defaulters: { [K in CreatableEntity]: Defaulter<K> } = {
     reviewStatus: "pending",
     deploymentStatus: "not_deployed",
   }),
-  persona: (i) => ({
-    id: newId("ps"),
-    name: i.name,
-    owner: i.owner ?? "you",
-    risk: i.risk ?? "low",
-    state: "draft",
-    updatedAt: nowIso(),
-    archetype: i.archetype,
-    routedStrategies: 0,
-    successRate: 0,
-    lifecycleStatus: i.initialMode ?? "shadow",
-  }),
+  persona: (i) => {
+    const initialMode = i.initialMode ?? "shadow";
+    const lifecycleStatus = initialMode === "suspended" ? "suspended" : "draft";
+    return {
+      id: newId("ps"),
+      name: i.name,
+      owner: i.owner ?? "you",
+      risk: i.risk ?? "low",
+      state: initialMode === "suspended" ? "paused" : "draft",
+      updatedAt: nowIso(),
+      archetype: i.archetype,
+      routedStrategies: 0,
+      successRate: 0,
+      lifecycleStatus,
+      executionMode: initialMode,
+    };
+  },
   capitalPool: (i) => ({
     id: newId("cp"),
     name: i.name,

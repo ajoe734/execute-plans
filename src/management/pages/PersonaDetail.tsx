@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
 import { useT } from "@/platform/hooks";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
 import { Pause, Edit, Beaker, Play, Lock } from "lucide-react";
-import { mutations } from "@/lib/bff/mutations";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -28,6 +27,13 @@ import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHis
 import { resolvePersonaForDetail } from "./personaDetailData";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
+
+const commandDescription = (payload: Record<string, unknown>): string | undefined => {
+  const data = payload.data as Record<string, unknown> | undefined;
+  const receipt = data?.receipt as Record<string, unknown> | undefined;
+  const commandId = data?.commandId ?? data?.command_id ?? receipt?.command_id ?? receipt?.id;
+  return commandId ? String(commandId) : undefined;
+};
 
 export const PersonaDetail = () => {
   const { id } = useParams();
@@ -102,13 +108,13 @@ export const PersonaDetail = () => {
         actions={
           <>
             <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
-            <Button size="sm" variant="outline" onClick={async () => { await mutations.personaOps(p.id, "test", "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
+            <Button size="sm" variant="outline" onClick={async () => { await testPersonaPrompt(p.id, "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
               <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { const r = await mutations.personaOps(p.id, "run_eval", "manual eval"); toast.success(t("persona.ops.evalToast"), { description: r.job?.id }); }}>
+            <Button size="sm" variant="outline" onClick={async () => { const r = await runPersonaAction(p.id, "run_eval", { memo: "manual eval" }); toast.success(t("persona.ops.evalToast"), { description: commandDescription(r) }); }}>
               <Play className="h-4 w-4 mr-1" />{t("persona.ops.runEval")}
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { await mutations.personaOps(p.id, "restrict_tools", "temporary restriction"); toast.success(t("persona.ops.restrictToast")); }}>
+            <Button size="sm" variant="outline" onClick={async () => { await runPersonaAction(p.id, "restrict_tools", { memo: "temporary restriction" }); toast.success(t("persona.ops.restrictToast")); }}>
               <Lock className="h-4 w-4 mr-1" />{t("persona.ops.restrictTools")}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
@@ -201,7 +207,7 @@ export const PersonaDetail = () => {
         confirmEntity={{ type: "persona", id: p.id }}
         target={{ type: "Persona", id: p.id, name: p.name }}
         risk="high"
-        onConfirm={async (memo, token) => { await runActionSafe({ kind: "Persona", id: p.id, action: "suspend", memo }, { confirmToken: token }); toast.success(t("toast.saved")); }}
+        onConfirm={async (memo, token) => { await runPersonaAction(p.id, "suspend", { memo, confirmToken: token }); toast.success(t("toast.saved")); }}
       />
     </>
   );

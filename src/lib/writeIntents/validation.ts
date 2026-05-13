@@ -1,4 +1,5 @@
 // Pack F F1 — pure validators per Pack_F_Disposition §2.5
+import { PERSONA_ARCHETYPES, PERSONA_INITIAL_MODES } from "./types";
 import type {
   ArtifactCreateInput,
   CapitalPoolCreateInput,
@@ -24,6 +25,9 @@ const requireName = (name: unknown, errs: Record<string, string>) => {
   else if (s.length < 3 || s.length > 120) errs.name = "name length must be 3-120";
 };
 
+const PERSONA_ARCHETYPE_SET = new Set<string>(PERSONA_ARCHETYPES);
+const PERSONA_INITIAL_MODE_SET = new Set<string>(PERSONA_INITIAL_MODES);
+
 const validators: { [K in CreatableEntity]: (input: CreateInputMap[K]) => ValidationResult } = {
   strategy: (i: StrategyCreateInput) => {
     const errors: Record<string, string> = {};
@@ -38,6 +42,8 @@ const validators: { [K in CreatableEntity]: (input: CreateInputMap[K]) => Valida
     const errors: Record<string, string> = {};
     requireName(i.name, errors);
     if (!i.archetype?.trim()) errors.archetype = "required";
+    else if (!PERSONA_ARCHETYPE_SET.has(i.archetype)) errors.archetype = "invalid option";
+    if (i.initialMode && !PERSONA_INITIAL_MODE_SET.has(i.initialMode)) errors.initialMode = "invalid option";
     return { ok: Object.keys(errors).length === 0, errors };
   },
   capitalPool: (i: CapitalPoolCreateInput) => {

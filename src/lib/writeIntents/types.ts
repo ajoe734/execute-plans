@@ -17,6 +17,21 @@ export type CreatableEntity =
 export type RiskDefault = "info" | "low" | "medium" | "high" | "critical";
 export const RISK_LEVELS: readonly RiskDefault[] = ["info", "low", "medium", "high", "critical"] as const;
 
+export const PERSONA_ARCHETYPES = [
+  "trader",
+  "analyst",
+  "quant",
+  "macro",
+  "risk",
+  "red_team",
+  "capital",
+  "generalist",
+] as const;
+export type PersonaArchetype = (typeof PERSONA_ARCHETYPES)[number];
+
+export const PERSONA_INITIAL_MODES = ["shadow", "suspended"] as const;
+export type PersonaInitialMode = (typeof PERSONA_INITIAL_MODES)[number];
+
 export interface BaseCreateInput {
   name: string;
   owner?: string;
@@ -33,9 +48,11 @@ export interface StrategyCreateInput extends BaseCreateInput {
 }
 
 export interface PersonaCreateInput extends BaseCreateInput {
-  archetype: string;
+  // Kept as the backend-facing DTO key; the UI presents it as "role type".
+  archetype: PersonaArchetype;
   description?: string;
-  initialMode?: "shadow" | "suspended";
+  // v0 overlay execution mode, mapped to a canonical lifecycle status at build time.
+  initialMode?: PersonaInitialMode;
 }
 
 export interface CapitalPoolCreateInput extends BaseCreateInput {
