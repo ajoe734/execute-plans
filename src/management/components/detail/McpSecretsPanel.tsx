@@ -8,6 +8,11 @@ import { bff } from "@/lib/bff-v1";
 import type { McpSecret, McpServer } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import {
+  MockDataEmptyState,
+} from "@/components/data/MockDataBadge";
+import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
+import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
 
 const fmtAge = (iso: string) => {
   const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400_000);
@@ -16,6 +21,8 @@ const fmtAge = (iso: string) => {
 
 export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
   const t = useT();
+  const liveStatus = useLiveStatusSnapshot();
+  const secretsGate = getMockDataBadgeModel("bff.mcpSecrets.forServer", liveStatus);
   const [secrets, setSecrets] = useState<McpSecret[]>([]);
   const [rotate, setRotate] = useState<McpSecret | null>(null);
   useEffect(() => { bff.mcpSecrets.forServer(server.id).then(setSecrets); }, [server.id]);
@@ -23,7 +30,11 @@ export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
   return (
     <>
       <Card className="p-0 divide-y divide-border">
-        {secrets.length === 0 && <div className="text-xs text-muted-foreground text-center py-6">{t("empty.none")}</div>}
+        {secrets.length === 0 && secretsGate ? (
+          <MockDataEmptyState helperName="bff.mcpSecrets.forServer" className="border-0" />
+        ) : secrets.length === 0 ? (
+          <div className="text-xs text-muted-foreground text-center py-6">{t("empty.none")}</div>
+        ) : null}
         {secrets.map((s) => (
           <div key={s.id} className="flex items-center gap-3 px-3 py-2.5">
             <KeyRound className="h-4 w-4 text-muted-foreground shrink-0" />
