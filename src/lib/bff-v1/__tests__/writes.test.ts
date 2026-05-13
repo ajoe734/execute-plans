@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { runAction, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
+import { liveWriteGated, runAction, sessionKindAllowsWrite, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
 import { BffError } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
@@ -12,6 +12,8 @@ function setWriteEnv(realWrites: boolean, token: string | null = null) {
 
 afterEach(() => {
   setWriteEnv(false, null);
+  delete process.env.VITE_BFF_FALLBACK;
+  delete process.env.VITE_BFF_STRICT_WRITES;
   liveStatus._reset();
   vi.restoreAllMocks();
 });
@@ -86,13 +88,32 @@ describe("VI-2 writes seam", () => {
   });
 });
 
-function makeLiveFetch(body: unknown, status = 202): ReturnType<typeof vi.fn> {
-  return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
+function meSession(sessionKind: "cookie" | "bearer" | "stub", opts: { env?: string; strict?: boolean } = {}) {
+  return {
+    data: {
+      session: { authenticated: true, session_kind: sessionKind },
+      environment: { name: opts.env ?? "dev", strict_auth: opts.strict ?? false },
+    },
+  };
+}
+
+function makeJsonResponse(body: unknown, status = 202): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function makeSessionFetch(sessionKind: "cookie" | "bearer" | "stub"): ReturnType<typeof vi.fn> {
+  return vi.fn().mockResolvedValue(makeJsonResponse(meSession(sessionKind), 200));
+}
+
+function makeLiveFetch(body: unknown, status = 202, sessionKind: "cookie" | "bearer" | "stub" = "bearer"): ReturnType<typeof vi.fn> {
+  return vi.fn().mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bff/me")) return makeJsonResponse(meSession(sessionKind), 200);
+    return makeJsonResponse(body, status);
+  });
 }
 
 describe("VI-2 live-mode adaptLive normalization", () => {
@@ -122,7 +143,8 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     expect(env.legacy).toBeDefined();
     expect(env.legacy.ok).toBe(true);
     expect(env.legacy.audit.id).toBe(commandId);
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toMatch(/\/bff\/me$/);
   });
 
   it("requestConfirmToken adaptLive maps tokenId→confirmToken with HighRiskConfirm fields", async () => {
@@ -159,7 +181,7 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     expect(env.data.expiresAt).toBeTruthy();
     expect(env.correlationId).toBe("corr_ct_01");
     expect(env.idempotencyKey).toBe("idk_srv_ct");
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -169,11 +191,9 @@ describe("VI-2 confirmToken propagation to live POST body", () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     let capturedBody: unknown;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_, init) => {
+      if (!init?.body) return makeJsonResponse(meSession("bearer"), 200);
       capturedBody = JSON.parse((init as RequestInit).body as string);
-      return new Response(
-        JSON.stringify({ status: "accepted", data: { commandId: "cmd_ct_prop" }, meta: {} }),
-        { status: 202, headers: { "Content-Type": "application/json" } },
-      );
+      return makeJsonResponse({ status: "accepted", data: { commandId: "cmd_ct_prop" }, meta: {} }, 202);
     });
 
     await runAction(
@@ -182,23 +202,50 @@ describe("VI-2 confirmToken propagation to live POST body", () => {
     );
 
     expect((capturedBody as Record<string, unknown>).confirmToken).toBe("ctok_v3_abc123");
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("VI-2 auth gate", () => {
-  it("runAction stays in mock when VITE_BFF_REAL_WRITES=true but no bearer token", async () => {
+describe("VI-2 session-kind write gate", () => {
+  it("liveWriteGated fetches /bff/me with credentials and admits cookie-only sessions", async () => {
     setWriteEnv(true, null);
-    const fetcher = vi.fn();
+    const fetcher = makeSessionFetch("cookie");
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    await expect(liveWriteGated()).resolves.toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toMatch(/\/bff\/me$/);
+    expect((init as RequestInit).credentials).toBe("include");
+  });
+
+  it("sessionKindAllowsWrite blocks stub in production or strict mode", () => {
+    expect(sessionKindAllowsWrite("cookie", { production: true, strict: true })).toBe(true);
+    expect(sessionKindAllowsWrite("bearer", { production: true, strict: true })).toBe(true);
+    expect(sessionKindAllowsWrite("stub", { production: false, strict: false })).toBe(true);
+    expect(sessionKindAllowsWrite("stub", { production: true, strict: false })).toBe(false);
+    expect(sessionKindAllowsWrite("stub", { production: false, strict: true })).toBe(false);
+  });
+
+  it("runAction stays in mock when /bff/me rejects the session", async () => {
+    setWriteEnv(true, null);
+    const fetcher = vi.fn().mockResolvedValue(
+      makeJsonResponse({ error: { code: "INVALID_TOKEN", message: "missing" } }, 401),
+    );
     vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
     const env = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" });
     expect(env.ok).toBe(true);
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
-  it("requestConfirmToken stays in mock when VITE_BFF_REAL_WRITES=true but no bearer token", async () => {
+  it("requestConfirmToken uses live transport for a cookie-only session", async () => {
     setWriteEnv(true, null);
-    const fetcher = vi.fn();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const tokenId = "ct_cookie_only";
+    const fetcher = makeLiveFetch({
+      status: "accepted",
+      data: { tokenId, commandId: "cmd_cookie_ct" },
+      meta: { idempotency: { idempotencyKey: "idk_cookie" } },
+    }, 201, "cookie");
     vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
     const env = await requestConfirmToken({
       actionId: "strategy.deploy_live",
@@ -209,6 +256,7 @@ describe("VI-2 auth gate", () => {
       platformEnvironment: "production",
     });
     expect(env.ok).toBe(true);
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(env.data.confirmToken).toBe(tokenId);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,7 +1,8 @@
 // BFF-LUV-FE-004 — Canonical live-write seam for high-risk/write flows.
 //
-// All writes are gated by VITE_BFF_REAL_WRITES=true AND a bearer token present.
-// Falls back to mock mutations when either gate is not satisfied.
+// All writes are gated by VITE_BFF_REAL_WRITES=true AND an authenticated
+// /bff/me session_kind (cookie or bearer; stub only outside strict/prod).
+// Falls back to mock mutations when the gate is not satisfied.
 //
 // Canonical action path:        /bff/actions/{entityType}/{entityId}/{actionId}
 // Confirm token create:         POST   /bff/confirm-tokens
@@ -16,12 +17,12 @@ import { mutations } from "./mutations";
 import type { RunActionInput, MutationResult } from "./mutations";
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
-import { withLiveOrMock, realWritesEnabled } from "@/lib/bff-v1/liveTransport";
+import { withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { liveWriteGated, sessionKindAllowsWrite } from "@/lib/bff-v1/writeGate";
 import { paths } from "@/lib/bff-v1/paths";
 import {
   idempotencyKey as mintIdemKey,
   newCorrelationId,
-  readBrowserAuthStorage,
 } from "@/lib/bff-v1/headers";
 import { makeBffError, BffError } from "@/lib/bff-v1/errors";
 import type {
@@ -29,20 +30,7 @@ import type {
   ActionCommandResponseData,
 } from "@/lib/bff-v1/dto";
 
-// ---------- Auth gate ----------
-
-function authPresent(): boolean {
-  try {
-    return readBrowserAuthStorage().token !== null;
-  } catch {
-    return false;
-  }
-}
-
-/** Both VITE_BFF_REAL_WRITES=true AND a bearer token must be present. */
-export function liveWriteGated(): boolean {
-  return realWritesEnabled() && authPresent();
-}
+export { liveWriteGated, sessionKindAllowsWrite };
 
 // ---------- Entity-type mapping ----------
 
@@ -124,7 +112,7 @@ export async function runAction(
     return { ok: true, data, auditEventId: legacy.audit.id, correlationId, idempotencyKey, message: legacy.message, legacy };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     const livePath = paths.action(entityType(input.kind), input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
@@ -211,7 +199,7 @@ export async function requestConfirmToken(
     return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenEnvelope>(
       {
         method: "POST",
@@ -270,7 +258,7 @@ export async function readConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenReadEnvelope>(
       {
         method: "GET",
@@ -319,7 +307,7 @@ export async function redeemConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenRedeemEnvelope>(
       {
         method: "POST",
@@ -358,7 +346,7 @@ export async function deleteConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenDeleteEnvelope>(
       {
         method: "DELETE",
@@ -406,7 +394,7 @@ export async function decideApproval(
     return { ok: true, data: { approvalId: id, decision }, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ApprovalDecisionEnvelope>(
       {
         method: "POST",
@@ -451,7 +439,7 @@ export async function acknowledgeAlert(
     return { ok: true, data: { alertId: id }, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<AlertAckEnvelope>(
       {
         method: "POST",
@@ -501,7 +489,7 @@ export async function decideIntervention(
     };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<InterventionDecisionEnvelope>(
       {
         method: "POST",
