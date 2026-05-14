@@ -76,6 +76,7 @@ node scripts/probe-bff-authenticated-live.mjs
 ```bash
 PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app \
 PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+PANTHEON_OLD_BFF_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io \
 node scripts/probe-hosted-browser-bff.mjs
 ```
 
