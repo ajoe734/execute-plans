@@ -46,8 +46,12 @@ jobs:
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'true' }}
       PANTHEON_RELEASE_GATE_OBSERVATION_END: "2026-05-20"
-      VITE_BFF_MODE: live
-      VITE_BFF_FALLBACK: strict
+      # VITE_BFF_* are build-time vars for the Vite FE bundle. CI does not
+      # build or serve the FE (it tests against the hosted Lovable app), so
+      # setting them at job level has no effect on the FE under test but DOES
+      # leak into the vitest process and override unit tests that exercise
+      # hybrid/auto fallback paths. Keep them unset at job level; the strict
+      # signal that matters to Playwright is PANTHEON_E2E_STRICT.
       PANTHEON_E2E_STRICT: "1"
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
