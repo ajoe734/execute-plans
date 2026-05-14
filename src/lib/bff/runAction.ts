@@ -205,7 +205,7 @@ export async function runAction(
         };
         const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
         const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" };
+        const mockLegacy = { ok: true as const, audit: { id: commandId } as AuditEvent, message: "dispatched" } as MutationResult;
         return {
           ok: true,
           data: { actionId: commandId, status: "accepted" as const },
