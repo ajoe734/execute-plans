@@ -21,9 +21,9 @@ on:
         required: false
         default: ""
       soft_fail:
-        description: "Keep release gate in observation mode; set false after 2026-05-20 hard-gate switch."
+        description: "Emergency override to keep release gate in observation mode. Hard-gate is the default since 2026-05-14 (FE-INT-GATE early switch). Set true only if a transient external dependency is blocking valid merges."
         required: false
-        default: "true"
+        default: "false"
         type: choice
         options:
           - "true"
@@ -44,8 +44,7 @@ jobs:
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'true' }}
-      PANTHEON_RELEASE_GATE_OBSERVATION_END: "2026-05-20"
+      PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. CI does not
       # build or serve the FE (it tests against the hosted Lovable app), so
       # setting them at job level has no effect on the FE under test but DOES
@@ -162,7 +161,7 @@ jobs:
       - name: Aggregate release gate
         id: aggregate
         if: always()
-        continue-on-error: ${{ (inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'true') == 'true' }}
+        continue-on-error: ${{ (inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false') == 'true' }}
         run: node scripts/aggregate-release-gate.mjs
 
       - name: Upload evidence
@@ -185,8 +184,9 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const path = require('path');
             const marker = '<!-- pantheon-release-gate-summary -->';
-            const summaryPath = '.lovable/audits/release-gate-summary.md';
+            const summaryPath = path.join(process.env.PANTHEON_AUDIT_OUT_DIR || '.lovable/audits', 'release-gate-summary.md');
             const fallback = `${marker}\n# Pantheon FE-BFF Release Gate Summary\n\nRelease gate summary was not generated. Check the workflow logs.`;
             const summary = fs.existsSync(summaryPath)
               ? fs.readFileSync(summaryPath, 'utf8')
