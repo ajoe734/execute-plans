@@ -237,6 +237,26 @@ async function installQuietEventSource(page: Page) {
   });
 }
 
+async function installRuntimeFallbackOverride(
+  page: Page,
+  fallback: "auto" | "strict",
+) {
+  await page.addInitScript((value) => {
+    const runtimeConfig = { VITE_BFF_FALLBACK: value, fallback: value };
+    Object.assign(window as unknown as Record<string, unknown>, {
+      __PANTHEON_BFF_RUNTIME__: runtimeConfig,
+      __PANTHEON_RUNTIME_CONFIG__: runtimeConfig,
+    });
+
+    try {
+      window.sessionStorage.setItem("pantheon.integration.fallback", value);
+      window.sessionStorage.setItem("pantheon.e2e.fallback", value);
+    } catch {
+      // Storage can be unavailable in restricted browser contexts; globals still cover bootstrap.
+    }
+  }, fallback);
+}
+
 async function gotoStrategiesAndWaitForInjectedStatus(
   page: Page,
   expectedStatus: number,
@@ -265,6 +285,7 @@ test.describe("F15 strict vs hybrid fallback", () => {
   }) => {
     test.skip(STRICT, "Run this branch with live + auto fallback.");
 
+    await installRuntimeFallbackOverride(page, "auto");
     await installQuietEventSource(page);
     await installStableShellRoutes(page);
     await isolateOtherAncillaryBffRoutes(page);
@@ -288,6 +309,7 @@ test.describe("F15 strict vs hybrid fallback", () => {
   }) => {
     test.skip(!STRICT, "Run this branch with live + strict fallback.");
 
+    await installRuntimeFallbackOverride(page, "strict");
     await installQuietEventSource(page);
     await installStableShellRoutes(page);
     await isolateOtherAncillaryBffRoutes(page);
@@ -307,6 +329,7 @@ test.describe("F15 strict vs hybrid fallback", () => {
   });
 
   test("4xx BffError envelope never falls back to mock", async ({ page }) => {
+    await installRuntimeFallbackOverride(page, STRICT ? "strict" : "auto");
     await installQuietEventSource(page);
     await installStableShellRoutes(page);
     await isolateOtherAncillaryBffRoutes(page);
