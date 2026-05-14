@@ -659,21 +659,20 @@ async function clickAwaitingApprovalPath(page: Page): Promise<void> {
   const approvalPattern = new RegExp(escapeRegExp(APPROVAL_ID), "i");
   const hiqPattern = new RegExp(escapeRegExp(HIQ_ID), "i");
   const statusPattern = /awaiting approval|awaiting_approval|pending approval|review approval|open hiq/i;
+  const row = page.locator("tbody tr").filter({ hasText: REBALANCE_ID }).first();
+
+  await expect(row, "awaiting approval control must be on the rebalance row").toBeVisible();
 
   const clicked = await clickFirstVisible([
-    page.getByRole("link", { name: approvalPattern }),
-    page.getByRole("link", { name: hiqPattern }),
-    page.getByRole("link", { name: statusPattern }),
-    page.getByRole("button", { name: approvalPattern }),
-    page.getByRole("button", { name: hiqPattern }),
-    page.getByRole("button", { name: statusPattern }),
-    page.locator(`a[href*="approvals"][href*="${APPROVAL_ID}"]`),
-    page.locator(`a[href*="interventions"][href*="${HIQ_ID}"]`),
-    page.locator(`a[href*="hiq"][href*="${HIQ_ID}"]`),
-    // Current hosted Lovable exposes the operator path through the shell nav
-    // while row-level approval evidence is tracked in FE-INT-GATE-ALIGN-F04-FOLLOWUP.
-    page.locator('a[href$="/management/approvals"]'),
-    page.locator('a[href$="/management/interventions"]'),
+    row.getByRole("link", { name: approvalPattern }),
+    row.getByRole("link", { name: hiqPattern }),
+    row.getByRole("link", { name: statusPattern }),
+    row.getByRole("button", { name: approvalPattern }),
+    row.getByRole("button", { name: hiqPattern }),
+    row.getByRole("button", { name: statusPattern }),
+    row.locator(`a[href*="approvals"][href*="${APPROVAL_ID}"]`),
+    row.locator(`a[href*="interventions"][href*="${HIQ_ID}"]`),
+    row.locator(`a[href*="hiq"][href*="${HIQ_ID}"]`),
   ]);
 
   expect(clicked, "awaiting approval must expose an Approvals or HIQ control").toBe(
@@ -742,7 +741,7 @@ test.describe("F04 optimization loop timeline", () => {
   });
 
   test("awaiting approval links to Approvals or HIQ", async ({ page }) => {
-    const calls = await installC01Routes(page);
+    await installC01Routes(page);
 
     await gotoOptimizationLoop(page);
     await expectAnyVisibleText(
@@ -761,8 +760,7 @@ test.describe("F04 optimization loop timeline", () => {
           return (
             /\/management\/approvals(?:\/|$)/.test(path) ||
             /\/management\/interventions(?:\/|$)/.test(path) ||
-            /\/management\/hiq(?:\/|$)/.test(path) ||
-            [...calls].some((calledPath) => isApprovalPath(calledPath) || isHiqPath(calledPath))
+            /\/management\/hiq(?:\/|$)/.test(path)
           );
         },
         {
