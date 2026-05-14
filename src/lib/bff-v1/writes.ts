@@ -1,5 +1,5 @@
 // BFF Contract v1 — write/mutation seam (VI-2).
-// Wraps legacy mock mutations plus live command routes
+// Wraps legacy mock mutations plus the final live command route
 // so every call site automatically obtains:
 //   - correlationId (auto-minted root chain when absent)
 //   - idempotencyKey (auto-minted; survives replay)
@@ -17,32 +17,14 @@ import { makeBffError, BffError } from "./errors";
 import { withLiveOrMock } from "./liveTransport";
 import { liveWriteGated, sessionKindAllowsWrite } from "./writeGate";
 import { paths } from "./paths";
+import {
+  FINAL_COMMANDS_PATH,
+  adaptRunActionCommandResponse,
+  buildRunActionCommand,
+  type BackendCommandResponse,
+} from "@/lib/bff/commandClient";
 
 export { liveWriteGated, sessionKindAllowsWrite };
-
-/** Map RunActionInput.kind → canonical live action endpoint. */
-const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
-  Strategy: "strategy",
-  Persona: "persona",
-  CapitalPool: "capital-pool",
-  Rebalance: "rebalance",
-  Deployment: "deployment",
-  Evolution: "evolution-program",
-  Research: "research-experiment",
-  Artifact: "artifact",
-  RankingFormula: "ranking-formula",
-  Tool: "tool",
-  McpServer: "mcp-server",
-  McpTool: "mcp-tool",
-  Skill: "skill",
-  Channel: "channel",
-  Runtime: "runtime",
-};
-
-function actionPath(kind: RunActionInput["kind"], id: string, action: string): string {
-  const et = KIND_TO_ENTITY_TYPE[kind] ?? kind.toLowerCase();
-  return paths.action(et, id, action);
-}
 
 export interface RunActionEnvelope extends CommandResponse<ActionCommandResponseData> {
   /** Pass-through to the underlying mock MutationResult for legacy consumers. */
@@ -101,34 +83,18 @@ export async function runAction(
   };
 
   if (await liveWriteGated()) {
-    const livePath = actionPath(input.kind, input.id, input.action);
-    return withLiveOrMock<RunActionEnvelope>(
+    const commandOpts = { correlationId, idempotencyKey, confirmToken };
+    return withLiveOrMock<RunActionEnvelope, BackendCommandResponse>(
       {
         method: "POST",
-        path: livePath,
-        body: { memo: input.memo, expectedVersion: input.expectedVersion, newState: input.newState, confirmToken },
+        path: FINAL_COMMANDS_PATH,
+        body: buildRunActionCommand(input, commandOpts),
         idempotencyKey,
-        ifMatchVersion: input.expectedVersion,
-        headers: { "X-Correlation-Id": correlationId },
+        correlationId,
+        headers: confirmToken ? { "X-Confirm-Token": confirmToken } : undefined,
       },
       mockBranch,
-      (rawData) => {
-        const d = rawData as {
-          data?: { commandId?: string; command_id?: string; receipt_id?: string };
-          meta?: { idempotency?: { idempotencyKey?: string } };
-        };
-        const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
-        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" };
-        return {
-          ok: true,
-          data: { actionId: commandId, status: "accepted" as const },
-          auditEventId: commandId,
-          correlationId,
-          idempotencyKey: iKey,
-          legacy: mockLegacy,
-        };
-      },
+      (rawData) => adaptRunActionCommandResponse(rawData, commandOpts),
     );
   }
   return mockBranch();

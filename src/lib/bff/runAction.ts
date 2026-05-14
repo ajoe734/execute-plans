@@ -4,7 +4,8 @@
 // /bff/me session_kind (cookie or bearer; stub only outside strict/prod).
 // Falls back to mock mutations when the gate is not satisfied.
 //
-// Canonical action path:        /bff/actions/{entityType}/{entityId}/{actionId}
+// Canonical command path:       /bff/v1/commands
+// Deprecated action path:       /bff/actions/{entityType}/{entityId}/{actionId}
 // Confirm token create:         POST   /bff/confirm-tokens
 // Confirm token read:           GET    /bff/confirm-tokens/{tokenId}
 // Confirm token redeem:         POST   /bff/confirm-tokens/{tokenId}/redeem
@@ -88,7 +89,7 @@ export interface RunActionOptions {
   secondOperatorId?: string;
   headers?: Record<string, string>;
   baseUrl?: string;
-  /** Default keeps the legacy /bff/actions adapter path until BFF-CONSOL-024. */
+  /** Use only for explicit legacy-adapter compatibility checks. */
   route?: "legacy-actions" | "commands";
 }
 
@@ -162,15 +163,15 @@ export async function runCommandAction(
 }
 
 /**
- * Canonical live-write seam: dispatches entity actions through
- * /bff/actions/{entityType}/{entityId}/{actionId} when live writes are enabled.
- * Falls back to mock mutations when the write gate is not open.
+ * Canonical live-write seam: dispatches entity actions through /bff/v1/commands
+ * when live writes are enabled. The old /bff/actions adapter is retained only
+ * for explicit compatibility checks.
  */
 export async function runAction(
   input: RunActionInput,
   opts: RunActionOptions = {},
 ): Promise<RunActionEnvelope> {
-  if (opts.route === "commands") {
+  if (opts.route !== "legacy-actions") {
     return runCommandAction(input, opts) as Promise<RunActionEnvelope>;
   }
 
