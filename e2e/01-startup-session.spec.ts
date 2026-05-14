@@ -304,15 +304,9 @@ test.describe("F01 startup session", () => {
       contentType: "application/json",
     });
 
-    if (interceptedMeRequests === 0) {
-      test.info().annotations.push({
-        type: "product-gap",
-        description: `${STARTUP_ME_FOLLOW_UP}: hosted startup renders from live BFF endpoints but does not request /bff/me before showing the local role control.`,
-      });
-      expect(
-        bffRequests.some((url) => url.includes("/bff/")),
-        "hosted startup should still exercise live BFF routes while the /bff/me startup gap is tracked separately",
-      ).toBe(true);
-    }
+    expect(
+      interceptedMeRequests,
+      `${STARTUP_ME_FOLLOW_UP} fixed: startup must request /bff/me at least once before showing user UI`,
+    ).toBeGreaterThan(0);
   });
 });
