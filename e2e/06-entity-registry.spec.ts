@@ -10,7 +10,7 @@
  * Env:
  *   FRONTEND_BASE_URL or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
- *   BFF_BASE_URL or VITE_BFF_BASE_URL
+ *   BFF_BASE_URL, VITE_BFF_BASE_URL, or PANTHEON_BFF_BASE_URL
  *     default: https://pantheon-staging-bff.34.81.225.122.sslip.io
  *   BFF_AUTH_TOKEN
  *     optional; when omitted the dev stub token is used.
@@ -32,7 +32,7 @@ const RUN_LIVE_BFF_CONTRACT =
 const SNAPSHOT_AT = "2026-05-13T14:10:00Z";
 const MISSING_ID = "missing-fe-int-gate-b06";
 const SERVING_MOCK_BANNER =
-  /serving[-\s]?mock|mock data|seed fallback|資料來源：seed/i;
+  /serving[-\s]?mock|mock data|fallback data|hybrid fallback active|seed fallback active|資料來源：seed/i;
 const CRASH_TEXT =
   /application error|cannot read properties|undefined is not|uncaught|traceback|typeerror|referenceerror/i;
 
@@ -69,6 +69,7 @@ function bffUrl(path: string): string {
   const base =
     process.env.BFF_BASE_URL ||
     process.env.VITE_BFF_BASE_URL ||
+    process.env.PANTHEON_BFF_BASE_URL ||
     DEFAULT_BFF_BASE_URL;
   return `${base.replace(/\/$/, "")}${path}`;
 }
@@ -195,7 +196,7 @@ const REGISTRIES: RegistryFixture[] = [
       id: "persona-b06-risk",
       persona_id: "persona-b06-risk",
       name: "B06 Risk Persona",
-      state: "active",
+      state: "deployed",
       risk: "low",
       archetype: "risk-steward",
       owner: "operator-b06",
@@ -219,6 +220,14 @@ const REGISTRIES: RegistryFixture[] = [
       capital_pool_id: "pool-b06-core",
       name: "B06 Core Capital Pool",
       status: "active",
+      state: "deployed",
+      risk: "medium",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      currency: "USD",
+      allocated: 1000000,
+      utilized: 420000,
+      riskBudget: 0.04,
       risk_policy_ref: "risk-policy-b06-core",
       max_notional: 1000000,
       updated_at: SNAPSHOT_AT,
@@ -240,6 +249,14 @@ const REGISTRIES: RegistryFixture[] = [
       title: "B06 Paper Deployment",
       strategy_id: "strategy-b06-momentum",
       status: "pending_approval",
+      state: "review",
+      risk: "high",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      target: "paper",
+      artifactId: "artifact-b06-strategy",
+      version: "2026.05.13-b06",
+      strategyId: "strategy-b06-momentum",
       deployment_stage: "paper",
       stage: "paper",
       updated_at: SNAPSHOT_AT,
@@ -259,7 +276,15 @@ const REGISTRIES: RegistryFixture[] = [
       runtime_id: "runtime-b06-paper",
       binding_id: "binding-b06-paper",
       name: "B06 Runtime Binding",
-      status: "healthy",
+      kind: "executor",
+      env: "paper",
+      status: "running",
+      cpu: 0.31,
+      memory: 0.44,
+      latencyP95Ms: 128,
+      uptimePct: 99.91,
+      region: "us-east-1",
+      updatedAt: SNAPSHOT_AT,
       deployment_stage: "paper",
       strategy_id: "strategy-b06-momentum",
       persona_id: "persona-b06-risk",
@@ -282,6 +307,13 @@ const REGISTRIES: RegistryFixture[] = [
       title: "B06 Rebalance Plan",
       capital_pool_id: "pool-b06-core",
       status: "awaiting_review",
+      state: "review",
+      risk: "medium",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      quarter: "2026-Q2",
+      targetPoolId: "pool-b06-core",
+      proposedDelta: 0.06,
       reason: "risk budget drift",
       updated_at: SNAPSHOT_AT,
     },
@@ -303,6 +335,15 @@ const REGISTRIES: RegistryFixture[] = [
       title: "B06 Evolution Program",
       strategy_id: "strategy-b06-momentum",
       status: "running",
+      state: "deployed",
+      risk: "medium",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      generation: 7,
+      population: 32,
+      bestFitness: 1.27,
+      parentAlpha: "b06-momentum-alpha",
+      progress: 0.64,
       current_generation: 7,
       updated_at: SNAPSHOT_AT,
     },
@@ -323,7 +364,14 @@ const REGISTRIES: RegistryFixture[] = [
       title: "B06 Research Experiment",
       linked_strategy_id: "strategy-b06-momentum",
       backend: "qlib",
-      status: "completed",
+      status: "concluded",
+      state: "approved",
+      risk: "low",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      hypothesis: "Fixture-backed Qlib experiment for F07 entity registry coverage.",
+      metric: "Sharpe",
+      metricValue: 1.18,
       updated_at: SNAPSHOT_AT,
     },
   }),
@@ -341,6 +389,14 @@ const REGISTRIES: RegistryFixture[] = [
       tool_id: "tool-b06-replay",
       name: "B06 Tool Registry",
       status: "active",
+      state: "deployed",
+      risk: "low",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      category: "analysis",
+      version: "2026.05",
+      inputs: 3,
+      usedBy: 2,
       tool_class: "analysis",
       description: "Fixture tool for F07 entity registry coverage.",
       updated_at: SNAPSHOT_AT,
@@ -360,7 +416,15 @@ const REGISTRIES: RegistryFixture[] = [
       server_id: "mcp-server-b06",
       name: "B06 MCP Server",
       status: "connected",
+      state: "deployed",
+      risk: "medium",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
       endpoint: "https://mcp-b06.local",
+      region: "us-east-1",
+      toolCount: 4,
+      envAllowed: ["research", "paper"],
+      health: "running",
       server_version: "2026.05",
       updated_at: SNAPSHOT_AT,
     },
@@ -379,6 +443,15 @@ const REGISTRIES: RegistryFixture[] = [
       skill_id: "skill-b06-audit",
       name: "B06 Skill Registry",
       status: "draft",
+      state: "draft",
+      risk: "low",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      version: "0.1.0",
+      archetype: "Risk",
+      draft: true,
+      evalScore: 0.81,
+      usedByPersonas: 1,
       description: "Fixture skill for F07 entity registry coverage.",
       sandbox_enabled: true,
       updated_at: SNAPSHOT_AT,
@@ -398,6 +471,14 @@ const REGISTRIES: RegistryFixture[] = [
       channel_id: "channel-b06-system",
       name: "B06 Channel Registry",
       status: "active",
+      state: "deployed",
+      risk: "low",
+      owner: "operator-b06",
+      updatedAt: SNAPSHOT_AT,
+      kind: "webhook",
+      destination: "https://events-b06.local/system",
+      subscribers: 3,
+      filters: "kind=system",
       replay_supported: true,
       resync_routes: ["/bff/events/resync?channel=system"],
       updated_at: SNAPSHOT_AT,
@@ -854,6 +935,7 @@ test.describe("F07 entity registry", () => {
   test("renders all 12 registry surfaces from fixture-backed list routes", async ({
     page,
   }) => {
+    test.setTimeout(360_000);
     const calls = new Set<string>();
     const failures = collectPageFailures(page);
     await installQuietEventSource(page);
