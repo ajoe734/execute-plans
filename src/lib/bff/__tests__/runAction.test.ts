@@ -387,7 +387,40 @@ describe("BFF-CONSOL-020 commandClient migration", () => {
     expect(env.legacy.audit.id).toBe("cmd-bff-consol-020");
   });
 
-  it("legacy runAction still posts through the /bff/actions adapter path", async () => {
+  it("runAction defaults to the /bff/v1/commands command route", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    let commandUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      commandUrl = url;
+      return makeJsonResponse({
+        status: "accepted",
+        data: {
+          status: "accepted",
+          command: "StrategyAction",
+          receipt_id: "cmd-default-command-024",
+          receipt: { command_id: "cmd-default-command-024", status: "accepted" },
+        },
+        meta: {
+          durable: true,
+          idempotency: { key: "idk_default_024", idempotencyKey: "idk_default_024", replayed: false },
+        },
+      }, 202);
+    });
+
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_024", action: "promote_paper" },
+      { correlationId: "cid_default_024", idempotencyKey: "idk_default_024" },
+    );
+
+    expect(commandUrl.endsWith("/bff/v1/commands")).toBe(true);
+    expect(env.data.actionId).toBe("cmd-default-command-024");
+    expect(env.data.status).toBe("accepted");
+  });
+
+  it("explicit legacy runAction route still posts through the /bff/actions adapter path", async () => {
     setEnv(true, "tok_bearer_live");
     setLive(true);
     let actionUrl = "";
@@ -404,7 +437,7 @@ describe("BFF-CONSOL-020 commandClient migration", () => {
 
     const env = await runAction(
       { kind: "Strategy", id: "stg_020", action: "promote_paper" },
-      { correlationId: "cid_legacy_020", idempotencyKey: "idk_legacy_020" },
+      { correlationId: "cid_legacy_020", idempotencyKey: "idk_legacy_020", route: "legacy-actions" },
     );
 
     expect(actionUrl.endsWith("/bff/actions/strategy/stg_020/promote_paper")).toBe(true);

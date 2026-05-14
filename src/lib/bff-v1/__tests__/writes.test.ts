@@ -121,13 +121,19 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     setWriteEnv(true, "tok_live_test");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     const commandId = "cmd_abc123";
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      makeLiveFetch({
+    let commandUrl = "";
+    let commandBody: Record<string, unknown> = {};
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      commandUrl = url;
+      commandBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return makeJsonResponse({
         status: "accepted",
         data: { commandId, status: "accepted" },
         meta: { idempotency: { idempotencyKey: "idk_from_server" } },
-      }, 202),
-    );
+      }, 202);
+    });
 
     const env = await runAction(
       { kind: "Strategy", id: "stg_001", action: "activate" },
@@ -143,6 +149,10 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     expect(env.legacy).toBeDefined();
     expect(env.legacy.ok).toBe(true);
     expect(env.legacy.audit.id).toBe(commandId);
+    expect(commandUrl.endsWith("/bff/v1/commands")).toBe(true);
+    expect(commandBody.command).toBe("StrategyAction");
+    expect(commandBody.target).toEqual({ type: "Strategy", id: "stg_001" });
+    expect(commandBody.action).toBe("activate");
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toMatch(/\/bff\/me$/);
   });
@@ -201,7 +211,10 @@ describe("VI-2 confirmToken propagation to live POST body", () => {
       { confirmToken: "ctok_v3_abc123" },
     );
 
+    expect((capturedBody as Record<string, unknown>).command).toBe("StrategyAction");
+    expect((capturedBody as Record<string, unknown>).target).toEqual({ type: "Strategy", id: "stg_001" });
     expect((capturedBody as Record<string, unknown>).confirmToken).toBe("ctok_v3_abc123");
+    expect(((capturedBody as Record<string, unknown>).params as Record<string, unknown>).confirmToken).toBe("ctok_v3_abc123");
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
