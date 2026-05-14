@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { bff } from "@/lib/bff-v1";
+import { lists, useLiveListV1 } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import type { Runtime } from "@/lib/bff/types";
@@ -24,15 +24,14 @@ type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "in
 
 export const RuntimesPage = () => {
   const t = useT();
-  const [rows, setRows] = useState<Runtime[]>([]);
+  const { items: rows, refresh } = useLiveListV1<Runtime>(lists.runtimes, ["Runtime"]);
   const [killTarget, setKillTarget] = useState<Runtime | null>(null);
-  useEffect(() => { bff.runtimes.list().then(setRows); }, []);
 
   const run = async (r: Runtime, action: RuntimeAction) => {
     const mappedAction = action === "disable_new" ? "quarantine" : action;
     const res = await mutations.runtimeAction(r.id, mappedAction, action === "disable_new" ? "disable_new_deployments" : `from runtimes table`);
     toast.success(t(`runtime.actions.${action}.toast`, { name: r.name }), { description: res.job?.id });
-    bff.runtimes.list().then(setRows);
+    refresh();
   };
 
   return (
@@ -88,7 +87,7 @@ export const RuntimesPage = () => {
           onConfirm={async (memo) => {
             await mutations.emergencyKill({ kind: "Runtime", id: killTarget.id }, memo);
             toast.success(t("runtime.actions.emergency_kill.toast", { name: killTarget.name }));
-            bff.runtimes.list().then(setRows);
+            refresh();
           }}
         />
       )}
