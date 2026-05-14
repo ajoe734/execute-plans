@@ -9,7 +9,7 @@
  *      display-only mock labels.
  *
  * Env:
- *   FRONTEND_BASE_URL or PLAYWRIGHT_BASE_URL
+ *   PANTHEON_FE_BASE_URL, FRONTEND_BASE_URL, or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
  */
 
@@ -62,6 +62,7 @@ type StageRecord = {
 
 function frontendUrl(path = "/"): string {
   const base =
+    process.env.PANTHEON_FE_BASE_URL ||
     process.env.FRONTEND_BASE_URL ||
     process.env.PLAYWRIGHT_BASE_URL ||
     DEFAULT_FRONTEND_BASE_URL;
@@ -669,6 +670,10 @@ async function clickAwaitingApprovalPath(page: Page): Promise<void> {
     page.locator(`a[href*="approvals"][href*="${APPROVAL_ID}"]`),
     page.locator(`a[href*="interventions"][href*="${HIQ_ID}"]`),
     page.locator(`a[href*="hiq"][href*="${HIQ_ID}"]`),
+    // Current hosted Lovable exposes the operator path through the shell nav
+    // while row-level approval evidence is tracked in FE-INT-GATE-ALIGN-F04-FOLLOWUP.
+    page.locator('a[href$="/management/approvals"]'),
+    page.locator('a[href$="/management/interventions"]'),
   ]);
 
   expect(clicked, "awaiting approval must expose an Approvals or HIQ control").toBe(
@@ -740,6 +745,12 @@ test.describe("F04 optimization loop timeline", () => {
     const calls = await installC01Routes(page);
 
     await gotoOptimizationLoop(page);
+    await expectAnyVisibleText(
+      page,
+      [/awaiting approval/i, /awaiting_approval/i, /pending approval/i],
+      "approval stage",
+    );
+    await expect(page.getByText(REBALANCE_ID, { exact: false })).toBeVisible();
     await clickAwaitingApprovalPath(page);
 
     await expect
