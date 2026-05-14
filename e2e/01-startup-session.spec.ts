@@ -296,10 +296,6 @@ test.describe("F01 startup session", () => {
     await page.waitForTimeout(2_000);
 
     const text = await bodyText(page);
-    expect(text).not.toMatch(SERVING_MOCK_BANNER);
-    expect(text).not.toMatch(/op-fe-gate|portfolio_manager|mock operator/i);
-    expect(text).toMatch(/\bAuth\b|AUTH_REQUIRED|Sign in required|STRICT TYPED ERROR/i);
-
     await test.info().attach("startup-bff-network", {
       body: JSON.stringify({ interceptedMeRequests, bffRequests }, null, 2),
       contentType: "application/json",
@@ -309,5 +305,8 @@ test.describe("F01 startup session", () => {
       interceptedMeRequests,
       `${STARTUP_ME_FOLLOW_UP} fixed: startup must request /bff/me at least once before showing user UI`,
     ).toBeGreaterThan(0);
+    expect(text).toMatch(/\bAuth\b|AUTH_REQUIRED|Sign in required|STRICT TYPED ERROR/i);
+    expect(text).not.toMatch(SERVING_MOCK_BANNER);
+    expect(text).not.toMatch(/op-fe-gate|portfolio_manager|mock operator/i);
   });
 });
