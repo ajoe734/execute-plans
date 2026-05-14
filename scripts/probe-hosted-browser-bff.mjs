@@ -8,7 +8,12 @@ const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https:/
 const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-dev-bff.35.236.178.81.sslip.io");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const OVERALL_TIMEOUT_MS = 90_000;
-const CORE_BFF_PATHS = ["/bff/v5/control-room"];
+const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
+const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
+const REQUIRED_CORE_BFF_PATHS = ["/bff/v5/control-room"];
+const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
+const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
+const probeStartedAt = Date.now();
 
 function currentSha() {
   const fromEnv =
@@ -53,6 +58,42 @@ function pathnameOf(url) {
 function isCoreBffResponse(res, expectedPath) {
   const url = res.url();
   return url.startsWith(BFF_BASE) && pathnameOf(url) === expectedPath && res.request().method() === "GET";
+}
+
+function isAcceptableCoreStatus(response) {
+  if (response.path === "/bff/me") return response.status >= 200 && response.status < 500;
+  return response.status >= 200 && response.status < 400;
+}
+
+function isRequiredCorePath(pathname) {
+  return REQUIRED_CORE_BFF_PATHS.includes(pathname);
+}
+
+function remainingTimeoutMs() {
+  return Math.max(1, OVERALL_TIMEOUT_MS - (Date.now() - probeStartedAt));
+}
+
+async function waitForCoreBffResponse(page, expectedPath, timeoutMs = remainingTimeoutMs()) {
+  try {
+    const res = await page.waitForResponse(res => isCoreBffResponse(res, expectedPath), {
+      timeout: Math.min(timeoutMs, remainingTimeoutMs()),
+    });
+    return {
+      path: expectedPath,
+      status: res.status(),
+      method: res.request().method(),
+      url: res.url(),
+      error: "",
+    };
+  } catch (err) {
+    return {
+      path: expectedPath,
+      status: 0,
+      method: "GET",
+      url: "",
+      error: String(err).replace(/\s+/g, " ").slice(0, 240),
+    };
+  }
 }
 
 function textHits(label, text, needle) {
@@ -110,25 +151,24 @@ page.on("console", msg => {
 
 const pageUrl = withNoCache(`${FE_BASE}/management`);
 try {
-  const coreResponsePromises = CORE_BFF_PATHS.map(expectedPath =>
-    page.waitForResponse(res => isCoreBffResponse(res, expectedPath), { timeout: OVERALL_TIMEOUT_MS })
-      .then(res => ({
-        path: expectedPath,
-        status: res.status(),
-        method: res.request().method(),
-        url: res.url(),
-      }))
+  const requiredCoreResponsePromises = REQUIRED_CORE_BFF_PATHS.map(expectedPath =>
+    waitForCoreBffResponse(page, expectedPath)
+  );
+  const optionalCoreResponsePromises = OPTIONAL_CORE_BFF_PATHS.map(expectedPath =>
+    waitForCoreBffResponse(page, expectedPath, OPTIONAL_CORE_TIMEOUT_MS)
   );
 
-  await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: OVERALL_TIMEOUT_MS });
-  coreResponses.push(...await Promise.all(coreResponsePromises));
+  await page.goto(pageUrl, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: remainingTimeoutMs() });
+  coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
+  coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
 
   html = await page.content();
   const scripts = await page.locator("script[src]").evaluateAll(nodes => nodes.map(n => n.src));
   for (const s of scripts) {
+    if (remainingTimeoutMs() <= 1) break;
     try {
       const fetchedUrl = withNoCache(s);
-      const res = await fetch(fetchedUrl, { signal: AbortSignal.timeout(OVERALL_TIMEOUT_MS) });
+      const res = await fetch(fetchedUrl, { signal: AbortSignal.timeout(remainingTimeoutMs()) });
       bundleFetches.push({ source: s, fetched: fetchedUrl, status: res.status });
       bundleText += await res.text();
     } catch {}
@@ -142,11 +182,15 @@ const containsOld = bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_UR
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
 oldUrlHits.push(...textHits("bundle", bundleText, OLD_BFF_URL));
 const oldUrlHitCount = oldUrlHits.reduce((total, hit) => total + (hit.count ?? 1), 0);
-const coreResponseOk =
-  CORE_BFF_PATHS.every(expectedPath =>
-    coreResponses.some(response => response.path === expectedPath && response.status >= 200 && response.status < 400)
+const requiredCoreResponseOk =
+  REQUIRED_CORE_BFF_PATHS.every(expectedPath =>
+    coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
-const pass = containsBff && coreResponseOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
+const optionalCoreResponsesObserved =
+  OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
+    coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
+  );
+const pass = containsBff && requiredCoreResponseOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
@@ -159,14 +203,18 @@ const md = [
   `Old BFF: ${OLD_BFF_URL}`,
   `nocache: ${NOCACHE_SHA}`,
   `timeout ms: ${OVERALL_TIMEOUT_MS}`,
-  `navigation waitUntil: domcontentloaded`,
+  `navigation waitUntil: ${NAVIGATION_WAIT_UNTIL}`,
+  `core waitForResponse paths: ${CORE_BFF_PATHS.join(", ")}`,
+  `required core waitForResponse paths: ${REQUIRED_CORE_BFF_PATHS.join(", ")}`,
+  `optional core waitForResponse paths: ${OPTIONAL_CORE_BFF_PATHS.join(", ")}`,
   ``,
   `## Summary`,
   ``,
   `- contains intended BFF URL: ${containsBff}`,
   `- contains old BFF URL: ${containsOld}`,
   `- old BFF URL hit count: ${oldUrlHitCount}`,
-  `- core BFF responses complete: ${coreResponseOk}`,
+  `- required core BFF responses complete: ${requiredCoreResponseOk}`,
+  `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
   `- request count: ${requests.length}`,
   `- response count: ${responses.length}`,
   `- failed count: ${failed.length}`,
@@ -174,9 +222,9 @@ const md = [
   ``,
   `## Core BFF responses`,
   ``,
-  `| Status | Method | Path | URL |`,
-  `|---:|---|---|---|`,
-  ...coreResponses.map(r => `| ${r.status} | ${r.method} | ${r.path} | ${r.url.replace(BFF_BASE, "")} |`),
+  `| Status | Method | Path | Required | Accepted | URL / Error |`,
+  `|---:|---|---|---|---|---|`,
+  ...coreResponses.map(r => `| ${r.status} | ${r.method} | ${r.path} | ${isRequiredCorePath(r.path)} | ${isAcceptableCoreStatus(r)} | ${r.url ? r.url.replace(BFF_BASE, "") : r.error} |`),
   ``,
   `## Bundle fetches`,
   ``,
