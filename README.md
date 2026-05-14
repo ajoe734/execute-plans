@@ -186,7 +186,33 @@ npm run test
 
 ---
 
+## 整合測試（Pantheon FE × BFF Integration Gate）
+
+對應 `docs/testing/Pantheon_FE_BE_Integration_Test_Blueprint_2026-05-10.md`。
+測試 runner 用獨立的 env（**不**寫在 `.env.example`，避免污染 Vite runtime）：
+
+```bash
+cp .env.integration.example .env.integration   # 本地測試
+export $(grep -v '^#' .env.integration | xargs)
+```
+
+常用指令：
+
+```bash
+npm run test:contract        # vitest contract-drift
+npm run probe:bff:routes     # 匿名 BFF route probe，輸出 .lovable/audits/
+npm run probe:bff:auth       # 需 PANTHEON_BFF_SMOKE_BEARER_TOKEN
+npm run probe:browser        # hosted bundle BFF probe
+npm run e2e                  # Playwright 全套
+npm run gate:integration     # 全部串起來
+```
+
+CI workflow: `.github/workflows/pantheon-integration-gate.yml`（`workflow_dispatch`，需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`）。
+證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
+
 ## 相關文件
 
 - `.lovable/spec/INDEX.md` — Spec 8 個 Part 索引
 - `.lovable/plan.md` — Phase 16 實作落差盤點與後續計畫
+- `docs/testing/Pantheon_FE_BE_Integration_Test_Blueprint_2026-05-10.md` — 整合測試藍圖（F01–F18）
+- `docs/testing/Release_Gate_Checklist_2026-05-10.md` — Release gate Gate 0–7

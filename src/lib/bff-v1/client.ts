@@ -2,7 +2,7 @@
 // Frozen contract source: .lovable/feedback/2026-05-07-final/
 
 import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
-import { BffError, isBffErrorEnvelope, makeBffError } from "./errors";
+import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { bootstrapMockAdapters } from "./mocks/adapters";
 import { resolveMock } from "./mocks/registry";
 import { liveStatus } from "./liveStatus";
@@ -129,8 +129,9 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   const text = await res.text();
   const json: unknown = text ? safeJson(text) : undefined;
   if (!res.ok) {
-    if (isBffErrorEnvelope(json)) {
-      throw new BffError(res.status, json);
+    const envelope = normalizeBffErrorEnvelope(json, res.status, headers["X-Correlation-Id"]);
+    if (envelope) {
+      throw new BffError(res.status, envelope);
     }
     throw makeBffError({
       code: "UNKNOWN_ERROR",

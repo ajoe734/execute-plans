@@ -7,7 +7,7 @@ import { RightDrawer } from "./components/RightDrawer";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { JobProgressDrawer } from "./components/JobProgressDrawer";
 import { HandoffDrawer } from "./components/HandoffDrawer";
-import { LiveBffBanner } from "./components/LiveBffBanner";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import { BulkResultDrawer } from "./components/BulkResultDrawer";
 import { RollbackSagaDrawer } from "./components/RollbackSagaDrawer";
 import { KeyboardShortcutsHelp, useGlobalShortcuts } from "./components/KeyboardShortcutsHelp";
@@ -28,7 +28,7 @@ export const PlatformShell = () => {
   }, []);
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <LiveBffBanner />
+      <LiveStatusBanner />
       <TopBar />
       <div className="flex-1 flex pb-10">
         <Outlet />

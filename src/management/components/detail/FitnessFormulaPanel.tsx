@@ -5,9 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { bff } from "@/lib/bff-v1";
 import type { FitnessFormula, MutationRule } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import {
+  MockDataEmptyState,
+} from "@/components/data/MockDataBadge";
+import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
+import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
 
 export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness" | "mutation" }) => {
   const t = useT();
+  const liveStatus = useLiveStatusSnapshot();
+  const fitnessGate = getMockDataBadgeModel("bff.fitnessFormulas.list", liveStatus);
+  const mutationGate = getMockDataBadgeModel("bff.mutationRules.list", liveStatus);
   const [formulas, setFormulas] = useState<FitnessFormula[]>([]);
   const [rules, setRules] = useState<MutationRule[]>([]);
   useEffect(() => {
@@ -31,7 +39,11 @@ export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness"
             </div>
           </div>
         ))}
-        {formulas.length === 0 && <div className="text-xs text-muted-foreground">{t("empty.none")}</div>}
+        {formulas.length === 0 && fitnessGate ? (
+          <MockDataEmptyState helperName="bff.fitnessFormulas.list" className="border-0 p-4" />
+        ) : formulas.length === 0 ? (
+          <div className="text-xs text-muted-foreground">{t("empty.none")}</div>
+        ) : null}
       </Card>
       )}
       {showMutation && (
@@ -49,7 +61,11 @@ export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness"
             </div>
           </div>
         ))}
-        {rules.length === 0 && <div className="text-xs text-muted-foreground">{t("empty.none")}</div>}
+        {rules.length === 0 && mutationGate ? (
+          <MockDataEmptyState helperName="bff.mutationRules.list" className="border-0 p-4" />
+        ) : rules.length === 0 ? (
+          <div className="text-xs text-muted-foreground">{t("empty.none")}</div>
+        ) : null}
       </Card>
       )}
     </div>

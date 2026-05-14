@@ -22,6 +22,10 @@ import { usePlatform } from "@/platform/store";
 import { bffV5 } from "@/lib/bff/v5";
 import { bffAgora } from "@/lib/bff/agora";
 import {
+  seedHelperMustReturnEmptyInLive,
+  seedHelperEmptyReason,
+} from "@/lib/bff-v1/seedTaxonomy";
+import {
   fetchMe,
   invalidateMe,
   logoutSession,
@@ -44,9 +48,23 @@ usePlatform.subscribe((s) => {
 
 const delay = <T>(v: T, ms = 220) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
+const liveEmpty = <T>(helperName: string, emptyValue: T): Promise<T> | undefined => {
+  if (seedHelperMustReturnEmptyInLive(helperName)) {
+    return delay(emptyValue, 0);
+  }
+  return undefined;
+};
+
+const delaySeed = <T>(helperName: string, value: T, emptyValue: T): Promise<T> =>
+  liveEmpty(helperName, emptyValue) ?? delay(value);
+
+export function getSeedHelperUnavailableReason(helperName: string): string | undefined {
+  return seedHelperMustReturnEmptyInLive(helperName) ? seedHelperEmptyReason(helperName) : undefined;
+}
+
 export const bff = {
   /** Locale header the BFF sends on every call. UI/tests can read this to verify wiring. */
-  getAcceptLanguage: acceptLanguage,
+  getAcceptLanguage: () => seedHelperMustReturnEmptyInLive("bff.getAcceptLanguage") ? null : acceptLanguage(),
   mutations,
   /** Agora read surfaces. Strict in live mode: no seeded fallback after live transport failure. */
   agora: bffAgora,
@@ -138,65 +156,78 @@ export const bff = {
     get: (id: string) => delay(seed.channels.find((c) => c.id === id)),
   },
   routePolicies: {
-    list: () => delay(seed.routePolicies),
-    get: (id: string) => delay(seed.routePolicies.find((p) => p.id === id)),
+    list: () => delaySeed("bff.routePolicies.list", seed.routePolicies, []),
+    get: (id: string) => delaySeed("bff.routePolicies.get", seed.routePolicies.find((p) => p.id === id), undefined),
     forPersona: (personaId: string) => delay(seed.routePolicies.find((p) => p.personaId === personaId)),
   },
   policyVersions: {
-    list: (policyId: string) => delay(seed.policyVersions.filter((v) => v.policyId === policyId)),
+    list: (policyId: string) =>
+      delaySeed("bff.policyVersions.list", seed.policyVersions.filter((v) => v.policyId === policyId), []),
   },
   permissionMatrix: {
-    get: (instance: string) => delay(seed.permissionMatrices.find((m) => m.instance === instance)),
+    get: (instance: string) =>
+      delaySeed("bff.permissionMatrix.get", seed.permissionMatrices.find((m) => m.instance === instance), undefined),
   },
   permissionMatrices: {
-    list: () => delay(seed.permissionMatrices),
+    list: () => delaySeed("bff.permissionMatrices.list", seed.permissionMatrices, []),
   },
   memoryUpdates: {
-    list: () => delay(seed.memoryUpdates),
+    list: () => delaySeed("bff.memoryUpdates.list", seed.memoryUpdates, []),
     forPersona: (personaId: string) => delay(seed.memoryUpdates.filter((m) => m.personaId === personaId)),
   },
   consultRules: {
-    list: () => delay(seed.consultRules),
-    get: (id: string) => delay(seed.consultRules.find((c) => c.id === id)),
+    list: () => delaySeed("bff.consultRules.list", seed.consultRules, []),
+    get: (id: string) => delaySeed("bff.consultRules.get", seed.consultRules.find((c) => c.id === id), undefined),
   },
   evolutionRuns: {
-    list: () => delay(seed.evolutionRuns),
+    list: () => delaySeed("bff.evolutionRuns.list", seed.evolutionRuns, []),
     forProgram: (programId: string) => delay(seed.evolutionRuns.filter((r) => r.programId === programId)),
   },
   evolutionCandidates: {
-    forRun: (runId: string) => delay(seed.evolutionCandidates.filter((c) => c.runId === runId)),
+    forRun: (runId: string) =>
+      delaySeed("bff.evolutionCandidates.forRun", seed.evolutionCandidates.filter((c) => c.runId === runId), []),
   },
   fitnessFormulas: {
-    list: () => delay(seed.fitnessFormulas),
-    get: (id: string) => delay(seed.fitnessFormulas.find((f) => f.id === id)),
+    list: () => delaySeed("bff.fitnessFormulas.list", seed.fitnessFormulas, []),
+    get: (id: string) => delaySeed("bff.fitnessFormulas.get", seed.fitnessFormulas.find((f) => f.id === id), undefined),
   },
   mutationRules: {
-    list: () => delay(seed.mutationRules),
+    list: () => delaySeed("bff.mutationRules.list", seed.mutationRules, []),
   },
   allocationSimulations: {
-    forRebalance: (rebalanceId: string) => delay(seed.allocationSimulations.filter((s) => s.rebalanceId === rebalanceId)),
+    forRebalance: (rebalanceId: string) =>
+      delaySeed("bff.allocationSimulations.forRebalance", seed.allocationSimulations.filter((s) => s.rebalanceId === rebalanceId), []),
   },
   // ----- Phase 13 -----
   policyViolations: {
-    list: () => delay(seed.policyViolations),
-    forSubject: (kind: string, id: string) => delay(seed.policyViolations.filter((v) => v.subjectKind === kind && v.subjectId === id)),
+    list: () => delaySeed("bff.policyViolations.list", seed.policyViolations, []),
+    forSubject: (kind: string, id: string) =>
+      delaySeed("bff.policyViolations.forSubject", seed.policyViolations.filter((v) => v.subjectKind === kind && v.subjectId === id), []),
   },
   evaluationRuns: {
-    list: () => delay(seed.evaluationRuns),
-    forSubject: (kind: string, id: string) => delay(seed.evaluationRuns.filter((e) => e.subjectKind === kind && e.subjectId === id)),
+    list: () => delaySeed("bff.evaluationRuns.list", seed.evaluationRuns, []),
+    forSubject: (kind: string, id: string) =>
+      delaySeed("bff.evaluationRuns.forSubject", seed.evaluationRuns.filter((e) => e.subjectKind === kind && e.subjectId === id), []),
   },
   objectVersions: {
-    forSubject: (kind: string, id: string) => delay(seed.objectVersions.filter((v) => v.subjectKind === kind && v.subjectId === id)),
+    forSubject: (kind: string, id: string) =>
+      delaySeed("bff.objectVersions.forSubject", seed.objectVersions.filter((v) => v.subjectKind === kind && v.subjectId === id), []),
   },
   featureSets: {
-    forStrategy: (id: string) => delay(seed.featureSets.filter((f) => f.strategyId === id)),
+    forStrategy: (id: string) =>
+      delaySeed("bff.featureSets.forStrategy", seed.featureSets.filter((f) => f.strategyId === id), []),
   },
   performanceSeries: {
     forStrategy: (id: string, granularity: "day" | "week" | "month") =>
-      delay(seed.performanceSeries.find((s) => s.strategyId === id && s.granularity === granularity)),
+      delaySeed(
+        "bff.performanceSeries.forStrategy",
+        seed.performanceSeries.find((s) => s.strategyId === id && s.granularity === granularity),
+        undefined,
+      ),
   },
   watchers: {
-    forSubject: (kind: string, id: string) => delay(seed.watchers.filter((w) => w.subjectKind === kind && w.subjectId === id)),
+    forSubject: (kind: string, id: string) =>
+      delaySeed("bff.watchers.forSubject", seed.watchers.filter((w) => w.subjectKind === kind && w.subjectId === id), []),
   },
   decisionJournal: {
     list: () => bffAgora.journal.list(),
@@ -204,25 +235,31 @@ export const bff = {
       bffAgora.journal.list().then((items) => items.filter((d) => d.subjectKind === kind && d.subjectId === id)),
   },
   allocationLimits: {
-    forPool: (id: string) => delay(seed.allocationLimits.filter((l) => l.poolId === id)),
+    forPool: (id: string) =>
+      delaySeed("bff.allocationLimits.forPool", seed.allocationLimits.filter((l) => l.poolId === id), []),
   },
   poolFreezes: {
-    forPool: (id: string) => delay(seed.poolFreezes.filter((f) => f.poolId === id)),
+    forPool: (id: string) =>
+      delaySeed("bff.poolFreezes.forPool", seed.poolFreezes.filter((f) => f.poolId === id), []),
   },
   deploymentStages: {
     forDeployment: (id: string) => delay(seed.deploymentStages.filter((s) => s.deploymentId === id)),
   },
   mcpSecrets: {
-    forServer: (id: string) => delay(seed.mcpSecrets.filter((s) => s.serverId === id)),
+    forServer: (id: string) =>
+      delaySeed("bff.mcpSecrets.forServer", seed.mcpSecrets.filter((s) => s.serverId === id), []),
   },
   promotions: {
-    forProgram: (id: string) => delay(seed.promotions.filter((p) => p.programId === id)),
+    forProgram: (id: string) =>
+      delaySeed("bff.promotions.forProgram", seed.promotions.filter((p) => p.programId === id), []),
   },
   metricFreezes: {
-    forRebalance: (id: string) => delay(seed.metricFreezes.filter((m) => m.rebalanceId === id)),
+    forRebalance: (id: string) =>
+      delaySeed("bff.metricFreezes.forRebalance", seed.metricFreezes.filter((m) => m.rebalanceId === id), []),
   },
   rebalanceOverrides: {
-    forRebalance: (id: string) => delay(seed.rebalanceOverrides.filter((o) => o.rebalanceId === id)),
+    forRebalance: (id: string) =>
+      delaySeed("bff.rebalanceOverrides.forRebalance", seed.rebalanceOverrides.filter((o) => o.rebalanceId === id), []),
   },
   rebalanceWorkflow: {
     forRebalance: (id: string) => delay(seed.rebalanceWorkflowSteps(id)),

@@ -8,10 +8,17 @@ import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import type { Rebalance } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import {
+  MockDataEmptyState,
+} from "@/components/data/MockDataBadge";
+import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
+import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
 
 export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance }) => {
   const t = useT();
-  const lines = rebalance.lines ?? [];
+  const liveStatus = useLiveStatusSnapshot();
+  const simulationGate = getMockDataBadgeModel("bff.allocationSimulations.forRebalance", liveStatus);
+  const lines = useMemo(() => rebalance.lines ?? [], [rebalance.lines]);
   const [weights, setWeights] = useState<Record<string, number>>(() =>
     Object.fromEntries(lines.map((l) => [l.strategyId, l.proposedWeight * 100]))
   );
@@ -30,6 +37,10 @@ export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance 
   // Mock recomputation: small linear shift around expected metrics.
   const sharpe = (rebalance.expectedSharpe ?? 1.5) - turnover * 0.1;
   const dd = (rebalance.expectedDrawdown ?? -0.05) - turnover * 0.02;
+
+  if (simulationGate?.behavior === "disabled") {
+    return <MockDataEmptyState helperName="bff.allocationSimulations.forRebalance" />;
+  }
 
   return (
     <div className="space-y-4">

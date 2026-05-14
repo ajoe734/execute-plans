@@ -1,0 +1,471 @@
+{
+  "metadata": {
+    "snapshot_date": "2026-05-13",
+    "source": "execute-plans frontend BFF adapter sources",
+    "generator": "scripts/bff_route_manifest_frontend.ts",
+    "total_routes": 63,
+    "source_files": [
+      "src/lib/bff-v1/paths.ts",
+      "src/lib/bff/client.ts",
+      "src/lib/bff/v5.ts",
+      "src/lib/bff/agora.ts",
+      "src/lib/bff/runAction.ts",
+      "src/lib/bff-v1/sse/liveSse.ts"
+    ],
+    "path_builder_count": 69,
+    "mode_values": [
+      "live_required",
+      "mock_only",
+      "hybrid"
+    ],
+    "notes": [
+      "Generated from frontend live adapter call sites; runtime behavior is unchanged.",
+      "Dynamic path segments are normalized to {param} for backend manifest diffing.",
+      "withStrictLiveOrMock call sites are classified as live_required; withLiveOrMock and live SSE are hybrid.",
+      "src/lib/bff-v1/paths.ts is scanned as the path-builder registry used to resolve caller expressions."
+    ]
+  },
+  "entries": [
+    {
+      "method": "GET",
+      "path": "/bff/agora/ask/sessions",
+      "family": "agora-core",
+      "caller_file": "src/lib/bff/agora.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/agora/daily",
+      "family": "agora-core",
+      "caller_file": "src/lib/bff/agora.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/agora/inbox",
+      "family": "agora-core",
+      "caller_file": "src/lib/bff/agora.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/agora/journal",
+      "family": "agora-core",
+      "caller_file": "src/lib/bff/agora.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/agora/signals",
+      "family": "agora-core",
+      "caller_file": "src/lib/bff/agora.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/channels",
+      "family": "agora-extended",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/channels/{param}",
+      "family": "agora-extended",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/capital-pools",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/capital-pools/{param}",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/ranking-formulas",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/ranking-formulas/{param}",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/rebalances",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/rebalances/{param}",
+      "family": "capital-ranking-rebalance",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/artifacts",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/artifacts/{param}",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/evolution-programs",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/evolution-programs/{param}",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/jobs",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/jobs/{param}",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/research-experiments",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/research-experiments/{param}",
+      "family": "evolution-experiment-jobs-events",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/control-room",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/execution/persona-health",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/execution/strategy-health",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/loop-runs",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/loop-runs/{param}",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/sentinel/findings",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/sentinel/findings/{param}",
+      "family": "execute-plans-cutover-smoke",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/actions/{param}/{param}/{param}",
+      "family": "final-contract",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "DELETE",
+      "path": "/bff/confirm-tokens/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/alerts",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/alerts/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/approvals",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/approvals/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/audit",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/confirm-tokens/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/deployments",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/deployments/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/incidents",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/incidents/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/runtimes",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/runtimes/{param}",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/alerts/{param}/acknowledge",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/approvals/{param}/decide",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/confirm-tokens",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/confirm-tokens/{param}/redeem",
+      "family": "governance-runtime-risk-audit",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/mcp-servers",
+      "family": "mcp-final",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/mcp-servers/{param}",
+      "family": "mcp-final",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/mcp-tools",
+      "family": "mcp-final",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/mcp-tools/{param}",
+      "family": "mcp-final",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/events/stream",
+      "family": "sse-compatibility",
+      "caller_file": "src/lib/bff-v1/sse/liveSse.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/personas",
+      "family": "strategy-persona",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/personas/{param}",
+      "family": "strategy-persona",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/strategies",
+      "family": "strategy-persona",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/strategies/{param}",
+      "family": "strategy-persona",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/skills",
+      "family": "tools-mcp-skills",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/skills/{param}",
+      "family": "tools-mcp-skills",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/tools",
+      "family": "tools-mcp-skills",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/tools/{param}",
+      "family": "tools-mcp-skills",
+      "caller_file": "src/lib/bff/client.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/interventions",
+      "family": "v5-interventions",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "GET",
+      "path": "/bff/v5/interventions/{param}",
+      "family": "v5-interventions",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "live_required"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/v5/interventions/{param}/decide",
+      "family": "v5-interventions",
+      "caller_file": "src/lib/bff/runAction.ts",
+      "mode": "hybrid"
+    },
+    {
+      "method": "POST",
+      "path": "/bff/v5/interventions/{param}/remediate",
+      "family": "v5-interventions",
+      "caller_file": "src/lib/bff/v5.ts",
+      "mode": "hybrid"
+    }
+  ]
+}

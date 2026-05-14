@@ -1,8 +1,9 @@
 // BFF-LUV-FE-004 — Focused write-flow tests for bff/runAction.ts
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { liveWriteGated, runAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff/runAction";
+import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff/runAction";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { BffError } from "@/lib/bff-v1/errors";
 
 // ---------- helpers ----------
 
@@ -21,6 +22,8 @@ function setLive(on: boolean) {
 
 afterEach(() => {
   setEnv(false, null);
+  delete process.env.VITE_BFF_FALLBACK;
+  delete process.env.VITE_BFF_STRICT_WRITES;
   liveStatus._reset();
   vi.restoreAllMocks();
 });
@@ -28,19 +31,62 @@ afterEach(() => {
 // ---------- liveWriteGated ----------
 
 describe("liveWriteGated", () => {
-  it("returns false when VITE_BFF_REAL_WRITES is not set", () => {
+  it("returns false when VITE_BFF_REAL_WRITES is not set", async () => {
     setEnv(false, null);
-    expect(liveWriteGated()).toBe(false);
+    const fetcher = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    await expect(liveWriteGated()).resolves.toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("returns false when real writes enabled but no auth token", () => {
+  it("returns false when /bff/me rejects the session", async () => {
     setEnv(true, null);
-    expect(liveWriteGated()).toBe(false);
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "INVALID_TOKEN", message: "missing" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    await expect(liveWriteGated()).resolves.toBe(false);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
-  it("returns true when real writes enabled AND token present", () => {
+  it("returns true for a cookie-only /bff/me session", async () => {
+    setEnv(true, null);
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(meSession("cookie")), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+    await expect(liveWriteGated()).resolves.toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toMatch(/\/bff\/me$/);
+    expect((init as RequestInit).credentials).toBe("include");
+  });
+
+  it("returns true for a bearer /bff/me session", async () => {
     setEnv(true, "tok_test_123");
-    expect(liveWriteGated()).toBe(true);
+    vi.spyOn(globalThis, "fetch").mockImplementation(makeSessionFetch("bearer"));
+    await expect(liveWriteGated()).resolves.toBe(true);
+  });
+
+  it("blocks stub sessions in strict write mode", async () => {
+    setEnv(true, "tok_stub");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    vi.spyOn(globalThis, "fetch").mockImplementation(makeSessionFetch("stub"));
+    await expect(liveWriteGated()).resolves.toBe(false);
+  });
+
+  it("sessionKindAllowsWrite admits cookie and bearer while production-blocking stub", () => {
+    expect(sessionKindAllowsWrite("cookie", { production: true, strict: true })).toBe(true);
+    expect(sessionKindAllowsWrite("bearer", { production: true, strict: true })).toBe(true);
+    expect(sessionKindAllowsWrite("stub", { production: false, strict: false })).toBe(true);
+    expect(sessionKindAllowsWrite("stub", { production: true, strict: false })).toBe(false);
+    expect(sessionKindAllowsWrite("unknown", { production: false, strict: false })).toBe(false);
   });
 });
 
@@ -230,13 +276,35 @@ describe("no live-capital side effects in smoke mode", () => {
 
 // ---------- live mode adapter tests ----------
 
-function makeLiveFetch(body: unknown, status = 202): ReturnType<typeof vi.fn> {
-  return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(body), {
+function meSession(sessionKind: "cookie" | "bearer" | "stub", opts: { env?: string; strict?: boolean } = {}) {
+  return {
+    data: {
+      session: { authenticated: true, session_kind: sessionKind },
+      environment: { name: opts.env ?? "dev", strict_auth: opts.strict ?? false },
+    },
+  };
+}
+
+function makeJsonResponse(body: unknown, status = 202): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function makeSessionFetch(sessionKind: "cookie" | "bearer" | "stub"): ReturnType<typeof vi.fn> {
+  return vi.fn().mockResolvedValue(makeJsonResponse(meSession(sessionKind), 200));
+}
+
+function makeLiveFetch(body: unknown, status = 202, sessionKind: "cookie" | "bearer" | "stub" = "bearer"): ReturnType<typeof vi.fn> {
+  return vi.fn().mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/bff/me")) return makeJsonResponse(meSession(sessionKind), 200);
+    return new Response(JSON.stringify(body), {
       status,
       headers: { "Content-Type": "application/json" },
-    }),
-  );
+    });
+  });
 }
 
 describe("runAction live mode adapter", () => {
@@ -258,7 +326,137 @@ describe("runAction live mode adapter", () => {
     expect(env.correlationId).toMatch(/^cid_/);
     expect(env.idempotencyKey).toBe("idk_live001");
     expect(env.auditEventId).toBe(commandId);
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toMatch(/\/bff\/me$/);
+  });
+});
+
+describe("BFF-CONSOL-020 commandClient migration", () => {
+  it("runCommandAction posts a command envelope directly to /bff/v1/commands", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    let commandUrl = "";
+    let commandInit: RequestInit | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      commandUrl = url;
+      commandInit = init;
+      return makeJsonResponse({
+        status: "accepted",
+        data: {
+          status: "accepted",
+          command: "StrategyAction",
+          receipt_id: "cmd-bff-consol-020",
+          receipt: { command_id: "cmd-bff-consol-020", status: "accepted" },
+        },
+        meta: {
+          durable: true,
+          idempotency: { key: "idk_cmd_020", idempotencyKey: "idk_cmd_020", replayed: false },
+        },
+      }, 202);
+    });
+
+    const env = await runCommandAction(
+      { kind: "Strategy", id: "stg_020", action: "promote_live", memo: "approved", expectedVersion: 7 },
+      {
+        correlationId: "cid_cmd_020",
+        idempotencyKey: "idk_cmd_020",
+        confirmToken: "ctok_modal_020",
+        approvalId: "appr_020",
+      },
+    );
+
+    expect(commandUrl.endsWith("/bff/v1/commands")).toBe(true);
+    const body = JSON.parse(String(commandInit?.body)) as Record<string, unknown>;
+    expect(body.command).toBe("StrategyAction");
+    expect(body.target).toEqual({ type: "Strategy", id: "stg_020" });
+    expect(body.action).toBe("promote_live");
+    expect(body.confirmToken).toBe("ctok_modal_020");
+    expect(body.approvalId).toBe("appr_020");
+    expect(body).not.toHaveProperty("idempotencyKey");
+    expect((body.params as Record<string, unknown>).confirmToken).toBe("ctok_modal_020");
+    expect((body.params as Record<string, unknown>).approvalId).toBe("appr_020");
+    expect((body.params as Record<string, unknown>).audit_event).toBe("strategy.promote_live");
+    expect((commandInit?.headers as Record<string, string>)["Idempotency-Key"]).toBe("idk_cmd_020");
+    expect((commandInit?.headers as Record<string, string>)["X-Confirm-Token"]).toBe("ctok_modal_020");
+    expect((commandInit?.headers as Record<string, string>)["X-Correlation-Id"]).toBe("cid_cmd_020");
+    expect(env.data.actionId).toBe("cmd-bff-consol-020");
+    expect(env.data.status).toBe("accepted");
+    expect(env.idempotencyKey).toBe("idk_cmd_020");
+    expect(env.legacy.audit.id).toBe("cmd-bff-consol-020");
+  });
+
+  it("legacy runAction still posts through the /bff/actions adapter path", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    let actionUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      actionUrl = url;
+      return makeJsonResponse({
+        status: "accepted",
+        data: { status: "accepted", command_id: "cmd-legacy-action-020" },
+        meta: { idempotency: { idempotencyKey: "idk_legacy_020" } },
+      }, 202);
+    });
+
+    const env = await runAction(
+      { kind: "Strategy", id: "stg_020", action: "promote_paper" },
+      { correlationId: "cid_legacy_020", idempotencyKey: "idk_legacy_020" },
+    );
+
+    expect(actionUrl.endsWith("/bff/actions/strategy/stg_020/promote_paper")).toBe(true);
+    expect(env.data.actionId).toBe("cmd-legacy-action-020");
+    expect(env.data.status).toBe("accepted");
+  });
+
+  it("command route propagates typed backend precondition errors", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      return makeJsonResponse({
+        detail: {
+          error: {
+            code: "CONFIRM_TOKEN_REQUIRED",
+            message: "Confirmation token is required before this action can be accepted",
+            details: {
+              reason: "CONFIRM_TOKEN_MISSING",
+              kind: "confirm_token",
+              correlationId: "cid_cmd_err_020",
+            },
+          },
+          correlationId: "cid_cmd_err_020",
+        },
+      }, 428);
+    });
+
+    await expect(
+      runCommandAction(
+        { kind: "Runtime", id: "runtime_020", action: "stop", memo: "pause live runtime" },
+        { correlationId: "cid_cmd_err_020", idempotencyKey: "idk_cmd_err_020" },
+      ),
+    ).rejects.toMatchObject({
+      name: "BffError",
+      status: 428,
+      code: "CONFIRM_TOKEN_REQUIRED",
+      correlationId: "cid_cmd_err_020",
+    });
+
+    let caught: unknown;
+    try {
+      await runCommandAction(
+        { kind: "Runtime", id: "runtime_020", action: "stop", memo: "pause live runtime" },
+        { correlationId: "cid_cmd_err_020", idempotencyKey: "idk_cmd_err_021" },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BffError);
+    expect((caught as BffError).requiresConfirmToken()).toBe(true);
   });
 });
 
@@ -290,7 +488,7 @@ describe("requestConfirmToken live mode adapter", () => {
     expect(env.data.ttlSeconds).toBeGreaterThan(0);
     expect(env.data.requiredPhrase).toMatch(/PROMOTE PAPER/);
     expect(env.idempotencyKey).toBe("idk_live002");
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -309,7 +507,7 @@ describe("readConfirmToken live mode adapter", () => {
     expect(env.ok).toBe(true);
     expect(env.data.confirmToken).toBe(tokenId);
     expect(env.data.ttlSeconds).toBeGreaterThan(0);
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -329,7 +527,7 @@ describe("redeemConfirmToken live mode adapter", () => {
     expect(env.ok).toBe(true);
     expect(env.data.tokenId).toBe(tokenId);
     expect(env.data.redeemed).toBe(true);
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -349,6 +547,6 @@ describe("deleteConfirmToken live mode adapter", () => {
     expect(env.ok).toBe(true);
     expect(env.data.tokenId).toBe(tokenId);
     expect(env.data.deleted).toBe(true);
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });

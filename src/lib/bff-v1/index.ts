@@ -15,9 +15,11 @@ export * from "./lists";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
+export * from "./writeGate";
 export * from "./personas";
 export * from "./liveStatus";
 export * from "./liveTransport";
+export * from "./seedTaxonomy";
 // Batch VII — escape hatch for legacy seed accessors during migration.
 export * from "./legacy";
 // Batch VII-c — v5 closed-loop OS namespace (single entrypoint).

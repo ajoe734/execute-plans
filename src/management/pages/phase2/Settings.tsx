@@ -15,6 +15,7 @@ import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { bff } from "@/lib/bff-v1";
 import { toast } from "sonner";
+import { MockDataBadge } from "@/components/data/MockDataBadge";
 import {
   DEFAULT_FORCE_TRANSITION_POLICY,
   validateForceTransition,
@@ -107,6 +108,7 @@ export const SettingsPage = () => {
   const t = useT();
   const locale = usePlatform((s) => s.locale);
   const setLocale = usePlatform((s) => s.setLocale);
+  const acceptLanguage = bff.getAcceptLanguage();
 
   return (
     <>
@@ -191,7 +193,11 @@ export const SettingsPage = () => {
                 <Button size="sm" variant={locale === "en-US" ? "default" : "outline"} onClick={() => setLocale("en-US")}>{locale === "en-US" ? "✓" : t("settings.locale.use")}</Button>
               </Row>
               <Row label={t("settings.locale.acceptLanguage")} hint={t("settings.locale.acceptHint")}>
-                <Badge variant="outline" className="text-mono text-[10px]">{bff.getAcceptLanguage()}</Badge>
+                {acceptLanguage ? (
+                  <Badge variant="outline" className="text-mono text-[10px]">{acceptLanguage}</Badge>
+                ) : (
+                  <MockDataBadge helperName="bff.getAcceptLanguage" />
+                )}
               </Row>
             </Section>
           </TabsContent>

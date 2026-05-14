@@ -87,6 +87,73 @@ export interface MakeErrorArgs {
   cause?: string;
 }
 
+function statusDefaults(status: number): Pick<BffErrorPayload, "retryable" | "userActionable"> {
+  return {
+    retryable: status === 0 || status === 429 || status >= 500,
+    userActionable: status >= 400 && status < 500,
+  };
+}
+
+function errorPayloadFrom(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null) return null;
+  const top = value as { error?: unknown; detail?: unknown };
+  if (typeof top.error === "object" && top.error !== null) {
+    return top.error as Record<string, unknown>;
+  }
+  if (typeof top.detail === "object" && top.detail !== null) {
+    const detail = top.detail as { error?: unknown };
+    if (typeof detail.error === "object" && detail.error !== null) {
+      return detail.error as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function detailPayloadFrom(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const top = value as { detail?: unknown };
+  if (typeof top.detail === "object" && top.detail !== null) {
+    return top.detail as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+export function normalizeBffErrorEnvelope(
+  value: unknown,
+  status = 500,
+  fallbackCorrelationId?: string,
+): BffErrorEnvelope | null {
+  const payload = errorPayloadFrom(value);
+  if (!payload || typeof payload.code !== "string") return null;
+  const detail = detailPayloadFrom(value);
+  const details = (
+    typeof payload.details === "object" && payload.details !== null
+      ? payload.details
+      : undefined
+  ) as BffErrorPayload["details"] | undefined;
+  const correlationId = String(
+    payload.correlationId ??
+    detail?.correlationId ??
+    details?.correlationId ??
+    fallbackCorrelationId ??
+    `corr_${Math.random().toString(36).slice(2, 10)}`,
+  );
+  const defaults = statusDefaults(status);
+  return {
+    error: {
+      code: payload.code as ErrorCode,
+      i18nKey: typeof payload.i18nKey === "string" ? payload.i18nKey : `errors.${payload.code}`,
+      message: typeof payload.message === "string" ? payload.message : String(payload.code),
+      retryable: typeof payload.retryable === "boolean" ? payload.retryable : defaults.retryable,
+      userActionable:
+        typeof payload.userActionable === "boolean" ? payload.userActionable : defaults.userActionable,
+      correlationId,
+      cause: typeof payload.cause === "string" ? payload.cause : undefined,
+      details,
+    },
+  };
+}
+
 export function makeBffError(args: MakeErrorArgs): BffError {
   const status = ERROR_CODE_TO_STATUS[args.code] ?? 500;
   const envelope: BffErrorEnvelope = {
@@ -105,9 +172,5 @@ export function makeBffError(args: MakeErrorArgs): BffError {
 }
 
 export function isBffErrorEnvelope(value: unknown): value is BffErrorEnvelope {
-  if (typeof value !== "object" || value === null) return false;
-  const e = (value as { error?: unknown }).error;
-  if (typeof e !== "object" || e === null) return false;
-  const p = e as Record<string, unknown>;
-  return typeof p.code === "string" && typeof p.correlationId === "string";
+  return normalizeBffErrorEnvelope(value) !== null;
 }

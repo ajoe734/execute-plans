@@ -1,7 +1,8 @@
 // BFF-LUV-FE-004 — Canonical live-write seam for high-risk/write flows.
 //
-// All writes are gated by VITE_BFF_REAL_WRITES=true AND a bearer token present.
-// Falls back to mock mutations when either gate is not satisfied.
+// All writes are gated by VITE_BFF_REAL_WRITES=true AND an authenticated
+// /bff/me session_kind (cookie or bearer; stub only outside strict/prod).
+// Falls back to mock mutations when the gate is not satisfied.
 //
 // Canonical action path:        /bff/actions/{entityType}/{entityId}/{actionId}
 // Confirm token create:         POST   /bff/confirm-tokens
@@ -16,33 +17,31 @@ import { mutations } from "./mutations";
 import type { RunActionInput, MutationResult } from "./mutations";
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
-import { withLiveOrMock, realWritesEnabled } from "@/lib/bff-v1/liveTransport";
+import { withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { liveWriteGated, sessionKindAllowsWrite } from "@/lib/bff-v1/writeGate";
 import { paths } from "@/lib/bff-v1/paths";
 import {
   idempotencyKey as mintIdemKey,
   newCorrelationId,
-  readBrowserAuthStorage,
 } from "@/lib/bff-v1/headers";
 import { makeBffError, BffError } from "@/lib/bff-v1/errors";
 import type {
   CommandResponse,
   ActionCommandResponseData,
 } from "@/lib/bff-v1/dto";
+import {
+  commandClient,
+  type CommandRunActionEnvelope,
+} from "./commandClient";
 
-// ---------- Auth gate ----------
+export { commandClient } from "./commandClient";
+export type {
+  BackendCommandResponse,
+  CommandRunActionEnvelope,
+  FinalCommandEnvelope,
+} from "./commandClient";
 
-function authPresent(): boolean {
-  try {
-    return readBrowserAuthStorage().token !== null;
-  } catch {
-    return false;
-  }
-}
-
-/** Both VITE_BFF_REAL_WRITES=true AND a bearer token must be present. */
-export function liveWriteGated(): boolean {
-  return realWritesEnabled() && authPresent();
-}
+export { liveWriteGated, sessionKindAllowsWrite };
 
 // ---------- Entity-type mapping ----------
 
@@ -81,9 +80,86 @@ export interface RunActionOptions {
   idempotencyKey?: string;
   /** v3 §6.2 confirm token issued by `requestConfirmToken`. */
   confirmToken?: string;
+  /** Attach governance approval evidence for command-path callers. */
+  approvalId?: string;
+  approvalDecisionId?: string;
+  /** Attach two-person authorization evidence for command-path callers. */
+  twoManSignatureId?: string;
+  secondOperatorId?: string;
+  headers?: Record<string, string>;
+  baseUrl?: string;
+  /** Default keeps the legacy /bff/actions adapter path until BFF-CONSOL-024. */
+  route?: "legacy-actions" | "commands";
 }
 
 // ---------- runAction ----------
+
+async function mockRunActionEnvelope(
+  input: RunActionInput,
+  resolved: { correlationId: string; idempotencyKey: string; confirmToken?: string },
+): Promise<RunActionEnvelope> {
+  const legacy = await mutations.runAction({
+    ...input,
+    correlationId: resolved.correlationId,
+    idempotencyKey: resolved.idempotencyKey,
+    confirmToken: resolved.confirmToken,
+  });
+  if (!legacy.ok) {
+    throw makeBffError({
+      code:
+        legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
+        : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
+        : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
+        : "VALIDATION_FAILED",
+      message: legacy.message ?? legacy.rejected ?? "rejected",
+      correlationId: resolved.correlationId,
+      details: { reason: legacy.rejected },
+    });
+  }
+  const data: ActionCommandResponseData = {
+    actionId: legacy.audit.id,
+    status: "completed",
+  };
+  return {
+    ok: true,
+    data,
+    auditEventId: legacy.audit.id,
+    correlationId: resolved.correlationId,
+    idempotencyKey: resolved.idempotencyKey,
+    message: legacy.message,
+    legacy,
+  };
+}
+
+/**
+ * New command caller for BFF-CONSOL-020. When the live write gate is open it
+ * posts directly to /bff/v1/commands; otherwise it returns the same mock
+ * CommandResponse envelope as the legacy caller.
+ */
+export async function runCommandAction(
+  input: RunActionInput,
+  opts: RunActionOptions = {},
+): Promise<CommandRunActionEnvelope | RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? input.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
+  const confirmToken = opts.confirmToken ?? input.confirmToken;
+
+  if (await liveWriteGated()) {
+    return commandClient.runAction(input, {
+      correlationId,
+      idempotencyKey,
+      confirmToken,
+      approvalId: opts.approvalId,
+      approvalDecisionId: opts.approvalDecisionId,
+      twoManSignatureId: opts.twoManSignatureId,
+      secondOperatorId: opts.secondOperatorId,
+      headers: opts.headers,
+      baseUrl: opts.baseUrl,
+    });
+  }
+
+  return mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
+}
 
 /**
  * Canonical live-write seam: dispatches entity actions through
@@ -94,37 +170,17 @@ export async function runAction(
   input: RunActionInput,
   opts: RunActionOptions = {},
 ): Promise<RunActionEnvelope> {
+  if (opts.route === "commands") {
+    return runCommandAction(input, opts) as Promise<RunActionEnvelope>;
+  }
+
   const correlationId = opts.correlationId ?? input.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
   const confirmToken = opts.confirmToken ?? input.confirmToken;
 
-  const mockBranch = async (): Promise<RunActionEnvelope> => {
-    const legacy = await mutations.runAction({
-      ...input,
-      correlationId,
-      idempotencyKey,
-      confirmToken,
-    });
-    if (!legacy.ok) {
-      throw makeBffError({
-        code:
-          legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
-          : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
-          : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
-          : "VALIDATION_FAILED",
-        message: legacy.message ?? legacy.rejected ?? "rejected",
-        correlationId,
-        details: { reason: legacy.rejected },
-      });
-    }
-    const data: ActionCommandResponseData = {
-      actionId: legacy.audit.id,
-      status: "completed",
-    };
-    return { ok: true, data, auditEventId: legacy.audit.id, correlationId, idempotencyKey, message: legacy.message, legacy };
-  };
+  const mockBranch = () => mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     const livePath = paths.action(entityType(input.kind), input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
@@ -211,7 +267,7 @@ export async function requestConfirmToken(
     return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenEnvelope>(
       {
         method: "POST",
@@ -270,7 +326,7 @@ export async function readConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenReadEnvelope>(
       {
         method: "GET",
@@ -319,7 +375,7 @@ export async function redeemConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenRedeemEnvelope>(
       {
         method: "POST",
@@ -358,7 +414,7 @@ export async function deleteConfirmToken(
     idempotencyKey,
   });
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenDeleteEnvelope>(
       {
         method: "DELETE",
@@ -406,7 +462,7 @@ export async function decideApproval(
     return { ok: true, data: { approvalId: id, decision }, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ApprovalDecisionEnvelope>(
       {
         method: "POST",
@@ -451,7 +507,7 @@ export async function acknowledgeAlert(
     return { ok: true, data: { alertId: id }, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<AlertAckEnvelope>(
       {
         method: "POST",
@@ -501,7 +557,7 @@ export async function decideIntervention(
     };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<InterventionDecisionEnvelope>(
       {
         method: "POST",

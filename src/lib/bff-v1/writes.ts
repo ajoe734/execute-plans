@@ -12,23 +12,14 @@
 import { bff } from "./seed";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
 import type { CommandResponse, ActionCommandResponseData } from "./dto";
-import { idempotencyKey as mintIdemKey, readBrowserAuthStorage } from "./headers";
+import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
-import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
+import { withLiveOrMock } from "./liveTransport";
+import { liveWriteGated, sessionKindAllowsWrite } from "./writeGate";
 import { paths } from "./paths";
 
-function authPresent(): boolean {
-  try {
-    return readBrowserAuthStorage().token !== null;
-  } catch {
-    return false;
-  }
-}
-
-function liveWriteGated(): boolean {
-  return realWritesEnabled() && authPresent();
-}
+export { liveWriteGated, sessionKindAllowsWrite };
 
 /** Map RunActionInput.kind → canonical live action endpoint. */
 const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
@@ -110,7 +101,7 @@ export async function runAction(
     };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     const livePath = actionPath(input.kind, input.id, input.action);
     return withLiveOrMock<RunActionEnvelope>(
       {
@@ -187,7 +178,7 @@ export async function requestConfirmToken(
     return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
 
-  if (liveWriteGated()) {
+  if (await liveWriteGated()) {
     return withLiveOrMock<ConfirmTokenEnvelope>(
       {
         method: "POST",
