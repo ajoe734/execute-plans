@@ -222,7 +222,7 @@ async function liveRoutePolicies(helperName: string): Promise<typeof seed.routeP
       return [policy];
     },
   );
-  return policies as typeof seed.routePolicies;
+  return policies as unknown as typeof seed.routePolicies;
 }
 
 async function liveConsultRules(helperName: string): Promise<typeof seed.consultRules> {
@@ -290,7 +290,7 @@ async function liveEvolutionRuns(helperName: string): Promise<typeof seed.evolut
       ),
     ),
   );
-  return batches.flat() as typeof seed.evolutionRuns;
+  return batches.flat() as unknown as typeof seed.evolutionRuns;
 }
 
 async function liveEvolutionCandidatesForRun(runId: string): Promise<typeof seed.evolutionCandidates> {
@@ -317,7 +317,7 @@ async function liveEvolutionCandidatesForRun(runId: string): Promise<typeof seed
           runId: recordString(candidate, "runId", "run_id", "evolution_run_id") ?? runId,
         })),
   );
-  return candidates as typeof seed.evolutionCandidates;
+  return candidates as unknown as typeof seed.evolutionCandidates;
 }
 
 const adaptPersonaEvaluations = (body: unknown, personaId: string): UnknownRecord[] =>
@@ -334,7 +334,7 @@ async function liveEvaluationRuns(helperName: string): Promise<typeof seed.evalu
     paths.personaEvaluations,
     adaptPersonaEvaluations,
   );
-  return evaluations as typeof seed.evaluationRuns;
+  return evaluations as unknown as typeof seed.evaluationRuns;
 }
 
 async function liveEvaluationRunsForSubject(kind: string, id: string): Promise<typeof seed.evaluationRuns> {
@@ -344,7 +344,7 @@ async function liveEvaluationRunsForSubject(kind: string, id: string): Promise<t
     { method: "GET", path: paths.personaEvaluations(id) },
     (body) => adaptPersonaEvaluations(body, id),
   );
-  return evaluations as typeof seed.evaluationRuns;
+  return evaluations as unknown as typeof seed.evaluationRuns;
 }
 
 async function liveMemoryUpdates(helperName: string): Promise<typeof seed.memoryUpdates> {
@@ -358,7 +358,7 @@ async function liveMemoryUpdates(helperName: string): Promise<typeof seed.memory
         personaId: recordString(update, "personaId", "persona_id") ?? personaId,
       })),
   );
-  return updates as typeof seed.memoryUpdates;
+  return updates as unknown as typeof seed.memoryUpdates;
 }
 
 async function liveObjectVersionsForSubject(kind: string, id: string): Promise<typeof seed.objectVersions> {
@@ -378,7 +378,7 @@ async function liveObjectVersionsForSubject(kind: string, id: string): Promise<t
         spec: version,
       })),
   );
-  return versions as typeof seed.objectVersions;
+  return versions as unknown as typeof seed.objectVersions;
 }
 
 const liveEmpty = <T>(helperName: string, emptyValue: T): Promise<T> | undefined => {
