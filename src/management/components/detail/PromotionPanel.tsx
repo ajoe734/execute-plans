@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";
@@ -44,7 +45,7 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
 
   const onConfirm = async (memo: string) => {
     if (!confirm) return;
-    await bff.mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
+    await mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
     toast.success(t("phase13.evolution.promotion.queued"));
     setHistory((h) => [
       {

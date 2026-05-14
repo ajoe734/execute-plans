@@ -3,7 +3,7 @@
 //
 // v3 §6.2 confirm-token flow (Pack A G03/G66/G86): when `actionId` is a v3
 // dotted high-risk action id, the modal fetches a short-lived `confirmToken`
-// from `bff.commands.requestConfirmToken` on open, displays a TTL countdown
+// from the bffWrites requestConfirmToken facade on open, displays a TTL countdown
 // and the server-issued `requiredPhrase`, and passes the token to `onConfirm`.
 // Legacy callers that pass a plain `confirmToken` string continue to work.
 import { useEffect, useRef, useState, type ReactNode } from "react";

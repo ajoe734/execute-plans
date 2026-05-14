@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Artifact } from "@/lib/bff/types";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 
@@ -66,7 +66,7 @@ export const ArtifactRollbackPanel = ({ artifact }: { artifact: Artifact }) => {
         confirmToken="ROLLBACK"
         destructive
         onConfirm={async (memo) => {
-          await bff.mutations.rollback("Artifact", artifact.id, memo);
+          await mutations.rollback("Artifact", artifact.id, memo);
           toast.success(t("artifact.rollback.done"));
           setTarget(null);
         }}

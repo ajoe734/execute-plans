@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { RoutePolicy, RoutePolicyRule, RouteTargetKind } from "@/lib/bff/types";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 
 const ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];
@@ -67,7 +67,7 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
   };
 
   const submit = async () => {
-    await bff.mutations.publishRoutePolicy(policy.id, rules, `Edited rules: ${rules.length}`);
+    await mutations.publishRoutePolicy(policy.id, rules, `Edited rules: ${rules.length}`);
     toast.success(t("governance.policy.submitted"));
     setDirty(false);
   };

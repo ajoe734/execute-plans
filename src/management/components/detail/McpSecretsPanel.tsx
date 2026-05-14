@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import type { McpSecret, McpServer } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -60,7 +61,7 @@ export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
         confirmToken="ROTATE"
         destructive
         onConfirm={async (memo) => {
-          await bff.mutations.rotateMcpSecret(rotate!.id, memo);
+          await mutations.rotateMcpSecret(rotate!.id, memo);
           setSecrets((ss) => ss.map((x) => x.id === rotate!.id ? { ...x, lastRotatedAt: new Date().toISOString(), rotatedBy: "you" } : x));
           toast.success(t("phase13.mcp.secrets.queued"));
           setRotate(null);

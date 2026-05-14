@@ -150,7 +150,7 @@ export const DeploymentDetail = () => {
         description={`Rolls back to version ${d.previousVersion ?? "previous"}. Live orders will continue to flow through the previous artifact.`}
         confirmToken="ROLLBACK"
         destructive
-        onConfirm={async (memo) => { await bff.mutations.rollback("Deployment", d.id, memo); toast.success("Rollback executed"); }}
+        onConfirm={async (memo) => { await mutations.rollback("Deployment", d.id, memo); toast.success("Rollback executed"); }}
       />
 
       <Dialog open={reduceOpen} onOpenChange={setReduceOpen}>
@@ -175,7 +175,7 @@ export const DeploymentDetail = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReduceOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
-              await bff.mutations.reduceAllocation(d.id, newPct, `manual reduce → ${newPct}%`);
+              await mutations.reduceAllocation(d.id, newPct, `manual reduce → ${newPct}%`);
               toast.success(t("deployment.reduceAllocation.queued", { pct: newPct }));
               setReduceOpen(false);
               const fresh = await bff.deployments.get(d.id);

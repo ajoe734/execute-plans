@@ -201,12 +201,27 @@ type AskEvent =
 | resync | `/bff/agora/ask/sessions/{id}` |
 | auth scope | `agora.ask` / `persona.consult` |
 
-### 5.3 完整 SSE channel catalog
+### 5.3 Planner B4 control channels
+
+Planner Response §B4 extends the final SSE catalog with five control
+channels already present in the frontend runtime channel list.
+
+| Channel | Envelope | Replay | Resync | Auth scope |
+|---|---|---|---|---|
+| `confirm_token` | `SseEventEnvelope<ConfirmTokenEvent>` | 24h | `/bff/confirm-tokens`, `/bff/confirm-tokens/{tokenId}` | `*` |
+| `cooldown` | `SseEventEnvelope<CooldownEvent>` | 24h | affected entity action descriptor endpoint | `*` |
+| `transition` | `SseEventEnvelope<TransitionEvent>` | 24h | affected entity detail/list endpoint | `*` |
+| `rollback` | `SseEventEnvelope<RollbackEvent>` | 24h | `/bff/deployments`, `/bff/incidents` | `deployment.rollback` |
+| `handoff` | `SseEventEnvelope<HandoffEvent>` | 24h | approval-linked handoff detail endpoint | `approval.read` |
+
+### 5.4 完整 SSE channel catalog
 
 ```
-approval, ask, artifact, runtime, mcp, skill, channel, tool,
-ranking, rebalance, evolution, research, signal, inbox,
-journal, postmortem, loop, sentinel, intervention, audit, system
+strategy, persona, capital, deployment, job, risk, approval, audit,
+artifact, runtime, mcp, skill, channel, tool, ranking, rebalance,
+evolution, research, signal, inbox, journal, postmortem, ask, loop,
+sentinel, intervention, confirm_token, cooldown, transition, rollback,
+handoff, system
 ```
 
 ---

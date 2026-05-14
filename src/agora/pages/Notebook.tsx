@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { useHandoff } from "@/lib/handoff";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 
 interface Note { id: string; title: string; body: string; tags: string[]; artifactId?: string; ts: string; }
 
@@ -30,7 +30,7 @@ export const Notebook = () => {
   const parseTags = (value: string) => value.split(",").map((x) => x.trim()).filter(Boolean);
 
   const convertToResearchTask = async (note: Note) => {
-    const result = await bff.mutations.createResearchTaskFromNote(note.id, `Notebook note: ${note.title}`);
+    const result = await mutations.createResearchTaskFromNote(note.id, `Notebook note: ${note.title}`);
     openHandoff({
       type: "research_task",
       source: { kind: "ResearchNote", id: note.id, label: note.title },

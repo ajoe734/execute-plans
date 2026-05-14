@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { bff } from "@/lib/bff-v1";
+import { mutations } from "@/lib/bff/mutations";
 import { __resetIdempotencyForTests } from "@/lib/v4/idempotency";
 import {
   issueConfirmTokenV4, redeemConfirmToken, revokeConfirmToken,
@@ -14,8 +14,8 @@ describe("Pack C-H1 wiring", () => {
 
   it("C028 idempotency replay returns the same audit on repeat key", async () => {
     const key = `idem-${Math.random()}`;
-    const r1 = await bff.mutations.runAction({ kind: "Strategy", id: "_does_not_exist", action: "noop", idempotencyKey: key });
-    const r2 = await bff.mutations.runAction({ kind: "Strategy", id: "_does_not_exist", action: "noop", idempotencyKey: key });
+    const r1 = await mutations.runAction({ kind: "Strategy", id: "_does_not_exist", action: "noop", idempotencyKey: key });
+    const r2 = await mutations.runAction({ kind: "Strategy", id: "_does_not_exist", action: "noop", idempotencyKey: key });
     expect(r2.audit.id).toBe(r1.audit.id);
   });
 

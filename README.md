@@ -207,7 +207,7 @@ npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
 ```
 
-CI workflow: `.github/workflows/pantheon-integration-gate.yml`（`workflow_dispatch`，需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`）。
+CI workflow: `.github/workflows/pantheon-integration-gate.yml`（`workflow_dispatch`，需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；`PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
 證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
 
 ## 相關文件

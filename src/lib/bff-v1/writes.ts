@@ -1,16 +1,15 @@
 // BFF Contract v1 — write/mutation seam (VI-2).
-// Wraps legacy `bff.mutations.runAction` + `bff.commands.requestConfirmToken`
+// Wraps legacy mock mutations plus live command routes
 // so every call site automatically obtains:
 //   - correlationId (auto-minted root chain when absent)
 //   - idempotencyKey (auto-minted; survives replay)
 //   - CommandResponse<T> envelope shape (Final §2.2)
 //   - BffError-style failure mapping (illegal_transition / state_conflict / invariant)
 //
-// Existing detail pages keep calling `runActionSafe(...)` and `bff.commands.*`;
-// they auto-inherit these guarantees because both delegate here.
+// Existing detail pages keep calling `runActionSafe(...)`; they inherit these
+// guarantees because the wrapper delegates here.
 
-import { bff } from "./seed";
-import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
+import { mutations, type RunActionInput, type MutationResult } from "@/lib/bff/mutations";
 import type { CommandResponse, ActionCommandResponseData } from "./dto";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
@@ -69,7 +68,7 @@ export async function runAction(
   const confirmToken = opts.confirmToken ?? input.confirmToken;
 
   const mockBranch = async (): Promise<RunActionEnvelope> => {
-    const legacy = await bff.mutations.runAction({
+    const legacy = await mutations.runAction({
       ...input,
       correlationId,
       idempotencyKey,
@@ -166,7 +165,7 @@ export async function requestConfirmToken(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
   const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
-    const r = await bff.commands.requestConfirmToken(req, params);
+    const r = await mutations.requestConfirmToken(req, params);
     if (!r.ok) {
       throw makeBffError({
         code: "VALIDATION_FAILED",

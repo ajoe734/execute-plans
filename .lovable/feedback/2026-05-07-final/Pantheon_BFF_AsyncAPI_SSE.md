@@ -205,6 +205,11 @@ Frontend behavior:
 | loop | `loop.read` | `/bff/v5/loop-runs` |
 | sentinel | `sentinel.read` | `/bff/v5/sentinel/findings` |
 | intervention | `intervention.read` | `/bff/v5/interventions` |
+| confirm_token | `*` | `/bff/confirm-tokens`, `/bff/confirm-tokens/{tokenId}` |
+| cooldown | `*` | affected entity action descriptor endpoint |
+| transition | `*` | affected entity detail/list endpoint |
+| rollback | `deployment.rollback` | `/bff/deployments`, `/bff/incidents` |
+| handoff | `approval.read` | approval-linked handoff detail endpoint |
 | system | session-dependent | varies |
 
 ---
