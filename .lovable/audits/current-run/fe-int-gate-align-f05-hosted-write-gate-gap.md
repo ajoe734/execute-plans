@@ -150,3 +150,16 @@ The current hosted asset observed in the original gap,
 `https://pantheon-dev.lovable.app/assets/index-BYfBkno5.js`, predates this
 runtime gate. Hosted F05 can only pass after `pantheon-dev.lovable.app` is
 redeployed with the commit that contains this remediation.
+
+Remediation commit:
+
+- `104f06b` — `FE-INT-GATE-ALIGN-F05-DEPLOY-WRITE-GATE restore dev write gate`
+- pushed to `origin/bff-luv-fe-006-dev-deploy`
+
+Hosted asset check after push:
+
+- `2026-05-14T12:32:26Z`: `https://pantheon-dev.lovable.app/` still references
+  `/assets/index-BYfBkno5.js`
+
+Therefore hosted F05 rerun remains blocked on the Lovable dev deployment
+refresh, not on the spec or runtime gate code.
