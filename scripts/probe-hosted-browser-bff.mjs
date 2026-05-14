@@ -7,6 +7,8 @@ const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://p
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");
 const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-dev-bff.35.236.178.81.sslip.io");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
+const OVERALL_TIMEOUT_MS = 90_000;
+const CORE_BFF_PATHS = ["/bff/v5/control-room"];
 
 function currentSha() {
   const fromEnv =
@@ -40,6 +42,19 @@ function matchesUrlNeedle(url, needle) {
   return cleanNeedle.startsWith("http") ? url.startsWith(cleanNeedle) : url.includes(cleanNeedle);
 }
 
+function pathnameOf(url) {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+}
+
+function isCoreBffResponse(res, expectedPath) {
+  const url = res.url();
+  return url.startsWith(BFF_BASE) && pathnameOf(url) === expectedPath && res.request().method() === "GET";
+}
+
 function textHits(label, text, needle) {
   if (!needle) return [];
   let count = 0;
@@ -61,12 +76,18 @@ try {
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
+page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
+page.setDefaultNavigationTimeout(OVERALL_TIMEOUT_MS);
 
 const requests = [];
 const responses = [];
 const failed = [];
 const oldUrlHits = [];
 const consoleErrors = [];
+const coreResponses = [];
+let html = "";
+let bundleText = "";
+const bundleFetches = [];
 
 page.on("request", req => {
   const url = req.url();
@@ -88,28 +109,44 @@ page.on("console", msg => {
 });
 
 const pageUrl = withNoCache(`${FE_BASE}/management`);
-await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 60000 });
-const html = await page.content();
-const scripts = await page.locator("script[src]").evaluateAll(nodes => nodes.map(n => n.src));
-let bundleText = "";
-const bundleFetches = [];
-for (const s of scripts) {
-  try {
-    const fetchedUrl = withNoCache(s);
-    const res = await fetch(fetchedUrl);
-    bundleFetches.push({ source: s, fetched: fetchedUrl, status: res.status });
-    bundleText += await res.text();
-  } catch {}
-}
+try {
+  const coreResponsePromises = CORE_BFF_PATHS.map(expectedPath =>
+    page.waitForResponse(res => isCoreBffResponse(res, expectedPath), { timeout: OVERALL_TIMEOUT_MS })
+      .then(res => ({
+        path: expectedPath,
+        status: res.status(),
+        method: res.request().method(),
+        url: res.url(),
+      }))
+  );
 
-await browser.close();
+  await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: OVERALL_TIMEOUT_MS });
+  coreResponses.push(...await Promise.all(coreResponsePromises));
+
+  html = await page.content();
+  const scripts = await page.locator("script[src]").evaluateAll(nodes => nodes.map(n => n.src));
+  for (const s of scripts) {
+    try {
+      const fetchedUrl = withNoCache(s);
+      const res = await fetch(fetchedUrl, { signal: AbortSignal.timeout(OVERALL_TIMEOUT_MS) });
+      bundleFetches.push({ source: s, fetched: fetchedUrl, status: res.status });
+      bundleText += await res.text();
+    } catch {}
+  }
+} finally {
+  await browser.close();
+}
 
 const containsBff = bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
 const containsOld = bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL);
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
 oldUrlHits.push(...textHits("bundle", bundleText, OLD_BFF_URL));
 const oldUrlHitCount = oldUrlHits.reduce((total, hit) => total + (hit.count ?? 1), 0);
-const pass = containsBff && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
+const coreResponseOk =
+  CORE_BFF_PATHS.every(expectedPath =>
+    coreResponses.some(response => response.path === expectedPath && response.status >= 200 && response.status < 400)
+  );
+const pass = containsBff && coreResponseOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
@@ -121,16 +158,25 @@ const md = [
   `BFF: ${BFF_BASE}`,
   `Old BFF: ${OLD_BFF_URL}`,
   `nocache: ${NOCACHE_SHA}`,
+  `timeout ms: ${OVERALL_TIMEOUT_MS}`,
+  `navigation waitUntil: domcontentloaded`,
   ``,
   `## Summary`,
   ``,
   `- contains intended BFF URL: ${containsBff}`,
   `- contains old BFF URL: ${containsOld}`,
   `- old BFF URL hit count: ${oldUrlHitCount}`,
+  `- core BFF responses complete: ${coreResponseOk}`,
   `- request count: ${requests.length}`,
   `- response count: ${responses.length}`,
   `- failed count: ${failed.length}`,
   `- pass: ${pass}`,
+  ``,
+  `## Core BFF responses`,
+  ``,
+  `| Status | Method | Path | URL |`,
+  `|---:|---|---|---|`,
+  ...coreResponses.map(r => `| ${r.status} | ${r.method} | ${r.path} | ${r.url.replace(BFF_BASE, "")} |`),
   ``,
   `## Bundle fetches`,
   ``,

@@ -2,7 +2,7 @@
 // High-fidelity findings list + remediation drawer with Q24 advisory /
 // guarded_automation / emergency_override flow. Emergency wraps HighRiskConfirm.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
@@ -55,6 +55,7 @@ export const SentinelPage = () => {
   // D (2026-05-09) — list ↔ timeline toggle
   const [view, setView] = useState<"list" | "timeline">("list");
   const [params, setParams] = useSearchParams();
+  const activeFindingTriggerRef = useRef<HTMLElement | null>(null);
 
   // E2 drill-down: ?finding=<id> auto-opens the matching finding drawer.
   useEffect(() => {
@@ -64,12 +65,26 @@ export const SentinelPage = () => {
     if (match) setActive(match);
   }, [params, findings.data]);
 
+  const restoreFindingTriggerFocus = () => {
+    const trigger = activeFindingTriggerRef.current;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.isConnected) trigger.focus();
+    });
+  };
+
+  const openFinding = (finding: SentinelFinding, trigger?: HTMLElement) => {
+    activeFindingTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setActive(finding);
+  };
+
   const closeActive = () => {
     setActive(null);
     if (params.get("finding")) {
       params.delete("finding");
       setParams(params, { replace: true });
     }
+    restoreFindingTriggerFocus();
   };
 
   const all = findings.data?.items ?? [];
@@ -127,13 +142,13 @@ export const SentinelPage = () => {
           }
         >
           {view === "timeline" ? (
-            <SentinelTimelineView findings={visible} onPick={setActive} />
+            <SentinelTimelineView findings={visible} onPick={openFinding} />
           ) : (
             <ul className="space-y-2">
               {visible.map((f) => (
                 <li key={f.id}>
                   <button
-                    onClick={() => setActive(f)}
+                    onClick={(e) => openFinding(f, e.currentTarget)}
                     className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -376,7 +391,7 @@ const ActionGroup = ({
 // ordered most-recent first. Same drawer interaction as the list view.
 const SentinelTimelineView = ({
   findings, onPick,
-}: { findings: SentinelFinding[]; onPick: (f: SentinelFinding) => void }) => {
+}: { findings: SentinelFinding[]; onPick: (f: SentinelFinding, trigger?: HTMLElement) => void }) => {
   const t = useT();
   if (findings.length === 0) {
     return (
@@ -409,7 +424,7 @@ const SentinelTimelineView = ({
             {items.map((f) => (
               <li key={f.id}>
                 <button
-                  onClick={() => onPick(f)}
+                  onClick={(e) => onPick(f, e.currentTarget)}
                   className="w-full text-left border border-border rounded-md px-3 py-2 bg-card hover:bg-muted/30 transition-colors flex items-center gap-2"
                 >
                   <span className="text-mono text-[10px] text-muted-foreground w-14 shrink-0">

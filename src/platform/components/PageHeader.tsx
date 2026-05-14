@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { Fragment, ReactNode } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { useT } from "@/platform/hooks";
 import {
@@ -44,7 +44,7 @@ const PageBreadcrumb = ({ pathname }: { pathname: string }) => {
         {chain.map((node, i) => {
           const isLast = i === chain.length - 1;
           return (
-            <span key={node.path} className="contents">
+            <Fragment key={node.path}>
               <BreadcrumbItem>
                 {isLast ? (
                   <BreadcrumbPage>{t(node.i18nKey)}</BreadcrumbPage>
@@ -55,7 +55,7 @@ const PageBreadcrumb = ({ pathname }: { pathname: string }) => {
                 )}
               </BreadcrumbItem>
               {!isLast && <BreadcrumbSeparator />}
-            </span>
+            </Fragment>
           );
         })}
       </BreadcrumbList>

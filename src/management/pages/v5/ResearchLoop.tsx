@@ -2,7 +2,7 @@
 // Research loop runs derived from ResearchExperiment via deriveLoopRuns().
 // Reuses LoopRunDrawer for stage timeline + advance/pause/resume/cancel actions.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
@@ -42,6 +42,7 @@ export const ResearchLoopPage = () => {
   const runParam = params.get("run");
   const runs = useV5Live(() => v5.loops.list("research"));
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (runParam && runParam !== activeRunId) setActiveRunId(runParam);
@@ -53,7 +54,16 @@ export const ResearchLoopPage = () => {
     () => items.find((r) => r.id === activeRunId) ?? null,
     [items, activeRunId],
   );
-  const openRun = (id: string) => {
+  const restoreRunTriggerFocus = () => {
+    const trigger = activeRunTriggerRef.current;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.isConnected) trigger.focus();
+    });
+  };
+
+  const openRun = (id: string, trigger?: HTMLElement) => {
+    activeRunTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setActiveRunId(id);
     const next = new URLSearchParams(params);
     next.set("run", id);
@@ -64,6 +74,7 @@ export const ResearchLoopPage = () => {
     const next = new URLSearchParams(params);
     next.delete("run");
     setParams(next, { replace: true });
+    restoreRunTriggerFocus();
   };
 
   const running = items.filter((r) => r.status === "running").length;
@@ -105,9 +116,9 @@ export const ResearchLoopPage = () => {
                 <tr
                   key={r.id}
                   className={`border-t border-border cursor-pointer hover:bg-muted/40 ${activeRunId === r.id ? "bg-primary/5" : ""}`}
-                  onClick={() => openRun(r.id)}
+                  onClick={(e) => openRun(r.id, e.currentTarget)}
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id); } }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id, e.currentTarget); } }}
                   aria-label={t("v5.loops.execution.openRun")}
                 >
                   <td className="px-3 py-2">

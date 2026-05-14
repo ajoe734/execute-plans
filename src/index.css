@@ -23,9 +23,9 @@
     --secondary-foreground: 222 47% 16%;
 
     --muted: 220 14% 94%;
-    --muted-foreground: 220 10% 46%;
+    --muted-foreground: 220 11% 38%;
 
-    --accent: 217 91% 60%;
+    --accent: 217 80% 38%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 75% 50%;
@@ -38,7 +38,7 @@
     --radius: 0.5rem;
 
     /* Pantheon environments */
-    --env-research: 217 91% 60%;
+    --env-research: 217 80% 38%;
     --env-research-bg: 217 91% 95%;
     --env-paper: 38 92% 50%;
     --env-paper-bg: 38 92% 92%;
@@ -67,10 +67,10 @@
 
     /* Status */
     --status-pending: 220 10% 46%;
-    --status-running: 217 91% 60%;
-    --status-success: 142 71% 45%;
-    --status-warning: 38 92% 50%;
-    --status-failed: 0 75% 50%;
+    --status-running: 217 80% 38%;
+    --status-success: 142 70% 25%;
+    --status-warning: 38 92% 27%;
+    --status-failed: 0 75% 38%;
     --status-paused: 280 65% 60%;
 
     /* Sidebar */
@@ -103,7 +103,7 @@
     --muted: 222 30% 14%;
     --muted-foreground: 220 10% 60%;
 
-    --accent: 217 91% 60%;
+    --accent: 217 91% 70%;
     --accent-foreground: 222 47% 11%;
 
     --destructive: 0 70% 50%;
@@ -129,6 +129,11 @@
     --bucket-4: 25 88% 62%;
     --bucket-5: 0 70% 62%;
     --focus-ring-color: 210 90% 65%;
+    --env-research: 217 91% 70%;
+    --status-running: 217 91% 70%;
+    --status-success: 142 70% 62%;
+    --status-warning: 38 90% 66%;
+    --status-failed: 0 75% 68%;
 
     --sidebar-background: 222 50% 4%;
     --sidebar-foreground: 220 14% 80%;

@@ -46,6 +46,7 @@ export const ExecutionLoopPage = () => {
   const runs = useV5Live(() => v5.loops.list("execution"));
   const personas = useV5Live(() => v5.personas.health());
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (focus === "personas") personasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -65,7 +66,16 @@ export const ExecutionLoopPage = () => {
     () => items.find((r) => r.id === activeRunId) ?? null,
     [items, activeRunId],
   );
-  const openRun = (id: string) => {
+  const restoreRunTriggerFocus = () => {
+    const trigger = activeRunTriggerRef.current;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.isConnected) trigger.focus();
+    });
+  };
+
+  const openRun = (id: string, trigger?: HTMLElement) => {
+    activeRunTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setActiveRunId(id);
     const next = new URLSearchParams(params);
     next.set("run", id);
@@ -76,6 +86,7 @@ export const ExecutionLoopPage = () => {
     const next = new URLSearchParams(params);
     next.delete("run");
     setParams(next, { replace: true });
+    restoreRunTriggerFocus();
   };
 
   const running = items.filter((r) => r.status === "running").length;
@@ -119,9 +130,9 @@ export const ExecutionLoopPage = () => {
                 <tr
                   key={r.id}
                   className={`border-t border-border cursor-pointer hover:bg-muted/40 ${activeRunId === r.id ? "bg-primary/5" : ""}`}
-                  onClick={() => openRun(r.id)}
+                  onClick={(e) => openRun(r.id, e.currentTarget)}
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id); } }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRun(r.id, e.currentTarget); } }}
                   aria-label={t("v5.loops.execution.openRun", { defaultValue: "Open run details" })}
                 >
                   <td className="px-3 py-2">
