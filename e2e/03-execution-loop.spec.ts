@@ -282,6 +282,7 @@ const mePayload = {
 
 function frontendUrl(path = "/"): string {
   const base =
+    process.env.PANTHEON_FE_BASE_URL ||
     process.env.FRONTEND_BASE_URL ||
     process.env.PLAYWRIGHT_BASE_URL ||
     DEFAULT_FRONTEND_BASE_URL;
@@ -290,6 +291,7 @@ function frontendUrl(path = "/"): string {
 
 function bffUrl(path: string): string {
   const base =
+    process.env.PANTHEON_BFF_BASE_URL ||
     process.env.BFF_BASE_URL ||
     process.env.VITE_BFF_BASE_URL ||
     DEFAULT_BFF_BASE_URL;
