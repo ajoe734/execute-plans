@@ -1,6 +1,7 @@
 import { bffFetch } from "./client";
 import { paths } from "./paths";
 import { realWritesEnabled } from "./liveTransport";
+import { readBffEnv } from "./runtimeEnv";
 
 export type BffSessionKind = "cookie" | "bearer" | "stub";
 
@@ -19,18 +20,12 @@ export function sessionKindAllowsWrite(
   return false;
 }
 
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
 function truthy(value: unknown): boolean {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
 
 function strictWriteModeFromEnv(): boolean {
-  const env = readEnv();
+  const env = readBffEnv();
   return env.VITE_BFF_FALLBACK === "strict" || truthy(env.VITE_BFF_STRICT_WRITES);
 }
 

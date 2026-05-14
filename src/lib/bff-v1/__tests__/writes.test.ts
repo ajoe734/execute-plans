@@ -231,6 +231,25 @@ describe("VI-2 session-kind write gate", () => {
     expect((init as RequestInit).credentials).toBe("include");
   });
 
+  it("honors the dev-host browser runtime real-write gate", async () => {
+    setWriteEnv(false, null);
+    window.sessionStorage.setItem("pantheon.integration.realWrites", "true");
+    const fetcher = makeSessionFetch("cookie");
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetcher);
+
+    await expect(liveWriteGated()).resolves.toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("honors the dev-host browser runtime strict fallback gate", async () => {
+    setWriteEnv(false, null);
+    window.sessionStorage.setItem("pantheon.integration.realWrites", "true");
+    window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
+    vi.spyOn(globalThis, "fetch").mockImplementation(makeSessionFetch("stub"));
+
+    await expect(liveWriteGated()).resolves.toBe(false);
+  });
+
   it("sessionKindAllowsWrite blocks stub in production or strict mode", () => {
     expect(sessionKindAllowsWrite("cookie", { production: true, strict: true })).toBe(true);
     expect(sessionKindAllowsWrite("bearer", { production: true, strict: true })).toBe(true);

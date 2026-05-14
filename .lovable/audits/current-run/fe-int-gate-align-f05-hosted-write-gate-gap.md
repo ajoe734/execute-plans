@@ -81,5 +81,72 @@ This is not a selector mismatch. The hosted Lovable DOM matches the current
 spec selectors, but the hosted deployment is missing the write-gate env needed
 for the F05 live-write acceptance path.
 
-Follow-up required: deploy `pantheon-dev.lovable.app` with an explicit,
-dev-scoped real-write gate for integration testing, then rerun F05 hosted twice.
+## Remediation
+
+Added a browser runtime gate that is only honored on localhost and
+`pantheon-dev.lovable.app`:
+
+- `sessionStorage["pantheon.integration.realWrites"]="true"` enables the
+  integration-test real-write path even when the hosted bundle was built with
+  `VITE_BFF_REAL_WRITES=false` or without that env key.
+- `sessionStorage["pantheon.integration.fallback"]="strict"` selects strict
+  fallback mode for the same dev-host integration run.
+- Other hosts ignore these runtime overrides, so production and non-dev shared
+  deployments keep their build-time write gate behavior.
+
+`e2e/04-sentinel-remediation.spec.ts` now injects those dev-scoped session
+keys before navigation. The spec still waits for the remediation POSTs and still
+asserts the emergency `CONFIRM_TOKEN_REQUIRED` response and advisory `202`
+queue response.
+
+## Verification
+
+Unit/type checks:
+
+```bash
+npx tsc --noEmit
+npx vitest run src/lib/bff-v1/__tests__/writes.test.ts src/lib/bff/__tests__/liveTransportSnapshot.test.ts
+```
+
+Production-preview build:
+
+```bash
+VITE_BFF_MODE=live \
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+VITE_BFF_FALLBACK=auto \
+VITE_BFF_REAL_WRITES=false \
+npm run build
+```
+
+F05 production-preview runs against the built bundle:
+
+```bash
+PANTHEON_FE_BASE_URL=http://127.0.0.1:4175 \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+VITE_BFF_MODE=live \
+VITE_BFF_REAL_WRITES=false \
+VITE_BFF_FALLBACK=auto \
+npx playwright test e2e/04-sentinel-remediation.spec.ts --trace=on --reporter=list \
+  --output=/tmp/fe-int-gate-align-f05-deploy-write-gate-preview-run1
+```
+
+Result: `2 passed`.
+
+```bash
+PANTHEON_FE_BASE_URL=http://127.0.0.1:4175 \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+VITE_BFF_MODE=live \
+VITE_BFF_REAL_WRITES=false \
+VITE_BFF_FALLBACK=auto \
+npx playwright test e2e/04-sentinel-remediation.spec.ts --trace=on --reporter=list \
+  --output=/tmp/fe-int-gate-align-f05-deploy-write-gate-preview-run2
+```
+
+Result: `2 passed`.
+
+## Hosted Deployment Note
+
+The current hosted asset observed in the original gap,
+`https://pantheon-dev.lovable.app/assets/index-BYfBkno5.js`, predates this
+runtime gate. Hosted F05 can only pass after `pantheon-dev.lovable.app` is
+redeployed with the commit that contains this remediation.

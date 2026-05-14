@@ -13,6 +13,10 @@ function stubLiveEnv(fallback: "auto" | "strict" = "auto") {
 
 describe("BFF live transport snapshot", () => {
   afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__;
+    delete (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__;
+    window.sessionStorage.clear();
+    window.localStorage.clear();
     vi.unstubAllEnvs();
     liveStatus._reset();
   });
@@ -37,6 +41,30 @@ describe("BFF live transport snapshot", () => {
     expect(snap.usingSeed).toBe(false);
     expect(snap.seedFallbackArmed).toBe(true);
     expect(snap.typedError).toBe(false);
+  });
+
+  it("allows hosted dev runtime fallback selection to report strict real mode", () => {
+    stubLiveEnv("auto");
+    window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
+
+    const snap = getLiveStatusSnapshot();
+
+    expect(snap.transportMode).toBe("real");
+    expect(snap.configuredMode).toBe("real");
+    expect(snap.seedFallbackArmed).toBe(false);
+  });
+
+  it("allows pre-bootstrap runtime config to select strict real mode", () => {
+    stubLiveEnv("auto");
+    Object.assign(window as unknown as Record<string, unknown>, {
+      __PANTHEON_BFF_RUNTIME__: { VITE_BFF_FALLBACK: "strict" },
+    });
+
+    const snap = getLiveStatusSnapshot();
+
+    expect(snap.transportMode).toBe("real");
+    expect(snap.configuredMode).toBe("real");
+    expect(snap.seedFallbackArmed).toBe(false);
   });
 
   it("reports hybrid transport fallback as active seed source", () => {

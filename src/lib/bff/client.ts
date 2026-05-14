@@ -26,6 +26,7 @@ import {
   withLiveOrMock,
   liveStatus,
 } from "@/lib/bff-v1";
+import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import * as seed from "@/mocks/seed";
 import type {
   Strategy,
@@ -57,18 +58,12 @@ export type ManagementMode = "mock" | "hybrid" | "real";
 const truthy = (v: unknown): boolean =>
   ["1", "true", "yes", "on"].includes(String(v ?? "").trim().toLowerCase());
 
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
 /** Detect the management read mode from env.
  *  - `mock`  : configured mode is mock (default; also used by tests).
  *  - `real`  : configured mode is live AND VITE_BFF_FALLBACK=strict.
  *  - `hybrid`: configured mode is live with default `auto` fallback. */
 export function detectManagementMode(): ManagementMode {
-  const env = readEnv();
+  const env = readBffEnv();
   if (env.MODE === "test" || env.NODE_ENV === "test") return "mock";
   if (env.VITE_BFF_MODE !== "live") return "mock";
   return env.VITE_BFF_FALLBACK === "strict" ? "real" : "hybrid";
