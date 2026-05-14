@@ -28,7 +28,7 @@ const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 
 const SERVING_MOCK_BANNER =
-  /serving[-\s]?mock|mock data|seed fallback|資料來源：seed/i;
+  /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -298,6 +298,7 @@ test.describe("F01 startup session", () => {
     const text = await bodyText(page);
     expect(text).not.toMatch(SERVING_MOCK_BANNER);
     expect(text).not.toMatch(/op-fe-gate|portfolio_manager|mock operator/i);
+    expect(text).toMatch(/\bAuth\b|AUTH_REQUIRED|Sign in required|STRICT TYPED ERROR/i);
 
     await test.info().attach("startup-bff-network", {
       body: JSON.stringify({ interceptedMeRequests, bffRequests }, null, 2),

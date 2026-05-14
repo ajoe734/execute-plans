@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
-import { usePlatform, type Locale, type UserRole } from "@/platform/store";
+import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
@@ -16,12 +16,6 @@ import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 
-const roles: UserRole[] = [
-  "admin", "research_lead", "risk_officer", "capital_manager",
-  "strategy_manager", "system_operator", "reviewer", "capability_admin",
-  "analyst", "trader", "ai_trainer",
-];
-
 type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified";
 
 export const TopBar = () => {
@@ -29,7 +23,7 @@ export const TopBar = () => {
   const navigate = useNavigate();
   const loc = useLocation();
   const isManagement = loc.pathname.startsWith("/management");
-  const { locale, setLocale, role, setRole } = usePlatform();
+  const { locale, setLocale } = usePlatform();
   const live = useLiveStatus();
   const { me, loading: meLoading, error: meError } = useMe();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -187,8 +181,8 @@ export const TopBar = () => {
         <Button variant="ghost" size="sm" disabled className="gap-1">
           <Loader2 className="h-4 w-4 animate-spin" />
         </Button>
-      ) : meError ? (
-        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError.message} aria-label="auth-error">
+      ) : meError || !me ? (
+        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
           <Lock className="h-4 w-4" />
           <span className="text-xs">Auth</span>
         </Button>
@@ -212,20 +206,7 @@ export const TopBar = () => {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1"><User className="h-4 w-4" /> {role}</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{t("topbar.role")}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {roles.map((r) => (
-              <DropdownMenuItem key={r} onClick={() => setRole(r)}>{r}</DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      ) : null}
     </header>
   );
 };
