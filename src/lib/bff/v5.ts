@@ -136,6 +136,75 @@ function adaptStageStatus(value: unknown, fallback: LoopRun["stages"][number]["s
   return fallback;
 }
 
+type LoopRunNextAction = NonNullable<LoopRun["nextAction"]>;
+type LoopRunEvidenceRef = NonNullable<LoopRun["evidence"]>[number];
+
+function adaptLoopNextAction(value: unknown): LoopRunNextAction | undefined {
+  const item = asRecord(value);
+  const rawKind = asString(item.kind ?? item.action_kind ?? item.actionKind).toLowerCase();
+  if (!rawKind) return undefined;
+
+  const kind: LoopRunNextAction["kind"] =
+    ["awaiting_approval", "pending_approval", "approval"].includes(rawKind)
+      ? "awaiting_approval"
+      : ["awaiting_human_decision", "human_decision", "manual_decision"].includes(rawKind)
+        ? "awaiting_human_decision"
+        : rawKind === "automatic"
+          ? "automatic"
+          : "none";
+  const label = asString(item.label ?? item.name ?? item.title);
+  const etaMs = Number(item.etaMs ?? item.eta_ms);
+
+  return {
+    kind,
+    label: label || undefined,
+    etaMs: Number.isFinite(etaMs) ? etaMs : undefined,
+  };
+}
+
+const LOOP_EVIDENCE_KINDS = new Set<LoopRunEvidenceRef["kind"]>([
+  "alert",
+  "incident",
+  "job",
+  "audit",
+  "metric",
+  "strategy",
+  "persona",
+  "deployment",
+  "runtime",
+  "policy",
+  "approval",
+]);
+
+function adaptLoopEvidenceRef(value: unknown): LoopRunEvidenceRef | undefined {
+  const item = asRecord(value);
+  const kind = asString(item.kind ?? item.evidence_kind ?? item.evidenceKind).toLowerCase();
+  const id = asString(item.id ?? item.ref_id ?? item.refId ?? item.evidence_id ?? item.evidenceId);
+  if (!id || !LOOP_EVIDENCE_KINDS.has(kind as LoopRunEvidenceRef["kind"])) return undefined;
+  return { kind: kind as LoopRunEvidenceRef["kind"], id };
+}
+
+function adaptLoopEvidence(item: UnknownRecord): LoopRunEvidenceRef[] {
+  const rawRefs = [
+    ...(Array.isArray(item.evidence) ? item.evidence : []),
+    ...(Array.isArray(item.evidence_refs) ? item.evidence_refs : []),
+    ...(Array.isArray(item.evidenceRefs) ? item.evidenceRefs : []),
+  ];
+  const refs = rawRefs
+    .map(adaptLoopEvidenceRef)
+    .filter((ref): ref is LoopRunEvidenceRef => Boolean(ref));
+
+  const approval = asRecord(item.approval);
+  const approvalId = asString(
+    item.approval_id ?? item.approvalId ?? approval.approval_id ?? approval.approvalId ?? approval.id,
+  );
+  if (approvalId && !refs.some((ref) => ref.kind === "approval" && ref.id === approvalId)) {
+    refs.push({ kind: "approval", id: approvalId });
+  }
+
+  return refs;
+}
+
 function adaptLoopKind(value: unknown): LoopKind {
   const kind = asString(value).toLowerCase();
   if (kind.includes("research")) return "research";
@@ -156,7 +225,7 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
       const s = asRecord(stage);
       return {
         id: asString(s.id ?? s.stage_id ?? s.stageId, `${id}_stage_${stageIndex + 1}`),
-        name: asString(s.name ?? s.label ?? s.kind, `Stage ${stageIndex + 1}`),
+        name: asString(s.name ?? s.kind ?? s.stage ?? s.stage_name ?? s.stageName ?? s.label, `Stage ${stageIndex + 1}`),
         status: adaptStageStatus(s.status),
         startedAt: asString(s.startedAt ?? s.started_at),
         completedAt: asString(s.completedAt ?? s.completed_at),
@@ -174,6 +243,11 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
       timeoutPolicySource: "backend" as const,
     }];
   const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
+  const evidence = adaptLoopEvidence(item);
+  if (incidentId && !evidence.some((ref) => ref.kind === "incident" && ref.id === incidentId)) {
+    evidence.push({ kind: "incident", id: incidentId });
+  }
+  const explicitNextAction = adaptLoopNextAction(item.nextAction ?? item.next_action);
   return {
     id,
     loopKind: adaptLoopKind(item.loopKind ?? item.loop_kind ?? item.kind ?? item.title),
@@ -187,12 +261,16 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
     subjectName: asString(item.subjectName ?? item.subject_name ?? item.title ?? item.name, id),
     stages,
     currentStageId: asString(item.currentStageId ?? item.current_stage_id) || stages.find((stage) => stage.status === "running" || stage.status === "blocked")?.id,
-    nextAction: status === "blocked"
-      ? { kind: "awaiting_human_decision", label: "Resolve BFF loop blocker" }
-      : status === "running"
-        ? { kind: "automatic", label: "BFF loop running" }
-        : { kind: "none" },
-    evidence: incidentId ? [{ kind: "incident", id: incidentId }] : [],
+    nextAction: explicitNextAction ?? (
+      evidence.some((ref) => ref.kind === "approval")
+        ? { kind: "awaiting_approval", label: "Review approval" }
+        : status === "blocked"
+          ? { kind: "awaiting_human_decision", label: "Resolve BFF loop blocker" }
+          : status === "running"
+            ? { kind: "automatic", label: "BFF loop running" }
+            : { kind: "none" }
+    ),
+    evidence,
   };
 }
 
