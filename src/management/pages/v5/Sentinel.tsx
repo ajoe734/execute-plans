@@ -65,14 +65,6 @@ export const SentinelPage = () => {
     if (match) setActive(match);
   }, [params, findings.data]);
 
-  const restoreFindingTriggerFocus = () => {
-    const trigger = activeFindingTriggerRef.current;
-    if (!trigger) return;
-    window.requestAnimationFrame(() => {
-      if (trigger.isConnected) trigger.focus();
-    });
-  };
-
   const openFinding = (finding: SentinelFinding, trigger?: HTMLElement) => {
     activeFindingTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setActive(finding);
@@ -84,7 +76,6 @@ export const SentinelPage = () => {
       params.delete("finding");
       setParams(params, { replace: true });
     }
-    restoreFindingTriggerFocus();
   };
 
   const all = findings.data?.items ?? [];
@@ -183,7 +174,7 @@ export const SentinelPage = () => {
         </SkeletonThreshold>
       </PageBody>
 
-      <FindingDrawer finding={active} onClose={closeActive} onActed={findings.refresh} />
+      <FindingDrawer finding={active} onClose={closeActive} onActed={findings.refresh} triggerRef={activeFindingTriggerRef} />
     </>
   );
 };
@@ -191,8 +182,8 @@ export const SentinelPage = () => {
 // ---------- Finding drawer with remediation flow ----------
 
 const FindingDrawer = ({
-  finding, onClose, onActed,
-}: { finding: SentinelFinding | null; onClose: () => void; onActed: () => void }) => {
+  finding, onClose, onActed, triggerRef,
+}: { finding: SentinelFinding | null; onClose: () => void; onActed: () => void; triggerRef?: { current: HTMLElement | null } }) => {
   const t = useT();
   const [pendingEmergency, setPendingEmergency] = useState<RemediationAction | null>(null);
 
@@ -237,7 +228,14 @@ const FindingDrawer = ({
   return (
     <>
       <Sheet open={!!finding} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-xl overflow-y-auto"
+          onCloseAutoFocus={(e) => {
+            const el = triggerRef?.current;
+            if (el?.isConnected) { e.preventDefault(); el.focus(); }
+          }}
+        >
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Badge variant="outline" className={sevCls[finding.severity]}>{finding.severity}</Badge>

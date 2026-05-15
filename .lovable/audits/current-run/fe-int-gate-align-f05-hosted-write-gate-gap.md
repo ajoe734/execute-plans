@@ -163,3 +163,47 @@ Hosted asset check after push:
 
 Therefore hosted F05 rerun remains blocked on the Lovable dev deployment
 refresh, not on the spec or runtime gate code.
+
+## Owner Closeout
+
+Finalized: 2026-05-15T05:18:06Z
+Reviewer: Codex2
+
+Lovable dev has since refreshed to a bundle containing the runtime write-gate
+remediation. Codex2 review approved F05 after rerunning the hosted spec twice
+against `https://pantheon-dev.lovable.app` and the dev BFF with strict fallback
+and real writes enabled. Reviewer evidence is recorded in the Pantheon
+orchestration repo at:
+
+- `support/reviews/FE-INT-GATE-ALIGN-F05-codex2-review.md`
+- `support/evidence/FE-INT-GATE-ALIGN-F05-codex2-review/`
+
+Owner closeout re-ran the same focused hosted verification from this
+`execute-plans` branch:
+
+```bash
+PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+VITE_BFF_MODE=live \
+VITE_BFF_FALLBACK=strict \
+VITE_BFF_REAL_WRITES=true \
+npx playwright test e2e/04-sentinel-remediation.spec.ts --trace=on --reporter=list \
+  --output=/tmp/fe-int-gate-align-f05-closeout-run1
+```
+
+Result: `2 passed`.
+
+```bash
+PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+VITE_BFF_MODE=live \
+VITE_BFF_FALLBACK=strict \
+VITE_BFF_REAL_WRITES=true \
+npx playwright test e2e/04-sentinel-remediation.spec.ts --trace=on --reporter=list \
+  --output=/tmp/fe-int-gate-align-f05-closeout-run2
+```
+
+Result: `2 passed`.
+
+F05 is no longer blocked on the hosted deployment refresh. The remaining
+ME-STARTUP and strict-preview URL issues are tracked outside this task.

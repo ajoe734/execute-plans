@@ -20,6 +20,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -57,6 +58,26 @@ function authHeader(): string {
 
 function strictFallbackMode(): string {
   return process.env.VITE_BFF_FALLBACK || process.env.BFF_FALLBACK || "strict";
+}
+
+async function installRuntimeFallbackOverride(
+  page: Page,
+  fallback: "auto" | "strict",
+) {
+  await page.addInitScript((value) => {
+    const runtimeConfig = { VITE_BFF_FALLBACK: value, fallback: value };
+    Object.assign(window as unknown as Record<string, unknown>, {
+      __PANTHEON_BFF_RUNTIME__: runtimeConfig,
+      __PANTHEON_RUNTIME_CONFIG__: runtimeConfig,
+    });
+
+    try {
+      window.sessionStorage.setItem("pantheon.integration.fallback", value);
+      window.sessionStorage.setItem("pantheon.e2e.fallback", value);
+    } catch {
+      // Storage can be unavailable; runtime globals still cover bootstrap.
+    }
+  }, fallback);
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -181,6 +202,7 @@ test.describe("F01 startup session", () => {
     page,
   }) => {
     expect(strictFallbackMode()).toBe("strict");
+    await installRuntimeFallbackOverride(page, "strict");
 
     await page.goto(frontendUrl("/"), { waitUntil: "domcontentloaded" });
 
@@ -257,6 +279,7 @@ test.describe("F01 startup session", () => {
     page,
   }) => {
     expect(strictFallbackMode()).toBe("strict");
+    await installRuntimeFallbackOverride(page, "strict");
 
     let interceptedMeRequests = 0;
     const bffRequests: string[] = [];

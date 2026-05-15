@@ -66,14 +66,6 @@ export const ExecutionLoopPage = () => {
     () => items.find((r) => r.id === activeRunId) ?? null,
     [items, activeRunId],
   );
-  const restoreRunTriggerFocus = () => {
-    const trigger = activeRunTriggerRef.current;
-    if (!trigger) return;
-    window.requestAnimationFrame(() => {
-      if (trigger.isConnected) trigger.focus();
-    });
-  };
-
   const openRun = (id: string, trigger?: HTMLElement) => {
     activeRunTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setActiveRunId(id);
@@ -86,7 +78,6 @@ export const ExecutionLoopPage = () => {
     const next = new URLSearchParams(params);
     next.delete("run");
     setParams(next, { replace: true });
-    restoreRunTriggerFocus();
   };
 
   const running = items.filter((r) => r.status === "running").length;
@@ -182,7 +173,7 @@ export const ExecutionLoopPage = () => {
             : <div className="text-sm text-muted-foreground">{t("common.loading")}</div>}
         </div>
       </PageBody>
-      <LoopRunDrawer run={activeRun} onClose={closeRun} />
+      <LoopRunDrawer run={activeRun} onClose={closeRun} triggerRef={activeRunTriggerRef} />
     </>
   );
 };
