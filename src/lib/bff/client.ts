@@ -26,6 +26,10 @@ import {
   withLiveOrMock,
   liveStatus,
 } from "@/lib/bff-v1";
+import {
+  idempotencyKey as mintIdempotencyKey,
+  newCorrelationId,
+} from "@/lib/bff-v1/headers";
 import { normalizeLiveListResponse } from "@/lib/bff-v1/lists";
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import {
@@ -33,6 +37,11 @@ import {
   strictNotFoundAsUndefined,
   withStrictLiveOrMock,
 } from "@/lib/bff/liveRead";
+import {
+  commandClient,
+  type BackendCommandResponse,
+  type FinalCommandEnvelope,
+} from "@/lib/bff/commandClient";
 import * as seed from "@/mocks/seed";
 import type {
   OodaLoopPacket,
@@ -159,6 +168,52 @@ export type OodaPacketListQuery = {
   page_size?: number;
 };
 
+export type EvolutionReviewDecision = "approve" | "reject";
+
+export type EvolutionReviewSurfaceState = "fresh" | "stale" | "unavailable" | string;
+
+export type EvolutionReviewProjection = {
+  decision_id: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  target_version?: string | null;
+  action_type?: string | null;
+  decision_state?: string | null;
+  risk_level?: string | null;
+  created_at?: string | null;
+  approval_decision_id?: string | null;
+  proposed_changes?: Record<string, unknown>;
+  risk_assessment?: Record<string, unknown>;
+  required_approvals?: Array<Record<string, unknown>>;
+  review_chain?: Array<Record<string, unknown>>;
+  linked_incident_id?: string | null;
+  linked_postmortem_id?: string | null;
+  evidence_refs?: Array<Record<string, unknown>>;
+  rollback_followthrough?: Record<string, unknown> | null;
+  allowedActions: {
+    canApproveMutation: boolean;
+    canRejectMutation: boolean;
+    [key: string]: unknown;
+  };
+  meta?: {
+    snapshot_at?: string;
+    surfaces?: {
+      mutation_review?: EvolutionReviewSurfaceState | Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+};
+
+export type EvolutionReviewDecisionOptions = {
+  memo?: string;
+  approvalDecisionId?: string | null;
+  correlationId?: string;
+  idempotencyKey?: string;
+  headers?: Record<string, string>;
+  baseUrl?: string;
+};
+
 function oodaPacketList(
   path: string,
   query?: OodaPacketListQuery,
@@ -177,6 +232,92 @@ function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
     async () => undefined,
     adaptOodaPacketDetail,
     strictNotFoundAsUndefined,
+  );
+}
+
+function adaptEvolutionReview(body: unknown): EvolutionReviewProjection | undefined {
+  const rawReview = asObject(strictDataFrom(body) ?? body);
+  const decisionId = String(
+    rawReview.decision_id ?? rawReview.id ?? rawReview.evolution_decision_id ?? "",
+  ).trim();
+  if (!decisionId) return undefined;
+  const allowedActions = asObject(rawReview.allowedActions);
+  return {
+    ...rawReview,
+    decision_id: decisionId,
+    allowedActions: {
+      canApproveMutation: allowedActions.canApproveMutation === true,
+      canRejectMutation: allowedActions.canRejectMutation === true,
+      ...allowedActions,
+    },
+  } as EvolutionReviewProjection;
+}
+
+function evolutionReviewDetail(decisionId: string): Promise<EvolutionReviewProjection | undefined> {
+  return withStrictLiveOrMock<EvolutionReviewProjection | undefined, unknown>(
+    { method: "GET", path: paths.evolutionMutationReview(decisionId) },
+    async () => undefined,
+    adaptEvolutionReview,
+    strictNotFoundAsUndefined,
+  );
+}
+
+function evolutionReviewDecisionPayload(
+  decisionId: string,
+  decision: EvolutionReviewDecision,
+  opts: EvolutionReviewDecisionOptions,
+): FinalCommandEnvelope {
+  const cleanDecisionId = decisionId.trim();
+  const cleanApprovalDecisionId = String(opts.approvalDecisionId ?? "").trim() || undefined;
+  const memo = String(opts.memo ?? "").trim() || `Evolution decision ${decision}`;
+  const params = {
+    evolution_decision_id: cleanDecisionId,
+    approval_action: decision,
+    ...(cleanApprovalDecisionId ? {
+      approval_decision_id: cleanApprovalDecisionId,
+      approvalDecisionId: cleanApprovalDecisionId,
+    } : {}),
+    note: memo,
+    approval_rationale: memo,
+    frontend_source_route: paths.evolutionMutationReview(cleanDecisionId),
+  };
+
+  return {
+    command: "ApproveEvolutionDecision",
+    target: {
+      type: "EvolutionDecision",
+      id: cleanDecisionId,
+    },
+    action: decision,
+    params,
+    audit_context: {
+      reason: memo,
+      incident_id: null,
+    },
+    ...(cleanApprovalDecisionId ? { approvalDecisionId: cleanApprovalDecisionId } : {}),
+  };
+}
+
+async function decideEvolutionReview(
+  decisionId: string,
+  decision: EvolutionReviewDecision,
+  opts: EvolutionReviewDecisionOptions = {},
+): Promise<BackendCommandResponse> {
+  const cleanDecisionId = decisionId.trim();
+  if (!cleanDecisionId) {
+    throw new Error("Evolution review decision requires a decision id.");
+  }
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdempotencyKey();
+  return commandClient.submitCommand(
+    evolutionReviewDecisionPayload(cleanDecisionId, decision, opts),
+    {
+      correlationId,
+      idempotencyKey,
+      approvalDecisionId: opts.approvalDecisionId ?? undefined,
+      headers: opts.headers,
+      baseUrl: opts.baseUrl,
+    },
   );
 }
 
@@ -320,6 +461,11 @@ const oodaPackets = {
     oodaPacketList(paths.evolutionProgramOodaPackets(id), query),
 };
 
+const evolutionReviews = {
+  get: evolutionReviewDetail,
+  decide: decideEvolutionReview,
+};
+
 // ---------- Public surface ----------
 
 /** Canonical Management Console read surface — list + detail per family,
@@ -346,6 +492,7 @@ export const managementClient = {
   approvals,
   audit,
   oodaPackets,
+  evolutionReviews,
 } as const;
 
 export type ManagementFamily = keyof typeof managementClient;
