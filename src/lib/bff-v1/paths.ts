@@ -138,4 +138,11 @@ export const paths = {
   /** @deprecated Alias of `v5InterventionDecide(id)`. */
   v5InterventionDecision: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
   v5ExecutionPersonaHealth: () => `${BASE}/v5/execution/persona-health`,
+
+  // ---- Management OODA packet read surface ----
+  oodaPackets: () => `${BASE}/ooda/packets`,
+  oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
+  strategyOodaPackets: (id: string) => `${BASE}/strategies/${enc(id)}/ooda`,
+  runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
+  evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
 } as const;

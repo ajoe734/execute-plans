@@ -26,8 +26,19 @@ import {
   withLiveOrMock,
   liveStatus,
 } from "@/lib/bff-v1";
+import { normalizeLiveListResponse } from "@/lib/bff-v1/lists";
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
+import {
+  strictDataFrom,
+  strictNotFoundAsUndefined,
+  withStrictLiveOrMock,
+} from "@/lib/bff/liveRead";
 import * as seed from "@/mocks/seed";
+import type {
+  OodaLoopPacket,
+  OodaPacketDetail,
+  OodaPacketMeta,
+} from "@/lib/ooda/packets";
 import type {
   Strategy,
   Persona,
@@ -95,6 +106,78 @@ function liveOrMockDetail<T>(
     const mockFn = async (): Promise<T | undefined> => loader(id);
     return withLiveOrMock<T | undefined>({ method: "GET", path: pathFor(id) }, mockFn);
   };
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function emptyOodaPacketList(): ListEnvelope<OodaLoopPacket> {
+  return {
+    items: [],
+    cursor: {},
+    pageSize: 0,
+    totalCountExact: true,
+    estimatedTotal: 0,
+    meta: {
+      surfaces: {
+        ooda_packets: {
+          status: "unavailable",
+          source: "mock",
+          reason: "OODA packets are served only by the Pantheon OODA read surface.",
+        },
+      },
+    },
+  };
+}
+
+function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
+  const envelope = asObject(body);
+  const rawPacket = asObject(strictDataFrom(body) ?? body);
+  const id = String(rawPacket.packet_id ?? rawPacket.id ?? "").trim();
+  if (!id) return undefined;
+  const packet = {
+    ...rawPacket,
+    packet_id: id,
+  } as OodaLoopPacket;
+  const meta = asObject(envelope.meta) as OodaPacketMeta;
+  return {
+    packet,
+    meta: Object.keys(meta).length > 0 ? meta : undefined,
+  };
+}
+
+export type OodaPacketListQuery = {
+  status?: string;
+  stage?: string;
+  strategy_id?: string;
+  runtime_id?: string;
+  evolution_program_id?: string;
+  page_token?: string;
+  page_size?: number;
+};
+
+function oodaPacketList(
+  path: string,
+  query?: OodaPacketListQuery,
+): Promise<ListEnvelope<OodaLoopPacket>> {
+  const queryParams = query as Record<string, string | number | undefined> | undefined;
+  return withStrictLiveOrMock<ListEnvelope<OodaLoopPacket>, unknown>(
+    { method: "GET", path, query: queryParams },
+    async () => emptyOodaPacketList(),
+    (data) => normalizeLiveListResponse<OodaLoopPacket>(data, "loopRun"),
+  );
+}
+
+function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
+  return withStrictLiveOrMock<OodaPacketDetail | undefined, unknown>(
+    { method: "GET", path: paths.oodaPacket(id) },
+    async () => undefined,
+    adaptOodaPacketDetail,
+    strictNotFoundAsUndefined,
+  );
 }
 
 // ---------- Per-family adapters ----------
@@ -225,6 +308,18 @@ const audit = {
   list:  bffV1Lists.audit as () => Promise<ListEnvelope<AuditEvent>>,
 };
 
+const oodaPackets = {
+  list: (query?: OodaPacketListQuery): Promise<ListEnvelope<OodaLoopPacket>> =>
+    oodaPacketList(paths.oodaPackets(), query),
+  get: oodaPacketDetail,
+  forStrategy: (id: string, query?: Omit<OodaPacketListQuery, "strategy_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
+    oodaPacketList(paths.strategyOodaPackets(id), query),
+  forRuntime: (id: string, query?: Omit<OodaPacketListQuery, "runtime_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
+    oodaPacketList(paths.runtimeOodaPackets(id), query),
+  forEvolutionProgram: (id: string, query?: Omit<OodaPacketListQuery, "evolution_program_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
+    oodaPacketList(paths.evolutionProgramOodaPackets(id), query),
+};
+
 // ---------- Public surface ----------
 
 /** Canonical Management Console read surface — list + detail per family,
@@ -250,6 +345,7 @@ export const managementClient = {
   incidents,
   approvals,
   audit,
+  oodaPackets,
 } as const;
 
 export type ManagementFamily = keyof typeof managementClient;
@@ -260,6 +356,7 @@ export const MANAGEMENT_FAMILIES: readonly ManagementFamily[] = [
   "rebalances", "deployments", "evolution", "research", "artifacts",
   "tools", "mcpServers", "mcpTools", "skills", "channels",
   "jobs", "runtimes", "alerts", "incidents", "approvals", "audit",
+  "oodaPackets",
 ] as const;
 
 /** Snapshot of the current live-status, useful for UI banners that show

@@ -29,6 +29,7 @@ describe("managementClient — coverage", () => {
       "rebalances", "deployments", "evolution", "research", "artifacts",
       "tools", "mcpServers", "mcpTools", "skills", "channels",
       "jobs", "runtimes", "alerts", "incidents", "approvals", "audit",
+      "oodaPackets",
     ] as const;
     for (const family of required) {
       expect(managementClient).toHaveProperty(family);
@@ -43,6 +44,7 @@ describe("managementClient — coverage", () => {
       "rebalances", "deployments", "evolution", "research", "artifacts",
       "tools", "mcpServers", "mcpTools", "skills", "channels",
       "jobs", "runtimes", "alerts", "incidents", "approvals",
+      "oodaPackets",
     ] as const;
     for (const family of entityRegistries) {
       const adapter = managementClient[family] as { get?: unknown };
@@ -82,6 +84,13 @@ describe("managementClient — DTO normalization (mock mode)", () => {
     expect(env.cursor).toEqual({});
   });
 
+  it("oodaPackets.list does not invent seed packets in mock mode", async () => {
+    const env = await managementClient.oodaPackets.list();
+    expect(env.items).toEqual([]);
+    expect(env.totalCountExact).toBe(true);
+    expect(env.meta?.surfaces).toHaveProperty("ooda_packets");
+  });
+
   it("strategies.get returns a domain object or undefined", async () => {
     const list = await managementClient.strategies.list();
     if (list.items.length === 0) return; // empty seed in some modes
@@ -91,6 +100,99 @@ describe("managementClient — DTO normalization (mock mode)", () => {
     expect(detail?.id).toBe(id);
     const missing = await managementClient.strategies.get("strat_does_not_exist_xyz");
     expect(missing).toBeUndefined();
+  });
+});
+
+describe("managementClient — OODA packet live adapter", () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://example.test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+    liveStatus._reset();
+  });
+
+  it("reads packet detail from /bff/ooda/packets/{id} and preserves source meta", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        data: {
+          packet_id: "ooda-live-001",
+          loop_type: "paper_strategy",
+          status: "closed",
+          environment: "paper",
+          observe: { source_refs: ["source://rs-003"] },
+          orient: { evidence_bundle_refs: ["evidence://orientation"] },
+          decide: { approval_decision_id: "approval-paper-001" },
+          act: { runtime_binding_id: "runtime-binding-paper-001", live_capital_side_effects: false },
+          learn: { telemetry_refs: ["telemetry://post-action"] },
+        },
+        meta: {
+          snapshot_at: "2026-05-15T16:00:00Z",
+          surfaces: {
+            ooda_packet_detail: { status: "ok", source: "service_store" },
+          },
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const detail = await managementClient.oodaPackets.get("ooda-live-001");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/bff/ooda/packets/ooda-live-001");
+    expect(detail?.packet.packet_id).toBe("ooda-live-001");
+    expect(detail?.meta?.surfaces?.ooda_packet_detail?.source).toBe("service_store");
+  });
+
+  it("reads OODA packet list and related packet routes without falling back to seed data", async () => {
+    const responseBody = {
+      items: [
+        {
+          packet_id: "ooda-live-002",
+          loop_type: "paper_strategy",
+          status: "acted",
+          environment: "paper",
+        },
+      ],
+      page_info: { total: 1 },
+      meta: {
+        surfaces: {
+          ooda_packets: { status: "ok", source: "service_store" },
+        },
+      },
+    };
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    globalThis.fetch = fetchMock;
+
+    const listed = await managementClient.oodaPackets.list({ status: "acted", page_size: 5 });
+    const strategy = await managementClient.oodaPackets.forStrategy("strat-rs-003");
+    const runtime = await managementClient.oodaPackets.forRuntime("runtime-paper-001");
+    const evolution = await managementClient.oodaPackets.forEvolutionProgram("evo-program-001");
+
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0].packet_id).toBe("ooda-live-002");
+    expect(listed.estimatedTotal).toBe(1);
+    expect(strategy.items[0].packet_id).toBe("ooda-live-002");
+    expect(runtime.items[0].packet_id).toBe("ooda-live-002");
+    expect(evolution.items[0].packet_id).toBe("ooda-live-002");
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://example.test/bff/ooda/packets?status=acted&page_size=5",
+      "https://example.test/bff/strategies/strat-rs-003/ooda",
+      "https://example.test/bff/runtimes/runtime-paper-001/ooda",
+      "https://example.test/bff/evolution-programs/evo-program-001/ooda",
+    ]);
   });
 });
 
