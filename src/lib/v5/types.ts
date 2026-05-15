@@ -37,6 +37,7 @@ export interface LoopStage {
 export interface LoopRunNextAction {
   kind: "automatic" | "awaiting_approval" | "awaiting_human_decision" | "none";
   label?: string;
+  href?: string;
   etaMs?: number;
 }
 

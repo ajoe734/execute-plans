@@ -6,20 +6,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User } from "lucide-react";
-import { usePlatform, type Locale, type UserRole } from "@/platform/store";
+import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
+import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
+import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
-
-const roles: UserRole[] = [
-  "admin", "research_lead", "risk_officer", "capital_manager",
-  "strategy_manager", "system_operator", "reviewer", "capability_admin",
-  "analyst", "trader", "ai_trainer",
-];
 
 type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified";
 
@@ -28,8 +23,9 @@ export const TopBar = () => {
   const navigate = useNavigate();
   const loc = useLocation();
   const isManagement = loc.pathname.startsWith("/management");
-  const { locale, setLocale, role, setRole } = usePlatform();
+  const { locale, setLocale } = usePlatform();
   const live = useLiveStatus();
+  const { me, loading: meLoading, error: meError } = useMe();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
@@ -180,19 +176,37 @@ export const TopBar = () => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Role */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1"><User className="h-4 w-4" /> {role}</Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>{t("topbar.role")}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {roles.map((r) => (
-            <DropdownMenuItem key={r} onClick={() => setRole(r)}>{r}</DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* User / Session — sourced from /bff/me; 401 surfaces auth error, never mock user */}
+      {meLoading && !me ? (
+        <Button variant="ghost" size="sm" disabled className="gap-1">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </Button>
+      ) : meError || !me ? (
+        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
+          <Lock className="h-4 w-4" />
+          <span className="text-xs">Auth</span>
+        </Button>
+      ) : me ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1">
+              <User className="h-4 w-4" />
+              {String(
+                (me.user as { displayName?: string; display_name?: string }).displayName
+                  ?? (me.user as { display_name?: string }).display_name
+                  ?? me.user.id
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>{t("topbar.role")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {me.roles.map((r) => (
+              <DropdownMenuItem key={r} disabled>{r}</DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </header>
   );
 };

@@ -14,21 +14,16 @@
 import { bffFetch, type BffRequest } from "./client";
 import { BffError, makeBffError } from "./errors";
 import { liveStatus, shouldUseLive } from "./liveStatus";
+import { readBffEnv } from "./runtimeEnv";
 
 export type FallbackMode = "auto" | "strict";
 
 const truthy = (value: unknown): boolean =>
   ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
 function detectFallbackMode(): FallbackMode {
   try {
-    const env = readEnv();
+    const env = readBffEnv();
     return env?.VITE_BFF_FALLBACK === "strict" ? "strict" : "auto";
   } catch {
     return "auto";
@@ -37,7 +32,7 @@ function detectFallbackMode(): FallbackMode {
 
 export function realWritesEnabled(): boolean {
   try {
-    const env = readEnv();
+    const env = readBffEnv();
     return truthy(env?.VITE_BFF_REAL_WRITES);
   } catch {
     return false;

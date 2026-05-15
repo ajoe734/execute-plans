@@ -216,9 +216,18 @@ async function installB04Routes(page: Page): Promise<RouteCalls> {
     requestBodies: [],
   };
 
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname.startsWith("/bff/v5/sentinel/findings")) {
+      calls.findingGets += 1;
+    }
+  });
+
   await page.addInitScript((token) => {
     window.localStorage.setItem("pantheon_operator_token", token);
     window.localStorage.setItem("pantheon.bff.bearerToken", token);
+    window.sessionStorage.setItem("pantheon.integration.realWrites", "true");
+    window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
   }, authToken());
 
   await page.route("**/*", async (route) => {
@@ -305,7 +314,6 @@ async function installB04Routes(page: Page): Promise<RouteCalls> {
     }
 
     if (request.method() === "GET" && path.startsWith("/bff/v5/sentinel/findings")) {
-      calls.findingGets += 1;
       await fulfillJson(route, {
         items: [sentinelFinding],
         count: 1,

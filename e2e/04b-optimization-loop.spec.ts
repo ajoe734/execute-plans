@@ -9,7 +9,7 @@
  *      display-only mock labels.
  *
  * Env:
- *   FRONTEND_BASE_URL or PLAYWRIGHT_BASE_URL
+ *   PANTHEON_FE_BASE_URL, FRONTEND_BASE_URL, or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
  */
 
@@ -62,6 +62,7 @@ type StageRecord = {
 
 function frontendUrl(path = "/"): string {
   const base =
+    process.env.PANTHEON_FE_BASE_URL ||
     process.env.FRONTEND_BASE_URL ||
     process.env.PLAYWRIGHT_BASE_URL ||
     DEFAULT_FRONTEND_BASE_URL;
@@ -658,17 +659,20 @@ async function clickAwaitingApprovalPath(page: Page): Promise<void> {
   const approvalPattern = new RegExp(escapeRegExp(APPROVAL_ID), "i");
   const hiqPattern = new RegExp(escapeRegExp(HIQ_ID), "i");
   const statusPattern = /awaiting approval|awaiting_approval|pending approval|review approval|open hiq/i;
+  const row = page.locator("tbody tr").filter({ hasText: REBALANCE_ID }).first();
+
+  await expect(row, "awaiting approval control must be on the rebalance row").toBeVisible();
 
   const clicked = await clickFirstVisible([
-    page.getByRole("link", { name: approvalPattern }),
-    page.getByRole("link", { name: hiqPattern }),
-    page.getByRole("link", { name: statusPattern }),
-    page.getByRole("button", { name: approvalPattern }),
-    page.getByRole("button", { name: hiqPattern }),
-    page.getByRole("button", { name: statusPattern }),
-    page.locator(`a[href*="approvals"][href*="${APPROVAL_ID}"]`),
-    page.locator(`a[href*="interventions"][href*="${HIQ_ID}"]`),
-    page.locator(`a[href*="hiq"][href*="${HIQ_ID}"]`),
+    row.getByRole("link", { name: approvalPattern }),
+    row.getByRole("link", { name: hiqPattern }),
+    row.getByRole("link", { name: statusPattern }),
+    row.getByRole("button", { name: approvalPattern }),
+    row.getByRole("button", { name: hiqPattern }),
+    row.getByRole("button", { name: statusPattern }),
+    row.locator(`a[href*="approvals"][href*="${APPROVAL_ID}"]`),
+    row.locator(`a[href*="interventions"][href*="${HIQ_ID}"]`),
+    row.locator(`a[href*="hiq"][href*="${HIQ_ID}"]`),
   ]);
 
   expect(clicked, "awaiting approval must expose an Approvals or HIQ control").toBe(
@@ -737,9 +741,15 @@ test.describe("F04 optimization loop timeline", () => {
   });
 
   test("awaiting approval links to Approvals or HIQ", async ({ page }) => {
-    const calls = await installC01Routes(page);
+    await installC01Routes(page);
 
     await gotoOptimizationLoop(page);
+    await expectAnyVisibleText(
+      page,
+      [/awaiting approval/i, /awaiting_approval/i, /pending approval/i],
+      "approval stage",
+    );
+    await expect(page.getByText(REBALANCE_ID, { exact: false })).toBeVisible();
     await clickAwaitingApprovalPath(page);
 
     await expect
@@ -750,8 +760,7 @@ test.describe("F04 optimization loop timeline", () => {
           return (
             /\/management\/approvals(?:\/|$)/.test(path) ||
             /\/management\/interventions(?:\/|$)/.test(path) ||
-            /\/management\/hiq(?:\/|$)/.test(path) ||
-            [...calls].some((calledPath) => isApprovalPath(calledPath) || isHiqPath(calledPath))
+            /\/management\/hiq(?:\/|$)/.test(path)
           );
         },
         {

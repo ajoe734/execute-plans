@@ -69,6 +69,22 @@ const asStringArray = (value: unknown): string[] => {
   return value.map((item) => asString(item)).filter(Boolean);
 };
 
+const asManagementHref = (value: unknown): string | undefined => {
+  const href = asString(value);
+  if (!href) return undefined;
+  if (href.startsWith("/management/")) return href;
+  if (href.startsWith("management/")) return `/${href}`;
+  return undefined;
+};
+
+const firstManagementHref = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    const href = asManagementHref(value);
+    if (href) return href;
+  }
+  return undefined;
+};
+
 const itemsFrom = (body: unknown): unknown[] => {
   return strictItemsFrom(body);
 };
@@ -145,7 +161,7 @@ function adaptLoopNextAction(value: unknown): LoopRunNextAction | undefined {
   if (!rawKind) return undefined;
 
   const kind: LoopRunNextAction["kind"] =
-    ["awaiting_approval", "pending_approval", "approval"].includes(rawKind)
+    ["awaiting_approval", "pending_approval", "approval"].includes(rawKind) || rawKind.includes("approval")
       ? "awaiting_approval"
       : ["awaiting_human_decision", "human_decision", "manual_decision"].includes(rawKind)
         ? "awaiting_human_decision"
@@ -154,12 +170,22 @@ function adaptLoopNextAction(value: unknown): LoopRunNextAction | undefined {
           : "none";
   const label = asString(item.label ?? item.name ?? item.title);
   const etaMs = Number(item.etaMs ?? item.eta_ms);
+  const href = firstManagementHref(
+    item.href,
+    item.url,
+    item.to,
+    item.route,
+    item.action_href,
+    item.actionHref,
+  );
 
-  return {
+  const action: LoopRunNextAction = {
     kind,
-    label: label || undefined,
-    etaMs: Number.isFinite(etaMs) ? etaMs : undefined,
   };
+  if (label) action.label = label;
+  if (href) action.href = href;
+  if (Number.isFinite(etaMs)) action.etaMs = etaMs;
+  return action;
 }
 
 const LOOP_EVIDENCE_KINDS = new Set<LoopRunEvidenceRef["kind"]>([
@@ -205,6 +231,14 @@ function adaptLoopEvidence(item: UnknownRecord): LoopRunEvidenceRef[] {
   return refs;
 }
 
+function approvalIdFromEvidence(evidence: LoopRunEvidenceRef[]): string | undefined {
+  return evidence.find((ref) => ref.kind === "approval")?.id;
+}
+
+function approvalHrefFromId(id: string | undefined): string | undefined {
+  return id ? `/management/approvals?approval=${encodeURIComponent(id)}` : undefined;
+}
+
 function adaptLoopKind(value: unknown): LoopKind {
   const kind = asString(value).toLowerCase();
   if (kind.includes("research")) return "research";
@@ -219,7 +253,11 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
   const status = adaptLoopStatus(item.status ?? item.runStatus ?? item.run_status);
   const startedAt = isoFrom(item.startedAt ?? item.started_at ?? activePeriod.start ?? item.created_at ?? item.createdAt);
   const updatedAt = isoFrom(item.updatedAt ?? item.updated_at ?? item.resolved_at ?? item.resolvedAt ?? activePeriod.end ?? startedAt);
-  const liveStages = Array.isArray(item.stages) ? item.stages : [];
+  const liveStages = Array.isArray(item.stages)
+    ? item.stages
+    : Array.isArray(item.timeline)
+      ? item.timeline
+      : [];
   const stages = liveStages.length > 0
     ? liveStages.map((stage, stageIndex) => {
       const s = asRecord(stage);
@@ -242,15 +280,58 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
       completedAt: status === "succeeded" || status === "failed" || status === "cancelled" ? updatedAt : undefined,
       timeoutPolicySource: "backend" as const,
     }];
+  const approval = asRecord(item.approval);
+  const links = asRecord(item.links);
+  const approvalLinks = asRecord(approval.links);
+  const approvalStage = liveStages
+    .map(asRecord)
+    .find((stage) => {
+      const entityType = asString(stage.entity_type ?? stage.entityType).toLowerCase();
+      const kind = asString(stage.kind ?? stage.stage ?? stage.name).toLowerCase();
+      return entityType === "approval" || kind.includes("approval");
+    });
   const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
   const evidence = adaptLoopEvidence(item);
   if (incidentId && !evidence.some((ref) => ref.kind === "incident" && ref.id === incidentId)) {
     evidence.push({ kind: "incident", id: incidentId });
   }
+  const stageApprovalId = asString(
+    approvalStage?.entity_id ?? approvalStage?.entityId ?? approvalStage?.approval_id ?? approvalStage?.approvalId,
+  );
+  if (stageApprovalId && !evidence.some((ref) => ref.kind === "approval" && ref.id === stageApprovalId)) {
+    evidence.push({ kind: "approval", id: stageApprovalId });
+  }
   const explicitNextAction = adaptLoopNextAction(item.nextAction ?? item.next_action);
+  const approvalId = approvalIdFromEvidence(evidence);
+  const approvalHref = firstManagementHref(
+    explicitNextAction?.href,
+    item.action_href,
+    item.actionHref,
+    links.approval,
+    links.approvals,
+    approvalLinks.approval,
+    approvalLinks.approvals,
+    approvalStage?.action_href,
+    approvalStage?.actionHref,
+    approvalHrefFromId(approvalId),
+  );
+  const nextAction = explicitNextAction
+    ? {
+      ...explicitNextAction,
+      href: explicitNextAction.href ?? (explicitNextAction.kind === "awaiting_approval" ? approvalHref : undefined),
+    }
+    : (
+      approvalId
+        ? { kind: "awaiting_approval" as const, label: "Review approval", href: approvalHref }
+        : status === "blocked"
+          ? { kind: "awaiting_human_decision" as const, label: "Resolve BFF loop blocker" }
+          : status === "running"
+            ? { kind: "automatic" as const, label: "BFF loop running" }
+            : { kind: "none" as const }
+    );
   return {
     id,
-    loopKind: adaptLoopKind(item.loopKind ?? item.loop_kind ?? item.kind ?? item.title),
+    loopKind: adaptLoopKind(item.loopKind ?? item.loop_kind ?? item.loopFamily ?? item.loop_family ?? item.kind ?? item.title),
     status,
     startedAt,
     updatedAt,
@@ -261,15 +342,7 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
     subjectName: asString(item.subjectName ?? item.subject_name ?? item.title ?? item.name, id),
     stages,
     currentStageId: asString(item.currentStageId ?? item.current_stage_id) || stages.find((stage) => stage.status === "running" || stage.status === "blocked")?.id,
-    nextAction: explicitNextAction ?? (
-      evidence.some((ref) => ref.kind === "approval")
-        ? { kind: "awaiting_approval", label: "Review approval" }
-        : status === "blocked"
-          ? { kind: "awaiting_human_decision", label: "Resolve BFF loop blocker" }
-          : status === "running"
-            ? { kind: "automatic", label: "BFF loop running" }
-            : { kind: "none" }
-    ),
+    nextAction,
     evidence,
   };
 }

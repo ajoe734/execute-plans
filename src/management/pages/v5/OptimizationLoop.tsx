@@ -31,6 +31,8 @@ const stageDotCls: Record<string, string> = {
   skipped: "bg-muted-foreground/30",
 };
 
+const approvalHref = (approvalId: string) => `/management/approvals?approval=${encodeURIComponent(approvalId)}`;
+
 export const OptimizationLoopPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -92,6 +94,12 @@ export const OptimizationLoopPage = () => {
             <tbody>
               {items.map((r) => {
                 const approvalEv = r.evidence?.find((e) => e.kind === "approval");
+                const nextActionLabel = r.nextAction?.label ?? r.nextAction?.kind ?? "—";
+                const nextActionHref = r.nextAction?.href ?? (
+                  r.nextAction?.kind === "awaiting_approval" && approvalEv
+                    ? approvalHref(approvalEv.id)
+                    : undefined
+                );
                 return (
                   <tr key={r.id} className="border-t border-border">
                     <td className="px-3 py-2">
@@ -113,10 +121,14 @@ export const OptimizationLoopPage = () => {
                         {r.stages.map((s) => s.name).join(" → ")}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.nextAction?.label ?? r.nextAction?.kind ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      {nextActionHref
+                        ? <Link to={nextActionHref} className="text-primary hover:underline">{nextActionLabel}</Link>
+                        : <span className="text-muted-foreground">{nextActionLabel}</span>}
+                    </td>
                     <td className="px-3 py-2">
                       {approvalEv
-                        ? <Link to="/management/approvals" className="text-mono text-xs hover:underline">{approvalEv.id}</Link>
+                        ? <Link to={approvalHref(approvalEv.id)} className="text-mono text-xs hover:underline" aria-label={`Open approval ${approvalEv.id}`}>{approvalEv.id}</Link>
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
