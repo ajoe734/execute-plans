@@ -36,9 +36,10 @@ const timeoutTone: Record<string, string> = {
 interface Props {
   run: LoopRun | null;
   onClose: () => void;
+  triggerRef?: { current: HTMLElement | null };
 }
 
-export const LoopRunDrawer = ({ run, onClose }: Props) => {
+export const LoopRunDrawer = ({ run, onClose, triggerRef }: Props) => {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
@@ -77,7 +78,14 @@ export const LoopRunDrawer = ({ run, onClose }: Props) => {
 
   return (
     <Sheet open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl overflow-y-auto"
+        onCloseAutoFocus={(e) => {
+          const el = triggerRef?.current;
+          if (el?.isConnected) { e.preventDefault(); el.focus(); }
+        }}
+      >
         {run && (
           <>
             <SheetHeader>
