@@ -40,9 +40,9 @@
     /* Pantheon environments */
     --env-research: 217 80% 38%;
     --env-research-bg: 217 91% 95%;
-    --env-paper: 38 92% 50%;
+    --env-paper: 38 92% 27%;
     --env-paper-bg: 38 92% 92%;
-    --env-live: 142 71% 45%;
+    --env-live: 142 70% 25%;
     --env-live-bg: 142 60% 92%;
     --env-live-accent: 0 75% 50%;
 
@@ -66,12 +66,12 @@
     --focus-ring-offset: 2px;
 
     /* Status */
-    --status-pending: 220 10% 46%;
+    --status-pending: 220 13% 33%;
     --status-running: 217 80% 38%;
     --status-success: 142 70% 25%;
     --status-warning: 38 92% 27%;
     --status-failed: 0 75% 38%;
-    --status-paused: 280 65% 60%;
+    --status-paused: 280 60% 34%;
 
     /* Sidebar */
     --sidebar-background: 222 47% 11%;
@@ -130,10 +130,14 @@
     --bucket-5: 0 70% 62%;
     --focus-ring-color: 210 90% 65%;
     --env-research: 217 91% 70%;
+    --env-paper: 38 90% 66%;
+    --env-live: 142 70% 62%;
+    --status-pending: 220 10% 72%;
     --status-running: 217 91% 70%;
     --status-success: 142 70% 62%;
     --status-warning: 38 90% 66%;
     --status-failed: 0 75% 68%;
+    --status-paused: 280 65% 72%;
 
     --sidebar-background: 222 50% 4%;
     --sidebar-foreground: 220 14% 80%;
