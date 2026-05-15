@@ -115,7 +115,7 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
     id,
     source: bffInterventionSource(kind),
     severity: bffInterventionSeverity(kind),
-    title: `${kind.replaceAll("_", " ")} · ${targetType}:${targetId}`,
+    title: `${kind.replace(/_/g, " ")} · ${targetType}:${targetId}`,
     summary: asString(item.description ?? item.summary ?? item.reason),
     createdAt: triggeredAt,
     updatedAt,

@@ -175,7 +175,7 @@ describe("decideApproval mock branch", () => {
     const seed = await import("@/mocks/seed");
     const ap = seed.approvals.find((a) => a.id === "ap_303")!;
     ap.state = "pending";
-    ap.stages?.forEach((s) => { s.state = "pending"; delete (s as Record<string,unknown>).decidedAt; });
+    ap.stages?.forEach((s) => { s.state = "pending"; delete (s as unknown as Record<string,unknown>).decidedAt; });
     const env = await decideApproval("ap_303", "approve", "lgtm");
     expect(env.ok).toBe(true);
     expect(env.data.approvalId).toBe("ap_303");
