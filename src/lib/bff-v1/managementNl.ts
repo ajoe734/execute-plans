@@ -6,7 +6,12 @@ import {
   type ManagementNlAnswer, type ManagementNlAsk, type ManagementNlIntent,
   classifyIntent,
 } from "@/lib/v5/management/nl";
-import { BffError } from "@/lib/bff-v1";
+function nlError(code: "FEATURE_DISABLED", message: string): Error {
+  const e = new Error(message);
+  (e as Error & { code?: string }).code = code;
+  e.name = "ManagementNlError";
+  return e;
+}
 
 export interface ManagementNlEnv {
   /** "fixed_mock" only in Phase 1 (per design ruling §1). */
