@@ -1,110 +1,114 @@
-## 目標
 
-由 FE 端直接把 B 組 backport 規格寫進 spec 檔（不再等 Planner），並輸出**現階段完整版規格快照** `.lovable/spec/current/`，作為唯一最新對外 SoT。同步整合 A/C/D 狀態進單一 audit 表。
+# Pantheon Management 改版實作計畫（規格 2026-05-20 v1）
 
-## 為什麼可以由 FE 直接做
+## 0. 規格已通讀，先列釐清問題（建議在 M0 之前回覆）
 
-- B1/B2/B3 的內容都已在 `.lovable/feedback/2026-05-09-addendum/FE_Blueprint_Gap_Missing_Spec_Addendum_2026-05-09.md` 被 Planner APPROVED
-- FE 端 TS artifacts 早已實作（`errorCodes.ts` 26 條、`bff-v1/dto.ts` `ActionCommandStatus` + `EVIDENCE_CAPABILITY_MAP`、`bff-v1/sse/payloads.ts` `ApprovalEvent`/`AskEvent`）
-- 只剩把這些「碼即規格」回灌到 markdown / OpenAPI YAML / AsyncAPI markdown
+1. **NL Console 後端**：第 7 章 `POST /bff/management/nl/ask` Phase 1 是否要先接 Lovable AI Gateway（`google/gemini-2.5-flash`）做 stub 回答，還是純前端 fixed-mock？我預設 **mock-only**（避免在 strict 模式打雷），等 BFF endpoint 上線再切換。
+2. **Persona Intent Traces 隱私**：規格說「不可顯示原始私密文字」。我打算把 `userIntentSummary` 視為已 redact 的欄位，原始 prompt 一律不從 BFF 取回；UI 只顯示三種 visibility（summary / redacted / restricted）。可以嗎？
+3. **Trading Pulse 比較基準**：`baselineLabel` 規格沒定義固定值。我建議枚舉 `previous_artifact | 7d_rolling | last_canary | last_review`。需要其他選項嗎？
+4. **EP5 / Broker Live / Capital Live / BFF HA / Strict Publish 五頁**：規格 §4.1 列出路由但 §6 沒給 detail spec，只在 §12 Pack M3 列任務。我會以「readiness checklist + EvidencePacket list + 缺項 blockers」三段式作骨架，detail 等後續 spec。OK？
+5. **歸檔位置**：擬把上傳檔 copy 至 `.lovable/spec/management-2026-05-20/Pantheon_Management_Lovable_Spec_2026-05-20.md`，並在 `.lovable/spec/INDEX.md` 與 `mem://index.md` 加入引用。可以嗎？
 
-## 變更清單
+> 若無回覆，我會以上面預設方案進行。
 
-### 1. Pack D markdown backport（normative spec）
+---
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md`**
-- D21 ErrorCode master：列出 26 條 canonical（補 RESOURCE_NOT_FOUND / APPROVAL_REQUIRED / CONFIRM_TOKEN_REVOKED）
-- §3.1 ErrorEnvelope 範例對齊 26 條
+## 1. 範圍與不變式
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_SSE_Event_Contract.md`**
-- §1 SseEventEnvelope：`correlationId: string`（required，不再 optional）
-- §2 channel 清單加 `approval` / `ask`（first-class）
-- §3 ApprovalEvent 4 子型別（created / stage.changed / decided / sla.escalated）
-- §4 AskEvent 6 子型別（session.started / message.delta / tool.called / message.completed / session.completed / session.failed）
+依規格 §2 與 §13，本次改版 **不刪既有頁**，只重排 IA 並新增一線監控頁；所有寫入仍走 `bff-v1` facade + HighRiskConfirm + `VITE_BFF_REAL_WRITES=false` gate；strict 模式禁止 silent seed。
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_Permission_Contract.md`**
-- 新增 §EvidenceKind Capability Map：19 canonical + 3 legacy alias 對應 capability（依 addendum §B3.6 表）
+對應已有資產：
+- `src/management/pages/v5/ControlRoom.tsx` → 改造為 OneRingCockpit
+- `src/management/pages/v5/Interventions.tsx` + `RiskCenter.tsx` + `GovernanceQueuePage` → 整併入 HumanInbox
+- `src/lib/bff-v1/v5.ts`（`controlRoom / loops / personas / strategies`）作為 Phase 1 read-model 來源
+- `src/lib/bff-v1/lists.ts`、`approvals`、`alerts`、`incidents` 等 facade 已存在
 
-### 2. OpenAPI / AsyncAPI 回灌
+---
 
-**`.lovable/feedback/2026-05-07-final/Pantheon_BFF_OpenAPI_3_1.yaml`**
-- `components.schemas.ActionCommandStatus`：named enum [accepted, queued, completed]
-- 所有 inline `enum: [accepted, queued, completed]` 改 `$ref`
-- `components.schemas.ErrorCode`：26 條 enum
+## 2. 實作順序（6 個 pack + M0 歸檔）
 
-**`.lovable/feedback/2026-05-07-final/Pantheon_BFF_AsyncAPI_SSE.md`**
-- envelope `correlationId` required
-- channels.approval / channels.ask 章節 + payload schema
-- EvidenceKind 19+3 章節 + 提示 backend SHOULD NOT 發 legacy alias
+### Pack M0 — 歸檔 + 釐清
+- 複製規格至 `.lovable/spec/management-2026-05-20/`
+- 更新 `.lovable/spec/INDEX.md` 與 `mem://index.md` Core 段落
+- 在 `.lovable/audits/` 新增 `mgmt-revamp-2026-05-20-plan.md` 追蹤表
 
-### 3. 現階段完整版規格快照（新目錄）
+### Pack M1 — IA + Navigation（基礎，先落地）
+- `src/App.tsx`：新增 13 條路由（§4.1），`/management` index → `Navigate to /management/one-ring`，保留 `/management/control-room` alias 同元件
+- `src/management/ManagementLayout.tsx`：依 §5.1 六個 group 重排（Oversight / LiveReadiness / AdvancedRegistry / Operations / Capabilities / System）
+- `src/i18n/locales/{en-US,zh-TW}.ts`：補 §10 全部 keys；跑 `scripts/check-i18n.ts`
+- 新頁先以 `PageStub` 占位（讓路由 / nav / i18n 先綠）
 
-**`.lovable/spec/current/INDEX.md`** — 唯一最新入口，列：
-- normative 層：v4 + Pack D（含本次 backport）
-- 升級層：v5 SA + SD
-- BFF Contract：2026-05-07 Final（含本次 backport）
-- 已 supersede：v3、v2、v1
+### Pack M2 — 核心七頁（最大工作量，按依賴順序）
 
-**`.lovable/spec/current/Pantheon_Spec_Current_2026-05-10.md`** — 單檔 consolidated：
-- §1 Source-of-truth 樹狀清單 + 衝突優先序
-- §2 Entity / Status / Transition 全集（從 Pack D StateMachine_Contract 摘要）
-- §3 BFF Contract 摘要（Final + ActionCommandStatus + 26 ErrorCode）
-- §4 SSE Contract 摘要（correlationId required、20 channels、ApprovalEvent/AskEvent）
-- §5 Permission Contract 摘要（12 role × entity × action + EvidenceKind capability map）
-- §6 v5 升級層摘要（IA / Loop / Sentinel / HIQ）
-- §7 已 LANDED 的全部 spec gap（233 + G 系列 + Stage 2 + 2026-05-09 Addendum）
-- §8 剩餘工作三類：A 後端 / B 已由本次 backport 收掉 / D optional
+每頁規約：建立 view-model 於 `src/lib/v5/management/<pageName>.ts`（純函式組合既有 facade），頁面元件放 `src/management/pages/oversight/`，所有資料經 `useV5Live` / list facade。
 
-### 4. 整合 audit（取代散落文件）
+| 順序 | 頁面 | 主要依賴 facade | 重用元件 |
+|---|---|---|---|
+| 1 | **OneRingCockpit** | `v5.controlRoom.get`、`v5.personas.health`、`v5.strategies.health`、`lists.approvals` | 從 ControlRoom 拆出 AutonomyStatusCard / LoopLane / SentinelPreview / HIQPreview |
+| 2 | **PersonaFleet** | `lists.personas`、`v5.personas.health` → 組 `RingPersonaFleetItem` | DataTable、PermissionAwareButton |
+| 3 | **HumanInbox** | merge `lists.approvals` + `v5.interventions` + Sentinel findings + human gates | 重用 Interventions 卡片、HighRiskConfirm |
+| 4 | **TradingPulse** | `lists.deployments`、`lists.runtimes`、`v5.strategies.health`、`lists.capitalPools` | 新 ComparisonTable |
+| 5 | **EvolutionJournal** | `lists.audit` + `v5.optimizationLoop` + EvolutionDetail data | Timeline |
+| 6 | **EvidenceExplorer** + Detail | 新 facade `bff-v1/evidence.ts`（mock-first，§8.2 endpoint preview） | 新 EvidencePacketCard |
+| 7 | **PersonaIntentTraces** + Detail | 新 facade `bff-v1/personaIntent.ts`（mock-only，redaction-aware） | 新 RedactionBadge |
 
-**`.lovable/audits/fe-spec-status-2026-05-10.md`** — 單表狀態總覽
-- A 組：5 個 P0 backend checklist + live probe HTTP code 對照
-- B 組：全部 ✅ RESOLVED_BY_FE_BACKPORT_2026-05-10（指向本次改動）
-- C 組：全部 ✅ LANDED（C1–C5）
-- D 組：D1–D4 LANDED + 列剩餘可深化方向
-- spec-conflict-G：G01/G05/G06/G07/G09/G12/G13/G14 全 LANDED
-- H 版 backlog：H1/H2/H3 全 FE CLOSED
+每頁都需：empty/error state、strict-mode 透傳真錯誤、a11y axe smoke 加進 `src/test/a11y-axe-smoke-v5.test.tsx`。
 
-**`.lovable/audits/INDEX.md`** 加入口：`- [FE × Spec Status 2026-05-10] — 唯一最新整合狀態表`
+### Pack M3 — Live Readiness 五頁（骨架版）
+依 §4.1 建 `BrokerLiveReadinessPage` / `CapitalBindingLiveReadinessPage` / `BffHaReadinessPage` / `StrictPublishAuditPage` + DeploymentDetail 內加 EP5 panel。  
+共用元件 `<ReadinessChecklist>`（綁 EvidencePacket）+ `<BlockersList>`（綁 HumanInbox）。  
+detail 內容等規格補完，先綠路由與框架。
 
-`.lovable/audits/fe-blueprint-gap-2026-05-09.md` 頂端加 `> Superseded by fe-spec-status-2026-05-10.md`
+### Pack M4 — Natural Language Console
+- 新 `src/management/components/nl/NlConsoleDock.tsx`（全域 dock，TopBar 喚起）
+- 路由 `/management/ask`（可選頁面殼）
+- 新 facade `bff-v1/managementNl.ts`：mock-only 回 `ManagementNlAnswer`
+- **硬限制**：回應卡若 `risk in {high, critical}` 或 `requiresHumanGate=true`，按鈕一律 disabled + 改為「開啟 HumanGateDecision」連結，符合 §7.4
 
-### 5. Memory 更新
+### Pack M5 — Write Path Hardening
+- `src/lib/bff-v1/personas.ts`：`paths.personaAction(id, action)` → `paths.action("persona", id, action)`，保留 deprecated alias 一個版本
+- `DeploymentDetail.tsx`：rollback / reduceAllocation / scheduleDeployment 改走 `runActionSafe` + canonical
+- Approval decide 路徑覆核
+- 新測試 `src/lib/bff-v1/__tests__/no-legacy-live-write.test.ts`：以 AST scan 阻擋新 page 走 legacy mutation
 
-`mem://index.md` Core 加一行：
-> **2026-05-10 spec backport LANDED**：B1/B2/B3 已由 FE 直接落地至 Pack D markdown + OpenAPI + AsyncAPI；現階段完整規格快照於 `.lovable/spec/current/`。
+### Pack M6 — 測試 + 驗收
+- Vitest：Persona Fleet filter / Inbox grouping / Pulse direction / Evidence status / Intent redaction / nav route 存在性
+- Playwright：`e2e/20-mgmt-one-ring.spec.ts` 等 7 個 route smoke
+- Strict-mode test：擴 `e2e/09-strict-vs-hybrid.spec.ts` 涵蓋新頁不出現 seed
+- i18n parity gate
+- 對齊 §14 acceptance checklist 寫進 `.lovable/audits/mgmt-revamp-2026-05-20-final.md`
 
-新增 `mem://reference/current-spec` — 指向 `.lovable/spec/current/INDEX.md`
+---
 
-### 6. FE artifact 註記回收
+## 3. 技術細節重點
 
-- `src/lib/v4/errorCodes.ts` 頂端 `FE_READY — Pack D D21 markdown backport pending` → 改為 `LANDED 2026-05-10 — Pack D D21 markdown 已對齊 26 條`
-- `src/lib/bff-v1/dto.ts` ActionCommandStatus / EvidenceKind 對應註記同步更新
-- `src/lib/bff-v1/sse/payloads.ts` correlationId 註記更新
+```text
+view-model 層    src/lib/v5/management/<page>.ts   pure compose, 100% testable
+page 元件        src/management/pages/oversight/   no fetch, no env branching
+facade 擴充      src/lib/bff-v1/{evidence,personaIntent,managementNl}.ts
+                 mock-first，paths 對齊 §8.2 future endpoints，strict→錯誤
+共用元件        src/management/components/oversight/{AutonomyStrip,FleetCard,
+                 InboxCard,ComparisonTable,EvolutionTimeline,
+                 EvidencePacketCard,RedactionBadge,ReadinessChecklist}
+write path      一律 runActionSafe + HighRiskConfirm + idempotencyKey
+i18n            §10 所有 keys 雙語齊備；nav 中性語言（避免 Agora 端泄露 §1.3）
+```
 
-## 不做
+執行節奏建議：**M0 → M1 一輪（單次 PR）→ M2 一頁一輪 → M3/M4 並行 → M5 → M6**。  
+每輪以「routes green + a11y smoke pass + i18n parity pass + tsc 0 error」為閘門。
 
-- 不改 src/ 任何 runtime 邏輯（只改註解）
-- 不改 Pack D 其它條目的 normative 內容（只 backport B 組）
-- 不改 v5 SA/SD（屬升級層，不在 backport 範圍）
-- 不刪除舊 audit / feedback 歷史（保留歸檔）
-- 不開新 spec 決策（一切引用既有 Planner APPROVED disposition）
+---
 
-## 驗收
+## 4. 不做（依 §13）
+不刪 entity pages、不開 real writes、不繞 HighRiskConfirm、不直 fetch、strict 不偽裝 seed、Intent traces 不顯示未 redact 私文。
 
-完成後：
-1. `grep RESOURCE_NOT_FOUND .lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md` 命中
-2. AsyncAPI 含 `approval` / `ask` channel 章節
-3. OpenAPI 有 `components.schemas.ActionCommandStatus`
-4. `.lovable/spec/current/INDEX.md` 存在且引用所有 backport 後的檔案
-5. `fe-spec-status-2026-05-10.md` B 組標 RESOLVED
-6. 366 tests green（無 src/ 邏輯變動，預期不影響）
+---
 
-## 預估規模
+## 5. 預期產出
+- 7 條新一線路由 + 5 條 readiness 路由 + 1 條 NL ask 路由
+- 3 條新 BFF facade（mock-first）
+- ~10 個共用 oversight 元件
+- 6 個 vitest 檔 + 7 個 playwright smoke
+- §14 acceptance 14 項全綠
 
-- Pack D 3 檔：各加 30–80 行
-- OpenAPI YAML：~40 行
-- AsyncAPI markdown：~120 行
-- `spec/current/` 2 檔：INDEX 30 行、consolidated ~600 行
-- audit 1 檔：~250 行
-- 共約 1100 行 markdown / YAML 增減；0 行 src/ 邏輯變動
+請先回 §0 的 5 個問題（或同意預設方案），我會在 Build 模式按 M0→M6 依序執行。
