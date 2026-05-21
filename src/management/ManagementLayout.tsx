@@ -24,12 +24,14 @@ export const ManagementLayout = () => {
       { to: "/management/evolution-journal", label: t("nav.evolutionJournal"), icon: GitBranch },
       { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
       { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
+      { to: "/management/ask", label: "Ask Management", icon: MessagesSquare },
     ]},
     { label: t("groups.liveReadiness"), items: [
-      { to: "/management/broker-live", label: t("nav.brokerLiveReadiness"), icon: ShieldAlert },
-      { to: "/management/capital-live", label: t("nav.capitalLiveReadiness"), icon: Wallet },
-      { to: "/management/system/bff-ha", label: t("nav.bffHaReadiness"), icon: Server },
-      { to: "/management/system/strict-publish", label: t("nav.strictPublishAudit"), icon: ShieldCheck },
+      { to: "/management/readiness/ep5", label: "EP5 Canary Readiness", icon: ShieldAlert },
+      { to: "/management/readiness/broker-live", label: t("nav.brokerLiveReadiness"), icon: ShieldAlert, dedupeKey: "brokerLive" },
+      { to: "/management/readiness/capital-binding-live", label: t("nav.capitalLiveReadiness"), icon: Wallet, dedupeKey: "capitalLive" },
+      { to: "/management/readiness/bff-ha", label: t("nav.bffHaReadiness"), icon: Server, dedupeKey: "bffHa" },
+      { to: "/management/readiness/strict-publish", label: t("nav.strictPublishAudit"), icon: ShieldCheck, dedupeKey: "strict" },
     ]},
     { label: t("groups.advancedRegistry"), items: [
       { to: "/management/strategies", label: t("nav.strategyRegistry"), icon: Boxes },
