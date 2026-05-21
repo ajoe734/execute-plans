@@ -6,11 +6,14 @@ import {
   type ManagementNlAnswer, type ManagementNlAsk, type ManagementNlIntent,
   classifyIntent,
 } from "@/lib/v5/management/nl";
-function nlError(code: "FEATURE_DISABLED", message: string): Error {
-  const e = new Error(message);
-  (e as Error & { code?: string }).code = code;
-  e.name = "ManagementNlError";
-  return e;
+
+export class ManagementNlError extends Error {
+  readonly code: "FEATURE_DISABLED" | "STRICT_REFUSED" | "GATEWAY_FORBIDDEN";
+  constructor(code: ManagementNlError["code"], message: string) {
+    super(message);
+    this.name = "ManagementNlError";
+    this.code = code;
+  }
 }
 
 export interface ManagementNlEnv {
@@ -32,27 +35,24 @@ const HIGH_RISK_INTENTS: ReadonlySet<ManagementNlIntent> = new Set([
  */
 export function askManagementNl(ask: ManagementNlAsk, env: ManagementNlEnv): ManagementNlAnswer {
   if (env.strict) {
-    throw new BffError({
-      code: "FEATURE_DISABLED",
-      message: "Management NL Console is not available in strict mode (Phase 1 mock-only).",
-      retryable: false,
-    });
+    throw new ManagementNlError(
+      "STRICT_REFUSED",
+      "Management NL Console is not available in strict mode (Phase 1 mock-only).",
+    );
   }
   if (env.gatewayEnabled) {
     // Hard guard: even if a future operator flips the env flag, FE refuses
     // to talk to any external AI gateway directly. Phase 2 must route via BFF.
-    throw new BffError({
-      code: "FEATURE_DISABLED",
-      message: "Phase 1 forbids direct AI gateway calls; route via Pantheon BFF (Phase 2).",
-      retryable: false,
-    });
+    throw new ManagementNlError(
+      "GATEWAY_FORBIDDEN",
+      "Phase 1 forbids direct AI gateway calls; route via Pantheon BFF (Phase 2).",
+    );
   }
   if (env.provider !== "fixed_mock") {
-    throw new BffError({
-      code: "FEATURE_DISABLED",
-      message: `Unsupported NL provider: ${String(env.provider)}`,
-      retryable: false,
-    });
+    throw new ManagementNlError(
+      "FEATURE_DISABLED",
+      `Unsupported NL provider: ${String(env.provider)}`,
+    );
   }
   const intent = ask.intent ?? classifyIntent(ask.prompt);
   return respondFixed(intent, ask);
