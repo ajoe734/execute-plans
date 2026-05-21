@@ -134,6 +134,18 @@ export default {
     liveStrategyMonitor: "Live Strategy Monitor",
     deploymentRegistry: "Deployment Registry",
     deploymentMonitor: "Deployment Monitor",
+    // 2026-05-20 revamp §5.1 — One Ring Oversight IA.
+    oneRingCockpit: "One Ring Cockpit",
+    personaFleet: "Persona Fleet",
+    humanInbox: "Human Inbox",
+    tradingPulse: "Trading Pulse",
+    evolutionJournal: "Evolution Journal",
+    evidenceExplorer: "Evidence Explorer",
+    personaIntent: "Persona Intent Traces",
+    brokerLiveReadiness: "Broker Live Readiness",
+    capitalLiveReadiness: "Capital Binding Live",
+    bffHaReadiness: "BFF HA Readiness",
+    strictPublishAudit: "Strict Publish Audit",
   },
   groups: {
     overview: "Overview",
@@ -151,6 +163,10 @@ export default {
     channels: "Channels",
     closedLoopOs: "Closed-Loop OS",
     legacy: "Legacy",
+    // 2026-05-20 revamp §5.1 groups.
+    oversight: "Oversight",
+    liveReadiness: "Live Readiness",
+    advancedRegistry: "Advanced Registry",
   },
   v5: {
     controlRoom: {

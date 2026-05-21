@@ -128,6 +128,18 @@ export default {
     liveStrategyMonitor: "Live Strategy 監測",
     deploymentRegistry: "部署列表",
     deploymentMonitor: "部署監測",
+    // 2026-05-20 改版 §5.1 — One Ring Oversight IA。
+    oneRingCockpit: "One Ring 駕駛艙",
+    personaFleet: "Persona 艦隊",
+    humanInbox: "人類收件匣",
+    tradingPulse: "交易脈動",
+    evolutionJournal: "演化日誌",
+    evidenceExplorer: "證據庫",
+    personaIntent: "Persona 意圖追蹤",
+    brokerLiveReadiness: "Broker Live 就緒",
+    capitalLiveReadiness: "資金綁定 Live",
+    bffHaReadiness: "BFF HA 就緒",
+    strictPublishAudit: "Strict 發行稽核",
   },
   groups: {
     overview: "總覽",
@@ -145,6 +157,10 @@ export default {
     channels: "通道",
     closedLoopOs: "閉環 OS",
     legacy: "Legacy（舊版）",
+    // 2026-05-20 改版 §5.1 群組。
+    oversight: "監察",
+    liveReadiness: "Live 就緒",
+    advancedRegistry: "進階登錄",
   },
   v5: {
     controlRoom: {
