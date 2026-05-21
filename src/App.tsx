@@ -99,6 +99,8 @@ import {
   CapitalBindingLiveReadinessPage,
   BffHaReadinessPage,
   StrictPublishAuditPage,
+  Ep5CanaryReadinessPage,
+  ManagementNlConsole,
 } from "@/management/pages/oversight/_stubs";
 import NotFound from "./pages/NotFound";
 
@@ -132,8 +134,14 @@ const App = () => (
               <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailPage />} />
               <Route path="broker-live" element={<BrokerLiveReadinessPage />} />
               <Route path="capital-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="readiness/ep5" element={<Ep5CanaryReadinessPage />} />
+              <Route path="readiness/broker-live" element={<BrokerLiveReadinessPage />} />
+              <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
+              <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
+              <Route path="ask" element={<ManagementNlConsole />} />
               {/* Legacy v5 surface kept reachable for ops review. */}
               <Route path="control-room-legacy" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
