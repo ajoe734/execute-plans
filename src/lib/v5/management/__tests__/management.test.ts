@@ -50,7 +50,7 @@ describe("PersonaIntent visibility rules", () => {
       evidenceRefs: [], riskFlags: [], policyViolations: [],
       createdAt: new Date().toISOString(),
     };
-    expect("rawPrompt" in (t as Record<string, unknown>)).toBe(false);
+    expect("rawPrompt" in (t as unknown as Record<string, unknown>)).toBe(false);
   });
 });
 
