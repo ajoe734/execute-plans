@@ -11,24 +11,27 @@ import {
 
 export const ManagementLayout = () => {
   const t = useT();
+  // 2026-05-20 Management revamp §5.1 — One Ring Oversight IA.
+  // Oversight (new first-line cockpit) → Live Readiness → Advanced Registry →
+  // Operations → Capabilities → System. Old Closed-Loop OS entries are
+  // redistributed (§5.2) into Oversight / Advanced Registry / Operations.
   const groups: NavGroup[] = [
-    // Pack E E1+E7 — v5 Closed-Loop OS top-level group (Q17/Q23 staged replacement).
-    // dedupeKey prevents double-highlighting when nested loop routes are active.
-    { label: t("groups.closedLoopOs"), items: [
-      { to: "/management/control-room", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "controlRoom" },
-      { to: "/management/loops", label: t("nav.loops"), icon: Workflow, dedupeKey: "loops" },
-      { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical, dedupeKey: "loops" },
-      { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target, dedupeKey: "loops" },
-      // Pack F F03 — Persona Trading Health is a loop view, not a registry
-      { to: "/management/loops/execution?focus=personas", label: t("nav.personaTradingHealth"), icon: Users },
-      { to: "/management/loops/execution?focus=strategies", label: t("nav.liveStrategyMonitor"), icon: Boxes },
-      { to: "/management/loops/execution?focus=deployments", label: t("nav.deploymentMonitor"), icon: Rocket },
-      { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch, dedupeKey: "loops" },
-      { to: "/management/sentinel", label: t("nav.sentinel"), icon: ShieldAlert },
-      { to: "/management/interventions", label: t("nav.interventions"), icon: Eye },
+    { label: t("groups.oversight"), items: [
+      { to: "/management/one-ring", label: t("nav.oneRingCockpit"), icon: Compass, dedupeKey: "oneRing" },
+      { to: "/management/persona-fleet", label: t("nav.personaFleet"), icon: Users, dedupeKey: "fleet" },
+      { to: "/management/human-inbox", label: t("nav.humanInbox"), icon: Eye, dedupeKey: "humanQueue" },
+      { to: "/management/trading-pulse", label: t("nav.tradingPulse"), icon: Target },
+      { to: "/management/evolution-journal", label: t("nav.evolutionJournal"), icon: GitBranch },
+      { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
+      { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
     ]},
-    { label: t("groups.coreManagement"), items: [
-      // Pack F F03 — registry routes (entity management). Distinct from loop monitors above.
+    { label: t("groups.liveReadiness"), items: [
+      { to: "/management/broker-live", label: t("nav.brokerLiveReadiness"), icon: ShieldAlert },
+      { to: "/management/capital-live", label: t("nav.capitalLiveReadiness"), icon: Wallet },
+      { to: "/management/system/bff-ha", label: t("nav.bffHaReadiness"), icon: Server },
+      { to: "/management/system/strict-publish", label: t("nav.strictPublishAudit"), icon: ShieldCheck },
+    ]},
+    { label: t("groups.advancedRegistry"), items: [
       { to: "/management/strategies", label: t("nav.strategyRegistry"), icon: Boxes },
       { to: "/management/alpha-factory", label: t("nav.alphaFactory"), icon: Factory },
       { to: "/management/personas", label: t("nav.personaRegistry"), icon: Users, dedupeKey: "personas" },
@@ -36,18 +39,14 @@ export const ManagementLayout = () => {
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
       { to: "/management/rebalance", label: t("nav.rebalance"), icon: Repeat },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
-    ]},
-    { label: t("groups.researchGov"), items: [
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
-      { to: "/management/governance", label: t("nav.governance"), icon: ClipboardCheck },
-      { to: "/management/governance/policies", label: t("nav.routePolicies"), icon: ClipboardCheck },
-      { to: "/management/governance/permissions", label: t("nav.permissions"), icon: ShieldCheck },
-      { to: "/management/governance/memory", label: t("nav.memoryGov"), icon: Brain },
-      { to: "/management/governance/consult", label: t("nav.consultRules"), icon: MessagesSquare },
-      { to: "/management/knowledge", label: t("nav.knowledge"), icon: BookOpen },
-      { to: "/management/postmortems", label: t("nav.postmortems"), icon: FileText },
-      { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
+      { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
+      // Closed-Loop OS surfaces — kept reachable from registry (§5.2 redistribution).
+      { to: "/management/loops", label: t("nav.loops"), icon: Workflow, dedupeKey: "loops" },
+      { to: "/management/loops/research", label: t("nav.loopResearch"), icon: FlaskConical, dedupeKey: "loops" },
+      { to: "/management/loops/execution", label: t("nav.loopExecution"), icon: Target, dedupeKey: "loops" },
+      { to: "/management/loops/optimization", label: t("nav.loopOptimization"), icon: GitBranch, dedupeKey: "loops" },
     ]},
     { label: t("groups.operations"), items: [
       { to: "/management/deployments", label: t("nav.deployments"), icon: Rocket },
@@ -56,10 +55,16 @@ export const ManagementLayout = () => {
       { to: "/management/incidents", label: t("nav.incidents"), icon: AlertOctagon },
       { to: "/management/jobs", label: t("nav.jobs"), icon: ListChecks },
       { to: "/management/alerts", label: t("nav.alerts"), icon: Bell },
-      // Pack E E6/E7 — Approvals coexists with HIQ. dedupeKey shared so
-      // /management/interventions (HIQ) is the canonical entry and Approvals
-      // never double-highlights when reached from HIQ links.
+      { to: "/management/sentinel", label: t("nav.sentinel"), icon: ShieldAlert, dedupeKey: "humanQueue" },
+      { to: "/management/interventions", label: t("nav.interventions"), icon: Eye, dedupeKey: "humanQueue" },
       { to: "/management/approvals", label: t("nav.approvals"), icon: ClipboardCheck, dedupeKey: "humanQueue" },
+      { to: "/management/governance", label: t("nav.governance"), icon: ClipboardCheck },
+      { to: "/management/governance/policies", label: t("nav.routePolicies"), icon: ClipboardCheck },
+      { to: "/management/governance/permissions", label: t("nav.permissions"), icon: ShieldCheck },
+      { to: "/management/governance/memory", label: t("nav.memoryGov"), icon: Brain },
+      { to: "/management/governance/consult", label: t("nav.consultRules"), icon: MessagesSquare },
+      { to: "/management/knowledge", label: t("nav.knowledge"), icon: BookOpen },
+      { to: "/management/postmortems", label: t("nav.postmortems"), icon: FileText },
     ]},
     { label: t("groups.capabilities"), items: [
       { to: "/management/tools", label: t("nav.tools"), icon: Wrench },
@@ -74,12 +79,9 @@ export const ManagementLayout = () => {
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},
-    // Pack E E7 (Q23) — Legacy IA stabilized: command-center/overview now redirect
-    // to /management/control-room (deep links preserved via <Navigate replace>).
-    // Legacy nav entries removed — dedupeKey would otherwise hide them anyway.
-    // overview-legacy retained as escape hatch for ops review of the v4 dashboard.
     { label: t("groups.legacy"), items: [
-      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "controlRoom" },
+      { to: "/management/control-room-legacy", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "oneRing" },
+      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "oneRing" },
     ]},
   ];
 

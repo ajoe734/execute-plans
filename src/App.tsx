@@ -84,6 +84,22 @@ import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
 import { ResearchLoopPage } from "@/management/pages/v5/ResearchLoop";
 import { SentinelPage } from "@/management/pages/v5/Sentinel";
 import { InterventionsPage } from "@/management/pages/v5/Interventions";
+// 2026-05-20 Management revamp — One Ring Oversight IA (stubs from M1; replaced in M2+).
+import {
+  OneRingCockpitPage,
+  PersonaFleetPage,
+  HumanInboxPage,
+  TradingPulsePage,
+  EvolutionJournalPage,
+  EvidenceExplorerPage,
+  EvidencePacketDetailPage,
+  PersonaIntentTracesPage,
+  PersonaIntentTraceDetailPage,
+  BrokerLiveReadinessPage,
+  CapitalBindingLiveReadinessPage,
+  BffHaReadinessPage,
+  StrictPublishAuditPage,
+} from "@/management/pages/oversight/_stubs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -100,8 +116,26 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<ControlRoomPage />} />
-              <Route path="control-room" element={<ControlRoomPage />} />
+              {/* 2026-05-20 revamp §4.2 — index redirects to One Ring Cockpit. */}
+              <Route index element={<Navigate to="/management/one-ring" replace />} />
+              {/* §4.3 — control-room alias preserved, renders OneRingCockpit so deep links survive. */}
+              <Route path="control-room" element={<OneRingCockpitPage />} />
+              {/* §4.1 — new One Ring Oversight IA routes (stubs from M1, replaced in M2+). */}
+              <Route path="one-ring" element={<OneRingCockpitPage />} />
+              <Route path="persona-fleet" element={<PersonaFleetPage />} />
+              <Route path="human-inbox" element={<HumanInboxPage />} />
+              <Route path="trading-pulse" element={<TradingPulsePage />} />
+              <Route path="evolution-journal" element={<EvolutionJournalPage />} />
+              <Route path="evidence" element={<EvidenceExplorerPage />} />
+              <Route path="evidence/:id" element={<EvidencePacketDetailPage />} />
+              <Route path="persona-intent" element={<PersonaIntentTracesPage />} />
+              <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailPage />} />
+              <Route path="broker-live" element={<BrokerLiveReadinessPage />} />
+              <Route path="capital-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
+              <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
+              {/* Legacy v5 surface kept reachable for ops review. */}
+              <Route path="control-room-legacy" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
               <Route path="loops/optimization" element={<OptimizationLoopPage />} />
