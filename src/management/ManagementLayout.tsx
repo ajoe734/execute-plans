@@ -11,21 +11,22 @@ import {
 
 export const ManagementLayout = () => {
   const t = useT();
-  // 2026-05-20 Management revamp §5.1 — One Ring Oversight IA.
-  // Oversight (new first-line cockpit) → Live Readiness → Advanced Registry →
-  // Operations → Capabilities → System. Old Closed-Loop OS entries are
-  // redistributed (§5.2) into Oversight / Advanced Registry / Operations.
+  // 2026-05-20 Management revamp §5.1 + PM-1 — Pathreon Management Oversight IA.
+  // Oversight (cockpit-first) → Live Readiness → Advanced Registry → Operations →
+  // Capabilities → System. Visible labels must read Pathreon Management; internal
+  // symbol names may keep historical aliases.
   const groups: NavGroup[] = [
     { label: t("groups.oversight"), items: [
-      { to: "/management/one-ring", label: t("nav.oneRingCockpit"), icon: Compass, dedupeKey: "oneRing" },
+      { to: "/management/cockpit", label: t("nav.managementCockpit"), icon: Compass, dedupeKey: "cockpit" },
       { to: "/management/persona-fleet", label: t("nav.personaFleet"), icon: Users, dedupeKey: "fleet" },
       { to: "/management/human-inbox", label: t("nav.humanInbox"), icon: Eye, dedupeKey: "humanQueue" },
       { to: "/management/trading-pulse", label: t("nav.tradingPulse"), icon: Target },
       { to: "/management/evolution-journal", label: t("nav.evolutionJournal"), icon: GitBranch },
       { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
       { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
-      { to: "/management/ask", label: "Ask Management", icon: MessagesSquare },
+      { to: "/management/ask", label: t("nav.askManagement"), icon: MessagesSquare },
     ]},
+
     { label: t("groups.liveReadiness"), items: [
       { to: "/management/readiness/ep5", label: "EP5 Canary Readiness", icon: ShieldAlert },
       { to: "/management/readiness/broker-live", label: t("nav.brokerLiveReadiness"), icon: ShieldAlert, dedupeKey: "brokerLive" },
