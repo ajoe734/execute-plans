@@ -3,6 +3,7 @@
 // in M1 transitional IA — see App.tsx). Phase 1 ships full minimum fields;
 // "Enable Canary"/"Enable Live" buttons are intentionally OMITTED.
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -11,6 +12,8 @@ import { ReadinessChecklist } from "@/management/components/readiness/ReadinessC
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem, pendingItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("ooda_paper_packet", "OODA paper packet present", "research-owner"),
