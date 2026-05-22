@@ -2,6 +2,7 @@
 // HARD RULE: no reveal / expand / download / reconstruct UI. Visibility ⇒
 // renderable fields strictly via intentDisplayRules().
 
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
@@ -61,6 +62,7 @@ const badgeTone = (b: "summary" | "redacted" | "restricted") =>
                     "bg-status-failed/15 text-status-failed border-status-failed/30";
 
 const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
+  const { t } = useTranslation();
   const r = intentDisplayRules(trace.visibility);
   return (
     <Card className="p-4">
@@ -95,10 +97,10 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
         <div className="mt-3 space-y-2">
           {r.showSummary && <p className="text-sm text-foreground">{trace.userIntentSummary}</p>}
           {r.showInterpretation && trace.personaInterpretation && (
-            <p className="text-sm text-muted-foreground">Interpretation: {trace.personaInterpretation}</p>
+            <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.interpretationFmt", { text: trace.personaInterpretation })}</p>
           )}
           {r.showToolsUsed && trace.toolsUsed.length > 0 && (
-            <p className="text-xs text-muted-foreground">Tools: {trace.toolsUsed.join(", ")}</p>
+            <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: trace.toolsUsed.join(", ") })}</p>
           )}
           {r.showRiskFlags && trace.riskFlags.length > 0 && (
             <p className="text-xs">
@@ -109,7 +111,7 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
           )}
           {r.showEvidenceRefs && trace.evidenceRefs.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              Evidence: {trace.evidenceRefs.map((e) => (
+              {t("mgmt.personaIntent.evidenceLabel")} {trace.evidenceRefs.map((e) => (
                 <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
               ))}
             </p>
@@ -121,16 +123,17 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
   );
 };
 
-export const PersonaIntentTracesPage = () => (
-  <section className="p-6 space-y-4" aria-label="Persona Intent Traces">
-    <header>
-      <h1 className="text-2xl font-semibold text-foreground">Persona Intent Traces</h1>
-      <p className="text-sm text-muted-foreground">
-        Trade-relevant persona intent. Already redacted by BFF / policy engine. No reveal affordance.
-      </p>
-    </header>
-    {TRACES.map((t) => <Trace key={t.id} trace={t} />)}
-  </section>
-);
+export const PersonaIntentTracesPage = () => {
+  const { t } = useTranslation();
+  return (
+    <section className="p-6 space-y-4" aria-label={t("mgmt.personaIntent.title")}>
+      <header>
+        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.personaIntent.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.subtitle")}</p>
+      </header>
+      {TRACES.map((t) => <Trace key={t.id} trace={t} />)}
+    </section>
+  );
+};
 
 export const PersonaIntentTraceDetailPage = PersonaIntentTracesPage;

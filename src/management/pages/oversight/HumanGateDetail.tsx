@@ -2,6 +2,7 @@
 // Phase 1: deterministic mock detail derived from id.
 
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,23 +36,26 @@ function seedDetail(id: string): HumanInboxDetail {
 }
 
 export const HumanGateDetailPage = () => {
+  const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
   const item = seedDetail(id);
   return (
-    <section className="p-6 space-y-4" aria-label="Human Gate Detail">
+    <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{item.title}</h1>
-          <p className="text-sm text-muted-foreground">Required role: {item.requiredRole} · Decision type: {item.decisionType}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("mgmt.inbox.headerSubtitleFmt", { role: item.requiredRole, decision: item.decisionType })}
+          </p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link to="/management/human-inbox">← Inbox</Link>
+          <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
         </Button>
       </header>
 
       {!item.canProceed && (
         <Card className="border-status-failed/40 bg-status-failed/5 p-3">
-          <h2 className="text-sm font-semibold text-status-failed">Cannot proceed</h2>
+          <h2 className="text-sm font-semibold text-status-failed">{t("mgmt.inbox.cannotProceedTitle")}</h2>
           <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
             {item.blockingReasons?.map((r) => <li key={r}>{r}</li>)}
           </ul>
@@ -59,28 +63,28 @@ export const HumanGateDetailPage = () => {
       )}
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Consequences</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.consequences")}</h2>
         <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-          <div><dt className="text-muted-foreground">If approved</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
-          <div><dt className="text-muted-foreground">If rejected</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
-          <div><dt className="text-muted-foreground">If ignored</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
+          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
+          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
+          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
         </dl>
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Signatures</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.signatures")}</h2>
         <ul className="mt-2 space-y-1 text-xs">
           {item.signatures.map((s) => (
             <li key={s.role} className="flex items-center gap-2">
               <Badge variant="outline">{s.role}</Badge>
-              <span className="text-muted-foreground">{s.signedBy ?? "pending"}</span>
+              <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
             </li>
           ))}
         </ul>
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Evidence</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.evidence")}</h2>
         <ul className="mt-2 text-xs">
           {item.evidenceRefs.map((e) => (
             <li key={e}>
@@ -91,9 +95,9 @@ export const HumanGateDetailPage = () => {
       </Card>
 
       <div className="flex gap-2">
-        <Button size="sm" disabled={!item.canDecide || !item.canProceed}>Approve</Button>
-        <Button size="sm" variant="outline" disabled={!item.canDecide}>Reject</Button>
-        <Button size="sm" variant="outline">Request more evidence</Button>
+        <Button size="sm" disabled={!item.canDecide || !item.canProceed}>{t("mgmt.actions.approve")}</Button>
+        <Button size="sm" variant="outline" disabled={!item.canDecide}>{t("mgmt.actions.reject")}</Button>
+        <Button size="sm" variant="outline">{t("mgmt.actions.requestMoreEvidence")}</Button>
       </div>
     </section>
   );

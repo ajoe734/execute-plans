@@ -3,6 +3,7 @@
 // in M1 transitional IA — see App.tsx). Phase 1 ships full minimum fields;
 // "Enable Canary"/"Enable Live" buttons are intentionally OMITTED.
 
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ReadinessHeader } from "@/management/components/readiness/ReadinessHeader";
@@ -37,24 +38,25 @@ const blockers = [
 ];
 
 export const Ep5CanaryReadinessPage = () => {
+  const { t } = useTranslation();
   const page = buildReadinessPage({
-    title: "EP5 Canary Readiness",
+    title: t("mgmt.readiness.ep5Title"),
     environment: "paper→canary",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
   });
   return (
-    <section className="p-6 space-y-4" aria-label="EP5 Canary Readiness">
+    <section className="p-6 space-y-4" aria-label={t("mgmt.readiness.ep5Title")}>
       <ReadinessHeader model={page.header} />
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" asChild>
-          <Link to="/management/evidence">View Evidence</Link>
+          <Link to="/management/evidence">{t("mgmt.actions.viewEvidence")}</Link>
         </Button>
         <Button variant="outline" size="sm" asChild>
-          <Link to="/management/human-inbox">Open Human Gate</Link>
+          <Link to="/management/human-inbox">{t("mgmt.actions.openHumanGate")}</Link>
         </Button>
-        <Button variant="outline" size="sm">Refresh Readiness</Button>
-        <Button variant="outline" size="sm">Export Packet</Button>
+        <Button variant="outline" size="sm">{t("mgmt.actions.refreshReadiness")}</Button>
+        <Button variant="outline" size="sm">{t("mgmt.actions.exportPacket")}</Button>
         {/* Per design ruling §4.1: Enable Canary / Enable Live are NOT exposed. */}
       </div>
       <ReadinessChecklist items={page.checklist} />
