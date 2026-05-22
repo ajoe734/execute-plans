@@ -83,9 +83,10 @@ export const ManagementLayout = () => {
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},
     { label: t("groups.legacy"), items: [
-      { to: "/management/control-room-legacy", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "oneRing" },
-      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "oneRing" },
+      { to: "/management/control-room-legacy", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "cockpit" },
+      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "cockpit" },
     ]},
+
   ];
 
   return (
