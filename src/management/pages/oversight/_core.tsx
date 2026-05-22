@@ -98,7 +98,7 @@ export const PersonaFleetPage = () => (
           {FLEET.map((r) => (
             <tr key={r.personaId} className="border-b border-border/50">
               <td className="px-3 py-2 font-mono">{r.personaId}</td>
-              <td className="px-3 py-2 text-muted-foreground">{r.ringBearer}</td>
+              <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
               <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
               <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
               <td className={"px-3 py-2 " + (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
