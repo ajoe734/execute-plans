@@ -42,6 +42,14 @@ export const OneRingCockpitPage = () => {
   const seed = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
   const { data } = useV5Live(() => mgmt.cockpit.get(() => seed), []);
   const model = data ?? seed;
+
+  // PM-12 snapshots
+  const pSeed = useMemo(() => defaultPortfolioBook(), []);
+  const lSeed = useMemo(() => defaultPersonaLeague(), []);
+  const qSnap = useMemo(() => defaultQuarterlySnapshot(), []);
+  const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
+  const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
       <header>
@@ -49,6 +57,11 @@ export const OneRingCockpitPage = () => {
         <p className="text-sm text-muted-foreground">{t("mgmt.cockpit.subtitle")}</p>
       </header>
       <SystemStateStrip model={model.strip} />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
+        <PersonaLeagueSnapshot rows={league ?? lSeed} />
+        <QuarterlyRankingCountdown snap={qSnap} />
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LoopFlowMap model={model.loopFlow} />
         <PersonaOodaMatrix model={model.matrix} />
@@ -57,6 +70,7 @@ export const OneRingCockpitPage = () => {
     </section>
   );
 };
+
 
 
 // =====================================================================
