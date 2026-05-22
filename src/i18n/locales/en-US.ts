@@ -1079,6 +1079,8 @@ export default {
   },
   capitalPool: {
     mandate: {
+      autoActions: "Auto actions",
+      breachCadence: "Breach cadence",
       charter: "Mandate charter", bindingRules: "Binding rules",
       objectiveValue: "Generate risk-adjusted alpha within sanctioned mandate.",
       horizonValue: "Quarterly review cycle, 12-month horizon.",
