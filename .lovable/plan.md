@@ -1,108 +1,145 @@
-# Pack PM-i18n — Management Revamp 中英文化收尾
 
-範圍：只動 PM-1..PM-11 在 2026-05-21~22 新增/修改的 management 檔案，以及 v5/management seed 中需要被翻譯的 label。不動 v4 normative、Pack D、Agora、BFF DTO。
+# Pack PM-Live — One Ring Oversight + Studios 完整 BFF 串接
 
-## 1. 目標
+## 範圍
 
-1. 消滅 PM-1..PM-11 新檔案內的 ~64 個 hardcoded English 字串。
-2. 補齊 `t("…")` 引用但字典缺失的 19 個 key。
-3. en-US / zh-TW 1:1 對齊（`scripts/check-i18n.ts` asymmetry = 0、missing = 0）。
-4. 加上 CI guard：`src/management/**` 的 hardcoded 候選 = 0，違反即 fail build。
+把目前**唯一**還在純 mock seed 的兩塊補上 `withLiveOrMock` adapter，讓 `VITE_BFF_MODE=live` 時打真 BFF、失敗 fallback seed（與其他頁面一致）。
 
-## 2. i18n key namespace（新增）
+不動：v4 / Pack D normative、Agora（已用 `withStrictLiveOrMock` 串接）、v5 Loop OS（已串）、所有 Management 核心列表/詳情（已串）。
 
-統一掛在 `mgmt.*` 命名空間下，與既有 `nav.*` / `groups.*` / `page.*` 共存：
+## 目標清單
 
-```text
-mgmt.cockpit.*           SystemStateStrip / LoopFlowMap / PersonaOodaMatrix / CriticalAnomalyPanel 標題與 label
-mgmt.anomaly.*           severity / domain / why / action / manage / evidence / nextAction / evidenceMissing / noAction
-mgmt.humanInbox.*        9 kinds 顯示名 + detail page 區塊 label + decision/TTL/signatures
-mgmt.readiness.*         checklist / blockers / evidencePacket / header / nextAction
-mgmt.nl.*                drawer title / placeholder / status / strict-mode error / explain intents
-mgmt.personaIntent.*     summary / redacted / restricted / disclaimer
-mgmt.tradingPulse.*      8 ranking blocks 名稱 + baseline labels (12 enum)
-mgmt.loopFlow.*          10 OODA node names + 10 edge labels
-mgmt.ooda.*              5 phase 名稱
-mgmt.actions.*           manage / viewEvidence / decide / acknowledge / runEval 共用按鈕
+### A. Management Oversight (PM-1–PM-11) — 14 條 path 全部 live wire
+
+`paths.ts` 已定義但無 adapter 的 14 條：
+
+| Path 函式 | 後端 endpoint | 接到的頁面 / 元件 |
+|---|---|---|
+| `mgmtCockpit()` | `GET /bff/management/cockpit` | `oversight/_core.tsx` `OneRingCockpitPage` (PM-3) |
+| `mgmtPersonaFleet()` | `GET /bff/management/persona-fleet` | PM-7 `PersonaFleetPage` |
+| `mgmtHumanInbox()` | `GET /bff/management/human-inbox` | PM-6 `HumanInboxPage` |
+| `mgmtHumanInboxItem(id)` | `GET /bff/management/human-inbox/{id}` | `HumanGateDetail.tsx` |
+| `mgmtTradingPulse()` | `GET /bff/management/trading-pulse` | PM-4 `TradingPulsePage` |
+| `mgmtTradingRankings()` | `GET /bff/management/trading-pulse/rankings` | PM-4 8 ranking blocks |
+| `mgmtEvolutionJournal()` | `GET /bff/management/evolution-journal` | PM-11 |
+| `mgmtEvidenceExplorer()` | `GET /bff/management/evidence` | PM-1 |
+| `mgmtPersonaIntent()` | `GET /bff/management/persona-intent` | `PersonaIntentTraces.tsx` |
+| `mgmtReadinessEp5()` | `GET /bff/management/readiness/ep5` | `Ep5CanaryReadiness.tsx` |
+| `mgmtReadinessBrokerLive()` | `GET /bff/management/readiness/broker-live` | `BrokerLiveReadiness.tsx` |
+| `mgmtReadinessCapitalBinding()` | `GET /bff/management/readiness/capital-binding-live` | `CapitalBindingLiveReadiness.tsx` |
+| `mgmtReadinessBffHa()` | `GET /bff/management/readiness/bff-ha` | `BffHaReadiness.tsx` |
+| `mgmtReadinessStrictPublish()` | `GET /bff/management/readiness/strict-publish` | `StrictPublishAudit.tsx` |
+
+### B. Studios mock-only helpers — 11 個 helper 補 live adapter
+
+`fitnessFormulas`, `mutationRules`, `policyViolations`, `allocationLimits`, `poolFreezes`, `mcpSecrets`, `promotions`, `metricFreezes`, `rebalanceOverrides`, `permissionMatrices`, `featureSets` → 用既有 `liveListOrSeed` / `liveDerivedListOrSeed` pattern 補上。
+
+## 實作設計
+
+### 1) 新增 `src/lib/bff-v1/management.ts`
+
+集中放 PM-1–PM-11 的 live wiring，與 `lists.ts` 同 pattern：
+
+```ts
+import { withLiveOrMock } from "./liveTransport";
+import { paths } from "./paths";
+import { composeCockpit, defaultCockpitSeed, type CockpitModel } from "@/lib/v5/management/cockpit";
+import { defaultPulseRankings, type TradingPulseRankBlock } from "@/lib/v5/management/tradingRankings";
+import { ... } from "@/lib/v5/management/humanInbox";
+// ...
+
+export const mgmt = {
+  cockpit: {
+    get: (): Promise<CockpitModel> =>
+      withLiveOrMock(
+        { method: "GET", path: paths.mgmtCockpit() },
+        async () => composeCockpit(defaultCockpitSeed()),
+        (raw) => adaptCockpit(raw),
+      ),
+  },
+  humanInbox: {
+    list: () => withLiveOrMock({ method: "GET", path: paths.mgmtHumanInbox() }, mockInbox, adaptInbox),
+    get: (id) => withLiveOrMock({ method: "GET", path: paths.mgmtHumanInboxItem(id) }, () => mockInboxItem(id), adaptInboxItem),
+  },
+  tradingPulse: { get: ..., rankings: ... },
+  personaFleet: { get: ... },
+  evolutionJournal: { list: ... },
+  evidence: { list: ... },
+  personaIntent: { list: ... },
+  readiness: {
+    ep5: () => ...,
+    brokerLive: () => ...,
+    capitalBinding: () => ...,
+    bffHa: () => ...,
+    strictPublish: () => ...,
+  },
+};
 ```
 
-每個 key en-US 與 zh-TW 同步落地。
+從 `@/lib/bff-v1` barrel re-export，UI 改用 `mgmt.*`。
 
-## 3. 變更清單
+### 2) Adapter 設計
 
-### 3.1 字典（必改）
+每個 endpoint：
+- **Mock branch** = 既有 `composeCockpit(defaultCockpitSeed())` / `defaultPulseRankings()` / seed 直接回傳，不改 view-model 形狀。
+- **Live adapter** = `(raw: unknown) => CockpitModel` 等，期待 BFF 回傳已是同 shape；若包在 `{ data: ... }` envelope 內則解包。**不假設後端欄位**：用 `firstArray`/`asRecord` 防禦式解析，缺欄位則退回 seed。
+- 用 `fallback=auto`（預設）：live 失敗就 seed；strict mode 由全域控。
 
-- `src/i18n/locales/en-US.ts` — 新增 `mgmt.*` 子樹（預估 ~140 keys）+ 補 19 missing keys（如 `approval`, `confirm`, `v5.loops.research` 等）。
-- `src/i18n/locales/zh-TW.ts` — 1:1 對應翻譯。
+### 3) 頁面改造（最小侵入）
 
-### 3.2 元件/頁面（共 ~12 檔，全部把 hardcoded 字串換成 `t(...)`）
+每個 PM 頁面從直接呼叫 seed helper 改成 hook：
 
-| 檔案 | 目前 hardcoded 數 |
-|---|---|
-| `src/management/pages/oversight/_core.tsx` | 34 |
-| `src/management/pages/oversight/HumanGateDetail.tsx` | 10 |
-| `src/management/components/anomaly/AnomalyCard.tsx` | 6 |
-| `src/management/components/readiness/{Blockers,EvidencePacket,Checklist,Header}.tsx` | 5 |
-| `src/management/pages/oversight/Ep5CanaryReadiness.tsx` | 4 |
-| `src/management/pages/oversight/NlConsole.tsx` | 2 |
-| `src/management/components/cockpit/PersonaOodaMatrix.tsx` | 1 |
-| `src/management/components/cockpit/CriticalAnomalyPanel.tsx` | 1 |
-| `src/management/components/nl/NlAssistantDrawer.tsx` | 1 |
-| `src/management/pages/oversight/PersonaIntentTraces.tsx` | 1 |
-| 其餘 cockpit/anomaly 元件少量殘留 | ~ |
+```tsx
+// 之前
+const model = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
 
-每個檔案加 `import { useTranslation } from "react-i18next"` 並把 JSX text node 換為 `{t("mgmt.xxx.yyy")}`。
+// 之後
+const model = useV5Live(() => mgmt.cockpit.get()).data ?? composeCockpit(defaultCockpitSeed());
+```
 
-### 3.3 Seed 層（v5/management）— 引入 i18n key 而非翻譯字串
+複用既有 `useV5Live` hook（已支援 loading + SSE refresh）。共 8 個頁面檔案修改。
 
-Seed 不能直接呼叫 `t()`（純函式 + 測試友善），改用「key 引用」模式：
+### 4) Studios mock helpers (B)
 
-- `src/lib/v5/management/anomaly.ts`：`ManagementAnomaly` 新增 optional `titleKey` / `whyKey` / `recommendedActionKey`；現有 `title/why/recommendedAction` 維持當 fallback。
-- `src/lib/v5/management/readinessSeeds.ts`：checklist item / blocker reason 一律改為 key reference。
-- `src/lib/v5/management/cockpit.ts`：loop node / matrix phase label 改為 key reference。
-- `src/lib/v5/management/humanInbox.ts`：9 kinds label 改為 key reference。
-- `src/lib/v5/management/tradingRankings.ts`：8 ranking blocks + 12 baseline 改為 key reference。
+在 `src/lib/bff-v1/seed.ts` 把 `delaySeed("bff.fitnessFormulas.list", …)` 等 11 處改成 `liveListOrSeed("bff.fitnessFormulas.list", paths.fitnessFormulas(), seed.fitnessFormulas)`。需要在 `paths.ts` 補對應的 path builder（若尚未存在）。
 
-UI 端：`label = item.titleKey ? t(item.titleKey) : item.title`。
+### 5) Tests
 
-### 3.4 CI guard
+新增 `src/lib/bff-v1/__tests__/management.test.ts`：
+- mock mode 回傳形狀 = `composeCockpit(defaultCockpitSeed())`
+- live mode + transport fail = fallback to seed（auto）
+- live mode + valid response = adapter 正確映射
+- 14 條 path 都呼叫到正確 URL
 
-- 擴充 `scripts/check-i18n.ts`：新增 `STRICT_DIRS=["src/management"]`，於該範圍下：
-  - hardcoded 候選 > 0 → `process.exit(1)`
-  - missing key > 0 → `process.exit(1)`
-  - asymmetry > 0 → `process.exit(1)`
-- 其餘 src/ 維持 informational（不影響舊有行為）。
+更新 `revamp-2026-05-20.test.ts`：保持 374/374+ green。
 
-### 3.5 測試
+### 6) 文件 / Memory
 
-- 新增 `src/lib/v5/management/__tests__/i18nParity.test.ts`：
-  - 斷言所有 seed 內 `*Key` 欄位存在於 en-US 與 zh-TW 字典中。
-  - 斷言 `mgmt.*` 子樹兩語系 key 集合相等。
-- 既有 525 vitest 必須續綠。
+- `.lovable/audits/mgmt-revamp-2026-05-20-plan.md` 加 PM-Live 章節，標 LANDED。
+- 更新 `mem://reference/management-revamp-2026-05-20`：M0–M4 之外加註 **Live wiring complete**。
+- 更新 `mem://index.md` Core：移除「PM-1–PM-11 純 mock」的暗示（如有）。
 
-### 3.6 文件
+## 驗收 gates
 
-- `.lovable/audits/mgmt-revamp-2026-05-20-plan.md`：新增「PM-i18n LANDED 2026-05-22」段落。
-- `mem://index.md` Core 不需更新（已涵蓋 mgmt 範圍）。
+1. `bun test` → 既有 529 + 新增 ~12 個 mgmt test，全綠。
+2. `scripts/check-i18n.ts` → 0 missing / 0 hardcoded / 0 asymmetry（不退步）。
+3. `scripts/check-management-naming.ts` → 0 hits。
+4. Build pass。
+5. **Mock mode**（預設）：所有 PM 頁面視覺與目前完全一致（cockpit / human inbox / readiness / persona intent / NL）。
+6. **Live mode + fallback=auto**：BFF 不通時自動 fallback seed，頁面照常顯示，`LiveStatusBanner` 顯示 fallback。
+7. **Live mode + strict + BFF 通**：直接顯示後端資料。
 
-## 4. 不做（明確排除）
+## 不做
 
-- 不改 Agora、不改 v4/Pack D。
-- 不引入新 i18n library / 不改 namespace 分割策略。
-- 不重寫既有 nav/groups/page keys（值已正確）。
-- 不接 AI 翻譯，所有 zh-TW 由人工/規範用語對照表手動產出（保持與既有風格一致：例如 "Manage" → 「管理」、"Evidence" → 「證據」、"Persona" 保留英文）。
+- 不改 NL Console 的 `fixed_mock` provider（Phase 1 故意禁用 gateway，spec 規定）。
+- 不改 Agora（已串）。
+- 不改 v4/Pack D normative TS。
+- 不新增 i18n keys 以外的功能變更。
+- 不寫後端；只負責 FE adapter。後端若回傳形狀不同，由 adapter 防禦式吸收 + fallback seed。
 
-## 5. 驗收閘門
+## 範圍預估
 
-- `bunx tsx scripts/check-i18n.ts` → missing=0、asymmetry=0、`src/management/**` hardcoded=0。
-- `bunx vitest run` → 全綠（含新 parity test）。
-- `bunx tsx scripts/check-management-naming.ts` → 0 hits（既有 guard 不退化）。
-- 手動 smoke：`/management/cockpit` 切換 zh-TW ↔ en-US，所有文字翻譯，無 raw key 漏出。
-
-## 6. 預估規模
-
-- 修改：~12 個 component 檔 + 5 個 seed 檔 + 2 個 locale 檔 + 1 個 check 腳本。
-- 新增：1 個 parity test。
-- 新 i18n key：~140（en + zh 對稱）+ 19 missing 修復。
-
-確認後我會一次性落地，不再分批。
+- 新增 1 檔（`management.ts`，~250 行）+ 1 test 檔（~120 行）
+- 修改 8 頁面 + `seed.ts` 11 處 + `paths.ts` 補 ~6 path
+- ~15 i18n key 不需新增
+- 預估 ~600 行變更，1 個 commit

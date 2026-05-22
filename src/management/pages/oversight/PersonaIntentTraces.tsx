@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { intentDisplayRules, type PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 // Phase 1 deterministic mock list.
 const TRACES: PersonaIntentTrace[] = [
@@ -125,13 +127,15 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
 
 export const PersonaIntentTracesPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.personaIntent.list(() => TRACES), []);
+  const traces = data ?? TRACES;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.personaIntent.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.personaIntent.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.subtitle")}</p>
       </header>
-      {TRACES.map((t) => <Trace key={t.id} trace={t} />)}
+      {traces.map((tr) => <Trace key={tr.id} trace={tr} />)}
     </section>
   );
 };

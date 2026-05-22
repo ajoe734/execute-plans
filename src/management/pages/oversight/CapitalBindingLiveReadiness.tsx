@@ -1,9 +1,12 @@
 // 2026-05-20 revamp §7.3 + design ruling §4.3 — Capital Binding Live.
+import { useMemo } from "react";
 import { ReadinessHeader } from "@/management/components/readiness/ReadinessHeader";
 import { ReadinessChecklist } from "@/management/components/readiness/ReadinessChecklist";
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem, pendingItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("capital_binding_live_packet", "CapitalBindingLiveReadiness packet present", "capital-owner"),
@@ -31,12 +34,14 @@ const blockers = [
 ];
 
 export const CapitalBindingLiveReadinessPage = () => {
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: "Capital Binding Live",
     environment: "live",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), []);
+  const { data } = useV5Live(() => mgmt.readiness.capitalBinding(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label="Capital Binding Live Readiness">
       <ReadinessHeader model={page.header} />

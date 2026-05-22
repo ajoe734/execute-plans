@@ -69,3 +69,33 @@ Tests: 525/525 vitest green; both CI guards green.
 - vitest pass
 - i18n parity（`scripts/check-i18n.ts`）pass
 - a11y axe smoke pass
+
+## PM-Live LANDED 2026-05-22
+
+**Scope**: 14 條 `mgmt*` aggregate paths (PM-1..PM-11 Oversight 全頁) 從純 seed 升級為 live-wired with seed fallback。
+
+**新增**:
+- `src/lib/bff-v1/management.ts` — `mgmt.*` façade，每個 helper `withLiveOrMock(req, seedFn, safeAdapt(...))`
+- `src/lib/bff-v1/__tests__/management.test.ts` — 7 個 test 驗 façade + 14 paths
+
+**改寫頁面** (8 檔)：
+- `oversight/_core.tsx` × 6 surfaces（Cockpit / PersonaFleet / HumanInbox / TradingPulse + Rankings / Evolution / Evidence）
+- `oversight/HumanGateDetail.tsx`
+- `oversight/PersonaIntentTraces.tsx`
+- 5 個 readiness 頁（Ep5 / BrokerLive / CapitalBindingLive / BffHa / StrictPublish）
+
+每個頁面 pattern：
+```tsx
+const seed = useMemo(() => /* compose existing seed */, []);
+const { data } = useV5Live(() => mgmt.X(() => seed), []);
+const model = data ?? seed;
+```
+
+**Adapter 設計**：unwrap `{data:…}` envelope → shape guard（`isObject`/`Array`）→ shape 不符回 `null` → `safeAdapt` 吞例外回 seedFn()。BFF 尚未上時：`fallback=auto` 自動回 seed，視覺零差。
+
+**驗收**:
+- 536 vitest 全綠（先前 529，+7 新測）
+- `scripts/check-i18n.ts` 通過（0 missing / 0 hardcoded / 0 asymmetry）
+- `scripts/check-management-naming.ts` 0 hits
+
+**仍待**: Studios 11 mock-only helpers (fitnessFormulas/mutationRules/...) ；後端實作這 14 條 endpoint 後可直接收成 live。

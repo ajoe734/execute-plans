@@ -3,6 +3,7 @@
 // in M1 transitional IA — see App.tsx). Phase 1 ships full minimum fields;
 // "Enable Canary"/"Enable Live" buttons are intentionally OMITTED.
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -11,6 +12,8 @@ import { ReadinessChecklist } from "@/management/components/readiness/ReadinessC
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem, pendingItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("ooda_paper_packet", "OODA paper packet present", "research-owner"),
@@ -37,14 +40,17 @@ const blockers = [
   { id: "B-EP5-001", severity: "high" as const, reason: "Risk-owner signoff pending on canary activation", requiredRole: "risk-owner", nextAction: "Open Human Gate", linkedEvidence: ["ep4-paper-2026-05-18"] },
 ];
 
+
 export const Ep5CanaryReadinessPage = () => {
   const { t } = useTranslation();
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: t("mgmt.readiness.ep5Title"),
     environment: "paper→canary",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), [t]);
+  const { data } = useV5Live(() => mgmt.readiness.ep5(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.readiness.ep5Title")}>
       <ReadinessHeader model={page.header} />

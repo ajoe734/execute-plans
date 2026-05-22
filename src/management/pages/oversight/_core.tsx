@@ -24,6 +24,8 @@ import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
 } from "@/lib/v5/management/humanInbox";
 import { buildLinkSet } from "@/lib/v5/management/links";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 // =====================================================================
 // Pathreon Management Cockpit (PM-3)
@@ -31,7 +33,9 @@ import { buildLinkSet } from "@/lib/v5/management/links";
 
 export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
-  const model = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  const seed = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  const { data } = useV5Live(() => mgmt.cockpit.get(() => seed), []);
+  const model = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
       <header>
@@ -68,6 +72,8 @@ const FLEET: FleetRow[] = [
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.personaFleet.get<FleetRow>(() => FLEET), []);
+  const rows = data ?? FLEET;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.fleet.title")}>
       <header>
@@ -86,7 +92,7 @@ export const PersonaFleetPage = () => {
           </thead>
 
           <tbody>
-            {FLEET.map((r) => (
+            {rows.map((r) => (
               <tr key={r.personaId} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono">{r.personaId}</td>
                 <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
@@ -159,7 +165,9 @@ function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRol
 
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
-  const sorted = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  const seed = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  const { data } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
+  const sorted = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header>
@@ -221,12 +229,14 @@ const PULSE: PulseRow[] = [
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
   const [selectedKind, setSelectedKind] = useState<TradingBaselineKind | "default">("default");
+  const { data: pulseRows } = useV5Live(() => mgmt.tradingPulse.get<PulseRow>(() => PULSE), []);
+  const rows = pulseRows ?? PULSE;
   const visible = useMemo(() => {
     if (selectedKind === "default") {
-      return PULSE.filter((p) => TRADING_BASELINE_DEFAULTS.includes(p.baselineKind));
+      return rows.filter((p) => TRADING_BASELINE_DEFAULTS.includes(p.baselineKind));
     }
-    return PULSE.filter((p) => p.baselineKind === selectedKind);
-  }, [selectedKind]);
+    return rows.filter((p) => p.baselineKind === selectedKind);
+  }, [selectedKind, rows]);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
       <header>
@@ -276,7 +286,8 @@ export const TradingPulsePage = () => {
 
 const RankingBlocks = () => {
   const { t } = useTranslation();
-  const blocks = useMemo(() => defaultPulseRankings(), []);
+  const { data } = useV5Live(() => mgmt.tradingPulse.rankings(), []);
+  const blocks = data ?? defaultPulseRankings();
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("mgmt.pulse.rankingsLabel")}>
       {blocks.map((b) => (
@@ -326,13 +337,15 @@ const verdictTone = (v: EvolutionEntry["verdict"]) =>
 
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => EVOLUTION), []);
+  const rows = data ?? EVOLUTION;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
-      {EVOLUTION.map((e) => (
+      {rows.map((e) => (
         <Card key={e.id} className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
@@ -368,6 +381,8 @@ const EVIDENCE: EvidenceRow[] = [
 
 export const EvidenceExplorerPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.evidence.list<EvidenceRow>(() => EVIDENCE), []);
+  const rows = data ?? EVIDENCE;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
       <header>
@@ -384,7 +399,7 @@ export const EvidenceExplorerPage = () => {
             </tr>
           </thead>
           <tbody>
-            {EVIDENCE.map((e) => (
+            {rows.map((e) => (
               <tr key={e.id} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
                 <td className="px-3 py-2">{e.kind}</td>

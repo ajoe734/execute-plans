@@ -1,9 +1,12 @@
 // 2026-05-20 revamp §7.5 + design ruling §4.5 — Strict Publish Audit.
+import { useMemo } from "react";
 import { ReadinessHeader } from "@/management/components/readiness/ReadinessHeader";
 import { ReadinessChecklist } from "@/management/components/readiness/ReadinessChecklist";
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("deployment_url", "Deployment URL present", "operator"),
@@ -27,12 +30,14 @@ const packets = [
 const blockers: never[] = [];
 
 export const StrictPublishAuditPage = () => {
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: "Strict Publish Audit",
     environment: "strict-live",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), []);
+  const { data } = useV5Live(() => mgmt.readiness.strictPublish(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label="Strict Publish Audit">
       <ReadinessHeader model={page.header} />

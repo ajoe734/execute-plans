@@ -24,3 +24,5 @@ export * from "./seedTaxonomy";
 export * from "./legacy";
 // Batch VII-c — v5 closed-loop OS namespace (single entrypoint).
 export * from "./v5";
+// 2026-05-22 PM-Live — Management Oversight live wiring (PM-1..PM-11).
+export * from "./management";

@@ -1,9 +1,12 @@
 // 2026-05-20 revamp §7.2 + design ruling §4.2 — Broker Live Activation.
+import { useMemo } from "react";
 import { ReadinessHeader } from "@/management/components/readiness/ReadinessHeader";
 import { ReadinessChecklist } from "@/management/components/readiness/ReadinessChecklist";
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem, pendingItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("broker_live_activation_criteria", "broker_live_activation_criteria present", "broker-owner"),
@@ -30,12 +33,14 @@ const blockers = [
 ];
 
 export const BrokerLiveReadinessPage = () => {
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: "Broker Live Activation",
     environment: "canary→live",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), []);
+  const { data } = useV5Live(() => mgmt.readiness.brokerLive(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label="Broker Live Readiness">
       <ReadinessHeader model={page.header} />
