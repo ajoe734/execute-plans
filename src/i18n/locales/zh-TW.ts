@@ -1810,6 +1810,11 @@ export default {
       criticalAnomalies: "Critical 異常",
       noCriticalAnomalies: "目前無 critical 異常。",
       personaOoda: "Persona × OODA",
+      totalCapital: "資金總覽",
+      personaLeague: "Persona 聯賽",
+      quarterlyCountdown: "季度排名倒數",
+      activePools: "活躍資金池",
+      highestRiskPool: "風險最高資金池",
     },
     fleet: {
       title: "Persona 艦隊",
