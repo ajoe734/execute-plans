@@ -1827,6 +1827,12 @@ export default {
       criticalAnomalies: "Critical Anomalies",
       noCriticalAnomalies: "No critical anomalies.",
       personaOoda: "Persona × OODA",
+      // PM-12 snapshots
+      totalCapital: "Total Capital",
+      personaLeague: "Persona League",
+      quarterlyCountdown: "Quarterly Ranking",
+      activePools: "Active pools",
+      highestRiskPool: "Highest risk pool",
     },
     fleet: {
       title: "Persona Fleet",
@@ -1941,14 +1947,7 @@ export default {
         evolutionRecent: "Recent evolution outcomes",
       },
     },
-    // 2026-05-22 PM-12 — Performance & League.
-    cockpit2: {
-      totalCapital: "Total Capital",
-      personaLeague: "Persona League",
-      quarterlyCountdown: "Quarterly Ranking",
-      activePools: "Active pools",
-      highestRiskPool: "Highest risk pool",
-    },
+    // 2026-05-22 PM-12 — Performance & League surfaces.
     portfolio: {
       title: "Portfolio Book",
       subtitle: "All managed capital pools — NAV, exposure, leverage, and holdings.",
