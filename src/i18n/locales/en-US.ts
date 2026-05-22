@@ -214,7 +214,15 @@ export default {
     },
     loops: {
       subtitle: "Closed-loop runs across research, execution and optimization.",
-      research: { title: "Research Loop Runs" },
+      research: {
+        title: "Research Loop Runs",
+        subtitle: "Research loop runs and review queue.",
+        runs: "Loop runs",
+        runsHint: "Each row is one research loop run.",
+        reviewPending: "Review pending",
+        emptyTitle: "No research loops",
+        emptyDesc: "Nothing matches the current focus.",
+      },
       execution: {
         title: "Execution Loop",
         subtitle: "Live execution loops, persona routing health, and v0-mock timeout policy.",
@@ -382,6 +390,15 @@ export default {
     memo: "Audit memo",
     memoPlaceholder: "Explain why this action is needed. Stored in the audit log (min 8 chars).",
     memoHint: "Memo must be at least 8 characters.",
+    memoTooShort: "Memo is too short.",
+    memoTooLong: "Memo is too long.",
+    memoIncidentRef: "Reference an open incident in the memo.",
+    cooldown: { title: "Cooldown active", remaining: "{{t}} remaining" },
+    twoMan: {
+      title: "Two-man rule",
+      distinctUser: "Second approver must be a different user.",
+      distinctFamily: "Second approver must be from a different role family.",
+    },
   },
   common: {
     owner: "Owner", updated: "Last updated", state: "State", name: "Name", createNotConfigured: "Create flow not configured",
@@ -671,6 +688,7 @@ export default {
     },
   },
   incident: {
+    viewRollbackSaga: "View rollback saga",
     notFound: "Incident not found",
     notFoundHint: "The incident may have been resolved or archived.",
     summary: "Incident summary",
@@ -997,6 +1015,7 @@ export default {
       approve: "Approve stage",
       reject: "Reject",
     },
+    quorum: { label: "Quorum" },
   },
   lifecycle: {
     title: "Lifecycle",
@@ -1374,7 +1393,7 @@ export default {
   },
   settings: {
     subtitle: "Personal preferences, workspace, integrations, locale, theme, and feature flags.",
-    tab: { profile: "Profile", workspace: "Workspace", integrations: "Integrations", api: "API Keys", locale: "Language", flags: "Feature Flags" },
+    tab: { profile: "Profile", workspace: "Workspace", integrations: "Integrations", api: "API Keys", locale: "Language", flags: "Feature Flags", breakglass: "Break-Glass" },
     profile: { title: "Profile", displayName: "Display name", email: "Email" },
     workspace: { title: "Workspace", name: "Name", tz: "Timezone" },
     theme: { title: "Theme", dark: "Dark mode", darkHint: "Default for low-light operator workflows.", density: "Density" },
