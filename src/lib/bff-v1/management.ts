@@ -20,6 +20,17 @@ import {
 import type { HumanInboxItem, HumanInboxDetail } from "@/lib/v5/management/humanInbox";
 import type { PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
 import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
+// PM-12 imports
+import type {
+  PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
+} from "@/lib/v5/management/portfolio";
+import type { PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
+import type {
+  QuarterlyRankingRow, QuarterlyRankingFormula,
+} from "@/lib/v5/management/quarterlyRanking";
+import type {
+  PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
+} from "@/lib/v5/management/performanceAttribution";
 
 // ---------- shape guards (extremely defensive) ----------
 
