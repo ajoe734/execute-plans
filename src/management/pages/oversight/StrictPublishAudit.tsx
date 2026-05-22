@@ -30,12 +30,14 @@ const packets = [
 const blockers: never[] = [];
 
 export const StrictPublishAuditPage = () => {
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: "Strict Publish Audit",
     environment: "strict-live",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), []);
+  const { data } = useV5Live(() => mgmt.readiness.strictPublish(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label="Strict Publish Audit">
       <ReadinessHeader model={page.header} />
