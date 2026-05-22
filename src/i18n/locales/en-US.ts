@@ -151,6 +151,11 @@ export default {
     capitalLiveReadiness: "Capital Binding Live",
     bffHaReadiness: "BFF HA Readiness",
     strictPublishAudit: "Strict Publish Audit",
+    // PM-12
+    portfolioBook: "Portfolio Book",
+    personaLeague: "Persona League",
+    quarterlyRanking: "Quarterly Ranking",
+    performanceAttribution: "Performance Attribution",
 
   },
   groups: {
@@ -173,6 +178,7 @@ export default {
     oversight: "Pathreon Management",
     liveReadiness: "Live Readiness",
     advancedRegistry: "Advanced Registry",
+    performanceLeague: "Performance & League",
   },
 
   v5: {
