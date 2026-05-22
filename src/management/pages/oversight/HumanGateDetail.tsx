@@ -41,7 +41,9 @@ function seedDetail(id: string): HumanInboxDetail {
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  const item = seedDetail(id);
+  const seed = useMemo(() => seedDetail(id), [id]);
+  const { data } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
+  const item = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
