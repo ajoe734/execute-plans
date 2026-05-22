@@ -23,3 +23,4 @@ export { CapitalBindingLiveReadinessPage } from "./CapitalBindingLiveReadiness";
 export { BffHaReadinessPage } from "./BffHaReadiness";
 export { StrictPublishAuditPage } from "./StrictPublishAudit";
 export { ManagementNlConsole } from "./NlConsole";
+export { HumanGateDetailPage } from "./HumanGateDetail";

@@ -117,6 +117,28 @@ function respondFixed(intent: ManagementNlIntent, ask: ManagementNlAsk): Managem
         refused: false,
       };
     }
+    case "explain_current_page":
+      return {
+        intent, provider: "fixed_mock",
+        summary: "I can't see your current page from this mock provider. Use the side nav to explain what you're looking at, or pick a deep-link below.",
+        followups: [
+          { label: "Pathreon Management Cockpit", href: "/management/cockpit" },
+          { label: "Persona Fleet", href: "/management/persona-fleet" },
+        ],
+        refused: false,
+      };
+    case "explain_selected_anomaly":
+      return {
+        intent, provider: "fixed_mock",
+        summary: ask.objectRef
+          ? `Anomaly ${ask.objectRef}: open Critical Anomaly Panel for why + recommended action.`
+          : "Pick an anomaly card to see why it fired.",
+        followups: [
+          { label: "Critical Anomalies", href: "/management/cockpit" },
+          { label: "Sentinel", href: "/management/sentinel" },
+        ],
+        refused: false,
+      };
     case "unknown":
     default:
       return {

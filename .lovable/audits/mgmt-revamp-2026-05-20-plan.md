@@ -9,11 +9,28 @@
 |---|---|---|
 | M0 | 歸檔 + INDEX + memory + 追蹤表 | ✅ DONE (2026-05-20) |
 | M1 | IA + Nav + i18n + stubs | ✅ DONE (2026-05-20) |
-| M2 | OneRing / Fleet / Inbox / Pulse / Evolution / Evidence / Intent 七頁實作 | ⏳ TODO |
-| M3 | Broker/Capital/BFF-HA/Strict Publish readiness 骨架 | ⏳ TODO |
-| M4 | NL Console dock + mock facade | ⏳ TODO |
-| M5 | Write path hardening (persona canonical + deployment + approvals) | ⏳ TODO |
-| M6 | Tests (unit + Playwright smoke + strict-mode + i18n parity) | ⏳ TODO |
+| M2 | OneRing / Fleet / Inbox / Pulse / Evolution / Evidence / Intent 七頁實作 | ✅ DONE (2026-05-21) |
+| M3 | Broker/Capital/BFF-HA/Strict Publish readiness 骨架 | ✅ DONE (2026-05-21) |
+| M4 | NL Console dock + mock facade | ✅ DONE (2026-05-22) |
+| M5 | Write path hardening (persona canonical + deployment + approvals) | ⏳ PARTIAL — personas LANDED 2026-05-22；deployment/approvals 仍走 nested `paths.{xAction}` |
+| M6 | Tests (unit + Playwright smoke + strict-mode + i18n parity) | ✅ unit 51 LANDED (2026-05-22)；Playwright smoke 待補 |
+| PM-1..PM-11 | 2026-05-20 改版完整實作 (5 sprints) | ✅ PM-1..PM-11 LANDED 2026-05-22 — 詳見下方 |
+
+## PM-1..PM-11 LANDED 2026-05-22
+
+- PM-1 naming + redirects + `check-management-naming.ts` guard
+- PM-2 deep link model (`links.ts` + `buildLinkSet`)
+- PM-3 Cockpit visual upgrade — `composeCockpit` + 4 components (SystemStateStrip / LoopFlowMap / PersonaOodaMatrix / CriticalAnomalyPanel)
+- PM-4 Trading Pulse 8 ranking blocks (`tradingRankings.ts`) + 12-baseline enum validation
+- PM-5 Unified anomaly model (5 severities × 12 domains) + AnomalyBadge/Card/List
+- PM-6 Human Inbox 9 kinds + `/management/human-inbox/:id` detail page
+- PM-7 Readiness pages keep §4 minimum-fields contract (blockerIds/manageHref ready in type surface)
+- PM-8 Persistent NL drawer mounted in `ManagementLayout` topbar; `explain_current_page` + `explain_selected_anomaly` intents added; strict-mode never silently falls back
+- PM-9 13 management aggregate paths added to `paths.ts` (`mgmtCockpit`..`mgmtReadinessStrictPublish`)
+- PM-10 `runPersonaAction` switched to canonical `paths.action("persona", id, action)`
+- PM-11 `scripts/check-agora-boundary.ts` CI guard — 0 hits
+
+Tests: 525/525 vitest green; both CI guards green.
 
 ## 預設方案（plan §0，待用戶確認 / 否則沿用）
 

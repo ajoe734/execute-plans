@@ -1,6 +1,6 @@
 // 2026-05-20 revamp §6 — Core 7 Oversight pages (Phase 1).
-// Replaces M1 stubs with real, data-driven UIs. Each page renders from a
-// pure local view-model + minimal seed access so the routes are real.
+// Cockpit upgraded by PM-3 (composeCockpit + SystemStateStrip / LoopFlowMap /
+// PersonaOodaMatrix / CriticalAnomalyPanel).
 //
 // PersonaIntent + readiness pages live in their own files.
 
@@ -13,51 +13,38 @@ import {
   TRADING_BASELINE_DEFAULTS, TRADING_BASELINE_KINDS,
   baselineLabel, type TradingBaselineKind,
 } from "@/lib/v5/management/tradingBaseline";
+import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
+import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
+import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
+import { PersonaOodaMatrix } from "@/management/components/cockpit/PersonaOodaMatrix";
+import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAnomalyPanel";
+import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
+import {
+  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
+} from "@/lib/v5/management/humanInbox";
+import { buildLinkSet } from "@/lib/v5/management/links";
 
 // =====================================================================
-// Pathreon Management Cockpit — top-level oversight aggregate.
-// (Internal symbol kept as OneRingCockpitPage for back-compat; visible label
-// must read "Pathreon Management Cockpit".)
+// Pathreon Management Cockpit (PM-3)
 // =====================================================================
 
-const COCKPIT_KPIS = {
-  autonomyState: "guarded" as const,
-  humanPending: 3,
-  criticalFindings: 1,
-  personaOwners: 4,
-  personas: 12,
+export const OneRingCockpitPage = () => {
+  const model = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  return (
+    <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
+      <header>
+        <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
+        <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
+      </header>
+      <SystemStateStrip model={model.strip} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LoopFlowMap model={model.loopFlow} />
+        <PersonaOodaMatrix model={model.matrix} />
+      </div>
+      <CriticalAnomalyPanel anomalies={model.anomalies} />
+    </section>
+  );
 };
-
-const COCKPIT_SECTIONS = [
-  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 owners · 2 in OODA-Decide · 1 paused" },
-  { title: "Trading Pulse", href: "/management/trading-pulse", body: "1 canary positive vs previous artifact · 1 paper drift watching" },
-  { title: "Evolution summary", href: "/management/evolution-journal", body: "2 mutations landed this week · 1 reverted" },
-];
-
-export const OneRingCockpitPage = () => (
-  <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
-    <header>
-      <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
-      <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
-    </header>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Autonomy</div><div className="text-lg font-semibold">{COCKPIT_KPIS.autonomyState}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Human pending</div><div className="text-lg font-semibold">{COCKPIT_KPIS.humanPending}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Critical findings</div><div className="text-lg font-semibold">{COCKPIT_KPIS.criticalFindings}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Persona owners</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personaOwners}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Personas</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personas}</div></Card>
-    </div>
-    <div className="grid gap-3 lg:grid-cols-3">
-      {COCKPIT_SECTIONS.map((s) => (
-        <Card key={s.href} className="p-4">
-          <h2 className="text-sm font-semibold text-foreground">{s.title}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{s.body}</p>
-          <Link to={s.href} className="mt-2 inline-block text-xs text-primary underline-offset-4 hover:underline">Open →</Link>
-        </Card>
-      ))}
-    </div>
-  </section>
-);
 
 
 // =====================================================================
@@ -122,53 +109,96 @@ export const PersonaFleetPage = () => (
 // Human Inbox
 // =====================================================================
 
-interface InboxItem {
-  id: string; kind: "approval" | "sentinel" | "ask";
-  title: string; requiredRole: string;
-  consequenceIfApproved: string; consequenceIfRejected: string; consequenceIfIgnored: string;
-  href: string;
-}
+// =====================================================================
+// Human Inbox — 9 kinds (PM-6)
+// =====================================================================
 
-const INBOX: InboxItem[] = [
-  { id: "appr-001", kind: "approval", title: "Approve mutation v3 for alpha-trader", requiredRole: "research-owner",
-    consequenceIfApproved: "Mutation enters paper run", consequenceIfRejected: "Mutation discarded",
-    consequenceIfIgnored: "Times out in 12h", href: "/management/approvals" },
-  { id: "sent-019", kind: "sentinel", title: "Beta drift critical on momentum sleeve", requiredRole: "risk-owner",
-    consequenceIfApproved: "Acknowledged + remediation", consequenceIfRejected: "Auto-paused",
-    consequenceIfIgnored: "Auto-paused in 30m", href: "/management/sentinel" },
-  { id: "ask-007", kind: "ask", title: "Persona asks: extend live-paper overlap?", requiredRole: "operator",
-    consequenceIfApproved: "Overlap +2d", consequenceIfRejected: "Continue as planned",
-    consequenceIfIgnored: "Default: continue", href: "/management/interventions" },
+const INBOX: HumanInboxItem[] = [
+  buildInbox("appr-001", "approval", "Approve mutation v3 for alpha-trader", "research-owner",
+    "Mutation enters paper run", "Mutation discarded", "Times out in 12h"),
+  buildInbox("sent-019", "sentinel", "Beta drift critical on momentum sleeve", "risk-owner",
+    "Acknowledged + remediation", "Auto-paused", "Auto-paused in 30m"),
+  buildInbox("ask-007", "ask", "Persona asks: extend live-paper overlap?", "operator",
+    "Overlap +2d", "Continue as planned", "Default: continue"),
+  buildInbox("inter-031", "intervention", "Pause persona capital-steward live trading", "ops-owner",
+    "Persona paused", "Persona continues", "Continues until next gate"),
+  buildInbox("rdy-002", "readiness_blocker", "EP5 canary blocker: missing paper-14d evidence", "research-owner",
+    "Unblocks canary promote", "Blocker remains", "Blocker remains"),
+  buildInbox("pol-014", "policy_violation", "Trace-003 flagged confidentiality violation", "compliance",
+    "Acknowledged + remediation logged", "Escalated to legal", "Auto-escalates in 2h"),
+  buildInbox("rbk-009", "rollback_request", "Rollback dep-042 vol-target weekly", "ops-owner",
+    "Rollback executes", "Rollback denied", "Awaits next window"),
+  buildInbox("cap-022", "capital_breach", "cp-eu-mid-cap VaR utilisation at 0.91", "capital-owner",
+    "Risk budget extended", "Reduce exposure", "Auto-reduces in 1h"),
+  buildInbox("brk-005", "broker_disconnect", "Broker IB EU lost binding", "ops-owner",
+    "Re-bind broker", "Switch venue", "Live trading halts"),
 ];
 
-export const HumanInboxPage = () => (
-  <section className="p-6 space-y-4" aria-label="Human Inbox">
-    <header>
-      <h1 className="text-2xl font-semibold text-foreground">Human Inbox</h1>
-      <p className="text-sm text-muted-foreground">One queue. Required role + consequences shown up front.</p>
-    </header>
-    {INBOX.map((it) => (
-      <Card key={it.id} className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{it.kind}</Badge>
-            <span className="text-sm font-medium text-foreground">{it.title}</span>
+function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRole: string,
+                    a: string, r: string, ign: string): HumanInboxItem {
+  const links = kind === "approval"          ? buildLinkSet({ primary: { kind: "approval", id } }) :
+                kind === "sentinel"          ? buildLinkSet({ primary: { kind: "sentinel", id } }) :
+                kind === "rollback_request"  ? buildLinkSet({ primary: { kind: "deployment", id: "dep-042" } }) :
+                kind === "capital_breach"    ? buildLinkSet({ primary: { kind: "capital_pool", id: "cp-eu-mid-cap" } }) :
+                kind === "broker_disconnect" ? buildLinkSet({ primary: { kind: "broker_live" } }) :
+                kind === "policy_violation"  ? buildLinkSet({ primary: { kind: "evidence", id: "ev:legal-hold-1" } }) :
+                kind === "readiness_blocker" ? buildLinkSet({ primary: { kind: "strict_publish" } }) :
+                                                buildLinkSet({ primary: { kind: "human_gate", id } });
+  return {
+    id, kind, title, requiredRole,
+    consequenceIfApproved: a, consequenceIfRejected: r, consequenceIfIgnored: ign,
+    canDecide: kind !== "policy_violation",
+    canProceed: kind !== "capital_breach",
+    blockingReasons: kind === "capital_breach" ? ["Capital pool VaR breach"] : undefined,
+    detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
+    ttlSec: 12 * 3600,
+    links,
+  };
+}
+
+export const HumanInboxPage = () => {
+  const sorted = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  return (
+    <section className="p-6 space-y-4" aria-label="Human Inbox">
+      <header>
+        <h1 className="text-2xl font-semibold text-foreground">Human Inbox</h1>
+        <p className="text-sm text-muted-foreground">
+          {HUMAN_INBOX_KINDS.length} kinds · required role + consequences shown up front · deep links to the page that fixes it.
+        </p>
+      </header>
+      {sorted.map((it) => (
+        <Card key={it.id} className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{it.kind}</Badge>
+              <span className="text-sm font-medium text-foreground">{it.title}</span>
+              {!it.canProceed && (
+                <Badge variant="outline" className="bg-status-failed/15 text-status-failed border-status-failed/30">
+                  cannot proceed
+                </Badge>
+              )}
+            </div>
+            <Badge variant="outline">required role: {it.requiredRole}</Badge>
           </div>
-          <Badge variant="outline">required role: {it.requiredRole}</Badge>
-        </div>
-        <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
-          <div><dt className="text-muted-foreground">If approved</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
-          <div><dt className="text-muted-foreground">If rejected</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
-          <div><dt className="text-muted-foreground">If ignored</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
-        </dl>
-        <div className="mt-3 flex gap-2">
-          <Button asChild size="sm" variant="outline"><Link to={it.href}>Open</Link></Button>
-          <Button size="sm" variant="outline">Request more evidence</Button>
-        </div>
-      </Card>
-    ))}
-  </section>
-);
+          <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted-foreground">If approved</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
+            <div><dt className="text-muted-foreground">If rejected</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
+            <div><dt className="text-muted-foreground">If ignored</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>Open detail</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>Manage</Link></Button>
+            {it.links.evidenceHref ? (
+              <Button asChild size="sm" variant="outline"><Link to={it.links.evidenceHref}>Evidence</Link></Button>
+            ) : (
+              <span className="text-xs text-muted-foreground self-center">Evidence missing</span>
+            )}
+          </div>
+        </Card>
+      ))}
+    </section>
+  );
+};
 
 // =====================================================================
 // Trading Pulse — baselineKind enum + baselineLabel display.
@@ -235,7 +265,38 @@ export const TradingPulsePage = () => {
           );
         })}
       </div>
+
+      <RankingBlocks />
     </section>
+  );
+};
+
+const RankingBlocks = () => {
+  const blocks = useMemo(() => defaultPulseRankings(), []);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Trading Pulse Rankings">
+      {blocks.map((b) => (
+        <Card key={b.kind} className="p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
+          {b.rows.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">No rows.</p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-xs">
+              {b.rows.map((r) => (
+                <li key={r.subjectId} className="flex items-center justify-between gap-2">
+                  <Link to={r.links.manageHref} className="font-mono text-primary underline-offset-4 hover:underline">
+                    {r.subjectLabel}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {r.metric}: <span className="text-foreground">{r.metricValue}{r.metricUnit ?? ""}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ))}
+    </div>
   );
 };
 

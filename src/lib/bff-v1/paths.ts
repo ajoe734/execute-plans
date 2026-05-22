@@ -138,4 +138,21 @@ export const paths = {
   /** @deprecated Alias of `v5InterventionDecide(id)`. */
   v5InterventionDecision: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
   v5ExecutionPersonaHealth: () => `${BASE}/v5/execution/persona-health`,
+
+  // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
+  // Mock providers continue returning seeds; live providers hit these.
+  mgmtCockpit: () => `${BASE}/management/cockpit`,
+  mgmtPersonaFleet: () => `${BASE}/management/persona-fleet`,
+  mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
+  mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
+  mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
+  mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
+  mgmtEvolutionJournal: () => `${BASE}/management/evolution-journal`,
+  mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
+  mgmtPersonaIntent: () => `${BASE}/management/persona-intent`,
+  mgmtReadinessEp5: () => `${BASE}/management/readiness/ep5`,
+  mgmtReadinessBrokerLive: () => `${BASE}/management/readiness/broker-live`,
+  mgmtReadinessCapitalBinding: () => `${BASE}/management/readiness/capital-binding-live`,
+  mgmtReadinessBffHa: () => `${BASE}/management/readiness/bff-ha`,
+  mgmtReadinessStrictPublish: () => `${BASE}/management/readiness/strict-publish`,
 } as const;
