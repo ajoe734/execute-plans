@@ -19,7 +19,13 @@ import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStr
 import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
 import { PersonaOodaMatrix } from "@/management/components/cockpit/PersonaOodaMatrix";
 import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAnomalyPanel";
+import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapitalSnapshot";
+import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
+import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
+import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
+import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
+import { defaultQuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
 } from "@/lib/v5/management/humanInbox";
