@@ -92,7 +92,7 @@ export const PersonaFleetPage = () => {
           </thead>
 
           <tbody>
-            {FLEET.map((r) => (
+            {rows.map((r) => (
               <tr key={r.personaId} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono">{r.personaId}</td>
                 <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
