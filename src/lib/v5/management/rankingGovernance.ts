@@ -1,6 +1,8 @@
 // 2026-05-22 PM12-010 — Ranking → Human Inbox bridge.
-// Mock-only: writes a HumanInboxItem into writeOverlay so the user can land on
-// /management/human-inbox/:id and review. Never mutates persona/capital/live.
+// Generates a deterministic Human Inbox id from a ranking recommendation.
+// The detail page (HumanGateDetail) will pick up `ranking_recommendation`
+// kind from the id prefix and render an editable governance gate.
+// NEVER mutates persona / capital / live deployment directly.
 
 import type { LeagueRecommendedAction } from "./personaLeague";
 import type { HumanInboxItem } from "./humanInbox";
@@ -15,8 +17,7 @@ export interface SendRankingRecommendationInput {
   evidenceRefs?: string[];
 }
 
-// Required-role mapping per recommendation (defensive default = governance_lead).
-function requiredRoleFor(action: LeagueRecommendedAction): string {
+export function requiredRoleFor(action: LeagueRecommendedAction): string {
   switch (action) {
     case "promote_to_canary_candidate": return "deployment_lead";
     case "increase_research_budget": return "research_lead";
@@ -33,7 +34,7 @@ function requiredRoleFor(action: LeagueRecommendedAction): string {
 export function buildRankingInboxItem(
   input: SendRankingRecommendationInput,
 ): HumanInboxItem {
-  const id = `inbox-rank-${input.personaId}-${Date.now()}`;
+  const id = makeRankingInboxId(input);
   return {
     id,
     kind: "ranking_recommendation",
@@ -55,22 +56,13 @@ export function buildRankingInboxItem(
   };
 }
 
-/** Mock: pushes the item into writeOverlay (browser-only) and returns its id. */
+export function makeRankingInboxId(input: SendRankingRecommendationInput): string {
+  // Prefix "ran" so the detail page id→kind heuristic resolves to
+  // `ranking_recommendation`.
+  return `ranking-rec-${input.source}-${input.personaId}-${input.recommendation}`;
+}
+
+/** Returns the deterministic id so the caller can navigate to the detail. */
 export function sendRankingRecommendation(input: SendRankingRecommendationInput): string {
-  const item = buildRankingInboxItem(input);
-  if (typeof window !== "undefined") {
-    try {
-      // Lazy import to avoid SSR / test breakage.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const w = require("@/lib/bff/writeOverlay") as typeof import("@/lib/bff/writeOverlay");
-      // Best-effort — overlay api may not have a typed channel; ignore if unsupported.
-      const fn = (w as unknown as Record<string, unknown>).appendOverlay;
-      if (typeof fn === "function") {
-        (fn as (k: string, v: unknown) => void)("mgmt.humanInbox", item);
-      }
-    } catch {
-      // Phase 1 silent — user still lands on the inbox detail page.
-    }
-  }
-  return item.id;
+  return makeRankingInboxId(input);
 }
