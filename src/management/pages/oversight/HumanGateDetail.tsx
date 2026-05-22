@@ -1,6 +1,7 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
-// Phase 1: deterministic mock detail derived from id.
+// Phase 1: deterministic mock detail derived from id; live wired via mgmt.humanInbox.get.
 
+import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -8,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HUMAN_INBOX_KINDS, type HumanInboxDetail, type HumanInboxKind } from "@/lib/v5/management/humanInbox";
 import { buildLinkSet } from "@/lib/v5/management/links";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 function seedDetail(id: string): HumanInboxDetail {
   const kind: HumanInboxKind = (HUMAN_INBOX_KINDS.find((k) => id.startsWith(k.slice(0, 3))) ?? "approval");
