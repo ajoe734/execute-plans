@@ -230,6 +230,97 @@ export const mgmt = {
         safeAdapt(adaptReadiness, seedFn),
       ),
   },
+
+  // ---------- PM-12 ----------
+
+  portfolioBook: {
+    summary: (seedFn: () => PortfolioSummary): Promise<PortfolioSummary> =>
+      withLiveOrMock<PortfolioSummary>(
+        { method: "GET", path: paths.mgmtPortfolioBook() },
+        async () => seedFn(),
+        safeAdapt((raw) => {
+          const data = unwrap(raw);
+          return isObject(data) && "totalNav" in data ? (data as unknown as PortfolioSummary) : null;
+        }, seedFn),
+      ),
+    pools: (seedFn: () => CapitalPoolSummaryRow[]): Promise<CapitalPoolSummaryRow[]> =>
+      withLiveOrMock<CapitalPoolSummaryRow[]>(
+        { method: "GET", path: paths.mgmtPortfolioPools() },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<CapitalPoolSummaryRow>, seedFn),
+      ),
+    holdings: (seedFn: () => HoldingRow[]): Promise<HoldingRow[]> =>
+      withLiveOrMock<HoldingRow[]>(
+        { method: "GET", path: paths.mgmtPortfolioHoldings() },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<HoldingRow>, seedFn),
+      ),
+  },
+
+  personaLeague: {
+    list: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
+      withLiveOrMock<PersonaLeagueRow[]>(
+        { method: "GET", path: paths.mgmtPersonaLeague() },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<PersonaLeagueRow>, seedFn),
+      ),
+    rankings: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
+      withLiveOrMock<PersonaLeagueRow[]>(
+        { method: "GET", path: paths.mgmtPersonaLeagueRankings() },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<PersonaLeagueRow>, seedFn),
+      ),
+    tiers: <T>(seedFn: () => T): Promise<T> =>
+      withLiveOrMock<T>(
+        { method: "GET", path: paths.mgmtPersonaLeagueTiers() },
+        async () => seedFn(),
+        safeAdapt((raw) => {
+          const data = unwrap(raw);
+          return isObject(data) ? (data as unknown as T) : null;
+        }, seedFn),
+      ),
+  },
+
+  quarterlyRanking: {
+    list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
+      withLiveOrMock<QuarterlyRankingRow[]>(
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+      ),
+    formula: (seedFn: () => QuarterlyRankingFormula): Promise<QuarterlyRankingFormula> =>
+      withLiveOrMock<QuarterlyRankingFormula>(
+        { method: "GET", path: paths.mgmtQuarterlyRankingFormula() },
+        async () => seedFn(),
+        safeAdapt((raw) => {
+          const data = unwrap(raw);
+          return isObject(data) && "weights" in data
+            ? (data as unknown as QuarterlyRankingFormula) : null;
+        }, seedFn),
+      ),
+    recommendations: (
+      quarter: string | undefined,
+      seedFn: () => QuarterlyRankingRow[],
+    ): Promise<QuarterlyRankingRow[]> =>
+      withLiveOrMock<QuarterlyRankingRow[]>(
+        { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+      ),
+  },
+
+  performanceAttribution: {
+    list: (
+      dimension: AttributionDimension | undefined,
+      period: AttributionPeriod | undefined,
+      seedFn: () => PerformanceAttributionRow[],
+    ): Promise<PerformanceAttributionRow[]> =>
+      withLiveOrMock<PerformanceAttributionRow[]>(
+        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) },
+        async () => seedFn(),
+        safeAdapt(adaptArrayPassthrough<PerformanceAttributionRow>, seedFn),
+      ),
+  },
 };
 
 export type Mgmt = typeof mgmt;
