@@ -15,34 +15,36 @@ import {
 } from "@/lib/v5/management/tradingBaseline";
 
 // =====================================================================
-// One Ring Cockpit — top-level oversight aggregate.
+// Pathreon Management Cockpit — top-level oversight aggregate.
+// (Internal symbol kept as OneRingCockpitPage for back-compat; visible label
+// must read "Pathreon Management Cockpit".)
 // =====================================================================
 
 const COCKPIT_KPIS = {
   autonomyState: "guarded" as const,
   humanPending: 3,
   criticalFindings: 1,
-  ringBearers: 4,
+  personaOwners: 4,
   personas: 12,
 };
 
 const COCKPIT_SECTIONS = [
-  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 ring bearers · 2 in OODA-Decide · 1 paused" },
+  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 owners · 2 in OODA-Decide · 1 paused" },
   { title: "Trading Pulse", href: "/management/trading-pulse", body: "1 canary positive vs previous artifact · 1 paper drift watching" },
   { title: "Evolution summary", href: "/management/evolution-journal", body: "2 mutations landed this week · 1 reverted" },
 ];
 
 export const OneRingCockpitPage = () => (
-  <section className="p-6 space-y-4" aria-label="One Ring Cockpit">
+  <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
     <header>
-      <h1 className="text-2xl font-semibold text-foreground">One Ring Cockpit</h1>
+      <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
       <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
     </header>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Card className="p-3"><div className="text-xs text-muted-foreground">Autonomy</div><div className="text-lg font-semibold">{COCKPIT_KPIS.autonomyState}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Human pending</div><div className="text-lg font-semibold">{COCKPIT_KPIS.humanPending}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Critical findings</div><div className="text-lg font-semibold">{COCKPIT_KPIS.criticalFindings}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Ring bearers</div><div className="text-lg font-semibold">{COCKPIT_KPIS.ringBearers}</div></Card>
+      <Card className="p-3"><div className="text-xs text-muted-foreground">Persona owners</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personaOwners}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Personas</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personas}</div></Card>
     </div>
     <div className="grid gap-3 lg:grid-cols-3">
@@ -56,6 +58,7 @@ export const OneRingCockpitPage = () => (
     </div>
   </section>
 );
+
 
 // =====================================================================
 // Persona Fleet
