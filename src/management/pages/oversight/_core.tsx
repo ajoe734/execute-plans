@@ -381,6 +381,8 @@ const EVIDENCE: EvidenceRow[] = [
 
 export const EvidenceExplorerPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.evidence.list<EvidenceRow>(() => EVIDENCE), []);
+  const rows = data ?? EVIDENCE;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
       <header>
@@ -397,7 +399,7 @@ export const EvidenceExplorerPage = () => {
             </tr>
           </thead>
           <tbody>
-            {EVIDENCE.map((e) => (
+            {rows.map((e) => (
               <tr key={e.id} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
                 <td className="px-3 py-2">{e.kind}</td>
