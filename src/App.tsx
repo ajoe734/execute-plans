@@ -101,6 +101,7 @@ import {
   StrictPublishAuditPage,
   Ep5CanaryReadinessPage,
   ManagementNlConsole,
+  HumanGateDetailPage,
 } from "@/management/pages/oversight/_stubs";
 import NotFound from "./pages/NotFound";
 
@@ -127,6 +128,7 @@ const App = () => (
 
               <Route path="persona-fleet" element={<PersonaFleetPage />} />
               <Route path="human-inbox" element={<HumanInboxPage />} />
+              <Route path="human-inbox/:id" element={<HumanGateDetailPage />} />
               <Route path="trading-pulse" element={<TradingPulsePage />} />
               <Route path="evolution-journal" element={<EvolutionJournalPage />} />
               <Route path="evidence" element={<EvidenceExplorerPage />} />

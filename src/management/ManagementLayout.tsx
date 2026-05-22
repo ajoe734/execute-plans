@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { SideNav, type NavGroup } from "@/platform/components/SideNav";
+import { NlAssistantDrawer } from "@/management/components/nl/NlAssistantDrawer";
 import { useT } from "@/platform/hooks";
 import {
   LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
@@ -93,6 +94,9 @@ export const ManagementLayout = () => {
     <>
       <SideNav groups={groups} />
       <main className="flex-1 min-w-0">
+        <div className="flex items-center justify-end gap-2 border-b border-border bg-background/50 px-4 py-2">
+          <NlAssistantDrawer />
+        </div>
         <Outlet />
       </main>
     </>
