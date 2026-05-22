@@ -155,4 +155,23 @@ export const paths = {
   mgmtReadinessCapitalBinding: () => `${BASE}/management/readiness/capital-binding-live`,
   mgmtReadinessBffHa: () => `${BASE}/management/readiness/bff-ha`,
   mgmtReadinessStrictPublish: () => `${BASE}/management/readiness/strict-publish`,
+
+  // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
+  mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
+  mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
+  mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
+  mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
+  mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
+  mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
+  mgmtQuarterlyRanking: (quarter?: string) =>
+    `${BASE}/management/quarterly-ranking${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
+  mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
+    `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtPerformanceAttribution: (dimension?: string, period?: string) => {
+    const qs: string[] = [];
+    if (dimension) qs.push(`dimension=${enc(dimension)}`);
+    if (period) qs.push(`period=${enc(period)}`);
+    return `${BASE}/management/performance-attribution${qs.length ? `?${qs.join("&")}` : ""}`;
+  },
 } as const;
