@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { intentDisplayRules, type PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 // Phase 1 deterministic mock list.
 const TRACES: PersonaIntentTrace[] = [
