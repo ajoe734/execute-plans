@@ -286,7 +286,8 @@ export const TradingPulsePage = () => {
 
 const RankingBlocks = () => {
   const { t } = useTranslation();
-  const blocks = useMemo(() => defaultPulseRankings(), []);
+  const { data } = useV5Live(() => mgmt.tradingPulse.rankings(), []);
+  const blocks = data ?? defaultPulseRankings();
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("mgmt.pulse.rankingsLabel")}>
       {blocks.map((b) => (
