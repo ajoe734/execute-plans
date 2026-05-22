@@ -37,14 +37,20 @@ const blockers = [
   { id: "B-EP5-001", severity: "high" as const, reason: "Risk-owner signoff pending on canary activation", requiredRole: "risk-owner", nextAction: "Open Human Gate", linkedEvidence: ["ep4-paper-2026-05-18"] },
 ];
 
+import { useMemo } from "react";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
+
 export const Ep5CanaryReadinessPage = () => {
   const { t } = useTranslation();
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: t("mgmt.readiness.ep5Title"),
     environment: "paper→canary",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), [t]);
+  const { data } = useV5Live(() => mgmt.readiness.ep5(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.readiness.ep5Title")}>
       <ReadinessHeader model={page.header} />
