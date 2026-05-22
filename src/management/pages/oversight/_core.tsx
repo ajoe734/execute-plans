@@ -109,53 +109,96 @@ export const PersonaFleetPage = () => (
 // Human Inbox
 // =====================================================================
 
-interface InboxItem {
-  id: string; kind: "approval" | "sentinel" | "ask";
-  title: string; requiredRole: string;
-  consequenceIfApproved: string; consequenceIfRejected: string; consequenceIfIgnored: string;
-  href: string;
-}
+// =====================================================================
+// Human Inbox — 9 kinds (PM-6)
+// =====================================================================
 
-const INBOX: InboxItem[] = [
-  { id: "appr-001", kind: "approval", title: "Approve mutation v3 for alpha-trader", requiredRole: "research-owner",
-    consequenceIfApproved: "Mutation enters paper run", consequenceIfRejected: "Mutation discarded",
-    consequenceIfIgnored: "Times out in 12h", href: "/management/approvals" },
-  { id: "sent-019", kind: "sentinel", title: "Beta drift critical on momentum sleeve", requiredRole: "risk-owner",
-    consequenceIfApproved: "Acknowledged + remediation", consequenceIfRejected: "Auto-paused",
-    consequenceIfIgnored: "Auto-paused in 30m", href: "/management/sentinel" },
-  { id: "ask-007", kind: "ask", title: "Persona asks: extend live-paper overlap?", requiredRole: "operator",
-    consequenceIfApproved: "Overlap +2d", consequenceIfRejected: "Continue as planned",
-    consequenceIfIgnored: "Default: continue", href: "/management/interventions" },
+const INBOX: HumanInboxItem[] = [
+  buildInbox("appr-001", "approval", "Approve mutation v3 for alpha-trader", "research-owner",
+    "Mutation enters paper run", "Mutation discarded", "Times out in 12h"),
+  buildInbox("sent-019", "sentinel", "Beta drift critical on momentum sleeve", "risk-owner",
+    "Acknowledged + remediation", "Auto-paused", "Auto-paused in 30m"),
+  buildInbox("ask-007", "ask", "Persona asks: extend live-paper overlap?", "operator",
+    "Overlap +2d", "Continue as planned", "Default: continue"),
+  buildInbox("inter-031", "intervention", "Pause persona capital-steward live trading", "ops-owner",
+    "Persona paused", "Persona continues", "Continues until next gate"),
+  buildInbox("rdy-002", "readiness_blocker", "EP5 canary blocker: missing paper-14d evidence", "research-owner",
+    "Unblocks canary promote", "Blocker remains", "Blocker remains"),
+  buildInbox("pol-014", "policy_violation", "Trace-003 flagged confidentiality violation", "compliance",
+    "Acknowledged + remediation logged", "Escalated to legal", "Auto-escalates in 2h"),
+  buildInbox("rbk-009", "rollback_request", "Rollback dep-042 vol-target weekly", "ops-owner",
+    "Rollback executes", "Rollback denied", "Awaits next window"),
+  buildInbox("cap-022", "capital_breach", "cp-eu-mid-cap VaR utilisation at 0.91", "capital-owner",
+    "Risk budget extended", "Reduce exposure", "Auto-reduces in 1h"),
+  buildInbox("brk-005", "broker_disconnect", "Broker IB EU lost binding", "ops-owner",
+    "Re-bind broker", "Switch venue", "Live trading halts"),
 ];
 
-export const HumanInboxPage = () => (
-  <section className="p-6 space-y-4" aria-label="Human Inbox">
-    <header>
-      <h1 className="text-2xl font-semibold text-foreground">Human Inbox</h1>
-      <p className="text-sm text-muted-foreground">One queue. Required role + consequences shown up front.</p>
-    </header>
-    {INBOX.map((it) => (
-      <Card key={it.id} className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{it.kind}</Badge>
-            <span className="text-sm font-medium text-foreground">{it.title}</span>
+function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRole: string,
+                    a: string, r: string, ign: string): HumanInboxItem {
+  const links = kind === "approval"          ? buildLinkSet({ primary: { kind: "approval", id } }) :
+                kind === "sentinel"          ? buildLinkSet({ primary: { kind: "sentinel", id } }) :
+                kind === "rollback_request"  ? buildLinkSet({ primary: { kind: "deployment", id: "dep-042" } }) :
+                kind === "capital_breach"    ? buildLinkSet({ primary: { kind: "capital_pool", id: "cp-eu-mid-cap" } }) :
+                kind === "broker_disconnect" ? buildLinkSet({ primary: { kind: "broker_live" } }) :
+                kind === "policy_violation"  ? buildLinkSet({ primary: { kind: "evidence", id: "ev:legal-hold-1" } }) :
+                kind === "readiness_blocker" ? buildLinkSet({ primary: { kind: "strict_publish" } }) :
+                                                buildLinkSet({ primary: { kind: "human_gate", id } });
+  return {
+    id, kind, title, requiredRole,
+    consequenceIfApproved: a, consequenceIfRejected: r, consequenceIfIgnored: ign,
+    canDecide: kind !== "policy_violation",
+    canProceed: kind !== "capital_breach",
+    blockingReasons: kind === "capital_breach" ? ["Capital pool VaR breach"] : undefined,
+    detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
+    ttlSec: 12 * 3600,
+    links,
+  };
+}
+
+export const HumanInboxPage = () => {
+  const sorted = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  return (
+    <section className="p-6 space-y-4" aria-label="Human Inbox">
+      <header>
+        <h1 className="text-2xl font-semibold text-foreground">Human Inbox</h1>
+        <p className="text-sm text-muted-foreground">
+          {HUMAN_INBOX_KINDS.length} kinds · required role + consequences shown up front · deep links to the page that fixes it.
+        </p>
+      </header>
+      {sorted.map((it) => (
+        <Card key={it.id} className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{it.kind}</Badge>
+              <span className="text-sm font-medium text-foreground">{it.title}</span>
+              {!it.canProceed && (
+                <Badge variant="outline" className="bg-status-failed/15 text-status-failed border-status-failed/30">
+                  cannot proceed
+                </Badge>
+              )}
+            </div>
+            <Badge variant="outline">required role: {it.requiredRole}</Badge>
           </div>
-          <Badge variant="outline">required role: {it.requiredRole}</Badge>
-        </div>
-        <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
-          <div><dt className="text-muted-foreground">If approved</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
-          <div><dt className="text-muted-foreground">If rejected</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
-          <div><dt className="text-muted-foreground">If ignored</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
-        </dl>
-        <div className="mt-3 flex gap-2">
-          <Button asChild size="sm" variant="outline"><Link to={it.href}>Open</Link></Button>
-          <Button size="sm" variant="outline">Request more evidence</Button>
-        </div>
-      </Card>
-    ))}
-  </section>
-);
+          <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted-foreground">If approved</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
+            <div><dt className="text-muted-foreground">If rejected</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
+            <div><dt className="text-muted-foreground">If ignored</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>Open detail</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>Manage</Link></Button>
+            {it.links.evidenceHref ? (
+              <Button asChild size="sm" variant="outline"><Link to={it.links.evidenceHref}>Evidence</Link></Button>
+            ) : (
+              <span className="text-xs text-muted-foreground self-center">Evidence missing</span>
+            )}
+          </div>
+        </Card>
+      ))}
+    </section>
+  );
+};
 
 // =====================================================================
 // Trading Pulse — baselineKind enum + baselineLabel display.
