@@ -10,7 +10,7 @@ describe("resolveManagementHref — PM-2 deep link rules", () => {
     ["persona", "alpha-trader", "/management/personas/alpha-trader"],
     ["strategy", "s/01", "/management/strategies/s%2F01"],
     ["capital_pool", "cap-1", "/management/capital/cap-1"],
-    ["capital_pool_live", undefined, "/management/readiness/capital-binding-live", { poolId: "cap-1" }],
+    ["capital_pool_live", undefined, "/management/readiness/capital-binding-live?pool=cap-1", { poolId: "cap-1" }],
     ["approval", "g-77", "/management/governance/g-77"],
     ["approval", undefined, "/management/governance"],
     ["human_gate", "gate-1", "/management/human-inbox/gate-1"],
