@@ -24,6 +24,8 @@ import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
 } from "@/lib/v5/management/humanInbox";
 import { buildLinkSet } from "@/lib/v5/management/links";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 // =====================================================================
 // Pathreon Management Cockpit (PM-3)
