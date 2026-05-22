@@ -7,7 +7,7 @@ import {
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
-  Beaker, Compass, Target, Eye, ShieldAlert,
+  Beaker, Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart, CalendarClock,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -26,6 +26,14 @@ export const ManagementLayout = () => {
       { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
       { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
       { to: "/management/ask", label: t("nav.askManagement"), icon: MessagesSquare },
+    ]},
+
+    // 2026-05-22 PM-12 — Performance & League group.
+    { label: t("groups.performanceLeague"), items: [
+      { to: "/management/portfolio-book", label: t("nav.portfolioBook"), icon: PieChart },
+      { to: "/management/persona-league", label: t("nav.personaLeague"), icon: Trophy },
+      { to: "/management/quarterly-ranking", label: t("nav.quarterlyRanking"), icon: CalendarClock },
+      { to: "/management/performance-attribution", label: t("nav.performanceAttribution"), icon: BarChart3 },
     ]},
 
     { label: t("groups.liveReadiness"), items: [

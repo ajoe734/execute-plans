@@ -11,11 +11,13 @@ export type HumanInboxKind =
   | "policy_violation"
   | "rollback_request"
   | "capital_breach"
-  | "broker_disconnect";
+  | "broker_disconnect"
+  | "ranking_recommendation"; // 2026-05-22 PM12-010 — quarterly ranking → governance
 
 export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = [
   "approval", "sentinel", "ask", "intervention", "readiness_blocker",
   "policy_violation", "rollback_request", "capital_breach", "broker_disconnect",
+  "ranking_recommendation",
 ] as const;
 
 export interface HumanInboxItem {
@@ -60,6 +62,7 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "broker_disconnect": return 5;
     case "readiness_blocker": return 4;
     case "intervention": return 3;
+    case "ranking_recommendation": return 2.5;
     case "approval": return 2;
     case "ask": return 1;
   }

@@ -103,6 +103,11 @@ import {
   ManagementNlConsole,
   HumanGateDetailPage,
 } from "@/management/pages/oversight/_stubs";
+// 2026-05-22 PM-12 — Performance & League pages.
+import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
+import { PersonaLeaguePage } from "@/management/pages/oversight/PersonaLeague";
+import { QuarterlyRankingPage } from "@/management/pages/oversight/QuarterlyRanking";
+import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -145,6 +150,11 @@ const App = () => (
               <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="ask" element={<ManagementNlConsole />} />
+              {/* PM-12 — Performance & League */}
+              <Route path="portfolio-book" element={<PortfolioBookPage />} />
+              <Route path="persona-league" element={<PersonaLeaguePage />} />
+              <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
+              <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
               {/* Legacy v5 surface kept reachable for ops review. */}
               <Route path="control-room-legacy" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
