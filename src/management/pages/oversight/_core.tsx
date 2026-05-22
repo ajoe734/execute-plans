@@ -72,6 +72,8 @@ const FLEET: FleetRow[] = [
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.personaFleet.get<FleetRow>(() => FLEET), []);
+  const rows = data ?? FLEET;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.fleet.title")}>
       <header>
