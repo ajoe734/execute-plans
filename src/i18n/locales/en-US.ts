@@ -134,8 +134,13 @@ export default {
     liveStrategyMonitor: "Live Strategy Monitor",
     deploymentRegistry: "Deployment Registry",
     deploymentMonitor: "Deployment Monitor",
-    // 2026-05-20 revamp §5.1 — One Ring Oversight IA.
-    oneRingCockpit: "One Ring Cockpit",
+    // 2026-05-20 PM-1 — Pathreon Management visible labels. Old `oneRingCockpit`
+    // key retained for back-compat but value rewritten; new canonical key is
+    // `managementCockpit`.
+    oneRingCockpit: "Pathreon Management Cockpit",
+    managementCockpit: "Management Cockpit",
+    pathreonManagement: "Pathreon Management",
+    askManagement: "Ask Pathreon Management",
     personaFleet: "Persona Fleet",
     humanInbox: "Human Inbox",
     tradingPulse: "Trading Pulse",
@@ -146,6 +151,7 @@ export default {
     capitalLiveReadiness: "Capital Binding Live",
     bffHaReadiness: "BFF HA Readiness",
     strictPublishAudit: "Strict Publish Audit",
+
   },
   groups: {
     overview: "Overview",
