@@ -1,86 +1,112 @@
-# Pack M2–M6 實作計畫（依 2026-05-20 設計團隊五項裁示）
 
-M0 + M1 已 LANDED。本計畫涵蓋 M2–M6，全程依據裁示寫成硬規則。
+# Pathreon Management Revamp — Implementation Plan
 
-## 硬規則（寫進 code 與 test）
+Source of truth: `user-uploads://Pathreon_Management_Lovable_實作計畫_2026-05-20.md` (will archive into `.lovable/spec/management-2026-05-20/Pathreon_Management_Lovable_Implementation_Plan_2026-05-20.md` as a normative addendum to the existing `Pantheon_Management_Lovable_Spec_2026-05-20.md`).
 
-1. **NL Console**：Phase 1 `fixed_mock` only；前端**禁止**直接呼叫 Lovable AI Gateway 或 google/gemini-*；strict mode 不靜默 fallback；endpoint `POST /bff/management/nl/ask` Phase 1 不實作。Env：`VITE_MANAGEMENT_NL_PROVIDER=fixed_mock`、`VITE_MANAGEMENT_NL_GATEWAY_ENABLED=false`。
-2. **Persona Intent Traces**：BFF 不回 raw prompt；`userIntentSummary` 視為已 redact；UI 三層 `summary | redacted | restricted`；**禁止** reveal / expand / download / reconstruct。
-3. **Trading Pulse**：拆 `baselineKind` (12-value enum) + `baselineLabel` (display)；預設 3 卡：`previous_artifact / 7d_rolling / last_review`，其餘進 dropdown。
-4. **Readiness 5 頁**：三段式（Header + Checklist + EvidencePackets + Blockers）；Phase 1 **照裁示 §4.1–4.5 全部最小欄位實作**，不留 TODO；enable/activate 鈕只能是 human-gate placeholder。
-5. **Archive**：標 Management UX Overlay Spec，**不取代** BFF OpenAPI / Pack D / v5。
+Scope: Management-only. Agora user UI is touched only by PM-11 (boundary audit).
 
-## Pack M2 — Core 7 Pages
+## Hard rules (must hold across all packs)
 
-每頁：`src/lib/v5/management/<page>.ts` (pure view-model, 100% testable) + `src/management/pages/oversight/<Page>.tsx` (UI via `useV5Live` + `bff-v1/lists`)；三態齊全 + strict-mode 不靜默 fallback + axe smoke。
+- Visible UI must read **Pathreon Management** / Management Cockpit / Persona Fleet / Human Inbox / Trading Pulse / Evolution Journal / Evidence Explorer / Persona Intent Traces / Readiness. **No** One Ring / Ring Bearer / Ring Persona / 魔戒 / Sauron in any visible label, breadcrumb, page title or i18n value. Internal symbol names may stay (`_core.tsx`, `OneRingCockpitPage`) — not a Phase 1 blocker.
+- NL Console remains fixed-mock only; **no** direct AI gateway call from FE; strict mode never silently falls back.
+- Persona Intent Traces: no reveal/expand/download/reconstruct affordance; `userIntentSummary` treated as already redacted.
+- High-risk actions stay behind confirm-token / HighRiskConfirm; enable canary/live buttons stay human-gate placeholders.
+- Strict mode (`VITE_BFF_FALLBACK=strict`) must surface typed errors, never seed fallback.
 
-- OneRingCockpit `/management/one-ring`
-- PersonaFleet `/management/persona-fleet`
-- HumanInbox `/management/human-inbox`（沿用 D26 ApprovalEvent / AskEvent）
-- TradingPulse `/management/trading-pulse`（新增 `TradingBaselineKind` enum）
-- EvolutionJournal `/management/evolution-journal`
-- EvidenceExplorer `/management/evidence-explorer`（19+3 EvidenceKind）
-- PersonaIntentTraces `/management/persona-intent-traces`（新增 `PersonaIntentTrace` + `PersonaIntentVisibility`，**無 reveal UI**）
+## Sprint sequencing (per spec §16)
 
-## Pack M3 — Readiness 5 Pages
+### Sprint L-MGMT-1 — Naming + IA + Deep Link (PM-1, PM-2)
 
-共用元件 (`src/management/components/readiness/`)：`ReadinessHeader`、`ReadinessChecklist`、`EvidencePacketList`、`BlockersList`。
+1. **Naming Cleanup**
+   - Add `/management/cockpit` route; redirect `/management`, `/management/control-room`, `/management/one-ring` → `/management/cockpit`. Preserve `/management/control-room-legacy`, `/management/overview-legacy`.
+   - Rewrite all visible strings + i18n values (`nav.pathreonManagement`, `nav.managementCockpit`, `groups.pathreonManagement`, `page.managementCockpit.subtitle`, etc.) in `src/i18n/locales/{en-US,zh-TW}.ts`. Old keys retained but values updated.
+   - Update `ManagementLayout.tsx` group titles + page titles + breadcrumbs.
+   - Add CI guard: `scripts/check-management-naming.ts` greps `src/management/**` + `src/i18n/**` for forbidden tokens (One Ring, Ring Bearer, Ring Persona, 魔戒, Sauron, 至尊魔戒) and fails build on hit.
 
-Types：`src/lib/v5/management/readiness.ts` — `ReadinessStatus`、`ReadinessChecklistItem`、`ReadinessBlocker`、`ReadinessPacket`。
+2. **Deep Link Model** (`src/lib/v5/management/links.ts`)
+   - Add `ManagementLinkSet` + `RelatedHrefKind` enum (12 kinds per §5.3).
+   - Add pure resolver `resolveManagementHref(kind, id, opts?)` covering all 17 rules (persona, strategy, capital_pool, capital_pool_live, approval, human_gate, deployment, runtime, evidence, postmortem, evolution, loop_run, sentinel, intervention, broker_live, bff_ha, strict_publish).
+   - Wire into every existing oversight page so every row carries `manageHref` + optional `evidenceHref` + `recommendedActionHref`. Fallback labels `Evidence missing` / `No action required` when absent.
 
-各頁 checklist items 完全照裁示列：
-- Ep5CanaryReadiness `/management/readiness/ep5` — 12 items；actions: View Evidence / Open Human Gate / Refresh / Export；**禁** Enable Canary/Live
-- BrokerLiveReadiness `/management/readiness/broker-live` — 10 items + 6 blocker codes
-- CapitalBindingLiveReadiness `/management/readiness/capital-binding-live` — 14 items
-- BffHaReadiness `/management/readiness/bff-ha` — 11 items
-- StrictPublishAudit `/management/readiness/strict-publish` — 12 items（含 env manifest 三項）
+### Sprint L-MGMT-2 — Cockpit Visual Upgrade (PM-3)
 
-## Pack M4 — NL Console (mock-only)
+- Rename `OneRingCockpit` page label → `Pathreon Management Cockpit`. Add 4 new components under `src/management/components/cockpit/`:
+  - `SystemStateStrip.tsx` (9-field model, all cards clickable)
+  - `LoopFlowMap.tsx` — SVG-based OODA flow with 10 nodes / 10 edges, severity color rules, keyboard-navigable, aria-labeled
+  - `PersonaOodaMatrix.tsx` — persona × {Observe, Orient, Decide, Act, Learn} grid, cell click → deep link
+  - `CriticalAnomalyPanel.tsx` — top 5–8 with severity / domain / why / recommended action / manage + evidence links
+- View-model: `src/lib/v5/management/cockpit.ts` exposing `composeCockpit(seed | live)` → `{ strip, loopFlow, matrix, anomalies }`. 100% pure + tested.
+- Replace cards-only layout in `_core.tsx`'s cockpit section with the new composition.
 
-- `src/lib/bff-v1/managementNl.ts` — `ManagementNlIntent` (7 值) + `ManagementNlProvider`；deterministic fixed responder；strict mode 直接報錯；high/critical risk intent 只回 human gate 連結
-- `src/management/components/NlConsoleDock.tsx`（TopBar dock）
-- `src/management/pages/oversight/NlConsole.tsx` `/management/ask`
-- `.env.example` 補兩個 flag，預設關閉
+### Sprint L-MGMT-3 — Trading Pulse Ranking + Unified Anomaly (PM-4, PM-5)
 
-## Pack M5 — Write Path Hardening
+- **Trading Pulse**: extend `tradingBaseline.ts` enum to include `champion_artifact`, `30d_rolling`, `last_paper`, `last_canary`, `last_live`, `pre_mutation`, `pre_deployment`, `benchmark`, `custom_period` (validate full 12 values). Add `TradingPulseRankRow` type. Add 8 ranking blocks (Top Improving Personas, Top Degrading Personas, Top Improving Strategies, Worst Execution Quality, Highest Risk Capital Pools, Most Blocked Deployments, Most Human-Intervened Personas, Most Unstable After Training). Each row uses Deep Link model.
+- **Unified Anomaly Model** (`src/lib/v5/management/anomaly.ts`):
+  - `ManagementAnomalySeverity` (5) + `ManagementAnomalyDomain` (12) + `ManagementAnomaly` shape per §8.2.
+  - Components: `AnomalyBadge`, `AnomalyCard`, `AnomalyList` under `src/management/components/`.
+  - Apply across Cockpit, Persona Fleet, Human Inbox, Trading Pulse, Evolution Journal, Readiness, Evidence Explorer, Persona Intent Traces.
 
-- 統一 `paths.personaAction` → `paths.action("persona", id, action)`
-- `DeploymentDetail` 改 `runActionSafe`
-- 新 `src/lib/v4/__tests__/noLegacyMutations.test.ts` AST scan 防 regression
+### Sprint L-MGMT-4 — Human Inbox + Readiness Drilldown (PM-6, PM-7)
 
-## Pack M6 — Testing & Acceptance
+- **Human Inbox**: extend `HumanInboxItem` to 9 kinds. Add `/management/human-inbox/:id` detail route with full §9.3 fields (decision type, signatures, TTL, can_proceed, blocking reasons, evidence, decision history, audit refs). Action buttons gated by `canDecide`; canary/live remain placeholders.
+- **Readiness**: extend `ReadinessChecklistItem` with `blockerIds`, `manageHref`, `evidenceHref`, `nextActionHref`. Make `ReadinessChecklist` expandable with §10.3 detail panel. Each blocker in `BlockersList` opens a detail with §10.4 fields. Apply to all 5 readiness pages without changing the §4 minimum-fields contract.
 
-- Vitest：每個 view-model + readiness composer + NL responder + PersonaIntent visibility 規則（驗無 reveal API）
-- Playwright smoke：12 routes + NL dock
-- i18n parity 補齊新 keys
-- §14 acceptance checklist tick-off → `.lovable/audits/mgmt-revamp-2026-05-20-plan.md`
-- `mem://index.md` 標 M2–M6 LANDED
+### Sprint L-MGMT-5 — Persistent NL Shell + Write Path Hardening (PM-8, PM-10)
 
-## 技術細節
+- **Persistent NL** (`src/management/components/nl/`):
+  - `NlCommandInput.tsx` mounted in TopBar (always-on input)
+  - `NlAssistantDrawer.tsx` (Radix right drawer)
+  - `useManagementNlContext()` hook computing `ManagementNlContext` from route + selected entity + visible anomaly IDs
+  - Extend `ManagementNlIntent` with `explain_current_page` + `explain_selected_anomaly`; extend `managementNl.ts` responder. Strict-mode behaviour unchanged.
+- **Write Path Hardening**:
+  - `src/lib/bff-v1/personas.ts`: switch `runPersonaAction` to `paths.action("persona", id, action)`.
+  - Audit + migrate: Deployment (rollback/reduce/schedule), Approval (decide/batchDecide), Alert acknowledge, Incident transitions, Capital pool risk budget, Persona (suspend/restrict/run_eval).
+  - Extend existing AST scan test (`src/lib/v4/__tests__/noLegacyMutations.test.ts`) to fail on any new live caller of `paths.{personaAction,strategyAction,capitalPoolAction,deploymentAction}`.
 
-新檔布局：
+### Sprint L-MGMT-6 — Live Aggregate Wiring + Agora Boundary (PM-9, PM-11)
+
+- **Live wiring**: add 13 management aggregate paths to `bff-v1/paths.ts` (§12.2). Each new oversight page swaps `seed → useV5Live(aggregate)` with strict-mode typed error surfacing via `LiveStatusBanner`. Mock provider returns existing seeds; live provider hits BFF. No silent fallback in strict.
+- **Agora boundary scan**: `scripts/check-agora-boundary.ts` grep `src/agora/**` for forbidden tokens (Management, Governance Queue, Runtime Binding, Capital Binding Live, Operator Gate, Artifact State, Deployment Stage, Pathreon Management). Rename Agora handoff buttons to `Request Review` / `Submit for Validation` etc. Wire as CI guard.
+
+## Testing (PM-spec §15)
+
+Add unit tests: `managementLinkRules`, `managementAnomaly`, `tradingBaseline` (12-enum), `humanInbox`, `readinessChecklist`, `managementNlContext`, `personaIntentPrivacy` (asserts no `rawPrompt` / `reveal*` API on type surface), `canonicalWritePath` (AST scan).
+
+Playwright additions: `/management → /cockpit` redirect, `/one-ring → /cockpit` redirect, cockpit loop-map rendering + clickable anomalies, persona row → detail, human-inbox item → detail/evidence/action, trading-pulse ranking → subject detail, readiness item drilldown → blocker/gate/evidence, NL drawer open from TopBar.
+
+Strict-mode pass with `VITE_BFF_MODE=live`, `VITE_BFF_FALLBACK=strict`, `VITE_BFF_REAL_WRITES=false`: no seed fallback on aggregate pages, NL refuses, readiness typed-error, banner correct.
+
+A11y: loop flow keyboard-navigable; anomaly markers aria-labeled; no color-only severity.
+
+## Deliverables / file layout
+
 ```text
+.lovable/spec/management-2026-05-20/Pathreon_Management_Lovable_Implementation_Plan_2026-05-20.md   # archived
+.lovable/audits/mgmt-revamp-2026-05-20-plan.md                                                       # extended w/ PM-1..PM-11 rows
 src/lib/v5/management/
-  personaIntent.ts       // PersonaIntentVisibility + PersonaIntentTrace
-  tradingBaseline.ts     // TradingBaselineKind (12) + label helpers
-  readiness.ts           // shared readiness types
-  oneRing.ts             // cockpit composer
-  evolutionJournal.ts    // baseline diff composer
-  evidenceExplorer.ts    // packet browser composer
-  nl.ts                  // ManagementNlIntent + Provider
-src/management/components/readiness/
-  ReadinessHeader.tsx
-  ReadinessChecklist.tsx
-  EvidencePacketList.tsx
-  BlockersList.tsx
+  links.ts            anomaly.ts          cockpit.ts          humanInbox.ts
+  tradingBaseline.ts (extended)           readiness.ts (extended)        nl.ts (extended)
+src/management/components/cockpit/{SystemStateStrip,LoopFlowMap,PersonaOodaMatrix,CriticalAnomalyPanel}.tsx
+src/management/components/{AnomalyBadge,AnomalyCard,AnomalyList}.tsx
+src/management/components/nl/{NlCommandInput,NlAssistantDrawer}.tsx + hooks/useManagementNlContext.ts
+src/management/pages/oversight/HumanGateDetail.tsx (new /human-inbox/:id)
+scripts/{check-management-naming,check-agora-boundary}.ts (+ CI hooks)
+src/lib/bff-v1/paths.ts (+ 13 management aggregate paths)
 ```
 
-Mock 資料：`src/lib/bff-v1/seed.ts` 補 5 種 readiness packets、三 visibility 的 intent traces、NL canned responses。Strict mode 不寫 seed（沿用 writeOverlay 規則）。
+Estimated ~30 new files, ~25 modified. No changes to v4 normative layer, Pack D contracts, BFF DTO schemas (only client paths + new aggregates per §12.2). Each sprint must pass `tsc --noEmit` + vitest + i18n parity + axe smoke before the next begins.
 
-i18n：`management.readiness.*`、`management.nl.*`、`management.intent.visibility.*`、`management.trading.baseline.*`，en-US / zh-TW 並行。
+## Gate per sprint
 
-驗證：`tsc --noEmit` + vitest + playwright smoke + i18n parity。axe smoke 跑 4 個 Oversight 主頁。
+- L-MGMT-1: forbidden-token scan = 0 hits; redirects verified in Playwright.
+- L-MGMT-2: cockpit renders 4 new components; loop map keyboard-navigable.
+- L-MGMT-3: 12 baseline values present; 8 ranking blocks rendered; AnomalyBadge used on ≥7 pages.
+- L-MGMT-4: `/human-inbox/:id` reachable; all readiness items expandable with deep links.
+- L-MGMT-5: NL drawer mounted globally; AST scan green; personas write path uses canonical `paths.action`.
+- L-MGMT-6: strict-mode E2E green; Agora boundary scan = 0 hits.
 
-範圍：新檔 ~25、修改 ~10；不動 v4 normative / Pack D 契約 / BFF client paths（除 M5）。
+## Open items for confirmation before build
 
-執行順序：M2 → M3 → M4 → M5 → M6，每 pack 收尾 tsc + 對應 test 全綠才推下一 pack。
+1. Archive the uploaded plan under `.lovable/spec/management-2026-05-20/` and reference it from `.lovable/spec/INDEX.md` + `mem://index.md` — OK?
+2. Sprint cadence: ship sprint-by-sprint with verification gates (recommended), or batch PM-1+PM-2 then pause for review?
+3. PM-9 (Live BFF aggregate paths) — implement client paths + mock providers now, leaving real BFF integration as a separate ticket once backend ships the endpoints?

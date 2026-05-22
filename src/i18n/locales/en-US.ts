@@ -134,8 +134,13 @@ export default {
     liveStrategyMonitor: "Live Strategy Monitor",
     deploymentRegistry: "Deployment Registry",
     deploymentMonitor: "Deployment Monitor",
-    // 2026-05-20 revamp §5.1 — One Ring Oversight IA.
-    oneRingCockpit: "One Ring Cockpit",
+    // 2026-05-20 PM-1 — Pathreon Management visible labels. Old `oneRingCockpit`
+    // key retained for back-compat but value rewritten; new canonical key is
+    // `managementCockpit`.
+    oneRingCockpit: "Pathreon Management Cockpit",
+    managementCockpit: "Management Cockpit",
+    pathreonManagement: "Pathreon Management",
+    askManagement: "Ask Pathreon Management",
     personaFleet: "Persona Fleet",
     humanInbox: "Human Inbox",
     tradingPulse: "Trading Pulse",
@@ -146,6 +151,7 @@ export default {
     capitalLiveReadiness: "Capital Binding Live",
     bffHaReadiness: "BFF HA Readiness",
     strictPublishAudit: "Strict Publish Audit",
+
   },
   groups: {
     overview: "Overview",
@@ -164,10 +170,11 @@ export default {
     closedLoopOs: "Closed-Loop OS",
     legacy: "Legacy",
     // 2026-05-20 revamp §5.1 groups.
-    oversight: "Oversight",
+    oversight: "Pathreon Management",
     liveReadiness: "Live Readiness",
     advancedRegistry: "Advanced Registry",
   },
+
   v5: {
     controlRoom: {
       subtitle: "Pantheon Control Room — unified KPIs, loops, sentinel, interventions.",
@@ -1684,24 +1691,27 @@ export default {
     stubNotice: "Stub page — implementation lands in M2/M3 of the 2026-05-20 revamp plan.",
   },
   oneRing: {
-    title: "One Ring Cockpit",
-    subtitle: "Is the AI trading organization healthy? Who needs me right now?",
+    title: "Pathreon Management Cockpit",
+    subtitle: "Is the AI trading organisation healthy? Who needs me right now?",
     autonomyState: "Autonomy",
     humanPending: "Human pending",
     criticalFindings: "Critical findings",
     personaFleet: "Persona Fleet snapshot",
     tradingPulse: "Trading Pulse",
     evolutionSummary: "Evolution summary",
+    personaOwners: "Persona owners",
   },
   personaFleet: {
     title: "Persona Fleet",
-    subtitle: "All AI trading personas across ring bearers — health, OODA stage, and human needs.",
+    subtitle: "All AI trading personas across persona owners — health, OODA stage, and human needs.",
     humanNeeded: "Human needed",
     oodaStage: "OODA stage",
     autonomyMode: "Autonomy mode",
     performanceDelta: "Performance Δ",
     lastMutation: "Last mutation",
+    owner: "Owner",
   },
+
   humanInbox: {
     title: "Human Inbox",
     subtitle: "Single queue for approvals, gates, sentinel findings, and live blockers.",

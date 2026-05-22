@@ -118,12 +118,13 @@ const App = () => (
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              {/* 2026-05-20 revamp §4.2 — index redirects to One Ring Cockpit. */}
-              <Route index element={<Navigate to="/management/one-ring" replace />} />
-              {/* §4.3 — control-room alias preserved, renders OneRingCockpit so deep links survive. */}
-              <Route path="control-room" element={<OneRingCockpitPage />} />
-              {/* §4.1 — new One Ring Oversight IA routes (stubs from M1, replaced in M2+). */}
-              <Route path="one-ring" element={<OneRingCockpitPage />} />
+              {/* 2026-05-20 PM-1 — Pathreon Management Cockpit is the canonical landing. */}
+              <Route index element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="cockpit" element={<OneRingCockpitPage />} />
+              {/* PM-1 — legacy aliases redirect to /cockpit (deep links preserved). */}
+              <Route path="control-room" element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="one-ring" element={<Navigate to="/management/cockpit" replace />} />
+
               <Route path="persona-fleet" element={<PersonaFleetPage />} />
               <Route path="human-inbox" element={<HumanInboxPage />} />
               <Route path="trading-pulse" element={<TradingPulsePage />} />

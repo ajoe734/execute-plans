@@ -15,34 +15,36 @@ import {
 } from "@/lib/v5/management/tradingBaseline";
 
 // =====================================================================
-// One Ring Cockpit — top-level oversight aggregate.
+// Pathreon Management Cockpit — top-level oversight aggregate.
+// (Internal symbol kept as OneRingCockpitPage for back-compat; visible label
+// must read "Pathreon Management Cockpit".)
 // =====================================================================
 
 const COCKPIT_KPIS = {
   autonomyState: "guarded" as const,
   humanPending: 3,
   criticalFindings: 1,
-  ringBearers: 4,
+  personaOwners: 4,
   personas: 12,
 };
 
 const COCKPIT_SECTIONS = [
-  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 ring bearers · 2 in OODA-Decide · 1 paused" },
+  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 owners · 2 in OODA-Decide · 1 paused" },
   { title: "Trading Pulse", href: "/management/trading-pulse", body: "1 canary positive vs previous artifact · 1 paper drift watching" },
   { title: "Evolution summary", href: "/management/evolution-journal", body: "2 mutations landed this week · 1 reverted" },
 ];
 
 export const OneRingCockpitPage = () => (
-  <section className="p-6 space-y-4" aria-label="One Ring Cockpit">
+  <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
     <header>
-      <h1 className="text-2xl font-semibold text-foreground">One Ring Cockpit</h1>
+      <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
       <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
     </header>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Card className="p-3"><div className="text-xs text-muted-foreground">Autonomy</div><div className="text-lg font-semibold">{COCKPIT_KPIS.autonomyState}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Human pending</div><div className="text-lg font-semibold">{COCKPIT_KPIS.humanPending}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Critical findings</div><div className="text-lg font-semibold">{COCKPIT_KPIS.criticalFindings}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Ring bearers</div><div className="text-lg font-semibold">{COCKPIT_KPIS.ringBearers}</div></Card>
+      <Card className="p-3"><div className="text-xs text-muted-foreground">Persona owners</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personaOwners}</div></Card>
       <Card className="p-3"><div className="text-xs text-muted-foreground">Personas</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personas}</div></Card>
     </div>
     <div className="grid gap-3 lg:grid-cols-3">
@@ -57,44 +59,46 @@ export const OneRingCockpitPage = () => (
   </section>
 );
 
+
 // =====================================================================
 // Persona Fleet
 // =====================================================================
 
 interface FleetRow {
-  personaId: string; ringBearer: string; ooda: "Observe" | "Orient" | "Decide" | "Act";
+  personaId: string; owner: string; ooda: "Observe" | "Orient" | "Decide" | "Act";
   autonomy: "manual" | "supervised" | "autonomous"; perfDelta: number; humanNeeded: boolean;
   lastMutation: string;
 }
 
 const FLEET: FleetRow[] = [
-  { personaId: "alpha-trader", ringBearer: "research-1", ooda: "Decide", autonomy: "supervised", perfDelta: +0.024, humanNeeded: true, lastMutation: "2026-05-19" },
-  { personaId: "risk-guard",   ringBearer: "research-1", ooda: "Observe", autonomy: "autonomous", perfDelta: +0.005, humanNeeded: false, lastMutation: "2026-05-12" },
-  { personaId: "fx-scout",     ringBearer: "trading-1", ooda: "Orient",  autonomy: "supervised", perfDelta: -0.011, humanNeeded: false, lastMutation: "2026-05-17" },
-  { personaId: "capital-steward", ringBearer: "capital-1", ooda: "Act", autonomy: "manual",     perfDelta: +0.002, humanNeeded: true,  lastMutation: "2026-05-15" },
+  { personaId: "alpha-trader", owner: "research-1", ooda: "Decide", autonomy: "supervised", perfDelta: +0.024, humanNeeded: true, lastMutation: "2026-05-19" },
+  { personaId: "risk-guard",   owner: "research-1", ooda: "Observe", autonomy: "autonomous", perfDelta: +0.005, humanNeeded: false, lastMutation: "2026-05-12" },
+  { personaId: "fx-scout",     owner: "trading-1", ooda: "Orient",  autonomy: "supervised", perfDelta: -0.011, humanNeeded: false, lastMutation: "2026-05-17" },
+  { personaId: "capital-steward", owner: "capital-1", ooda: "Act", autonomy: "manual",     perfDelta: +0.002, humanNeeded: true,  lastMutation: "2026-05-15" },
 ];
 
 export const PersonaFleetPage = () => (
   <section className="p-6 space-y-4" aria-label="Persona Fleet">
     <header>
       <h1 className="text-2xl font-semibold text-foreground">Persona Fleet</h1>
-      <p className="text-sm text-muted-foreground">All AI trading personas across ring bearers.</p>
+      <p className="text-sm text-muted-foreground">All AI trading personas across persona owners.</p>
     </header>
     <Card className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
-            <th className="px-3 py-2">Persona</th><th className="px-3 py-2">Ring bearer</th>
+            <th className="px-3 py-2">Persona</th><th className="px-3 py-2">Owner</th>
             <th className="px-3 py-2">OODA</th><th className="px-3 py-2">Autonomy</th>
             <th className="px-3 py-2">Δ Performance</th><th className="px-3 py-2">Last mutation</th>
             <th className="px-3 py-2">Human needed</th>
           </tr>
         </thead>
+
         <tbody>
           {FLEET.map((r) => (
             <tr key={r.personaId} className="border-b border-border/50">
               <td className="px-3 py-2 font-mono">{r.personaId}</td>
-              <td className="px-3 py-2 text-muted-foreground">{r.ringBearer}</td>
+              <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
               <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
               <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
               <td className={"px-3 py-2 " + (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>

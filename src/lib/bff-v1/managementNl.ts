@@ -123,7 +123,7 @@ function respondFixed(intent: ManagementNlIntent, ask: ManagementNlAsk): Managem
         intent: "unknown", provider: "fixed_mock",
         summary: "I didn't recognise that question. Try one of these surfaces:",
         followups: [
-          { label: "One Ring Cockpit", href: "/management/one-ring" },
+          { label: "Pathreon Management Cockpit", href: "/management/cockpit" },
           { label: "Human Inbox", href: "/management/human-inbox" },
           { label: "Trading Pulse", href: "/management/trading-pulse" },
           { label: "Evidence Explorer", href: "/management/evidence" },
