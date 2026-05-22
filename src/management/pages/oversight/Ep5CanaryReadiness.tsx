@@ -40,9 +40,6 @@ const blockers = [
   { id: "B-EP5-001", severity: "high" as const, reason: "Risk-owner signoff pending on canary activation", requiredRole: "risk-owner", nextAction: "Open Human Gate", linkedEvidence: ["ep4-paper-2026-05-18"] },
 ];
 
-import { useMemo } from "react";
-import { mgmt } from "@/lib/bff-v1";
-import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 export const Ep5CanaryReadinessPage = () => {
   const { t } = useTranslation();
