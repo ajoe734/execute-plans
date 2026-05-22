@@ -265,7 +265,38 @@ export const TradingPulsePage = () => {
           );
         })}
       </div>
+
+      <RankingBlocks />
     </section>
+  );
+};
+
+const RankingBlocks = () => {
+  const blocks = useMemo(() => defaultPulseRankings(), []);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Trading Pulse Rankings">
+      {blocks.map((b) => (
+        <Card key={b.kind} className="p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
+          {b.rows.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">No rows.</p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-xs">
+              {b.rows.map((r) => (
+                <li key={r.subjectId} className="flex items-center justify-between gap-2">
+                  <Link to={r.links.manageHref} className="font-mono text-primary underline-offset-4 hover:underline">
+                    {r.subjectLabel}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {r.metric}: <span className="text-foreground">{r.metricValue}{r.metricUnit ?? ""}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ))}
+    </div>
   );
 };
 
