@@ -13,8 +13,18 @@
 | M3 | Broker/Capital/BFF-HA/Strict Publish readiness 骨架 | ✅ DONE (2026-05-21) |
 | M4 | NL Console dock + mock facade | ✅ DONE (2026-05-22) |
 | M5 | Write path hardening (persona canonical + deployment + approvals) | ⏳ PARTIAL — personas LANDED 2026-05-22；deployment/approvals 仍走 nested `paths.{xAction}` |
-| M6 | Tests (unit + Playwright smoke + strict-mode + i18n parity) | ✅ unit 51 LANDED (2026-05-22)；Playwright smoke 待補 |
+| M6 | Tests (unit + Playwright smoke + strict-mode + i18n parity) | ✅ unit 529 LANDED (2026-05-22)；Playwright smoke 待補 |
 | PM-1..PM-11 | 2026-05-20 改版完整實作 (5 sprints) | ✅ PM-1..PM-11 LANDED 2026-05-22 — 詳見下方 |
+| PM-i18n | en-US + zh-TW 翻譯收尾 + CI strict guard | ✅ LANDED 2026-05-22 — 詳見下方 |
+
+## PM-i18n LANDED 2026-05-22
+
+- 新增 `mgmt.*` namespace（en + zh 各 132 keys 1:1 對稱）涵蓋 cockpit / fleet / inbox / pulse / evolution / evidence / personaIntent / readiness / anomaly / nl / actions
+- 補齊 19 個既有 t() 引用但缺失的 keys（approval.quorum / capitalPool.mandate.{autoActions,breachCadence} / confirm.{cooldown,memo*,twoMan} / incident.viewRollbackSaga / settings.tab.breakglass / v5.loops.research.*）
+- PM-1..PM-11 新檔案全部 i18n 化（11 個 component/page 檔），無 hardcoded English 殘留
+- `scripts/check-i18n.ts` 新增 strict guard：`src/management/pages/oversight/` + `components/{cockpit,anomaly,readiness,nl}/` 下 hardcoded > 0 / missing > 0 / asymmetry > 0 → `exit 1`
+- 新增 `src/lib/v5/management/__tests__/i18nParity.test.ts`（4 tests 全綠）；529/529 vitest 續綠
+- 兩個 CI guard（check-management-naming / check-i18n strict）皆綠
 
 ## PM-1..PM-11 LANDED 2026-05-22
 

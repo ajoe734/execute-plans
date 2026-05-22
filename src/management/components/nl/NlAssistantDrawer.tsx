@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import type { ManagementNlAnswer } from "@/lib/v5/management/nl";
 import { useManagementNlContext } from "@/management/hooks/useManagementNlContext";
 
 export const NlAssistantDrawer = () => {
+  const { t } = useTranslation();
   const ctx = useManagementNlContext();
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState<ManagementNlAnswer | null>(null);
@@ -37,20 +39,20 @@ export const NlAssistantDrawer = () => {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2" aria-label="Open management assistant">
+        <Button variant="outline" size="sm" className="gap-2" aria-label={t("mgmt.nl.drawerOpenAria")}>
           <MessagesSquare className="h-4 w-4" />
-          <span className="hidden md:inline">Ask Management</span>
+          <span className="hidden md:inline">{t("mgmt.actions.askManagement")}</span>
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-[420px] sm:max-w-[420px] overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Ask Management (Phase 1 — fixed mock)</SheetTitle>
+          <SheetTitle>{t("mgmt.nl.drawerTitle")}</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-3">
           <div className="text-xs text-muted-foreground">
-            Current page: <span className="text-foreground">{ctx.pageLabel ?? ctx.routePath}</span>
+            {t("mgmt.nl.currentPageFmt")} <span className="text-foreground">{ctx.pageLabel ?? ctx.routePath}</span>
             {ctx.selectedEntityId && (
-              <> · Selected: <Badge variant="outline">{ctx.selectedEntityKind}:{ctx.selectedEntityId}</Badge></>
+              <> · {t("mgmt.nl.selectedFmt")} <Badge variant="outline">{ctx.selectedEntityKind}:{ctx.selectedEntityId}</Badge></>
             )}
           </div>
           <form
@@ -58,18 +60,18 @@ export const NlAssistantDrawer = () => {
             onSubmit={(e) => { e.preventDefault(); onAsk(); }}
           >
             <Input
-              placeholder="e.g. who needs me right now?"
+              placeholder={t("mgmt.nl.drawerPlaceholder")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              aria-label="Ask Pathreon Management"
+              aria-label={t("mgmt.nl.drawerInputAria")}
             />
-            <Button type="submit" size="sm">Ask</Button>
+            <Button type="submit" size="sm">{t("mgmt.actions.ask")}</Button>
           </form>
           {error && (
             <Card className="p-3 border-status-failed/40 bg-status-failed/5">
               <p className="text-xs text-status-failed">{error}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Strict mode never silently falls back to mock. See ruling §1.
+                {t("mgmt.nl.strictModeWarning")}
               </p>
             </Card>
           )}
@@ -80,7 +82,7 @@ export const NlAssistantDrawer = () => {
                 <Badge variant="outline">{answer.provider}</Badge>
                 {answer.refused && (
                   <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">
-                    refused
+                    {t("mgmt.nl.refused")}
                   </Badge>
                 )}
               </div>
