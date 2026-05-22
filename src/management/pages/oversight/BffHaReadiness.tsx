@@ -1,9 +1,12 @@
 // 2026-05-20 revamp §7.4 + design ruling §4.4 — BFF HA / Control Plane.
+import { useMemo } from "react";
 import { ReadinessHeader } from "@/management/components/readiness/ReadinessHeader";
 import { ReadinessChecklist } from "@/management/components/readiness/ReadinessChecklist";
 import { EvidencePacketList } from "@/management/components/readiness/EvidencePacketList";
 import { BlockersList } from "@/management/components/readiness/BlockersList";
 import { buildReadinessPage, passItem, pendingItem } from "@/lib/v5/management/readinessSeeds";
+import { mgmt } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const checklist = [
   passItem("topology_selected", "Topology selected", "platform-owner"),
