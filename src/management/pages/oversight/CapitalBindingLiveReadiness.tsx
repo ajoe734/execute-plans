@@ -34,12 +34,14 @@ const blockers = [
 ];
 
 export const CapitalBindingLiveReadinessPage = () => {
-  const page = buildReadinessPage({
+  const seed = useMemo(() => buildReadinessPage({
     title: "Capital Binding Live",
     environment: "live",
     checklist, packets, blockers,
     lastUpdated: "2026-05-20T12:00:00Z",
-  });
+  }), []);
+  const { data } = useV5Live(() => mgmt.readiness.capitalBinding(() => seed), []);
+  const page = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label="Capital Binding Live Readiness">
       <ReadinessHeader model={page.header} />
