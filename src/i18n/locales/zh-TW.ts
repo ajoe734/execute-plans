@@ -143,6 +143,11 @@ export default {
     capitalLiveReadiness: "資金綁定 Live",
     bffHaReadiness: "BFF HA 就緒",
     strictPublishAudit: "Strict 發行稽核",
+    // PM-12
+    portfolioBook: "資金持倉總覽",
+    personaLeague: "Persona 聯賽",
+    quarterlyRanking: "季度排名",
+    performanceAttribution: "績效歸因",
 
   },
   groups: {
@@ -165,6 +170,7 @@ export default {
     oversight: "Pathreon Management",
     liveReadiness: "Live 就緒",
     advancedRegistry: "進階登錄",
+    performanceLeague: "績效與排名",
 
   },
   v5: {
