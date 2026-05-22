@@ -162,9 +162,10 @@ export default {
     closedLoopOs: "閉環 OS",
     legacy: "Legacy（舊版）",
     // 2026-05-20 改版 §5.1 群組。
-    oversight: "監察",
+    oversight: "Pathreon Management",
     liveReadiness: "Live 就緒",
     advancedRegistry: "進階登錄",
+
   },
   v5: {
     controlRoom: {
