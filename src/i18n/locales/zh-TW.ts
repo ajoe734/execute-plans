@@ -1674,7 +1674,7 @@ export default {
     stubNotice: "占位頁 — 將在 2026-05-20 改版計畫 M2/M3 落地實作。",
   },
   oneRing: {
-    title: "One Ring 駕駛艙",
+    title: "Pathreon Management 駕駛艙",
     subtitle: "整個 AI 交易組織健康嗎？誰需要我？",
     autonomyState: "自治狀態",
     humanPending: "待人類處理",
@@ -1682,16 +1682,19 @@ export default {
     personaFleet: "Persona 艦隊快照",
     tradingPulse: "交易脈動",
     evolutionSummary: "演化摘要",
+    personaOwners: "Persona 負責人",
   },
   personaFleet: {
     title: "Persona 艦隊",
-    subtitle: "所有 ring bearer 的 AI 交易人格 — 健康、OODA 階段、人類需求。",
+    subtitle: "所有 persona 負責人下的 AI 交易人格 — 健康、OODA 階段、人類需求。",
     humanNeeded: "需要人類",
     oodaStage: "OODA 階段",
     autonomyMode: "自治模式",
     performanceDelta: "績效 Δ",
     lastMutation: "最近 mutation",
+    owner: "負責人",
   },
+
   humanInbox: {
     title: "人類收件匣",
     subtitle: "Approval、Gate、Sentinel finding、Live blocker 的單一佇列。",
