@@ -170,10 +170,11 @@ export default {
     closedLoopOs: "Closed-Loop OS",
     legacy: "Legacy",
     // 2026-05-20 revamp §5.1 groups.
-    oversight: "Oversight",
+    oversight: "Pathreon Management",
     liveReadiness: "Live Readiness",
     advancedRegistry: "Advanced Registry",
   },
+
   v5: {
     controlRoom: {
       subtitle: "Pantheon Control Room — unified KPIs, loops, sentinel, interventions.",
