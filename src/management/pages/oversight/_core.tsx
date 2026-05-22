@@ -337,13 +337,15 @@ const verdictTone = (v: EvolutionEntry["verdict"]) =>
 
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
+  const { data } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => EVOLUTION), []);
+  const rows = data ?? EVOLUTION;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
-      {EVOLUTION.map((e) => (
+      {rows.map((e) => (
         <Card key={e.id} className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
