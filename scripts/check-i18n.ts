@@ -122,3 +122,36 @@ const suspect = zhFlat.filter(([k, v]) => {
 });
 console.log(`\n=== zh-TW values that look untranslated: ${suspect.length} ===`);
 suspect.slice(0, 40).forEach(([k, v]) => console.log(`  ${k}\t${v}`));
+
+// === Pack PM-i18n strict guard (2026-05-22) ===
+// PM-1..PM-11 new files MUST be fully i18n-ised. Anything new under
+// src/management/{pages/oversight,components/{cockpit,anomaly,readiness,nl}}
+// is held to: 0 missing keys, 0 hardcoded English JSX candidates.
+const STRICT_PREFIXES = [
+  "management/pages/oversight/",
+  "management/components/cockpit/",
+  "management/components/anomaly/",
+  "management/components/readiness/",
+  "management/components/nl/",
+];
+const strictHardCoded = hardCoded.filter((h) => STRICT_PREFIXES.some((p) => h.file.startsWith(p)));
+let strictFail = 0;
+if (missing.length > 0) {
+  console.error(`\n[PM-i18n strict] FAIL: ${missing.length} missing key(s) in dictionaries.`);
+  strictFail++;
+}
+if (onlyEn.length > 0 || onlyZh.length > 0) {
+  console.error(`\n[PM-i18n strict] FAIL: locale asymmetry — en-only=${onlyEn.length} zh-only=${onlyZh.length}.`);
+  strictFail++;
+}
+if (strictHardCoded.length > 0) {
+  console.error(`\n[PM-i18n strict] FAIL: ${strictHardCoded.length} hardcoded English candidate(s) inside Management revamp scope:`);
+  strictHardCoded.slice(0, 20).forEach((h) => console.error(`  ${h.file}:${h.line}  ${h.text}`));
+  strictFail++;
+}
+if (strictFail > 0) {
+  console.error(`\n[PM-i18n strict] ${strictFail} category failed. See above.`);
+  process.exit(1);
+}
+console.log("\n[PM-i18n strict] OK — management revamp scope is fully internationalised.");
+
