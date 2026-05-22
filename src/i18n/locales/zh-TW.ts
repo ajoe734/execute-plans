@@ -206,7 +206,15 @@ export default {
     },
     loops: {
       subtitle: "研究 / 執行 / 最佳化三條閉環的執行紀錄。",
-      research: { title: "研究迴圈執行" },
+      research: {
+        title: "研究迴圈執行",
+        subtitle: "研究迴圈執行與審查佇列。",
+        runs: "迴圈執行",
+        runsHint: "每一列為一次研究迴圈執行。",
+        reviewPending: "待審查",
+        emptyTitle: "無研究迴圈",
+        emptyDesc: "目前 focus 沒有匹配的執行。",
+      },
       execution: {
         title: "執行迴圈",
         subtitle: "即時執行迴圈、Persona 路由健康度與 v0-mock timeout 政策。",
@@ -374,6 +382,15 @@ export default {
     memo: "稽核備註",
     memoPlaceholder: "說明為何要執行此動作，將寫入 audit log（至少 8 字）。",
     memoHint: "備註至少 8 字才能送出。",
+    memoTooShort: "備註過短。",
+    memoTooLong: "備註過長。",
+    memoIncidentRef: "請於備註中引用一筆開啟中的事故。",
+    cooldown: { title: "冷卻中", remaining: "剩餘 {{t}}" },
+    twoMan: {
+      title: "雙人控管",
+      distinctUser: "第二位審批者必須為不同使用者。",
+      distinctFamily: "第二位審批者必須來自不同角色家族。",
+    },
   },
   common: {
     owner: "負責人", updated: "更新時間", state: "狀態", name: "名稱", createNotConfigured: "尚未設定建立流程",
@@ -657,6 +674,7 @@ export default {
     },
   },
   incident: {
+    viewRollbackSaga: "檢視 rollback saga",
     notFound: "找不到事件",
     notFoundHint: "事件可能已解決或封存。",
     summary: "事件摘要",
@@ -980,6 +998,7 @@ export default {
       approve: "核准本階段",
       reject: "駁回",
     },
+    quorum: { label: "通過門檻" },
   },
   lifecycle: {
     title: "生命週期",
@@ -1043,6 +1062,8 @@ export default {
   },
   capitalPool: {
     mandate: {
+      autoActions: "自動動作",
+      breachCadence: "違規檢查頻率",
       charter: "資金池章程", bindingRules: "綁定規則",
       objectiveValue: "在核准授權範圍內產生風險調整後 Alpha。",
       horizonValue: "季度檢視週期，12 個月視野。",
@@ -1357,7 +1378,7 @@ export default {
   },
   settings: {
     subtitle: "個人偏好、工作區、整合、語言、佈景與功能旗標。",
-    tab: { profile: "個人", workspace: "工作區", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標" },
+    tab: { profile: "個人", workspace: "工作區", integrations: "整合", api: "API 金鑰", locale: "語言", flags: "功能旗標", breakglass: "Break-Glass" },
     profile: { title: "個人資料", displayName: "顯示名稱", email: "電子郵件" },
     workspace: { title: "工作區", name: "名稱", tz: "時區" },
     theme: { title: "佈景", dark: "深色模式", darkHint: "預設適用低光環境作業。", density: "密度" },
