@@ -128,8 +128,11 @@ export default {
     liveStrategyMonitor: "Live Strategy 監測",
     deploymentRegistry: "部署列表",
     deploymentMonitor: "部署監測",
-    // 2026-05-20 改版 §5.1 — One Ring Oversight IA。
-    oneRingCockpit: "One Ring 駕駛艙",
+    // 2026-05-20 PM-1 — Pathreon Management 可見名稱。
+    oneRingCockpit: "Pathreon Management 駕駛艙",
+    managementCockpit: "管理駕駛艙",
+    pathreonManagement: "Pathreon Management",
+    askManagement: "詢問 Pathreon Management",
     personaFleet: "Persona 艦隊",
     humanInbox: "人類收件匣",
     tradingPulse: "交易脈動",
@@ -140,6 +143,7 @@ export default {
     capitalLiveReadiness: "資金綁定 Live",
     bffHaReadiness: "BFF HA 就緒",
     strictPublishAudit: "Strict 發行稽核",
+
   },
   groups: {
     overview: "總覽",
