@@ -165,7 +165,9 @@ function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRol
 
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
-  const sorted = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  const seed = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
+  const { data } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
+  const sorted = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header>
