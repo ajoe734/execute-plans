@@ -1,6 +1,6 @@
 // 2026-05-20 revamp §6 — Core 7 Oversight pages (Phase 1).
-// Replaces M1 stubs with real, data-driven UIs. Each page renders from a
-// pure local view-model + minimal seed access so the routes are real.
+// Cockpit upgraded by PM-3 (composeCockpit + SystemStateStrip / LoopFlowMap /
+// PersonaOodaMatrix / CriticalAnomalyPanel).
 //
 // PersonaIntent + readiness pages live in their own files.
 
@@ -13,51 +13,38 @@ import {
   TRADING_BASELINE_DEFAULTS, TRADING_BASELINE_KINDS,
   baselineLabel, type TradingBaselineKind,
 } from "@/lib/v5/management/tradingBaseline";
+import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
+import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
+import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
+import { PersonaOodaMatrix } from "@/management/components/cockpit/PersonaOodaMatrix";
+import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAnomalyPanel";
+import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
+import {
+  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
+} from "@/lib/v5/management/humanInbox";
+import { buildLinkSet } from "@/lib/v5/management/links";
 
 // =====================================================================
-// Pathreon Management Cockpit — top-level oversight aggregate.
-// (Internal symbol kept as OneRingCockpitPage for back-compat; visible label
-// must read "Pathreon Management Cockpit".)
+// Pathreon Management Cockpit (PM-3)
 // =====================================================================
 
-const COCKPIT_KPIS = {
-  autonomyState: "guarded" as const,
-  humanPending: 3,
-  criticalFindings: 1,
-  personaOwners: 4,
-  personas: 12,
+export const OneRingCockpitPage = () => {
+  const model = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  return (
+    <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
+      <header>
+        <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
+        <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
+      </header>
+      <SystemStateStrip model={model.strip} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LoopFlowMap model={model.loopFlow} />
+        <PersonaOodaMatrix model={model.matrix} />
+      </div>
+      <CriticalAnomalyPanel anomalies={model.anomalies} />
+    </section>
+  );
 };
-
-const COCKPIT_SECTIONS = [
-  { title: "Persona Fleet snapshot", href: "/management/persona-fleet", body: "12 personas across 4 owners · 2 in OODA-Decide · 1 paused" },
-  { title: "Trading Pulse", href: "/management/trading-pulse", body: "1 canary positive vs previous artifact · 1 paper drift watching" },
-  { title: "Evolution summary", href: "/management/evolution-journal", body: "2 mutations landed this week · 1 reverted" },
-];
-
-export const OneRingCockpitPage = () => (
-  <section className="p-6 space-y-4" aria-label="Pathreon Management Cockpit">
-    <header>
-      <h1 className="text-2xl font-semibold text-foreground">Pathreon Management Cockpit</h1>
-      <p className="text-sm text-muted-foreground">Is the AI trading organisation healthy? Who needs me right now?</p>
-    </header>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Autonomy</div><div className="text-lg font-semibold">{COCKPIT_KPIS.autonomyState}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Human pending</div><div className="text-lg font-semibold">{COCKPIT_KPIS.humanPending}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Critical findings</div><div className="text-lg font-semibold">{COCKPIT_KPIS.criticalFindings}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Persona owners</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personaOwners}</div></Card>
-      <Card className="p-3"><div className="text-xs text-muted-foreground">Personas</div><div className="text-lg font-semibold">{COCKPIT_KPIS.personas}</div></Card>
-    </div>
-    <div className="grid gap-3 lg:grid-cols-3">
-      {COCKPIT_SECTIONS.map((s) => (
-        <Card key={s.href} className="p-4">
-          <h2 className="text-sm font-semibold text-foreground">{s.title}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{s.body}</p>
-          <Link to={s.href} className="mt-2 inline-block text-xs text-primary underline-offset-4 hover:underline">Open →</Link>
-        </Card>
-      ))}
-    </div>
-  </section>
-);
 
 
 // =====================================================================
