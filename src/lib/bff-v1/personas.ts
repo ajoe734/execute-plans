@@ -57,9 +57,10 @@ export async function runPersonaAction(
   payload: Record<string, unknown> = {},
   opts: PersonaWriteOptions = {},
 ): Promise<Record<string, unknown>> {
+  // 2026-05-20 PM-10 — canonical write path: /bff/actions/{entityType}/{entityId}/{actionId}
   return bffFetch<Record<string, unknown>>({
     method: "POST",
-    path: paths.personaAction(id, action),
+    path: paths.action("persona", id, action),
     body: payload,
     idempotencyKey: opts.idempotencyKey,
     correlationId: opts.correlationId,
