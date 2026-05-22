@@ -229,12 +229,14 @@ const PULSE: PulseRow[] = [
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
   const [selectedKind, setSelectedKind] = useState<TradingBaselineKind | "default">("default");
+  const { data: pulseRows } = useV5Live(() => mgmt.tradingPulse.get<PulseRow>(() => PULSE), []);
+  const rows = pulseRows ?? PULSE;
   const visible = useMemo(() => {
     if (selectedKind === "default") {
-      return PULSE.filter((p) => TRADING_BASELINE_DEFAULTS.includes(p.baselineKind));
+      return rows.filter((p) => TRADING_BASELINE_DEFAULTS.includes(p.baselineKind));
     }
-    return PULSE.filter((p) => p.baselineKind === selectedKind);
-  }, [selectedKind]);
+    return rows.filter((p) => p.baselineKind === selectedKind);
+  }, [selectedKind, rows]);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
       <header>
