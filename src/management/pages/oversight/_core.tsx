@@ -33,7 +33,9 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
-  const model = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  const seed = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
+  const { data } = useV5Live(() => mgmt.cockpit.get(() => seed), []);
+  const model = data ?? seed;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
       <header>
