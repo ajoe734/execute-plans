@@ -1,145 +1,106 @@
 
-# Pack PM-12 — Competition-Style Performance Management
+# Pack PM-BE-Gap: 完整 BFF 缺漏盤點（給後端 pantheon repo）
 
-依 `Pathreon_Management_PM12_差異分析與工作文件_2026-05-22.md` 落地完整 PM-12 工作包，補上目前 Management 缺少的「全資金池持倉總覽 + 全人格績效聯賽 + 季度排名 + 績效歸因 + 排名驅動治理」管理層。沿用既有 v5 management seed + bff-v1 facade + withLiveOrMock + i18n + useV5Live pattern，與 PM-Live 一致。
+## 目標
 
-## 範圍與不做
+把 FE 目前 `src/lib/bff-v1/paths.ts` + `management.ts` 所有 canonical path（含 2026-05-22 新增 PM-Live / PM-12 共 22 條 management 路徑）對照 2026-05-09 live probe 結果與最新網路請求記錄，輸出一份單一權威盤點檔，給後端 lupin 團隊照表實作。
 
-**做**：4 個新頁面、4 份 v5 model、bff-v1 facade 擴充、Cockpit 3 個 snapshot、Human Inbox 新增 `ranking_recommendation` kind、完整 zh-TW / en-US i18n、unit + smoke + deeplink tests。
+## 交付物
 
-**不做**：後端 endpoint；任何直接 mutate live capital / persona / deployment 的動作；Agora 端；改 Trading Pulse 既有 8 ranking blocks（與 League 並存）；改 v4/Pack D normative。
+**新增** `.lovable/audits/bff-backend-gap-2026-05-23.md`，包含：
 
----
+### §1. Executive Summary
+- 探測時間、目標 URL（lupin dev）、總缺漏數
+- 目前 FE catalogued path 總數：**約 87 條**（含 PM-Live 14 + PM-12 11 新增）
+- 已實作：4（`/health`、`/bff/events/stream`、`/bff/approvals` 401-gated、`/bff/v5/interventions` 401-gated、`/bff/mcp-servers/{id}/import-tools` 401-gated）
+- 未實作（404 或未驗證）：**~83 條**
 
-## 1) 路由與導覽（PM12-001）
+### §2. P0 — Session bootstrap（阻塞所有 live 流程）
+| Method | Path | 用途 |
+|---|---|---|
+| GET  | `/bff/me` | session/locale/capabilities/tenant/feature-flags bootstrap |
+| PATCH | `/bff/me/locale` | UI locale 持久化 |
+| POST | `/bff/auth/refresh` | token refresh |
+| POST | `/bff/logout` | session 結束 |
+| GET  | `/openapi.json` | **目前 500** — FE/QA 自描述 |
 
-`App.tsx` 新增 4 條 lazy route：
+### §3. P0 — Decision endpoints（list 已 401，但 decide 缺）
+- `POST /bff/approvals/{id}/decide`
+- `POST /bff/approvals/batch-decide`
+- `POST /bff/v5/interventions/{id}/decide`
+- `POST /bff/alerts/{id}/acknowledge`
 
-```
-/management/portfolio-book          → PortfolioBookPage
-/management/persona-league          → PersonaLeaguePage
-/management/quarterly-ranking       → QuarterlyRankingPage
-/management/performance-attribution → PerformanceAttributionPage
-```
+### §4. P0 — Canonical action endpoint
+- `POST /bff/actions/{entityType}/{entityId}/{actionId}`（Final OpenAPI §1772）
+- 影響：所有 entity 的高風險動作（含 confirm-token flow）
+- 對應 `POST /bff/confirm-tokens`、`GET /bff/confirm-tokens/{id}`、`POST /bff/confirm-tokens/{id}/redeem`、`POST /bff/command-confirmations`
 
-`ManagementLayout.tsx` 新增 nav group **Performance & League**，包含上述 4 條（避免 Pathreon Management group 過長）。i18n key：
+### §5. P1 — Entity registries（CRUD list / get）
+列出 27 條：strategies, strategy/{id}, strategy/{id}/specs, personas, persona/{id}, persona/{id}/route-policy, persona/{id}/evaluations, persona/{id}/memory, capital-pools(+{id}), rebalances(+{id}), deployments(+{id}), evolution-programs(+{id}/runs/{id}/candidates), jobs(+{id}), alerts, incidents(+{id}), audit, artifacts(+{id}), runtimes, mcp-servers, mcp-tools, skills, channels, tools, ranking-formulas, research-experiments, search
 
-```
-nav.portfolioBook / nav.personaLeague / nav.quarterlyRanking / nav.performanceAttribution
-groups.performanceLeague
-```
+### §6. P1 — Agora（6 條）
+signals, inbox, journal, postmortems, ask/sessions(+{id})
 
----
+### §7. P1 — v5 closed-loop（5 條）
+loop-runs(+{id}), sentinel/findings, v5/execution/persona-health（interventions 已實作）
 
-## 2) v5 Management models（新增 4 檔）
+### §8. P1 — **NEW** Management Oversight（PM-Live, 14 條，2026-05-22 加入）
+| Path | 對應頁面 |
+|---|---|
+| `GET /bff/management/cockpit` | One-Ring Cockpit |
+| `GET /bff/management/persona-fleet` | Persona Fleet |
+| `GET /bff/management/human-inbox` | Human Inbox |
+| `GET /bff/management/human-inbox/{id}` | HumanGateDetail |
+| `GET /bff/management/trading-pulse` | Trading Pulse |
+| `GET /bff/management/trading-pulse/rankings` | Trading Pulse rankings |
+| `GET /bff/management/evolution-journal` | Evolution Journal |
+| `GET /bff/management/evidence` | Evidence Explorer |
+| `GET /bff/management/persona-intent` | PersonaIntentTraces |
+| `GET /bff/management/readiness/ep5` | Ep5CanaryReadiness |
+| `GET /bff/management/readiness/broker-live` | BrokerLiveReadiness |
+| `GET /bff/management/readiness/capital-binding-live` | CapitalBindingLiveReadiness |
+| `GET /bff/management/readiness/bff-ha` | BffHaReadiness |
+| `GET /bff/management/readiness/strict-publish` | StrictPublishAudit |
 
-`src/lib/v5/management/`：
+### §9. P1 — **NEW** Management Performance（PM-12, 8 條，2026-05-22 加入）
+| Path | 對應頁面 |
+|---|---|
+| `GET /bff/management/portfolio-book` | PortfolioBook summary |
+| `GET /bff/management/portfolio-book/pools` | PortfolioBook pools tab |
+| `GET /bff/management/portfolio-book/holdings` | PortfolioBook holdings tab |
+| `GET /bff/management/persona-league` | PersonaLeague list |
+| `GET /bff/management/persona-league/rankings` | PersonaLeague rankings |
+| `GET /bff/management/persona-league/tiers` | PersonaLeague tiers |
+| `GET /bff/management/quarterly-ranking?quarter=YYYY-Qn` | QuarterlyRanking list |
+| `GET /bff/management/quarterly-ranking/formula` | formula version |
+| `GET /bff/management/quarterly-ranking/recommendations?quarter=...` | promote/demote 建議 |
+| `GET /bff/management/performance-attribution?dimension=&period=` | PerformanceAttribution |
 
-- `portfolio.ts` — `PortfolioSummary`、`CapitalPoolSummaryRow`、`HoldingRow`、`defaultPortfolioSeed()`、`composePortfolio()`
-- `personaLeague.ts` — `PersonaLeagueRow`、`PersonaLeaguePreset`、`LeagueRecommendedAction`、`defaultPersonaLeagueSeed()`、ranking sort helpers、tier 分布計算
-- `quarterlyRanking.ts` — `QuarterlyRankingRow`、`QuarterlyRankingFormula`、`QuarterlyScoreBreakdown`、`computeQuarterlyScore(row, formula)`（純函式）、`defaultQuarterlyFormula()`、`defaultQuarterlyRankingSeed()`
-- `performanceAttribution.ts` — `AttributionDimension`（12 種）、`PerformanceAttributionRow`、`defaultAttributionSeed()`
+### §10. Schema / DTO 對齊提醒
+- 每組 endpoint 直接引用 FE seed shape 作為 reference（`src/lib/v5/management/*.ts` 的 `default*()` 函式即是合約預期形狀）
+- response envelope：採 Final OpenAPI 既定（`data` / `error` / `meta.correlationId`）
+- 高風險動作須回 `ActionCommandStatus` named enum
+- SSE `correlationId` 必填
 
-所有 row 都帶 `ManagementLinkSet`（沿用 `links.ts`），便於 deep link。
+### §11. 優先序建議
+1. **Block-1 (P0)**：§2 + §3 + §4 + `/openapi.json` 修復
+2. **Block-2 (P1-core)**：§5 entity registries + §6 Agora
+3. **Block-3 (P1-management)**：§8 PM-Live + §9 PM-12（FE 已 100% 完成 + safeAdapt fallback，後端按 shape 補即可）
+4. **Block-4 (P1-v5)**：§7 v5 loop/sentinel
 
-`humanInbox.ts`：`HumanInboxKind` 新增 `"ranking_recommendation"`、`humanInboxRank` 給予 rank（建議 2.5 落在 approval 與 intervention 之間）；`HumanInboxDetail` 不改 schema，由 detail page 透過 `evidenceRefs` + `consequenceIf*` 文字承載 ranking metadata。
+### §12. FE 端目前的容錯設計（後端可放心漸進實作）
+- `VITE_BFF_MODE=mock` 為 default
+- `VITE_BFF_FALLBACK=auto` — 任一 path 404/500 自動退回 seed
+- 所有 management endpoint 已套 `withLiveOrMock + safeAdapt`，schema 不符也不會炸 UI
 
----
+## 流程
+1. 讀 `src/lib/bff-v1/paths.ts`、`management.ts` 抽出 87 條 canonical path 表
+2. 對照 2026-05-09 probe 結果（`bff-live-probe-2026-05-09.md`）與 2026-05-13 baseline probe 補新狀態
+3. 寫成單檔 markdown
+4. 更新 `mem://index.md` 加一行指向新檔
+5. 不動任何 runtime code
 
-## 3) bff-v1 facade 擴充
-
-`src/lib/bff-v1/paths.ts` 新增：
-
-```
-mgmtPortfolioBook / mgmtPortfolioHoldings / mgmtPortfolioPools
-mgmtPersonaLeague / mgmtPersonaLeagueRankings / mgmtPersonaLeagueTiers
-mgmtQuarterlyRanking(quarter?) / mgmtQuarterlyRankingFormula / mgmtQuarterlyRankingRecommendations(quarter?)
-mgmtPerformanceAttribution(dimension?, period?)
-```
-
-`src/lib/bff-v1/management.ts` 在 `mgmt` 物件新增：
-
-```
-mgmt.portfolioBook = { summary, holdings, pools }
-mgmt.personaLeague = { list, rankings, tiers }
-mgmt.quarterlyRanking = { list, formula, recommendations }
-mgmt.performanceAttribution = { list }
-```
-
-每個 helper：`withLiveOrMock(req, seedFn, safeAdapt(adapter, seedFn))`，與既有 PM-Live 完全同 pattern。Strict mode（`VITE_BFF_FALLBACK=strict`）失敗會 throw（不 silently fallback seed） — 沿用 liveTransport 既行為。
-
----
-
-## 4) 頁面實作
-
-### 4.1 PortfolioBookPage (`/oversight/PortfolioBook.tsx`)
-
-Sections：Header(env/currency filter) → Total Snapshot 卡片區 → Capital Pool Summary 表 → Holdings 表（支援 pool/persona/strategy/symbol/assetClass/sector/region/currency 過濾，concentration 與負 PnL 反白）→ Exposure Breakdown（by assetClass / sector / region）→ Risk Alerts → Drilldown。
-
-### 4.2 PersonaLeaguePage (`/oversight/PersonaLeague.tsx`)
-
-Header(period selector + preset selector 9 種) → League KPI → Ranking Table（rank delta arrow + tier badge + 可展開 scoreBreakdown drawer + 支援 sort by rank/PnL/Sharpe/DD/slippage/intervention/violation）→ Tier Distribution → Top Movers → Disqualified/Suspended → Governance Recommendation 欄位（deep link Human Inbox）。
-
-### 4.3 QuarterlyRankingPage (`/oversight/QuarterlyRanking.tsx`)
-
-Header(quarter selector + cutoff/days remaining + formula version) → Quarterly Snapshot → Formula Weights 面板（透明顯示權重與 hardPenalties + minDataRequirements）→ Ranking Table（含 previousQuarterRank + delta + tier）→ Eligibility/Disqualification → Recommendations Panel（每列「Send to Governance」按鈕 → 開 Human Inbox detail）→ Evidence Packets list。
-
-### 4.4 PerformanceAttributionPage (`/oversight/PerformanceAttribution.tsx`)
-
-Dimension selector（12 種）+ period selector → Contribution Table（PnL contribution、risk contribution 分欄、正負染色、可排序、點 row → 該 entity detail、evidence link）。
-
-所有頁面：以 `useV5Live(() => mgmt.X.Y(seedFn))` 取資料，loading skeleton + `LiveStatusBanner` fallback 訊息一致。
-
----
-
-## 5) Cockpit 整合（PM12-005 / -009）
-
-`src/management/components/cockpit/` 新增 3 元件，插入 `OneRingCockpitPage`：
-
-- `TotalCapitalSnapshot.tsx` — 顯示 totalNav / cash / gross / net / leverage / unrealizedPnL / realizedPnL / activePools / highestRiskPool / largestExposure；卡片點擊 → `/management/portfolio-book`
-- `PersonaLeagueSnapshot.tsx` — Top 3 / Bottom 3 / Biggest rank up / down / Most unstable after training / Most improved after evolution；點擊 → `/management/persona-league`
-- `QuarterlyRankingCountdown.tsx` — current quarter / cutoff / days remaining / formula version / eligible / disqualified / pending evidence gaps；點擊 → `/management/quarterly-ranking`
-
-資料來源：複用 `mgmt.portfolioBook.summary` / `mgmt.personaLeague.list` / `mgmt.quarterlyRanking.list` + `mgmt.quarterlyRanking.formula`。
-
----
-
-## 6) Ranking → Human Inbox（PM12-006 / -010）
-
-- `HumanInboxKind` += `"ranking_recommendation"`；i18n 補對應 label / consequence 模板。
-- `PersonaLeagueRow.recommendedAction` 與 `QuarterlyRankingRow.recommendation` UI 渲染為 button「Send to Governance」。
-- 點擊：mock 端使用 `writeOverlay`（既有 30min TTL pattern）寫入一筆 `HumanInboxItem`，kind=`ranking_recommendation`，subject=personaId，evidenceRefs 帶 ranking snapshot ref；live 端打 `POST /bff/management/human-inbox`（若未來提供）— Phase 1 統一走 writeOverlay。
-- 跳轉至 `/management/human-inbox/:id`。**絕對不直接 mutate persona / capital / deployment**。
-
----
-
-## 7) i18n（PM12-011）
-
-zh-TW 與 en-US 同步補：nav 5 keys、頁面 header / section title / column header / preset name / tier label / recommendation 9 種 enum、cockpit snapshot 標題、ranking_recommendation kind label/consequence。`scripts/check-i18n.ts` 必須 0 missing / 0 hardcoded / 0 asymmetry。
-
----
-
-## 8) Tests
-
-新增測試：
-
-- `src/lib/v5/management/__tests__/portfolio.test.ts` — summary 加總、links 合法
-- `__tests__/personaLeague.test.ts` — 排序、rank delta、preset 切換
-- `__tests__/quarterlyRanking.test.ts` — `computeQuarterlyScore` 公式正確、eligibility / disqualification 判定、recommendation 對應
-- `__tests__/performanceAttribution.test.ts` — sort by contribution、正負染色資料正確
-- `src/lib/bff-v1/__tests__/management.test.ts` 擴充 — 4 個新 namespace 各驗 mock shape + path URL + strict-mode error 路徑
-- Route smoke test（沿用既有 ManagementLayout test pattern）4 條新路由可渲染、nav 有對應項
-- Deep link test — 每類 row links 命中合法目標
-- i18nParity 自動覆蓋新 key
-
-驗收：`bun test` 全綠（既有 536 + 新增 ~30）；`check-i18n` / `check-management-naming` 0 hit。
-
----
-
-## 9) 範圍預估
-
-- 新增：4 v5 model + 4 page + 3 cockpit 元件 + 1 facade 段 + ~6 測試檔
-- 修改：`App.tsx`、`ManagementLayout.tsx`、`paths.ts`、`management.ts`、`humanInbox.ts`、`OneRingCockpitPage`、i18n 兩檔
-- 估 ~2400 行新增 + ~250 行修改，1 commit
-
-完成後 Pathreon Management 才真正具備「競賽式多人格交易管理」管理層。
+## 不做
+- 不改 `paths.ts` / `management.ts`
+- 不重新跑 live probe（會被 CORS 擋）
+- 不動後端 repo
