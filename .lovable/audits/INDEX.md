@@ -28,8 +28,18 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 4 條 Audit F 實作層 RESOLVED；8 條 spec-conflict-G 為 impl-pending（不影響 spec 完整度）。
 實作層分 Batch II / III / IV 推進，由 `.lovable/plan.md` 追蹤。
 
+## BFF Backend Live Probe 系列
+
+對 lupin dev BFF (`https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io`) 的實作覆蓋度盤點。FE 不動，純後端 handoff 清單。
+
+| 版本 ID | 日期 | 範圍 | 已實作 / 總數 | 缺漏 | 備註 |
+|---------|------|------|---------------|------|------|
+| `bff-backend-gap-2026-05-23` | 2026-05-23 | ~87 條 canonical paths baseline | 4 / 87 | 76 P0+P1 + CORS + `/openapi.json` 500 | 首次盤點，給 lupin BE 照表實作 |
+| `bff-backend-gap-2026-05-24-delta` | 2026-05-24 | 第二輪 live probe（含 detail-by-id 真實 ID） | **~62 / 87** | **26**（1 P0 batch-decide + 14 §8 PM-Live + 10 §9 PM-12 + 1 `command-confirmations/{token}` GET）+ 1 schema 偏差（error envelope 多包 `detail`、缺 `meta.correlationId`）+ CORS 仍 broken；`/openapi.json` 已修好 | **Latest — SUPERSEDES baseline 數字** |
+
 ## 使用建議
 
 1. **規劃團隊**：以 `-summary.csv` 篩選 severity，逐條補定義。
 2. **後續審計**：請新增列，不覆蓋既有版本。
 3. **與 plan.md 關係**：本資料夾紀錄 spec 缺漏；實作異動由 `.lovable/plan.md` 追蹤。
+
