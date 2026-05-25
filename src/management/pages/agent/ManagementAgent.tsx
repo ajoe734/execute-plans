@@ -207,7 +207,7 @@ function ChatWindow({ threadId, initialMessages, accessToken }: {
   // Focus input on mount, after submit, after stream finish.
   useEffect(() => { inputRef.current?.focus(); }, [threadId, status]);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!text.trim() || status === "submitted" || status === "streaming") return;
     const t = text.trim();
