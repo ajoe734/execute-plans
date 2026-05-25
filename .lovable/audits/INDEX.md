@@ -37,7 +37,8 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `bff-backend-gap-2026-05-23` | 2026-05-23 | ~87 條 canonical paths baseline | 4 / 87 | 76 P0+P1 + CORS + `/openapi.json` 500 | 首次盤點 |
 | `bff-backend-gap-2026-05-24-delta` | 2026-05-24 | 第二輪 live probe（含 detail-by-id 真實 ID） | ~62 / 87 | 26 + 1 schema 偏差 + CORS | SUPERSEDED by delta-v3 |
 | `bff-backend-gap-2026-05-25-delta-v3` | 2026-05-25 AM | 第三輪 — BE 報告「完成」後 re-probe | ~63 / 87 | 27 + 2 P0 blockers + 160 bonus | SUPERSEDED by delta-v4 |
-| `bff-backend-gap-2026-05-25-delta-v4` | 2026-05-25 late | 第四輪 — BE 再次「完成」後 re-probe，270 paths | **~86 / 87** | **僅剩 1 P0：CORS preflight 仍 400 + 缺 ACAO**；§8/§9/command-confirmations/error envelope（`RESOURCE_NOT_FOUND` + `meta.correlationId`）全部 LANDED；envelope 仍缺 `i18nKey`/`retryable`/`userActionable`（P2） | **LATEST — SUPERSEDES delta-v3** |
+| `bff-backend-gap-2026-05-25-delta-v4` | 2026-05-25 late | 第四輪 — BE 再次「完成」後 re-probe，270 paths | **~86 / 87** | 1 P0 CORS + P2 envelope optional fields | SUPERSEDED by delta-v5 |
+| `bff-backend-gap-2026-05-25-delta-v5` | 2026-05-25 final | 第五輪 — 收尾 re-probe | **87 / 87** | **0 — ALL CLEAR**：CORS preflight 204 + ACAO echo origin ✅；error envelope canonical (`code/i18nKey/message/retryable/userActionable/details` + `meta.correlationId`, `RESOURCE_NOT_FOUND`) ✅；§8/§9/paths.mgmt* 21/21 全 200 ✅；`GET /bff/command-confirmations/{token}` 200 ✅；瀏覽器 preview origin 直打 `/bff/*` 全綠 | **LATEST — BFF handoff COMPLETE** |
 
 ## 使用建議
 
