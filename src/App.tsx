@@ -108,6 +108,10 @@ import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
 import { PersonaLeaguePage } from "@/management/pages/oversight/PersonaLeague";
 import { QuarterlyRankingPage } from "@/management/pages/oversight/QuarterlyRanking";
 import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
+import ManagementAgent from "@/management/pages/agent/ManagementAgent";
+import AuthPage from "@/pages/Auth";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -118,8 +122,12 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AuthProvider>
         <Routes>
           <Route path="/" element={<Navigate to="/management" replace />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/management/agent" element={<ProtectedRoute><ManagementAgent /></ProtectedRoute>} />
+          <Route path="/management/agent/:threadId" element={<ProtectedRoute><ManagementAgent /></ProtectedRoute>} />
 
           <Route element={<PlatformShell />}>
             {/* Management Console */}
