@@ -20,6 +20,7 @@
     "gate:integration": "npm run test && npm run build && npm run test:contract && npm run probe:bff:routes && npm run probe:browser && npm run e2e"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.193",
     "@hookform/resolvers": "^3.10.0",
     "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.11",
