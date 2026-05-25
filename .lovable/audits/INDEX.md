@@ -34,8 +34,9 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 
 | 版本 ID | 日期 | 範圍 | 已實作 / 總數 | 缺漏 | 備註 |
 |---------|------|------|---------------|------|------|
-| `bff-backend-gap-2026-05-23` | 2026-05-23 | ~87 條 canonical paths baseline | 4 / 87 | 76 P0+P1 + CORS + `/openapi.json` 500 | 首次盤點，給 lupin BE 照表實作 |
-| `bff-backend-gap-2026-05-24-delta` | 2026-05-24 | 第二輪 live probe（含 detail-by-id 真實 ID） | **~62 / 87** | **26**（1 P0 batch-decide + 14 §8 PM-Live + 10 §9 PM-12 + 1 `command-confirmations/{token}` GET）+ 1 schema 偏差（error envelope 多包 `detail`、缺 `meta.correlationId`）+ CORS 仍 broken；`/openapi.json` 已修好 | **Latest — SUPERSEDES baseline 數字** |
+| `bff-backend-gap-2026-05-23` | 2026-05-23 | ~87 條 canonical paths baseline | 4 / 87 | 76 P0+P1 + CORS + `/openapi.json` 500 | 首次盤點 |
+| `bff-backend-gap-2026-05-24-delta` | 2026-05-24 | 第二輪 live probe（含 detail-by-id 真實 ID） | ~62 / 87 | 26 + 1 schema 偏差 + CORS | SUPERSEDED by delta-v3 |
+| `bff-backend-gap-2026-05-25-delta-v3` | 2026-05-25 | 第三輪 — BE 報告「完成」後 re-probe | **~63 / 87** | **27**（14 §8 + 10 §9 + 1 confirm-token GET + 2 naming/builder 對齊）+ **2 P0 blockers 未修**（CORS preflight 400、error envelope 仍 `detail`-wrapped 且回 `OBJECT_NOT_FOUND` 非 Pack D §D21）+ 160+ 非 canonical 新增路徑 | **LATEST — SUPERSEDES 05-24** |
 
 ## 使用建議
 
