@@ -63,3 +63,11 @@ BE 同時暴露多套命名（FE 不會用，但建議收斂）：
 - FE 程式碼變更（`withLiveOrMock + safeAdapt` 已能自動降級）
 - BE 程式碼變更（這份是給 BE 的 gap report）
 - 觸發 BE migration / deployment
+
+---
+
+## ✅ DONE 2026-05-25
+
+- 寫入 `.lovable/audits/bff-backend-gap-2026-05-25-delta-v3.md`
+- `.lovable/audits/INDEX.md` 加入 delta-v3 列、05-24 標 SUPERSEDED
+- `mem://index.md` Core 區 BFF probe 一行更新至 2026-05-25
