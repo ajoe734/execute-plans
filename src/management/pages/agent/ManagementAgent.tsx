@@ -1,9 +1,10 @@
+// TEST MODE: no auth. Anonymous session id stored in localStorage.
+// Re-enable auth (useAuth, accessToken, ProtectedRoute) before production.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
@@ -11,44 +12,53 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { PlusCircle, Trash2, MessageSquare, LogOut, Brain, Check, X } from "lucide-react";
+import { PlusCircle, Trash2, MessageSquare, Brain, Check, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`;
+
+const ANON_KEY = "pantheon.anonId";
+function getAnonId(): string {
+  try {
+    let id = localStorage.getItem(ANON_KEY);
+    if (!id) {
+      id = `anon-${crypto.randomUUID()}`;
+      localStorage.setItem(ANON_KEY, id);
+    }
+    return id;
+  } catch {
+    return `anon-${Math.random().toString(36).slice(2)}`;
+  }
+}
 
 interface Thread { id: string; title: string; updated_at: string; }
 
 export default function ManagementAgent() {
   const { threadId: routeThreadId } = useParams();
   const nav = useNavigate();
-  const { user, signOut } = useAuth();
+  const anonId = useMemo(() => getAnonId(), []);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
 
-  // Load token.
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setAccessToken(s?.access_token ?? null));
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Load threads.
   const reloadThreads = async () => {
-    const { data } = await supabase.from("chat_threads").select("id,title,updated_at").order("updated_at", { ascending: false });
+    const { data } = await supabase
+      .from("chat_threads")
+      .select("id,title,updated_at")
+      .eq("user_id", anonId)
+      .order("updated_at", { ascending: false });
     setThreads(data ?? []);
   };
-  useEffect(() => { reloadThreads(); }, [user?.id]);
+  useEffect(() => { reloadThreads(); }, [anonId]);
 
   // Bootstrap: if no :threadId, create/select.
   useEffect(() => {
     if (routeThreadId && routeThreadId !== "new") return;
-    if (!user) return;
     (async () => {
       if (routeThreadId === "new" || threads.length === 0) {
         const { data, error } = await supabase
-          .from("chat_threads").insert({ user_id: user.id, title: "New conversation" })
+          .from("chat_threads")
+          .insert({ user_id: anonId, title: "New conversation" })
           .select("id").single();
         if (error) { toast.error(error.message); return; }
         await reloadThreads();
@@ -57,9 +67,8 @@ export default function ManagementAgent() {
         nav(`/management/agent/${threads[0].id}`, { replace: true });
       }
     })();
-  }, [routeThreadId, user, threads.length]);
+  }, [routeThreadId, anonId, threads.length]);
 
-  // Load thread messages.
   useEffect(() => {
     if (!routeThreadId || routeThreadId === "new") return;
     setLoadingMsgs(true);
@@ -79,80 +88,81 @@ export default function ManagementAgent() {
   }, [routeThreadId]);
 
   const newThread = async () => {
-    if (!user) return;
     const { data, error } = await supabase.from("chat_threads")
-      .insert({ user_id: user.id, title: "New conversation" }).select("id").single();
+      .insert({ user_id: anonId, title: "New conversation" }).select("id").single();
     if (error) { toast.error(error.message); return; }
     await reloadThreads();
     nav(`/management/agent/${data.id}`);
   };
 
   const deleteThread = async (id: string) => {
-    await supabase.from("chat_threads").delete().eq("id", id);
+    await supabase.from("chat_threads").delete().eq("id", id).eq("user_id", anonId);
     await reloadThreads();
     if (id === routeThreadId) nav("/management/agent");
   };
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 border-r flex flex-col">
-        <div className="p-3 border-b flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-semibold text-sm">
-            <Brain className="h-4 w-4" /> Management AI
+    <div className="flex flex-col h-screen bg-background">
+      <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        <span>測試版：未啟用登入，所有對話為公開可讀。Anon · {anonId.slice(-6)}</span>
+        <Button size="sm" variant="ghost" className="ml-auto h-6 px-2 text-xs" onClick={() => nav("/management/cockpit")}>← 回 Cockpit</Button>
+      </div>
+      <div className="flex flex-1 min-h-0">
+        <aside className="w-64 border-r flex flex-col">
+          <div className="p-3 border-b flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-semibold text-sm">
+              <Brain className="h-4 w-4" /> Management AI
+            </div>
+            <Button size="icon" variant="ghost" onClick={newThread} title="New conversation" className="h-8 w-8">
+              <PlusCircle className="h-4 w-4" />
+            </Button>
           </div>
-          <Button size="icon-sm" variant="ghost" onClick={newThread} title="New conversation">
-            <PlusCircle className="h-4 w-4" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <ul className="p-2 space-y-1">
-            {threads.map((t) => (
-              <li
-                key={t.id}
-                className={`group flex items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer hover:bg-accent ${t.id === routeThreadId ? "bg-accent" : ""}`}
-                onClick={() => nav(`/management/agent/${t.id}`)}
-              >
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="flex-1 truncate">{t.title}</span>
-                <button
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                  onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                  aria-label="Delete thread"
+          <ScrollArea className="flex-1">
+            <ul className="p-2 space-y-1">
+              {threads.map((t) => (
+                <li
+                  key={t.id}
+                  className={`group flex items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer hover:bg-accent ${t.id === routeThreadId ? "bg-accent" : ""}`}
+                  onClick={() => nav(`/management/agent/${t.id}`)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
-        <div className="p-3 border-t text-xs text-muted-foreground flex items-center justify-between">
-          <span className="truncate">{user?.email}</span>
-          <Button size="icon-sm" variant="ghost" onClick={signOut} title="Sign out">
-            <LogOut className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </aside>
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="flex-1 truncate">{t.title}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                    aria-label="Delete thread"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+          <div className="p-3 border-t text-xs text-muted-foreground">
+            Test mode · {anonId.slice(-6)}
+          </div>
+        </aside>
 
-      {/* Chat */}
-      <main className="flex-1 flex flex-col">
-        {routeThreadId && routeThreadId !== "new" && !loadingMsgs && accessToken ? (
-          <ChatWindow
-            key={routeThreadId}
-            threadId={routeThreadId}
-            initialMessages={initialMessages}
-            accessToken={accessToken}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">Loading…</div>
-        )}
-      </main>
+        <main className="flex-1 flex flex-col min-w-0">
+          {routeThreadId && routeThreadId !== "new" && !loadingMsgs ? (
+            <ChatWindow
+              key={routeThreadId}
+              threadId={routeThreadId}
+              anonId={anonId}
+              initialMessages={initialMessages}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">Loading…</div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
 
-function ChatWindow({ threadId, initialMessages, accessToken }: {
-  threadId: string; initialMessages: UIMessage[]; accessToken: string;
+function ChatWindow({ threadId, anonId, initialMessages }: {
+  threadId: string; anonId: string; initialMessages: UIMessage[];
 }) {
   const nav = useNavigate();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -161,10 +171,9 @@ function ChatWindow({ threadId, initialMessages, accessToken }: {
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: FUNCTION_URL,
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: { threadId },
+      body: { threadId, anonId },
     }),
-    [accessToken, threadId],
+    [threadId, anonId],
   );
 
   const { messages, sendMessage, status, addToolResult, error } = useChat({
@@ -180,19 +189,14 @@ function ChatWindow({ threadId, initialMessages, accessToken }: {
     sendAutomaticallyWhen: () => true,
   });
 
-  // Auto-execute client-side navigate tool calls.
   useEffect(() => {
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       for (const part of m.parts ?? []) {
-        if (
-          part.type === "tool-navigate" &&
-          part.state === "input-available"
-        ) {
+        if (part.type === "tool-navigate" && part.state === "input-available") {
           const href = (part.input as { href?: string })?.href;
           if (href) {
-            try { nav(href); }
-            catch { /* ignore */ }
+            try { nav(href); } catch { /* ignore */ }
             addToolResult({
               tool: "navigate",
               toolCallId: part.toolCallId,
@@ -204,7 +208,6 @@ function ChatWindow({ threadId, initialMessages, accessToken }: {
     }
   }, [messages, addToolResult, nav]);
 
-  // Focus input on mount, after submit, after stream finish.
   useEffect(() => { inputRef.current?.focus(); }, [threadId, status]);
 
   const onSubmit = async (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
@@ -274,7 +277,6 @@ function ChatWindow({ threadId, initialMessages, accessToken }: {
   );
 }
 
-// Render tool call: high-risk tools paused for approval get inline confirm card.
 function ToolBlock({ part, addToolResult }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
