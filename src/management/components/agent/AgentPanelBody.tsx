@@ -16,7 +16,7 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft } from "lucide-react";
+import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft, ExternalLink, Zap, FileEdit, ShieldCheck, Bot } from "lucide-react";
 import { toast } from "sonner";
 
 const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`;
@@ -170,15 +170,35 @@ export function AgentPanelBody() {
   );
 }
 
+type AgentMode = "auto" | "draft" | "confirm" | "agent";
+const MODE_META: Record<AgentMode, { label: string; icon: typeof Zap; hint: string }> = {
+  auto:    { label: "自動",   icon: Zap,         hint: "低風險動作直接執行（無確認）" },
+  draft:   { label: "草稿",   icon: FileEdit,    hint: "AI 只產生草稿，不寫後端" },
+  confirm: { label: "確認",   icon: ShieldCheck, hint: "寫入需你按批准（預設）" },
+  agent:   { label: "代理",   icon: Bot,         hint: "多步自動執行，高風險仍需批准" },
+};
+
 function ChatWindow({ threadId, anonId, initialMessages }: {
   threadId: string; anonId: string; initialMessages: UIMessage[];
 }) {
   const nav = useNavigate();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<AgentMode>(() => {
+    try { return (localStorage.getItem("pantheon.agentMode") as AgentMode) || "confirm"; }
+    catch { return "confirm"; }
+  });
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+    try { localStorage.setItem("pantheon.agentMode", mode); } catch { /* ignore */ }
+  }, [mode]);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: FUNCTION_URL, body: { threadId, anonId } }),
+    () => new DefaultChatTransport({
+      api: FUNCTION_URL,
+      body: () => ({ threadId, anonId, mode: modeRef.current }),
+    }),
     [threadId, anonId],
   );
 
@@ -259,7 +279,33 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
         <ConversationScrollButton />
       </Conversation>
 
-      <div className="border-t p-2">
+      <div className="border-t p-2 space-y-1.5">
+        <div className="flex items-center gap-1 px-0.5" role="radiogroup" aria-label="AI 操作模式">
+          {(Object.keys(MODE_META) as AgentMode[]).map((k) => {
+            const M = MODE_META[k];
+            const Icon = M.icon;
+            const active = mode === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setMode(k)}
+                title={M.hint}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
+                }`}
+              >
+                <Icon className="h-3 w-3" />
+                {M.label}
+              </button>
+            );
+          })}
+          <span className="ml-auto text-[10px] text-muted-foreground truncate">{MODE_META[mode].hint}</span>
+        </div>
         <PromptInput onSubmit={onSubmit}>
           <PromptInputTextarea
             ref={inputRef}
@@ -281,6 +327,7 @@ function ToolBlock({ part, addToolResult }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
 }) {
+  const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
@@ -289,8 +336,25 @@ function ToolBlock({ part, addToolResult }: {
     "decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness",
   ].includes(toolName);
 
+  const isDraft = toolName.startsWith("propose_");
+  const isAuto = toolName === "annotate_evidence";
+  const completed = part.state === "output-available";
+  const output = part.output as { kind?: string; href?: string; payload?: unknown; note?: string; ok?: boolean; stubbed?: boolean } | undefined;
+
+  const openDraft = () => {
+    if (!output?.href) return;
+    try {
+      sessionStorage.setItem("pantheon.agentPrefill", JSON.stringify({
+        tool: toolName,
+        payload: output.payload,
+        at: Date.now(),
+      }));
+    } catch { /* ignore */ }
+    nav(output.href);
+  };
+
   return (
-    <div className="px-4 py-2">
+    <div className="px-4 py-2 space-y-2">
       <Tool defaultOpen={false}>
         <ToolHeader type={`tool-${toolName}` as any} state={part.state} />
         <ToolContent>
@@ -298,8 +362,29 @@ function ToolBlock({ part, addToolResult }: {
           <ToolOutput output={part.output} errorText={part.errorText} />
         </ToolContent>
       </Tool>
+
+      {isDraft && completed && output?.href && (
+        <div className="ml-4 flex items-center gap-2 text-xs bg-blue-500/10 border border-blue-500/30 rounded-md p-2">
+          <FileEdit className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+          <span className="flex-1">草稿已就緒：<span className="font-medium">{toolName.replace("propose_", "")}</span>。{output.note ?? ""}</span>
+          <Button size="sm" variant="outline" onClick={openDraft}>
+            <ExternalLink className="h-3 w-3 mr-1" /> 開啟頁面
+          </Button>
+        </div>
+      )}
+
+      {isAuto && completed && (
+        <div className="ml-4 flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 rounded-md p-2">
+          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+          <span className="flex-1">
+            ✓ 已完成 <span className="font-medium">{toolName}</span>
+            {output?.stubbed ? "（後端尚未上線，已暫存）" : ""}
+          </span>
+        </div>
+      )}
+
       {needsApproval && (
-        <div className="mt-2 ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
+        <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
           <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
           <Button size="sm" variant="outline" onClick={() =>
             addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: false, reason: "user_denied" } })

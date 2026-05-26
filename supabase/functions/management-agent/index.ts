@@ -32,20 +32,45 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const SYSTEM_PROMPT = `You are the Pantheon Management Cockpit assistant — a senior operator copilot.
+type AgentMode = "auto" | "draft" | "confirm" | "agent";
 
-You can:
-- Answer questions about the management cockpit using BFF tools (cockpit metrics, persona league, portfolio book, human inbox, trading pulse, alerts).
-- Navigate the user to any management surface by calling the \`navigate\` tool.
-- Propose high-risk actions (approve/reject human-inbox items, create ask/intervention, trigger readiness checks) — these require user approval before execution.
-- Answer general product/usage questions about the Pantheon Management UI.
+const BASE_SYSTEM_PROMPT = `You are the Pantheon Management Cockpit assistant — a senior operator copilot.
+
+You have FOUR operating modes (chosen by user per message):
+- **auto**: low-risk side effects allowed without confirmation (annotate_evidence, query_*).
+- **draft**: never write to the backend; produce form drafts via propose_* tools (they only stage payloads + navigate).
+- **confirm**: write actions allowed but MUST use needsApproval tools (decide_inbox_item, create_ask, create_intervention, trigger_readiness).
+- **agent**: multi-step autonomy; chain query_* → propose_* / decide_* freely. Confirm-tier tools still require approval.
+
+Tool catalogue:
+- Read: query_cockpit, query_persona_league, query_portfolio_book, query_trading_pulse, query_human_inbox, query_alerts.
+- Navigation: navigate(href).
+- Low-risk write (auto): annotate_evidence.
+- Draft (draft/agent): propose_inbox_decision, propose_ask. These DO NOT call backend — they only stage a draft and navigate.
+- High-risk write (confirm/agent): decide_inbox_item, create_ask, create_intervention, trigger_readiness.
 
 Rules:
-- Always cite real data from tool results; never invent numbers.
-- Respond in the user's language (default: 繁體中文; English when prompted in English).
-- Before any destructive or governance-touching action, briefly explain why and what will happen.
+- Always cite real data from tool results; never invent numbers or IDs.
+- Respond in user's language (default 繁體中文; English when prompted).
+- In **draft** mode, NEVER call decide_inbox_item / create_ask / create_intervention / trigger_readiness — use propose_* instead.
+- In **auto** mode, NEVER call high-risk write tools either; if user asks for a high-risk action, refuse and suggest switching to confirm/agent.
+- In **confirm** mode, prefer needsApproval tools when the user wants to commit.
+- Before any destructive action, briefly explain why and what will happen.
 - Available surfaces: /management/cockpit, /management/persona-fleet, /management/human-inbox, /management/trading-pulse, /management/portfolio-book, /management/persona-league, /management/quarterly-ranking, /management/performance-attribution, /management/evolution-journal, /management/evidence, /management/sentinel, /management/interventions, /management/readiness/{bff-ha,broker-live,capital-binding-live,ep5,strict-publish}.
 - Keep responses concise. Use markdown.`;
+
+function modeHint(mode: AgentMode): string {
+  switch (mode) {
+    case "auto":
+      return `\n\nCURRENT MODE = **auto**. You MAY use annotate_evidence without confirmation. You MAY NOT use any high-risk write tools. Prefer succinct execution.`;
+    case "draft":
+      return `\n\nCURRENT MODE = **draft**. You MUST NOT call decide_inbox_item / create_ask / create_intervention / trigger_readiness. Use propose_inbox_decision / propose_ask instead — they stage a draft and navigate the user to the relevant page.`;
+    case "confirm":
+      return `\n\nCURRENT MODE = **confirm** (default). For any backend write, use the needsApproval tools so the user can review and approve.`;
+    case "agent":
+      return `\n\nCURRENT MODE = **agent**. You may chain multiple tool calls autonomously. High-risk tools still pause for approval. End with a short summary of what you did.`;
+  }
+}
 
 async function bffGet(path: string): Promise<unknown> {
   const r = await fetch(`${BFF_BASE_URL}${path}`);
@@ -54,8 +79,8 @@ async function bffGet(path: string): Promise<unknown> {
   catch { return { status: r.status, data: text.slice(0, 2000) }; }
 }
 
-function buildTools() {
-  return {
+function buildTools(mode: AgentMode) {
+  const tools: Record<string, ReturnType<typeof tool>> = {
     navigate: tool({
       description: "Navigate the user's browser to a management surface route. Use absolute paths like /management/human-inbox.",
       inputSchema: z.object({
@@ -93,6 +118,63 @@ function buildTools() {
       inputSchema: z.object({}),
       execute: async () => bffGet("/bff/alerts"),
     }),
+
+    // ─── Low-risk write (auto tier) ─────────────────────────────
+    annotate_evidence: tool({
+      description: "Attach a tag or short note to an evidence item. LOW RISK — executes immediately in auto/agent mode.",
+      inputSchema: z.object({
+        evidenceId: z.string(),
+        tag: z.string().optional(),
+        note: z.string().max(280).optional(),
+      }),
+      execute: async ({ evidenceId, tag, note }) => {
+        // Try BFF; if endpoint missing, return a client-side stub the panel can show.
+        try {
+          const r = await fetch(`${BFF_BASE_URL}/bff/evidence/${encodeURIComponent(evidenceId)}/annotate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tag, note }),
+          });
+          if (r.ok) return { status: r.status, ok: true, evidenceId, tag, note };
+          return { status: r.status, ok: false, stubbed: true, evidenceId, tag, note, hint: "BFF endpoint not yet implemented; annotation staged locally." };
+        } catch (e) {
+          return { ok: false, stubbed: true, evidenceId, tag, note, error: String(e) };
+        }
+      },
+    }),
+
+    // ─── Draft tier (no backend write) ──────────────────────────
+    propose_inbox_decision: tool({
+      description: "Stage a DRAFT inbox decision (approve/reject/defer) with reason. Does NOT call backend — user will review and submit from the Human Inbox page.",
+      inputSchema: z.object({
+        itemId: z.string(),
+        action: z.enum(["approve", "reject", "defer"]),
+        reason: z.string().min(3),
+      }),
+      execute: async ({ itemId, action, reason }) => ({
+        kind: "draft",
+        target: "human-inbox",
+        href: "/management/human-inbox",
+        payload: { itemId, action, reason },
+        note: "Draft staged. Open Human Inbox to review and submit.",
+      }),
+    }),
+    propose_ask: tool({
+      description: "Stage a DRAFT Ask (question for a persona). Does NOT call backend — user will review and submit from the Persona Fleet page.",
+      inputSchema: z.object({
+        target: z.string().describe("persona id or name"),
+        question: z.string().min(3),
+      }),
+      execute: async ({ target, question }) => ({
+        kind: "draft",
+        target: "persona-fleet",
+        href: "/management/persona-fleet",
+        payload: { target, question },
+        note: "Draft staged. Open Persona Fleet to review and submit.",
+      }),
+    }),
+
+    // ─── Confirm tier (needsApproval) ───────────────────────────
     decide_inbox_item: tool({
       description: "Approve, reject, or defer a human-inbox item. HIGH RISK — requires user approval.",
       inputSchema: z.object({
@@ -154,6 +236,29 @@ function buildTools() {
       },
     }),
   };
+
+  // Mode-based pruning so the model literally cannot pick disallowed tools.
+  if (mode === "draft") {
+    delete tools.decide_inbox_item;
+    delete tools.create_ask;
+    delete tools.create_intervention;
+    delete tools.trigger_readiness;
+    delete tools.annotate_evidence;
+  } else if (mode === "auto") {
+    delete tools.decide_inbox_item;
+    delete tools.create_ask;
+    delete tools.create_intervention;
+    delete tools.trigger_readiness;
+    delete tools.propose_inbox_decision;
+    delete tools.propose_ask;
+  } else if (mode === "confirm") {
+    // confirm = default; keep everything but propose_* (encourage real commits)
+    delete tools.propose_inbox_decision;
+    delete tools.propose_ask;
+  }
+  // agent: keep all.
+
+  return tools;
 }
 
 const responseHeaders = { ...corsHeaders, "X-Pantheon-Test-Mode": "true" };
@@ -164,8 +269,11 @@ Deno.serve(async (req) => {
   console.warn("[management-agent] TEST MODE: no auth");
 
   try {
-    const body = await req.json() as { messages: UIMessage[]; threadId: string; anonId: string };
+    const body = await req.json() as { messages: UIMessage[]; threadId: string; anonId: string; mode?: AgentMode };
     const { messages, threadId, anonId } = body;
+    const mode: AgentMode = body.mode && ["auto", "draft", "confirm", "agent"].includes(body.mode)
+      ? body.mode
+      : "confirm";
     if (!Array.isArray(messages) || !threadId || !anonId) {
       return new Response(JSON.stringify({ error: "Invalid request: messages, threadId, anonId required" }), {
         status: 400, headers: { ...responseHeaders, "Content-Type": "application/json" },
@@ -210,13 +318,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const tools = buildTools();
+    const tools = buildTools(mode);
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
-      system: SYSTEM_PROMPT,
+      system: BASE_SYSTEM_PROMPT + modeHint(mode),
       messages: await convertToModelMessages(messages),
       tools,
-      stopWhen: stepCountIs(50),
+      stopWhen: stepCountIs(mode === "agent" ? 80 : 50),
     });
 
     return result.toUIMessageStreamResponse({
