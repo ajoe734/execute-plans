@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 export type AgentPanelMode = "closed" | "minimized" | "normal" | "maximized";
+export type Corner = "tl" | "tr" | "bl" | "br";
 
 interface PanelState {
   mode: AgentPanelMode;
@@ -12,12 +13,13 @@ interface PanelState {
 }
 
 const STORAGE_KEY = "pantheon.agentPanel.v1";
+const EDGE = 16;
 
 function load(): PanelState {
   const defaultState: PanelState = {
     mode: "closed",
-    x: typeof window !== "undefined" ? Math.max(16, window.innerWidth - 460) : 800,
-    y: typeof window !== "undefined" ? Math.max(16, window.innerHeight - 660) : 80,
+    x: typeof window !== "undefined" ? Math.max(EDGE, window.innerWidth - 460) : 800,
+    y: typeof window !== "undefined" ? Math.max(EDGE, window.innerHeight - 660) : 80,
     w: 440, h: 620,
   };
   if (typeof window === "undefined") return defaultState;
@@ -54,6 +56,15 @@ export const agentPanel = {
   maximize() { state = { ...state, mode: state.mode === "maximized" ? "normal" : "maximized" }; emit(); },
   setRect(p: Partial<Pick<PanelState, "x" | "y" | "w" | "h">>) {
     state = { ...state, ...p }; emit();
+  },
+  snapToCorner(corner: Corner) {
+    if (typeof window === "undefined") return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = state.w, h = state.h;
+    const x = corner === "tl" || corner === "bl" ? EDGE : Math.max(EDGE, vw - w - EDGE);
+    const y = corner === "tl" || corner === "tr" ? EDGE : Math.max(EDGE, vh - h - EDGE);
+    state = { ...state, x, y, mode: "normal" };
+    emit();
   },
 };
 
