@@ -198,7 +198,15 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: FUNCTION_URL,
-      body: () => ({ threadId, anonId, mode: modeRef.current }),
+      body: () => {
+        const stored = readBrowserAuthStorage();
+        const envToken = (import.meta.env.VITE_BFF_DEV_BEARER_TOKEN as string | undefined) ?? null;
+        const bffAuth = {
+          token: stored.token ?? envToken ?? null,
+          tenantId: stored.tenantId ?? null,
+        };
+        return { threadId, anonId, mode: modeRef.current, bffAuth };
+      },
     }),
     [threadId, anonId],
   );
