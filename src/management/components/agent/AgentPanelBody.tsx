@@ -40,36 +40,49 @@ export function AgentPanelBody() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const bootstrappedRef = useRef(false);
+  const [bootError, setBootError] = useState<string | null>(null);
 
   const reloadThreads = async (): Promise<Thread[]> => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("chat_threads")
       .select("id,title,updated_at")
       .eq("user_id", anonId)
       .order("updated_at", { ascending: false });
+    if (error) throw error;
     const list = (data ?? []) as Thread[];
     setThreads(list);
     return list;
+  };
+
+  const bootstrap = async () => {
+    setBootError(null);
+    try {
+      const list = await reloadThreads();
+      if (list.length > 0) {
+        setActiveThreadId(list[0].id);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("chat_threads")
+        .insert({ user_id: anonId, title: "New conversation" })
+        .select("id,title,updated_at").single();
+      if (error) throw error;
+      setThreads([data as Thread]);
+      setActiveThreadId(data.id);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      // eslint-disable-next-line no-console
+      console.error("[AgentPanelBody] bootstrap failed", e);
+      setBootError(msg);
+    }
   };
 
   // Single-shot bootstrap: pick newest thread, or create one. StrictMode-safe via ref.
   useEffect(() => {
     if (bootstrappedRef.current) return;
     bootstrappedRef.current = true;
-    (async () => {
-      const list = await reloadThreads();
-      if (list.length > 0) {
-        setActiveThreadId(list[0].id);
-      } else {
-        const { data, error } = await supabase
-          .from("chat_threads")
-          .insert({ user_id: anonId, title: "New conversation" })
-          .select("id,title,updated_at").single();
-        if (error) { toast.error(error.message); return; }
-        setThreads([data as Thread]);
-        setActiveThreadId(data.id);
-      }
-    })();
+    void bootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anonId]);
 
   // Load messages whenever activeThreadId changes.
@@ -81,8 +94,14 @@ export function AgentPanelBody() {
       .select("id,role,parts,message_id,created_at")
       .eq("thread_id", activeThreadId)
       .order("created_at", { ascending: true })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error("[AgentPanelBody] load messages failed", error);
+          setInitialMessages([]);
+          return;
+        }
         const msgs: UIMessage[] = (data ?? []).map((r) => ({
           id: r.message_id || r.id,
           role: r.role as "user" | "assistant",
@@ -92,6 +111,12 @@ export function AgentPanelBody() {
       });
     return () => { alive = false; };
   }, [activeThreadId]);
+
+  const retryBootstrap = () => {
+    bootstrappedRef.current = false;
+    setBootError(null);
+    void bootstrap();
+  };
 
   const newThread = async () => {
     const { data, error } = await supabase
@@ -161,9 +186,21 @@ export function AgentPanelBody() {
 
         {activeThreadId && initialMessages !== null ? (
           <ChatWindow key={activeThreadId} threadId={activeThreadId} anonId={anonId} initialMessages={initialMessages} />
+        ) : bootError ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 p-4 text-xs">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <div className="font-medium text-destructive">無法載入對話</div>
+            <div className="text-muted-foreground font-mono text-[10px] text-center break-all max-w-full">
+              {bootError}
+            </div>
+            <Button size="sm" variant="outline" onClick={retryBootstrap}>重試</Button>
+          </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
-            載入中…
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>載入中…</span>
+            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
+              卡住了？點此重試
+            </Button>
           </div>
         )}
       </main>
