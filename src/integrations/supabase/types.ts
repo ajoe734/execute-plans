@@ -42,15 +42,7 @@ export type Database = {
           thread_id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "chat_messages_thread_id_fkey"
-            columns: ["thread_id"]
-            isOneToOne: false
-            referencedRelation: "chat_threads"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       chat_threads: {
         Row: {
