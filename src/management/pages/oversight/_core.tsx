@@ -52,9 +52,14 @@ export const OneRingCockpitPage = () => {
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.cockpit.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mgmt.cockpit.subtitle")}</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.cockpit.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.cockpit.subtitle")}</p>
+        </div>
+        <Button asChild size="sm" variant="default">
+          <Link to="/management/agent">💬 詢問 AI Management</Link>
+        </Button>
       </header>
       <SystemStateStrip model={model.strip} />
       <div className="grid gap-4 lg:grid-cols-3">
