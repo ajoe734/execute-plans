@@ -16,7 +16,8 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft, ExternalLink, Zap, FileEdit, ShieldCheck, Bot } from "lucide-react";
+import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft, ExternalLink, Zap, FileEdit, ShieldCheck, Bot, AlertCircle, Copy } from "lucide-react";
+import { readBrowserAuthStorage } from "@/lib/bff-v1/headers";
 import { toast } from "sonner";
 
 const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`;
@@ -197,7 +198,15 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: FUNCTION_URL,
-      body: () => ({ threadId, anonId, mode: modeRef.current }),
+      body: () => {
+        const stored = readBrowserAuthStorage();
+        const envToken = (import.meta.env.VITE_BFF_DEV_BEARER_TOKEN as string | undefined) ?? null;
+        const bffAuth = {
+          token: stored.token ?? envToken ?? null,
+          tenantId: stored.tenantId ?? null,
+        };
+        return { threadId, anonId, mode: modeRef.current, bffAuth };
+      },
     }),
     [threadId, anonId],
   );
@@ -339,7 +348,13 @@ function ToolBlock({ part, addToolResult }: {
   const isDraft = toolName.startsWith("propose_");
   const isAuto = toolName === "annotate_evidence";
   const completed = part.state === "output-available";
-  const output = part.output as { kind?: string; href?: string; payload?: unknown; note?: string; ok?: boolean; stubbed?: boolean } | undefined;
+  const output = part.output as {
+    kind?: string; href?: string; payload?: unknown; note?: string;
+    ok?: boolean; stubbed?: boolean; status?: number;
+    code?: string; i18nKey?: string; message?: string; correlationId?: string;
+  } | undefined;
+
+  const isError = completed && output && output.ok === false;
 
   const openDraft = () => {
     if (!output?.href) return;
@@ -353,6 +368,14 @@ function ToolBlock({ part, addToolResult }: {
     nav(output.href);
   };
 
+  const copyCorrelationId = () => {
+    if (!output?.correlationId) return;
+    try {
+      navigator.clipboard.writeText(output.correlationId);
+      toast.success("已複製 correlationId");
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="px-4 py-2 space-y-2">
       <Tool defaultOpen={false}>
@@ -363,7 +386,34 @@ function ToolBlock({ part, addToolResult }: {
         </ToolContent>
       </Tool>
 
-      {isDraft && completed && output?.href && (
+      {isError && (
+        <div className="ml-4 flex items-start gap-2 text-xs bg-destructive/10 border border-destructive/40 rounded-md p-2">
+          <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="font-medium text-destructive">
+              工具呼叫失敗 · <span className="font-mono">{toolName}</span>
+              {typeof output?.status === "number" && output.status > 0 && (
+                <span className="ml-1 text-muted-foreground font-normal">({output.status})</span>
+              )}
+            </div>
+            <div className="text-foreground/80 break-words">
+              {output?.i18nKey || output?.code || output?.message || "未知錯誤"}
+            </div>
+            {output?.correlationId && (
+              <button
+                onClick={copyCorrelationId}
+                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-mono hover:text-foreground"
+                title="複製 correlationId"
+              >
+                <Copy className="h-2.5 w-2.5" />
+                {output.correlationId}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isDraft && completed && !isError && output?.href && (
         <div className="ml-4 flex items-center gap-2 text-xs bg-blue-500/10 border border-blue-500/30 rounded-md p-2">
           <FileEdit className="h-3.5 w-3.5 text-blue-600 shrink-0" />
           <span className="flex-1">草稿已就緒：<span className="font-medium">{toolName.replace("propose_", "")}</span>。{output.note ?? ""}</span>
@@ -373,7 +423,7 @@ function ToolBlock({ part, addToolResult }: {
         </div>
       )}
 
-      {isAuto && completed && (
+      {isAuto && completed && !isError && (
         <div className="ml-4 flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 rounded-md p-2">
           <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
           <span className="flex-1">
