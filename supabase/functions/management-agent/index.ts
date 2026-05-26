@@ -72,11 +72,98 @@ function modeHint(mode: AgentMode): string {
   }
 }
 
-async function bffGet(path: string): Promise<unknown> {
-  const r = await fetch(`${BFF_BASE_URL}${path}`);
-  const text = await r.text();
-  try { return { status: r.status, data: JSON.parse(text) }; }
-  catch { return { status: r.status, data: text.slice(0, 2000) }; }
+// ─── BFF auth header injection ─────────────────────────────────
+// Dev BFF uses a stub bearer token of the form "<operatorId>:<roles>[:mfa]".
+// Frontend sends `bffAuth: { token?, tenantId? }` in the request body;
+// otherwise we fall back to env, then to the hardcoded dev default.
+const DEV_BEARER_FALLBACK = "pantheon-dev-browser:reviewer";
+const BFF_API_VERSION = "2026-05-07";
+
+interface BffAuth { token?: string | null; tenantId?: string | null }
+
+function resolveAuth(input: BffAuth | undefined): { token: string; tenantId: string | null } {
+  const token =
+    input?.token?.trim() ||
+    Deno.env.get("PANTHEON_BFF_DEV_BEARER_TOKEN")?.trim() ||
+    DEV_BEARER_FALLBACK;
+  const tenantId =
+    input?.tenantId?.trim() ||
+    Deno.env.get("PANTHEON_BFF_TENANT_ID")?.trim() ||
+    null;
+  return { token, tenantId };
+}
+
+function newCorrelationId(): string {
+  return `cid_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+function idempotencyKey(): string {
+  return `idk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function bffHeaders(auth: BffAuth | undefined, mutation: boolean): Record<string, string> {
+  const { token, tenantId } = resolveAuth(auth);
+  const h: Record<string, string> = {
+    "Accept": "application/json",
+    "Authorization": `Bearer ${token}`,
+    "X-Correlation-Id": newCorrelationId(),
+    "X-BFF-Api-Version": BFF_API_VERSION,
+  };
+  if (tenantId) h["X-Tenant-Id"] = tenantId;
+  if (mutation) {
+    h["Content-Type"] = "application/json";
+    h["Idempotency-Key"] = idempotencyKey();
+  }
+  return h;
+}
+
+interface ToolErrorEnvelope {
+  ok: false;
+  status: number;
+  code?: string;
+  i18nKey?: string;
+  message: string;
+  correlationId?: string;
+}
+
+async function bffCall(
+  path: string,
+  init: RequestInit & { auth?: BffAuth },
+): Promise<unknown> {
+  const method = init.method ?? "GET";
+  const mutation = method !== "GET" && method !== "HEAD";
+  const headers = { ...bffHeaders(init.auth, mutation), ...(init.headers as Record<string, string> | undefined) };
+  try {
+    const r = await fetch(`${BFF_BASE_URL}${path}`, { ...init, headers });
+    const text = await r.text();
+    let parsed: unknown = text;
+    try { parsed = JSON.parse(text); } catch { /* keep text */ }
+    if (!r.ok) {
+      const err = (parsed && typeof parsed === "object" ? (parsed as { error?: { code?: string; i18nKey?: string; message?: string } }).error : null) ?? null;
+      const env: ToolErrorEnvelope = {
+        ok: false,
+        status: r.status,
+        code: err?.code,
+        i18nKey: err?.i18nKey,
+        message: err?.message ?? `BFF ${method} ${path} failed (${r.status})`,
+        correlationId: headers["X-Correlation-Id"],
+      };
+      return env;
+    }
+    return { ok: true, status: r.status, data: parsed };
+  } catch (e) {
+    const env: ToolErrorEnvelope = {
+      ok: false,
+      status: 0,
+      code: "NETWORK_ERROR",
+      message: e instanceof Error ? e.message : String(e),
+      correlationId: headers["X-Correlation-Id"],
+    };
+    return env;
+  }
+}
+
+function bffGet(path: string, auth?: BffAuth): Promise<unknown> {
+  return bffCall(path, { method: "GET", auth });
 }
 
 function buildTools(mode: AgentMode) {
