@@ -186,9 +186,21 @@ export function AgentPanelBody() {
 
         {activeThreadId && initialMessages !== null ? (
           <ChatWindow key={activeThreadId} threadId={activeThreadId} anonId={anonId} initialMessages={initialMessages} />
+        ) : bootError ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 p-4 text-xs">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <div className="font-medium text-destructive">無法載入對話</div>
+            <div className="text-muted-foreground font-mono text-[10px] text-center break-all max-w-full">
+              {bootError}
+            </div>
+            <Button size="sm" variant="outline" onClick={retryBootstrap}>重試</Button>
+          </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
-            載入中…
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>載入中…</span>
+            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
+              卡住了？點此重試
+            </Button>
           </div>
         )}
       </main>
