@@ -103,7 +103,7 @@ export default function ManagementAgent() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+      <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-1.5 flex items-center gap-2 text-xs text-destructive">
         <AlertTriangle className="h-3.5 w-3.5" />
         <span>測試版：未啟用登入，所有對話為公開可讀。Anon · {anonId.slice(-6)}</span>
         <Button size="sm" variant="ghost" className="ml-auto h-6 px-2 text-xs" onClick={() => nav("/management/cockpit")}>← 回 Cockpit</Button>
