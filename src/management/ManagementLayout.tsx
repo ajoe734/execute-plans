@@ -108,7 +108,10 @@ export const ManagementLayout = () => {
         <div className="flex items-center justify-end gap-2 border-b border-border bg-background/50 px-4 py-2">
           <NlAssistantDrawer />
         </div>
-        <Outlet />
+        <ErrorBoundary key={useLocation().pathname} scope="Management page">
+          <Outlet />
+        </ErrorBoundary>
+
       </main>
       <FloatingAgentPanel />
     </>
