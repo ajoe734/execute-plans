@@ -184,9 +184,21 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const nav = useNavigate();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<AgentMode>(() => {
+    try { return (localStorage.getItem("pantheon.agentMode") as AgentMode) || "confirm"; }
+    catch { return "confirm"; }
+  });
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+    try { localStorage.setItem("pantheon.agentMode", mode); } catch { /* ignore */ }
+  }, [mode]);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: FUNCTION_URL, body: { threadId, anonId } }),
+    () => new DefaultChatTransport({
+      api: FUNCTION_URL,
+      body: () => ({ threadId, anonId, mode: modeRef.current }),
+    }),
     [threadId, anonId],
   );
 
