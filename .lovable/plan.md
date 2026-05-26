@@ -1,57 +1,52 @@
-# Management AI — 測試版免登入
+## 目標
 
-讓 `/management/agent` 在無 auth session 下也能直接使用，並從 `/management/cockpit` 一鍵進入。
+把 Management AI 從「獨佔全螢幕路由」改成「浮在系統上的可縮放面板」，並修掉目前卡住的問題。
 
-## 變更
+## 問題分析
 
-### 1. 路由 / 入口
-- **`src/App.tsx`** — 移除 `/management/agent/*` 外的 `ProtectedRoute` 包裝（保留 `/auth` 路由檔案但不強制）。
-- **`src/management/pages/Cockpit.tsx`** — 把舊的 `<ManagementNlConsole/>` drawer 改為一顆按鈕「詢問 AI Management」，直接 `nav('/management/agent')`，不再導去 `/auth`。
+1. **卡住** = 目前 `ManagementAgent.tsx` 是整頁 `h-screen` route (`/management/agent/:id`)，導覽過去就離開 Cockpit，回不去也無法同時操作。Empty/Loading 狀態（`routeThreadId === "new"` 時、thread bootstrap 競態）會卡在 "Loading…"。
+2. **無法同時操作** = 它是 route 不是 overlay。
 
-### 2. Edge Function（`supabase/functions/management-agent/index.ts`）
-- 移除 `Authorization: Bearer` 強制檢查，改用 request body 帶來的 `anonId`（client localStorage 產生）。
-- 用 `SUPABASE_SERVICE_ROLE_KEY` 建立 admin client，繞過 RLS 寫入 `chat_threads` / `chat_messages`。
-- `chat_threads.user_id` / `chat_messages.user_id` 以 `anonId`（text）存入。
-- 加上 `console.warn("[management-agent] TEST MODE: no auth")` 與回應 header `X-Pantheon-Test-Mode: true`。
-- `supabase/config.toml` 加入：
-  ```
-  [functions.management-agent]
-  verify_jwt = false
-  ```
+## 方案：Floating Agent Panel（浮窗）
 
-### 3. DB Migration
-- `chat_threads.user_id` 與 `chat_messages.user_id` 改為 `text NOT NULL`（原為 `uuid`）。
-- DROP 既有 4+4 條 `auth.uid() = user_id` RLS policies。
-- 改為 `USING (true) WITH CHECK (true)` 全開（測試版，僅 service role 寫入，client 不直接 query 這些表）。
-- 註解標註：`-- TEST MODE: re-enable per-user RLS before production`。
+### A. 新元件 `src/management/components/agent/FloatingAgentPanel.tsx`
+- 用 Portal 掛到 `document.body`，`position: fixed`，預設右下角 `width: 420px, height: 600px`。
+- 三種狀態：`minimized`（只剩右下角圓形 FAB icon）/ `normal`（預設浮窗）/ `maximized`（佔大部分視窗但仍是 overlay，不蓋住側邊欄）。
+- Header bar：拖曳移動、最小化 `–`、最大化 `▢`、關閉 `×`。
+- Resize handle：右下角 corner（CSS `resize: both` + `overflow: hidden`，最簡實作）。
+- 位置/尺寸/狀態存 `localStorage`（`pantheon.agentPanel.state`）下次開啟還原。
+- z-index 高於系統 UI，但 toast / dialog 仍可疊上。
+- **背景不加 backdrop**，原系統完全可操作（點擊不會被攔截）。
 
-### 4. Frontend（`src/management/pages/agent/ManagementAgent.tsx`）
-- 移除 `useAuth()`、`accessToken`、`supabase.auth.*` 相關程式。
-- 新增 `getAnonId()`：從 `localStorage.pantheon.anonId` 讀取，若無則產生 `anon-<crypto.randomUUID()>` 並寫入。
-- `chat_threads` / `chat_messages` 的 select / insert / delete 直接帶 `.eq('user_id', anonId)`（透過 service role 的 edge function 或暫時關閉 RLS 後 client 也能讀 — 見下方技術細節）。
-- `DefaultChatTransport` 不再帶 `Authorization` header，改在 `body` 帶 `{ threadId, anonId }`。
-- Sidebar 底部把 email + signOut 改為「Test mode · {anonId 後 6 碼}」+ 「清除對話」按鈕。
-- 加一條頂部 banner：「測試版：未啟用登入，所有對話為公開可讀」。
+### B. Panel 內容 = 現有 ChatWindow 抽出
+- 把 `ManagementAgent.tsx` 的 `ChatWindow` + thread sidebar 拆成 `AgentPanelBody.tsx`，移除 `h-screen` 並改用 `h-full`。
+- Sidebar 在 panel 中變成可摺疊 drawer（窄寬度時自動隱藏），預設只顯示對話視窗 + 頂部「☰ 對話列表 / + 新對話」按鈕。
+- 修掉卡死：
+  - `routeThreadId` 不再從 URL 取，改成 panel 內部 state `activeThreadId`。
+  - 初次開啟若無 thread → 直接建立並選中（單一 effect、用 ref 防 StrictMode 重入）。
+  - Loading 狀態加 timeout fallback，error 顯示重試按鈕。
 
-### 5. 保留但停用
-- `src/lib/auth/AuthProvider.tsx`、`src/lib/auth/ProtectedRoute.tsx`、`src/pages/Auth.tsx` — 保留檔案，加 `@deprecated test-bypass` 註解。
-- `App.tsx` 仍掛 `<AuthProvider>` 以避免 import 連鎖錯誤，但不再被 agent 路由使用。
+### C. 全域掛載
+- `src/management/ManagementLayout.tsx` 底部加 `<FloatingAgentPanel />`（只在 management 範圍內出現）。
+- 由 `useAgentPanel()` zustand-lite store（`src/management/components/agent/useAgentPanel.ts`）控制 open/minimize/maximize。
+- `src/management/pages/oversight/_core.tsx` 的「💬 詢問 AI Management」按鈕改成 `useAgentPanel().open()`，不再 `nav('/management/agent')`。
 
-## 技術細節
+### D. Route 處理
+- 保留 `/management/agent/:threadId?` route 但改成 redirect 到 `/management/cockpit` 並自動 `open(threadId)`，這樣舊連結還能用。
+- 移除 ManagementAgent 整頁版本（或留為 deprecated debug-only）。
 
-**Thread / message 讀寫**：為避免在 client 也走 service role（不安全且需要新 edge function），最簡作法是 migration 直接把 RLS 放開（`USING (true)`），client 端用 anon key 即可 CRUD，並用 `user_id = anonId` 自行 scope。Edge function 寫入時同樣帶 anonId。代價：任何人能讀別人的 thread（測試版可接受，banner 明示）。
-
-**Anon id 持久化**：`localStorage`，清除瀏覽器資料會產生新 id（舊 thread 仍在 DB，但找不到入口）。
+### E. 測試模式 banner
+- 從原本「全頁 top banner」改成 panel header 內一條細紅線，不再侵入主系統畫面。
 
 ## 驗收
-1. 無痕視窗 → `/management/cockpit` → 點「詢問 AI」→ 進到 `/management/agent`，無 redirect。
-2. 輸入「這系統怎麼使用？」→ Gemini 串流回覆。
-3. 重新整理 `/management/agent/<id>` → 對話保留。
-4. 不同瀏覽器 → 各自獨立 thread 清單。
-5. 頂部明確顯示「測試版未啟用登入」banner。
 
-## 安全提醒
-測試版 AI endpoint 公開：任何人可消耗 Lovable AI 額度、讀取其他 anonId 對話。**上線前必須**：
-- 還原 RLS 為 `auth.uid() = user_id`
-- 還原 `verify_jwt = true`
-- 還原 ProtectedRoute
+1. 在 Cockpit 點「詢問 AI」→ 右下角浮窗開啟，cockpit 內容仍可滾動/點擊。
+2. 浮窗可拖曳、可右下角拖拉縮放、可最小化成 FAB、可最大化、可關閉。
+3. 重新整理頁面後，浮窗位置/尺寸/開關狀態保留。
+4. 訊息能正常 stream，不再卡 "Loading…"。
+5. 切換 thread / 新建 thread 在 panel 內完成，不改變主路由。
+
+## 不在範圍
+
+- 不動 edge function、不改 RLS、不改 BFF；純前端 UI 重構。
+- 不重做 thread persistence schema。
