@@ -1,4 +1,6 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
 import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { NlAssistantDrawer } from "@/management/components/nl/NlAssistantDrawer";
 import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
@@ -106,7 +108,10 @@ export const ManagementLayout = () => {
         <div className="flex items-center justify-end gap-2 border-b border-border bg-background/50 px-4 py-2">
           <NlAssistantDrawer />
         </div>
-        <Outlet />
+        <ErrorBoundary key={useLocation().pathname} scope="Management page">
+          <Outlet />
+        </ErrorBoundary>
+
       </main>
       <FloatingAgentPanel />
     </>

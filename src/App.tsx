@@ -113,6 +113,7 @@ import AuthPage from "@/pages/Auth";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import NotFound from "./pages/NotFound";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -123,7 +124,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+        <ErrorBoundary scope="App">
         <Routes>
+
           <Route path="/" element={<Navigate to="/management" replace />} />
           <Route path="/auth" element={<AuthPage />} />
           {/* TEST MODE: legacy /management/agent paths now redirect and open the floating panel. */}
@@ -282,7 +285,9 @@ const App = () => (
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ErrorBoundary>
         </AuthProvider>
+
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
