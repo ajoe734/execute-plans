@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { NlAssistantDrawer } from "@/management/components/nl/NlAssistantDrawer";
+import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
 import { useT } from "@/platform/hooks";
 import {
   LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
@@ -107,6 +108,7 @@ export const ManagementLayout = () => {
         </div>
         <Outlet />
       </main>
+      <FloatingAgentPanel />
     </>
   );
 };

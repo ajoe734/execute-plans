@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import {
   TRADING_BASELINE_DEFAULTS, TRADING_BASELINE_KINDS,
   baselineLabel, type TradingBaselineKind,
@@ -57,8 +58,8 @@ export const OneRingCockpitPage = () => {
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.cockpit.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.cockpit.subtitle")}</p>
         </div>
-        <Button asChild size="sm" variant="default">
-          <Link to="/management/agent">💬 詢問 AI Management</Link>
+        <Button size="sm" variant="default" onClick={() => agentPanel.open()}>
+          💬 詢問 AI Management
         </Button>
       </header>
       <SystemStateStrip model={model.strip} />
