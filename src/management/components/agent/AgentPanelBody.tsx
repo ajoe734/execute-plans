@@ -184,6 +184,16 @@ export function AgentPanelBody() {
           <span className="text-[10px] text-muted-foreground ml-auto pr-2">測試模式 · {anonId.slice(-6)}</span>
         </div>
 
+        {/* Always-visible debug status bar */}
+        <div className="border-b px-2 py-0.5 bg-muted/10 text-[10px] font-mono text-muted-foreground flex flex-wrap gap-x-3">
+          <span>threads:{threads.length}</span>
+          <span>active:{activeThreadId ? activeThreadId.slice(0, 8) : "—"}</span>
+          <span>msgs:{initialMessages === null ? "loading" : initialMessages.length}</span>
+          <span className={bootError ? "text-destructive" : ""}>
+            boot:{bootError ? "ERR" : (activeThreadId && initialMessages !== null) ? "ok" : "pending"}
+          </span>
+        </div>
+
         {activeThreadId && initialMessages !== null ? (
           <ChatWindow key={activeThreadId} threadId={activeThreadId} anonId={anonId} initialMessages={initialMessages} />
         ) : bootError ? (
