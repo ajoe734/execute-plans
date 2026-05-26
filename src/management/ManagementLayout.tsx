@@ -1,4 +1,6 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
 import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { NlAssistantDrawer } from "@/management/components/nl/NlAssistantDrawer";
 import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
