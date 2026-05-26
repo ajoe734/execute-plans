@@ -166,7 +166,7 @@ function bffGet(path: string, auth?: BffAuth): Promise<unknown> {
   return bffCall(path, { method: "GET", auth });
 }
 
-function buildTools(mode: AgentMode) {
+function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
   const tools: Record<string, ReturnType<typeof tool>> = {
     navigate: tool({
       description: "Navigate the user's browser to a management surface route. Use absolute paths like /management/human-inbox.",
@@ -178,35 +178,34 @@ function buildTools(mode: AgentMode) {
     query_cockpit: tool({
       description: "Fetch the management cockpit snapshot.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/management/cockpit"),
+      execute: async () => bffGet("/bff/management/cockpit", auth),
     }),
     query_persona_league: tool({
       description: "Fetch persona league rankings.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/management/persona-league"),
+      execute: async () => bffGet("/bff/management/persona-league", auth),
     }),
     query_portfolio_book: tool({
       description: "Fetch portfolio book overview.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/management/portfolio-book"),
+      execute: async () => bffGet("/bff/management/portfolio-book", auth),
     }),
     query_trading_pulse: tool({
       description: "Fetch trading pulse comparison.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/management/trading-pulse"),
+      execute: async () => bffGet("/bff/management/trading-pulse", auth),
     }),
     query_human_inbox: tool({
       description: "List human inbox items.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/approvals"),
+      execute: async () => bffGet("/bff/approvals", auth),
     }),
     query_alerts: tool({
       description: "List recent system alerts.",
       inputSchema: z.object({}),
-      execute: async () => bffGet("/bff/alerts"),
+      execute: async () => bffGet("/bff/alerts", auth),
     }),
 
-    // ─── Low-risk write (auto tier) ─────────────────────────────
     annotate_evidence: tool({
       description: "Attach a tag or short note to an evidence item. LOW RISK — executes immediately in auto/agent mode.",
       inputSchema: z.object({
@@ -214,23 +213,14 @@ function buildTools(mode: AgentMode) {
         tag: z.string().optional(),
         note: z.string().max(280).optional(),
       }),
-      execute: async ({ evidenceId, tag, note }) => {
-        // Try BFF; if endpoint missing, return a client-side stub the panel can show.
-        try {
-          const r = await fetch(`${BFF_BASE_URL}/bff/evidence/${encodeURIComponent(evidenceId)}/annotate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tag, note }),
-          });
-          if (r.ok) return { status: r.status, ok: true, evidenceId, tag, note };
-          return { status: r.status, ok: false, stubbed: true, evidenceId, tag, note, hint: "BFF endpoint not yet implemented; annotation staged locally." };
-        } catch (e) {
-          return { ok: false, stubbed: true, evidenceId, tag, note, error: String(e) };
-        }
-      },
+      execute: async ({ evidenceId, tag, note }) =>
+        bffCall(`/bff/evidence/${encodeURIComponent(evidenceId)}/annotate`, {
+          method: "POST",
+          body: JSON.stringify({ tag, note }),
+          auth,
+        }),
     }),
 
-    // ─── Draft tier (no backend write) ──────────────────────────
     propose_inbox_decision: tool({
       description: "Stage a DRAFT inbox decision (approve/reject/defer) with reason. Does NOT call backend — user will review and submit from the Human Inbox page.",
       inputSchema: z.object({
@@ -239,6 +229,7 @@ function buildTools(mode: AgentMode) {
         reason: z.string().min(3),
       }),
       execute: async ({ itemId, action, reason }) => ({
+        ok: true,
         kind: "draft",
         target: "human-inbox",
         href: "/management/human-inbox",
@@ -253,6 +244,7 @@ function buildTools(mode: AgentMode) {
         question: z.string().min(3),
       }),
       execute: async ({ target, question }) => ({
+        ok: true,
         kind: "draft",
         target: "persona-fleet",
         href: "/management/persona-fleet",
@@ -261,7 +253,6 @@ function buildTools(mode: AgentMode) {
       }),
     }),
 
-    // ─── Confirm tier (needsApproval) ───────────────────────────
     decide_inbox_item: tool({
       description: "Approve, reject, or defer a human-inbox item. HIGH RISK — requires user approval.",
       inputSchema: z.object({
@@ -270,27 +261,23 @@ function buildTools(mode: AgentMode) {
         reason: z.string().min(3),
       }),
       needsApproval: true,
-      execute: async ({ itemId, action, reason }) => {
-        const r = await fetch(`${BFF_BASE_URL}/bff/approvals/${encodeURIComponent(itemId)}/decision`, {
+      execute: async ({ itemId, action, reason }) =>
+        bffCall(`/bff/approvals/${encodeURIComponent(itemId)}/decision`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, reason }),
-        });
-        return { status: r.status, ok: r.ok };
-      },
+          auth,
+        }),
     }),
     create_ask: tool({
       description: "Open an Ask channel. HIGH RISK — requires user approval.",
       inputSchema: z.object({ target: z.string(), question: z.string().min(3) }),
       needsApproval: true,
-      execute: async ({ target, question }) => {
-        const r = await fetch(`${BFF_BASE_URL}/bff/ask`, {
+      execute: async ({ target, question }) =>
+        bffCall(`/bff/ask`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ target, question }),
-        });
-        return { status: r.status, ok: r.ok };
-      },
+          auth,
+        }),
     }),
     create_intervention: tool({
       description: "Submit an intervention. HIGH RISK — requires user approval.",
@@ -300,14 +287,12 @@ function buildTools(mode: AgentMode) {
         payload: z.record(z.unknown()).optional(),
       }),
       needsApproval: true,
-      execute: async ({ target, kind, payload }) => {
-        const r = await fetch(`${BFF_BASE_URL}/bff/interventions`, {
+      execute: async ({ target, kind, payload }) =>
+        bffCall(`/bff/interventions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ target, kind, payload: payload ?? {} }),
-        });
-        return { status: r.status, ok: r.ok };
-      },
+          auth,
+        }),
     }),
     trigger_readiness: tool({
       description: "Trigger a readiness re-check. HIGH RISK — requires user approval.",
@@ -315,16 +300,14 @@ function buildTools(mode: AgentMode) {
         check: z.enum(["bff-ha", "broker-live", "capital-binding-live", "ep5", "strict-publish"]),
       }),
       needsApproval: true,
-      execute: async ({ check }) => {
-        const r = await fetch(`${BFF_BASE_URL}/bff/management/readiness/${check}/probe`, {
+      execute: async ({ check }) =>
+        bffCall(`/bff/management/readiness/${check}/probe`, {
           method: "POST",
-        });
-        return { status: r.status, ok: r.ok };
-      },
+          auth,
+        }),
     }),
   };
 
-  // Mode-based pruning so the model literally cannot pick disallowed tools.
   if (mode === "draft") {
     delete tools.decide_inbox_item;
     delete tools.create_ask;
@@ -339,11 +322,9 @@ function buildTools(mode: AgentMode) {
     delete tools.propose_inbox_decision;
     delete tools.propose_ask;
   } else if (mode === "confirm") {
-    // confirm = default; keep everything but propose_* (encourage real commits)
     delete tools.propose_inbox_decision;
     delete tools.propose_ask;
   }
-  // agent: keep all.
 
   return tools;
 }
@@ -356,8 +337,14 @@ Deno.serve(async (req) => {
   console.warn("[management-agent] TEST MODE: no auth");
 
   try {
-    const body = await req.json() as { messages: UIMessage[]; threadId: string; anonId: string; mode?: AgentMode };
-    const { messages, threadId, anonId } = body;
+    const body = await req.json() as {
+      messages: UIMessage[];
+      threadId: string;
+      anonId: string;
+      mode?: AgentMode;
+      bffAuth?: BffAuth;
+    };
+    const { messages, threadId, anonId, bffAuth } = body;
     const mode: AgentMode = body.mode && ["auto", "draft", "confirm", "agent"].includes(body.mode)
       ? body.mode
       : "confirm";
@@ -365,6 +352,72 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid request: messages, threadId, anonId required" }), {
         status: 400, headers: { ...responseHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    const { data: thread } = await admin
+      .from("chat_threads")
+      .select("id, user_id, title")
+      .eq("id", threadId)
+      .maybeSingle();
+    if (!thread) {
+      await admin.from("chat_threads").insert({ id: threadId, user_id: anonId, title: "New conversation" });
+    } else if (thread.user_id !== anonId) {
+      return new Response(JSON.stringify({ error: "Thread not owned by this session" }), {
+        status: 403, headers: { ...responseHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const last = messages[messages.length - 1];
+    if (last && last.role === "user") {
+      const { error: insErr } = await admin.from("chat_messages").insert({
+        thread_id: threadId,
+        user_id: anonId,
+        role: "user",
+        parts: last.parts ?? [],
+        message_id: last.id ?? null,
+      });
+      if (insErr) console.error("[management-agent] insert user msg failed", insErr);
+
+      if (thread?.title === "New conversation" || !thread) {
+        const text = (last.parts ?? [])
+          .filter((p: { type: string }) => p.type === "text")
+          .map((p: { text?: string }) => p.text ?? "")
+          .join(" ")
+          .slice(0, 80);
+        if (text) {
+          await admin.from("chat_threads").update({ title: text }).eq("id", threadId);
+        }
+      }
+    }
+
+    const tools = buildTools(mode, bffAuth);
+    const errorRule = `\n\nIMPORTANT: When a tool result has \`ok: false\`, DO NOT narrate or interpret the error. Output exactly one short line in the user's language: \`工具呼叫失敗，請見上方錯誤卡。\` and STOP. Do not retry, do not explain authorization or status codes.`;
+    const result = streamText({
+      model: gateway("google/gemini-3-flash-preview"),
+      system: BASE_SYSTEM_PROMPT + modeHint(mode) + errorRule,
+      messages: await convertToModelMessages(messages),
+      tools,
+      stopWhen: stepCountIs(mode === "agent" ? 80 : 50),
+    });
+
+    return result.toUIMessageStreamResponse({
+      originalMessages: messages,
+      headers: responseHeaders,
+      onFinish: async ({ responseMessage }) => {
+        try {
+          await admin.from("chat_messages").insert({
+            thread_id: threadId,
+            user_id: anonId,
+            role: "assistant",
+            parts: responseMessage.parts ?? [],
+            message_id: responseMessage.id ?? null,
+          });
+          await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+        } catch (e) {
+          console.error("[management-agent] persist assistant failed", e);
+        }
+      },
+    });
     }
 
     // Verify thread exists & belongs to this anonId; auto-create if missing.
