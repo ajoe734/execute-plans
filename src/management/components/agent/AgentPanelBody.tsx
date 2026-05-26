@@ -1,0 +1,314 @@
+// Chat body for the floating Management AI panel.
+// Refactored from src/management/pages/agent/ManagementAgent.tsx — no URL deps,
+// internal activeThreadId state, single-shot bootstrap (StrictMode safe).
+//
+// TEST MODE: anon id in localStorage; no auth.
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft } from "lucide-react";
+import { toast } from "sonner";
+
+const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`;
+
+const ANON_KEY = "pantheon.anonId";
+function getAnonId(): string {
+  try {
+    let id = localStorage.getItem(ANON_KEY);
+    if (!id) { id = `anon-${crypto.randomUUID()}`; localStorage.setItem(ANON_KEY, id); }
+    return id;
+  } catch { return `anon-${Math.random().toString(36).slice(2)}`; }
+}
+
+interface Thread { id: string; title: string; updated_at: string; }
+
+export function AgentPanelBody() {
+  const anonId = useMemo(() => getAnonId(), []);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const bootstrappedRef = useRef(false);
+
+  const reloadThreads = async (): Promise<Thread[]> => {
+    const { data } = await supabase
+      .from("chat_threads")
+      .select("id,title,updated_at")
+      .eq("user_id", anonId)
+      .order("updated_at", { ascending: false });
+    const list = (data ?? []) as Thread[];
+    setThreads(list);
+    return list;
+  };
+
+  // Single-shot bootstrap: pick newest thread, or create one. StrictMode-safe via ref.
+  useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    (async () => {
+      const list = await reloadThreads();
+      if (list.length > 0) {
+        setActiveThreadId(list[0].id);
+      } else {
+        const { data, error } = await supabase
+          .from("chat_threads")
+          .insert({ user_id: anonId, title: "New conversation" })
+          .select("id,title,updated_at").single();
+        if (error) { toast.error(error.message); return; }
+        setThreads([data as Thread]);
+        setActiveThreadId(data.id);
+      }
+    })();
+  }, [anonId]);
+
+  // Load messages whenever activeThreadId changes.
+  useEffect(() => {
+    if (!activeThreadId) return;
+    let alive = true;
+    setInitialMessages(null);
+    supabase.from("chat_messages")
+      .select("id,role,parts,message_id,created_at")
+      .eq("thread_id", activeThreadId)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (!alive) return;
+        const msgs: UIMessage[] = (data ?? []).map((r) => ({
+          id: r.message_id || r.id,
+          role: r.role as "user" | "assistant",
+          parts: r.parts as UIMessage["parts"],
+        }));
+        setInitialMessages(msgs);
+      });
+    return () => { alive = false; };
+  }, [activeThreadId]);
+
+  const newThread = async () => {
+    const { data, error } = await supabase
+      .from("chat_threads")
+      .insert({ user_id: anonId, title: "New conversation" })
+      .select("id,title,updated_at").single();
+    if (error) { toast.error(error.message); return; }
+    await reloadThreads();
+    setActiveThreadId(data.id);
+  };
+
+  const deleteThread = async (id: string) => {
+    await supabase.from("chat_threads").delete().eq("id", id).eq("user_id", anonId);
+    const list = await reloadThreads();
+    if (id === activeThreadId) {
+      setActiveThreadId(list[0]?.id ?? null);
+      if (list.length === 0) {
+        bootstrappedRef.current = false; // allow re-bootstrap to create a fresh thread
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-1 min-h-0 bg-background">
+      {showSidebar && (
+        <aside className="w-48 border-r flex flex-col bg-muted/30">
+          <div className="p-2 border-b flex items-center justify-between gap-1">
+            <span className="text-xs font-medium px-1">對話</span>
+            <Button size="icon" variant="ghost" onClick={newThread} title="新對話" className="h-7 w-7">
+              <PlusCircle className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <ScrollArea className="flex-1">
+            <ul className="p-1 space-y-0.5">
+              {threads.map((t) => (
+                <li
+                  key={t.id}
+                  className={`group flex items-center gap-1.5 px-2 py-1.5 rounded text-xs cursor-pointer hover:bg-accent ${t.id === activeThreadId ? "bg-accent" : ""}`}
+                  onClick={() => setActiveThreadId(t.id)}
+                >
+                  <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="flex-1 truncate">{t.title}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                    aria-label="刪除對話"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </aside>
+      )}
+
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="border-b px-2 py-1 flex items-center gap-1 bg-muted/20">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSidebar((v) => !v)} title="對話列表">
+            <PanelLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={newThread} title="新對話">
+            <PlusCircle className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-[10px] text-muted-foreground ml-auto pr-2">測試模式 · {anonId.slice(-6)}</span>
+        </div>
+
+        {activeThreadId && initialMessages !== null ? (
+          <ChatWindow key={activeThreadId} threadId={activeThreadId} anonId={anonId} initialMessages={initialMessages} />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
+            載入中…
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ChatWindow({ threadId, anonId, initialMessages }: {
+  threadId: string; anonId: string; initialMessages: UIMessage[];
+}) {
+  const nav = useNavigate();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [text, setText] = useState("");
+
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: FUNCTION_URL, body: { threadId, anonId } }),
+    [threadId, anonId],
+  );
+
+  const { messages, sendMessage, status, addToolResult, error } = useChat({
+    id: threadId,
+    messages: initialMessages,
+    transport,
+    onError: (e) => {
+      const m = (e as Error).message;
+      if (m.includes("429")) toast.error("AI 使用量已達上限，請稍後再試");
+      else if (m.includes("402")) toast.error("AI 點數已用罄，請至工作區設定加值");
+      else toast.error(m);
+    },
+    sendAutomaticallyWhen: () => true,
+  });
+
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const part of m.parts ?? []) {
+        if (part.type === "tool-navigate" && part.state === "input-available") {
+          const href = (part.input as { href?: string })?.href;
+          if (href) {
+            try { nav(href); } catch { /* ignore */ }
+            addToolResult({ tool: "navigate", toolCallId: part.toolCallId, output: { ok: true, href } });
+          }
+        }
+      }
+    }
+  }, [messages, addToolResult, nav]);
+
+  useEffect(() => { inputRef.current?.focus(); }, [threadId, status]);
+
+  const onSubmit = async (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!text.trim() || status === "submitted" || status === "streaming") return;
+    const t = text.trim();
+    setText("");
+    await sendMessage({ text: t });
+  };
+
+  return (
+    <>
+      <Conversation className="flex-1 min-h-0">
+        <ConversationContent>
+          {messages.length === 0 && (
+            <ConversationEmptyState
+              title="Pantheon Management AI"
+              description="詢問 cockpit 數據、導航到任何頁面，或請我代為提交審批／介入。"
+            />
+          )}
+          {messages.map((m) => (
+            <div key={m.id}>
+              {m.parts?.map((part, idx) => {
+                if (part.type === "text") {
+                  return (
+                    <Message key={idx} from={m.role}>
+                      {m.role === "assistant"
+                        ? <MessageResponse>{part.text}</MessageResponse>
+                        : <MessageContent>{part.text}</MessageContent>}
+                    </Message>
+                  );
+                }
+                if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} />;
+                }
+                return null;
+              })}
+            </div>
+          ))}
+          {status === "submitted" && (
+            <div className="px-4 py-2"><Shimmer>Thinking…</Shimmer></div>
+          )}
+          {error && (
+            <div className="px-4 py-2 text-xs text-destructive">{error.message}</div>
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+
+      <div className="border-t p-2">
+        <PromptInput onSubmit={onSubmit}>
+          <PromptInputTextarea
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="跟 Management AI 說話…"
+            disabled={status === "streaming"}
+          />
+          <PromptInputFooter className="justify-end">
+            <PromptInputSubmit status={status} disabled={!text.trim()} />
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
+    </>
+  );
+}
+
+function ToolBlock({ part, addToolResult }: {
+  part: any;
+  addToolResult: ReturnType<typeof useChat>["addToolResult"];
+}) {
+  const toolName: string = part.type === "dynamic-tool"
+    ? (part.toolName as string)
+    : (part.type as string).slice("tool-".length);
+
+  const needsApproval = part.state === "input-available" && [
+    "decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness",
+  ].includes(toolName);
+
+  return (
+    <div className="px-4 py-2">
+      <Tool defaultOpen={false}>
+        <ToolHeader type={`tool-${toolName}` as any} state={part.state} />
+        <ToolContent>
+          <ToolInput input={part.input} />
+          <ToolOutput output={part.output} errorText={part.errorText} />
+        </ToolContent>
+      </Tool>
+      {needsApproval && (
+        <div className="mt-2 ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
+          <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
+          <Button size="sm" variant="outline" onClick={() =>
+            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: false, reason: "user_denied" } })
+          }><X className="h-3 w-3 mr-1" /> 拒絕</Button>
+          <Button size="sm" onClick={() =>
+            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: true } })
+          }><Check className="h-3 w-3 mr-1" /> 批准</Button>
+        </div>
+      )}
+    </div>
+  );
+}
