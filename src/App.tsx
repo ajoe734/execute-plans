@@ -108,7 +108,7 @@ import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
 import { PersonaLeaguePage } from "@/management/pages/oversight/PersonaLeague";
 import { QuarterlyRankingPage } from "@/management/pages/oversight/QuarterlyRanking";
 import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
-import ManagementAgent from "@/management/pages/agent/ManagementAgent";
+import { ManagementAgentRedirect } from "@/management/pages/agent/ManagementAgentRedirect";
 import AuthPage from "@/pages/Auth";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
@@ -126,9 +126,9 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Navigate to="/management" replace />} />
           <Route path="/auth" element={<AuthPage />} />
-          {/* TEST MODE: no auth required for /management/agent. Re-enable ProtectedRoute before production. */}
-          <Route path="/management/agent" element={<ManagementAgent />} />
-          <Route path="/management/agent/:threadId" element={<ManagementAgent />} />
+          {/* TEST MODE: legacy /management/agent paths now redirect and open the floating panel. */}
+          <Route path="/management/agent" element={<ManagementAgentRedirect />} />
+          <Route path="/management/agent/:threadId" element={<ManagementAgentRedirect />} />
 
           <Route element={<PlatformShell />}>
             {/* Management Console */}
