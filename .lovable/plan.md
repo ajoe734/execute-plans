@@ -1,60 +1,48 @@
-## 為什麼現在 AI 「不會操作」
+## 根因
 
-`supabase/functions/management-agent/index.ts` 目前只給 AI 10 個工具：7 個唯讀 BFF 查詢、`navigate`、3 個高風險批准（decide_inbox / create_ask / create_intervention / trigger_readiness）。**沒有任何「填表」或「一般寫入」工具**，所以它只能查、帶路、送批准——你看到的「不會幫我填內容」就是這個原因。
+`supabase/functions/management-agent/index.ts` 的 `bffGet()` 和所有 BFF `fetch()` 完全沒帶 `Authorization` / `X-Tenant-Id` header，所以 dev BFF 回 401。錯誤被 tool 回傳給 LLM，LLM 老實複述「401 授權錯誤」。
 
-## 設計：四種風險等級 + 你每次決定
+## 變更
 
-每個 tool 一個 `riskTier`，AI 呼叫時帶 `mode` 參數，前端浮窗用不同 UI 接：
+### 1. Edge function — 注入 BFF auth（前端優先、secret fallback）
 
-| Tier | 行為 | UI |
-|---|---|---|
-| `auto` | 直接執行（讀取、標已讀、收藏、加備註） | 流裡顯示「✓ 已完成」 |
-| `draft` | AI 不寫後端，回傳 form payload；前端 `navigate` 到目標頁並用 query/事件預填欄位 | 浮窗顯示「已填入草稿，請至 XX 檢查送出」 |
-| `confirm` | AI 呼叫 `needsApproval` tool；停在 tool-call，等你按「批准/取消」 | 浮窗顯示批准卡（已有） |
-| `agent` | 多步任務模式，AI 可連續呼叫多個 tool，每個 `confirm` 仍會停 | 浮窗顯示步驟列表 |
+`supabase/functions/management-agent/index.ts`:
 
-**「每次你決定」的機制**：浮窗 composer 右側加一排 chip——`自動 / 草稿 / 確認 / 代理`，預設 `確認`。chip 值放進 system prompt 的當輪 hint，AI 據此選擇 tool 行為（例如選「草稿」時禁用 `confirm` tool，只能用 `propose_*`）。
+- 在 POST handler 從 request body 讀 `bffAuth: { token?, tenantId? }`（前端傳）。
+- Fallback：`Deno.env.get("PANTHEON_BFF_DEV_BEARER_TOKEN")` + `PANTHEON_BFF_TENANT_ID`。
+- 新增 `bffHeaders(auth, mutation)` helper → 一律加 `Authorization: Bearer <token>`、`X-Tenant-Id`、`X-Correlation-Id`、`X-BFF-Api-Version: 2026-05-07`，mutation 再加 `Content-Type` + `Idempotency-Key`。
+- 改 `bffGet(path, auth)` 與其他 8 個 `fetch(${BFF_BASE_URL}...)` 一律走 `bffHeaders`。
+- tool error envelope 正規化：所有 BFF call 失敗 → 回 `{ ok: false, status, code, correlationId, message }`，不要把整段錯誤丟給模型解釋。
 
-## 三個最先要的寫入動作（我選的）
+新增 secret：`PANTHEON_BFF_DEV_BEARER_TOKEN`（值 = `pantheon-dev-browser:reviewer`，與 `.env` `VITE_BFF_DEV_BEARER_TOKEN` 一致）。
 
-挑「日常最痛、風險可控、有 BFF 端點」的：
+### 2. 前端 — 把 token 傳給 edge function
 
-1. **`propose_inbox_decision`**（草稿/確認雙模）— 預填批准/拒絕理由到 Human Inbox 該項目；草稿模式只 navigate + 帶 prefill，確認模式直接呼 `/bff/approvals/{id}/decision`。
-2. **`propose_ask`**（草稿/確認）— AI 草擬「要問哪個 persona 什麼問題」，草稿模式跳到 /management/persona-fleet 並開 Ask drawer 預填；確認模式直送 `/bff/ask`。
-3. **`annotate_evidence`**（auto tier）— 對 evidence 列表項目加備註/標籤，低風險自動執行，呼 `/bff/evidence/{id}/annotate`（若 BFF 還沒這 endpoint，先 mock 寫進 chat_messages 的 metadata，下一輪後端補）。
+`src/management/components/agent/AgentPanelBody.tsx`:
 
-## 實作切點（最小集合）
+- 從 `@/lib/bff-v1/headers` 匯出的 `readBrowserAuthStorage()` + `VITE_BFF_DEV_BEARER_TOKEN` env 取得 `{ token, tenantId }`。
+- `DefaultChatTransport` body 加上 `bffAuth: { token, tenantId }`（與現有 `mode` 並列）。
 
-```text
-supabase/functions/management-agent/index.ts
-  + 新增 tool: propose_inbox_decision, propose_ask, annotate_evidence
-  + 每個 tool 加 riskTier metadata（寫在 description 字串）
-  + system prompt 註入當輪 user-selected mode hint
-  + stepCountIs(50) 改成 stepCountIs(80) for agent mode
+### 3. 前端 — 紅字錯誤卡，停止 LLM 解釋
 
-src/management/components/agent/AgentPanelBody.tsx
-  + composer 上方加 mode chip 列（自動/草稿/確認/代理）
-  + sendMessage body 附 { mode } → edge function 拼 system hint
-  + 處理新 tool part：
-      - draft tool 完成 → 顯示「草稿已就緒」+ 按鈕「開啟頁面」
-      - auto tool 完成 → 顯示綠勾條
-  + 'navigate' tool 已存在，draft 工具 reuse 它 + sessionStorage 'agent_prefill'
+`AgentPanelBody.tsx` tool rendering：
 
-src/management/pages/{human-inbox,persona-fleet}/...
-  + 進入時 read sessionStorage 'agent_prefill'，若有就 prefill 對應 form
-  + 用完 clear，避免殘留
-```
+- 偵測 tool output `ok === false`（或 `status >= 400`）→ 渲染 `<ToolErrorCard>`：紅色邊框 + `AlertCircle` icon + 狀態碼 + i18nKey/message + `correlationId`（小字可複製）+ 「重試」按鈕（重新 invoke 同 tool args）。
+- system prompt 增補一段："**When a tool returns `ok:false`, DO NOT narrate the error to the user. Output exactly one short line: `工具呼叫失敗，請見上方錯誤卡。` Then stop.**"
+- text 重複偵測（先前修的）保留。
 
-## 不在這次範圍
-- 不動 BFF / 後端 API（evidence annotate 若無就先 client-side stub）
-- 不動 auth、不動浮窗 dragging/snap 行為
-- 不擴增 readiness / sentinel 寫入工具
-- 不做 agent 模式的長任務佇列 UI（這次代理模式只是允許連續多步，UI 仍走現有 message stream）
+### 4. 文件
+
+更新 `.lovable/plan.md` 記錄這次修補；無 spec 變更。
 
 ## 驗收
 
-1. composer 預設 `確認`：問「拒絕 inbox 第一筆」→ AI 呼 `propose_inbox_decision` confirm 模式 → 浮窗出現批准卡 → 按批准 → BFF 200。
-2. 切 `草稿`：問同樣問題 → AI 不送 API，浮窗顯示「草稿已就緒 開啟 Human Inbox」→ 點進去 → 該項目 reason textarea 已預填 AI 草稿。
-3. 切 `自動`：問「幫第一筆 evidence 加個 tag follow-up」→ 浮窗綠勾「✓ 已加 tag」，不需確認。
-4. 切 `代理`：問「檢查 cockpit、找出最差 persona、預填一個 ask 草稿」→ AI 連續呼 query_cockpit → query_persona_league → propose_ask(draft) → 最後一步顯示草稿卡。
-5. 文字問題（無 tool）在任何 mode 下都不再重複（之前的 fix 維持）。
+1. 切到 `confirm` 模式，問「啟動循環」→ `query_persona_league` 等工具回 200（network 看 edge function logs 確認帶了 Authorization）。
+2. 故意把 secret 設錯 → tool 回 401 → UI 顯示紅字錯誤卡（含 correlationId），LLM 只說「工具呼叫失敗，請見上方錯誤卡」。
+3. 真實 OIDC 接上後，前端 token 自動覆蓋 secret fallback，無需改 edge function。
+
+## Out of scope
+
+- BFF 本身的 mock-token 驗證邏輯
+- 未來真正 OIDC token 的 refresh / silent renew（仍由 `useMe` + 401 interceptor 處理）
+- Floating agent window UI 改版
