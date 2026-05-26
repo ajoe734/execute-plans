@@ -90,15 +90,16 @@ export function AgentPanelBody() {
     if (!activeThreadId) return;
     let alive = true;
     setInitialMessages(null);
-    supabase.from("chat_messages")
-      .select("id,role,parts,message_id,created_at")
-      .eq("thread_id", activeThreadId)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("chat_messages")
+          .select("id,role,parts,message_id,created_at")
+          .eq("thread_id", activeThreadId)
+          .order("created_at", { ascending: true });
         if (!alive) return;
         if (error) {
-          // eslint-disable-next-line no-console
           console.error("[AgentPanelBody] load messages failed", error);
+          setBootError(`load messages: ${error.message}`);
           setInitialMessages([]);
           return;
         }
@@ -108,9 +109,27 @@ export function AgentPanelBody() {
           parts: r.parts as UIMessage["parts"],
         }));
         setInitialMessages(msgs);
+      } catch (e) {
+        if (!alive) return;
+        const msg = (e as Error)?.message || String(e);
+        console.error("[AgentPanelBody] load messages threw", e);
+        setBootError(`load messages threw: ${msg}`);
+        setInitialMessages([]);
+      }
+    })();
+    // Safety: if nothing resolves in 8s, fail open with empty list so UI unblocks.
+    const safety = setTimeout(() => {
+      if (!alive) return;
+      setInitialMessages((curr) => {
+        if (curr !== null) return curr;
+        console.warn("[AgentPanelBody] message load timeout, failing open");
+        setBootError("load messages: timeout after 8s");
+        return [];
       });
-    return () => { alive = false; };
+    }, 8000);
+    return () => { alive = false; clearTimeout(safety); };
   }, [activeThreadId]);
+
 
   const retryBootstrap = () => {
     bootstrappedRef.current = false;
