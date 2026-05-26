@@ -16,7 +16,7 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft } from "lucide-react";
+import { PlusCircle, Trash2, MessageSquare, Check, X, PanelLeft, ExternalLink, Zap, FileEdit, ShieldCheck, Bot } from "lucide-react";
 import { toast } from "sonner";
 
 const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`;
@@ -169,6 +169,14 @@ export function AgentPanelBody() {
     </div>
   );
 }
+
+type AgentMode = "auto" | "draft" | "confirm" | "agent";
+const MODE_META: Record<AgentMode, { label: string; icon: typeof Zap; hint: string }> = {
+  auto:    { label: "自動",   icon: Zap,         hint: "低風險動作直接執行（無確認）" },
+  draft:   { label: "草稿",   icon: FileEdit,    hint: "AI 只產生草稿，不寫後端" },
+  confirm: { label: "確認",   icon: ShieldCheck, hint: "寫入需你按批准（預設）" },
+  agent:   { label: "代理",   icon: Bot,         hint: "多步自動執行，高風險仍需批准" },
+};
 
 function ChatWindow({ threadId, anonId, initialMessages }: {
   threadId: string; anonId: string; initialMessages: UIMessage[];
