@@ -126,8 +126,9 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Navigate to="/management" replace />} />
           <Route path="/auth" element={<AuthPage />} />
-          <Route path="/management/agent" element={<ProtectedRoute><ManagementAgent /></ProtectedRoute>} />
-          <Route path="/management/agent/:threadId" element={<ProtectedRoute><ManagementAgent /></ProtectedRoute>} />
+          {/* TEST MODE: no auth required for /management/agent. Re-enable ProtectedRoute before production. */}
+          <Route path="/management/agent" element={<ManagementAgent />} />
+          <Route path="/management/agent/:threadId" element={<ManagementAgent />} />
 
           <Route element={<PlatformShell />}>
             {/* Management Console */}
