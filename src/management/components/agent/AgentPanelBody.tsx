@@ -120,6 +120,53 @@ export function AgentPanelBody() {
     return () => { alive = false; };
   }, [activeThreadId]);
 
+  // Mirror debug bar state to console on every change.
+  useEffect(() => {
+    const snap = {
+      threads: threads.length,
+      active: activeThreadId,
+      msgs: initialMessages === null ? "loading" : initialMessages.length,
+      boot: bootError ? "ERR" : (activeThreadId && initialMessages !== null) ? "ok" : "pending",
+      bootError,
+      ts: new Date().toISOString(),
+    };
+    // eslint-disable-next-line no-console
+    console.log("[AgentPanelBody:debug]", snap);
+  }, [threads, activeThreadId, initialMessages, bootError]);
+
+  // Watchdog: if still loading after 5s, dump diagnostics (last fetch, online, supabase url).
+  useEffect(() => {
+    if (activeThreadId && initialMessages === null) {
+      const t = setTimeout(() => {
+        // eslint-disable-next-line no-console
+        console.warn("[AgentPanelBody:stuck] still loading after 5s", {
+          activeThreadId,
+          threads: threads.length,
+          bootError,
+          online: typeof navigator !== "undefined" ? navigator.onLine : "n/a",
+          supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+          functionUrl: FUNCTION_URL,
+          anonId,
+          ts: new Date().toISOString(),
+        });
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+    if (!activeThreadId && !bootError) {
+      const t = setTimeout(() => {
+        // eslint-disable-next-line no-console
+        console.warn("[AgentPanelBody:stuck] bootstrap still pending after 5s", {
+          threads: threads.length,
+          anonId,
+          supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+          ts: new Date().toISOString(),
+        });
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [activeThreadId, initialMessages, bootError, threads.length, anonId]);
+
+
 
 
   const retryBootstrap = () => {
