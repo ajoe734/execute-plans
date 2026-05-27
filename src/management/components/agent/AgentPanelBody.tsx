@@ -4,7 +4,7 @@
 //
 // TEST MODE: anon id in localStorage; no auth.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
@@ -32,6 +32,11 @@ function getAnonId(): string {
 }
 
 interface Thread { id: string; title: string; updated_at: string; }
+
+type PendingApproval = { toolName: string; toolCallId: string; approvalId: string };
+
+const isEmptyAssistantMessage = (message: UIMessage) =>
+  message.role === "assistant" && (!message.parts || message.parts.length === 0);
 
 export function AgentPanelBody() {
   const anonId = useMemo(() => getAnonId(), []);
@@ -108,11 +113,13 @@ export function AgentPanelBody() {
           setBootError(`load: ${error.message}`);
           return;
         }
-        const msgs: UIMessage[] = (data ?? []).map((r) => ({
-          id: r.message_id || r.id,
-          role: r.role as "user" | "assistant",
-          parts: r.parts as UIMessage["parts"],
-        }));
+        const msgs: UIMessage[] = (data ?? [])
+          .map((r) => ({
+            id: r.message_id || r.id,
+            role: r.role as "user" | "assistant",
+            parts: r.parts as UIMessage["parts"],
+          }))
+          .filter((m) => !isEmptyAssistantMessage(m));
         if (msgs.length > 0) setInitialMessages(msgs);
       } catch (e) {
         if (!alive) return;
@@ -320,7 +327,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     [threadId, anonId],
   );
 
-  const { messages, sendMessage, status, addToolResult, addToolApprovalResponse, error } = useChat({
+  const { messages, setMessages, sendMessage, status, addToolResult, addToolApprovalResponse, error } = useChat({
     id: threadId,
     messages: initialMessages,
     transport,
@@ -337,8 +344,8 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
 
   // Pending high-risk approvals — AI SDK emits state="approval-requested" with part.approval.id
   // for tools declared with needsApproval:true. Resolve via addToolApprovalResponse({id,approved,reason}).
-  const pendingApprovals = useMemo(() => {
-    const out: { toolName: string; toolCallId: string; approvalId: string }[] = [];
+  const pendingApprovals = useMemo<PendingApproval[]>(() => {
+    const out: PendingApproval[] = [];
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       for (const part of m.parts ?? []) {
@@ -361,6 +368,41 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     // eslint-disable-next-line no-console
     console.log("[AgentPanelBody:pending]", { threadId, count: pendingApprovals.length, pending: pendingApprovals, status });
   }, [pendingApprovals, status, threadId]);
+
+  const resolveApproval = useCallback(async (p: PendingApproval, approved: boolean) => {
+    // eslint-disable-next-line no-console
+    console.log(approved ? "[AgentPanelBody:approve]" : "[AgentPanelBody:deny]", { ...p, status });
+    // Defensive UI patch first: the SDK helper only mutates the LAST message.
+    // If the pending approval was loaded from history and is not the last
+    // message, the click looked dead. Patch the matching part locally so the
+    // banner unblocks immediately even if the follow-up request fails.
+    setMessages((current) => current.map((m) => ({
+      ...m,
+      parts: (m.parts ?? []).map((part) => {
+        const t = part.type as string;
+        if (!t?.startsWith("tool-") && t !== "dynamic-tool") return part;
+        const candidate = part as typeof part & { state?: string; approval?: { id?: string } };
+        if (candidate.state !== "approval-requested" || candidate.approval?.id !== p.approvalId) return part;
+        return {
+          ...part,
+          state: "approval-responded",
+          approval: { id: p.approvalId, approved, reason: approved ? undefined : "user_denied" },
+        } as typeof part;
+      }),
+    })));
+
+    try {
+      await addToolApprovalResponse({
+        id: p.approvalId,
+        approved,
+        reason: approved ? undefined : "user_denied",
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[AgentPanelBody:approval-error]", { ...p, approved, error: e });
+      toast.error("批准狀態已更新，但送出到 AI SDK 時失敗；請再送一次訊息繼續。 ");
+    }
+  }, [addToolApprovalResponse, setMessages, status]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
   const navHandledRef = useRef<Set<string>>(new Set());
@@ -431,7 +473,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} addToolApprovalResponse={addToolApprovalResponse} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} />;
                 }
                 return null;
               })}
@@ -456,15 +498,11 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
             {pendingApprovals.map((p) => (
               <div key={p.toolCallId} className="flex items-center gap-1.5 text-xs">
                 <span className="font-mono flex-1 truncate">{p.toolName}</span>
-                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => {
-                  // eslint-disable-next-line no-console
-                  console.log("[AgentPanelBody:deny]", p);
-                  addToolApprovalResponse({ id: p.approvalId, approved: false, reason: "user_denied" });
-                }}><X className="h-3 w-3 mr-1" />拒絕</Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void resolveApproval(p, false)}>
+                  <X className="h-3 w-3 mr-1" />拒絕
+                </Button>
                 <Button size="sm" className="h-6 text-[10px]" onClick={() => {
-                  // eslint-disable-next-line no-console
-                  console.log("[AgentPanelBody:approve]", p);
-                  addToolApprovalResponse({ id: p.approvalId, approved: true });
+                  void resolveApproval(p, true);
                 }}><Check className="h-3 w-3 mr-1" />批准</Button>
               </div>
             ))}
@@ -513,10 +551,10 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   );
 }
 
-function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
+function ToolBlock({ part, addToolResult, resolveApproval }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
-  addToolApprovalResponse: ReturnType<typeof useChat>["addToolApprovalResponse"];
+  resolveApproval: (p: PendingApproval, approved: boolean) => Promise<void>;
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
@@ -617,10 +655,10 @@ function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
           <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
           <Button size="sm" variant="outline" onClick={() =>
-            addToolApprovalResponse({ id: part.approval.id, approved: false, reason: "user_denied" })
+            void resolveApproval({ toolName, toolCallId: part.toolCallId, approvalId: part.approval.id }, false)
           }><X className="h-3 w-3 mr-1" /> 拒絕</Button>
           <Button size="sm" onClick={() =>
-            addToolApprovalResponse({ id: part.approval.id, approved: true })
+            void resolveApproval({ toolName, toolCallId: part.toolCallId, approvalId: part.approval.id }, true)
           }><Check className="h-3 w-3 mr-1" /> 批准</Button>
         </div>
       )}
