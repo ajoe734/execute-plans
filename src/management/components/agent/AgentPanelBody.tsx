@@ -617,10 +617,10 @@ function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
           <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
           <Button size="sm" variant="outline" onClick={() =>
-            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: false, reason: "user_denied" } })
+            addToolApprovalResponse({ id: part.approval.id, approved: false, reason: "user_denied" })
           }><X className="h-3 w-3 mr-1" /> 拒絕</Button>
           <Button size="sm" onClick={() =>
-            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: true } })
+            addToolApprovalResponse({ id: part.approval.id, approved: true })
           }><Check className="h-3 w-3 mr-1" /> 批准</Button>
         </div>
       )}
