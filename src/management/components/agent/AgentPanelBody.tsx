@@ -494,7 +494,7 @@ function ToolBlock({ part, addToolResult }: {
 
   return (
     <div className="px-4 py-2 space-y-2">
-      <Tool defaultOpen={false}>
+      <Tool defaultOpen={needsApproval || isError}>
         <ToolHeader type={`tool-${toolName}` as any} state={part.state} />
         <ToolContent>
           <ToolInput input={part.input} />
