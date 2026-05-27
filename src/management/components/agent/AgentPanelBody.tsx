@@ -372,15 +372,10 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const resolveApproval = useCallback(async (p: PendingApproval, approved: boolean) => {
     // eslint-disable-next-line no-console
     console.log(approved ? "[AgentPanelBody:approve]" : "[AgentPanelBody:deny]", { ...p, status });
-    await addToolApprovalResponse({
-      id: p.approvalId,
-      approved,
-      reason: approved ? undefined : "user_denied",
-    });
-
-    // Defensive UI patch: the SDK helper only mutates the LAST message. If the
-    // pending approval was loaded from history and is not the last message, the
-    // click looked dead. Patch the matching part locally so the banner unblocks.
+    // Defensive UI patch first: the SDK helper only mutates the LAST message.
+    // If the pending approval was loaded from history and is not the last
+    // message, the click looked dead. Patch the matching part locally so the
+    // banner unblocks immediately even if the follow-up request fails.
     setMessages((current) => current.map((m) => ({
       ...m,
       parts: (m.parts ?? []).map((part) => {
@@ -395,6 +390,18 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
         } as typeof part;
       }),
     })));
+
+    try {
+      await addToolApprovalResponse({
+        id: p.approvalId,
+        approved,
+        reason: approved ? undefined : "user_denied",
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[AgentPanelBody:approval-error]", { ...p, approved, error: e });
+      toast.error("批准狀態已更新，但送出到 AI SDK 時失敗；請再送一次訊息繼續。 ");
+    }
   }, [addToolApprovalResponse, setMessages, status]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
