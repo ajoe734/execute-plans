@@ -513,18 +513,17 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   );
 }
 
-function ToolBlock({ part, addToolResult }: {
+function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
+  addToolApprovalResponse: ReturnType<typeof useChat>["addToolApprovalResponse"];
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
 
-  const needsApproval = part.state === "input-available" && [
-    "decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness",
-  ].includes(toolName);
+  const needsApproval = part.state === "approval-requested" && !!part.approval?.id;
 
   const isDraft = toolName.startsWith("propose_");
   const isAuto = toolName === "annotate_evidence";
