@@ -190,7 +190,8 @@ export function AgentPanelBody() {
   };
 
   const deleteThread = async (id: string) => {
-    await supabase.from("chat_threads").delete().eq("id", id).eq("user_id", anonId);
+    await supabase.from("chat_threads").delete().eq("id", id);
+
     const list = await reloadThreads();
     if (id === activeThreadId) {
       setActiveThreadId(list[0]?.id ?? null);
