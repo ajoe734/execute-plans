@@ -4,7 +4,7 @@
 //
 // TEST MODE: anon id in localStorage; no auth.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
@@ -32,6 +32,11 @@ function getAnonId(): string {
 }
 
 interface Thread { id: string; title: string; updated_at: string; }
+
+type PendingApproval = { toolName: string; toolCallId: string; approvalId: string };
+
+const isEmptyAssistantMessage = (message: UIMessage) =>
+  message.role === "assistant" && (!message.parts || message.parts.length === 0);
 
 export function AgentPanelBody() {
   const anonId = useMemo(() => getAnonId(), []);
@@ -108,11 +113,13 @@ export function AgentPanelBody() {
           setBootError(`load: ${error.message}`);
           return;
         }
-        const msgs: UIMessage[] = (data ?? []).map((r) => ({
-          id: r.message_id || r.id,
-          role: r.role as "user" | "assistant",
-          parts: r.parts as UIMessage["parts"],
-        }));
+        const msgs: UIMessage[] = (data ?? [])
+          .map((r) => ({
+            id: r.message_id || r.id,
+            role: r.role as "user" | "assistant",
+            parts: r.parts as UIMessage["parts"],
+          }))
+          .filter((m) => !isEmptyAssistantMessage(m));
         if (msgs.length > 0) setInitialMessages(msgs);
       } catch (e) {
         if (!alive) return;
