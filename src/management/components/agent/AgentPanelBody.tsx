@@ -387,6 +387,24 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       </Conversation>
 
       <div className="border-t p-2 space-y-1.5">
+        {hasPending && (
+          <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-2 space-y-1.5">
+            <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              ⚠ 有 {pendingApprovals.length} 個高風險動作等待你批准。批准或拒絕後才能繼續對話。
+            </div>
+            {pendingApprovals.map((p) => (
+              <div key={p.toolCallId} className="flex items-center gap-1.5 text-xs">
+                <span className="font-mono flex-1 truncate">{p.toolName}</span>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() =>
+                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: false, reason: "user_denied" } })
+                }><X className="h-3 w-3 mr-1" />拒絕</Button>
+                <Button size="sm" className="h-6 text-[10px]" onClick={() =>
+                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: true } })
+                }><Check className="h-3 w-3 mr-1" />批准</Button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1 px-0.5" role="radiogroup" aria-label="AI 操作模式">
           {(Object.keys(MODE_META) as AgentMode[]).map((k) => {
             const M = MODE_META[k];
@@ -418,11 +436,11 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
             ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="跟 Management AI 說話…"
-            disabled={status === "streaming"}
+            placeholder={hasPending ? "請先批准或拒絕上方動作…" : "跟 Management AI 說話…"}
+            disabled={status === "streaming" || hasPending}
           />
           <PromptInputFooter className="justify-end">
-            <PromptInputSubmit status={status} disabled={!text.trim()} />
+            <PromptInputSubmit status={status} disabled={!text.trim() || hasPending} />
           </PromptInputFooter>
         </PromptInput>
       </div>
