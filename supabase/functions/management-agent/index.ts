@@ -262,7 +262,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       }),
       needsApproval: true,
       execute: async ({ itemId, action, reason }) =>
-        bffCall(`/bff/approvals/${encodeURIComponent(itemId)}/decision`, {
+        bffCall(`/bff/management/human-inbox/${encodeURIComponent(itemId)}`, {
           method: "POST",
           body: JSON.stringify({ action, reason }),
           auth,
@@ -273,7 +273,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       inputSchema: z.object({ target: z.string(), question: z.string().min(3) }),
       needsApproval: true,
       execute: async ({ target, question }) =>
-        bffCall(`/bff/ask`, {
+        bffCall(`/bff/agora/ask/sessions`, {
           method: "POST",
           body: JSON.stringify({ target, question }),
           auth,
@@ -288,7 +288,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       }),
       needsApproval: true,
       execute: async ({ target, kind, payload }) =>
-        bffCall(`/bff/interventions`, {
+        bffCall(`/bff/v5/interventions`, {
           method: "POST",
           body: JSON.stringify({ target, kind, payload: payload ?? {} }),
           auth,
@@ -301,7 +301,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       }),
       needsApproval: true,
       execute: async ({ check }) =>
-        bffCall(`/bff/management/readiness/${check}/probe`, {
+        bffCall(`/bff/management/readiness/${check}`, {
           method: "POST",
           auth,
         }),
