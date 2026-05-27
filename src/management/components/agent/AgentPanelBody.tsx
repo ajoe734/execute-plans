@@ -281,11 +281,17 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
+  // Auto-resolve tool-navigate ONCE per toolCallId.
+  // Persisted history already has these parts in "input-available" state — without this
+  // guard, every render re-triggers nav(href), causing infinite navigation + UI lockup.
+  const navHandledRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       for (const part of m.parts ?? []) {
         if (part.type === "tool-navigate" && part.state === "input-available") {
+          if (navHandledRef.current.has(part.toolCallId)) continue;
+          navHandledRef.current.add(part.toolCallId);
           const href = (part.input as { href?: string })?.href;
           if (href) {
             try { nav(href); } catch { /* ignore */ }
@@ -295,6 +301,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       }
     }
   }, [messages, addToolResult, nav]);
+
 
   useEffect(() => { inputRef.current?.focus(); }, [threadId, status]);
 
