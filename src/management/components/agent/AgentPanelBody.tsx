@@ -42,17 +42,21 @@ export function AgentPanelBody() {
   const bootstrappedRef = useRef(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
+  // TEST MODE: list ALL threads (RLS policy allows public read). This is intentional
+  // because the Lovable preview iframe resets localStorage between sessions, so the
+  // anonId changes on every reload and filtering by user_id would hide prior history.
   const reloadThreads = async (): Promise<Thread[]> => {
     const { data, error } = await supabase
       .from("chat_threads")
       .select("id,title,updated_at")
-      .eq("user_id", anonId)
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(50);
     if (error) throw error;
     const list = (data ?? []) as Thread[];
     setThreads(list);
     return list;
   };
+
 
   const bootstrap = async () => {
     setBootError(null);
