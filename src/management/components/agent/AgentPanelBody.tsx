@@ -320,7 +320,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     [threadId, anonId],
   );
 
-  const { messages, sendMessage, status, addToolResult, error } = useChat({
+  const { messages, sendMessage, status, addToolResult, addToolApprovalResponse, error } = useChat({
     id: threadId,
     messages: initialMessages,
     transport,
@@ -330,28 +330,37 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       else if (m.includes("402")) toast.error("AI 點數已用罄，請至工作區設定加值");
       else toast.error(m);
     },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: ({ messages: msgs }) =>
+      lastAssistantMessageIsCompleteWithApprovalResponses({ messages: msgs }) ||
+      lastAssistantMessageIsCompleteWithToolCalls({ messages: msgs }),
   });
 
-  // Pending high-risk approvals — must be resolved before sending next message,
-  // otherwise the AI SDK errors with "Tool result is missing for tool call ...".
-  const APPROVAL_TOOLS = ["decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness"];
+  // Pending high-risk approvals — AI SDK emits state="approval-requested" with part.approval.id
+  // for tools declared with needsApproval:true. Resolve via addToolApprovalResponse({id,approved,reason}).
   const pendingApprovals = useMemo(() => {
-    const out: { toolName: string; toolCallId: string }[] = [];
+    const out: { toolName: string; toolCallId: string; approvalId: string }[] = [];
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       for (const part of m.parts ?? []) {
         const t = part.type as string;
-        if (!t?.startsWith("tool-")) continue;
-        if ((part as { state?: string }).state !== "input-available") continue;
-        const name = t.slice("tool-".length);
-        if (!APPROVAL_TOOLS.includes(name)) continue;
-        out.push({ toolName: name, toolCallId: (part as { toolCallId: string }).toolCallId });
+        if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
+        const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
+        if (p.state !== "approval-requested") continue;
+        const approvalId = p.approval?.id;
+        if (!approvalId || !p.toolCallId) continue;
+        const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
+        out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
       }
     }
     return out;
   }, [messages]);
   const hasPending = pendingApprovals.length > 0;
+
+  // Debug: pending approvals snapshot.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[AgentPanelBody:pending]", { threadId, count: pendingApprovals.length, pending: pendingApprovals, status });
+  }, [pendingApprovals, status, threadId]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
   const navHandledRef = useRef<Set<string>>(new Set());
