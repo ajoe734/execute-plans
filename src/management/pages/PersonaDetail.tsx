@@ -120,7 +120,9 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
-            <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
+            <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => setEditOpen(true)} title={canEdit ? undefined : t("permission.requireAction", { action: "edit" })}>
+              <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
+            </Button>
             <Button size="sm" variant="outline" onClick={async () => { await testPersonaPrompt(p.id, "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
               <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
             </Button>
@@ -132,6 +134,9 @@ export const PersonaDetail = () => {
             </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
               <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
+            </Button>
+            <Button size="sm" variant="destructive" disabled={!canDelete} onClick={() => setDeleteOpen(true)} title={canDelete ? undefined : t("permission.requireAction", { action: "archive" })}>
+              <Trash2 className="h-4 w-4 mr-1" />{t("actions.delete")}
             </Button>
           </>
         }
