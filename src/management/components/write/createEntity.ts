@@ -1,4 +1,4 @@
-import { createPersona } from "@/lib/bff-v1/personas";
+import { createPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import { writeOverlay } from "@/lib/bff/writeOverlay";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
@@ -35,4 +35,50 @@ export async function createEntityFromInput<K extends CreatableEntity>(
 
   writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
   return { entity, data: built, persistence: "overlay" };
+}
+
+/** Update an entity. For persona, tries BFF "edit" action then falls back to overlay patch.
+ *  All other entities are overlay-only for now (pending BFF endpoints). */
+export async function updateEntityFromInput<K extends CreatableEntity>(
+  entity: K,
+  id: string,
+  input: CreateInputMap[K],
+  opts: CreateEntityOptions = {},
+): Promise<CreateEntityResult> {
+  const patch = buildEntity(entity, input);
+  // Strip auto-generated id from create defaults so we patch the actual entity id.
+  const { id: _ignore, createdAt: _c, ...clean } = patch as Record<string, unknown>;
+  void _ignore; void _c;
+
+  if (entity === "persona") {
+    try {
+      const data = await runPersonaAction(id, "edit", clean, { idempotencyKey: opts.idempotencyKey });
+      writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
+      return { entity, data: { id, ...clean, ...(data as Record<string, unknown>) }, persistence: "bff" };
+    } catch {
+      // BFF edit not available — fall through to overlay patch.
+    }
+  }
+
+  writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
+  return { entity, data: { id, ...clean }, persistence: "overlay" };
+}
+
+/** Soft-delete an entity. For persona, tries BFF "archive" then falls back to overlay. */
+export async function deleteEntity(
+  entity: CreatableEntity,
+  id: string,
+  opts: CreateEntityOptions & { memo?: string; confirmToken?: string } = {},
+): Promise<CreatePersistence> {
+  if (entity === "persona") {
+    try {
+      await runPersonaAction(id, "archive", { memo: opts.memo, confirmToken: opts.confirmToken }, { idempotencyKey: opts.idempotencyKey });
+      writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
+      return "bff";
+    } catch {
+      // fall through
+    }
+  }
+  writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
+  return "overlay";
 }
