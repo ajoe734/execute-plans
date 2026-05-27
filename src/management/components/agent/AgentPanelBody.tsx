@@ -281,10 +281,21 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
-  // Auto-resolve tool-navigate ONCE per toolCallId.
-  // Persisted history already has these parts in "input-available" state — without this
-  // guard, every render re-triggers nav(href), causing infinite navigation + UI lockup.
+  // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
+  // Persisted history parts (loaded from DB) are pre-marked as handled so they never
+  // re-trigger nav(href) on mount — that was causing infinite navigation + UI lockup.
   const navHandledRef = useRef<Set<string>>(new Set());
+  const seededRef = useRef(false);
+  if (!seededRef.current) {
+    seededRef.current = true;
+    for (const m of initialMessages) {
+      for (const part of m.parts ?? []) {
+        if (part.type === "tool-navigate" && "toolCallId" in part) {
+          navHandledRef.current.add((part as { toolCallId: string }).toolCallId);
+        }
+      }
+    }
+  }
   useEffect(() => {
     for (const m of messages) {
       if (m.role !== "assistant") continue;
@@ -301,6 +312,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       }
     }
   }, [messages, addToolResult, nav]);
+
 
 
   useEffect(() => { inputRef.current?.focus(); }, [threadId, status]);
