@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -320,7 +320,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     [threadId, anonId],
   );
 
-  const { messages, sendMessage, status, addToolResult, error } = useChat({
+  const { messages, sendMessage, status, addToolResult, addToolApprovalResponse, error } = useChat({
     id: threadId,
     messages: initialMessages,
     transport,
@@ -330,28 +330,37 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       else if (m.includes("402")) toast.error("AI 點數已用罄，請至工作區設定加值");
       else toast.error(m);
     },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: ({ messages: msgs }) =>
+      lastAssistantMessageIsCompleteWithApprovalResponses({ messages: msgs }) ||
+      lastAssistantMessageIsCompleteWithToolCalls({ messages: msgs }),
   });
 
-  // Pending high-risk approvals — must be resolved before sending next message,
-  // otherwise the AI SDK errors with "Tool result is missing for tool call ...".
-  const APPROVAL_TOOLS = ["decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness"];
+  // Pending high-risk approvals — AI SDK emits state="approval-requested" with part.approval.id
+  // for tools declared with needsApproval:true. Resolve via addToolApprovalResponse({id,approved,reason}).
   const pendingApprovals = useMemo(() => {
-    const out: { toolName: string; toolCallId: string }[] = [];
+    const out: { toolName: string; toolCallId: string; approvalId: string }[] = [];
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       for (const part of m.parts ?? []) {
         const t = part.type as string;
-        if (!t?.startsWith("tool-")) continue;
-        if ((part as { state?: string }).state !== "input-available") continue;
-        const name = t.slice("tool-".length);
-        if (!APPROVAL_TOOLS.includes(name)) continue;
-        out.push({ toolName: name, toolCallId: (part as { toolCallId: string }).toolCallId });
+        if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
+        const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
+        if (p.state !== "approval-requested") continue;
+        const approvalId = p.approval?.id;
+        if (!approvalId || !p.toolCallId) continue;
+        const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
+        out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
       }
     }
     return out;
   }, [messages]);
   const hasPending = pendingApprovals.length > 0;
+
+  // Debug: pending approvals snapshot.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[AgentPanelBody:pending]", { threadId, count: pendingApprovals.length, pending: pendingApprovals, status });
+  }, [pendingApprovals, status, threadId]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
   const navHandledRef = useRef<Set<string>>(new Set());
@@ -422,7 +431,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} addToolApprovalResponse={addToolApprovalResponse} />;
                 }
                 return null;
               })}
@@ -447,12 +456,16 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
             {pendingApprovals.map((p) => (
               <div key={p.toolCallId} className="flex items-center gap-1.5 text-xs">
                 <span className="font-mono flex-1 truncate">{p.toolName}</span>
-                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() =>
-                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: false, reason: "user_denied" } })
-                }><X className="h-3 w-3 mr-1" />拒絕</Button>
-                <Button size="sm" className="h-6 text-[10px]" onClick={() =>
-                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: true } })
-                }><Check className="h-3 w-3 mr-1" />批准</Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => {
+                  // eslint-disable-next-line no-console
+                  console.log("[AgentPanelBody:deny]", p);
+                  addToolApprovalResponse({ id: p.approvalId, approved: false, reason: "user_denied" });
+                }}><X className="h-3 w-3 mr-1" />拒絕</Button>
+                <Button size="sm" className="h-6 text-[10px]" onClick={() => {
+                  // eslint-disable-next-line no-console
+                  console.log("[AgentPanelBody:approve]", p);
+                  addToolApprovalResponse({ id: p.approvalId, approved: true });
+                }}><Check className="h-3 w-3 mr-1" />批准</Button>
               </div>
             ))}
           </div>
@@ -500,18 +513,17 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   );
 }
 
-function ToolBlock({ part, addToolResult }: {
+function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
+  addToolApprovalResponse: ReturnType<typeof useChat>["addToolApprovalResponse"];
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
 
-  const needsApproval = part.state === "input-available" && [
-    "decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness",
-  ].includes(toolName);
+  const needsApproval = part.state === "approval-requested" && !!part.approval?.id;
 
   const isDraft = toolName.startsWith("propose_");
   const isAuto = toolName === "annotate_evidence";
@@ -605,10 +617,10 @@ function ToolBlock({ part, addToolResult }: {
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
           <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
           <Button size="sm" variant="outline" onClick={() =>
-            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: false, reason: "user_denied" } })
+            addToolApprovalResponse({ id: part.approval.id, approved: false, reason: "user_denied" })
           }><X className="h-3 w-3 mr-1" /> 拒絕</Button>
           <Button size="sm" onClick={() =>
-            addToolResult({ tool: toolName as never, toolCallId: part.toolCallId, output: { approved: true } })
+            addToolApprovalResponse({ id: part.approval.id, approved: true })
           }><Check className="h-3 w-3 mr-1" /> 批准</Button>
         </div>
       )}
