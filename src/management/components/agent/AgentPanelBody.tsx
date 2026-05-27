@@ -281,9 +281,27 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
+  // Pending high-risk approvals — must be resolved before sending next message,
+  // otherwise the AI SDK errors with "Tool result is missing for tool call ...".
+  const APPROVAL_TOOLS = ["decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness"];
+  const pendingApprovals = useMemo(() => {
+    const out: { toolName: string; toolCallId: string }[] = [];
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const part of m.parts ?? []) {
+        const t = part.type as string;
+        if (!t?.startsWith("tool-")) continue;
+        if ((part as { state?: string }).state !== "input-available") continue;
+        const name = t.slice("tool-".length);
+        if (!APPROVAL_TOOLS.includes(name)) continue;
+        out.push({ toolName: name, toolCallId: (part as { toolCallId: string }).toolCallId });
+      }
+    }
+    return out;
+  }, [messages]);
+  const hasPending = pendingApprovals.length > 0;
+
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
-  // Persisted history parts (loaded from DB) are pre-marked as handled so they never
-  // re-trigger nav(href) on mount — that was causing infinite navigation + UI lockup.
   const navHandledRef = useRef<Set<string>>(new Set());
   const seededRef = useRef(false);
   if (!seededRef.current) {
@@ -320,6 +338,10 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const onSubmit = async (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!text.trim() || status === "submitted" || status === "streaming") return;
+    if (hasPending) {
+      toast.error("請先批准或拒絕上方待處理的高風險動作");
+      return;
+    }
     const t = text.trim();
     setText("");
     await sendMessage({ text: t });
@@ -365,6 +387,24 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       </Conversation>
 
       <div className="border-t p-2 space-y-1.5">
+        {hasPending && (
+          <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-2 space-y-1.5">
+            <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              ⚠ 有 {pendingApprovals.length} 個高風險動作等待你批准。批准或拒絕後才能繼續對話。
+            </div>
+            {pendingApprovals.map((p) => (
+              <div key={p.toolCallId} className="flex items-center gap-1.5 text-xs">
+                <span className="font-mono flex-1 truncate">{p.toolName}</span>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() =>
+                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: false, reason: "user_denied" } })
+                }><X className="h-3 w-3 mr-1" />拒絕</Button>
+                <Button size="sm" className="h-6 text-[10px]" onClick={() =>
+                  addToolResult({ tool: p.toolName as never, toolCallId: p.toolCallId, output: { approved: true } })
+                }><Check className="h-3 w-3 mr-1" />批准</Button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1 px-0.5" role="radiogroup" aria-label="AI 操作模式">
           {(Object.keys(MODE_META) as AgentMode[]).map((k) => {
             const M = MODE_META[k];
@@ -396,11 +436,11 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
             ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="跟 Management AI 說話…"
-            disabled={status === "streaming"}
+            placeholder={hasPending ? "請先批准或拒絕上方動作…" : "跟 Management AI 說話…"}
+            disabled={status === "streaming" || hasPending}
           />
           <PromptInputFooter className="justify-end">
-            <PromptInputSubmit status={status} disabled={!text.trim()} />
+            <PromptInputSubmit status={status} disabled={!text.trim() || hasPending} />
           </PromptInputFooter>
         </PromptInput>
       </div>
@@ -454,7 +494,7 @@ function ToolBlock({ part, addToolResult }: {
 
   return (
     <div className="px-4 py-2 space-y-2">
-      <Tool defaultOpen={false}>
+      <Tool defaultOpen={needsApproval || isError}>
         <ToolHeader type={`tool-${toolName}` as any} state={part.state} />
         <ToolContent>
           <ToolInput input={part.input} />
