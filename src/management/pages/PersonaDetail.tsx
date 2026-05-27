@@ -227,6 +227,52 @@ export const PersonaDetail = () => {
         risk="high"
         onConfirm={async (memo, token) => { await runPersonaAction(p.id, "suspend", { memo, confirmToken: token }); toast.success(t("toast.saved")); }}
       />
+
+      <EntityCreateDrawer
+        entity="persona"
+        mode="edit"
+        editingId={p.id}
+        initialData={p as unknown as Record<string, unknown>}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onCreated={(updated) => {
+          setP((prev) => prev ? { ...prev, ...(updated as Partial<Persona>) } : prev);
+          toast.success(t("toast.saved"));
+        }}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("registry.delete.title", { defaultValue: "刪除 Persona" })}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("registry.delete.desc", { name: p.name, defaultValue: `將封存「${p.name}」。封存後 30 分鐘內仍可從稽核還原，正式刪除請於 Advanced Registry 由 admin 確認。` })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{t("actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={async (e) => {
+                e.preventDefault();
+                setDeleting(true);
+                try {
+                  await deleteEntity("persona", p.id, { memo: `delete from PersonaDetail (${p.name})` });
+                  toast.success(t("toast.saved"));
+                  setDeleteOpen(false);
+                  navigate("/management/personas");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {t("actions.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
