@@ -431,7 +431,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} addToolApprovalResponse={addToolApprovalResponse} />;
                 }
                 return null;
               })}
