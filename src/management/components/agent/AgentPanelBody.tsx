@@ -86,10 +86,12 @@ export function AgentPanelBody() {
   }, [anonId]);
 
   // Load messages whenever activeThreadId changes.
+  // STRATEGY: unblock UI immediately with [], then merge real history in background.
+  // This avoids the panel ever being stuck on "loading" if the fetch hangs/caches/fails silently.
   useEffect(() => {
     if (!activeThreadId) return;
     let alive = true;
-    setInitialMessages(null);
+    setInitialMessages([]); // <-- unblock UI right away
     (async () => {
       try {
         const { data, error } = await supabase.from("chat_messages")
@@ -99,8 +101,7 @@ export function AgentPanelBody() {
         if (!alive) return;
         if (error) {
           console.error("[AgentPanelBody] load messages failed", error);
-          setBootError(`load messages: ${error.message}`);
-          setInitialMessages([]);
+          setBootError(`load: ${error.message}`);
           return;
         }
         const msgs: UIMessage[] = (data ?? []).map((r) => ({
@@ -108,27 +109,17 @@ export function AgentPanelBody() {
           role: r.role as "user" | "assistant",
           parts: r.parts as UIMessage["parts"],
         }));
-        setInitialMessages(msgs);
+        if (msgs.length > 0) setInitialMessages(msgs);
       } catch (e) {
         if (!alive) return;
         const msg = (e as Error)?.message || String(e);
         console.error("[AgentPanelBody] load messages threw", e);
-        setBootError(`load messages threw: ${msg}`);
-        setInitialMessages([]);
+        setBootError(`load threw: ${msg}`);
       }
     })();
-    // Safety: if nothing resolves in 8s, fail open with empty list so UI unblocks.
-    const safety = setTimeout(() => {
-      if (!alive) return;
-      setInitialMessages((curr) => {
-        if (curr !== null) return curr;
-        console.warn("[AgentPanelBody] message load timeout, failing open");
-        setBootError("load messages: timeout after 8s");
-        return [];
-      });
-    }, 8000);
-    return () => { alive = false; clearTimeout(safety); };
+    return () => { alive = false; };
   }, [activeThreadId]);
+
 
 
   const retryBootstrap = () => {
