@@ -40,6 +40,10 @@ export interface OverlayAddOptions {
 class WriteOverlay {
   private created: OverlayItem[] = [];
   private idemKeys = new Map<string, string>();
+  /** Soft-deleted entity ids keyed as `${entity}:${id}`. */
+  private deleted = new Set<string>();
+  /** Patch overrides keyed as `${entity}:${id}` → partial data. */
+  private patches = new Map<string, Record<string, unknown>>();
   /** G13 — last audit hash, mock-only placeholder for prevHash chain. */
   private lastAuditHash: string | null = null;
 
@@ -115,16 +119,93 @@ class WriteOverlay {
     this.gc();
     return this.created
       .filter((c) => c.entity === entity)
+      .filter((c) => !this.deleted.has(`${entity}:${String(c.data.id ?? "")}`))
       // G14 — newest first by default; consumers can re-sort after merge.
       .sort((a, b) => b.insertedAt - a.insertedAt)
-      .map((c) => c.data as T);
+      .map((c) => this.applyPatch(entity, c.data) as T);
   }
 
   get<T extends { id?: unknown } = Record<string, unknown>>(entity: CreatableEntity, id: string): T | undefined {
     return this.list<T>(entity).find((item) => String(item.id ?? "") === id);
   }
 
-  clear() { this.created = []; this.idemKeys.clear(); this.lastAuditHash = null; }
+  /** Pack F follow-up — patch overlay for entities created elsewhere (e.g. BFF seed).
+   *  Mock-only: patch is applied transparently when the loader is wrapped by `withOverlay`.
+   */
+  update(entity: CreatableEntity, id: string, patch: Record<string, unknown>, opts: OverlayAddOptions = {}): string {
+    const key = `${entity}:${id}`;
+    const prev = this.patches.get(key) ?? {};
+    this.patches.set(key, { ...prev, ...patch });
+    return this.emitAudit(entity, id, "update", opts);
+  }
+
+  /** Pack F follow-up — soft delete: hides from `list()` and merged loaders. */
+  softDelete(entity: CreatableEntity, id: string, opts: OverlayAddOptions = {}): string {
+    this.deleted.add(`${entity}:${id}`);
+    return this.emitAudit(entity, id, "delete", opts);
+  }
+
+  /** Mark an entity id as deleted from the overlay's perspective without writing audit. */
+  isDeleted(entity: CreatableEntity, id: string): boolean {
+    return this.deleted.has(`${entity}:${id}`);
+  }
+
+  /** Apply any patches to a base data object (used by `withOverlay`). */
+  applyPatch<T>(entity: CreatableEntity, data: T): T {
+    const id = (data as { id?: unknown })?.id;
+    if (id == null) return data;
+    const key = `${entity}:${String(id)}`;
+    const patch = this.patches.get(key);
+    if (!patch) return data;
+    return { ...(data as Record<string, unknown>), ...patch } as T;
+  }
+
+  clear() {
+    this.created = [];
+    this.idemKeys.clear();
+    this.deleted.clear();
+    this.patches.clear();
+    this.lastAuditHash = null;
+  }
+
+  private emitAudit(entity: CreatableEntity, id: string, op: "update" | "delete", opts: OverlayAddOptions): string {
+    const correlationId = opts.correlationId ?? newCorrelationId();
+    const auditId = `aud_${newUuid().slice(0, 8)}`;
+    const prevHash = this.lastAuditHash;
+    const hash = `h_${auditId}`;
+    this.lastAuditHash = hash;
+    try {
+      auditEvents.unshift({
+        id: auditId,
+        actor: opts.actor ?? "you",
+        action: `${entity}.${op}`,
+        target: id,
+        ts: new Date().toISOString(),
+        memo: `Pack F mock ${op} (overlay) corr=${correlationId}${opts.confirmTokenId ? ` ctok=${opts.confirmTokenId}` : ""}`,
+        outcome: "ok",
+        ephemeral: true,
+        prevHash,
+        hash,
+      } as Parameters<typeof auditEvents.unshift>[0]);
+    } catch { /* seed shape variation */ }
+    const candidate = ENTITY_TO_SSE_CHANNEL[entity];
+    const REALTIME_CHANNELS: ReadonlySet<string> = new Set([
+      "strategy", "deployment", "incident", "loop", "job", "rebalance",
+      "capital", "persona", "review", "runtime", "risk", "session",
+      "notification", "system",
+    ]);
+    const channel: SseChannelKind = (
+      isSseChannel(candidate) && REALTIME_CHANNELS.has(candidate) ? candidate : "system"
+    ) as SseChannelKind;
+    realtime.emitEnvelope({
+      topic: "data",
+      channel,
+      type: `${entity}.${op}`,
+      payload: { kind: ENTITY_TO_LIVE_KIND[entity], action: op, id },
+      correlationId,
+    });
+    return auditId;
+  }
 
   private gc() {
     const now = Date.now();
@@ -162,8 +243,14 @@ export function withOverlay<T>(
 ): () => Promise<T[]> {
   return async () => {
     const base = await loader();
+    const filteredBase = base
+      .filter((item) => {
+        const id = (item as { id?: unknown })?.id;
+        return id == null || !writeOverlay.isDeleted(entity, String(id));
+      })
+      .map((item) => writeOverlay.applyPatch(entity, item));
     const extras = writeOverlay.list<T>(entity);
-    const merged = [...extras, ...base];
+    const merged = [...extras, ...filteredBase];
     return compare ? merged.slice().sort(compare) : merged;
   };
 }

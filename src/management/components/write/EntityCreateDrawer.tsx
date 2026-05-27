@@ -24,7 +24,7 @@ import { validateCreate } from "@/lib/writeIntents/validation";
 import { idempotencyKey } from "@/lib/bff-v1/headers";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createEntityFromInput, type CreateEntityResult } from "./createEntity";
+import { createEntityFromInput, updateEntityFromInput, type CreateEntityResult } from "./createEntity";
 
 // spec-conflict-G C3 — confirm cooldown (server-time would supersede in live mode).
 const CONFIRM_COOLDOWN_MS = 1500;
@@ -34,6 +34,12 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCreated?: (created: Record<string, unknown>, result: CreateEntityResult) => void;
+  /** When provided, the drawer runs in edit mode and patches the given id. */
+  mode?: "create" | "edit";
+  /** Initial form data for edit mode (or to prefill create). */
+  initialData?: Record<string, unknown>;
+  /** Entity id when mode === "edit". */
+  editingId?: string;
 }
 
 type FieldType =
@@ -188,11 +194,21 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
   }
 }
 
-export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Props) => {
+export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode = "create", initialData, editingId }: Props) => {
   const t = useT();
   const { toast } = useToast();
   const errIdBase = useId();
-  const [form, setForm] = useState<Record<string, unknown>>(() => blankInput(entity));
+  const seedForm = (): Record<string, unknown> => {
+    const blank = blankInput(entity);
+    if (!initialData) return blank;
+    // Only copy keys the form knows about.
+    const overlay: Record<string, unknown> = {};
+    for (const k of Object.keys(blank)) {
+      if (initialData[k] !== undefined && initialData[k] !== null) overlay[k] = initialData[k];
+    }
+    return { ...blank, ...overlay };
+  };
+  const [form, setForm] = useState<Record<string, unknown>>(seedForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // C3 — stable idempotencyKey per drawer-open; reset when drawer reopens.
   const idemRef = useRef<string>(idempotencyKey());
@@ -202,14 +218,15 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
 
   useEffect(() => {
     if (open) {
-      setForm(blankInput(entity));
+      setForm(seedForm());
       setErrors({});
       idemRef.current = idempotencyKey();
       lastSubmitAtRef.current = 0;
       setCooldownMs(0);
       setSubmitting(false);
     }
-  }, [open, entity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, entity, initialData]);
 
   // tick cooldown countdown
   useEffect(() => {
@@ -234,7 +251,6 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
       });
       return;
     }
-    // numbers already coerced via slider/number handlers; multi-tag already array.
     const r = validateCreate(entity, form as never);
     if (!r.ok) {
       const mapped: Record<string, string> = {};
@@ -244,11 +260,14 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
     }
     setSubmitting(true);
     try {
-      const result = await createEntityFromInput(entity, form as never, { idempotencyKey: idemRef.current });
+      const result =
+        mode === "edit" && editingId
+          ? await updateEntityFromInput(entity, editingId, form as never, { idempotencyKey: idemRef.current })
+          : await createEntityFromInput(entity, form as never, { idempotencyKey: idemRef.current });
       lastSubmitAtRef.current = now;
       setCooldownMs(CONFIRM_COOLDOWN_MS);
       toast({
-        title: `${t("actions.create")} — ${t(`entityCreate.entity.${entity}`)}`,
+        title: `${t(mode === "edit" ? "actions.save" : "actions.create")} — ${t(`entityCreate.entity.${entity}`)}`,
         description: String(result.data.name ?? result.data.id),
       });
       onCreated?.(result.data, result);
@@ -263,6 +282,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
       setSubmitting(false);
     }
   };
+
 
   const renderField = (f: FieldDef) => {
     const inputId = `${errIdBase}-${f.name}`;
@@ -378,7 +398,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
           <SheetTitle>
-            {t("actions.create")} — {t(`entityCreate.entity.${entity}`)}
+            {t(mode === "edit" ? "actions.edit" : "actions.create")} — {t(`entityCreate.entity.${entity}`)}
           </SheetTitle>
           <SheetDescription className="text-xs">
             {t("entityCreate.footerNote")}
@@ -394,7 +414,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated }: Pr
             {t("actions.cancel")}
           </Button>
           <Button onClick={submit} disabled={cooldownMs > 0 || submitting} aria-describedby={cooldownMs > 0 ? `${errIdBase}-cooldown` : undefined}>
-            {submitting ? t("common.loading") : cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t("actions.create")}
+            {submitting ? t("common.loading") : cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t(mode === "edit" ? "actions.save" : "actions.create")}
           </Button>
           {cooldownMs > 0 && (
             <span id={`${errIdBase}-cooldown`} className="sr-only" role="status">
