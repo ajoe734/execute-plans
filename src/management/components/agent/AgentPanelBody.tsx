@@ -281,9 +281,27 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
+  // Pending high-risk approvals — must be resolved before sending next message,
+  // otherwise the AI SDK errors with "Tool result is missing for tool call ...".
+  const APPROVAL_TOOLS = ["decide_inbox_item", "create_ask", "create_intervention", "trigger_readiness"];
+  const pendingApprovals = useMemo(() => {
+    const out: { toolName: string; toolCallId: string }[] = [];
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const part of m.parts ?? []) {
+        const t = part.type as string;
+        if (!t?.startsWith("tool-")) continue;
+        if ((part as { state?: string }).state !== "input-available") continue;
+        const name = t.slice("tool-".length);
+        if (!APPROVAL_TOOLS.includes(name)) continue;
+        out.push({ toolName: name, toolCallId: (part as { toolCallId: string }).toolCallId });
+      }
+    }
+    return out;
+  }, [messages]);
+  const hasPending = pendingApprovals.length > 0;
+
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
-  // Persisted history parts (loaded from DB) are pre-marked as handled so they never
-  // re-trigger nav(href) on mount — that was causing infinite navigation + UI lockup.
   const navHandledRef = useRef<Set<string>>(new Set());
   const seededRef = useRef(false);
   if (!seededRef.current) {
@@ -320,6 +338,10 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const onSubmit = async (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!text.trim() || status === "submitted" || status === "streaming") return;
+    if (hasPending) {
+      toast.error("請先批准或拒絕上方待處理的高風險動作");
+      return;
+    }
     const t = text.trim();
     setText("");
     await sendMessage({ text: t });
