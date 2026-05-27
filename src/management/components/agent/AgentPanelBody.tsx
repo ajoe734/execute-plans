@@ -544,10 +544,10 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   );
 }
 
-function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
+function ToolBlock({ part, addToolResult, resolveApproval }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
-  addToolApprovalResponse: ReturnType<typeof useChat>["addToolApprovalResponse"];
+  resolveApproval: (p: PendingApproval, approved: boolean) => Promise<void>;
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
@@ -648,10 +648,10 @@ function ToolBlock({ part, addToolResult, addToolApprovalResponse }: {
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
           <span className="flex-1">⚠ 高風險：<span className="font-medium">{toolName}</span> 需批准。</span>
           <Button size="sm" variant="outline" onClick={() =>
-            addToolApprovalResponse({ id: part.approval.id, approved: false, reason: "user_denied" })
+            void resolveApproval({ toolName, toolCallId: part.toolCallId, approvalId: part.approval.id }, false)
           }><X className="h-3 w-3 mr-1" /> 拒絕</Button>
           <Button size="sm" onClick={() =>
-            addToolApprovalResponse({ id: part.approval.id, approved: true })
+            void resolveApproval({ toolName, toolCallId: part.toolCallId, approvalId: part.approval.id }, true)
           }><Check className="h-3 w-3 mr-1" /> 批准</Button>
         </div>
       )}
