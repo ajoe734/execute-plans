@@ -224,7 +224,27 @@ export const InterventionsPage = () => {
                 </tr>
               ))}
               {visible.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6">
+                  <div className="mx-auto max-w-2xl rounded-md border border-dashed bg-muted/20 p-6 text-center">
+                    <div className="text-sm font-semibold text-foreground">
+                      {t("v5.interventions.empty.title", { defaultValue: "目前沒有待處理的介入" })}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("v5.interventions.empty.desc", { defaultValue: "此頁只負責簽核 / 駁回 Persona 與 Strategy 觸發的高風險動作。要新增、修改、刪除實體（Persona、Strategy、Capital Pool…）請改去 Advanced Registry。" })}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <Link to="/management/personas">
+                        <Button size="sm" variant="default">{t("v5.interventions.empty.gotoPersonas", { defaultValue: "前往 Persona Registry" })}</Button>
+                      </Link>
+                      <Link to="/management/strategies">
+                        <Button size="sm" variant="outline">{t("nav.strategies", { defaultValue: "Strategies" })}</Button>
+                      </Link>
+                      <Link to="/management/capital">
+                        <Button size="sm" variant="outline">{t("nav.capital", { defaultValue: "Capital" })}</Button>
+                      </Link>
+                    </div>
+                  </div>
+                </td></tr>
               )}
             </tbody>
           </table>
