@@ -1,37 +1,22 @@
-## 問題診斷
+這張圖的問題不是載入卡住，而是 AI SDK 的工具批准流程斷掉了：assistant 產生了 `create_intervention` 這個需要人工批准的 tool call，但前端沒有成功把對應的 tool result 回填到同一個 tool call，所以下一次送訊息時 SDK 判定歷史訊息不完整，顯示：`Tool result is missing for tool call ...`。
 
-`/management/readiness/bff-ha` 切走再切回來，整個畫面變黑（連側邊欄、導覽列都沒了）。這代表 **React tree 整個 unmount**，不是 loading 卡住（卡住會看到 skeleton）也不是 CSS 問題。
+我會這樣修：
 
-關鍵發現：
-- `rg ErrorBoundary src/` → **零個結果**。整個 app 沒有任何 error boundary
-- `useV5Live` 的 loader promise **沒有 `.catch()`**，rejection 變成 unhandledRejection；若 adapter / render 階段拋例外，整棵樹就掛掉
-- 沒有 runtime error log，是因為 published build 的 error 沒被 Lovable preview 攔到（pantheon-dev.lovable.app 不是 preview iframe）
-- 重新整理後就好 → 典型 render-time exception + 無 boundary 的症狀
+1. **修正 pending approval 偵測**
+   - 不只掃 `input-available`，也處理 AI SDK 可能出現的 `approval-requested` 狀態。
+   - 確認 `toolCallId`、`toolName` 取值完整，避免有 tool 卡片但批准列沒抓到。
 
-很可能的觸發點：BFF live call 回來資料形狀和 seed 不同 → `mgmt.readiness.bffHa` adapter 已經有 fallback，但 ReadinessChecklist / EvidencePacketList 內部某個 `.map` 在新 render 時拿到 undefined 欄位。
+2. **修正批准/拒絕回填方式**
+   - 將目前的 `addToolResult(...)` 改成符合目前 AI SDK docs 的 tool output 回填模式。
+   - 讓按「批准 / 拒絕」後，該 tool part 會變成有 output 的完成狀態，而不是仍留在缺 result 的狀態。
 
-## 修復計畫
+3. **避免壞掉的舊 thread 一直重播錯誤**
+   - 對從資料庫載入的歷史訊息做一次 normalization：若最後一段 assistant message 含有未完成的需要批准 tool call，前端會把它視為 pending，明確顯示批准列；必要時提供「拒絕並繼續」的安全出口。
+   - 不會自動批准任何高風險動作。
 
-### 1. 加全域 ErrorBoundary（根因修復）
-新增 `src/components/ErrorBoundary.tsx`：class component，`componentDidCatch` 印 console、render 時顯示**紅字錯誤卡**（符合既有「錯誤呈現用紅字錯誤卡」memory），含：
-- 錯誤訊息 + stack 摘要
-- 「重新載入」按鈕（`window.location.reload()`）
-- 「回首頁」按鈕
+4. **加強 debug console 輸出**
+   - 在 pending approval 變化、批准/拒絕 click、tool result 回填後，輸出 `threadId / toolName / toolCallId / state / status`。
+   - 若仍出現 `Tool result is missing`，console 會列出是哪一筆 message、哪個 tool call 缺 result。
 
-在 `src/App.tsx` 最外層（QueryClientProvider 內、Routes 外）包一層 ErrorBoundary，這樣任何子頁 crash 都不會把 layout 一起炸掉。
-
-### 2. `useV5Live` 加 `.catch()`
-loader rejection 改成 `setLoading(false)` 並保留舊 data，避免：
-- 黑屏（unhandledRejection 在某些瀏覽器設定下會卡 UI）
-- 永遠停在 loading
-
-### 3. 在 ManagementLayout 內再包一層 ErrorBoundary
-這樣單一頁 crash 時，左側選單還在、使用者可以切走。
-
-## 不動的東西
-- BFF / agent edge function / auth 一律不碰（與此 bug 無關）
-- 不改任何 readiness page 的商業邏輯
-
-## 驗收
-- 開 `/management/readiness/bff-ha` → 切到 cockpit → 切回來 ✅ 不黑屏
-- 故意拋錯 → 看到紅字錯誤卡而不是黑屏
+5. **驗證**
+   - 用目前這種「我要建立新的交易人格」流程檢查：產生 `create_intervention` → 出現批准列 → 按批准/拒絕 → 不再出現 `Tool result is missing`，且 input 可以繼續使用。
