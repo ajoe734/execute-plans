@@ -466,7 +466,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} addToolApprovalResponse={addToolApprovalResponse} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} />;
                 }
                 return null;
               })}
@@ -491,15 +491,11 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
             {pendingApprovals.map((p) => (
               <div key={p.toolCallId} className="flex items-center gap-1.5 text-xs">
                 <span className="font-mono flex-1 truncate">{p.toolName}</span>
-                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => {
-                  // eslint-disable-next-line no-console
-                  console.log("[AgentPanelBody:deny]", p);
-                  addToolApprovalResponse({ id: p.approvalId, approved: false, reason: "user_denied" });
-                }}><X className="h-3 w-3 mr-1" />拒絕</Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void resolveApproval(p, false)}>
+                  <X className="h-3 w-3 mr-1" />拒絕
+                </Button>
                 <Button size="sm" className="h-6 text-[10px]" onClick={() => {
-                  // eslint-disable-next-line no-console
-                  console.log("[AgentPanelBody:approve]", p);
-                  addToolApprovalResponse({ id: p.approvalId, approved: true });
+                  void resolveApproval(p, true);
                 }}><Check className="h-3 w-3 mr-1" />批准</Button>
               </div>
             ))}
