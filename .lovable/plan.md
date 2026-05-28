@@ -1,29 +1,104 @@
-## 問題
-小幫手回覆裡的「Evolution Journal (進化日誌)」這類 markdown 連結是用 `Streamdown` 預設渲染成 `<a target="_blank">`，所以一律新開分頁。你要的是在同一個視窗用 react-router 換頁。
+## Persona Onboarding Wizard — Implementation Plan
 
-## 修法（純 FE，1 個小改動）
+Source: `docs/04/pantheon_persona_onboarding_wizard_2026-05-28/PERSONA_ONBOARDING_WIZARD_SPEC.md` (L4, 2026-05-28).
 
-### 1. `src/components/ai-elements/message.tsx` — `MessageResponse` 改寫 `a` renderer
-在 `Streamdown` 加 `components={{ a: SmartLink }}`：
-- 用 `useNavigate()` 攔截 click
-- 判斷「站內連結」= `href` 以 `/` 開頭，或同 origin 且非 `mailto:` / `tel:` / 不同 host
-  - 站內：`e.preventDefault(); navigate(pathname + search + hash)`，**不加** `target`
-  - 站外：保留 `target="_blank" rel="noopener noreferrer"` + 小 ExternalLink icon（沿用既有 lucide）
-- 全部走 design system class（`text-primary underline-offset-2 hover:underline`），無自製顏色
+Core idea: BFF stays atomic; FE orchestrates the 5 lifecycle stages (Persona → Binding → Plan → Approval → Runtime) and surfaces "what's missing / next step" everywhere a persona is shown.
 
-### 2. 給 agent prompt 補一條建議（`supabase/functions/management-agent/index.ts` `BASE_SYSTEM_PROMPT`）
-> 站內導航**優先用 `navigate` 工具**而不是在 markdown 裡寫 `[文字](/management/...)`；只有當你要列出多個可點目標供使用者自選時才用 markdown 連結，而且只寫站內相對路徑（以 `/` 開頭），不要寫絕對 URL。
+### Pre-flight (mandatory per spec §4.1, §12)
 
-這條只是品味建議，主修正在 #1。
+1. **Smoke-probe 8 write endpoints** on lupin dev and produce `.lovable/audits/persona-onboarding-endpoint-probe-2026-05-28.md` listing status code + response shape for each. Required before wizard ships:
+   - `POST /bff/personas/{id}/actions/AdvanceLifecycle`
+   - `POST /bff/capital-pools` + `POST /bff/capital-pools/{id}/actions/ApprovePool`
+   - `POST /api/v1/bindings`
+   - `POST /api/v1/deployment-plans`
+   - `POST /api/v1/approval-decisions`
+   - `POST /bff/runtimes/{id}/actions/StartRuntime`
+   - `GET /api/v1/operator/persona-management/{id}` (verify `data.health` once BFF F4 lands)
 
-### 3. 不動的東西
-- `navigate` 工具本身（原本就是 react-router `nav(href)`，運作正常）
-- 「開啟頁面」按鈕（既有 UX）
-- 其他用 `MessageResponse` 的地方（同步受惠）
+   Any endpoint still 404/stub → wizard step wraps in `withWriteFallback` (writeOverlay degraded banner, same pattern as the 2026-05-28 write-gap audit).
 
-## 驗收
-1. 回覆中「Evolution Journal (進化日誌)」之類站內連結 → 點下去**同視窗**切到 `/management/evolution-journal`，不再 `_blank`
-2. 真正的外部連結（`https://...` 非同 host）仍以新分頁開啟並有 icon
-3. 既有 Streamdown markdown 樣式（程式碼、清單、math、mermaid）不受影響
+### 1. i18n — health.reasons → zh-TW
 
-要我進 build mode 套上嗎？
+Add 6 keys (en-US + zh-TW) per spec §5: `persona.health.lifecycle_not_active`, `no_runtime_binding`, `active_incident`, `drawdown_threshold`, `negative_pnl`, `runtime_status_attention`, plus severity + "next step" labels and wizard step titles.
+
+### 2. Persona readiness model (shared)
+
+New `src/management/lib/personaReadiness.ts`:
+- `PersonaStage = "lifecycle" | "binding" | "plan" | "approval" | "runtime"`
+- `derivePersonaReadiness(pm)` → `{ stages: {key, done, blockedReason?}[], completed: 0..5, nextStage, healthStatus, reasons }` from `persona-management/{id}` shape (`data.persona.lifecycle_state`, `data.bindings`, `data.deploymentPlans`, `data.approvals`, `data.runtimeBindings`, `data.health`). Tolerant of missing F4 fields — degrade gracefully.
+
+### 3. PersonaReadinessCard (spec §6)
+
+New `src/management/components/persona/PersonaReadinessCard.tsx`:
+- Header: name, lifecycle chip, health chip (`healthy`/`degraded`/`critical`, design-token colors).
+- 5 fixed checklist rows with `●/○` + i18n label + per-row "next step" button when blocked.
+- `reasons[]` expandable Radix tooltip with zh-TW text.
+- "Start Onboarding Wizard" primary button; "Advanced (manual)" secondary.
+- Happy-path variant (5/5) shows runtime summary + telemetry line.
+
+Mount in: `PersonaDetail.tsx` (top section, replaces ad-hoc status block) and `oversight/_core.tsx` Persona Fleet row expansion.
+
+### 4. Onboarding Wizard (spec §7)
+
+Route: `/management/personas/:id/onboarding` (in-app navigation via existing SmartLink/navigate tool — no new tab).
+
+New files:
+- `src/management/pages/PersonaOnboarding.tsx` — shell + step routing + `LifecycleStepper` reuse.
+- `src/management/components/persona/onboarding/Step1Lifecycle.tsx` … `Step5Runtime.tsx`.
+- `src/management/lib/personaOnboardingClient.ts` — thin wrappers over `runPersonaAction`, `createCapitalPool`, `createBinding`, `createDeploymentPlan`, `submitApproval`, `startRuntime`. Each uses idempotency key + correlation id and surfaces canonical 26-enum ErrorCode.
+
+Per-step behavior follows spec §7.2–§7.6 exactly:
+- Step 1: AdvanceLifecycle to `paper_owner` with confirm_token (HighRiskConfirm reuse).
+- Step 2: choose/create+approve capital pool, then create binding (paper scope, paper_owner role).
+- Step 3: pick approved artifact (filtered), create deployment plan (paper, locked).
+- Step 4: submit approval. **dev auto-approve toggle** with prominent warning banner; in non-dev the toggle is hidden and a reviewer queue link is shown.
+- Step 5: StartRuntime; on success refetch `persona-management/{id}` and redirect to runtime detail.
+
+State persisted in URL (`?step=N`) so reload survives. No auto-rollback (spec §9.2); on failure show ErrorCode, retry, or "switch to advanced mode" link.
+
+### 5. Advanced mode (spec §8)
+
+PersonaDetail keeps existing per-section editors (lifecycle / bindings / plans / approvals / runtimes). Each section gets a "Create / Advance" button that runs the same atomic call as the wizard. After any single-step success, refetch `persona-management/{id}` so readiness card updates.
+
+Permission gating via existing `usePermissions`:
+- wizard: `persona_operator`+
+- lifecycle/runtime advance: respective roles
+- live mode: `live_owner_approver` + MFA (already enforced by HighRiskConfirm two-man path).
+
+### 6. Dev-only utilities (spec §9.3)
+
+"Reset persona to draft" button in PersonaDetail, **hidden unless `import.meta.env.DEV` or env flag `VITE_PERSONA_DEV_RESET=1`**. Sequences: delete runtime bindings → delete plans → delete bindings → AdvanceLifecycle back to `draft`. Each step uses writeOverlay fallback if endpoint 404.
+
+### 7. Agent integration
+
+Add tools to `supabase/functions/management-agent/index.ts`: `start_persona_onboarding(personaId)` (returns navigate intent to wizard route), `query_persona_readiness(personaId)`. System prompt: when user says "啟動 persona" / "讓 persona 跑起來", prefer wizard navigation over manual tool chains. Whitelist new tools in `AgentPanelBody`.
+
+### 8. Audit + memory
+
+- `.lovable/audits/persona-onboarding-wizard-2026-05-28.md` — implementation log + endpoint probe results + open items from spec §11.
+- Memory file `mem://features/persona-onboarding-wizard` referenced from index Core.
+
+### Out of scope
+
+- BFF F4 `data.health` surface (BE side; FE degrades gracefully until live).
+- Capital-pool / persona lifecycle action_id enum cleanup (spec §11 open question — BE side).
+- New i18n module split (spec §11.5 — kept in existing locale files).
+
+### Acceptance (spec §12 DoD)
+
+- [ ] 8-endpoint smoke audit committed
+- [ ] Every persona card renders 5-step checklist + health chip
+- [ ] Reasons tooltip in zh-TW
+- [ ] Wizard completes draft→active on lupin dev (with overlay fallback where BE missing)
+- [ ] ErrorCode + next-step button on failures
+- [ ] Advanced mode independently usable
+- [ ] dev auto-approve banner visible in step 4
+- [ ] `persona-management/{id}.health` matches `persona-fleet[].health` once F4 lands
+
+### Sequencing
+
+1. Smoke probe + audit (read-only, no FE changes).
+2. i18n + readiness model + PersonaReadinessCard wired into PersonaDetail/Fleet.
+3. Wizard route + 5 steps behind feature flag `VITE_PERSONA_ONBOARDING=1`.
+4. Advanced mode polish + dev reset.
+5. Agent tools + memory + final audit + flag flip.

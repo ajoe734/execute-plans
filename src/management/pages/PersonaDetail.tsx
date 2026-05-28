@@ -27,6 +27,7 @@ import { PersonaPolicyViolationsTab } from "../components/detail/PersonaPolicyVi
 import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTab";
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
+import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
@@ -145,6 +146,7 @@ export const PersonaDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <Section>
+                <PersonaReadinessCard personaId={p.id} persona={p} personaName={p.name} className="mb-4" />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label={t("table.type")} value={p.archetype} />
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
