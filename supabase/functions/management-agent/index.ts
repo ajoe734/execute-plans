@@ -285,18 +285,36 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
           auth,
         }),
     }),
-    create_intervention: tool({
-      description: "Submit an intervention. HIGH RISK — requires user approval.",
+    decide_intervention: tool({
+      description: "Decide an EXISTING intervention (approve/reject/defer). HIGH RISK — requires user approval. Use this only when an intervention id already exists.",
       inputSchema: z.object({
-        target: z.string(),
-        kind: z.string(),
-        payload: z.record(z.unknown()).optional(),
+        id: z.string().describe("intervention id"),
+        decision: z.enum(["approve", "reject", "defer"]),
+        memo: z.string().min(3),
       }),
       needsApproval: true,
-      execute: async ({ target, kind, payload }) =>
-        bffCall(`/bff/v5/interventions`, {
+      execute: async ({ id, decision, memo }) =>
+        bffCall(`/bff/v5/interventions/${encodeURIComponent(id)}/decide`, {
           method: "POST",
-          body: JSON.stringify({ target, kind, payload: payload ?? {} }),
+          body: JSON.stringify({ decision, memo }),
+          auth,
+        }),
+    }),
+    request_sentinel_remediation: tool({
+      description: "Ask Sentinel to build a remediation plan for an EXISTING finding. This is how a new intervention is born (interventions cannot be created directly). HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        findingId: z.string(),
+        plan: z.object({
+          kind: z.enum(["pause", "throttle", "freeze", "rollback", "capital_cut", "custom"]),
+          target: z.string().describe("entity id the plan acts on"),
+          memo: z.string().optional(),
+        }),
+      }),
+      needsApproval: true,
+      execute: async ({ findingId, plan }) =>
+        bffCall(`/bff/v5/sentinel/remediation/build`, {
+          method: "POST",
+          body: JSON.stringify({ findingId, plan }),
           auth,
         }),
     }),
