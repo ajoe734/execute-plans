@@ -625,7 +625,8 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
 
   const isDraft = toolName.startsWith("propose_");
 
-  const isAuto = toolName === "annotate_evidence";
+  // No auto-mode side-effect tools remain after annotate_evidence removal (2026-05-28).
+  const isAuto = false;
   const completed = part.state === "output-available";
   const output = part.output as {
     kind?: string; href?: string; payload?: unknown; note?: string;
