@@ -335,13 +335,15 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
   if (mode === "draft") {
     delete tools.decide_inbox_item;
     delete tools.create_ask;
-    delete tools.create_intervention;
+    delete tools.decide_intervention;
+    delete tools.request_sentinel_remediation;
     delete tools.trigger_readiness;
     delete tools.annotate_evidence;
   } else if (mode === "auto") {
     delete tools.decide_inbox_item;
     delete tools.create_ask;
-    delete tools.create_intervention;
+    delete tools.decide_intervention;
+    delete tools.request_sentinel_remediation;
     delete tools.trigger_readiness;
     delete tools.propose_inbox_decision;
     delete tools.propose_ask;
