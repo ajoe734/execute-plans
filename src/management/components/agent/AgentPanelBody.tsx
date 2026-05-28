@@ -654,7 +654,18 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
 
   return (
     <div className="px-4 py-2 space-y-2">
+      {isStale && (
+        <div className="ml-4 flex items-start gap-2 text-xs bg-muted/40 border border-muted-foreground/20 rounded-md p-2 text-muted-foreground">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div>此工具已下線（歷史紀錄）· <span className="font-mono">{toolName}</span></div>
+            <div className="text-[10px] opacity-70">不再顯示批准卡片；如需建立 intervention 請使用 request_sentinel_remediation。</div>
+          </div>
+        </div>
+      )}
+      {!isStale && (
       <Tool defaultOpen={needsApproval || isError}>
+
         <ToolHeader type={`tool-${toolName}` as any} state={part.state} />
         <ToolContent>
           <ToolInput input={part.input} />
