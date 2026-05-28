@@ -599,7 +599,9 @@ const ACTIVE_TOOL_NAMES = new Set<string>([
   "navigate",
   "query_cockpit", "query_persona_league", "query_persona_fleet",
   "query_portfolio_book", "query_trading_pulse", "query_human_inbox", "query_alerts",
-  "annotate_evidence",
+  // annotate_evidence: REMOVED 2026-05-28 (BFF has no write endpoint; tool always 404'd).
+  // Kept out of this set so historical chat parts render as "Historical Record" instead
+  // of pending approval cards.
   "propose_inbox_decision", "propose_ask", "propose_create_persona",
   "decide_inbox_item", "create_ask", "decide_intervention",
   "request_sentinel_remediation", "trigger_readiness",
