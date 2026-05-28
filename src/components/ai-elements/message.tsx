@@ -31,7 +31,7 @@ import {
 import { Streamdown } from "streamdown";
 import { useNavigate } from "react-router-dom";
 
-type SmartAnchorProps = ComponentProps<"a">;
+type SmartAnchorProps = ComponentProps<"a"> & Record<string, unknown>;
 
 const SmartLink = ({ href, target, rel, onClick, children, className, ...rest }: SmartAnchorProps) => {
   const navigate = useNavigate();
