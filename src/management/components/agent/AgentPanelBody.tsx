@@ -63,12 +63,31 @@ export function AgentPanelBody() {
   };
 
 
+  const ACTIVE_THREAD_KEY = "pantheon.agentPanel.activeThreadId";
+  const readStoredActiveId = (): string | null => {
+    try { return localStorage.getItem(ACTIVE_THREAD_KEY); } catch { return null; }
+  };
+  const writeStoredActiveId = (id: string | null) => {
+    try {
+      if (id) localStorage.setItem(ACTIVE_THREAD_KEY, id);
+      else localStorage.removeItem(ACTIVE_THREAD_KEY);
+    } catch { /* ignore */ }
+  };
+
+  // Wrapped setter: keep localStorage in sync so refresh restores the same thread.
+  const selectThread = useCallback((id: string | null) => {
+    writeStoredActiveId(id);
+    setActiveThreadId(id);
+  }, []);
+
   const bootstrap = async () => {
     setBootError(null);
     try {
       const list = await reloadThreads();
       if (list.length > 0) {
-        setActiveThreadId(list[0].id);
+        const stored = readStoredActiveId();
+        const pick = stored && list.some((t) => t.id === stored) ? stored : list[0].id;
+        selectThread(pick);
         return;
       }
       const { data, error } = await supabase
@@ -77,7 +96,7 @@ export function AgentPanelBody() {
         .select("id,title,updated_at").single();
       if (error) throw error;
       setThreads([data as Thread]);
-      setActiveThreadId(data.id);
+      selectThread(data.id);
     } catch (e) {
       const msg = (e as Error)?.message || String(e);
       // eslint-disable-next-line no-console
@@ -95,12 +114,14 @@ export function AgentPanelBody() {
   }, [anonId]);
 
   // Load messages whenever activeThreadId changes.
-  // STRATEGY: unblock UI immediately with [], then merge real history in background.
-  // This avoids the panel ever being stuck on "loading" if the fetch hangs/caches/fails silently.
+  // STRATEGY: keep initialMessages=null (loading) until fetch completes, then
+  // mount ChatWindow with the REAL history. Using [] as a placeholder caused
+  // ChatWindow to mount empty and useChat ignored the later update because
+  // its `messages` prop is read only at mount → history was lost on refresh.
   useEffect(() => {
     if (!activeThreadId) return;
     let alive = true;
-    setInitialMessages([]); // <-- unblock UI right away
+    setInitialMessages(null); // loading
     (async () => {
       try {
         const { data, error } = await supabase.from("chat_messages")
@@ -111,6 +132,7 @@ export function AgentPanelBody() {
         if (error) {
           console.error("[AgentPanelBody] load messages failed", error);
           setBootError(`load: ${error.message}`);
+          setInitialMessages([]); // unblock UI on error
           return;
         }
         const msgs: UIMessage[] = (data ?? [])
@@ -120,12 +142,13 @@ export function AgentPanelBody() {
             parts: r.parts as UIMessage["parts"],
           }))
           .filter((m) => !isEmptyAssistantMessage(m));
-        if (msgs.length > 0) setInitialMessages(msgs);
+        setInitialMessages(msgs); // always set, even if empty
       } catch (e) {
         if (!alive) return;
         const msg = (e as Error)?.message || String(e);
         console.error("[AgentPanelBody] load messages threw", e);
         setBootError(`load threw: ${msg}`);
+        setInitialMessages([]);
       }
     })();
     return () => { alive = false; };
@@ -193,7 +216,7 @@ export function AgentPanelBody() {
       .select("id,title,updated_at").single();
     if (error) { toast.error(error.message); return; }
     await reloadThreads();
-    setActiveThreadId(data.id);
+    selectThread(data.id);
   };
 
   const deleteThread = async (id: string) => {
@@ -201,7 +224,8 @@ export function AgentPanelBody() {
 
     const list = await reloadThreads();
     if (id === activeThreadId) {
-      setActiveThreadId(list[0]?.id ?? null);
+      const next = list[0]?.id ?? null;
+      selectThread(next);
       if (list.length === 0) {
         bootstrappedRef.current = false; // allow re-bootstrap to create a fresh thread
       }
@@ -224,7 +248,7 @@ export function AgentPanelBody() {
                 <li
                   key={t.id}
                   className={`group flex items-center gap-1.5 px-2 py-1.5 rounded text-xs cursor-pointer hover:bg-accent ${t.id === activeThreadId ? "bg-accent" : ""}`}
-                  onClick={() => setActiveThreadId(t.id)}
+                  onClick={() => selectThread(t.id)}
                 >
                   <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0" />
                   <span className="flex-1 truncate">{t.title}</span>
@@ -275,11 +299,28 @@ export function AgentPanelBody() {
             <Button size="sm" variant="outline" onClick={retryBootstrap}>重試</Button>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span>載入中…</span>
-            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
-              卡住了？點此重試
-            </Button>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground p-4">
+            <span>
+              正在載入
+              {(() => {
+                const title = threads.find((t) => t.id === activeThreadId)?.title;
+                return title ? `「${title}」` : "";
+              })()}
+              的歷史訊息…
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
+                重試
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 text-[10px]"
+                onClick={() => setInitialMessages([])}
+              >
+                從空白開始
+              </Button>
+            </div>
           </div>
         )}
       </main>

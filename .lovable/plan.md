@@ -1,58 +1,42 @@
-# 計畫：write-path 真相對齊 + create_intervention 修正 + 全域 404 fallback
+# 修：Management AI 小幫手 refresh 後對話消失
 
-目的：把「BFF handoff COMPLETE」修正為「read-path COMPLETE / write-path 未驗證」，用真實 probe 拿到 write 端點實際狀態，修掉 spec 不存在的 `POST /bff/v5/interventions`，並讓所有 write 在 BE 未上線時優雅降級。
+## 問題
 
-## A. 記憶與審計範圍修正
+1. **歷史訊息消失（主因）**：`AgentPanelBody.tsx` line 103 為了避免 loading 卡住，在 thread 切換時立刻 `setInitialMessages([])`，讓 `<ChatWindow key={threadId} initialMessages={[]} />` mount。等 Supabase 回來 25 筆訊息再 `setInitialMessages(msgs)`，但 `useChat({ messages })` 只在 mount 當下吃，後續更新無效 → 畫面永遠停在 empty state。截圖 debug bar `msgs:25 boot:ok` 但右側是 welcome screen，就是這個證據。
 
-1. 改寫 `mem://index.md` Core，把「BFF handoff = COMPLETE」改為「**read-path** COMPLETE；**write-path** 未驗證 (P0-D / P1-A / P1-C / P1-E)」。
-2. 新增 `mem://audits/bff-write-gap-2026-05-28`，列出四個 write 區塊 OPEN 狀態 + delta-v5 只覆蓋 GET 的事實。
-3. 新增 `.lovable/audits/bff-backend-write-gap-2026-05-28.md`，內容含：
-   - 範圍說明（delta-v5 = read only）
-   - P0-D / P1-A / P1-C / P1-E 端點清單 + 預期狀態
-   - 與 `Pantheon_BFF_Backend_Handoff.md` 批次對照
+2. **活動 thread 跳走**：`bootstrap()` 永遠選 `list[0]`（最新 updated_at），沒持久化「使用者上次在哪個 thread」，refresh 後可能跳到別的 thread。
 
-## B. 真實 write-path probe
+3. （非 bug，確認過）panel 的開關/位置/大小已經有 `localStorage` 持久化（`useAgentPanel.ts`），這部分不用改。
 
-擴充 `scripts/probe-bff-authenticated-live.mjs`（或新增 `scripts/probe-bff-write-paths.mjs`），加入：
+## 修法
 
-- **P0-D create**：`POST /bff/strategies` `/personas` `/capital-pools` `/rebalances` `/deployments` `/runtimes` `/ranking-formulas` `/research-experiments` `/skills`（共 9 條，dry-run payload）
-- **P1-A action**：`POST /bff/actions/strategies/{id}/promote_live|pause|throttle|archive|edit`（取樣 5 條）
-- **P1-C v5 write**：`POST /bff/v5/sentinel/findings/{id}/status` `/sentinel/remediation/build` `/interventions/{id}/claim|release|escalate|decide|two-man-sign` `/interventions/batch-decide`（共 8 條）
-- **P1-E agora write**：`POST /bff/agora/signals` `/agora/feedback` `/agora/inbox/{id}/triage` `/agora/journal` `/agora/skill-coaching` `/agora/postmortems` `/agora/ask/sessions`（共 7 條）
+### A. 修 ChatWindow 永不啟動就空的問題
 
-每條期望：200/201/202（已上線）、404（未實作）、501（明確未實作）、4xx typed envelope（precondition）。輸出 markdown 表格到 `.lovable/audits/bff-backend-write-probe-2026-05-28.md`。
+`src/management/components/agent/AgentPanelBody.tsx`：
 
-## C. 修 create_intervention 工具
+- 移除 line 103 的 `setInitialMessages([])` 樂觀 unblock。改成在 thread 切換時 `setInitialMessages(null)`（loading 狀態）。
+- fetch 完成後一律 `setInitialMessages(msgs ?? [])`（即使 0 筆也要設定，讓 UI 解鎖）。
+- watchdog 已存在（line 149），保留 5s 卡住的 console.warn；但「真的卡住」時，提供「點此繼續（從空白開始）」按鈕，把 initialMessages 設成 `[]` 由使用者手動 unblock，而不是自動清空。
+- 這樣 `<ChatWindow>` 一定是用「真實歷史」mount，refresh 後對話完整呈現。
 
-Spec 沒有 `POST /bff/v5/interventions`，只有 `/{id}/decide`。Interventions 是 Sentinel remediation 自動產生，不是直接 POST create。
+### B. 記住上次活動的 thread
 
-1. `supabase/functions/management-agent/index.ts`：移除 `create_intervention` 直接打 `POST /bff/v5/interventions` 的分支；改為兩個工具：
-   - `decide_intervention(id, decision, memo)` → `POST /bff/v5/interventions/{id}/decide`
-   - `request_sentinel_remediation(findingId, plan)` → `POST /bff/v5/sentinel/remediation/build`（會自動生 intervention）
-2. 更新 agent system prompt：說明 intervention 不能直接 create，需從 Sentinel finding 走 remediation 流程。
-3. FE 端 `createEntity.ts` 移除 `intervention` 從 `CreatableEntity`，或改成 overlay-only（標 dev-only badge）。
+- 新增 localStorage key：`pantheon.agentPanel.activeThreadId`。
+- `bootstrap()` 改成：先讀 localStorage，若 id 還存在於 `list` 裡，用它當 active；否則 fall back 到 `list[0]`。
+- `setActiveThreadId` 寫一個 wrapper（或 useEffect 監聽）同步寫入 localStorage。
+- `deleteThread` 若刪到的是 active，清掉 localStorage 那筆。
 
-## D. 全域 FE write fallback
+### C. （順手）loading 文案小調整
 
-新增 `src/lib/bff-v1/writeFallback.ts`：
+把 `flex-1 flex flex-col items-center justify-center` 的「載入中…」加上 thread 標題，提示「正在載入『xxx』的歷史訊息…」，讓人知道並不是被洗掉了。
 
-- 包一個 `withWriteFallback<T>(fn, { entity, payload })`：執行 BE write；若 `404 / 501 / NOT_IMPLEMENTED / METHOD_NOT_ALLOWED` 則：
-  1. 寫入 `writeOverlay`（30min TTL）
-  2. 發 `realtime.emitEnvelope` 模擬成功
-  3. 觸發全域 banner（`LiveBffBanner` 加紅色 badge：「BE write endpoint not live — local draft only (30min TTL)」）
-- 接入點：`src/lib/bff/mutations.ts`、`src/lib/bff/commandClient.ts`、`src/lib/bff/runAction.ts`、`src/lib/bff-v1/v5.ts` 的所有 POST。
-- `LiveStatusBanner.tsx` 加 `writeDegraded` 狀態 + 計數（過去 5min 有幾個 write fallback）。
+## 驗證
 
-## 技術細節
+1. 打開小幫手 → 在某 thread 打幾句話 → reload → 同一個 thread 仍 active、25 筆歷史完整出現、debug bar `msgs:25 boot:ok` 且右側顯示對話而不是 empty state。
+2. 刪掉 active thread → 自動切到 list[0]，localStorage 同步更新。
+3. localStorage 被清掉的情境 → 回到「選 list[0]」原行為，沒 regression。
+4. 看一次 console，watchdog 5s 警告在正常路徑下不該觸發。
 
-- 不動 read-path（已驗證 OK）
-- writeOverlay 已有 idempotencyKey + correlationId chain，可直接用
-- probe script 帶 `X-Dry-Run: 1` header 並用 `dev-*` ID 避免污染
-- agent 工具改動需同步 `src/management/components/write/createEntity.ts` 的 entity 白名單
+## 範圍
 
-## 驗收
-
-- `mem://index.md` Core 不再宣稱 write-path complete
-- `.lovable/audits/bff-backend-write-probe-2026-05-28.md` 產出真實 status 表
-- 使用者問 agent「建立 intervention」→ agent 解釋並導去 Sentinel remediation
-- 任何 write 端點 404 不再噴錯，UI 顯示 degraded banner + overlay 生效
+只動 `src/management/components/agent/AgentPanelBody.tsx`，不碰 BFF、不碰 useAgentPanel、不碰 schema。純 UI / 前端 state 修復。
