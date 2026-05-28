@@ -299,11 +299,28 @@ export function AgentPanelBody() {
             <Button size="sm" variant="outline" onClick={retryBootstrap}>重試</Button>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span>載入中…</span>
-            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
-              卡住了？點此重試
-            </Button>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground p-4">
+            <span>
+              正在載入
+              {(() => {
+                const title = threads.find((t) => t.id === activeThreadId)?.title;
+                return title ? `「${title}」` : "";
+              })()}
+              的歷史訊息…
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={retryBootstrap}>
+                重試
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 text-[10px]"
+                onClick={() => setInitialMessages([])}
+              >
+                從空白開始
+              </Button>
+            </div>
           </div>
         )}
       </main>
