@@ -106,6 +106,13 @@ export const liveStatus = {
     state = { ...state, lastRequestId: requestId ?? state.lastRequestId, lastCorrelationId: correlationId ?? state.lastCorrelationId };
     notify();
   },
+  /** 2026-05-28 — record a write-path fallback (BE 404/501/NOT_IMPLEMENTED). */
+  recordWriteDegraded(endpoint: string, reason: string): void {
+    const now = Date.now();
+    const prior = (state.writeDegraded ?? []).filter((e) => now - e.at < WRITE_DEGRADED_WINDOW_MS);
+    state = { ...state, writeDegraded: [...prior, { endpoint, reason, at: now }] };
+    notify();
+  },
   /** Test-only reset. */
   _reset(next?: Partial<LiveStatus>): void {
     const env = readEnv();
