@@ -46,12 +46,11 @@ export const PersonaDetail = () => {
   const [routed, setRouted] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const { can } = usePermissions();
   const canEdit = can("edit");
-  const canDelete = can("archive");
+  const canRetire = can("archive");
 
   useEffect(() => {
     let cancelled = false;
@@ -130,8 +129,14 @@ export const PersonaDetail = () => {
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
               <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
             </Button>
-            <Button size="sm" variant="destructive" disabled={!canDelete} onClick={() => setDeleteOpen(true)} title={canDelete ? undefined : t("permission.requireAction", { action: "archive" })}>
-              <Trash2 className="h-4 w-4 mr-1" />{t("actions.delete")}
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!canRetire}
+              onClick={() => setRetireOpen(true)}
+              title={canRetire ? t("persona.ops.retireHint", { defaultValue: "封存後進入 retired 終態，保留稽核軌跡；不可物理刪除。" }) : t("permission.requireAction", { action: "archive" })}
+            >
+              <Archive className="h-4 w-4 mr-1" />{t("actions.retire")}
             </Button>
           </>
         }
@@ -236,38 +241,21 @@ export const PersonaDetail = () => {
         }}
       />
 
-      <AlertDialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("registry.delete.title", { defaultValue: "刪除 Persona" })}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("registry.delete.desc", { name: p.name, defaultValue: `將封存「${p.name}」。封存後 30 分鐘內仍可從稽核還原，正式刪除請於 Advanced Registry 由 admin 確認。` })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>{t("actions.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleting}
-              onClick={async (e) => {
-                e.preventDefault();
-                setDeleting(true);
-                try {
-                  await deleteEntity("persona", p.id, { memo: `delete from PersonaDetail (${p.name})` });
-                  toast.success(t("toast.saved"));
-                  setDeleteOpen(false);
-                  navigate("/management/personas");
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : String(err));
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-            >
-              {t("actions.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <HighRiskConfirm
+        open={retireOpen}
+        onOpenChange={setRetireOpen}
+        title={t("persona.ops.retireTitle", { name: p.name, defaultValue: `Retire persona — ${p.name}` })}
+        description={t("persona.ops.retireDesc", { defaultValue: "Persona 將進入 retired 終態，從預設列表移除，但保留審計軌跡 7 年。Persona 為審計實體，無法物理刪除；若需替換請使用 Fork from Retired。" })}
+        actionId="persona.retire"
+        confirmEntity={{ type: "persona", id: p.id }}
+        target={{ type: "Persona", id: p.id, name: p.name }}
+        risk="high"
+        onConfirm={async (memo, token) => {
+          await runPersonaAction(p.id, "retire", { memo, confirmToken: token });
+          toast.success(t("toast.saved"));
+          navigate("/management/personas");
+        }}
+      />
     </>
   );
 };
