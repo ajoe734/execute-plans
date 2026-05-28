@@ -29,7 +29,11 @@ export interface LiveStatus {
   lastRequestId?: string;
   /** Planner §E7 — last X-Correlation-Id from the server. */
   lastCorrelationId?: string;
+  /** 2026-05-28 — recent write fallback events (BE write endpoint not live). */
+  writeDegraded?: Array<{ endpoint: string; reason: string; at: number }>;
 }
+
+const WRITE_DEGRADED_WINDOW_MS = 5 * 60 * 1000;
 
 function readEnv(): { mode: BffMode; baseUrl: string } {
   try {
