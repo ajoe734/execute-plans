@@ -191,9 +191,14 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       execute: async () => bffGet("/bff/management/cockpit", auth),
     }),
     query_persona_league: tool({
-      description: "Fetch persona league rankings.",
+      description: "Fetch persona league RANKING snapshot. May lag — does NOT reflect newly created personas. To verify a newly created persona is registered, use query_persona_fleet instead.",
       inputSchema: z.object({}),
       execute: async () => bffGet("/bff/management/persona-league", auth),
+    }),
+    query_persona_fleet: tool({
+      description: "Fetch the persona REGISTRY (real-time). Use this to verify a newly created persona appears in the system. Returns the full fleet with lifecycle states.",
+      inputSchema: z.object({}),
+      execute: async () => bffGet("/bff/management/persona-fleet", auth),
     }),
     query_portfolio_book: tool({
       description: "Fetch portfolio book overview.",
