@@ -1,49 +1,58 @@
-# 計畫：補齊 Registry CRUD + Oversight 導引（Option A，遵守 spec）
+# 計畫：write-path 真相對齊 + create_intervention 修正 + 全域 404 fallback
 
-依 `Pantheon_Management_Lovable_Spec_2026-05-20.md` §2.4 / §3.2–3.3：
-- **Advanced Registry**（`/management/personas`, `/strategies`, `/capital`, `/deployments` …）= CRUD 之家
-- **Oversight**（`/management/interventions`, `/one-ring`, `/persona-fleet` …）= 只看不改，0 件時要給導引
+目的：把「BFF handoff COMPLETE」修正為「read-path COMPLETE / write-path 未驗證」，用真實 probe 拿到 write 端點實際狀態，修掉 spec 不存在的 `POST /bff/v5/interventions`，並讓所有 write 在 BE 未上線時優雅降級。
 
-## 範圍
+## A. 記憶與審計範圍修正
 
-### A. Registry CRUD 補齊（重點：先把 PersonaDetail 做對，當樣板）
+1. 改寫 `mem://index.md` Core，把「BFF handoff = COMPLETE」改為「**read-path** COMPLETE；**write-path** 未驗證 (P0-D / P1-A / P1-C / P1-E)」。
+2. 新增 `mem://audits/bff-write-gap-2026-05-28`，列出四個 write 區塊 OPEN 狀態 + delta-v5 只覆蓋 GET 的事實。
+3. 新增 `.lovable/audits/bff-backend-write-gap-2026-05-28.md`，內容含：
+   - 範圍說明（delta-v5 = read only）
+   - P0-D / P1-A / P1-C / P1-E 端點清單 + 預期狀態
+   - 與 `Pantheon_BFF_Backend_Handoff.md` 批次對照
 
-1. **`PersonaDetail.tsx`**
-   - `Edit` 按鈕接 `onClick` → 開啟 `EntityCreateDrawer` (`mode="edit"`, `initialData={p}`)；存檔後 refresh。
-   - 新增 `Delete` 按鈕（`PermissionAwareButton` + `AlertDialog` 二次確認 + HighRisk memo）→ 呼叫 `bff.personas.archive(id)`，fallback 走 `writeOverlay.softDelete('persona', id)`；成功後 navigate 回 `/management/personas`。
-   - 兩顆按鈕都用 `usePermissions().can('persona.edit' / 'persona.archive')` 控管。
+## B. 真實 write-path probe
 
-2. **`EntityCreateDrawer`**：擴充支援 `mode: "create" | "edit"` 與 `initialData`（目前只有 create）。
-   - `createEntity.ts` 加 `updateEntityFromInput()`：persona 走 `bff.personas.update`，其餘走 `writeOverlay.update`。
+擴充 `scripts/probe-bff-authenticated-live.mjs`（或新增 `scripts/probe-bff-write-paths.mjs`），加入：
 
-3. **`ObjectDetailLayout`**：新增 `entityActions?: { onEdit?, onDelete?, entity, id }` slot，內部統一渲染 Edit/Delete（含權限 + 確認），其他 Detail 頁（Strategy/Capital/Deployment/…）只要傳入即可，不必各自重寫。
+- **P0-D create**：`POST /bff/strategies` `/personas` `/capital-pools` `/rebalances` `/deployments` `/runtimes` `/ranking-formulas` `/research-experiments` `/skills`（共 9 條，dry-run payload）
+- **P1-A action**：`POST /bff/actions/strategies/{id}/promote_live|pause|throttle|archive|edit`（取樣 5 條）
+- **P1-C v5 write**：`POST /bff/v5/sentinel/findings/{id}/status` `/sentinel/remediation/build` `/interventions/{id}/claim|release|escalate|decide|two-man-sign` `/interventions/batch-decide`（共 8 條）
+- **P1-E agora write**：`POST /bff/agora/signals` `/agora/feedback` `/agora/inbox/{id}/triage` `/agora/journal` `/agora/skill-coaching` `/agora/postmortems` `/agora/ask/sessions`（共 7 條）
 
-4. **`ObjectListPage.tsx`**：每列尾端加 `⋯` dropdown（Edit / Duplicate / Delete），事件冒泡擋掉 row click。
+每條期望：200/201/202（已上線）、404（未實作）、501（明確未實作）、4xx typed envelope（precondition）。輸出 markdown 表格到 `.lovable/audits/bff-backend-write-probe-2026-05-28.md`。
 
-5. **其餘 11 個 Registry Detail**（Strategy、CapitalPool、Deployment、Tool、MCP、Skill、Rule、Eval、Dataset、Channel、Webhook 等實際存在者）：本輪只接上 `ObjectDetailLayout.entityActions`，動作走 writeOverlay（BFF 端點等 BE 跟上）。不額外加自訂表單欄位。
+## C. 修 create_intervention 工具
 
-### B. Oversight 空狀態導引
+Spec 沒有 `POST /bff/v5/interventions`，只有 `/{id}/decide`。Interventions 是 Sentinel remediation 自動產生，不是直接 POST create。
 
-6. **`Interventions.tsx`**：list 0 件時用 `EmptyState`，title「目前沒有待處理事項」+ description 解釋「這裡只負責簽核 / 駁回 Persona 與 Strategy 觸發的高風險動作；要新增、修改、刪除實體請去 Advanced Registry」+ CTA「前往 Persona Registry → `/management/personas`」+ 次要連結「Strategy / Capital」。
-7. **`Cockpit` 側欄**：Oversight 與 Advanced Registry 兩段各加一行 muted hint 文字（「即時監控」/ 「實體管理 CRUD」），用 i18n key 避免硬編。
+1. `supabase/functions/management-agent/index.ts`：移除 `create_intervention` 直接打 `POST /bff/v5/interventions` 的分支；改為兩個工具：
+   - `decide_intervention(id, decision, memo)` → `POST /bff/v5/interventions/{id}/decide`
+   - `request_sentinel_remediation(findingId, plan)` → `POST /bff/v5/sentinel/remediation/build`（會自動生 intervention）
+2. 更新 agent system prompt：說明 intervention 不能直接 create，需從 Sentinel finding 走 remediation 流程。
+3. FE 端 `createEntity.ts` 移除 `intervention` 從 `CreatableEntity`，或改成 overlay-only（標 dev-only badge）。
 
-### C. 不在本輪範圍
+## D. 全域 FE write fallback
 
-- 不改 `/interventions` 的職責（不會加建立 persona 按鈕）。
-- 不動 BFF 合約；BE 缺的 update/archive 端點走 writeOverlay fallback。
-- 不改其他 Oversight 頁（One Ring / Persona Fleet / Trading Pulse）— 它們已有自己的空狀態。
+新增 `src/lib/bff-v1/writeFallback.ts`：
+
+- 包一個 `withWriteFallback<T>(fn, { entity, payload })`：執行 BE write；若 `404 / 501 / NOT_IMPLEMENTED / METHOD_NOT_ALLOWED` 則：
+  1. 寫入 `writeOverlay`（30min TTL）
+  2. 發 `realtime.emitEnvelope` 模擬成功
+  3. 觸發全域 banner（`LiveBffBanner` 加紅色 badge：「BE write endpoint not live — local draft only (30min TTL)」）
+- 接入點：`src/lib/bff/mutations.ts`、`src/lib/bff/commandClient.ts`、`src/lib/bff/runAction.ts`、`src/lib/bff-v1/v5.ts` 的所有 POST。
+- `LiveStatusBanner.tsx` 加 `writeDegraded` 狀態 + 計數（過去 5min 有幾個 write fallback）。
 
 ## 技術細節
 
-- 既有：`EntityCreateDrawer`、`writeOverlay.add/softDelete`、`PermissionAwareButton`、`HighRiskConfirm`、`EmptyState`、`usePermissions`、`buildEntity` — 全部沿用。
-- 新增檔案：`src/management/components/write/updateEntity.ts`、`src/management/components/detail/EntityActionsBar.tsx`。
-- 修改檔案：`PersonaDetail.tsx`、`ObjectDetailLayout.tsx`、`ObjectListPage.tsx`、`EntityCreateDrawer.tsx`、`createEntity.ts`、`Interventions.tsx`、`Cockpit` 側欄、`i18n` 字串。
-- i18n：補 zh-TW / en，例 `registry.actions.delete`、`registry.actions.deleteConfirm`、`oversight.empty.interventions.title/desc/cta`、`nav.section.oversightHint`、`nav.section.registryHint`。
-- 測試：PersonaDetail edit/delete 行為加 1 個 vitest；Interventions 空狀態加 1 個 RTL smoke。
+- 不動 read-path（已驗證 OK）
+- writeOverlay 已有 idempotencyKey + correlationId chain，可直接用
+- probe script 帶 `X-Dry-Run: 1` header 並用 `dev-*` ID 避免污染
+- agent 工具改動需同步 `src/management/components/write/createEntity.ts` 的 entity 白名單
 
 ## 驗收
 
-- `/management/personas/:id` 看得到可運作的 Edit + Delete（含權限 disable + 二次確認）。
-- `/management/interventions` 0 件時顯示導引卡 + 跳轉 CTA，不再是空白「無資料」。
-- 11 個其他 Registry Detail 至少有共用 EntityActionsBar（即使 BE update API 未上，UI 動作會以 overlay 寫入並 toast 提示「將於 BFF 上線後同步」）。
-- 366 既有測試保持綠燈；新增 2 個測試通過。
+- `mem://index.md` Core 不再宣稱 write-path complete
+- `.lovable/audits/bff-backend-write-probe-2026-05-28.md` 產出真實 status 表
+- 使用者問 agent「建立 intervention」→ agent 解釋並導去 Sentinel remediation
+- 任何 write 端點 404 不再噴錯，UI 顯示 degraded banner + overlay 生效
