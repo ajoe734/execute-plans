@@ -21,8 +21,11 @@ import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
 import { withWriteFallback } from "@/lib/bff-v1/writeFallback";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
+import { lists } from "@/lib/bff-v1/lists";
 import { useT } from "@/platform/hooks";
 import type { Persona } from "@/lib/bff/types";
+
+interface CapitalPoolOption { id: string; name?: string; status?: string }
 
 type StepNum = 1 | 2 | 3 | 4 | 5;
 const STEP_KEYS: Record<StepNum, "lifecycle" | "binding" | "plan" | "approval" | "runtime"> = {
