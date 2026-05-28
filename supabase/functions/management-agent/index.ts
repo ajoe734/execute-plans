@@ -83,7 +83,7 @@ Rules:
 function modeHint(mode: AgentMode): string {
   switch (mode) {
     case "auto":
-      return `\n\nCURRENT MODE = **auto**. You MAY use annotate_evidence without confirmation. You MAY NOT use any high-risk write tools. Prefer succinct execution.`;
+      return `\n\nCURRENT MODE = **auto** (read-only). You have ONLY query_* + navigate tools. You MAY NOT call any write tool. If the user asks for a write/annotate/log action, refuse and suggest switching to confirm/agent (or, for evidence/journal, explain there is no BFF write endpoint at all).`;
     case "draft":
       return `\n\nCURRENT MODE = **draft**. You MUST NOT call decide_inbox_item / create_ask / decide_intervention / request_sentinel_remediation / trigger_readiness. Use propose_inbox_decision / propose_ask instead — they stage a draft and navigate the user to the relevant page.`;
     case "confirm":
