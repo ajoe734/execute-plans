@@ -599,7 +599,9 @@ const ACTIVE_TOOL_NAMES = new Set<string>([
   "navigate",
   "query_cockpit", "query_persona_league", "query_persona_fleet",
   "query_portfolio_book", "query_trading_pulse", "query_human_inbox", "query_alerts",
-  "annotate_evidence",
+  // annotate_evidence: REMOVED 2026-05-28 (BFF has no write endpoint; tool always 404'd).
+  // Kept out of this set so historical chat parts render as "Historical Record" instead
+  // of pending approval cards.
   "propose_inbox_decision", "propose_ask", "propose_create_persona",
   "decide_inbox_item", "create_ask", "decide_intervention",
   "request_sentinel_remediation", "trigger_readiness",
@@ -623,7 +625,7 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
 
   const isDraft = toolName.startsWith("propose_");
 
-  const isAuto = toolName === "annotate_evidence";
+  // No auto-mode side-effect tools remain after annotate_evidence removal (2026-05-28).
   const completed = part.state === "output-available";
   const output = part.output as {
     kind?: string; href?: string; payload?: unknown; note?: string;
@@ -713,15 +715,7 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
         </div>
       )}
 
-      {isAuto && completed && !isError && (
-        <div className="ml-4 flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 rounded-md p-2">
-          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-          <span className="flex-1">
-            ✓ 已完成 <span className="font-medium">{toolName}</span>
-            {output?.stubbed ? "（後端尚未上線，已暫存）" : ""}
-          </span>
-        </div>
-      )}
+      {/* auto-mode success banner removed with annotate_evidence (2026-05-28) */}
 
       {needsApproval && (
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">

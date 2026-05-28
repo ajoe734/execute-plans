@@ -82,3 +82,25 @@ If probe #2 returns "WRITE OK, FLEET STALE", that pinpoints a BE projection bug,
 
 - Hand the 8 open routes to BE owner with this audit + the raw probe.
 - Re-run both probes after each BE deploy; flip rows green when 200/201/202 lands.
+
+## Addendum — 2026-05-28 evening: removed two fabricated tools
+
+These tool→endpoint mappings were FE-invented (never present in any BFF spec) and have been removed from `supabase/functions/management-agent/index.ts`. They are listed here only so future audits do not reintroduce them:
+
+| FE tool name | Faked endpoint | Status |
+|---|---|---|
+| `annotate_evidence` | `POST /bff/evidence/{id}/annotate` | **NOT IN SPEC** — removed. Evidence wall is read-only via `GET /bff/management/evidence`. |
+| (none registered) | `POST /bff/journal/*` | **NOT IN SPEC** — Evolution Journal is read-only at `/management/evolution-journal`. |
+
+If product wants evidence annotation or journal entries to be writable, BE owners must:
+1. Add the route to Pack D BFF API Contract + Final OpenAPI.
+2. Update audit-chain hashing semantics (D26 EvidenceKind) to include the new evidence subtype.
+3. Add the route to `src/lib/bff-v1/paths.ts` and re-register the agent tool as `needsApproval: true`.
+
+See `.lovable/audits/agent-fake-evidence-write-2026-05-28.md` for full diagnosis.
+
+## Addendum — 2026-05-28 evening: independent Sentinel rule gap
+
+Observed: 13 personas in `degraded (score 85)` with reasons `persona_lifecycle_not_active` + `no_runtime_binding` produce **zero Sentinel findings**.
+
+This is a BE rule-coverage gap (the rule engine does not emit a finding for these reason codes). FE can only display whatever findings the BE produces — no FE fix is possible. Tracked for BE / Sentinel rules team.

@@ -37,7 +37,7 @@ type AgentMode = "auto" | "draft" | "confirm" | "agent";
 const BASE_SYSTEM_PROMPT = `You are the Pantheon Management Cockpit assistant — a senior operator copilot.
 
 You have FOUR operating modes (chosen by user per message):
-- **auto**: low-risk side effects allowed without confirmation (annotate_evidence, query_*).
+- **auto**: read-only execution. Query / navigate freely; no write tools available.
 - **draft**: never write to the backend; produce form drafts via propose_* tools (they only stage payloads + navigate).
 - **confirm**: write actions allowed but MUST use needsApproval tools (decide_inbox_item, create_ask, create_persona, create_strategy, create_capital_pool, create_rebalance, create_deployment, create_ranking_formula, create_research_experiment, create_skill, retire_persona, decide_intervention, request_sentinel_remediation, trigger_readiness).
 - **agent**: multi-step autonomy; chain query_* → propose_* / decide_* / create_* freely. Confirm-tier tools still require approval.
@@ -45,7 +45,6 @@ You have FOUR operating modes (chosen by user per message):
 Tool catalogue:
 - Read: query_cockpit, query_persona_league (RANKING snapshot, may lag), query_persona_fleet (REGISTRY, real-time — use this to verify a newly created persona), query_portfolio_book, query_trading_pulse, query_human_inbox, query_alerts.
 - Navigation: navigate(href).
-- Low-risk write (auto): annotate_evidence.
 - Draft (draft/agent): propose_inbox_decision, propose_ask, propose_create_persona. These DO NOT call backend — they only stage a draft and navigate.
 - High-risk write (confirm/agent): decide_inbox_item, create_ask, decide_intervention, request_sentinel_remediation, trigger_readiness.
 - Entity create (confirm/agent, needsApproval): create_persona, create_strategy, create_capital_pool, create_rebalance, create_deployment, create_ranking_formula, create_research_experiment, create_skill.
@@ -61,11 +60,19 @@ Entity creation rules — IMPORTANT:
 Entity deletion rules — IMPORTANT:
 - **Personas cannot be deleted.** Per Pack D StateMachine Contract (D02), persona is an audit entity; physical delete would break the evidence chain (audit retained 7 years). If the user asks to "delete / 刪除 / 移除 / 砍掉" a persona, do NOT search for a delete tool — instead use \`retire_persona(id, memo)\` to move it to the \`retired\` terminal state. Briefly explain that retired personas remain in the audit log but are hidden from default listings, and that replacement uses Fork from Retired.
 
+Evidence wall & Evolution Journal rules — IMPORTANT:
+- The current BFF exposes **ONLY** a read explorer at \`GET /bff/management/evidence\` and the read page \`/management/evolution-journal\`. There is **NO write endpoint** for evidence annotation, evolution journal entries, or audit notes. The legacy \`annotate_evidence\` tool has been removed (it always 404'd).
+- If the user asks to "記錄到 evidence / 標註 / 寫進 journal / 留下對帳 / annotate / pin to evidence / log to journal", do **NOT** pretend to write. Reply: "目前 BFF 沒有 evidence/journal 寫入端點，只有查詢。請改走 Human Inbox（create_ask）或 Ask 通道留下備註，或我帶你到 /management/evidence 用 explorer 過濾。" Then \`navigate('/management/evidence')\` or \`navigate('/management/human-inbox')\`.
+
+CRITICAL — Do NOT pre-narrate tool success:
+- Before a tool call returns, NEVER use past tense to describe its effect ("我已經...", "已標註", "已寫入", "已彙整到 X", "I have logged...", "I've recorded..."). Use future tense before calling ("我將呼叫 ..."), then report based on the actual \`ok: true/false\` in the result.
+- For audit entities (Evidence wall, Evolution Journal, Audit log), NEVER claim a write happened unless the corresponding tool is listed in the Tool catalogue above with a needsApproval write path. As of now, none exist — so any "已記錄到 evidence/journal" statement is forbidden.
+
 Rules:
 - Always cite real data from tool results; never invent numbers or IDs.
 - Respond in user's language (default 繁體中文; English when prompted).
 - In **draft** mode, NEVER call decide_inbox_item / create_ask / create_* / decide_intervention / request_sentinel_remediation / trigger_readiness — use propose_* instead.
-- In **auto** mode, NEVER call high-risk or create_* tools; if user asks for one, refuse and suggest switching to confirm/agent.
+- In **auto** mode, you have NO write tools; if user asks for one, refuse and suggest switching to confirm/agent.
 - In **confirm** mode, prefer needsApproval tools when the user wants to commit.
 - Before any destructive action, briefly explain why and what will happen.
 - Available surfaces: /management/cockpit, /management/persona-fleet, /management/personas, /management/strategies, /management/capital, /management/deployments, /management/tools, /management/mcps, /management/skills, /management/rules, /management/evals, /management/datasets, /management/channels, /management/webhooks, /management/human-inbox, /management/trading-pulse, /management/portfolio-book, /management/persona-league, /management/quarterly-ranking, /management/performance-attribution, /management/evolution-journal, /management/evidence, /management/sentinel, /management/interventions, /management/readiness/{bff-ha,broker-live,capital-binding-live,ep5,strict-publish}.
@@ -76,7 +83,7 @@ Rules:
 function modeHint(mode: AgentMode): string {
   switch (mode) {
     case "auto":
-      return `\n\nCURRENT MODE = **auto**. You MAY use annotate_evidence without confirmation. You MAY NOT use any high-risk write tools. Prefer succinct execution.`;
+      return `\n\nCURRENT MODE = **auto** (read-only). You have ONLY query_* + navigate tools. You MAY NOT call any write tool. If the user asks for a write/annotate/log action, refuse and suggest switching to confirm/agent (or, for evidence/journal, explain there is no BFF write endpoint at all).`;
     case "draft":
       return `\n\nCURRENT MODE = **draft**. You MUST NOT call decide_inbox_item / create_ask / decide_intervention / request_sentinel_remediation / trigger_readiness. Use propose_inbox_decision / propose_ask instead — they stage a draft and navigate the user to the relevant page.`;
     case "confirm":
@@ -225,20 +232,10 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       execute: async () => bffGet("/bff/alerts", auth),
     }),
 
-    annotate_evidence: tool({
-      description: "Attach a tag or short note to an evidence item. LOW RISK — executes immediately in auto/agent mode.",
-      inputSchema: z.object({
-        evidenceId: z.string(),
-        tag: z.string().optional(),
-        note: z.string().max(280).optional(),
-      }),
-      execute: async ({ evidenceId, tag, note }) =>
-        bffCall(`/bff/evidence/${encodeURIComponent(evidenceId)}/annotate`, {
-          method: "POST",
-          body: JSON.stringify({ tag, note }),
-          auth,
-        }),
-    }),
+    // annotate_evidence: REMOVED 2026-05-28.
+    // The BFF spec exposes only GET /bff/management/evidence (read explorer).
+    // There is no POST /bff/evidence/{id}/annotate — the tool always returned 404.
+    // Evidence/journal write semantics live in Human Inbox + Ask instead.
 
     propose_inbox_decision: tool({
       description: "Stage a DRAFT inbox decision (approve/reject/defer) with reason. Does NOT call backend — user will review and submit from the Human Inbox page.",
@@ -491,7 +488,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
     delete tools.decide_intervention;
     delete tools.request_sentinel_remediation;
     delete tools.trigger_readiness;
-    delete tools.annotate_evidence;
+    // annotate_evidence already removed from tool catalogue (2026-05-28).
     for (const k of CREATE_TOOLS) delete tools[k];
     for (const k of LIFECYCLE_TOOLS) delete tools[k];
   } else if (mode === "auto") {
