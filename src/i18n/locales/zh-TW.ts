@@ -1929,6 +1929,8 @@ export default {
       yes: "是",
       no: "否",
       state: "狀態",
+      actions: "操作",
+      onboard: "啟動精靈",
       filter: {
         showRetiredFmt: "顯示已封存 ({{count}})",
         hideRetired: "隱藏已封存",
