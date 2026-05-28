@@ -168,6 +168,7 @@ export const PersonaFleetPage = () => {
               <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.state")}</th>
+              <th className="px-3 py-2 text-right">{t("mgmt.fleet.actions")}</th>
             </tr>
           </thead>
 
