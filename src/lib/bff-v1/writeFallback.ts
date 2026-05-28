@@ -76,7 +76,7 @@ export async function withWriteFallback<T>(
         /* overlay never throws but be safe */
       }
     }
-    liveStatus.recordWriteDegraded?.(opts.endpoint, m.reason ?? "not implemented");
+    liveStatus.recordWriteDegraded(opts.endpoint, m.reason ?? "not implemented");
     return { ok: true, degraded: true, reason: m.reason, status: m.status };
   }
 }
