@@ -232,20 +232,10 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
       execute: async () => bffGet("/bff/alerts", auth),
     }),
 
-    annotate_evidence: tool({
-      description: "Attach a tag or short note to an evidence item. LOW RISK — executes immediately in auto/agent mode.",
-      inputSchema: z.object({
-        evidenceId: z.string(),
-        tag: z.string().optional(),
-        note: z.string().max(280).optional(),
-      }),
-      execute: async ({ evidenceId, tag, note }) =>
-        bffCall(`/bff/evidence/${encodeURIComponent(evidenceId)}/annotate`, {
-          method: "POST",
-          body: JSON.stringify({ tag, note }),
-          auth,
-        }),
-    }),
+    // annotate_evidence: REMOVED 2026-05-28.
+    // The BFF spec exposes only GET /bff/management/evidence (read explorer).
+    // There is no POST /bff/evidence/{id}/annotate — the tool always returned 404.
+    // Evidence/journal write semantics live in Human Inbox + Ask instead.
 
     propose_inbox_decision: tool({
       description: "Stage a DRAFT inbox decision (approve/reject/defer) with reason. Does NOT call backend — user will review and submit from the Human Inbox page.",
