@@ -70,7 +70,7 @@ function modeHint(mode: AgentMode): string {
     case "auto":
       return `\n\nCURRENT MODE = **auto**. You MAY use annotate_evidence without confirmation. You MAY NOT use any high-risk write tools. Prefer succinct execution.`;
     case "draft":
-      return `\n\nCURRENT MODE = **draft**. You MUST NOT call decide_inbox_item / create_ask / create_intervention / trigger_readiness. Use propose_inbox_decision / propose_ask instead — they stage a draft and navigate the user to the relevant page.`;
+      return `\n\nCURRENT MODE = **draft**. You MUST NOT call decide_inbox_item / create_ask / decide_intervention / request_sentinel_remediation / trigger_readiness. Use propose_inbox_decision / propose_ask instead — they stage a draft and navigate the user to the relevant page.`;
     case "confirm":
       return `\n\nCURRENT MODE = **confirm** (default). For any backend write, use the needsApproval tools so the user can review and approve.`;
     case "agent":
