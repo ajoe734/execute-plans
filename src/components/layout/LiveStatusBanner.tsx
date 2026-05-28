@@ -165,5 +165,9 @@ function BannerContent({ snap }: { snap: LiveStatusSnapshot }) {
 
 export const LiveStatusBanner = () => {
   const snap = useLiveStatusSnapshot();
-  return <BannerContent snap={snap} />;
+  return (
+    <>
+      <BannerContent snap={snap} />
+    </>
+  );
 };
