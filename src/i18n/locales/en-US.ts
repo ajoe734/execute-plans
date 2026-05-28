@@ -1849,6 +1849,14 @@ export default {
       humanNeeded: "Human needed",
       yes: "yes",
       no: "no",
+      state: "State",
+      filter: {
+        showRetiredFmt: "Show retired ({{count}})",
+        hideRetired: "Hide retired",
+        showDevProbeFmt: "Show dev-probes ({{count}})",
+        hideDevProbe: "Hide dev-probes",
+        allFilteredHint: "No personas match current filters. Toggle the buttons above to show retired or dev-probe personas.",
+      },
     },
     inbox: {
       title: "Human Inbox",
