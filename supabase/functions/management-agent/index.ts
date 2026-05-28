@@ -339,6 +339,157 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
           auth,
         }),
     }),
+
+    // ─── Entity create tools (P0-D, BE verified ready 2026-05-28) ───
+    // Each is needsApproval:true. Call ONCE per entity; for N entities, call N times.
+    create_persona: tool({
+      description: "Create a new persona entity (Registry). HIGH RISK — requires user approval. For multiple personas, call this tool repeatedly (once per persona). After creating, call query_persona_fleet to verify.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        archetype: z.string().optional().describe("e.g. generalist, momentum, mean-reversion"),
+        description: z.string().optional(),
+        initialMode: z.enum(["live", "paper", "shadow", "suspended"]).optional(),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/personas`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_strategy: tool({
+      description: "Create a new strategy entity. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        alpha: z.string().optional(),
+        capitalPoolId: z.string().optional(),
+        personaIds: z.array(z.string()).optional(),
+        risk: z.enum(["low", "medium", "high"]).optional(),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/strategies`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_capital_pool: tool({
+      description: "Create a new capital pool. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        currency: z.string().default("USD"),
+        allocated: z.number().nonnegative().default(0),
+        riskBudget: z.number().nonnegative().default(0),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/capital-pools`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_rebalance: tool({
+      description: "Create a rebalance plan. Requires an existing capital_pool_id. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        quarter: z.string().describe("e.g. 2026Q2"),
+        capital_pool_id: z.string().describe("Required. Target capital pool id."),
+      }),
+      needsApproval: true,
+      execute: async ({ name, quarter, capital_pool_id }) =>
+        bffCall(`/bff/rebalances`, {
+          method: "POST",
+          body: JSON.stringify({ name, quarter, capital_pool_id, targetPoolId: capital_pool_id }),
+          auth,
+        }),
+    }),
+    create_deployment: tool({
+      description: "Create a deployment of a strategy artifact to paper/live. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        strategyId: z.string(),
+        artifactId: z.string(),
+        target: z.enum(["paper", "live", "shadow"]).default("paper"),
+        version: z.string().default("0.0.1"),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/deployments`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_ranking_formula: tool({
+      description: "Create a new ranking formula expression. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        expression: z.string().min(1).describe("e.g. sharpe, 0.6*sharpe + 0.4*sortino"),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/ranking-formulas`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_research_experiment: tool({
+      description: "Create a new research experiment. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        hypothesis: z.string().min(1),
+        metric: z.string().default("sharpe"),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/research-experiments`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+    create_skill: tool({
+      description: "Create a new skill entity. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+      }),
+      needsApproval: true,
+      execute: async (input) =>
+        bffCall(`/bff/skills`, { method: "POST", body: JSON.stringify(input), auth }),
+    }),
+
+    // Draft variant for draft mode — does NOT call backend, just stages prefill.
+    propose_create_persona: tool({
+      description: "Stage a DRAFT persona create payload. Does NOT call backend — user will review and submit from /management/personas.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        archetype: z.string().optional(),
+        description: z.string().optional(),
+        initialMode: z.enum(["live", "paper", "shadow", "suspended"]).optional(),
+      }),
+      execute: async (input) => ({
+        ok: true,
+        kind: "draft",
+        target: "personas",
+        href: "/management/personas?intent=create",
+        payload: input,
+        note: "Draft staged. Open the Personas page to review and submit.",
+      }),
+    }),
+  };
+
+  const CREATE_TOOLS = [
+    "create_persona", "create_strategy", "create_capital_pool", "create_rebalance",
+    "create_deployment", "create_ranking_formula", "create_research_experiment", "create_skill",
+  ] as const;
+
+  if (mode === "draft") {
+    delete tools.decide_inbox_item;
+    delete tools.create_ask;
+    delete tools.decide_intervention;
+    delete tools.request_sentinel_remediation;
+    delete tools.trigger_readiness;
+    delete tools.annotate_evidence;
+    for (const k of CREATE_TOOLS) delete tools[k];
+  } else if (mode === "auto") {
+    delete tools.decide_inbox_item;
+    delete tools.create_ask;
+    delete tools.decide_intervention;
+    delete tools.request_sentinel_remediation;
+    delete tools.trigger_readiness;
+    delete tools.propose_inbox_decision;
+    delete tools.propose_ask;
+    delete tools.propose_create_persona;
+    for (const k of CREATE_TOOLS) delete tools[k];
+  } else if (mode === "confirm") {
+    delete tools.propose_inbox_decision;
+    delete tools.propose_ask;
+    delete tools.propose_create_persona;
+  } else {
+    // agent: keep both create_* and propose_create_persona available
+  }
+
   };
 
   if (mode === "draft") {
