@@ -608,7 +608,7 @@ const ACTIVE_TOOL_NAMES = new Set<string>([
   "create_persona", "create_strategy", "create_capital_pool", "create_rebalance",
   "create_deployment", "create_ranking_formula", "create_research_experiment", "create_skill",
   "retire_persona",
-  "start_persona_onboarding",
+  "start_persona_onboarding", "query_persona_readiness",
 ]);
 
 function ToolBlock({ part, addToolResult, resolveApproval }: {

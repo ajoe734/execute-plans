@@ -21,8 +21,11 @@ import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
 import { withWriteFallback } from "@/lib/bff-v1/writeFallback";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
+import { lists } from "@/lib/bff-v1/lists";
 import { useT } from "@/platform/hooks";
 import type { Persona } from "@/lib/bff/types";
+
+interface CapitalPoolOption { id: string; name?: string; status?: string }
 
 type StepNum = 1 | 2 | 3 | 4 | 5;
 const STEP_KEYS: Record<StepNum, "lifecycle" | "binding" | "plan" | "approval" | "runtime"> = {
@@ -62,7 +65,14 @@ export default function PersonaOnboarding() {
 
   const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ?? false;
 
+  const [pools, setPools] = useState<CapitalPoolOption[]>([]);
+
   useEffect(() => { if (id) getPersona(id).then(setPersona).catch(() => undefined); }, [id]);
+  useEffect(() => {
+    lists.capitalPools()
+      .then((env) => setPools((env.items ?? []) as CapitalPoolOption[]))
+      .catch(() => setPools([]));
+  }, []);
 
   const update = (n: StepNum, s: StepState) => setStates((p) => ({ ...p, [n]: s }));
 
@@ -150,7 +160,17 @@ export default function PersonaOnboarding() {
           <StepShell title={t("persona.onboarding.step2.title")} hint={t("persona.onboarding.step2.hint")}
                      state={states[2]} t={t}>
             <Label htmlFor="poolId">{t("persona.onboarding.step2.poolLabel")}</Label>
-            <Input id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)} placeholder="cp-..." />
+            {pools.length > 0 ? (
+              <select id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-sm">
+                <option value="">—</option>
+                {pools.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name ?? p.id}{p.status ? ` · ${p.status}` : ""}</option>
+                ))}
+              </select>
+            ) : (
+              <Input id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)} placeholder="cp-..." />
+            )}
             <Label htmlFor="budget">{t("persona.onboarding.step2.budgetLabel")}</Label>
             <Input id="budget" type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
             <Button onClick={doStep2} disabled={!poolId || states[2].status === "running"}>

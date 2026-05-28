@@ -168,6 +168,7 @@ export const PersonaFleetPage = () => {
               <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.state")}</th>
+              <th className="px-3 py-2 text-right">{t("mgmt.fleet.actions")}</th>
             </tr>
           </thead>
 
@@ -198,6 +199,15 @@ export const PersonaFleetPage = () => {
                     )}
                     {probe && (
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {!retired && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={`/management/personas/${encodeURIComponent(r.personaId)}/onboarding`}>
+                          {t("mgmt.fleet.onboard")}
+                        </Link>
+                      </Button>
                     )}
                   </td>
                 </tr>
