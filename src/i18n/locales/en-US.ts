@@ -1947,6 +1947,8 @@ export default {
       yes: "yes",
       no: "no",
       state: "State",
+      actions: "Actions",
+      onboard: "Onboard",
       filter: {
         showRetiredFmt: "Show retired ({{count}})",
         hideRetired: "Hide retired",
