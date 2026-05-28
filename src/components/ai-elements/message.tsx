@@ -374,7 +374,7 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
-      components={{ a: SmartLink }}
+      components={{ a: SmartLink as unknown as React.ComponentType }}
       {...props}
     />
   ),
