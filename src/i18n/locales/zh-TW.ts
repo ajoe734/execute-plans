@@ -1061,6 +1061,9 @@ export default {
       testToast: "{{name}} 試跑階段已啟動",
       evalToast: "評測已排入",
       restrictToast: "工具已暫時限制",
+      retireTitle: "封存 Persona — {{name}}",
+      retireDesc: "Persona 將進入 retired 終態，從預設列表移除，但保留審計軌跡 7 年。Persona 為審計實體，無法物理刪除；若需替換請使用 Fork from Retired。",
+      retireHint: "封存後進入 retired 終態，保留稽核軌跡；不可物理刪除。",
     },
   },
   capital: {
