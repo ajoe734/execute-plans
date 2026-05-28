@@ -1078,6 +1078,9 @@ export default {
       testToast: "Test session started for {{name}}",
       evalToast: "Evaluation queued",
       restrictToast: "Tools temporarily restricted",
+      retireTitle: "Retire persona — {{name}}",
+      retireDesc: "Persona will enter the `retired` terminal state and be hidden from default listings, but the full audit trail is retained for 7 years. Personas are audit entities and cannot be physically deleted; use Fork from Retired if you need a replacement.",
+      retireHint: "Retiring moves the persona to terminal state. Audit trail preserved; physical delete not allowed.",
     },
   },
   capital: {
