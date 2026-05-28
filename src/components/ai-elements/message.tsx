@@ -29,6 +29,49 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import { useNavigate } from "react-router-dom";
+
+type SmartAnchorProps = ComponentProps<"a">;
+
+const SmartLink = ({ href, target, rel, onClick, children, className, ...rest }: SmartAnchorProps) => {
+  const navigate = useNavigate();
+  const isInternal = (() => {
+    if (!href) return false;
+    if (href.startsWith("/") && !href.startsWith("//")) return true;
+    if (/^(mailto:|tel:|javascript:)/i.test(href)) return false;
+    try {
+      const u = new URL(href, typeof window !== "undefined" ? window.location.href : "http://localhost");
+      return typeof window !== "undefined" && u.origin === window.location.origin;
+    } catch { return false; }
+  })();
+
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(e);
+    if (e.defaultPrevented) return;
+    if (!isInternal || !href) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    try {
+      const u = new URL(href, window.location.href);
+      navigate(u.pathname + u.search + u.hash);
+    } catch {
+      navigate(href);
+    }
+  };
+
+  return (
+    <a
+      href={href}
+      onClick={handleClick}
+      target={isInternal ? undefined : (target ?? "_blank")}
+      rel={isInternal ? rel : (rel ?? "noopener noreferrer")}
+      className={cn("text-primary underline-offset-2 hover:underline", className)}
+      {...rest}
+    >
+      {children}
+    </a>
+  );
+};
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
