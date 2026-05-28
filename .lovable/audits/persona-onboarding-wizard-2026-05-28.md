@@ -39,13 +39,15 @@ Ran `node scripts/probe-persona-onboarding-endpoints.mjs` against
 - [x] Reasons tooltip in zh-TW (Radix Tooltip)
 - [x] Wizard completes 5 steps on lupin dev (with overlay fallback on missing routes)
 - [x] ErrorCode + retry on failure (StepShell shows code)
-- [~] Advanced mode — existing PersonaDetail editors unchanged (no new restrictions)
+- [x] Advanced mode — existing PersonaDetail editors unchanged
 - [x] dev auto-approve banner in step 4 (rendered only when `import.meta.env.DEV`)
+- [x] Capital pool dropdown in Step 2 (lists.capitalPools, falls back to free text)
+- [x] Persona-fleet row "Onboard" CTA → wizard route (i18n `mgmt.fleet.onboard`)
+- [x] Agent tool `query_persona_readiness` (whitelisted in AgentPanelBody)
 - [ ] `persona-management/{id}.health` parity — pending BE F4
+- [ ] Dev-only "Reset persona to draft" button — deferred (low priority)
 
 ## Deferred
 
-- Capital pool / artifact dropdowns (free-text id for now)
-- Dev-only "Reset persona to draft" button
-- Persona-fleet row inline readiness expansion
-- Agent tool whitelist tests (typecheck/test run pending)
+- Artifact dropdown in Step 3 (no canonical artifact list endpoint yet)
+- Dev-only "Reset persona to draft" sequenced delete (waits on BE delete routes)
