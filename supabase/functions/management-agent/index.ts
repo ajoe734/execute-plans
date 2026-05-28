@@ -492,6 +492,48 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
         note: "Opening Persona Onboarding Wizard.",
       }),
     }),
+
+    // Persona readiness query (2026-05-28). Read-only — fetches persona then summarizes.
+    query_persona_readiness: tool({
+      description: "Fetch a persona and summarize its 5-step onboarding readiness (lifecycle → binding → plan → approval → runtime) + health. Use when the user asks '<persona> 進度 / 狀態 / 為什麼還沒上線 / what's blocking <persona>'. Returns the next blocker so the agent can suggest start_persona_onboarding with the right step.",
+      inputSchema: z.object({
+        personaId: z.string().describe("persona id"),
+      }),
+      execute: async ({ personaId }) => {
+        try {
+          const url = `${Deno.env.get("VITE_SUPABASE_URL") ?? ""}`;
+          // Delegate to caller-side derivePersonaReadiness via persona detail; here we
+          // just surface raw lifecycle so the LLM can answer + propose next step.
+          const bff = Deno.env.get("VITE_BFF_BASE_URL") ?? "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io";
+          const res = await fetch(`${bff.replace(/\/$/, "")}/bff/personas/${encodeURIComponent(personaId)}`, {
+            headers: { Accept: "application/json" },
+          });
+          if (!res.ok) {
+            return { ok: false, kind: "error", code: res.status, note: `persona ${personaId} not reachable (${res.status})`, url };
+          }
+          const raw = await res.json().catch(() => ({}));
+          const p = (raw?.data ?? raw) as Record<string, unknown>;
+          const lifecycle = String((p?.lifecycle as string) ?? (p?.state as string) ?? "unknown");
+          const stageDone = {
+            lifecycle: lifecycle === "paper_owner" || lifecycle === "active",
+            binding: Array.isArray((p as { bindings?: unknown[] }).bindings) && ((p as { bindings?: unknown[] }).bindings!.length > 0),
+            plan: Array.isArray((p as { deploymentPlans?: unknown[] }).deploymentPlans) && ((p as { deploymentPlans?: unknown[] }).deploymentPlans!.length > 0),
+            approval: Array.isArray((p as { approvals?: unknown[] }).approvals) && ((p as { approvals?: unknown[] }).approvals!.length > 0),
+            runtime: Array.isArray((p as { runtimeBindings?: unknown[] }).runtimeBindings) && ((p as { runtimeBindings?: unknown[] }).runtimeBindings!.length > 0),
+          };
+          const stages = (["lifecycle", "binding", "plan", "approval", "runtime"] as const).map((k) => ({ key: k, done: stageDone[k] }));
+          const next = stages.find((s) => !s.done)?.key;
+          const completed = stages.filter((s) => s.done).length;
+          return {
+            ok: true, kind: "readiness", personaId, lifecycle, completed, total: 5,
+            stages, nextStage: next,
+            suggested: next ? { tool: "start_persona_onboarding", personaId, step: stages.findIndex((s) => s.key === next) + 1 } : null,
+          };
+        } catch (err) {
+          return { ok: false, kind: "error", note: String(err).slice(0, 160) };
+        }
+      },
+    }),
   };
 
   const CREATE_TOOLS = [
