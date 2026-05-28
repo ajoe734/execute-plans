@@ -216,7 +216,7 @@ export function AgentPanelBody() {
       .select("id,title,updated_at").single();
     if (error) { toast.error(error.message); return; }
     await reloadThreads();
-    setActiveThreadId(data.id);
+    selectThread(data.id);
   };
 
   const deleteThread = async (id: string) => {
@@ -224,7 +224,8 @@ export function AgentPanelBody() {
 
     const list = await reloadThreads();
     if (id === activeThreadId) {
-      setActiveThreadId(list[0]?.id ?? null);
+      const next = list[0]?.id ?? null;
+      selectThread(next);
       if (list.length === 0) {
         bootstrappedRef.current = false; // allow re-bootstrap to create a fresh thread
       }
