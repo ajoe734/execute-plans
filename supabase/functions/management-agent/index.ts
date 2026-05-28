@@ -493,6 +493,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
     delete tools.trigger_readiness;
     delete tools.annotate_evidence;
     for (const k of CREATE_TOOLS) delete tools[k];
+    for (const k of LIFECYCLE_TOOLS) delete tools[k];
   } else if (mode === "auto") {
     delete tools.decide_inbox_item;
     delete tools.create_ask;
@@ -503,12 +504,13 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
     delete tools.propose_ask;
     delete tools.propose_create_persona;
     for (const k of CREATE_TOOLS) delete tools[k];
+    for (const k of LIFECYCLE_TOOLS) delete tools[k];
   } else if (mode === "confirm") {
     delete tools.propose_inbox_decision;
     delete tools.propose_ask;
     delete tools.propose_create_persona;
   } else {
-    // agent: keep both create_* and propose_create_persona available
+    // agent: keep create_*, retire_*, and propose_create_persona available
   }
 
 
