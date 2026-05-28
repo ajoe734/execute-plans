@@ -37,12 +37,32 @@ function VersionMismatchStrip({
   );
 }
 
+function WriteDegradedStrip() {
+  const status = liveStatus.get();
+  const events = (status.writeDegraded ?? []).filter((e) => Date.now() - e.at < 5 * 60 * 1000);
+  if (events.length === 0) return null;
+  const last = events[events.length - 1];
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="w-full bg-status-failed/10 border-b border-status-failed/30 text-status-failed px-4 py-1.5 text-xs flex items-center gap-2"
+    >
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <span className="font-mono uppercase tracking-wider shrink-0">be write endpoint 未上線</span>
+      <span className="text-foreground/70 truncate">
+        {events.length} 筆本地 draft（30min TTL）· 最近：{last.endpoint} ({last.reason})
+      </span>
+    </div>
+  );
+}
+
 function BannerContent({ snap }: { snap: LiveStatusSnapshot }) {
   const { transportMode, fellBack, fallbackReason, apiVersionMismatch, serverApiVersion } = snap;
 
   if (transportMode === "real" && !apiVersionMismatch) {
-    // Fully live, strict — no visual noise needed.
-    return null;
+    // Fully live, strict — no visual noise needed (but write-degraded strip still renders).
+    return <WriteDegradedStrip />;
   }
 
   if (transportMode === "real" && apiVersionMismatch) {
