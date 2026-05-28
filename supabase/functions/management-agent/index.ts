@@ -488,7 +488,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
     delete tools.decide_intervention;
     delete tools.request_sentinel_remediation;
     delete tools.trigger_readiness;
-    delete tools.annotate_evidence;
+    // annotate_evidence already removed from tool catalogue (2026-05-28).
     for (const k of CREATE_TOOLS) delete tools[k];
     for (const k of LIFECYCLE_TOOLS) delete tools[k];
   } else if (mode === "auto") {
