@@ -160,7 +160,17 @@ export default function PersonaOnboarding() {
           <StepShell title={t("persona.onboarding.step2.title")} hint={t("persona.onboarding.step2.hint")}
                      state={states[2]} t={t}>
             <Label htmlFor="poolId">{t("persona.onboarding.step2.poolLabel")}</Label>
-            <Input id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)} placeholder="cp-..." />
+            {pools.length > 0 ? (
+              <select id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-sm">
+                <option value="">—</option>
+                {pools.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name ?? p.id}{p.status ? ` · ${p.status}` : ""}</option>
+                ))}
+              </select>
+            ) : (
+              <Input id="poolId" value={poolId} onChange={(e) => setPoolId(e.target.value)} placeholder="cp-..." />
+            )}
             <Label htmlFor="budget">{t("persona.onboarding.step2.budgetLabel")}</Label>
             <Input id="budget" type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
             <Button onClick={doStep2} disabled={!poolId || states[2].status === "running"}>
