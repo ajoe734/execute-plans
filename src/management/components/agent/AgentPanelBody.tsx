@@ -248,7 +248,7 @@ export function AgentPanelBody() {
                 <li
                   key={t.id}
                   className={`group flex items-center gap-1.5 px-2 py-1.5 rounded text-xs cursor-pointer hover:bg-accent ${t.id === activeThreadId ? "bg-accent" : ""}`}
-                  onClick={() => setActiveThreadId(t.id)}
+                  onClick={() => selectThread(t.id)}
                 >
                   <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0" />
                   <span className="flex-1 truncate">{t.title}</span>
