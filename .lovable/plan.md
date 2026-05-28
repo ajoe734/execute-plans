@@ -1,42 +1,47 @@
-# 修：Management AI 小幫手 refresh 後對話消失
+## 你說得對 — 這是 UI 誤導
 
-## 問題
+Pack D StateMachine Contract 明定 persona 只能走 `retired`（terminal、可審計），**沒有物理刪除**。但 UI 在兩個地方放了「刪除」按鈕，按了之後呼叫 `deleteEntity('persona', ...)`，BE 沒有對應端點，所以才會出現你看到的「Accepted 但實際刪不掉」。
 
-1. **歷史訊息消失（主因）**：`AgentPanelBody.tsx` line 103 為了避免 loading 卡住，在 thread 切換時立刻 `setInitialMessages([])`，讓 `<ChatWindow key={threadId} initialMessages={[]} />` mount。等 Supabase 回來 25 筆訊息再 `setInitialMessages(msgs)`，但 `useChat({ messages })` 只在 mount 當下吃，後續更新無效 → 畫面永遠停在 empty state。截圖 debug bar `msgs:25 boot:ok` 但右側是 welcome screen，就是這個證據。
+這是 FE 的鍋，不是 BE 鎖死——是按鈕本來就不該存在。
 
-2. **活動 thread 跳走**：`bootstrap()` 永遠選 `list[0]`（最新 updated_at），沒持久化「使用者上次在哪個 thread」，refresh 後可能跳到別的 thread。
+## 修法（純 UI / 文案，不動 business logic）
 
-3. （非 bug，確認過）panel 的開關/位置/大小已經有 `localStorage` 持久化（`useAgentPanel.ts`），這部分不用改。
+### 1. `src/management/pages/PersonaDetail.tsx`
+- 移除 `<Trash2 /> 刪除` 按鈕與 `AlertDialog`、`deleteOpen`、`deleting`、`deleteEntity` import
+- 既有的「Suspend」按鈕旁新增 **「Retire（封存）」** 按鈕：
+  - 走 `HighRiskConfirm` → `runPersonaAction(p.id, 'retire', { memo, confirmToken })`
+  - 文案說明：「封存後 persona 進入 retired 終態，保留審計軌跡 7 年；不可物理刪除。若要替換請使用 Fork from Retired。」
 
-## 修法
+### 2. `src/management/pages/PersonaFleet*`（Registry 列表）
+- 找列表 row action 的「刪除」icon → 換成「Retire」
+- 同樣走 `runPersonaAction(id, 'retire', ...)` + HighRiskConfirm
+- 加狀態 filter：預設隱藏 `retired` / `deprecated`，提供 toggle「顯示已封存」
 
-### A. 修 ChatWindow 永不啟動就空的問題
+### 3. `src/management/components/write/createEntity.ts`
+- `deleteEntity('persona', ...)` 改 throw 明確錯誤：「Persona 不支援刪除，請改用 retire。」避免其他地方誤用
+- 其他 entity（strategy/capital_pool…）若 spec 同樣只能 retire，下一輪再一起收
 
-`src/management/components/agent/AgentPanelBody.tsx`：
+### 4. i18n
+- 新增 `persona.ops.retire` / `persona.ops.retireConfirm` / `registry.filter.showRetired`
+- 移除 `registry.delete.title` / `registry.delete.desc` 的 persona 使用
 
-- 移除 line 103 的 `setInitialMessages([])` 樂觀 unblock。改成在 thread 切換時 `setInitialMessages(null)`（loading 狀態）。
-- fetch 完成後一律 `setInitialMessages(msgs ?? [])`（即使 0 筆也要設定，讓 UI 解鎖）。
-- watchdog 已存在（line 149），保留 5s 卡住的 console.warn；但「真的卡住」時，提供「點此繼續（從空白開始）」按鈕，把 initialMessages 設成 `[]` 由使用者手動 unblock，而不是自動清空。
-- 這樣 `<ChatWindow>` 一定是用「真實歷史」mount，refresh 後對話完整呈現。
+### 5. Agent 工具（management-agent/index.ts）
+- 移除（或不註冊）任何 `delete_persona` 工具引用
+- 新增 `retire_persona`（`needsApproval: true`）→ `POST /bff/actions/persona/{id}/retire`
+- System prompt 加一句：「Persona 為審計實體，僅能 retire，不能 delete。」
 
-### B. 記住上次活動的 thread
+### 6. 文檔
+- `.lovable/audits/persona-no-delete-2026-05-28.md` 一頁說明：spec 鎖、UI 修正、retire vs fork 流程
 
-- 新增 localStorage key：`pantheon.agentPanel.activeThreadId`。
-- `bootstrap()` 改成：先讀 localStorage，若 id 還存在於 `list` 裡，用它當 active；否則 fall back 到 `list[0]`。
-- `setActiveThreadId` 寫一個 wrapper（或 useEffect 監聽）同步寫入 localStorage。
-- `deleteThread` 若刪到的是 active，清掉 localStorage 那筆。
+## 不做的事
+- 不嘗試打通物理刪除（違反 D02 + audit immutability，會破壞 evidence chain）
+- 不動 BE / 不發 migration
+- 不改其他 entity 的 delete UI（本輪只收 persona；其餘下一輪盤點）
 
-### C. （順手）loading 文案小調整
+## 驗收
+1. PersonaDetail 沒有紅色刪除按鈕，改為 Retire
+2. Fleet 列表 row action 同步
+3. 點 Retire → HighRiskConfirm → BFF `POST /bff/actions/persona/{id}/retire` → 列表 refresh 後該 persona 從預設視圖消失（toggle 後可見、state=retired）
+4. Agent 在 confirm/agent 模式下被要求「刪除 persona X」會回覆「persona 僅能 retire」並提工具 `retire_persona`
 
-把 `flex-1 flex flex-col items-center justify-center` 的「載入中…」加上 thread 標題，提示「正在載入『xxx』的歷史訊息…」，讓人知道並不是被洗掉了。
-
-## 驗證
-
-1. 打開小幫手 → 在某 thread 打幾句話 → reload → 同一個 thread 仍 active、25 筆歷史完整出現、debug bar `msgs:25 boot:ok` 且右側顯示對話而不是 empty state。
-2. 刪掉 active thread → 自動切到 list[0]，localStorage 同步更新。
-3. localStorage 被清掉的情境 → 回到「選 list[0]」原行為，沒 regression。
-4. 看一次 console，watchdog 5s 警告在正常路徑下不該觸發。
-
-## 範圍
-
-只動 `src/management/components/agent/AgentPanelBody.tsx`，不碰 BFF、不碰 useAgentPanel、不碰 schema。純 UI / 前端 state 修復。
+要我進入 build 模式按這個計畫做嗎？
