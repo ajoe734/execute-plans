@@ -102,20 +102,21 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
   return { entity, data: { id, ...clean }, persistence: "overlay" };
 }
 
-/** Soft-delete an entity. For persona, tries BFF "archive" then falls back to overlay. */
+/** Soft-delete an entity.
+ *  Persona is an audit entity per Pack D StateMachine Contract (D02) — physical delete is
+ *  forbidden because it would break the audit evidence chain (D26 EvidenceKind.persona +
+ *  v4/auditImmutability assertAppendOnly). Use the `retire` lifecycle action instead:
+ *    runPersonaAction(id, "retire", { memo, confirmToken })
+ *  This is wired into PersonaDetail's "Retire" button via HighRiskConfirm. */
 export async function deleteEntity(
   entity: CreatableEntity,
   id: string,
   opts: CreateEntityOptions & { memo?: string; confirmToken?: string } = {},
 ): Promise<CreatePersistence> {
   if (entity === "persona") {
-    try {
-      await runPersonaAction(id, "archive", { memo: opts.memo, confirmToken: opts.confirmToken }, { idempotencyKey: opts.idempotencyKey });
-      writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
-      return "bff";
-    } catch {
-      // fall through
-    }
+    throw new Error(
+      "Persona is an audit entity and cannot be deleted. Use `runPersonaAction(id, 'retire', ...)` to archive it (terminal state, audit retained 7 years).",
+    );
   }
   writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
   return "overlay";
