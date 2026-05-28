@@ -11,6 +11,7 @@ import { AgoraLayout } from "@/agora/AgoraLayout";
 import { ManagementOverview } from "@/management/pages/Overview";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";
+import PersonaOnboarding from "@/management/pages/PersonaOnboarding";
 import { CapitalPoolDetail } from "@/management/pages/CapitalPoolDetail";
 import { RankingFormulaDetail } from "@/management/pages/RankingFormulaDetail";
 import { RebalanceDetail } from "@/management/pages/RebalanceDetail";
@@ -186,6 +187,7 @@ const App = () => (
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
               <Route path="personas/:id" element={<PersonaDetail />} />
+              <Route path="personas/:id/onboarding" element={<PersonaOnboarding />} />
               <Route path="capital" element={<CapitalPoolsList />} />
               <Route path="capital/:id" element={<CapitalPoolDetail />} />
               <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
