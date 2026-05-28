@@ -672,6 +672,8 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
           <ToolOutput output={part.output} errorText={part.errorText} />
         </ToolContent>
       </Tool>
+      )}
+
 
       {isError && (
         <div className="ml-4 flex items-start gap-2 text-xs bg-destructive/10 border border-destructive/40 rounded-md p-2">
