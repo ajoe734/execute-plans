@@ -45,7 +45,7 @@ const SmartLink = ({ href, target, rel, onClick, children, className, ...rest }:
     } catch { return false; }
   })();
 
-  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleClick = (e: ReactMouseEvent<HTMLAnchorElement>) => {
     onClick?.(e);
     if (e.defaultPrevented) return;
     if (!isInternal || !href) return;
