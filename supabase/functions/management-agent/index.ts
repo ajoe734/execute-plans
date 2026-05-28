@@ -443,6 +443,22 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
         bffCall(`/bff/skills`, { method: "POST", body: JSON.stringify(input), auth }),
     }),
 
+    // Persona lifecycle (retire = terminal, not delete). HIGH RISK.
+    retire_persona: tool({
+      description: "Retire (archive) a persona to the terminal `retired` state. Use this when the user asks to 'delete / remove / 刪除 / 移除 / 砍掉' a persona — physical delete is forbidden by D02 StateMachine Contract because persona is an audit entity. Retired personas remain in the audit log (7-year retention) but are hidden from default listings. HIGH RISK — requires user approval.",
+      inputSchema: z.object({
+        id: z.string().describe("persona id"),
+        memo: z.string().min(8).describe("audit memo (≥8 chars) explaining why retiring"),
+      }),
+      needsApproval: true,
+      execute: async ({ id, memo }) =>
+        bffCall(`/bff/actions/persona/${encodeURIComponent(id)}/retire`, {
+          method: "POST",
+          body: JSON.stringify({ memo }),
+          auth,
+        }),
+    }),
+
     // Draft variant for draft mode — does NOT call backend, just stages prefill.
     propose_create_persona: tool({
       description: "Stage a DRAFT persona create payload. Does NOT call backend — user will review and submit from /management/personas.",
@@ -467,6 +483,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
     "create_persona", "create_strategy", "create_capital_pool", "create_rebalance",
     "create_deployment", "create_ranking_formula", "create_research_experiment", "create_skill",
   ] as const;
+  const LIFECYCLE_TOOLS = ["retire_persona"] as const;
 
   if (mode === "draft") {
     delete tools.decide_inbox_item;
