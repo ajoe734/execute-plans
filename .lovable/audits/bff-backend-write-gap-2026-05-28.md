@@ -1,89 +1,84 @@
-# BFF Backend Write-Path Gap — 2026-05-28
+# BFF Backend Write-Path Gap — 2026-05-28 (rev 2)
 
-## Scope correction
+> **Update 2026-05-28 (rev 2):** Earlier draft of this file said "all batches OPEN /
+> not verified". That was wrong. After running `scripts/probe-bff-write-paths.mjs`
+> against the live dev BFF, **23 of 31 write endpoints are implemented**.
+> See `.lovable/audits/bff-backend-write-probe-2026-05-28.md` for the raw probe.
 
-`bff-backend-gap-2026-05-25-delta-v5.md` 宣告 "ALL CLEAR" 但**僅覆蓋 GET / read-path**：
+## Headline
 
-- CORS preflight ✅
-- error envelope canonical ✅
-- §8 PM-Live 14 + §9 PM-12 + paths.mgmt* 共 21/21 GET=200 ✅
-- `GET /bff/command-confirmations/{token}` 200 ✅
-
-**沒有任何 write 端點被 BE re-probe**。先前 mem index 寫「BFF handoff = COMPLETE」是 read-only 範圍，已撤回。
-
-## Write batches still OPEN
-
-對照 `.lovable/feedback/2026-05-07-final/Pantheon_BFF_Backend_Handoff.md`：
-
-### P0-D — Entity create (status: ❌ not verified)
-
-| Path | Method | Spec | Probe |
+| Batch | Total | ✅ implemented | ❌ NOT implemented |
 |---|---|---|---|
-| /bff/strategies | POST | OpenAPI §4 | ⬜ |
-| /bff/personas | POST | OpenAPI §4 | ⬜ |
-| /bff/capital-pools | POST | OpenAPI §4 | ⬜ |
-| /bff/rebalances | POST | OpenAPI §4 | ⬜ |
-| /bff/deployments | POST | OpenAPI §4 | ⬜ |
-| /bff/runtimes | POST | OpenAPI §4 | ⬜ |
-| /bff/ranking-formulas | POST | OpenAPI §4 | ⬜ |
-| /bff/research-experiments | POST | OpenAPI §4 | ⬜ |
-| /bff/skills | POST | OpenAPI §4 | ⬜ |
+| P0-D Entity create | 9 | 8 | 1 (`/bff/runtimes`) |
+| P1-A Action commands | 7 | 6 | 1 (`/bff/command-confirmations/{token}/confirm`) |
+| P1-C v5 Sentinel + HIQ writes | 8 | 7 | 1 (`/bff/v5/interventions/batch-decide`) |
+| P1-E Agora writes | 7 | 2 | 5 |
+| **Total** | **31** | **23** | **8** |
 
-### P1-A — Action commands (status: ❌ not verified)
+Probe classification: any 2xx / 4xx-typed envelope counts as "implemented".
+404 / 405 / 501 counts as "NOT implemented (route missing)".
 
-| Path pattern | Method | Spec | Probe |
-|---|---|---|---|
-| /bff/actions/strategies/{id}/promote_live | POST | OpenAPI §6 ActionCommand | ⬜ |
-| /bff/actions/strategies/{id}/pause | POST | OpenAPI §6 | ⬜ |
-| /bff/actions/strategies/{id}/throttle | POST | OpenAPI §6 | ⬜ |
-| /bff/actions/strategies/{id}/archive | POST | OpenAPI §6 | ⬜ |
-| /bff/actions/strategies/{id}/edit | POST | OpenAPI §6 | ⬜ |
-| /bff/approvals/{id}/decide | POST | OpenAPI §6 | ⬜ |
-| /bff/command-confirmations/{token}/confirm | POST | OpenAPI §6 | ⬜ |
+## Still OPEN — 8 endpoints
 
-### P1-C — v5 Sentinel + HIQ writes (status: ❌ not verified)
+```
+P0-D /bff/runtimes                                        405
+P1-A /bff/command-confirmations/{token}/confirm            404
+P1-C /bff/v5/interventions/batch-decide                    405
+P1-E /bff/agora/signals                                    405
+P1-E /bff/agora/feedback                                   404
+P1-E /bff/agora/inbox/{id}/triage                          404
+P1-E /bff/agora/skill-coaching                             404
+P1-E /bff/agora/postmortems                                405
+```
 
-| Path | Method | Spec | Probe |
-|---|---|---|---|
-| /bff/v5/sentinel/findings/{id}/status | POST | v5 SA §3 | ⬜ |
-| /bff/v5/sentinel/remediation/build | POST | v5 SA §3 | ⬜ |
-| /bff/v5/interventions/{id}/claim | POST | v5 SA §4 | ⬜ |
-| /bff/v5/interventions/{id}/release | POST | v5 SA §4 | ⬜ |
-| /bff/v5/interventions/{id}/escalate | POST | v5 SA §4 | ⬜ |
-| /bff/v5/interventions/{id}/decide | POST | v5 SA §4 | ⬜ |
-| /bff/v5/interventions/{id}/two-man-sign | POST | v5 SA §4 | ⬜ |
-| /bff/v5/interventions/batch-decide | POST | v5 SA §4 | ⬜ |
+These are the only routes the FE must keep `withWriteFallback` degrading for. Everything else
+should go straight to BE in the happy path.
 
-**⚠️ Spec 沒有 `POST /bff/v5/interventions` (create)。** Interventions 由 Sentinel `remediation/build` 自動生成。先前 `management-agent` 的 `create_intervention` 工具會 404，已移除。
+## What's actually ready (selected highlights)
 
-### P1-E — Agora writes (status: ❌ not verified)
+- All 7 implemented P0-D create endpoints respond 201 with a real entity id:
+  `/bff/personas`, `/bff/strategies`, `/bff/capital-pools`, `/bff/deployments`,
+  `/bff/ranking-formulas`, `/bff/research-experiments`, `/bff/skills`.
+  `/bff/rebalances` returns 422 "capital_pool_id is required" — that's a
+  validation envelope, route exists, agent tool now requires the field.
+- All 5 strategy action commands return typed 422 ("Unsupported action entity type"
+  with `strategy-dev`), proving routing + envelope are wired. Real strategy ids
+  should pass.
+- `/bff/approvals/{id}/decide` returns 403 (auth/role rejected) — route exists,
+  reviewer role check works.
+- All 7 implemented v5 endpoints accept commands (202 / 403).
+- `/bff/agora/journal` and `/bff/agora/ask/sessions` work (201).
 
-| Path | Method | Spec | Probe |
-|---|---|---|---|
-| /bff/agora/signals | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/feedback | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/inbox/{id}/triage | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/journal | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/skill-coaching | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/postmortems | POST | OpenAPI §10 | ⬜ |
-| /bff/agora/ask/sessions | POST | OpenAPI §10 | ⬜ |
+## FE mitigation (LANDED 2026-05-28)
 
-## FE mitigation (已 LANDED 2026-05-28)
+1. **`src/lib/bff-v1/writeFallback.ts`** — `withWriteFallback<T>(fn, { entity, payload })`:
+   - Run BE write.
+   - On `404 / 405 / 501` or typed code `NOT_IMPLEMENTED / RESOURCE_NOT_FOUND / METHOD_NOT_ALLOWED / ROUTE_NOT_FOUND`: stash in `writeOverlay` (30min TTL) + `liveStatus.recordWriteDegraded(path)` and return `{ degraded: true }`.
+   - Other errors: propagate typed envelope unchanged.
 
-1. **`src/lib/bff-v1/writeFallback.ts`** — `withWriteFallback<T>(fn, { entity, payload })`：
-   - 執行 BE write
-   - 若回 `404 / 501 / METHOD_NOT_ALLOWED` 或 code = `NOT_IMPLEMENTED / RESOURCE_NOT_FOUND`：寫 `writeOverlay`（30min TTL）+ `liveStatus.recordWriteDegraded(path)` + emit realtime envelope 模擬成功
-   - 其他 error：正常傳遞 typed error envelope
+2. **`LiveStatusBanner`** writeDegraded strip: shows "BE write endpoint not live — local draft only (30min TTL)" + endpoint list popover.
 
-2. **`LiveStatusBanner`** 加 `writeDegraded` 紅色 strip：顯示「BE write endpoint 未上線 — 本地 draft only (30min TTL)」+ 過去 5min fallback 次數 + 端點清單 popover。
+3. **`src/management/components/write/createEntity.ts`** — `createPersona()` failure path now mirrors other entities: NOT_IMPLEMENTED-ish error → overlay write + `persistence: 'overlay' + degraded: true` + typed error envelope returned to drawer. Real errors still throw so the drawer can show the envelope.
 
-3. **`supabase/functions/management-agent/index.ts`**：
-   - **移除** `create_intervention`（spec 不存在）
-   - **新增** `decide_intervention(id, decision, memo)` → `POST /bff/v5/interventions/{id}/decide`
-   - **新增** `request_sentinel_remediation(findingId, plan)` → `POST /bff/v5/sentinel/remediation/build`
-   - prompt 更新：建立 intervention = Sentinel finding → remediation/build → 自動生成
+4. **`supabase/functions/management-agent/index.ts`**:
+   - **Removed** `create_intervention` (spec does not define such an endpoint).
+   - **Added** `decide_intervention(id, decision, memo)` → `POST /bff/v5/interventions/{id}/decide`.
+   - **Added** `request_sentinel_remediation(findingId, plan)` → `POST /bff/v5/sentinel/remediation/build`.
+   - **Added 8 entity-create tools** (all `needsApproval: true`) for the BE-verified P0-D routes: `create_persona`, `create_strategy`, `create_capital_pool`, `create_rebalance` (required `capital_pool_id`), `create_deployment`, `create_ranking_formula`, `create_research_experiment`, `create_skill`. `/bff/runtimes` excluded (405).
+   - **Added** `query_persona_fleet` → `GET /bff/management/persona-fleet`, the correct registry endpoint to verify newly created personas. `query_persona_league` keeps its existing route but the prompt now explains it's a ranking snapshot that may lag.
+   - **Added** `propose_create_persona` draft variant for draft mode.
+   - Prompt rewritten: "create N entities → call create_X N times, do NOT use create_ask, do NOT navigate one page per entity".
+
+5. **`src/management/components/agent/AgentPanelBody.tsx`** — ToolBlock has an `ACTIVE_TOOL_NAMES` whitelist. Tool-call parts in chat history whose `toolName` is not in the current registry (e.g. legacy `create_intervention`) render as "此工具已下線（歷史紀錄）" muted notice instead of pending approve/reject cards. One-shot fix, no DB writes.
+
+## Acceptance probes
+
+- `scripts/probe-bff-write-paths.mjs` → 31 endpoints, classification → `bff-backend-write-probe-2026-05-28.md`.
+- `scripts/probe-create-persona-then-fleet.mjs` → POST /bff/personas → GET /bff/management/persona-fleet → verifies new id appears in registry → `bff-list-after-write-2026-05-28.md`.
+
+If probe #2 returns "WRITE OK, FLEET STALE", that pinpoints a BE projection bug, **not** a write-path bug.
 
 ## Next steps
 
-- 跑 `scripts/probe-bff-write-paths.mjs` 拿真實 status code → `.lovable/audits/bff-backend-write-probe-2026-05-28.md`
-- 把結果回灌給 BE owner，明確區分「已實作」/「未實作」/「precondition 失敗但已上線」
+- Hand the 8 open routes to BE owner with this audit + the raw probe.
+- Re-run both probes after each BE deploy; flip rows green when 200/201/202 lands.
