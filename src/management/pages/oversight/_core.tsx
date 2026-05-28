@@ -201,6 +201,15 @@ export const PersonaFleetPage = () => {
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-right">
+                    {!retired && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={`/management/personas/${encodeURIComponent(r.personaId)}/onboarding`}>
+                          {t("mgmt.fleet.onboard")}
+                        </Link>
+                      </Button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
