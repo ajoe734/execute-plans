@@ -478,6 +478,20 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
         note: "Draft staged. Open the Personas page to review and submit.",
       }),
     }),
+
+    // Persona onboarding wizard navigation (2026-05-28). Read-only — navigates only.
+    start_persona_onboarding: tool({
+      description: "Open the Persona Onboarding Wizard for a given persona id. Use when the user asks to '啟動 persona / 讓 persona 跑起來 / get persona running / onboard persona'. Wizard runs the 5-step orchestration (lifecycle → binding → plan → approval → runtime) per PERSONA_ONBOARDING_WIZARD_SPEC.md. This tool only navigates; the user drives each step.",
+      inputSchema: z.object({
+        personaId: z.string().describe("persona id (e.g. persona-dev)"),
+        step: z.number().int().min(1).max(5).optional(),
+      }),
+      execute: async ({ personaId, step }) => ({
+        ok: true, kind: "navigate",
+        href: `/management/personas/${encodeURIComponent(personaId)}/onboarding${step ? `?step=${step}` : ""}`,
+        note: "Opening Persona Onboarding Wizard.",
+      }),
+    }),
   };
 
   const CREATE_TOOLS = [
