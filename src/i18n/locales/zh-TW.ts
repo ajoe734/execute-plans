@@ -1831,6 +1831,14 @@ export default {
       humanNeeded: "需要人類",
       yes: "是",
       no: "否",
+      state: "狀態",
+      filter: {
+        showRetiredFmt: "顯示已封存 ({{count}})",
+        hideRetired: "隱藏已封存",
+        showDevProbeFmt: "顯示測試探針 ({{count}})",
+        hideDevProbe: "隱藏測試探針",
+        allFilteredHint: "目前篩選下沒有 persona。打開上方按鈕顯示已封存或測試探針。",
+      },
     },
     inbox: {
       title: "人類收件匣",
