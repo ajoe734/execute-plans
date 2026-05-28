@@ -65,7 +65,14 @@ export default function PersonaOnboarding() {
 
   const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ?? false;
 
+  const [pools, setPools] = useState<CapitalPoolOption[]>([]);
+
   useEffect(() => { if (id) getPersona(id).then(setPersona).catch(() => undefined); }, [id]);
+  useEffect(() => {
+    lists.capitalPools()
+      .then((env) => setPools((env.items ?? []) as CapitalPoolOption[]))
+      .catch(() => setPools([]));
+  }, []);
 
   const update = (n: StepNum, s: StepState) => setStates((p) => ({ ...p, [n]: s }));
 
