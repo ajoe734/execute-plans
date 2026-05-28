@@ -715,15 +715,7 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
         </div>
       )}
 
-      {isAuto && completed && !isError && (
-        <div className="ml-4 flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 rounded-md p-2">
-          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-          <span className="flex-1">
-            ✓ 已完成 <span className="font-medium">{toolName}</span>
-            {output?.stubbed ? "（後端尚未上線，已暫存）" : ""}
-          </span>
-        </div>
-      )}
+      {/* auto-mode success banner removed with annotate_evidence (2026-05-28) */}
 
       {needsApproval && (
         <div className="ml-4 flex items-center gap-2 text-xs bg-muted/40 border rounded-md p-2">
