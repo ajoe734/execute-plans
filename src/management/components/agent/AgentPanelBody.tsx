@@ -592,6 +592,21 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   );
 }
 
+// Active tools currently registered in supabase/functions/management-agent buildTools().
+// Tool-call parts from older messages whose toolName is NOT in this set are
+// rendered as "stale (historical record)" instead of pending-approval cards.
+const ACTIVE_TOOL_NAMES = new Set<string>([
+  "navigate",
+  "query_cockpit", "query_persona_league", "query_persona_fleet",
+  "query_portfolio_book", "query_trading_pulse", "query_human_inbox", "query_alerts",
+  "annotate_evidence",
+  "propose_inbox_decision", "propose_ask", "propose_create_persona",
+  "decide_inbox_item", "create_ask", "decide_intervention",
+  "request_sentinel_remediation", "trigger_readiness",
+  "create_persona", "create_strategy", "create_capital_pool", "create_rebalance",
+  "create_deployment", "create_ranking_formula", "create_research_experiment", "create_skill",
+]);
+
 function ToolBlock({ part, addToolResult, resolveApproval }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
@@ -602,9 +617,11 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
 
-  const needsApproval = part.state === "approval-requested" && !!part.approval?.id;
+  const isStale = !ACTIVE_TOOL_NAMES.has(toolName);
+  const needsApproval = !isStale && part.state === "approval-requested" && !!part.approval?.id;
 
   const isDraft = toolName.startsWith("propose_");
+
   const isAuto = toolName === "annotate_evidence";
   const completed = part.state === "output-available";
   const output = part.output as {
