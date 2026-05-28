@@ -87,25 +87,78 @@ interface FleetRow {
   personaId: string; owner: string; ooda: "Observe" | "Orient" | "Decide" | "Act";
   autonomy: "manual" | "supervised" | "autonomous"; perfDelta: number; humanNeeded: boolean;
   lastMutation: string;
+  /** Lifecycle state from Pack D D02. Optional for backward-compat. */
+  state?: "draft" | "active" | "paused" | "deprecated" | "retired" | "archived" | string;
+  /** Free-form tags (e.g. "dev-probe", "test"). */
+  tags?: string[];
 }
 
 const FLEET: FleetRow[] = [
-  { personaId: "alpha-trader", owner: "research-1", ooda: "Decide", autonomy: "supervised", perfDelta: +0.024, humanNeeded: true, lastMutation: "2026-05-19" },
-  { personaId: "risk-guard",   owner: "research-1", ooda: "Observe", autonomy: "autonomous", perfDelta: +0.005, humanNeeded: false, lastMutation: "2026-05-12" },
-  { personaId: "fx-scout",     owner: "trading-1", ooda: "Orient",  autonomy: "supervised", perfDelta: -0.011, humanNeeded: false, lastMutation: "2026-05-17" },
-  { personaId: "capital-steward", owner: "capital-1", ooda: "Act", autonomy: "manual",     perfDelta: +0.002, humanNeeded: true,  lastMutation: "2026-05-15" },
+  { personaId: "alpha-trader", owner: "research-1", ooda: "Decide", autonomy: "supervised", perfDelta: +0.024, humanNeeded: true, lastMutation: "2026-05-19", state: "active" },
+  { personaId: "risk-guard",   owner: "research-1", ooda: "Observe", autonomy: "autonomous", perfDelta: +0.005, humanNeeded: false, lastMutation: "2026-05-12", state: "active" },
+  { personaId: "fx-scout",     owner: "trading-1", ooda: "Orient",  autonomy: "supervised", perfDelta: -0.011, humanNeeded: false, lastMutation: "2026-05-17", state: "active" },
+  { personaId: "capital-steward", owner: "capital-1", ooda: "Act", autonomy: "manual",     perfDelta: +0.002, humanNeeded: true,  lastMutation: "2026-05-15", state: "active" },
 ];
+
+const HIDDEN_STATES = new Set(["retired", "deprecated", "archived"]);
+
+function isDevProbe(r: FleetRow): boolean {
+  if (r.tags?.some((t) => t === "dev-probe" || t === "test")) return true;
+  return /^dev-probe/i.test(r.personaId);
+}
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const { data } = useV5Live(() => mgmt.personaFleet.get<FleetRow>(() => FLEET), []);
   const rows = data ?? FLEET;
+
+  const [showRetired, setShowRetired] = useState(false);
+  const [showDevProbe, setShowDevProbe] = useState(false);
+
+  const filtered = useMemo(() => rows.filter((r) => {
+    if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
+    if (!showDevProbe && isDevProbe(r)) return false;
+    return true;
+  }), [rows, showRetired, showDevProbe]);
+
+  const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
+  const hiddenProbe = rows.filter(isDevProbe).length;
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.fleet.title")}>
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <Button
+            size="sm"
+            variant={showRetired ? "default" : "outline"}
+            onClick={() => setShowRetired((v) => !v)}
+            aria-pressed={showRetired}
+          >
+            {showRetired
+              ? t("mgmt.fleet.filter.hideRetired")
+              : t("mgmt.fleet.filter.showRetiredFmt", { count: hiddenRetired })}
+          </Button>
+          <Button
+            size="sm"
+            variant={showDevProbe ? "default" : "outline"}
+            onClick={() => setShowDevProbe((v) => !v)}
+            aria-pressed={showDevProbe}
+          >
+            {showDevProbe
+              ? t("mgmt.fleet.filter.hideDevProbe")
+              : t("mgmt.fleet.filter.showDevProbeFmt", { count: hiddenProbe })}
+          </Button>
+        </div>
       </header>
+      {filtered.length === 0 && rows.length > 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("mgmt.fleet.filter.allFilteredHint")}
+        </Card>
+      )}
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -114,27 +167,42 @@ export const PersonaFleetPage = () => {
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
+              <th className="px-3 py-2">{t("mgmt.fleet.state")}</th>
             </tr>
           </thead>
 
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.personaId} className="border-b border-border/50">
-                <td className="px-3 py-2 font-mono">{r.personaId}</td>
-                <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
-                <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
-                <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
-                <td className={"px-3 py-2 " + (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
-                  {(r.perfDelta * 100).toFixed(2)}%
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">{r.lastMutation}</td>
-                <td className="px-3 py-2">
-                  {r.humanNeeded
-                    ? <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">{t("mgmt.fleet.yes")}</Badge>
-                    : <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>}
-                </td>
-              </tr>
-            ))}
+            {filtered.map((r) => {
+              const retired = r.state && HIDDEN_STATES.has(r.state);
+              const probe = isDevProbe(r);
+              return (
+                <tr key={r.personaId} className={"border-b border-border/50 " + (retired ? "opacity-60" : "")}>
+                  <td className="px-3 py-2 font-mono">{r.personaId}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
+                  <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
+                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
+                  <td className={"px-3 py-2 " + (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
+                    {(r.perfDelta * 100).toFixed(2)}%
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.lastMutation}</td>
+                  <td className="px-3 py-2">
+                    {r.humanNeeded
+                      ? <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">{t("mgmt.fleet.yes")}</Badge>
+                      : <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.state && (
+                      <Badge variant="outline" className={retired ? "bg-muted text-muted-foreground" : ""}>
+                        {r.state}
+                      </Badge>
+                    )}
+                    {probe && (
+                      <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>
