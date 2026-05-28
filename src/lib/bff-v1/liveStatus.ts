@@ -29,7 +29,11 @@ export interface LiveStatus {
   lastRequestId?: string;
   /** Planner §E7 — last X-Correlation-Id from the server. */
   lastCorrelationId?: string;
+  /** 2026-05-28 — recent write fallback events (BE write endpoint not live). */
+  writeDegraded?: Array<{ endpoint: string; reason: string; at: number }>;
 }
+
+const WRITE_DEGRADED_WINDOW_MS = 5 * 60 * 1000;
 
 function readEnv(): { mode: BffMode; baseUrl: string } {
   try {
@@ -100,6 +104,13 @@ export const liveStatus = {
     if (!requestId && !correlationId) return;
     if (state.lastRequestId === requestId && state.lastCorrelationId === correlationId) return;
     state = { ...state, lastRequestId: requestId ?? state.lastRequestId, lastCorrelationId: correlationId ?? state.lastCorrelationId };
+    notify();
+  },
+  /** 2026-05-28 — record a write-path fallback (BE 404/501/NOT_IMPLEMENTED). */
+  recordWriteDegraded(endpoint: string, reason: string): void {
+    const now = Date.now();
+    const prior = (state.writeDegraded ?? []).filter((e) => now - e.at < WRITE_DEGRADED_WINDOW_MS);
+    state = { ...state, writeDegraded: [...prior, { endpoint, reason, at: now }] };
     notify();
   },
   /** Test-only reset. */
