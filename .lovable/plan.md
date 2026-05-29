@@ -1,104 +1,98 @@
-## Persona Onboarding Wizard — Implementation Plan
+## 目標
 
-Source: `docs/04/pantheon_persona_onboarding_wizard_2026-05-28/PERSONA_ONBOARDING_WIZARD_SPEC.md` (L4, 2026-05-28).
+把目前散在多個 audit / probe 檔案裡的「BE 還沒實作 / FE 只能 overlay 過渡」endpoint 全部收斂成一份**正式對 BE 團隊的需求規格書**，讓後端工程師可以直接 pick up 開票實作。
 
-Core idea: BFF stays atomic; FE orchestrates the 5 lifecycle stages (Persona → Binding → Plan → Approval → Runtime) and surfaces "what's missing / next step" everywhere a persona is shown.
+## 交付物
 
-### Pre-flight (mandatory per spec §4.1, §12)
+單一檔案：`.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md`
 
-1. **Smoke-probe 8 write endpoints** on lupin dev and produce `.lovable/audits/persona-onboarding-endpoint-probe-2026-05-28.md` listing status code + response shape for each. Required before wizard ships:
-   - `POST /bff/personas/{id}/actions/AdvanceLifecycle`
-   - `POST /bff/capital-pools` + `POST /bff/capital-pools/{id}/actions/ApprovePool`
-   - `POST /api/v1/bindings`
-   - `POST /api/v1/deployment-plans`
-   - `POST /api/v1/approval-decisions`
-   - `POST /bff/runtimes/{id}/actions/StartRuntime`
-   - `GET /api/v1/operator/persona-management/{id}` (verify `data.health` once BFF F4 lands)
+（同時更新 `mem://index.md` 把它列為 BE 需求 SoT，並在 `.lovable/audits/INDEX.md` 加索引）
 
-   Any endpoint still 404/stub → wizard step wraps in `withWriteFallback` (writeOverlay degraded banner, same pattern as the 2026-05-28 write-gap audit).
+## 規格書結構
 
-### 1. i18n — health.reasons → zh-TW
+### 0. Meta
+- 版本 / 日期 / 作者 (FE) / 對象 (BE owner)
+- 上游來源：Pack D BFF API Contract、Final OpenAPI 2026-05-07、Persona Onboarding Wizard Spec 2026-05-28
+- 下游證據：`bff-backend-write-probe-2026-05-28.md`、`persona-onboarding-endpoint-probe-2026-05-28.md`
+- Probe 環境：`pantheon-lupin-dev-bff.34.81.75.241.sslip.io`、bearer `pantheon-dev-browser:reviewer`、`X-Dry-Run: 1`
 
-Add 6 keys (en-US + zh-TW) per spec §5: `persona.health.lifecycle_not_active`, `no_runtime_binding`, `active_incident`, `drawdown_threshold`, `negative_pnl`, `runtime_status_attention`, plus severity + "next step" labels and wizard step titles.
+### 1. Headline 表（一眼看完）
+| Group | Total | Open | Severity |
+|---|---|---|---|
+| P0-D Entity create | 9 | 1 | P1 |
+| P1-A Action commands | 7 | 1 | P0 (HighRiskConfirm 阻斷) |
+| P1-C v5 writes | 8 | 1 | P2 |
+| P1-E Agora writes | 7 | 5 | P1 |
+| Persona Onboarding (lifecycle/binding/plan/approval/runtime) | 8 | 7 | **P0** |
+| Sentinel rule coverage | — | — | P2 (rule engine) |
+| **Total open endpoints** | **31 + 8** | **15** | — |
 
-### 2. Persona readiness model (shared)
+### 2. 每個 open endpoint 的需求卡（每筆統一格式）
 
-New `src/management/lib/personaReadiness.ts`:
-- `PersonaStage = "lifecycle" | "binding" | "plan" | "approval" | "runtime"`
-- `derivePersonaReadiness(pm)` → `{ stages: {key, done, blockedReason?}[], completed: 0..5, nextStage, healthStatus, reasons }` from `persona-management/{id}` shape (`data.persona.lifecycle_state`, `data.bindings`, `data.deploymentPlans`, `data.approvals`, `data.runtimeBindings`, `data.health`). Tolerant of missing F4 fields — degrade gracefully.
+每張卡固定欄位：
+- **Route + Method**
+- **目前 probe 觀察**（status code、envelope 片段）
+- **FE 已對接的呼叫位置**（檔案 + 函式）
+- **Spec 出處**（Pack D 章節 / OpenAPI operationId / Wizard Spec §）
+- **Request schema**（headers: Authorization / Idempotency-Key / X-Correlation-Id / X-BFF-Api-Version；body 欄位含型別、必填、範例）
+- **Response schema**（成功 2xx envelope、典型 4xx：401/403/404/409/422、ErrorCode 走 Pack D 26-enum）
+- **State machine 副作用**（哪個 entity 從哪個 state → 哪個 state、需要發哪個 SSE event）
+- **Audit chain 要求**（D26 EvidenceKind、是否寫 audit-chain hash）
+- **Permission / Role 要求**（Pack D Permission Contract）
+- **Acceptance criteria**（probe 重跑要看到什麼 status / shape）
+- **FE 移除 fallback 的判定條件**
 
-### 3. PersonaReadinessCard (spec §6)
+涵蓋全部 15 條：
 
-New `src/management/components/persona/PersonaReadinessCard.tsx`:
-- Header: name, lifecycle chip, health chip (`healthy`/`degraded`/`critical`, design-token colors).
-- 5 fixed checklist rows with `●/○` + i18n label + per-row "next step" button when blocked.
-- `reasons[]` expandable Radix tooltip with zh-TW text.
-- "Start Onboarding Wizard" primary button; "Advanced (manual)" secondary.
-- Happy-path variant (5/5) shows runtime summary + telemetry line.
+**P0 — Persona Onboarding (Wizard 4.1)**
+1. `POST /bff/personas/{id}/actions/AdvanceLifecycle`（目前 410 deprecated，需確認新路徑或恢復）
+2. `POST /bff/capital-pools/{id}/actions/ApprovePool`（410 deprecated 同上）
+3. `POST /api/v1/bindings`（405）
+4. `POST /api/v1/deployment-plans`（405）
+5. `POST /api/v1/approval-decisions`（405）
+6. `POST /bff/runtimes/{id}/actions/StartRuntime`（410 deprecated）
+7. `GET /api/v1/operator/persona-management/{id}` 含 `data.health`（404 / F4 缺欄位）
+8. （順帶）`/bff/personas/{id}/actions/AdvanceLifecycle` 等 deprecated 路徑的「新路徑」需 BE 文件化
 
-Mount in: `PersonaDetail.tsx` (top section, replaces ad-hoc status block) and `oversight/_core.tsx` Persona Fleet row expansion.
+**P0 — Action confirm**
+9. `POST /bff/command-confirmations/{token}/confirm`（404，阻斷所有 HighRiskConfirm 二段式確認）
 
-### 4. Onboarding Wizard (spec §7)
+**P1 — Entity create**
+10. `POST /bff/runtimes`（405）
 
-Route: `/management/personas/:id/onboarding` (in-app navigation via existing SmartLink/navigate tool — no new tab).
+**P1 — Agora**
+11. `POST /bff/agora/signals`（405）
+12. `POST /bff/agora/feedback`（404）
+13. `POST /bff/agora/inbox/{id}/triage`（404）
+14. `POST /bff/agora/skill-coaching`（404）
+15. `POST /bff/agora/postmortems`（405）
 
-New files:
-- `src/management/pages/PersonaOnboarding.tsx` — shell + step routing + `LifecycleStepper` reuse.
-- `src/management/components/persona/onboarding/Step1Lifecycle.tsx` … `Step5Runtime.tsx`.
-- `src/management/lib/personaOnboardingClient.ts` — thin wrappers over `runPersonaAction`, `createCapitalPool`, `createBinding`, `createDeploymentPlan`, `submitApproval`, `startRuntime`. Each uses idempotency key + correlation id and surfaces canonical 26-enum ErrorCode.
+**P2 — v5 batch**
+16. `POST /bff/v5/interventions/batch-decide`（405）
 
-Per-step behavior follows spec §7.2–§7.6 exactly:
-- Step 1: AdvanceLifecycle to `paper_owner` with confirm_token (HighRiskConfirm reuse).
-- Step 2: choose/create+approve capital pool, then create binding (paper scope, paper_owner role).
-- Step 3: pick approved artifact (filtered), create deployment plan (paper, locked).
-- Step 4: submit approval. **dev auto-approve toggle** with prominent warning banner; in non-dev the toggle is hidden and a reviewer queue link is shown.
-- Step 5: StartRuntime; on success refetch `persona-management/{id}` and redirect to runtime detail.
+### 3. 跨 endpoint 共通要求
+- 26-code ErrorCode envelope 必須回 `{ error: { code, i18nKey, message, retryable, userActionable, details }, meta: { correlationId, … } }`
+- Idempotency-Key replay 規則（24h 內重放回原 response）
+- `X-Dry-Run: 1` 行為（驗證但不寫，回 200 + `meta.dryRun: true`）
+- Deprecated route 退場政策：要嘛留 alias、要嘛在 OpenAPI 標明 replacement 路徑
+- SSE channel 對映（`ENTITY_TO_SSE_CHANNEL`）需同步更新
 
-State persisted in URL (`?step=N`) so reload survives. No auto-rollback (spec §9.2); on failure show ErrorCode, retry, or "switch to advanced mode" link.
+### 4. Sentinel rule coverage 缺口（獨立節）
+- 13 personas `degraded(85)` + reasons `persona_lifecycle_not_active` / `no_runtime_binding` → 0 findings
+- BE rule engine 需新增覆蓋規則（FE 無法補）
 
-### 5. Advanced mode (spec §8)
+### 5. 驗收流程
+- BE 每批 deploy 後跑 `scripts/probe-bff-write-paths.mjs` + `scripts/probe-persona-onboarding-endpoints.mjs`
+- 兩支 probe 全綠 → FE 撤掉對應 `withWriteFallback`、LiveStatusBanner degraded strip
+- 加一張 CI gate matrix（routes × status code 期望）
 
-PersonaDetail keeps existing per-section editors (lifecycle / bindings / plans / approvals / runtimes). Each section gets a "Create / Advance" button that runs the same atomic call as the wizard. After any single-step success, refetch `persona-management/{id}` so readiness card updates.
+### 6. 不在本規格範圍
+- 任何 FE 修改（FE 已 land overlay fallback）
+- 新 entity / 新 spec 設計（只 cover 對齊既有 spec 的缺口）
 
-Permission gating via existing `usePermissions`:
-- wizard: `persona_operator`+
-- lifecycle/runtime advance: respective roles
-- live mode: `live_owner_approver` + MFA (already enforced by HighRiskConfirm two-man path).
+## 範圍邊界
+- 純文件，不動程式碼
+- 不重新 probe（直接引用 2026-05-28 兩份 probe 證據）
+- 不更動 spec/v4 或 spec/current，只在 `.lovable/specs/be-requirements/` 下新增
 
-### 6. Dev-only utilities (spec §9.3)
-
-"Reset persona to draft" button in PersonaDetail, **hidden unless `import.meta.env.DEV` or env flag `VITE_PERSONA_DEV_RESET=1`**. Sequences: delete runtime bindings → delete plans → delete bindings → AdvanceLifecycle back to `draft`. Each step uses writeOverlay fallback if endpoint 404.
-
-### 7. Agent integration
-
-Add tools to `supabase/functions/management-agent/index.ts`: `start_persona_onboarding(personaId)` (returns navigate intent to wizard route), `query_persona_readiness(personaId)`. System prompt: when user says "啟動 persona" / "讓 persona 跑起來", prefer wizard navigation over manual tool chains. Whitelist new tools in `AgentPanelBody`.
-
-### 8. Audit + memory
-
-- `.lovable/audits/persona-onboarding-wizard-2026-05-28.md` — implementation log + endpoint probe results + open items from spec §11.
-- Memory file `mem://features/persona-onboarding-wizard` referenced from index Core.
-
-### Out of scope
-
-- BFF F4 `data.health` surface (BE side; FE degrades gracefully until live).
-- Capital-pool / persona lifecycle action_id enum cleanup (spec §11 open question — BE side).
-- New i18n module split (spec §11.5 — kept in existing locale files).
-
-### Acceptance (spec §12 DoD)
-
-- [ ] 8-endpoint smoke audit committed
-- [ ] Every persona card renders 5-step checklist + health chip
-- [ ] Reasons tooltip in zh-TW
-- [ ] Wizard completes draft→active on lupin dev (with overlay fallback where BE missing)
-- [ ] ErrorCode + next-step button on failures
-- [ ] Advanced mode independently usable
-- [ ] dev auto-approve banner visible in step 4
-- [ ] `persona-management/{id}.health` matches `persona-fleet[].health` once F4 lands
-
-### Sequencing
-
-1. Smoke probe + audit (read-only, no FE changes).
-2. i18n + readiness model + PersonaReadinessCard wired into PersonaDetail/Fleet.
-3. Wizard route + 5 steps behind feature flag `VITE_PERSONA_ONBOARDING=1`.
-4. Advanced mode polish + dev reset.
-5. Agent tools + memory + final audit + flag flip.
+按下 Implement 後就直接產出該規格書。
