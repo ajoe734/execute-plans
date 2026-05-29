@@ -38,7 +38,16 @@ spec-gap-YYYY-MM-DD-{流水序}-summary.csv
 | `bff-backend-gap-2026-05-24-delta` | 2026-05-24 | 第二輪 live probe（含 detail-by-id 真實 ID） | ~62 / 87 | 26 + 1 schema 偏差 + CORS | SUPERSEDED by delta-v3 |
 | `bff-backend-gap-2026-05-25-delta-v3` | 2026-05-25 AM | 第三輪 — BE 報告「完成」後 re-probe | ~63 / 87 | 27 + 2 P0 blockers + 160 bonus | SUPERSEDED by delta-v4 |
 | `bff-backend-gap-2026-05-25-delta-v4` | 2026-05-25 late | 第四輪 — BE 再次「完成」後 re-probe，270 paths | **~86 / 87** | 1 P0 CORS + P2 envelope optional fields | SUPERSEDED by delta-v5 |
-| `bff-backend-gap-2026-05-25-delta-v5` | 2026-05-25 final | 第五輪 — 收尾 re-probe | **87 / 87** | **0 — ALL CLEAR**：CORS preflight 204 + ACAO echo origin ✅；error envelope canonical (`code/i18nKey/message/retryable/userActionable/details` + `meta.correlationId`, `RESOURCE_NOT_FOUND`) ✅；§8/§9/paths.mgmt* 21/21 全 200 ✅；`GET /bff/command-confirmations/{token}` 200 ✅；瀏覽器 preview origin 直打 `/bff/*` 全綠 | **LATEST — BFF handoff COMPLETE** |
+| `bff-backend-gap-2026-05-25-delta-v5` | 2026-05-25 final | 第五輪 — 收尾 re-probe（**read-path only**） | **87 / 87** | **0 — read-path ALL CLEAR** | read-only scope；write-path 見下 |
+| `bff-backend-write-probe-2026-05-28` | 2026-05-28 | 31 個 write endpoint | 23 / 31 | 8 P0/P1/P2 | `scripts/probe-bff-write-paths.mjs` |
+| `persona-onboarding-endpoint-probe-2026-05-28` | 2026-05-28 | Wizard 8 endpoints | 1 / 8 | 7 (5 wizard stages + F4 + deprecated lifecycle) | `scripts/probe-persona-onboarding-endpoints.mjs` |
+
+## BE 需求規格書（對後端團隊）
+
+| Doc | 日期 | 範圍 | Open endpoints |
+|---|---|---|---|
+| [`BE_WRITE_GAP_SPEC_2026-05-28`](../specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md) | 2026-05-28 | 整合 write probe + onboarding probe 成正式 BE 需求書 | 15（8 P0 + 6 P1 + 1 P2）+ Sentinel 規則覆蓋 |
+
 
 ## 使用建議
 
