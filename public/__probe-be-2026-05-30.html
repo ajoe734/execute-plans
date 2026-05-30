@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>BE Probe 2026-05-30</title>
+<style>body{font:12px ui-monospace,monospace;padding:12px;background:#0b0f14;color:#e5e7eb}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #334;padding:4px 6px;vertical-align:top}
+.ok{color:#34d399}.bad{color:#f87171}.warn{color:#fbbf24}</style></head>
+<body>
+<h1>BE Write-Gap Verification — 2026-05-30</h1>
+<div id="meta"></div>
+<table id="t"><thead><tr><th>#</th><th>Tag</th><th>HTTP</th><th>Method</th><th>Route</th><th>Snippet</th></tr></thead><tbody></tbody></table>
+<script>
+const BFF="https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io";
+const H={"content-type":"application/json","accept":"application/json","authorization":"Bearer pantheon-dev-browser:reviewer","x-bff-api-version":"2026-05-07","x-dry-run":"1","x-correlation-id":"cid_probe_"+Date.now()};
+const ENDPOINTS=[
+ // P0 persona onboarding
+ ["P0","POST","/bff/personas/persona-dev/actions/AdvanceLifecycle",{action:"submit_for_review"}],
+ ["P0","POST","/bff/capital-pools/cp-dev/actions/ApprovePool",{decision:"approve"}],
+ ["P0","POST","/api/v1/bindings",{persona_id:"persona-dev",capital_pool_id:"cp-dev"}],
+ ["P0","POST","/api/v1/deployment-plans",{binding_id:"bind-dev",stage:"paper"}],
+ ["P0","POST","/api/v1/approval-decisions",{plan_id:"plan-dev",decision:"approve"}],
+ ["P0","POST","/bff/runtimes/runtime-dev/actions/StartRuntime",{}],
+ ["P0","GET","/api/v1/operator/persona-management/persona-dev",null],
+ ["P0","POST","/bff/command-confirmations/token-dev/confirm",{decision:"confirm"}],
+ // P1
+ ["P1","POST","/bff/runtimes",{deployment_id:"dep-dev",name:"probe"}],
+ ["P1","POST","/bff/agora/signals",{title:"probe",body:"x"}],
+ ["P1","POST","/bff/agora/feedback",{target_id:"x",rating:1}],
+ ["P1","POST","/bff/agora/inbox/inbox-dev/triage",{decision:"ack"}],
+ ["P1","POST","/bff/agora/skill-coaching",{skill_id:"skill-dev",note:"x"}],
+ ["P1","POST","/bff/agora/postmortems",{incident_id:"inc-dev",summary:"x"}],
+ // P2
+ ["P2","POST","/bff/v5/interventions/batch-decide",{ids:["i-dev"],decision:"approve"}],
+];
+async function run(){
+ const tb=document.querySelector("#t tbody");
+ let i=0,open=0,impl=0;
+ for(const [pri,m,p,body] of ENDPOINTS){
+  i++;
+  let st=0,snip="";
+  try{
+   const r=await fetch(BFF+p,{method:m,headers:H,body:body?JSON.stringify(body):undefined});
+   st=r.status; snip=(await r.text()).slice(0,180);
+  }catch(e){snip=String(e);}
+  const isOpen=[404,405,410,501,0].includes(st);
+  if(isOpen)open++;else impl++;
+  const tag=isOpen?'<span class="bad">❌ OPEN</span>':'<span class="ok">✅ implemented</span>';
+  tb.insertAdjacentHTML("beforeend",`<tr><td>${i}</td><td>${pri} ${tag}</td><td>${st}</td><td>${m}</td><td>${p}</td><td>${snip.replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"})[c])}</td></tr>`);
+ }
+ document.getElementById("meta").innerHTML=`<p>Total ${ENDPOINTS.length} — <span class="ok">✅ ${impl}</span> / <span class="bad">❌ ${open}</span> · ${new Date().toISOString()}</p><pre id="DONE">DONE impl=${impl} open=${open}</pre>`;
+}
+run();
+</script></body></html>
