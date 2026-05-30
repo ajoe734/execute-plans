@@ -1,103 +1,153 @@
-# BE Dev Access Request for Lovable Sandbox — 2026-05-30
+# BE Dev Access Request — Lupin VM 重建後 — 2026-05-30 (rev 2)
 
-> **目的**：讓 Lovable agent 的沙箱（執行 probe / CI 驗證的環境）能直接打到
-> `pantheon-lupin-dev-bff` 做 write-path 驗證，免去每次都要 user 從本機/瀏覽器
-> 手動跑 probe 再貼結果。
+> **Context**：lupin dev BFF 的 VM 已搬到新 GCP / cloud 帳號重建，原本的
+> `https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io` 可能：
+> (a) IP 變了、sslip.io subdomain 失效，或
+> (b) 入站防火牆 / CORS 規則沒有跟著遷移過去。
+>
+> 在 BE 重新發布前，**Lovable agent 完全打不到 BFF**（read + write 都掛）。
+> 本文件列出讓 agent sandbox 重新連得到所需的 4 項交付物。
 
-## 1. 問題現況
+## 0. 為什麼這次更急
 
-| 通道 | 結果 | 根因 |
-|---|---|---|
-| Lovable sandbox `curl https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io/health` | ❌ TCP connection timeout (10s) | sandbox egress 被 BE 防火牆 drop（IP 未列白） |
-| Lovable headless 瀏覽器 fetch（origin = `*.lovableproject.com`） | ❌ `TypeError: Failed to fetch` (CORS preflight reject) | BFF `Access-Control-Allow-Origin` 只 allow `https://id-preview--*.lovable.app` 與 `https://pantheon-dev.lovable.app` |
-| User 真實瀏覽器（origin = `id-preview--…lovable.app`） | ✅ 200 GET / 201 POST | 在白名單內 |
-| **後果** | 所有 BE write-path 驗證都要 user 手動 trigger | agent 無法獨立完成 spec verification loop |
-
-## 2. 我們希望 BE 開啟的權限
-
-### 2.1 網路層 — 兩擇一
-
-**A. IP allow-list（首選）**  
-把 Lovable agent sandbox 的 egress IP / CIDR 加入 lupin BFF 入站白名單。
-
-當前 sandbox egress（2026-05-30 採樣）：
-- IPv4: **`34.147.96.59`**（GCP, europe-west）
-- IPv6: `2a07:8241:fff:1002::/64`（Lovable infra）
-
-每個 sandbox session 重啟 IP 可能換，請以 GCP `europe-west` egress range
-或 Lovable 提供的 `/24` 為準（請與 Lovable infra 對接索取完整 CIDR 表）。
-驗證腳本：
-
-```bash
-curl -s https://api.ipify.org && echo
-```
-
-**B. 公開 dev BFF 走 lovable.dev 子網域 + CORS 擴白**  
-若 IP allow-list 不便維運，請：
-- 把 BFF DNS 暴露為 `pantheon-lupin-dev.lovable.app`（或 BE 自管 domain）
-- CORS `Access-Control-Allow-Origin` 追加：
-  - `https://*.lovableproject.com`
-  - `https://*.sandbox.lovable.dev`
-  - `https://b75d3452-f667-4cf4-893a-1061de45b347.lovableproject.com`
-
-### 2.2 認證層
-
-維持現有 dev bearer (`Bearer pantheon-dev-browser:reviewer`)。  
-若需獨立 agent identity，請發一組：
-- subject = `lovable-agent-ci`
-- role = `reviewer`（read-all + dry-run write）+ `approver`（驗 HighRiskConfirm path）
-- TTL = 90d，可 rotate
-
-### 2.3 Dry-run 與資料污染保護
-
-所有 probe 都會帶 `X-Dry-Run: 1` + `Idempotency-Key: probe-<uuid>`。請確認：
-
-- [ ] 全部 P0/P1/P2 endpoints 在 `X-Dry-Run: 1` 下**不寫 state**、只回 typed envelope
-- [ ] `X-Dry-Run: 1` 但 schema/權限不符仍回原本 422/403，方便 schema 驗證
-- [ ] dev DB 有獨立 `agent-probe` schema 或 tenant，避免污染 BE 自家測試資料
-
-### 2.4 預期 SLA
-
-- BFF dev 維持 99% 上線（cold start 可接受）
-- 每次 BE deploy 後跑一次 `scripts/probe-bff-write-paths.mjs` + `scripts/probe-persona-onboarding-endpoints.mjs`，**回貼結果到本 repo PR**
-- 任何 spec breaking change 走 `.lovable/feedback/` 通道，**禁止靜默改 route**
-
-## 3. 對應 Probe / Acceptance
-
-開通後 agent 端會跑：
-
-```bash
-node scripts/probe-bff-write-paths.mjs
-node scripts/probe-persona-onboarding-endpoints.mjs
-node scripts/probe-create-persona-then-fleet.mjs
-```
-
-並把結果寫進 `.lovable/audits/be-write-gap-verification-<date>.md`。
-全綠 → 自動撤 `src/lib/bff-v1/writeFallback.ts`、撤 `LiveStatusBanner` writeDegraded strip。
-
-驗證範圍對齊 `.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md`
-（15 open endpoints + Sentinel rule coverage）。
-
-## 4. 交付物（我們需要 BE 回覆）
-
-| # | 項目 | Owner | 目標日 |
-|---|---|---|---|
-| 1 | 回覆採 A (IP allow-list) 或 B (CORS+DNS) | BE platform | T+1d |
-| 2 | 若 A：提供允許 CIDR 列表 + 變更 SLA | BE platform | T+2d |
-| 3 | 若 B：發出 CORS update PR + 新 origin 上線 | BE platform | T+5d |
-| 4 | 發出 agent CI bearer + rotate 流程 | BE auth owner | T+3d |
-| 5 | 確認 `X-Dry-Run` 全 endpoint 不污染 state（測試報告） | BE per-service owner | T+7d |
-| 6 | CI hook：BE deploy → 自動跑 3 支 probe → 結果回貼 | BE devops | T+10d |
-
-## 5. 為何不能繼續走「user 手動 probe」
-
-| 問題 | 影響 |
+| 之前 (2026-05-28) | 現在 (VM 重建後) |
 |---|---|
-| 每次 spec 校驗 user 要開 DevTools 跑 script | 真實 user friction，違反 agent 自動化承諾 |
-| `withWriteFallback` 一直掛著 | UX degraded、`writeOverlay` 30min TTL 假資料污染 UI |
-| spec gap 收尾依賴非同步人工觸發 | release gate 無法 CI 化、SLA 不可預測 |
-| 13 個 degraded persona / 0 Sentinel findings 等 rule coverage gap 永遠驗不到 | regression 風險累積 |
+| sandbox 打不到 BFF，但 user 真實瀏覽器可以（CORS 白名單在）| user 預覽**也可能掛**，因為 origin allow-list / DNS 都還沒重綁 |
+| 只影響 agent 獨立驗證 | 影響 dev 環境整體 read-path（preview cockpit 拉不到 200） |
+| `withWriteFallback` 還能 degrade write | 連 GET 都會 fail，FE 顯示 LiveStatusBanner red |
+
+## 1. 我這邊（Lovable agent sandbox）的固定資料
+
+| 項目 | 值 |
+|---|---|
+| Sandbox egress IPv4 (2026-05-30) | **`34.147.96.59`** |
+| Sandbox egress IPv6 | `2a07:8241:fff:1002::/64` |
+| 預覽 origin (browser fetch from) | `https://id-preview--b75d3452-f667-4cf4-893a-1061de45b347.lovable.app` |
+| 預覽備援 origin | `https://b75d3452-f667-4cf4-893a-1061de45b347.lovableproject.com` |
+| 已發布 origin | `https://pantheon-dev.lovable.app` |
+| Dev bearer 目前值 | `Bearer pantheon-dev-browser:reviewer` |
+| Lovable project id | `b75d3452-f667-4cf4-893a-1061de45b347` |
+| Supabase project ref | `kwjtcynauaulrxngyetk` |
+
+> ⚠️ Sandbox IPv4 每次 session 重啟可能換到同 GCP `europe-west` 區段的別的 IP。
+> 請以 **`34.147.96.0/24`**（或更寬的 GCP europe-west egress range）為白名單最小單位。
+
+## 2. BE 團隊需要交付的 4 件事
+
+### ✅ 2.1 新的 BFF URL（最緊急）
+
+請 BE 在本 issue / 回覆訊息中提供：
+
+```yaml
+bff_dev_url: https://___________________________   # 新的 host，含 scheme
+bff_dev_ipv4: ___.___.___.___                       # 給 FE log + DNS sanity check
+bff_dev_health_path: /health                        # 確認與舊版一致
+bff_dev_ready_at:   2026-05-__T__:__Z              # 預計可連上時間
+```
+
+收到後我會：
+- 更新 `.env.development.example` 與 `src/lib/bff-v1/paths.ts` 預設值
+- 跑 `curl ${bff_dev_url}/health` 驗證 sandbox 連線
+- 跑三支 probe 收回 `.lovable/audits/be-write-gap-verification-2026-05-30.md`
+
+### ✅ 2.2 防火牆入站白名單
+
+請在新 VM 的 GCP firewall / Cloud Armor 加：
+
+```
+# Allow inbound 443 from:
+- 34.147.96.0/24                  # Lovable agent sandbox egress
+- (Lovable infra 提供的完整 CIDR)  # 跟 Lovable infra 索取
+- Lovable preview/publish 出口 IP # 由 user 真實瀏覽器走 CDN，通常已開
+```
+
+驗證：sandbox 跑 `curl -sS -m 5 ${bff_dev_url}/health` 應在 1s 內回 `200 {"status":"ok"}`。
+
+### ✅ 2.3 CORS Allow-Origin 重綁
+
+新 BFF 的 CORS middleware 需 allow（精確匹配，不可只設 `*`，因為要回應
+`Access-Control-Allow-Credentials: true`）：
+
+```
+Access-Control-Allow-Origin（list）:
+  - https://id-preview--b75d3452-f667-4cf4-893a-1061de45b347.lovable.app
+  - https://b75d3452-f667-4cf4-893a-1061de45b347.lovableproject.com
+  - https://pantheon-dev.lovable.app
+  - https://*.lovableproject.com          (萬用，可選)
+  - https://*.sandbox.lovable.dev         (萬用，可選)
+Access-Control-Allow-Methods:
+  - GET, POST, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers:
+  - authorization, content-type, accept, accept-language,
+    x-bff-api-version, x-correlation-id, x-request-id,
+    x-dry-run, idempotency-key
+Access-Control-Allow-Credentials: true
+Access-Control-Max-Age: 600
+```
+
+驗證：headless 瀏覽器從 `*.lovableproject.com` origin fetch 不應再回
+`TypeError: Failed to fetch` (即 preflight OPTIONS 應回 204)。
+
+### ✅ 2.4 Auth bearer 在新 VM 有效
+
+舊的 `pantheon-dev-browser:reviewer` token 在新 VM secret store 內可能不見了。
+請確認新 BFF 收到此 bearer 時：
+- 不回 401（auth bypass 對 dev 環境保留）
+- role-claim 解析為 `reviewer`（read + dry-run write）
+
+或發一組新的：
+
+```yaml
+agent_ci_bearer: <jwt or static token>
+identity:  lovable-agent-ci
+roles:     [reviewer, approver]
+ttl:       90d
+rotate_via: <endpoint or 1Password / Vault link>
+```
+
+我會用 `secrets--add_secret` 收進 Lovable Cloud，永遠不寫 codebase。
+
+## 3. 自動回歸驗證（開通後）
+
+開通後 sandbox 會跑：
+
+```bash
+node scripts/probe-bff-write-paths.mjs           # 31 write endpoints
+node scripts/probe-persona-onboarding-endpoints.mjs  # 8 wizard stages
+node scripts/probe-create-persona-then-fleet.mjs # write→read 一致性
+```
+
+結果輸出到 `.lovable/audits/be-write-gap-verification-<date>.md`。
+全綠則：
+- `mem://audits/bff-write-gap-2026-05-28` 標 CLOSED
+- 撤掉 `src/lib/bff-v1/writeFallback.ts` NOT_IMPLEMENTED 分支
+- 撤 `LiveStatusBanner` writeDegraded strip
+- `.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md` 整份 archive
+
+## 4. Checklist for BE owner
+
+- [ ] **2.1**: 在本 repo issue 回覆新 BFF URL + IP + health ready 時間
+- [ ] **2.2**: GCP firewall 加 `34.147.96.0/24`（或 Lovable infra CIDR）
+- [ ] **2.3**: 新 BFF CORS middleware 套上 §2.3 list
+- [ ] **2.4**: 確認 `pantheon-dev-browser:reviewer` 仍有效 / 發新 token
+- [ ] 通知 Lovable：「請 agent 跑 `scripts/probe-*.mjs` 收尾」
+
+## 5. 期間 FE 端的工作（我這邊先做）
+
+不阻塞 BE：
+- [x] 把這份 access request 寫出來
+- [ ] 等 BE 給新 URL 後，**一個 commit 改三個檔**：
+  - `.env.development.example`
+  - `.env.example`
+  - `src/lib/bff-v1/paths.ts`（若 base URL 寫死）
+- [ ] 跑 probe → 寫 verification report → 更新 memory
 
 ---
 
-**Contact**: 本 repo issue 或 `.lovable/feedback/2026-05-30-agent-access/` 子目錄回覆。
+**Owner mapping**:
+- §2.1 / §2.2 → BE platform / DevOps
+- §2.3 → BE BFF service owner
+- §2.4 → BE auth owner
+- §3 / §5 → Lovable agent (我)
+
+**Contact channel**: 本 repo issue 或 `.lovable/feedback/2026-05-30-agent-access/` 子目錄。
