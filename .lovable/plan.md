@@ -1,98 +1,32 @@
+# 驗證 BE 規格書實作狀態
+
 ## 目標
+重新跑 `.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md` 列出的 15 個 open endpoints + persona onboarding 8 個 stages，確認 BE 是否已全數開發完成。
 
-把目前散在多個 audit / probe 檔案裡的「BE 還沒實作 / FE 只能 overlay 過渡」endpoint 全部收斂成一份**正式對 BE 團隊的需求規格書**，讓後端工程師可以直接 pick up 開票實作。
+## 步驟
 
-## 交付物
+1. **重跑 3 支既有 probe 腳本**（read-only，不改任何檔案）
+   - `node scripts/probe-bff-write-paths.mjs` → 全 31 個 write endpoints
+   - `node scripts/probe-persona-onboarding-endpoints.mjs` → 8 個 wizard stages
+   - `node scripts/probe-create-persona-then-fleet.mjs` → write→read 一致性
 
-單一檔案：`.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md`
+2. **逐筆比對 15 個 P0/P1/P2 開放路由**，分類：
+   - ✅ 新通：原 4xx/5xx → 200/201/202 或 typed envelope
+   - ⚠️ 部分通：route 存在但 schema/權限仍未對齊
+   - ❌ 仍 open：404/405/410/501
 
-（同時更新 `mem://index.md` 把它列為 BE 需求 SoT，並在 `.lovable/audits/INDEX.md` 加索引）
+3. **產出驗證報告** `.lovable/audits/be-write-gap-verification-2026-05-30.md`
+   - Headline 表（15 列，BEFORE → AFTER 狀態）
+   - 每筆原始 status code + response snippet
+   - Persona onboarding 8 stages 對照表
+   - Sentinel rule coverage 重檢（13 degraded personas → findings 數）
 
-## 規格書結構
+4. **依結果更新**：
+   - 若全綠：更新 `mem://index.md` 把 write-gap 條目從 OPEN 改 CLOSED，並標註可移除 `withWriteFallback`
+   - 若部分綠：更新 `BE_WRITE_GAP_SPEC_2026-05-28.md` 表格欄位 + 補一份 delta
+   - 若仍紅：在報告中明列剩餘 endpoint 給 BE owner
 
-### 0. Meta
-- 版本 / 日期 / 作者 (FE) / 對象 (BE owner)
-- 上游來源：Pack D BFF API Contract、Final OpenAPI 2026-05-07、Persona Onboarding Wizard Spec 2026-05-28
-- 下游證據：`bff-backend-write-probe-2026-05-28.md`、`persona-onboarding-endpoint-probe-2026-05-28.md`
-- Probe 環境：`pantheon-lupin-dev-bff.34.81.75.241.sslip.io`、bearer `pantheon-dev-browser:reviewer`、`X-Dry-Run: 1`
-
-### 1. Headline 表（一眼看完）
-| Group | Total | Open | Severity |
-|---|---|---|---|
-| P0-D Entity create | 9 | 1 | P1 |
-| P1-A Action commands | 7 | 1 | P0 (HighRiskConfirm 阻斷) |
-| P1-C v5 writes | 8 | 1 | P2 |
-| P1-E Agora writes | 7 | 5 | P1 |
-| Persona Onboarding (lifecycle/binding/plan/approval/runtime) | 8 | 7 | **P0** |
-| Sentinel rule coverage | — | — | P2 (rule engine) |
-| **Total open endpoints** | **31 + 8** | **15** | — |
-
-### 2. 每個 open endpoint 的需求卡（每筆統一格式）
-
-每張卡固定欄位：
-- **Route + Method**
-- **目前 probe 觀察**（status code、envelope 片段）
-- **FE 已對接的呼叫位置**（檔案 + 函式）
-- **Spec 出處**（Pack D 章節 / OpenAPI operationId / Wizard Spec §）
-- **Request schema**（headers: Authorization / Idempotency-Key / X-Correlation-Id / X-BFF-Api-Version；body 欄位含型別、必填、範例）
-- **Response schema**（成功 2xx envelope、典型 4xx：401/403/404/409/422、ErrorCode 走 Pack D 26-enum）
-- **State machine 副作用**（哪個 entity 從哪個 state → 哪個 state、需要發哪個 SSE event）
-- **Audit chain 要求**（D26 EvidenceKind、是否寫 audit-chain hash）
-- **Permission / Role 要求**（Pack D Permission Contract）
-- **Acceptance criteria**（probe 重跑要看到什麼 status / shape）
-- **FE 移除 fallback 的判定條件**
-
-涵蓋全部 15 條：
-
-**P0 — Persona Onboarding (Wizard 4.1)**
-1. `POST /bff/personas/{id}/actions/AdvanceLifecycle`（目前 410 deprecated，需確認新路徑或恢復）
-2. `POST /bff/capital-pools/{id}/actions/ApprovePool`（410 deprecated 同上）
-3. `POST /api/v1/bindings`（405）
-4. `POST /api/v1/deployment-plans`（405）
-5. `POST /api/v1/approval-decisions`（405）
-6. `POST /bff/runtimes/{id}/actions/StartRuntime`（410 deprecated）
-7. `GET /api/v1/operator/persona-management/{id}` 含 `data.health`（404 / F4 缺欄位）
-8. （順帶）`/bff/personas/{id}/actions/AdvanceLifecycle` 等 deprecated 路徑的「新路徑」需 BE 文件化
-
-**P0 — Action confirm**
-9. `POST /bff/command-confirmations/{token}/confirm`（404，阻斷所有 HighRiskConfirm 二段式確認）
-
-**P1 — Entity create**
-10. `POST /bff/runtimes`（405）
-
-**P1 — Agora**
-11. `POST /bff/agora/signals`（405）
-12. `POST /bff/agora/feedback`（404）
-13. `POST /bff/agora/inbox/{id}/triage`（404）
-14. `POST /bff/agora/skill-coaching`（404）
-15. `POST /bff/agora/postmortems`（405）
-
-**P2 — v5 batch**
-16. `POST /bff/v5/interventions/batch-decide`（405）
-
-### 3. 跨 endpoint 共通要求
-- 26-code ErrorCode envelope 必須回 `{ error: { code, i18nKey, message, retryable, userActionable, details }, meta: { correlationId, … } }`
-- Idempotency-Key replay 規則（24h 內重放回原 response）
-- `X-Dry-Run: 1` 行為（驗證但不寫，回 200 + `meta.dryRun: true`）
-- Deprecated route 退場政策：要嘛留 alias、要嘛在 OpenAPI 標明 replacement 路徑
-- SSE channel 對映（`ENTITY_TO_SSE_CHANNEL`）需同步更新
-
-### 4. Sentinel rule coverage 缺口（獨立節）
-- 13 personas `degraded(85)` + reasons `persona_lifecycle_not_active` / `no_runtime_binding` → 0 findings
-- BE rule engine 需新增覆蓋規則（FE 無法補）
-
-### 5. 驗收流程
-- BE 每批 deploy 後跑 `scripts/probe-bff-write-paths.mjs` + `scripts/probe-persona-onboarding-endpoints.mjs`
-- 兩支 probe 全綠 → FE 撤掉對應 `withWriteFallback`、LiveStatusBanner degraded strip
-- 加一張 CI gate matrix（routes × status code 期望）
-
-### 6. 不在本規格範圍
-- 任何 FE 修改（FE 已 land overlay fallback）
-- 新 entity / 新 spec 設計（只 cover 對齊既有 spec 的缺口）
-
-## 範圍邊界
-- 純文件，不動程式碼
-- 不重新 probe（直接引用 2026-05-28 兩份 probe 證據）
-- 不更動 spec/v4 或 spec/current，只在 `.lovable/specs/be-requirements/` 下新增
-
-按下 Implement 後就直接產出該規格書。
+## 技術說明
+- 不動 src/、不動 supabase/functions/、不動 spec 文件本身（只在第 4 步視結果決定）
+- 所有 probe 用 dev bearer + `X-Dry-Run: 1`，不會污染 BE 真實資料
+- 預計 3 個 probe 共跑 ~30 秒
