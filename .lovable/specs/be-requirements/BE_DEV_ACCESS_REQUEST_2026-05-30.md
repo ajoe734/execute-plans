@@ -18,14 +18,18 @@
 ### 2.1 網路層 — 兩擇一
 
 **A. IP allow-list（首選）**  
-把 Lovable agent sandbox 的 egress IP / CIDR 加入 lupin BFF 的入站白名單。  
-我會在此份文件交付後 24h 內透過下方腳本回報目前 egress IP（每個沙箱 session
-重啟可能變動，請接受 `/24` 或更寬的 GCP / Cloudflare egress range）。
+把 Lovable agent sandbox 的 egress IP / CIDR 加入 lupin BFF 入站白名單。
+
+當前 sandbox egress（2026-05-30 採樣）：
+- IPv4: **`34.147.96.59`**（GCP, europe-west）
+- IPv6: `2a07:8241:fff:1002::/64`（Lovable infra）
+
+每個 sandbox session 重啟 IP 可能換，請以 GCP `europe-west` egress range
+或 Lovable 提供的 `/24` 為準（請與 Lovable infra 對接索取完整 CIDR 表）。
+驗證腳本：
 
 ```bash
-# Lovable sandbox 內執行：
 curl -s https://api.ipify.org && echo
-curl -s https://ifconfig.co/json | jq '{ip, asn, country}'
 ```
 
 **B. 公開 dev BFF 走 lovable.dev 子網域 + CORS 擴白**  
