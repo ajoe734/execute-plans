@@ -1,7 +1,7 @@
 # Persona Onboarding Wizard — Endpoint Probe — 2026-05-28
 
-Generated: 2026-05-30T11:30:08.911Z
-BFF base: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+Generated: 2026-05-31T14:41:35.722Z
+BFF base: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 Spec: docs/04/pantheon_persona_onboarding_wizard_2026-05-28/PERSONA_ONBOARDING_WIZARD_SPEC.md §4.1 / §12 DoD #1
 
 Probe: dev IDs + `X-Dry-Run: 1`. Any typed 4xx envelope counts as implemented.
@@ -10,11 +10,11 @@ auto-degrades to writeOverlay + LiveStatusBanner.
 
 | Stage | Tag | Status | Method | Route | Snippet |
 |---|---|---|---|---|---|
-| 1 | ⚠️ network | 0 | POST | /bff/personas/persona-dev/actions/AdvanceLifecycle | TimeoutError: The operation was aborted due to timeout |
-| 2a | ⚠️ network | 0 | POST | /bff/capital-pools | TimeoutError: The operation was aborted due to timeout |
-| 2b | ⚠️ network | 0 | POST | /bff/capital-pools/cp-dev/actions/ApprovePool | TimeoutError: The operation was aborted due to timeout |
-| 2c | ⚠️ network | 0 | POST | /api/v1/bindings | TimeoutError: The operation was aborted due to timeout |
-| 3 | ⚠️ network | 0 | POST | /api/v1/deployment-plans | TimeoutError: The operation was aborted due to timeout |
-| 4 | ⚠️ network | 0 | POST | /api/v1/approval-decisions | TimeoutError: The operation was aborted due to timeout |
-| 5 | ⚠️ network | 0 | POST | /bff/runtimes/runtime-dev/actions/StartRuntime | TimeoutError: The operation was aborted due to timeout |
-| F4 | ⚠️ network | 0 | GET | /api/v1/operator/persona-management/persona-dev | TimeoutError: The operation was aborted due to timeout |
+| 1 | ? 410 | 410 | POST | /bff/personas/persona-dev/actions/AdvanceLifecycle | {"detail":{"error":{"code":"OPERATION_NOT_ALLOWED","message":"Deprecated BFF route","details":{"reason":"route_deprecated","route":"/bff/personas/{persona_id}/actions/{action_id}","replacement":"/bff/ |
+| 2a | ✅ implemented | 201 | POST | /bff/capital-pools | {"id":"pool-20260531-d07ba9f0","pool_id":"pool-20260531-d07ba9f0","name":"probe-pool","status":"draft","risk_policy_ref":null,"params":{},"created_at":"2026-05-31T14:41:33Z","updated_at":"2026-05-31T1 |
+| 2b | ? 410 | 410 | POST | /bff/capital-pools/cp-dev/actions/ApprovePool | {"detail":{"error":{"code":"OPERATION_NOT_ALLOWED","message":"Deprecated BFF route","details":{"reason":"route_deprecated","route":"/bff/capital-pools/{pool_id}/actions/{action_id}","replacement":"/bf |
+| 2c | ❌ NOT implemented | 405 | POST | /api/v1/bindings | {"error":{"code":"VALIDATION_FAILED","i18nKey":"errors.VALIDATION_FAILED","message":"Method Not Allowed","retryable":false,"userActionable":true,"details":{"reason":"Method Not Allowed"}},"meta":{"cor |
+| 3 | ❌ NOT implemented | 405 | POST | /api/v1/deployment-plans | {"error":{"code":"VALIDATION_FAILED","i18nKey":"errors.VALIDATION_FAILED","message":"Method Not Allowed","retryable":false,"userActionable":true,"details":{"reason":"Method Not Allowed"}},"meta":{"cor |
+| 4 | ❌ NOT implemented | 405 | POST | /api/v1/approval-decisions | {"error":{"code":"VALIDATION_FAILED","i18nKey":"errors.VALIDATION_FAILED","message":"Method Not Allowed","retryable":false,"userActionable":true,"details":{"reason":"Method Not Allowed"}},"meta":{"cor |
+| 5 | ? 410 | 410 | POST | /bff/runtimes/runtime-dev/actions/StartRuntime | {"detail":{"error":{"code":"OPERATION_NOT_ALLOWED","message":"Deprecated BFF route","details":{"reason":"route_deprecated","route":"/bff/runtimes/{runtime_id}/actions/{action_id}","replacement":"/bff/ |
+| F4 | ❌ NOT implemented | 404 | GET | /api/v1/operator/persona-management/persona-dev | {"error":{"code":"RESOURCE_NOT_FOUND","i18nKey":"errors.RESOURCE_NOT_FOUND","message":"Persona not found","retryable":false,"userActionable":true,"details":{"reason":"Persona persona-dev does not exis |
