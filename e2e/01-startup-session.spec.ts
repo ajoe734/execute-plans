@@ -12,7 +12,7 @@
  *   PANTHEON_FE_BASE_URL, FRONTEND_BASE_URL, or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
  *   PANTHEON_BFF_BASE_URL, BFF_BASE_URL, or VITE_BFF_BASE_URL
- *     default: https://pantheon-staging-bff.34.81.225.122.sslip.io
+ *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
  *   BFF_AUTH_TOKEN
  *     optional; when omitted the dev stub token is used.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
@@ -24,7 +24,7 @@ import type { Page } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
-  "https://pantheon-staging-bff.34.81.225.122.sslip.io";
+  "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 
