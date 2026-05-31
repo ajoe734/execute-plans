@@ -17,7 +17,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const BFF_BASE_URL =
   Deno.env.get("PANTHEON_BFF_BASE_URL") ??
-  "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io";
+  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
 
 const gateway = createOpenAICompatible({
   name: "lovable",
@@ -504,7 +504,7 @@ function buildTools(mode: AgentMode, auth: BffAuth | undefined) {
           const url = `${Deno.env.get("VITE_SUPABASE_URL") ?? ""}`;
           // Delegate to caller-side derivePersonaReadiness via persona detail; here we
           // just surface raw lifecycle so the LLM can answer + propose next step.
-          const bff = Deno.env.get("VITE_BFF_BASE_URL") ?? "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io";
+          const bff = Deno.env.get("VITE_BFF_BASE_URL") ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
           const res = await fetch(`${bff.replace(/\/$/, "")}/bff/personas/${encodeURIComponent(personaId)}`, {
             headers: { Accept: "application/json" },
           });

@@ -1,27 +1,27 @@
 # Probe: create persona → persona-fleet — 2026-05-28
 
-Generated: 2026-05-28T06:52:51.009Z
-BFF base: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
-Probe name: `dev-probe-1779951166987`
+Generated: 2026-05-31T14:41:36.870Z
+BFF base: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+Probe name: `dev-probe-1780238492204`
 
 **Verdict:** PASS
 
 ## Step 1 — POST /bff/personas
 - status: 201
-- new id: `persona-20260528-f4650c96`
-- correlationId: `probe-1779951166988-9r650a`
+- new id: `persona-20260531-1715d8d2`
+- correlationId: `probe-1780238492204-s004ou`
 
 ## Step 2 — GET /bff/management/persona-fleet (REGISTRY)
 - status: 200
-- items: 4
+- items: 15
 - contains new id: **YES**
-- correlationId: `probe-1779951169501-35xs1l`
+- correlationId: `probe-1780238494612-8xsx6v`
 
 ## Step 3 — GET /bff/management/persona-league (RANKING SNAPSHOT, may lag)
 - status: 200
-- items: 4
+- items: 15
 - contains new id: YES
-- correlationId: `probe-1779951169822-yz90m6`
+- correlationId: `probe-1780238495446-80jliu`
 
 ## Interpretation
 
