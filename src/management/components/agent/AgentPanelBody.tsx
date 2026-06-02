@@ -383,26 +383,37 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       lastAssistantMessageIsCompleteWithToolCalls({ messages: msgs }),
   });
 
-  // Pending high-risk approvals — AI SDK emits state="approval-requested" with part.approval.id
-  // for tools declared with needsApproval:true. Resolve via addToolApprovalResponse({id,approved,reason}).
+  // Pending high-risk approvals — ONLY scan the LAST assistant message.
+  // Historical assistant messages with leftover "approval-requested" state are
+  // treated as stale (rendered as historical record by ToolBlock, no buttons,
+  // no input blocking). This prevents the queue from accumulating dozens of
+  // old approval cards when reopening a thread.
   const pendingApprovals = useMemo<PendingApproval[]>(() => {
     const out: PendingApproval[] = [];
-    for (const m of messages) {
-      if (m.role !== "assistant") continue;
-      for (const part of m.parts ?? []) {
-        const t = part.type as string;
-        if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
-        const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
-        if (p.state !== "approval-requested") continue;
-        const approvalId = p.approval?.id;
-        if (!approvalId || !p.toolCallId) continue;
-        const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
-        out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
-      }
+    // Find last assistant message
+    let lastAssistant: UIMessage | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") { lastAssistant = messages[i]; break; }
+    }
+    if (!lastAssistant) return out;
+    for (const part of lastAssistant.parts ?? []) {
+      const t = part.type as string;
+      if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
+      const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
+      if (p.state !== "approval-requested") continue;
+      const approvalId = p.approval?.id;
+      if (!approvalId || !p.toolCallId) continue;
+      const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
+      out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
     }
     return out;
   }, [messages]);
   const hasPending = pendingApprovals.length > 0;
+
+  // Set of approvalIds that are currently actionable (only those from the
+  // last assistant message). ToolBlock uses this to decide whether to render
+  // approval buttons or render the tool part as a historical record.
+  const activeApprovalIds = useMemo(() => new Set(pendingApprovals.map((p) => p.approvalId)), [pendingApprovals]);
 
   // Debug: pending approvals snapshot.
   useEffect(() => {
@@ -413,25 +424,50 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const resolveApproval = useCallback(async (p: PendingApproval, approved: boolean) => {
     // eslint-disable-next-line no-console
     console.log(approved ? "[AgentPanelBody:approve]" : "[AgentPanelBody:deny]", { ...p, status });
-    // Defensive UI patch first: the SDK helper only mutates the LAST message.
-    // If the pending approval was loaded from history and is not the last
-    // message, the click looked dead. Patch the matching part locally so the
-    // banner unblocks immediately even if the follow-up request fails.
-    setMessages((current) => current.map((m) => ({
-      ...m,
-      parts: (m.parts ?? []).map((part) => {
-        const t = part.type as string;
-        if (!t?.startsWith("tool-") && t !== "dynamic-tool") return part;
-        const candidate = part as typeof part & { state?: string; approval?: { id?: string } };
-        if (candidate.state !== "approval-requested" || candidate.approval?.id !== p.approvalId) return part;
-        return {
-          ...part,
-          state: "approval-responded",
-          approval: { id: p.approvalId, approved, reason: approved ? undefined : "user_denied" },
-        } as typeof part;
-      }),
-    })));
+    // 1) Defensive UI patch — the SDK helper only mutates the LAST message.
+    let updatedMessages: UIMessage[] = [];
+    setMessages((current) => {
+      const next = current.map((m) => ({
+        ...m,
+        parts: (m.parts ?? []).map((part) => {
+          const t = part.type as string;
+          if (!t?.startsWith("tool-") && t !== "dynamic-tool") return part;
+          const candidate = part as typeof part & { state?: string; approval?: { id?: string } };
+          if (candidate.state !== "approval-requested" || candidate.approval?.id !== p.approvalId) return part;
+          return {
+            ...part,
+            state: "approval-responded",
+            approval: { id: p.approvalId, approved, reason: approved ? undefined : "user_denied" },
+          } as typeof part;
+        }),
+      }));
+      updatedMessages = next;
+      return next;
+    });
 
+    // 2) Persist to chat_messages so reload / thread-switch doesn't resurrect it.
+    //    Find which DB rows changed (by message_id) and update their `parts`.
+    void (async () => {
+      try {
+        const changed = updatedMessages.filter((m) => m.role === "assistant" && (m.parts ?? []).some((part) => {
+          const candidate = part as { approval?: { id?: string } };
+          return candidate.approval?.id === p.approvalId;
+        }));
+        for (const m of changed) {
+          if (!m.id) continue;
+          const { error: upErr } = await supabase
+            .from("chat_messages")
+            .update({ parts: m.parts as unknown as never })
+            .eq("thread_id", threadId)
+            .eq("message_id", m.id);
+          if (upErr) console.error("[AgentPanelBody:persist-approval]", upErr);
+        }
+      } catch (e) {
+        console.error("[AgentPanelBody:persist-approval-threw]", e);
+      }
+    })();
+
+    // 3) Tell AI SDK so it can continue the model loop.
     try {
       await addToolApprovalResponse({
         id: p.approvalId,
@@ -443,7 +479,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       console.error("[AgentPanelBody:approval-error]", { ...p, approved, error: e });
       toast.error("批准狀態已更新，但送出到 AI SDK 時失敗；請再送一次訊息繼續。 ");
     }
-  }, [addToolApprovalResponse, setMessages, status]);
+  }, [addToolApprovalResponse, setMessages, status, threadId]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
   const navHandledRef = useRef<Set<string>>(new Set());
@@ -514,7 +550,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} activeApprovalIds={activeApprovalIds} />;
                 }
                 return null;
               })}
@@ -611,18 +647,21 @@ const ACTIVE_TOOL_NAMES = new Set<string>([
   "start_persona_onboarding", "query_persona_readiness",
 ]);
 
-function ToolBlock({ part, addToolResult, resolveApproval }: {
+function ToolBlock({ part, addToolResult, resolveApproval, activeApprovalIds }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
   resolveApproval: (p: PendingApproval, approved: boolean) => Promise<void>;
+  activeApprovalIds: Set<string>;
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
 
-  const isStale = !ACTIVE_TOOL_NAMES.has(toolName);
-  const needsApproval = !isStale && part.state === "approval-requested" && !!part.approval?.id;
+  const approvalId: string | undefined = part.approval?.id;
+  const isHistoricalApproval = part.state === "approval-requested" && (!approvalId || !activeApprovalIds.has(approvalId));
+  const isStale = !ACTIVE_TOOL_NAMES.has(toolName) || isHistoricalApproval;
+  const needsApproval = !isStale && part.state === "approval-requested" && !!approvalId && activeApprovalIds.has(approvalId);
 
   const isDraft = toolName.startsWith("propose_");
 
@@ -662,8 +701,15 @@ function ToolBlock({ part, addToolResult, resolveApproval }: {
         <div className="ml-4 flex items-start gap-2 text-xs bg-muted/40 border border-muted-foreground/20 rounded-md p-2 text-muted-foreground">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div>此工具已下線（歷史紀錄）· <span className="font-mono">{toolName}</span></div>
-            <div className="text-[10px] opacity-70">不再顯示批准卡片；如需建立 intervention 請使用 request_sentinel_remediation。</div>
+            <div>
+              {isHistoricalApproval ? "歷史批准紀錄" : "此工具已下線（歷史紀錄）"} ·{" "}
+              <span className="font-mono">{toolName}</span>
+            </div>
+            <div className="text-[10px] opacity-70">
+              {isHistoricalApproval
+                ? "舊對話中尚未回覆的批准請求；不再阻塞輸入。若仍要執行此動作，請再次請 AI 觸發。"
+                : "不再顯示批准卡片；如需建立 intervention 請使用 request_sentinel_remediation。"}
+            </div>
           </div>
         </div>
       )}
