@@ -635,6 +635,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Persist any incoming assistant messages whose parts may have changed
+    // (e.g. approval-requested → approval-responded after user clicked 批准/拒絕).
+    // Idempotent: update existing row by (thread_id, message_id); if none exists, skip.
+    // Without this, the FE may patch local state but reloading the thread resurrects
+    // old "approval-requested" cards from the DB.
+    try {
+      const assistantWithId = messages.filter(
+        (m): m is UIMessage & { id: string } => m.role === "assistant" && typeof m.id === "string" && m.id.length > 0,
+      );
+      for (const m of assistantWithId) {
+        const { error: upErr } = await admin
+          .from("chat_messages")
+          .update({ parts: (m.parts ?? []) as unknown as never })
+          .eq("thread_id", threadId)
+          .eq("message_id", m.id);
+        if (upErr) console.error("[management-agent] sync assistant parts failed", upErr);
+      }
+    } catch (e) {
+      console.error("[management-agent] sync assistant parts threw", e);
+    }
+
     const tools = buildTools(mode, bffAuth);
     const errorRule = `\n\nIMPORTANT: When a tool result has \`ok: false\`, DO NOT narrate or interpret the error. Output exactly one short line in the user's language: \`工具呼叫失敗，請見上方錯誤卡。\` and STOP. Do not retry, do not explain authorization or status codes.`;
     const result = streamText({
