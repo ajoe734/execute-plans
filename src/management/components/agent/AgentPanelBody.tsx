@@ -701,8 +701,15 @@ function ToolBlock({ part, addToolResult, resolveApproval, activeApprovalIds }: 
         <div className="ml-4 flex items-start gap-2 text-xs bg-muted/40 border border-muted-foreground/20 rounded-md p-2 text-muted-foreground">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div>此工具已下線（歷史紀錄）· <span className="font-mono">{toolName}</span></div>
-            <div className="text-[10px] opacity-70">不再顯示批准卡片；如需建立 intervention 請使用 request_sentinel_remediation。</div>
+            <div>
+              {isHistoricalApproval ? "歷史批准紀錄" : "此工具已下線（歷史紀錄）"} ·{" "}
+              <span className="font-mono">{toolName}</span>
+            </div>
+            <div className="text-[10px] opacity-70">
+              {isHistoricalApproval
+                ? "舊對話中尚未回覆的批准請求；不再阻塞輸入。若仍要執行此動作，請再次請 AI 觸發。"
+                : "不再顯示批准卡片；如需建立 intervention 請使用 request_sentinel_remediation。"}
+            </div>
           </div>
         </div>
       )}
