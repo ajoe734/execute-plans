@@ -725,7 +725,7 @@ function ToolBlock({ part, addToolResult, resolveApproval, activeApprovalIds }: 
       )}
 
 
-      {isError && (
+      {isError && !isStale && (
         <div className="ml-4 flex items-start gap-2 text-xs bg-destructive/10 border border-destructive/40 rounded-md p-2">
           <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0 space-y-1">
