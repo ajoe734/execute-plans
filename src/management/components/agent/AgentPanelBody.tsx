@@ -550,7 +550,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
                   );
                 }
                 if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
-                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} />;
+                  return <ToolBlock key={idx} part={part} addToolResult={addToolResult} resolveApproval={resolveApproval} activeApprovalIds={activeApprovalIds} />;
                 }
                 return null;
               })}
