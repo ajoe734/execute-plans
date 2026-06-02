@@ -383,26 +383,37 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       lastAssistantMessageIsCompleteWithToolCalls({ messages: msgs }),
   });
 
-  // Pending high-risk approvals — AI SDK emits state="approval-requested" with part.approval.id
-  // for tools declared with needsApproval:true. Resolve via addToolApprovalResponse({id,approved,reason}).
+  // Pending high-risk approvals — ONLY scan the LAST assistant message.
+  // Historical assistant messages with leftover "approval-requested" state are
+  // treated as stale (rendered as historical record by ToolBlock, no buttons,
+  // no input blocking). This prevents the queue from accumulating dozens of
+  // old approval cards when reopening a thread.
   const pendingApprovals = useMemo<PendingApproval[]>(() => {
     const out: PendingApproval[] = [];
-    for (const m of messages) {
-      if (m.role !== "assistant") continue;
-      for (const part of m.parts ?? []) {
-        const t = part.type as string;
-        if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
-        const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
-        if (p.state !== "approval-requested") continue;
-        const approvalId = p.approval?.id;
-        if (!approvalId || !p.toolCallId) continue;
-        const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
-        out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
-      }
+    // Find last assistant message
+    let lastAssistant: UIMessage | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") { lastAssistant = messages[i]; break; }
+    }
+    if (!lastAssistant) return out;
+    for (const part of lastAssistant.parts ?? []) {
+      const t = part.type as string;
+      if (!t?.startsWith("tool-") && t !== "dynamic-tool") continue;
+      const p = part as { state?: string; toolCallId?: string; approval?: { id?: string }; toolName?: string };
+      if (p.state !== "approval-requested") continue;
+      const approvalId = p.approval?.id;
+      if (!approvalId || !p.toolCallId) continue;
+      const name = t === "dynamic-tool" ? (p.toolName ?? "tool") : t.slice("tool-".length);
+      out.push({ toolName: name, toolCallId: p.toolCallId, approvalId });
     }
     return out;
   }, [messages]);
   const hasPending = pendingApprovals.length > 0;
+
+  // Set of approvalIds that are currently actionable (only those from the
+  // last assistant message). ToolBlock uses this to decide whether to render
+  // approval buttons or render the tool part as a historical record.
+  const activeApprovalIds = useMemo(() => new Set(pendingApprovals.map((p) => p.approvalId)), [pendingApprovals]);
 
   // Debug: pending approvals snapshot.
   useEffect(() => {
