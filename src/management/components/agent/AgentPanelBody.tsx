@@ -752,7 +752,7 @@ function ToolBlock({ part, addToolResult, resolveApproval, activeApprovalIds }: 
         </div>
       )}
 
-      {isDraft && completed && !isError && output?.href && (
+      {isDraft && completed && !isError && !isStale && output?.href && (
         <div className="ml-4 flex items-center gap-2 text-xs bg-blue-500/10 border border-blue-500/30 rounded-md p-2">
           <FileEdit className="h-3.5 w-3.5 text-blue-600 shrink-0" />
           <span className="flex-1">草稿已就緒：<span className="font-medium">{toolName.replace("propose_", "")}</span>。{output.note ?? ""}</span>
