@@ -424,25 +424,50 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
   const resolveApproval = useCallback(async (p: PendingApproval, approved: boolean) => {
     // eslint-disable-next-line no-console
     console.log(approved ? "[AgentPanelBody:approve]" : "[AgentPanelBody:deny]", { ...p, status });
-    // Defensive UI patch first: the SDK helper only mutates the LAST message.
-    // If the pending approval was loaded from history and is not the last
-    // message, the click looked dead. Patch the matching part locally so the
-    // banner unblocks immediately even if the follow-up request fails.
-    setMessages((current) => current.map((m) => ({
-      ...m,
-      parts: (m.parts ?? []).map((part) => {
-        const t = part.type as string;
-        if (!t?.startsWith("tool-") && t !== "dynamic-tool") return part;
-        const candidate = part as typeof part & { state?: string; approval?: { id?: string } };
-        if (candidate.state !== "approval-requested" || candidate.approval?.id !== p.approvalId) return part;
-        return {
-          ...part,
-          state: "approval-responded",
-          approval: { id: p.approvalId, approved, reason: approved ? undefined : "user_denied" },
-        } as typeof part;
-      }),
-    })));
+    // 1) Defensive UI patch — the SDK helper only mutates the LAST message.
+    let updatedMessages: UIMessage[] = [];
+    setMessages((current) => {
+      const next = current.map((m) => ({
+        ...m,
+        parts: (m.parts ?? []).map((part) => {
+          const t = part.type as string;
+          if (!t?.startsWith("tool-") && t !== "dynamic-tool") return part;
+          const candidate = part as typeof part & { state?: string; approval?: { id?: string } };
+          if (candidate.state !== "approval-requested" || candidate.approval?.id !== p.approvalId) return part;
+          return {
+            ...part,
+            state: "approval-responded",
+            approval: { id: p.approvalId, approved, reason: approved ? undefined : "user_denied" },
+          } as typeof part;
+        }),
+      }));
+      updatedMessages = next;
+      return next;
+    });
 
+    // 2) Persist to chat_messages so reload / thread-switch doesn't resurrect it.
+    //    Find which DB rows changed (by message_id) and update their `parts`.
+    void (async () => {
+      try {
+        const changed = updatedMessages.filter((m) => m.role === "assistant" && (m.parts ?? []).some((part) => {
+          const candidate = part as { approval?: { id?: string } };
+          return candidate.approval?.id === p.approvalId;
+        }));
+        for (const m of changed) {
+          if (!m.id) continue;
+          const { error: upErr } = await supabase
+            .from("chat_messages")
+            .update({ parts: m.parts as unknown as never })
+            .eq("thread_id", threadId)
+            .eq("message_id", m.id);
+          if (upErr) console.error("[AgentPanelBody:persist-approval]", upErr);
+        }
+      } catch (e) {
+        console.error("[AgentPanelBody:persist-approval-threw]", e);
+      }
+    })();
+
+    // 3) Tell AI SDK so it can continue the model loop.
     try {
       await addToolApprovalResponse({
         id: p.approvalId,
@@ -454,7 +479,7 @@ function ChatWindow({ threadId, anonId, initialMessages }: {
       console.error("[AgentPanelBody:approval-error]", { ...p, approved, error: e });
       toast.error("批准狀態已更新，但送出到 AI SDK 時失敗；請再送一次訊息繼續。 ");
     }
-  }, [addToolApprovalResponse, setMessages, status]);
+  }, [addToolApprovalResponse, setMessages, status, threadId]);
 
   // Auto-resolve tool-navigate ONLY for tool calls produced in THIS session.
   const navHandledRef = useRef<Set<string>>(new Set());
