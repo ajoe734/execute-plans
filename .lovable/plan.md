@@ -1,32 +1,31 @@
-我檢查到問題不只是 UI：目前批准狀態只改在前端 `useChat` 記憶體裡，沒有回寫到 `chat_messages.parts`。所以重新載入或切回對話後，資料庫仍是 `approval-requested`，前端又把整段歷史所有 pending approvals 掃出來，才會出現你截圖裡 19 個「明明批准過還一直冒出來」的卡片。
+## 問題
 
-修復計畫：
+截圖裡 `annotate_evidence` 同時顯示兩張卡：
+1. 灰色「此工具已下線（歷史紀錄）」(stale badge — 預期)
+2. 紅色「工具呼叫失敗 · annotate_evidence (404)」(舊錯誤卡 — 不該再出現)
 
-1. **只把目前最後一輪 assistant 的 approval 當成可處理項目**
-   - 修改 `src/management/components/agent/AgentPanelBody.tsx`。
-   - `pendingApprovals` 不再掃整個歷史訊息。
-   - 只檢查最後一則 assistant message；歷史裡殘留的 `approval-requested` 不再阻塞輸入、不再出現在底部總 approval queue。
-   - 歷史 tool 卡片如果還是舊狀態，只顯示為歷史紀錄，不給「批准/拒絕」按鈕。
+第二張卡是 2026-05-28 移除 `annotate_evidence` 之前已經寫進 `chat_messages.parts` 的歷史 output。移除工具後，渲染邏輯只擋了 `Tool` collapsible (`{!isStale && <Tool>...`)，但下方的紅色錯誤橫幅、draft 橫幅、approval 橫幅都沒有 `isStale` gate，所以仍會渲染。
 
-2. **批准/拒絕後立即持久化到資料庫**
-   - 在 `resolveApproval()` 裡，除了本地 `setMessages()`，也同步更新該 thread 對應 `chat_messages.parts`。
-   - 將 matching `approval.id` 的 part 從：
-     - `state: "approval-requested"`
-     轉成：
-     - `state: "approval-responded"`
-     - `approval: { id, approved, reason }`
-   - 這樣重新整理、切換 thread 後不會復活。
+## 修改範圍
 
-3. **後端 function 也補一層同步防線**
-   - 修改 `supabase/functions/management-agent/index.ts`。
-   - 當 `addToolApprovalResponse()` 送出下一次 stream request 時，edge function 在呼叫模型前先把 incoming assistant messages 裡已變更的 approval/tool parts 回寫到 `chat_messages`。
-   - 避免前端更新成功但 stream 中斷時，下次又從舊 DB 狀態復活。
+只動 `src/management/components/agent/AgentPanelBody.tsx` 的 `ToolBlock` (約 698–775 行)。
 
-4. **清掉目前這個 thread 的舊 pending 視覺污染**
-   - 因為既有資料裡已經有歷史 `approval-requested`，前端 active-only 規則會先讓它們不再阻塞。
-   - 若你再次按批准/拒絕，新的狀態會被寫回；舊歷史不再需要人工一個個按。
+把 `isStale` 變成單一截斷點：當工具已從 `ACTIVE_TOOL_NAMES` 下線、或是 historical approval 時，**只**渲染灰色 stale badge，**不**渲染：
+- 紅色 error 卡 (`isError` block, ~728–753)
+- draft 橫幅 (`isDraft && completed`, ~755–763)
+- approval 橫幅 (`needsApproval`, ~767+)
+- 任何後續輸出按鈕
 
-5. **驗證**
-   - 檢查 approval queue count：不應再從整個 history 撈出 19 個。
-   - 批准一個高風險 tool 後，切換 thread / reload，該 approval 不應再回到 pending。
-   - 確認仍能正常送出下一輪工具結果，不破壞 AI SDK `sendAutomaticallyWhen` 流程。
+做法：把 728 行起的後續區塊全部包在 `{!isStale && (...)}` 內，或在每個區塊條件最前面 `&& !isStale`。傾向前者，diff 小且語意清楚。
+
+## 不動什麼
+
+- `ACTIVE_TOOL_NAMES` 名單不動。
+- 不動 BE / edge function / DB — 歷史紀錄留著沒問題，只是 UI 不再渲染舊錯誤。
+- 不動 active 工具的 error 渲染（active 工具該繼續顯示紅卡）。
+
+## 驗證
+
+1. Cockpit chat 重新整理 → 截圖中的紅色 404 卡消失，只剩灰色 stale badge。
+2. 任何 active 工具（例：`request_sentinel_remediation`）若回 404，紅色 error 卡仍照常顯示。
+3. Draft / approval 橫幅在 active 工具上仍正常。
