@@ -647,18 +647,21 @@ const ACTIVE_TOOL_NAMES = new Set<string>([
   "start_persona_onboarding", "query_persona_readiness",
 ]);
 
-function ToolBlock({ part, addToolResult, resolveApproval }: {
+function ToolBlock({ part, addToolResult, resolveApproval, activeApprovalIds }: {
   part: any;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
   resolveApproval: (p: PendingApproval, approved: boolean) => Promise<void>;
+  activeApprovalIds: Set<string>;
 }) {
   const nav = useNavigate();
   const toolName: string = part.type === "dynamic-tool"
     ? (part.toolName as string)
     : (part.type as string).slice("tool-".length);
 
-  const isStale = !ACTIVE_TOOL_NAMES.has(toolName);
-  const needsApproval = !isStale && part.state === "approval-requested" && !!part.approval?.id;
+  const approvalId: string | undefined = part.approval?.id;
+  const isHistoricalApproval = part.state === "approval-requested" && (!approvalId || !activeApprovalIds.has(approvalId));
+  const isStale = !ACTIVE_TOOL_NAMES.has(toolName) || isHistoricalApproval;
+  const needsApproval = !isStale && part.state === "approval-requested" && !!approvalId && activeApprovalIds.has(approvalId);
 
   const isDraft = toolName.startsWith("propose_");
 
