@@ -234,7 +234,7 @@ export function AgentPanelBody() {
   const runUiAction = useCallback((action: ManagementAiUiAction, key: string) => {
     const result = executeUiAction(action as UiAction, {
       navigate: (p) => navigate(p),
-      setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind, selectedEntityId: id }),
+      setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind as never, selectedEntityId: id }),
       setSearchParam: (k, v) => {
         const next = new URLSearchParams(searchParams);
         if (v === "") next.delete(k); else next.set(k, v);
