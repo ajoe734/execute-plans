@@ -166,7 +166,10 @@ function newIdempotencyKey(): string {
 }
 
 /** POST /bff/management/nl/ask — never returns a locally-synthesized answer. */
-export async function askManagementAi(input: ManagementAiAskInput): Promise<ManagementAiResult> {
+export async function askManagementAi(
+  input: ManagementAiAskInput,
+  options?: { signal?: AbortSignal },
+): Promise<ManagementAiResult> {
   const base = detectBaseUrl();
   if (!base) {
     return {
@@ -196,8 +199,12 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
       headers,
       body,
       credentials: "include",
+      signal: options?.signal,
     });
   } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "aborted" };
+    }
     return {
       ok: false,
       kind: "transport_failure",
