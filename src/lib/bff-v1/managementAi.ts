@@ -32,6 +32,7 @@ export interface ProviderStatus {
 
 export interface ManagementAiAnswerOk {
   ok: true;
+  kind: "ok";
   answer: string;
   sessionId: string | null;
   traceId: string | null;
@@ -60,6 +61,7 @@ export type ManagementAiResult =
   | ManagementAiAnswerOk
   | ManagementAiAnswerDegraded
   | ManagementAiTransportFailure;
+
 
 export interface ManagementAiAskInput {
   question: string;
