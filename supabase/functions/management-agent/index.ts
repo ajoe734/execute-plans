@@ -635,13 +635,32 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Persist any incoming assistant messages whose parts may have changed
-    // (e.g. approval-requested → approval-responded after user clicked 批准/拒絕).
-    // Idempotent: update existing row by (thread_id, message_id); if none exists, skip.
-    // Without this, the FE may patch local state but reloading the thread resurrects
-    // old "approval-requested" cards from the DB.
+    // Sanitize incoming messages: any tool part without a terminal result
+    // (output-available / output-error / approval-responded) is rewritten to
+    // output-error so convertToModelMessages doesn't throw "Tool result is
+    // missing for tool call ...". Covers stale tool calls from prior sessions
+    // (e.g. removed tools like create_intervention, annotate_evidence).
+    const sanitizedMessages = messages.map((m) => {
+      if (m.role !== "assistant" || !Array.isArray(m.parts)) return m;
+      const parts = m.parts.map((part) => {
+        const t = (part as { type?: string }).type;
+        if (!t || (!t.startsWith("tool-") && t !== "dynamic-tool")) return part;
+        const p = part as { state?: string };
+        if (p.state === "output-available" || p.state === "output-error" || p.state === "approval-responded") return part;
+        return {
+          ...(part as object),
+          state: "output-error",
+          errorText: "Stale tool call from a previous session — no result was recorded.",
+          output: { ok: false, stale: true, message: "Stale tool call from a previous session — no result was recorded." },
+        } as typeof part;
+      });
+      return { ...m, parts };
+    });
+
+    // Persist any incoming assistant messages (post-sanitize) so the DB heals
+    // over time and reloads no longer resurrect stale approval-requested cards.
     try {
-      const assistantWithId = messages.filter(
+      const assistantWithId = sanitizedMessages.filter(
         (m): m is UIMessage & { id: string } => m.role === "assistant" && typeof m.id === "string" && m.id.length > 0,
       );
       for (const m of assistantWithId) {
@@ -658,10 +677,11 @@ Deno.serve(async (req) => {
 
     const tools = buildTools(mode, bffAuth);
     const errorRule = `\n\nIMPORTANT: When a tool result has \`ok: false\`, DO NOT narrate or interpret the error. Output exactly one short line in the user's language: \`工具呼叫失敗，請見上方錯誤卡。\` and STOP. Do not retry, do not explain authorization or status codes.`;
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       system: BASE_SYSTEM_PROMPT + modeHint(mode) + errorRule,
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(sanitizedMessages),
       tools,
       stopWhen: stepCountIs(mode === "agent" ? 80 : 50),
     });

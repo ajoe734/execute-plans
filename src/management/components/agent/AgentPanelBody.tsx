@@ -38,6 +38,41 @@ type PendingApproval = { toolName: string; toolCallId: string; approvalId: strin
 const isEmptyAssistantMessage = (message: UIMessage) =>
   message.role === "assistant" && (!message.parts || message.parts.length === 0);
 
+// Sanitize historical tool parts so `convertToModelMessages` on the server
+// never throws "Tool result is missing for tool call X". Any tool part whose
+// state is not a terminal one (output-available / output-error /
+// approval-responded) is rewritten to output-error with a synthetic note —
+// the original UI still renders it as a historical/stale card.
+function sanitizeHistoricalToolParts(messages: UIMessage[]): UIMessage[] {
+  return messages.map((m) => {
+    if (m.role !== "assistant" || !Array.isArray(m.parts)) return m;
+    const parts = m.parts.map((part) => {
+      const t = (part as { type?: string }).type;
+      if (!t || (!t.startsWith("tool-") && t !== "dynamic-tool")) return part;
+      const p = part as { state?: string; toolCallId?: string };
+      const state = p.state;
+      if (
+        state === "output-available" ||
+        state === "output-error" ||
+        state === "approval-responded"
+      ) return part;
+      // Stale tool call from a previous session — synthesize a result so the
+      // model loop won't reject the conversation.
+      return {
+        ...(part as object),
+        state: "output-error",
+        errorText: "Stale tool call from a previous session — no result was recorded.",
+        output: {
+          ok: false,
+          stale: true,
+          message: "Stale tool call from a previous session — no result was recorded.",
+        },
+      } as typeof part;
+    });
+    return { ...m, parts };
+  });
+}
+
 export function AgentPanelBody() {
   const anonId = useMemo(() => getAnonId(), []);
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -135,13 +170,14 @@ export function AgentPanelBody() {
           setInitialMessages([]); // unblock UI on error
           return;
         }
-        const msgs: UIMessage[] = (data ?? [])
+        const raw: UIMessage[] = (data ?? [])
           .map((r) => ({
             id: r.message_id || r.id,
             role: r.role as "user" | "assistant",
             parts: r.parts as UIMessage["parts"],
           }))
           .filter((m) => !isEmptyAssistantMessage(m));
+        const msgs = sanitizeHistoricalToolParts(raw);
         setInitialMessages(msgs); // always set, even if empty
       } catch (e) {
         if (!alive) return;
