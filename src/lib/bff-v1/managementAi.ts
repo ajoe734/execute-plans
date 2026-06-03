@@ -57,17 +57,45 @@ export interface ManagementAiTransportFailure {
   message: string;
 }
 
+export interface ManagementAiUiAction {
+  id?: string;
+  kind: string;
+  label?: string;
+  rationale?: string;
+  params?: Record<string, unknown>;
+  requiresConfirmation?: boolean;
+}
+
 export type ManagementAiResult =
-  | ManagementAiAnswerOk
+  | (ManagementAiAnswerOk & { uiActions: ManagementAiUiAction[] })
   | ManagementAiAnswerDegraded
   | ManagementAiTransportFailure;
 
 
+export interface ManagementAiRecentTurn {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ManagementAiUiSnapshot {
+  currentRoute: string;
+  selectedEntity?: { kind: string; id: string } | null;
+  visiblePanels?: string[];
+  filters?: Record<string, string>;
+  availableUiActions: Array<{ kind: string; description: string; paramsSchema: string }>;
+}
+
 export interface ManagementAiAskInput {
   question: string;
   focus?: string;
+  /** Free-form JSON-stringified frontend context (route, selection, etc). */
   context?: string;
   sessionId?: string | null;
+  conversation?: {
+    recentTurns: ManagementAiRecentTurn[];
+    summary?: string;
+  };
+  ui?: ManagementAiUiSnapshot;
 }
 
 interface RawAskResponse {
@@ -82,7 +110,32 @@ interface RawAskResponse {
     auditLog?: { href?: string };
     audit_log?: { href?: string };
     conversation?: { href?: string };
+    uiActions?: ManagementAiUiAction[];
+    ui_actions?: ManagementAiUiAction[];
+    suggestedActions?: ManagementAiUiAction[];
+    suggested_actions?: ManagementAiUiAction[];
+    actions?: ManagementAiUiAction[];
   };
+}
+
+function adaptUiActions(raw: RawAskResponse["data"]): ManagementAiUiAction[] {
+  const merged = [
+    ...(raw?.uiActions ?? []),
+    ...(raw?.ui_actions ?? []),
+    ...(raw?.suggestedActions ?? []),
+    ...(raw?.suggested_actions ?? []),
+    ...(raw?.actions ?? []),
+  ];
+  return merged
+    .filter((a) => a && typeof a.kind === "string")
+    .map((a) => ({
+      id: a.id ? String(a.id) : undefined,
+      kind: String(a.kind),
+      label: a.label ? String(a.label) : undefined,
+      rationale: a.rationale ? String(a.rationale) : undefined,
+      params: (a.params && typeof a.params === "object") ? a.params : {},
+      requiresConfirmation: Boolean(a.requiresConfirmation),
+    }));
 }
 
 function adaptProviderStatus(raw: Partial<ProviderStatus> | undefined): ProviderStatus | null {
