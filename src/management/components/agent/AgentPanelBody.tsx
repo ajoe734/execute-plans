@@ -94,7 +94,7 @@ export function AgentPanelBody() {
   const resync = useCallback(async () => {
     if (!sessionId) return;
     const res = await fetchManagementAiConversation(sessionId, traceId);
-    if (!res.ok) {
+    if (res.kind === "failure") {
       setDegraded({ message: `Resync failed: ${res.message}`, providerStatus: null });
       return;
     }
@@ -105,6 +105,7 @@ export function AgentPanelBody() {
       providerStatus: t.providerStatus ?? null,
     })));
   }, [sessionId, traceId]);
+
 
   const submit = useCallback(async (raw: string) => {
     const question = raw.trim();
@@ -121,7 +122,7 @@ export function AgentPanelBody() {
       sessionId,
     });
 
-    if (result.ok) {
+    if (result.kind === "ok") {
       setSessionId(result.sessionId ?? sessionId);
       setTraceId(result.traceId);
       setTurns((prev) => [...prev, {
@@ -138,6 +139,7 @@ export function AgentPanelBody() {
       setTraceId(result.traceId);
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
     } else {
+      // transport_failure
       setDegraded({
         message: result.status
           ? `Pantheon BFF returned ${result.status}: ${result.message}`
@@ -145,6 +147,7 @@ export function AgentPanelBody() {
         providerStatus: null,
       });
     }
+
     setPending(false);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [location.pathname, pending, sessionId]);
