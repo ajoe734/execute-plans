@@ -1,29 +1,45 @@
 // Management AI chat panel — Pantheon BFF runtime ONLY.
 //
-// 2026-06-03 rewrite: stripped the Supabase Edge Function (`management-agent`)
-// transport, the @ai-sdk/react `useChat` loop, tool-call/approval UI, and the
-// chat_threads/chat_messages persistence. Runtime path is now strictly:
+// Runtime path:
 //   User → Lovable FE → POST /bff/management/nl/ask → Pantheon BFF
 //                                                 → OpenClaw gateway / Codex
-// The FE never generates an answer locally. If the provider runtime is
-// degraded/disabled/error OR the BFF endpoint is unreachable, the UI surfaces
-// a degraded banner — never a synthetic reply.
 //
-// 2026-06-03b: restored the conversation list (sidebar). The BFF has no list
-// endpoint, so we keep a lightweight per-browser index in localStorage
-// (`pantheon.mgmtAi.sessions.v1`) mapping sessionId → {title, updatedAt}.
-// Clicking a session calls fetchManagementAiConversation(sessionId) to
-// rehydrate turns from the BFF. No message bodies are stored locally.
+// 2026-06-03c (multi-turn + UI actions):
+//   • Multi-turn: sessionId is reused across submits until the user starts a
+//     new chat. Each request sends `conversation.recentTurns` + summary.
+//   • UI snapshot: every request includes the current route, selected entity,
+//     visible filters, and the allowlisted `availableUiActions`.
+//   • UI actions: BFF MAY return `data.uiActions | suggestedActions | actions`.
+//     They are rendered as confirm chips. Only allowlisted kinds run; backend
+//     mutations (`runBffAction`) are NEVER auto-executed.
+//   • Resync uses GET /bff/management/ai/conversations/{session_id} WITHOUT
+//     trace_id (trace_id is per-turn audit, not history filter).
+//   • No Lovable AI fallback. degraded/disabled/error → degraded banner only.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare } from "lucide-react";
-import { askManagementAi, fetchManagementAiConversation, type ManagementAiResult, type ProviderStatus } from "@/lib/bff-v1/managementAi";
-import { useLocation } from "react-router-dom";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert } from "lucide-react";
+import {
+  askManagementAi,
+  fetchManagementAiConversation,
+  type ManagementAiResult,
+  type ManagementAiUiAction,
+  type ManagementAiUiSnapshot,
+  type ProviderStatus,
+} from "@/lib/bff-v1/managementAi";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  AVAILABLE_UI_ACTIONS,
+  executeUiAction,
+  isHighRiskAction,
+  type UiAction,
+} from "./uiActionRegistry";
+import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
 
 interface ChatTurn {
   id: string;
@@ -32,6 +48,9 @@ interface ChatTurn {
   providerStatus?: ProviderStatus | null;
   auditLogHref?: string | null;
   conversationHref?: string | null;
+  traceId?: string | null;
+  uiActions?: ManagementAiUiAction[];
+  createdAt: number;
 }
 
 interface DegradedState {
@@ -46,6 +65,7 @@ interface SessionIndexEntry {
 }
 
 const SESSION_INDEX_KEY = "pantheon.mgmtAi.sessions.v1";
+const RECENT_TURNS_LIMIT = 12;
 
 function loadSessionIndex(): SessionIndexEntry[] {
   if (typeof window === "undefined") return [];
@@ -92,16 +112,21 @@ function ProviderStatusBar({ s }: { s: ProviderStatus }) {
 
 export function AgentPanelBody() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const nlCtx = useManagementNlContext();
+
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [traceId, setTraceId] = useState<string | null>(null);
+  const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState(false);
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
+  const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Resolve textarea node without relying on forwardRef in PromptInputTextarea.
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     inputRef.current = inputContainerRef.current?.querySelector("textarea") ?? null;
@@ -142,15 +167,18 @@ export function AgentPanelBody() {
     setTurns([]);
     setSessionId(null);
     setTraceId(null);
+    setConversationSummary(undefined);
     setDegraded(null);
     setText("");
+    setActionFeedback({});
     inputRef.current?.focus();
   }, []);
 
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
-    const res = await fetchManagementAiConversation(target, traceId);
+    // NOTE: do NOT pass traceId — full conversation must not be trace-filtered.
+    const res = await fetchManagementAiConversation(target);
     if (res.kind === "failure") {
       setDegraded({ message: `Resync failed: ${res.message}`, providerStatus: null });
       return;
@@ -160,16 +188,19 @@ export function AgentPanelBody() {
       role: t.role === "assistant" ? "assistant" : "user",
       text: t.text,
       providerStatus: t.providerStatus ?? null,
+      createdAt: t.createdAt ? Date.parse(t.createdAt) || Date.now() : Date.now(),
     })));
     setDegraded(null);
-  }, [sessionId, traceId]);
+  }, [sessionId]);
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
     setSessionId(id);
     setTraceId(null);
+    setConversationSummary(undefined);
     setDegraded(null);
     setText("");
+    setActionFeedback({});
     await resync(id);
   }, [sessionId, resync]);
 
@@ -182,19 +213,74 @@ export function AgentPanelBody() {
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
 
+  // ---- UI snapshot (sent on every turn) ----
+  const buildUiSnapshot = useCallback((): ManagementAiUiSnapshot => {
+    const filters: Record<string, string> = {};
+    searchParams.forEach((v, k) => { filters[k] = v; });
+    return {
+      currentRoute: location.pathname,
+      selectedEntity: (nlCtx.selectedEntityKind && nlCtx.selectedEntityId)
+        ? { kind: nlCtx.selectedEntityKind, id: nlCtx.selectedEntityId }
+        : null,
+      visiblePanels: [],
+      filters,
+      availableUiActions: AVAILABLE_UI_ACTIONS.map((d) => ({
+        kind: d.kind, description: d.description, paramsSchema: d.paramsSchema,
+      })),
+    };
+  }, [location.pathname, searchParams, nlCtx.selectedEntityKind, nlCtx.selectedEntityId]);
+
+  // ---- Execute an allowlisted UI action ----
+  const runUiAction = useCallback((action: ManagementAiUiAction, key: string) => {
+    const result = executeUiAction(action as UiAction, {
+      navigate: (p) => navigate(p),
+      setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind, selectedEntityId: id }),
+      setSearchParam: (k, v) => {
+        const next = new URLSearchParams(searchParams);
+        if (v === "") next.delete(k); else next.set(k, v);
+        setSearchParams(next);
+      },
+      refresh: () => window.location.reload(),
+    });
+    setActionFeedback((prev) => ({
+      ...prev,
+      [key]: result.ok ? "已執行" : (result.reason ?? "未執行"),
+    }));
+  }, [navigate, searchParams, setSearchParams]);
+
   const submit = useCallback(async (raw: string) => {
     const question = raw.trim();
     if (!question || pending) return;
     setPending(true);
     setDegraded(null);
-    const userTurn: ChatTurn = { id: turnId("u"), role: "user", text: question };
+    const now = Date.now();
+    const userTurn: ChatTurn = { id: turnId("u"), role: "user", text: question, createdAt: now };
+
+    // Build recentTurns from CURRENT turns + the new user message (so BE sees
+    // it even if it doesn't persist history yet). Limited to last N turns.
+    const recentTurns = [...turns, userTurn].slice(-RECENT_TURNS_LIMIT).map((t) => ({
+      role: t.role as "user" | "assistant",
+      content: t.text,
+    }));
+
     setTurns((prev) => [...prev, userTurn]);
+
+    const ui = buildUiSnapshot();
 
     const result: ManagementAiResult = await askManagementAi({
       question,
       focus: "all",
-      context: location.pathname,
       sessionId,
+      context: JSON.stringify({
+        route: location.pathname,
+        pageLabel: nlCtx.pageLabel,
+        selectedEntity: ui.selectedEntity,
+      }),
+      conversation: {
+        recentTurns,
+        summary: conversationSummary,
+      },
+      ui,
     });
 
     if (result.kind === "ok") {
@@ -208,6 +294,9 @@ export function AgentPanelBody() {
         providerStatus: result.providerStatus,
         auditLogHref: result.auditLogHref,
         conversationHref: result.conversationHref,
+        traceId: result.traceId,
+        uiActions: result.uiActions,
+        createdAt: Date.now(),
       }]);
       setDegraded(null);
       if (sid) upsertSessionIndex(sid, question);
@@ -218,7 +307,6 @@ export function AgentPanelBody() {
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
       if (sid) upsertSessionIndex(sid, question);
     } else {
-      // transport_failure
       setDegraded({
         message: result.status
           ? `Pantheon BFF returned ${result.status}: ${result.message}`
@@ -229,7 +317,7 @@ export function AgentPanelBody() {
 
     setPending(false);
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [location.pathname, pending, sessionId, upsertSessionIndex]);
+  }, [pending, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex]);
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -257,9 +345,7 @@ export function AgentPanelBody() {
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
           {sessions.length === 0 && (
-            <div className="px-2 py-3 text-[10px] text-muted-foreground">
-              尚無對話紀錄
-            </div>
+            <div className="px-2 py-3 text-[10px] text-muted-foreground">尚無對話紀錄</div>
           )}
           {sessions.map((s) => {
             const active = s.id === sessionId;
@@ -271,9 +357,7 @@ export function AgentPanelBody() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] truncate">{s.title}</div>
-                  <div className="text-[9px] text-muted-foreground font-mono">
-                    {s.id.slice(0, 10)}…
-                  </div>
+                  <div className="text-[9px] text-muted-foreground font-mono">{s.id.slice(0, 10)}…</div>
                 </div>
                 <button
                   type="button"
@@ -296,6 +380,7 @@ export function AgentPanelBody() {
           <span className="text-[10px] text-muted-foreground">
             {sessionId ? `session ${sessionId.slice(0, 10)}…` : "new session"}
           </span>
+          <span className="text-[10px] text-muted-foreground">· {turns.length} 則訊息</span>
           <div className="ml-auto flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={startNewConversation}>
               新對話
@@ -309,7 +394,7 @@ export function AgentPanelBody() {
         {lastProviderStatus && (
           <div className="border-b px-2 py-1 bg-muted/10">
             <ProviderStatusBar s={lastProviderStatus} />
-            {(lastLinks.audit || lastLinks.conversation) && (
+            {(lastLinks.audit || lastLinks.conversation || traceId) && (
               <div className="text-[10px] mt-0.5 flex gap-2">
                 {lastLinks.audit && (
                   <a href={lastLinks.audit} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
@@ -332,15 +417,40 @@ export function AgentPanelBody() {
             {turns.length === 0 && !pending && (
               <ConversationEmptyState
                 title="Pantheon Management AI"
-                description="透過 Pantheon BFF → OpenClaw gateway / Codex provider 回應。FE 不會自行生成答案。"
+                description="多回合對話 · 經 Pantheon BFF → OpenClaw / Codex。FE 不會自行生成答案。"
               />
             )}
             {turns.map((t) => (
-              <Message key={t.id} from={t.role}>
-                {t.role === "assistant"
-                  ? <MessageResponse>{t.text}</MessageResponse>
-                  : <MessageContent>{t.text}</MessageContent>}
-              </Message>
+              <div key={t.id} className="space-y-1">
+                <Message from={t.role}>
+                  {t.role === "assistant"
+                    ? <MessageResponse>{t.text}</MessageResponse>
+                    : <MessageContent>{t.text}</MessageContent>}
+                </Message>
+                {t.role === "assistant" && t.uiActions && t.uiActions.length > 0 && (
+                  <div className="px-4 flex flex-wrap gap-1.5">
+                    {t.uiActions.map((a, idx) => {
+                      const key = `${t.id}:${idx}`;
+                      const highRisk = isHighRiskAction(a as UiAction);
+                      const feedback = actionFeedback[key];
+                      return (
+                        <Button
+                          key={key}
+                          size="sm"
+                          variant={highRisk ? "outline" : "secondary"}
+                          className="h-7 text-[11px] gap-1"
+                          onClick={() => runUiAction(a, key)}
+                          title={a.rationale ?? a.kind}
+                        >
+                          {highRisk ? <ShieldAlert className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                          <span>{a.label ?? a.kind}</span>
+                          {feedback && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{feedback}</Badge>}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ))}
             {pending && (
               <div className="px-4 py-2"><Shimmer>透過 OpenClaw 等候 Codex 回應…</Shimmer></div>
@@ -364,7 +474,7 @@ export function AgentPanelBody() {
             <PromptInputTextarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="跟 Management AI 說話…（經 Pantheon BFF / OpenClaw）"
+              placeholder="跟 Management AI 說話…（多回合 · 經 Pantheon BFF / OpenClaw）"
               disabled={pending}
             />
             <PromptInputFooter className="justify-end">
