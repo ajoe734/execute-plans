@@ -658,10 +658,33 @@ Deno.serve(async (req) => {
 
     const tools = buildTools(mode, bffAuth);
     const errorRule = `\n\nIMPORTANT: When a tool result has \`ok: false\`, DO NOT narrate or interpret the error. Output exactly one short line in the user's language: \`工具呼叫失敗，請見上方錯誤卡。\` and STOP. Do not retry, do not explain authorization or status codes.`;
+
+    // Sanitize incoming messages: any tool part without a terminal result
+    // (output-available / output-error / approval-responded) is rewritten to
+    // output-error so convertToModelMessages doesn't throw "Tool result is
+    // missing for tool call ...". This covers stale tool calls from prior
+    // sessions (e.g. removed tools like create_intervention, annotate_evidence).
+    const sanitizedMessages = messages.map((m) => {
+      if (m.role !== "assistant" || !Array.isArray(m.parts)) return m;
+      const parts = m.parts.map((part) => {
+        const t = (part as { type?: string }).type;
+        if (!t || (!t.startsWith("tool-") && t !== "dynamic-tool")) return part;
+        const p = part as { state?: string };
+        if (p.state === "output-available" || p.state === "output-error" || p.state === "approval-responded") return part;
+        return {
+          ...(part as object),
+          state: "output-error",
+          errorText: "Stale tool call from a previous session — no result was recorded.",
+          output: { ok: false, stale: true, message: "Stale tool call from a previous session — no result was recorded." },
+        } as typeof part;
+      });
+      return { ...m, parts };
+    });
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       system: BASE_SYSTEM_PROMPT + modeHint(mode) + errorRule,
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(sanitizedMessages),
       tools,
       stopWhen: stepCountIs(mode === "agent" ? 80 : 50),
     });
