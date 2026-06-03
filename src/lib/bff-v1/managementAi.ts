@@ -178,6 +178,7 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
 
   return {
     ok: true,
+    kind: "ok",
     answer: String(data.answer ?? ""),
     sessionId,
     traceId,
@@ -185,6 +186,7 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
     auditLogHref: data.auditLog?.href ?? data.audit_log?.href ?? null,
     conversationHref: data.conversation?.href ?? null,
   };
+
 }
 
 // ---- Conversation resync ----
@@ -199,17 +201,20 @@ export interface ManagementAiTurn {
 
 export interface ConversationResyncOk {
   ok: true;
+  kind: "ok";
   sessionId: string;
   turns: ManagementAiTurn[];
 }
 
 export interface ConversationResyncFailure {
   ok: false;
+  kind: "failure";
   status: number | null;
   message: string;
 }
 
 export type ConversationResyncResult = ConversationResyncOk | ConversationResyncFailure;
+
 
 interface RawConversationResponse {
   data?: {
