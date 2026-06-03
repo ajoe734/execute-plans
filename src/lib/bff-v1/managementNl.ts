@@ -1,6 +1,14 @@
+// @deprecated 2026-06-03 — Superseded by `src/lib/bff-v1/managementAi.ts`,
+// which routes through Pantheon BFF (`POST /bff/management/nl/ask`) →
+// OpenClaw gateway adapter / Codex provider. This Phase 1 fixed-mock
+// responder is kept only as a strict/gateway refusal sentinel; no UI surface
+// is allowed to use it for runtime answers. Remove after BE confirms
+// `/bff/management/nl/ask` is live and probe row is green.
+//
 // Phase 1 fixed-mock NL responder. NO network. NO AI gateway.
 // Strict mode handling is at the caller: when strict, callers MUST raise an
 // error before invoking this (see askManagementNl()).
+
 
 import {
   type ManagementNlAnswer, type ManagementNlAsk, type ManagementNlIntent,
