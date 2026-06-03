@@ -4,13 +4,13 @@
 //   User → Lovable FE → POST /bff/management/nl/ask → Pantheon BFF
 //                                                 → OpenClaw gateway / Codex
 //
-// 2026-06-03d (anti-truncation hardening):
-//   • resync() merges by turn.id instead of replacing — BFF empty/failure
-//     never wipes visible turns.
-//   • Switching session / starting new chat aborts the in-flight request and
-//     guards stale responses via activeSessionRef so they cannot leak into
-//     another session.
-//   • Inline resync notice (空回應 / 失敗 / 取消) — no silent black holes.
+// 2026-06-03e (anti-truncation v2 + image attachments):
+//   • Per-session localStorage cache so switching/reload never loses turns.
+//   • loadSession() hydrates from local cache first, then merges resync.
+//   • Recent-turn payload no longer hard-capped at 12; uses a char-budget
+//     window so long conversations actually reach the LLM.
+//   • Paperclip / paste / drop image attachments — sent as base64 in the
+//     BFF payload; rendered as thumbnails in the user message.
 //   • Still: no Lovable AI fallback; degraded/disabled/error → degraded banner.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,13 +20,14 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon } from "lucide-react";
 import {
   askManagementAi,
   fetchManagementAiConversation,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
+  type ManagementAiRecentTurn,
   type ProviderStatus,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -37,6 +38,16 @@ import {
   type UiAction,
 } from "./uiActionRegistry";
 import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
+import {
+  type ChatAttachment,
+  ATTACHMENT_LIMITS,
+  PER_TURN_CACHE_BUDGET,
+  attachmentToDataUrl,
+  compressToThumbnail,
+  fileToAttachment,
+  formatBytes,
+  validateNewFiles,
+} from "./attachmentUtils";
 
 interface ChatTurn {
   id: string;
@@ -47,6 +58,7 @@ interface ChatTurn {
   conversationHref?: string | null;
   traceId?: string | null;
   uiActions?: ManagementAiUiAction[];
+  attachments?: ChatAttachment[];
   createdAt: number;
 }
 
@@ -62,7 +74,10 @@ interface SessionIndexEntry {
 }
 
 const SESSION_INDEX_KEY = "pantheon.mgmtAi.sessions.v1";
-const RECENT_TURNS_LIMIT = 12;
+const TURNS_CACHE_PREFIX = "pantheon.mgmtAi.turns.v1.";
+const RECENT_CHAR_BUDGET = 32_000; // ~8k tokens of context
+const RECENT_HARD_TURN_CAP = 200;
+const CACHE_MAX_TURNS = 500;
 const NEW_SESSION_SENTINEL = "__new__";
 
 function loadSessionIndex(): SessionIndexEntry[] {
@@ -82,11 +97,53 @@ function loadSessionIndex(): SessionIndexEntry[] {
 
 function saveSessionIndex(list: SessionIndexEntry[]): void {
   if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify(list)); } catch { /* quota */ }
+}
+
+function turnsCacheKey(sessionId: string): string {
+  return `${TURNS_CACHE_PREFIX}${sessionId}`;
+}
+
+function loadTurnsCache(sessionId: string): ChatTurn[] {
+  if (typeof window === "undefined") return [];
   try {
-    window.localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify(list));
+    const raw = window.localStorage.getItem(turnsCacheKey(sessionId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((t): t is ChatTurn =>
+      t && typeof t.id === "string" && (t.role === "user" || t.role === "assistant") && typeof t.text === "string" && typeof t.createdAt === "number",
+    );
   } catch {
-    /* ignore quota */
+    return [];
   }
+}
+
+async function saveTurnsCache(sessionId: string, turns: ChatTurn[]): Promise<void> {
+  if (typeof window === "undefined") return;
+  const limited = turns.slice(-CACHE_MAX_TURNS);
+  // Per-turn attachment budget: if a turn's attachments exceed budget, downscale.
+  const safe: ChatTurn[] = await Promise.all(limited.map(async (t) => {
+    if (!t.attachments || t.attachments.length === 0) return t;
+    const total = t.attachments.reduce((s, a) => s + a.sizeBytes, 0);
+    if (total <= PER_TURN_CACHE_BUDGET) return t;
+    const thumbs = await Promise.all(t.attachments.map((a) => compressToThumbnail(a)));
+    return { ...t, attachments: thumbs };
+  }));
+  try {
+    window.localStorage.setItem(turnsCacheKey(sessionId), JSON.stringify(safe));
+  } catch {
+    // Quota — try dropping attachments entirely.
+    try {
+      const stripped = safe.map((t) => t.attachments ? { ...t, attachments: undefined } : t);
+      window.localStorage.setItem(turnsCacheKey(sessionId), JSON.stringify(stripped));
+    } catch { /* give up */ }
+  }
+}
+
+function clearTurnsCache(sessionId: string): void {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(turnsCacheKey(sessionId)); } catch { /* ignore */ }
 }
 
 function turnId(prefix: string): string {
@@ -100,9 +157,41 @@ function mergeTurns(local: ChatTurn[], incoming: ChatTurn[]): ChatTurn[] {
   for (const t of local) byId.set(t.id, t);
   for (const t of incoming) {
     const prev = byId.get(t.id);
-    byId.set(t.id, prev ? { ...prev, ...t } : t);
+    byId.set(t.id, prev ? { ...prev, ...t, attachments: prev.attachments ?? t.attachments } : t);
   }
   return Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/**
+ * Build the conversation payload: walk turns from the newest backwards until
+ * we exhaust the char budget, then if anything was dropped emit a small
+ * synthetic "earlier turns omitted" placeholder so the LLM knows.
+ */
+function buildConversationPayload(turns: ChatTurn[]): {
+  recentTurns: ManagementAiRecentTurn[];
+  summary?: string;
+} {
+  const collected: ManagementAiRecentTurn[] = [];
+  let used = 0;
+  let droppedCount = 0;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    const content = t.text;
+    const cost = content.length + 8;
+    if (collected.length >= RECENT_HARD_TURN_CAP) { droppedCount = i + 1; break; }
+    if (used + cost > RECENT_CHAR_BUDGET && collected.length > 0) {
+      droppedCount = i + 1;
+      break;
+    }
+    collected.push({ role: t.role, content });
+    used += cost;
+  }
+  collected.reverse();
+  const out: { recentTurns: ManagementAiRecentTurn[]; summary?: string } = { recentTurns: collected };
+  if (droppedCount > 0) {
+    out.summary = `[earlier ${droppedCount} turn(s) omitted by client char-budget; full history available via /bff/management/ai/conversations]`;
+  }
+  return out;
 }
 
 function ProviderStatusBar({ s }: { s: ProviderStatus }) {
@@ -116,6 +205,34 @@ function ProviderStatusBar({ s }: { s: ProviderStatus }) {
       <span>status={String(s.status)}</span>
       <span>used={String(s.used)}</span>
       <span>fallback={s.fallback ?? "null"}</span>
+    </div>
+  );
+}
+
+function AttachmentThumbs({ items, onRemove }: { items: ChatAttachment[]; onRemove?: (i: number) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((a, i) => (
+        <div key={`${a.filename}-${i}`} className="relative group">
+          <img
+            src={attachmentToDataUrl(a)}
+            alt={a.filename}
+            className="h-14 w-14 rounded object-cover border border-border"
+          />
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              className="absolute -top-1.5 -right-1.5 bg-background border rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition"
+              aria-label={`移除 ${a.filename}`}
+            >
+              <XIcon className="h-2.5 w-2.5" />
+            </button>
+          )}
+          <div className="text-[9px] text-muted-foreground mt-0.5 max-w-[56px] truncate">{formatBytes(a.sizeBytes)}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -136,14 +253,14 @@ export function AgentPanelBody() {
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ---- in-flight guards ----
   const abortRef = useRef<AbortController | null>(null);
-  // Tracks which "session bucket" the UI is currently showing. `null` = new
-  // chat that hasn't received a sessionId from BFF yet. We use the sentinel
-  // string when comparing because null !== null reference-wise across renders
-  // is fine, but storing `NEW_SESSION_SENTINEL` makes intent explicit.
   const activeSessionRef = useRef<string>(NEW_SESSION_SENTINEL);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
@@ -151,6 +268,13 @@ export function AgentPanelBody() {
     inputRef.current = inputContainerRef.current?.querySelector("textarea") ?? null;
     inputRef.current?.focus();
   }, []);
+
+  // ---- Persist turns whenever they change (debounced via rAF) ----
+  useEffect(() => {
+    if (!sessionId) return;
+    const id = window.requestAnimationFrame(() => { void saveTurnsCache(sessionId, turns); });
+    return () => window.cancelAnimationFrame(id);
+  }, [sessionId, turns]);
 
   const lastProviderStatus = useMemo<ProviderStatus | null>(() => {
     for (let i = turns.length - 1; i >= 0; i--) {
@@ -204,13 +328,14 @@ export function AgentPanelBody() {
     setText("");
     setActionFeedback({});
     setResyncNotice(null);
+    setPendingAttachments([]);
+    setAttachmentError(null);
     inputRef.current?.focus();
   }, [abortInflight]);
 
   /**
    * Pull conversation history from BFF and MERGE into local turns by id.
-   * Never wipes visible turns. Failures / empty responses surface as a
-   * non-destructive inline notice.
+   * Never wipes visible turns.
    */
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
@@ -218,7 +343,6 @@ export function AgentPanelBody() {
     const requestBucket = target;
     const res = await fetchManagementAiConversation(target);
 
-    // Guard: user switched session while resync was in flight.
     if (activeSessionRef.current !== requestBucket) return;
 
     if (res.kind === "failure") {
@@ -240,7 +364,7 @@ export function AgentPanelBody() {
         // eslint-disable-next-line no-console
         console.debug("[mgmtAi] resync", {
           sessionId: target,
-          received: incoming.length,
+          receivedFromBff: incoming.length,
           localBefore: prev.length,
           mergedTotal: merged.length,
         });
@@ -265,8 +389,15 @@ export function AgentPanelBody() {
     setDegraded(null);
     setText("");
     setActionFeedback({});
-    // Start fresh visible turns for this session; resync will populate.
-    setTurns([]);
+    setPendingAttachments([]);
+    setAttachmentError(null);
+    // Hydrate from local cache FIRST — switching never blanks the screen.
+    const cached = loadTurnsCache(id);
+    setTurns(cached);
+    if (import.meta.env?.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug("[mgmtAi] loadSession hydrated", { sessionId: id, cached: cached.length });
+    }
     await resync(id);
   }, [sessionId, resync, abortInflight]);
 
@@ -276,6 +407,7 @@ export function AgentPanelBody() {
       saveSessionIndex(list);
       return list;
     });
+    clearTurnsCache(id);
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
 
@@ -296,7 +428,6 @@ export function AgentPanelBody() {
     };
   }, [location.pathname, searchParams, nlCtx.selectedEntityKind, nlCtx.selectedEntityId]);
 
-  // ---- Execute an allowlisted UI action ----
   const runUiAction = useCallback((action: ManagementAiUiAction, key: string) => {
     const result = executeUiAction(action as UiAction, {
       navigate: (p) => navigate(p),
@@ -314,31 +445,72 @@ export function AgentPanelBody() {
     }));
   }, [navigate, searchParams, setSearchParams]);
 
+  // ---- Attachment handlers ----
+  const addFiles = useCallback(async (files: File[]) => {
+    setAttachmentError(null);
+    const { accepted, error } = validateNewFiles(pendingAttachments, files);
+    if (error) setAttachmentError(error);
+    if (accepted.length === 0) return;
+    const parsed = await Promise.all(accepted.map((f) => fileToAttachment(f)));
+    setPendingAttachments((prev) => [...prev, ...parsed]);
+  }, [pendingAttachments]);
+
+  const removePendingAttachment = useCallback((i: number) => {
+    setPendingAttachments((prev) => prev.filter((_, idx) => idx !== i));
+  }, []);
+
+  const onPaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    const files = Array.from(e.clipboardData?.files ?? []);
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (images.length > 0) {
+      e.preventDefault();
+      void addFiles(images);
+    }
+  }, [addFiles]);
+
+  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (files.length > 0) void addFiles(files);
+  }, [addFiles]);
+
   const submit = useCallback(async (raw: string) => {
     const question = raw.trim();
-    if (!question || pending) return;
+    const hasAttachments = pendingAttachments.length > 0;
+    if ((!question && !hasAttachments) || pending) return;
     setPending(true);
     setDegraded(null);
     setResyncNotice(null);
     const now = Date.now();
-    const userTurn: ChatTurn = { id: turnId("u"), role: "user", text: question, createdAt: now };
+    const attachmentsForTurn = pendingAttachments;
+    const userTurn: ChatTurn = {
+      id: turnId("u"),
+      role: "user",
+      text: question,
+      createdAt: now,
+      attachments: attachmentsForTurn.length > 0 ? attachmentsForTurn : undefined,
+    };
 
-    // Snapshot the session bucket this request belongs to. If the user
-    // switches before the response arrives, we discard the response.
     const requestBucket = activeSessionRef.current;
 
-    // Build recentTurns from CURRENT turns + the new user message (so BE sees
-    // it even if it doesn't persist history yet). Limited to last N turns.
-    const recentTurns = [...turns, userTurn].slice(-RECENT_TURNS_LIMIT).map((t) => ({
-      role: t.role as "user" | "assistant",
-      content: t.text,
-    }));
-
-    setTurns((prev) => [...prev, userTurn]);
+    const nextTurns = [...turns, userTurn];
+    setTurns(nextTurns);
+    setPendingAttachments([]);
 
     const ui = buildUiSnapshot();
+    const conv = buildConversationPayload(nextTurns);
+    if (import.meta.env?.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug("[mgmtAi] sending", {
+        sessionId,
+        totalTurns: nextTurns.length,
+        recentTurnsSent: conv.recentTurns.length,
+        summary: conv.summary ?? null,
+        attachments: attachmentsForTurn.length,
+      });
+    }
 
-    // Abort controller for this request — stored so session-switch can cancel.
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -352,20 +524,24 @@ export function AgentPanelBody() {
         selectedEntity: ui.selectedEntity,
       }),
       conversation: {
-        recentTurns,
-        summary: conversationSummary,
+        recentTurns: conv.recentTurns,
+        summary: conv.summary ?? conversationSummary,
       },
       ui,
+      attachments: attachmentsForTurn.length > 0
+        ? attachmentsForTurn.map((a) => ({
+            kind: a.kind,
+            mimeType: a.mimeType,
+            filename: a.filename,
+            sizeBytes: a.sizeBytes,
+            dataBase64: a.dataBase64,
+          }))
+        : undefined,
     }, { signal: controller.signal });
 
-    // Clear the abort ref only if it's still ours (could have been replaced).
     if (abortRef.current === controller) abortRef.current = null;
 
-    // Guard against session-switch race: drop the result entirely.
-    if (activeSessionRef.current !== requestBucket) {
-      // pending already reset by abortInflight; nothing else to do.
-      return;
-    }
+    if (activeSessionRef.current !== requestBucket) return;
 
     if (result.kind === "aborted") {
       setPending(false);
@@ -374,10 +550,7 @@ export function AgentPanelBody() {
 
     if (result.kind === "ok") {
       const sid = result.sessionId ?? sessionId;
-      // First-response upgrade: pin the active bucket to the real sessionId.
-      if (sid && requestBucket === NEW_SESSION_SENTINEL) {
-        activeSessionRef.current = sid;
-      }
+      if (sid && requestBucket === NEW_SESSION_SENTINEL) activeSessionRef.current = sid;
       setSessionId(sid);
       setTraceId(result.traceId);
       setTurns((prev) => [...prev, {
@@ -392,18 +565,15 @@ export function AgentPanelBody() {
         createdAt: Date.now(),
       }]);
       setDegraded(null);
-      if (sid) upsertSessionIndex(sid, question);
+      if (sid) upsertSessionIndex(sid, question || (attachmentsForTurn[0]?.filename ?? "圖片對話"));
     } else if (result.kind === "provider_degraded") {
       const sid = result.sessionId ?? sessionId;
-      if (sid && requestBucket === NEW_SESSION_SENTINEL) {
-        activeSessionRef.current = sid;
-      }
+      if (sid && requestBucket === NEW_SESSION_SENTINEL) activeSessionRef.current = sid;
       setSessionId(sid);
       setTraceId(result.traceId);
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
-      if (sid) upsertSessionIndex(sid, question);
+      if (sid) upsertSessionIndex(sid, question || (attachmentsForTurn[0]?.filename ?? "圖片對話"));
     } else {
-      // transport_failure
       setDegraded({
         message: result.status
           ? `Pantheon BFF returned ${result.status}: ${result.message}`
@@ -414,7 +584,7 @@ export function AgentPanelBody() {
 
     setPending(false);
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [pending, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex]);
+  }, [pending, pendingAttachments, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex]);
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -422,6 +592,8 @@ export function AgentPanelBody() {
     setText("");
     void submit(t);
   };
+
+  const canSubmit = (text.trim().length > 0 || pendingAttachments.length > 0) && !pending;
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -471,7 +643,12 @@ export function AgentPanelBody() {
       </aside>
 
       {/* Main chat column */}
-      <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+      <div
+        className={`flex flex-1 min-w-0 min-h-0 flex-col relative ${isDragging ? "ring-2 ring-primary ring-inset" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
+      >
         <div className="border-b px-2 py-1 flex items-center gap-2 bg-muted/20">
           <span className="text-[11px] font-medium">Management AI</span>
           <span className="text-[10px] text-muted-foreground">
@@ -529,7 +706,7 @@ export function AgentPanelBody() {
             {turns.length === 0 && !pending && (
               <ConversationEmptyState
                 title="Pantheon Management AI"
-                description="多回合對話 · 經 Pantheon BFF → OpenClaw / Codex。FE 不會自行生成答案。"
+                description="多回合對話 · 經 Pantheon BFF → OpenClaw / Codex。FE 不會自行生成答案。支援貼上 / 拖放 / 上傳圖片。"
               />
             )}
             {turns.map((t) => (
@@ -537,7 +714,16 @@ export function AgentPanelBody() {
                 <Message from={t.role}>
                   {t.role === "assistant"
                     ? <MessageResponse>{t.text}</MessageResponse>
-                    : <MessageContent>{t.text}</MessageContent>}
+                    : (
+                      <MessageContent>
+                        {t.text && <div className="whitespace-pre-wrap">{t.text}</div>}
+                        {t.attachments && t.attachments.length > 0 && (
+                          <div className="mt-1.5">
+                            <AttachmentThumbs items={t.attachments} />
+                          </div>
+                        )}
+                      </MessageContent>
+                    )}
                 </Message>
                 {t.role === "assistant" && t.uiActions && t.uiActions.length > 0 && (
                   <div className="px-4 flex flex-wrap gap-1.5">
@@ -581,18 +767,61 @@ export function AgentPanelBody() {
           <ConversationScrollButton />
         </Conversation>
 
-        <div className="border-t p-2" ref={inputContainerRef}>
+        {/* Pending attachments preview */}
+        {(pendingAttachments.length > 0 || attachmentError) && (
+          <div className="border-t px-2 py-1.5 bg-muted/5 space-y-1">
+            {pendingAttachments.length > 0 && (
+              <AttachmentThumbs items={pendingAttachments} onRemove={removePendingAttachment} />
+            )}
+            {attachmentError && (
+              <div className="text-[10px] text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />{attachmentError}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="border-t p-2" ref={inputContainerRef} onPaste={onPaste}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length > 0) void addFiles(files);
+              e.target.value = "";
+            }}
+          />
           <PromptInput onSubmit={onSubmit}>
             <PromptInputTextarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="跟 Management AI 說話…（多回合 · 經 Pantheon BFF / OpenClaw）"
+              placeholder="跟 Management AI 說話…（多回合 · 經 Pantheon BFF / OpenClaw · 可貼上/拖放圖片）"
               disabled={pending}
             />
-            <PromptInputFooter className="justify-end">
+            <PromptInputFooter className="justify-between">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-[11px]"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pending || pendingAttachments.length >= ATTACHMENT_LIMITS.maxPerMessage}
+                title="附加圖片"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                <span>圖片</span>
+                {pendingAttachments.length > 0 && (
+                  <Badge variant="secondary" className="ml-0.5 text-[9px] px-1 py-0">
+                    {pendingAttachments.length}/{ATTACHMENT_LIMITS.maxPerMessage}
+                  </Badge>
+                )}
+              </Button>
               <PromptInputSubmit
                 status={pending ? "submitted" : "ready"}
-                disabled={!text.trim() || pending}
+                disabled={!canSubmit}
               />
             </PromptInputFooter>
           </PromptInput>
