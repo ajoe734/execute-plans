@@ -504,3 +504,27 @@ Recommend wiring this matrix into `.github/workflows/pantheon-integration-gate.y
 ## 7. Change log
 
 - **2026-05-28** v1.0 — initial doc consolidating two 2026-05-28 probes + Wizard Spec into a single BE-facing requirements file.
+
+---
+
+## 8. 2026-06-03 addendum — Management AI runtime endpoints (new)
+
+Per FE directive 2026-06-03, the Management AI floating panel was repointed
+off the Supabase Edge Function (`management-agent` → `ai.gateway.lovable.dev`)
+onto Pantheon BFF. These two endpoints are now **required** for the panel to
+work; until they are live, FE renders a degraded banner (no client fallback).
+
+### 8.1 `POST /bff/management/nl/ask`  (P0-MAI)
+
+- **Body:** `{ question: string, focus: "all" | ..., context: string, sessionId?: string }`
+- **Headers:** `Authorization`, `X-Tenant-Id`, `X-Correlation-Id`, `Idempotency-Key`, `X-BFF-Api-Version`
+- **Success 200 body:** `{ data: { answer, session_id, trace_id, provider_status: { provider, runtime, status, used, fallback }, auditLog: { href }, conversation: { href } } }`
+- **Runtime path:** BFF → OpenClaw gateway adapter → Codex provider. No Lovable AI sandbox.
+- **Degraded contract:** When provider is unavailable, return 200 with `provider_status.used=false` and `status ∈ {degraded, disabled, error}`. FE will NOT synthesize a reply.
+- **Probe:** `scripts/probe-bff-write-paths.mjs` row `P2-MAI` and `scripts/probe-bff-routes.mjs`.
+
+### 8.2 `GET /bff/management/ai/conversations/{session_id}?trace_id=...`  (P0-MAI)
+
+- **Response:** `{ data: { session_id, turns: [{ id, role, text, created_at, provider_status? }] } }`
+- Used by the panel's Resync button to redraw a session from BFF truth.
+

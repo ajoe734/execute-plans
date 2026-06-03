@@ -156,6 +156,14 @@ export const paths = {
   mgmtReadinessBffHa: () => `${BASE}/management/readiness/bff-ha`,
   mgmtReadinessStrictPublish: () => `${BASE}/management/readiness/strict-publish`,
 
+  // ---- 2026-06-03 — Management AI runtime (OpenClaw gateway adapter / Codex). ----
+  // FE submits prompts here; never to /bff/agora/ask.
+  managementNlAsk: () => `${BASE}/management/nl/ask`,
+  managementAiConversation: (sessionId: string, traceId?: string) =>
+    `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+
+
+
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
   mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,

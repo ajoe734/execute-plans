@@ -440,7 +440,9 @@ function buildGate3(routeProbe, authSmoke) {
     "/bff/agora/inbox",
     "/bff/agora/journal",
     "/bff/agora/postmortems",
-    "/bff/agora/ask/sessions",
+    // "/bff/agora/ask/sessions" removed (2026-06-03) — Management AI runtime
+    // moved to POST /bff/management/nl/ask. See writePaths below.
+
   ];
   const v5Paths = [
     "/bff/v5/loop-runs",
@@ -452,7 +454,9 @@ function buildGate3(routeProbe, authSmoke) {
     "/bff/actions/strategies/strategy-dev/promote",
     "/bff/approvals/approval-dev/decide",
     "/bff/v5/interventions/intervention-dev/decide",
+    "/bff/management/nl/ask",
   ];
+
   const routeStatus = (condition) => routeProbe.exists ? condition ? "pass" : "fail" : routeProbe.missingStatus;
   const routeOwner = (condition) => routeProbe.exists && condition ? "" : GATE_OWNERS[3];
   const routeNote = (note) => routeProbe.exists ? note : routeProbe.missingNote;

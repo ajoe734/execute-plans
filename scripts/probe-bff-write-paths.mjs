@@ -71,7 +71,11 @@ const ENDPOINTS = [
   { batch: "P1-E", route: "/bff/agora/journal", method: "POST", body: { title: "dev-probe", body: "probe" } },
   { batch: "P1-E", route: "/bff/agora/skill-coaching", method: "POST", body: { skillId: "skill-dev" } },
   { batch: "P1-E", route: "/bff/agora/postmortems", method: "POST", body: { incidentId: "incident-dev" } },
-  { batch: "P1-E", route: "/bff/agora/ask/sessions", method: "POST", body: { target: "persona-dev", question: "probe" } },
+  // P1-E agora/ask removed (2026-06-03) — Management AI no longer uses Agora Ask.
+
+  // ── P2-MAI — Management AI runtime (OpenClaw / Codex) ─────────────
+  { batch: "P2-MAI", route: "/bff/management/nl/ask", method: "POST", body: { question: "probe", focus: "all", context: "probe-script" } },
+
 ];
 
 function classify(status) {

@@ -48,7 +48,10 @@ const routes = [
   ["GET", "/bff/agora/inbox"],
   ["GET", "/bff/agora/journal"],
   ["GET", "/bff/agora/postmortems"],
-  ["GET", "/bff/agora/ask/sessions"],
+  // /bff/agora/ask/sessions intentionally removed (2026-06-03): Management AI
+  // no longer uses Agora Ask. Agora-only probe lives in scripts/check-agora-boundary.ts.
+  ["POST", "/bff/management/nl/ask"],
+
   ["GET", "/bff/v5/loop-runs"],
   ["GET", "/bff/v5/sentinel/findings"],
   ["GET", "/bff/v5/interventions"],
@@ -58,6 +61,9 @@ const routes = [
 
 function bodyFor(method, route) {
   if (method === "GET") return undefined;
+  if (route === "/bff/management/nl/ask") {
+    return JSON.stringify({ question: "probe", focus: "all", context: "probe-script" });
+  }
   if (route.includes("/decide")) return JSON.stringify({ decision: "defer", memo: "route probe noop" });
   if (route.includes("/acknowledge")) return JSON.stringify({ memo: "route probe noop" });
   if (route.includes("/import-tools")) return JSON.stringify({ schemaJson: { probe: true }, memo: "route probe noop" });
@@ -65,6 +71,7 @@ function bodyFor(method, route) {
   if (route.includes("/actions/")) return JSON.stringify({ memo: "route probe noop", expectedVersion: 1 });
   return JSON.stringify({});
 }
+
 
 async function probe(method, route) {
   const headers = {
