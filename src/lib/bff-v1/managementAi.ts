@@ -290,14 +290,21 @@ interface RawConversationResponse {
   };
 }
 
+/**
+ * Read the full conversation history for a session.
+ *
+ * Per 2026-06-03 directive: do NOT pass trace_id when loading the full
+ * conversation — trace_id is for single-turn audit linking only. The
+ * second parameter is accepted but ignored to preserve call sites.
+ */
 export async function fetchManagementAiConversation(
   sessionId: string,
-  traceId?: string | null,
+  _traceIdIgnored?: string | null,
 ): Promise<ConversationResyncResult> {
   const base = detectBaseUrl();
   if (!base) return { ok: false, kind: "failure", status: null, message: "BFF base URL is not configured." };
   const headers = buildHeaders({ method: "GET" });
-  const url = `${base}${paths.managementAiConversation(sessionId, traceId ?? undefined)}`;
+  const url = `${base}${paths.managementAiConversation(sessionId)}`;
   let res: Response;
   try {
     res = await fetch(url, { method: "GET", headers, credentials: "include" });
