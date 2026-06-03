@@ -240,6 +240,7 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
     providerStatus: providerStatus!,
     auditLogHref: data.auditLog?.href ?? data.audit_log?.href ?? null,
     conversationHref: data.conversation?.href ?? null,
+    uiActions: adaptUiActions(data),
   };
 
 }
