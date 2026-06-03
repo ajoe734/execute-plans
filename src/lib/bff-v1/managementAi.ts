@@ -179,6 +179,8 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
     focus: input.focus ?? "all",
     context: input.context ?? "",
     sessionId: input.sessionId ?? undefined,
+    conversation: input.conversation ?? undefined,
+    ui: input.ui ?? undefined,
   });
 
   let res: Response;
