@@ -170,13 +170,14 @@ export function AgentPanelBody() {
           setInitialMessages([]); // unblock UI on error
           return;
         }
-        const msgs: UIMessage[] = (data ?? [])
+        const raw: UIMessage[] = (data ?? [])
           .map((r) => ({
             id: r.message_id || r.id,
             role: r.role as "user" | "assistant",
             parts: r.parts as UIMessage["parts"],
           }))
           .filter((m) => !isEmptyAssistantMessage(m));
+        const msgs = sanitizeHistoricalToolParts(raw);
         setInitialMessages(msgs); // always set, even if empty
       } catch (e) {
         if (!alive) return;
