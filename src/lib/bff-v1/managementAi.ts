@@ -91,6 +91,15 @@ export interface ManagementAiUiSnapshot {
   availableUiActions: Array<{ kind: string; description: string; paramsSchema: string }>;
 }
 
+export interface ManagementAiAttachment {
+  kind: "image";
+  mimeType: string;
+  filename: string;
+  sizeBytes: number;
+  /** base64 WITHOUT the `data:...;base64,` prefix */
+  dataBase64: string;
+}
+
 export interface ManagementAiAskInput {
   question: string;
   focus?: string;
@@ -102,6 +111,7 @@ export interface ManagementAiAskInput {
     summary?: string;
   };
   ui?: ManagementAiUiSnapshot;
+  attachments?: ManagementAiAttachment[];
 }
 
 interface RawAskResponse {
@@ -190,6 +200,7 @@ export async function askManagementAi(
     sessionId: input.sessionId ?? undefined,
     conversation: input.conversation ?? undefined,
     ui: input.ui ?? undefined,
+    attachments: input.attachments && input.attachments.length > 0 ? input.attachments : undefined,
   });
 
   let res: Response;
