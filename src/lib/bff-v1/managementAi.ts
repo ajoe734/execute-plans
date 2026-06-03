@@ -57,6 +57,11 @@ export interface ManagementAiTransportFailure {
   message: string;
 }
 
+export interface ManagementAiAborted {
+  ok: false;
+  kind: "aborted";
+}
+
 export interface ManagementAiUiAction {
   id?: string;
   kind: string;
@@ -69,7 +74,8 @@ export interface ManagementAiUiAction {
 export type ManagementAiResult =
   | (ManagementAiAnswerOk & { uiActions: ManagementAiUiAction[] })
   | ManagementAiAnswerDegraded
-  | ManagementAiTransportFailure;
+  | ManagementAiTransportFailure
+  | ManagementAiAborted;
 
 
 export interface ManagementAiRecentTurn {
