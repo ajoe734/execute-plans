@@ -1,31 +1,17 @@
-## 問題
+## 計畫
 
-截圖裡 `annotate_evidence` 同時顯示兩張卡：
-1. 灰色「此工具已下線（歷史紀錄）」(stale badge — 預期)
-2. 紅色「工具呼叫失敗 · annotate_evidence (404)」(舊錯誤卡 — 不該再出現)
+1. **修正批准送回 AI SDK 的方式**
+   - 目前 `resolveApproval()` 只呼叫 `addToolApprovalResponse()`，但畫面錯誤顯示 AI SDK 仍期待對應 `tool_create_intervention_...` 的 tool result。
+   - 我會改成在批准/拒絕時同時補一筆符合 SDK 期待的 `addToolResult({ tool, toolCallId, output })`，再送 approval response，避免下一輪模型收到「有 tool call、沒有 tool result」的歷史。
 
-第二張卡是 2026-05-28 移除 `annotate_evidence` 之前已經寫進 `chat_messages.parts` 的歷史 output。移除工具後，渲染邏輯只擋了 `Tool` collapsible (`{!isStale && <Tool>...`)，但下方的紅色錯誤橫幅、draft 橫幅、approval 橫幅都沒有 `isStale` gate，所以仍會渲染。
+2. **補強歷史訊息清理**
+   - 載入 `chat_messages.parts` 時，將已下線工具或歷史 pending approval 視為不可繼續執行的歷史紀錄，不再被送回後端作為 active tool loop 的上下文阻塞。
+   - 特別針對舊的 `create_intervention` / `annotate_evidence` 類工具，避免它們再觸發 tool-result validation error。
 
-## 修改範圍
+3. **後端串流前防呆**
+   - 在 `management-agent` function 呼叫 `convertToModelMessages(messages)` 前，清理/正規化傳入訊息：移除或降級沒有結果的舊 tool call parts，保留文字對話與已完成工具結果。
+   - 這樣即使資料庫已有壞掉的舊紀錄，也不會讓新訊息每次都卡在同一個 missing tool result。
 
-只動 `src/management/components/agent/AgentPanelBody.tsx` 的 `ToolBlock` (約 698–775 行)。
-
-把 `isStale` 變成單一截斷點：當工具已從 `ACTIVE_TOOL_NAMES` 下線、或是 historical approval 時，**只**渲染灰色 stale badge，**不**渲染：
-- 紅色 error 卡 (`isError` block, ~728–753)
-- draft 橫幅 (`isDraft && completed`, ~755–763)
-- approval 橫幅 (`needsApproval`, ~767+)
-- 任何後續輸出按鈕
-
-做法：把 728 行起的後續區塊全部包在 `{!isStale && (...)}` 內，或在每個區塊條件最前面 `&& !isStale`。傾向前者，diff 小且語意清楚。
-
-## 不動什麼
-
-- `ACTIVE_TOOL_NAMES` 名單不動。
-- 不動 BE / edge function / DB — 歷史紀錄留著沒問題，只是 UI 不再渲染舊錯誤。
-- 不動 active 工具的 error 渲染（active 工具該繼續顯示紅卡）。
-
-## 驗證
-
-1. Cockpit chat 重新整理 → 截圖中的紅色 404 卡消失，只剩灰色 stale badge。
-2. 任何 active 工具（例：`request_sentinel_remediation`）若回 404，紅色 error 卡仍照常顯示。
-3. Draft / approval 橫幅在 active 工具上仍正常。
+4. **驗證**
+   - 檢查 `create_intervention` 不再出現在 active tool set / confirm flow。
+   - 用現有 thread reload 情境確認：舊批准卡不阻塞輸入、送出新訊息不再出現紅字 `Tool result is missing...`。
