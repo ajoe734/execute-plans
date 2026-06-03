@@ -239,17 +239,17 @@ export async function fetchManagementAiConversation(
   traceId?: string | null,
 ): Promise<ConversationResyncResult> {
   const base = detectBaseUrl();
-  if (!base) return { ok: false, status: null, message: "BFF base URL is not configured." };
+  if (!base) return { ok: false, kind: "failure", status: null, message: "BFF base URL is not configured." };
   const headers = buildHeaders({ method: "GET" });
   const url = `${base}${paths.managementAiConversation(sessionId, traceId ?? undefined)}`;
   let res: Response;
   try {
     res = await fetch(url, { method: "GET", headers, credentials: "include" });
   } catch (err) {
-    return { ok: false, status: null, message: (err as Error)?.message ?? "Network error." };
+    return { ok: false, kind: "failure", status: null, message: (err as Error)?.message ?? "Network error." };
   }
   const text = await res.text();
-  if (!res.ok) return { ok: false, status: res.status, message: `BFF ${res.status}` };
+  if (!res.ok) return { ok: false, kind: "failure", status: res.status, message: `BFF ${res.status}` };
   let parsed: RawConversationResponse | undefined;
   try { parsed = text ? JSON.parse(text) as RawConversationResponse : undefined; } catch { parsed = undefined; }
   const data = parsed?.data ?? {};
@@ -260,5 +260,5 @@ export async function fetchManagementAiConversation(
     createdAt: t.createdAt ?? t.created_at ?? null,
     providerStatus: adaptProviderStatus(t.provider_status ?? t.providerStatus),
   }));
-  return { ok: true, sessionId: String(data.sessionId ?? data.session_id ?? sessionId), turns };
+  return { ok: true, kind: "ok", sessionId: String(data.sessionId ?? data.session_id ?? sessionId), turns };
 }
