@@ -200,6 +200,7 @@ export async function askManagementAi(
     sessionId: input.sessionId ?? undefined,
     conversation: input.conversation ?? undefined,
     ui: input.ui ?? undefined,
+    attachments: input.attachments && input.attachments.length > 0 ? input.attachments : undefined,
   });
 
   let res: Response;
