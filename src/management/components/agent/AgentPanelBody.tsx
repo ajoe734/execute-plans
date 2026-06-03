@@ -4,17 +4,14 @@
 //   User → Lovable FE → POST /bff/management/nl/ask → Pantheon BFF
 //                                                 → OpenClaw gateway / Codex
 //
-// 2026-06-03c (multi-turn + UI actions):
-//   • Multi-turn: sessionId is reused across submits until the user starts a
-//     new chat. Each request sends `conversation.recentTurns` + summary.
-//   • UI snapshot: every request includes the current route, selected entity,
-//     visible filters, and the allowlisted `availableUiActions`.
-//   • UI actions: BFF MAY return `data.uiActions | suggestedActions | actions`.
-//     They are rendered as confirm chips. Only allowlisted kinds run; backend
-//     mutations (`runBffAction`) are NEVER auto-executed.
-//   • Resync uses GET /bff/management/ai/conversations/{session_id} WITHOUT
-//     trace_id (trace_id is per-turn audit, not history filter).
-//   • No Lovable AI fallback. degraded/disabled/error → degraded banner only.
+// 2026-06-03d (anti-truncation hardening):
+//   • resync() merges by turn.id instead of replacing — BFF empty/failure
+//     never wipes visible turns.
+//   • Switching session / starting new chat aborts the in-flight request and
+//     guards stale responses via activeSessionRef so they cannot leak into
+//     another session.
+//   • Inline resync notice (空回應 / 失敗 / 取消) — no silent black holes.
+//   • Still: no Lovable AI fallback; degraded/disabled/error → degraded banner.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +20,7 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info } from "lucide-react";
 import {
   askManagementAi,
   fetchManagementAiConversation,
@@ -66,6 +63,7 @@ interface SessionIndexEntry {
 
 const SESSION_INDEX_KEY = "pantheon.mgmtAi.sessions.v1";
 const RECENT_TURNS_LIMIT = 12;
+const NEW_SESSION_SENTINEL = "__new__";
 
 function loadSessionIndex(): SessionIndexEntry[] {
   if (typeof window === "undefined") return [];
@@ -95,6 +93,18 @@ function turnId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Merge BFF turns into local turns by id; local-only turns are preserved. */
+function mergeTurns(local: ChatTurn[], incoming: ChatTurn[]): ChatTurn[] {
+  if (incoming.length === 0) return local;
+  const byId = new Map<string, ChatTurn>();
+  for (const t of local) byId.set(t.id, t);
+  for (const t of incoming) {
+    const prev = byId.get(t.id);
+    byId.set(t.id, prev ? { ...prev, ...t } : t);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt);
+}
+
 function ProviderStatusBar({ s }: { s: ProviderStatus }) {
   const tone = s.used && String(s.status).toLowerCase() === "completed"
     ? "text-emerald-700 dark:text-emerald-400"
@@ -122,10 +132,19 @@ export function AgentPanelBody() {
   const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState(false);
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
+  const [resyncNotice, setResyncNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ---- in-flight guards ----
+  const abortRef = useRef<AbortController | null>(null);
+  // Tracks which "session bucket" the UI is currently showing. `null` = new
+  // chat that hasn't received a sessionId from BFF yet. We use the sentinel
+  // string when comparing because null !== null reference-wise across renders
+  // is fine, but storing `NEW_SESSION_SENTINEL` makes intent explicit.
+  const activeSessionRef = useRef<string>(NEW_SESSION_SENTINEL);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -163,7 +182,20 @@ export function AgentPanelBody() {
     });
   }, []);
 
+  const abortInflight = useCallback((reason: "switch" | "new") => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    if (pending) {
+      setPending(false);
+      setResyncNotice(reason === "new" ? "已取消進行中的請求並開新對話。" : "切換對話時取消了上一則進行中的請求。");
+    }
+  }, [pending]);
+
   const startNewConversation = useCallback(() => {
+    abortInflight("new");
+    activeSessionRef.current = NEW_SESSION_SENTINEL;
     setTurns([]);
     setSessionId(null);
     setTraceId(null);
@@ -171,38 +203,72 @@ export function AgentPanelBody() {
     setDegraded(null);
     setText("");
     setActionFeedback({});
+    setResyncNotice(null);
     inputRef.current?.focus();
-  }, []);
+  }, [abortInflight]);
 
+  /**
+   * Pull conversation history from BFF and MERGE into local turns by id.
+   * Never wipes visible turns. Failures / empty responses surface as a
+   * non-destructive inline notice.
+   */
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
-    // NOTE: do NOT pass traceId — full conversation must not be trace-filtered.
+    const requestBucket = target;
     const res = await fetchManagementAiConversation(target);
+
+    // Guard: user switched session while resync was in flight.
+    if (activeSessionRef.current !== requestBucket) return;
+
     if (res.kind === "failure") {
-      setDegraded({ message: `Resync failed: ${res.message}`, providerStatus: null });
+      setResyncNotice(`Resync 失敗：${res.message}。本地畫面保留，可再次點 Resync 重試。`);
       return;
     }
-    setTurns(res.turns.map((t) => ({
+
+    const incoming: ChatTurn[] = res.turns.map((t, i) => ({
       id: t.id,
       role: t.role === "assistant" ? "assistant" : "user",
       text: t.text,
       providerStatus: t.providerStatus ?? null,
-      createdAt: t.createdAt ? Date.parse(t.createdAt) || Date.now() : Date.now(),
-    })));
-    setDegraded(null);
+      createdAt: t.createdAt ? (Date.parse(t.createdAt) || Date.now() + i) : (Date.now() + i),
+    }));
+
+    setTurns((prev) => {
+      const merged = mergeTurns(prev, incoming);
+      if (import.meta.env?.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug("[mgmtAi] resync", {
+          sessionId: target,
+          received: incoming.length,
+          localBefore: prev.length,
+          mergedTotal: merged.length,
+        });
+      }
+      return merged;
+    });
+
+    if (incoming.length === 0) {
+      setResyncNotice("BFF 未回傳任何歷史 turn，顯示本地快取。");
+    } else {
+      setResyncNotice(null);
+    }
   }, [sessionId]);
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
+    abortInflight("switch");
+    activeSessionRef.current = id;
     setSessionId(id);
     setTraceId(null);
     setConversationSummary(undefined);
     setDegraded(null);
     setText("");
     setActionFeedback({});
+    // Start fresh visible turns for this session; resync will populate.
+    setTurns([]);
     await resync(id);
-  }, [sessionId, resync]);
+  }, [sessionId, resync, abortInflight]);
 
   const deleteSession = useCallback((id: string) => {
     setSessions((prev) => {
@@ -253,8 +319,13 @@ export function AgentPanelBody() {
     if (!question || pending) return;
     setPending(true);
     setDegraded(null);
+    setResyncNotice(null);
     const now = Date.now();
     const userTurn: ChatTurn = { id: turnId("u"), role: "user", text: question, createdAt: now };
+
+    // Snapshot the session bucket this request belongs to. If the user
+    // switches before the response arrives, we discard the response.
+    const requestBucket = activeSessionRef.current;
 
     // Build recentTurns from CURRENT turns + the new user message (so BE sees
     // it even if it doesn't persist history yet). Limited to last N turns.
@@ -266,6 +337,10 @@ export function AgentPanelBody() {
     setTurns((prev) => [...prev, userTurn]);
 
     const ui = buildUiSnapshot();
+
+    // Abort controller for this request — stored so session-switch can cancel.
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const result: ManagementAiResult = await askManagementAi({
       question,
@@ -281,10 +356,28 @@ export function AgentPanelBody() {
         summary: conversationSummary,
       },
       ui,
-    });
+    }, { signal: controller.signal });
+
+    // Clear the abort ref only if it's still ours (could have been replaced).
+    if (abortRef.current === controller) abortRef.current = null;
+
+    // Guard against session-switch race: drop the result entirely.
+    if (activeSessionRef.current !== requestBucket) {
+      // pending already reset by abortInflight; nothing else to do.
+      return;
+    }
+
+    if (result.kind === "aborted") {
+      setPending(false);
+      return;
+    }
 
     if (result.kind === "ok") {
       const sid = result.sessionId ?? sessionId;
+      // First-response upgrade: pin the active bucket to the real sessionId.
+      if (sid && requestBucket === NEW_SESSION_SENTINEL) {
+        activeSessionRef.current = sid;
+      }
       setSessionId(sid);
       setTraceId(result.traceId);
       setTurns((prev) => [...prev, {
@@ -302,11 +395,15 @@ export function AgentPanelBody() {
       if (sid) upsertSessionIndex(sid, question);
     } else if (result.kind === "provider_degraded") {
       const sid = result.sessionId ?? sessionId;
+      if (sid && requestBucket === NEW_SESSION_SENTINEL) {
+        activeSessionRef.current = sid;
+      }
       setSessionId(sid);
       setTraceId(result.traceId);
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
       if (sid) upsertSessionIndex(sid, question);
     } else {
+      // transport_failure
       setDegraded({
         message: result.status
           ? `Pantheon BFF returned ${result.status}: ${result.message}`
@@ -343,7 +440,7 @@ export function AgentPanelBody() {
             <Plus className="h-3 w-3" />
           </Button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className={`flex-1 min-h-0 overflow-y-auto ${pending ? "cursor-progress" : ""}`}>
           {sessions.length === 0 && (
             <div className="px-2 py-3 text-[10px] text-muted-foreground">尚無對話紀錄</div>
           )}
@@ -409,6 +506,21 @@ export function AgentPanelBody() {
                 {traceId && <span className="text-muted-foreground">trace={traceId.slice(0, 12)}…</span>}
               </div>
             )}
+          </div>
+        )}
+
+        {resyncNotice && (
+          <div className="border-b px-2 py-1 bg-muted/5 text-[10px] flex items-start gap-1 text-muted-foreground">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" />
+            <span className="flex-1">{resyncNotice}</span>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setResyncNotice(null)}
+              aria-label="關閉提示"
+            >
+              ×
+            </button>
           </div>
         )}
 

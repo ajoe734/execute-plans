@@ -1,89 +1,69 @@
-# Management AI runtime repoint plan
+## 目標
 
-## Reality check (please confirm before I build)
+修掉 `AgentPanelBody` 切換 session 時把畫面 `turns` 整碗覆蓋、且 in-flight request 會污染別的 session 的問題。範圍只在 FE，不動 BFF contract。
 
-I read the repo and the directive does not fully match what is actually wired. Please confirm the intent so I don't tear out the wrong path.
+## 問題回顧（已在上一則訊息確認）
 
-1. **Management AI 目前不走 Agora Ask。** `src/management/components/agent/AgentPanelBody.tsx` 使用 `@ai-sdk/react` 的 `useChat` + `DefaultChatTransport`，URL 是 `https://${VITE_SUPABASE_PROJECT_ID}.functions.supabase.co/management-agent`，那支 Supabase Edge Function 內部呼叫 `https://ai.gateway.lovable.dev/v1`（`google/gemini-3-flash-preview`）。**這才是「Lovable AI sandbox runtime」**。
-2. 搜尋全 src/：**沒有任何 Management AI code 引用** `/bff/agora/ask`、`postAsk`、`openAskSse`、`getAskSession`、`src/lib/bff/agora.ts`。`paths.agoraAsk()` 也不存在（只有 `agoraAskSessions` / `agoraAskSession`，給真正的 Agora UI 使用）。
-3. 目錄是 `scripts/`，沒有 `execute-plans/scripts/`。`.lovable/preview-strict.env`、`.lovable/prod-strict.env` 不存在。
-4. `/bff/management/nl/ask`、`/bff/management/ai/conversations/{id}` 目前 **不在** `paths.ts`、不在 `BE_WRITE_GAP_SPEC_2026-05-28.md`、沒有 live probe 證據顯示 BE 已上線。
+1. `loadSession → resync` 會 `setTurns(res.turns.map(...))` 直接覆蓋，BFF 回空或漏訊息就視覺消失。
+2. `resync` 失敗時雖未清空，但成功分支無 merge / dedupe。
+3. `submit()` 進行中切換 session，舊 response 回來會 `setTurns(prev => [...assistantTurn])` 塞進新 session。
+4. 缺少使用者可見的「歷史載入失敗 / 為空」狀態，看起來像被截斷。
 
-→ 我會把真正的「Lovable AI sandbox runtime」（Supabase Edge Function `management-agent` + lovable-ai-gateway）拆掉，改打 BFF。請確認這就是你要的。
+## 修改計畫
 
-## What changes
+**檔案**：`src/management/components/agent/AgentPanelBody.tsx`（單檔，無新檔）
 
-### A. New BFF path builders (`src/lib/bff-v1/paths.ts`)
-- `managementNlAsk()` → `/bff/management/nl/ask`
-- `managementAiConversation(sessionId, traceId?)` → `/bff/management/ai/conversations/{id}?trace_id=...`
+### A. resync：merge 而非 replace
+- 改 `resync()`：以 `turn.id` 為 key 做 merge。BFF 回的 turns 為準（更新 `providerStatus` 等欄位），不在 BFF 結果內、但目前畫面已有的 turn 保留（避免歷史尚未持久化時就被抹掉）。
+- 排序統一用 `createdAt` 升冪。
+- BFF 回 `turns: []` 且目前 `turns.length > 0`：保留現有 turns，顯示一個輕量 inline 提示「BFF 未回傳歷史，顯示本地快取」（不是 degraded banner，避免誤導）。
+- `resync` failure：保留現有 turns，inline 顯示「Resync 失敗：<reason>，點 Resync 重試」。
 
-### B. New Management AI client (`src/lib/bff-v1/managementAi.ts`)
-- `askManagementAi({ question, focus, context, sessionId })` → `POST` 上面的 path
-  - Headers: `Content-Type: application/json`, `Idempotency-Key: <uuid>`, plus existing BFF auth via `headers.ts` (`setAuthProvider` / cookie / bearer)
-  - Returns typed `{ answer, sessionId, traceId, providerStatus: { provider, runtime, status, used, fallback }, auditLog?: { href }, conversation?: { href } }`
-- `fetchManagementAiConversation(sessionId, traceId?)` → `GET`, returns `{ turns: [...] }`
-- 嚴格遵守 user rule：**FE 絕對不自己生成回答**。若 `providerStatus.used !== true` 或 `status ∈ {degraded, disabled, error}`，回傳 typed `ProviderDegraded` 結果，不做任何 client fallback。
-- 不用 mock fallback（不掛 `withWriteFallback`）；若 BE 尚未實作，UI 顯示 degraded banner + retry，這符合 user 的「不可以由前端自己 fallback 回答」。
+### B. abort in-flight on session switch
+- 新增 `abortRef = useRef<AbortController | null>(null)` 與 `activeSessionRef = useRef<string | null>(null)`。
+- `submit()` 開始時：建立新 `AbortController`、紀錄 `requestSessionId = sessionId`（可能 null = new）。
+- `askManagementAi` 需要支援 `signal` 參數（見 D）。
+- response 回來時比對 `requestSessionId` 與當下 `activeSessionRef.current`，不一致就丟棄、不 setTurns。
+- `loadSession` / `startNewConversation` 進入時呼叫 `abortRef.current?.abort()`，並更新 `activeSessionRef`。
 
-### C. Rewrite chat panel transport (`src/management/components/agent/AgentPanelBody.tsx`)
-- 移除 `@ai-sdk/react` `useChat` + `DefaultChatTransport` + `FUNCTION_URL` 對 supabase edge function 的依賴。
-- 改成簡單 submit→`askManagementAi`→render 的流程。`sessionId` 從上一次 response 帶回；首訊省略。
-- 保留現有的 PromptInput / Conversation / Message UI 殼。
-- 新增「provider 狀態列」顯示 `provider / runtime / status / used / fallback`，以及 `auditLog.href`、`conversation.href`（外開連結）。
-- Resync / 切換 thread → 呼叫 `fetchManagementAiConversation(sessionId)` 拿 `turns` 重繪。
-- chat_threads / chat_messages（Supabase 表）改成只存 `{thread_id, session_id, title, updated_at}` 對應；BE response 才是訊息真實來源。或者完全不存 thread state（先簡化）。**請選 (i) 保留 Supabase thread 索引、訊息走 BFF；或 (ii) 全部丟給 BFF，FE 不再寫 chat_threads/chat_messages。** 預設選 (ii)。
-- 刪掉 `sanitizeHistoricalToolParts`、`PendingApproval`、tool-call/approval UI 殼（新 endpoint 沒有 tool calls 語意；如需要日後再加）。
+### C. pending 時切換的 UX
+- 切換 session 時若 `pending`：abort + 清 `pending=false`，並在新 session 顯示一次性 toast / inline note「上一則對話的請求已取消」。
+- Sessions sidebar 在 `pending` 時保留可點（abort），但加 `cursor-progress` 視覺提示。
 
-### D. Delete now-dead code
-- `supabase/functions/management-agent/index.ts` — 整支刪除（這是 Lovable AI gateway 入口）。
-- 若 (ii) 採用，亦移除 chat_threads / chat_messages 相關的 Supabase 寫入；表 schema 保留以避免破壞 migration。
+### D. `askManagementAi` 加 `signal`
+- `src/lib/bff-v1/managementAi.ts`：`askManagementAi(params)` 新增可選 `signal?: AbortSignal`，內部 fetch 帶上。abort 時回傳 `{ kind: "aborted" }`（新 result variant），讓 caller 知道不要 setTurns。
+- `AgentPanelBody` 處理 `kind === "aborted"`：no-op。
 
-### E. Agora 隔離（cleanup，非 Management AI 阻擋線）
-- `src/lib/bff/agora.ts`、`paths.agoraAskSessions/agoraAskSession` 全部 **保留**（真正 Agora UI 還在用：`AgoraLayout`、`AskPersonas`、`Watchlist`、`SignalDetail` + tests）。
-- 加一條 ESLint `no-restricted-imports`：禁止 `src/management/**` import `@/lib/bff/agora` 或 `paths.agoraAsk*`，避免日後再被混用。
-- `src/lib/bff-v1/seed.ts` 對 `bffAgora` 的引用屬於 mock seed，不動。
+### E. 診斷 log（開發環境）
+- `resync` 結束加 `console.debug("[mgmtAi] resync", { sessionId, received: res.turns.length, mergedTotal })`，方便日後驗證 BE 是否真的回了全部歷史。
 
-### F. Probe / release gate cleanup
-- `scripts/probe-bff-routes.mjs` — 移除 `["GET", "/bff/agora/ask/sessions"]` 那一列（如要保留 Agora probe 就改成 Agora-only section），改新增：
-  - `POST /bff/management/nl/ask`，斷言 `data.answer`、`data.providerStatus|provider_status`、`providerStatus.provider/runtime/status/used`
-- `scripts/probe-bff-authenticated-live.mjs` — 同步替換 `/bff/agora/ask/sessions` 條目。
-- `scripts/probe-bff-write-paths.mjs` — 移除 `P1-E /bff/agora/ask/sessions` row，新增 Management NL ask row。
-- `scripts/aggregate-release-gate.mjs` — 從 Management gate 移除 `/bff/agora/ask/sessions`，加入 `/bff/management/nl/ask`。
+### F. 不動的部分
+- `RECENT_TURNS_LIMIT = 12`：這只影響傳給 BE 的 context，不影響畫面顯示，保留。
+- `startNewConversation` 清空行為（有意）：保留。
+- localStorage `SESSION_INDEX_KEY`：不動。
+- BFF 任何 contract / endpoint：不動。
 
-### G. 更新 active dev BFF URL（34.81.75.241 → 35.201.239.38）
-僅改 active configs，**不動歷史 audits**（per directive）：
-- `.env`（目前 active 唯一還留舊 IP 的檔；其他 `.env.*.example` 已是新 IP）
-- 確認 `scripts/probe-bff-*` defaults 已是新 IP（grep 結果顯示已正確；只 double-check）
-- 不存在的檔 (`.lovable/preview-strict.env`、`.lovable/prod-strict.env`) → 跳過，不會憑空建立。
+## Definition of Done
 
-### H. Definition of Done（會在最後跑這幾條 grep 並貼結果）
-- `rg "src/lib/bff/agora" src/management` → 0 hit
-- `rg "/bff/agora/ask|agoraAsk" src/management` → 0 hit
-- `rg "functions.supabase.co/management-agent|management-agent" src/` → 0 hit
-- `rg "/bff/management/nl/ask" src/lib/bff-v1` → ≥1 hit
-- `rg "/bff/management/ai/conversations" src/lib/bff-v1` → ≥1 hit
-- `rg "34.81.75.241" .env .github scripts` → 0 hit
-- providerStatus.used !== true / status degraded 時 UI 顯示 degraded banner，無 model 回應。
+- 切換 session 後，畫面 turns 不會無聲消失；BFF 回空時保留本地畫面 + inline 提示。
+- 切換 session / 開新對話會 abort in-flight request，舊回應不會塞進新 session。
+- `resync` 失敗有可見的 inline 訊息與重試入口。
+- 既有 366 test 仍綠（本變更不該破壞 mock 模式或 contract test）。
+- 手動驗證：
+  1. 連送 3 則 → 切到別的 session → 切回來：3 則仍在。
+  2. 送 1 則尚未回應時切到別的 session：舊回應不會出現在新 session，原 session 切回顯示 user message + 「請求已取消」提示。
+  3. 把 BFF `conversations/{id}` mock 成 `turns: []`：畫面保留本地快取，不空白。
 
-## Technical notes
-- 既有 `src/lib/bff-v1/managementNl.ts`（Phase 1 fixed_mock）會被新 `managementAi.ts` 客戶端 supersede；保留檔但加 `@deprecated`，避免破壞 Console UI（如果有）。需要時可另開一張票完整下線。
-- 因為 BE `/bff/management/nl/ask` 尚未驗證上線，FE 落地後第一次 live probe 會回 404 / 501，這時 UI 應顯示 degraded（不是 mock 回答）。我會把這條 gap 加進 `BE_WRITE_GAP_SPEC` 對外需求 SoT。
-- 不動 `src/lib/bff-v1/managementNl.ts` 的 strict/gateway 守門邏輯（Phase 1 contract）；新流程不過它。
+## 技術細節 / Diff shape
 
-## Files I expect to touch
-- `src/lib/bff-v1/paths.ts` (add 2 builders)
-- `src/lib/bff-v1/managementAi.ts` (new)
-- `src/management/components/agent/AgentPanelBody.tsx` (rewrite transport)
-- `supabase/functions/management-agent/index.ts` (delete)
-- `eslint.config.js` (no-restricted-imports for `src/management/**`)
-- `scripts/probe-bff-routes.mjs`
-- `scripts/probe-bff-authenticated-live.mjs`
-- `scripts/probe-bff-write-paths.mjs`
-- `scripts/aggregate-release-gate.mjs`
-- `.env`
-- `.lovable/specs/be-requirements/BE_WRITE_GAP_SPEC_2026-05-28.md` (add NL ask + conversations rows)
+`AgentPanelBody.tsx`
+- 加 `abortRef`、`activeSessionRef`。
+- `resync` 改寫：merge by id，sort by createdAt，空回應 / 失敗都不清空。
+- 新增 state `resyncNotice: string | null` 渲染在 ProviderStatusBar 下方。
+- `submit` 用 abort controller + session guard。
+- `loadSession` / `startNewConversation` 先 abort。
 
-## Open questions
-1. **Thread persistence**：用 (i) 保留 Supabase chat_threads 當側欄索引、訊息由 BFF 提供；或 (ii) 完全丟給 BFF，前端不再寫 Supabase 表？我預設 (ii)。
-2. **管理 AI tool-calls / approvals**：新的 `/bff/management/nl/ask` shape 看起來是單輪 Q/A，不含 tool 呼叫或 approval 半完成 state。確認舊的 ToolCard / approval UI 全部 **可以拆掉** 嗎？
-3. `src/lib/bff-v1/managementNl.ts`（fixed_mock NL Console）是否還有 UI surface？我會 grep 確認，但需要你拍板：找到就一併拆，或先 `@deprecated` 留待後續。
+`src/lib/bff-v1/managementAi.ts`
+- `askManagementAi` 簽章加 `signal?: AbortSignal`，傳入 fetch。
+- `ManagementAiResult` union 加 `{ kind: "aborted" }`。
+- `AbortError` 捕捉 → 回 `aborted`，不變成 `transport_failure`。
