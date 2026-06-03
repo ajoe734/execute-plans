@@ -57,17 +57,45 @@ export interface ManagementAiTransportFailure {
   message: string;
 }
 
+export interface ManagementAiUiAction {
+  id?: string;
+  kind: string;
+  label?: string;
+  rationale?: string;
+  params?: Record<string, unknown>;
+  requiresConfirmation?: boolean;
+}
+
 export type ManagementAiResult =
-  | ManagementAiAnswerOk
+  | (ManagementAiAnswerOk & { uiActions: ManagementAiUiAction[] })
   | ManagementAiAnswerDegraded
   | ManagementAiTransportFailure;
 
 
+export interface ManagementAiRecentTurn {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ManagementAiUiSnapshot {
+  currentRoute: string;
+  selectedEntity?: { kind: string; id: string } | null;
+  visiblePanels?: string[];
+  filters?: Record<string, string>;
+  availableUiActions: Array<{ kind: string; description: string; paramsSchema: string }>;
+}
+
 export interface ManagementAiAskInput {
   question: string;
   focus?: string;
+  /** Free-form JSON-stringified frontend context (route, selection, etc). */
   context?: string;
   sessionId?: string | null;
+  conversation?: {
+    recentTurns: ManagementAiRecentTurn[];
+    summary?: string;
+  };
+  ui?: ManagementAiUiSnapshot;
 }
 
 interface RawAskResponse {
@@ -82,7 +110,32 @@ interface RawAskResponse {
     auditLog?: { href?: string };
     audit_log?: { href?: string };
     conversation?: { href?: string };
+    uiActions?: ManagementAiUiAction[];
+    ui_actions?: ManagementAiUiAction[];
+    suggestedActions?: ManagementAiUiAction[];
+    suggested_actions?: ManagementAiUiAction[];
+    actions?: ManagementAiUiAction[];
   };
+}
+
+function adaptUiActions(raw: RawAskResponse["data"]): ManagementAiUiAction[] {
+  const merged = [
+    ...(raw?.uiActions ?? []),
+    ...(raw?.ui_actions ?? []),
+    ...(raw?.suggestedActions ?? []),
+    ...(raw?.suggested_actions ?? []),
+    ...(raw?.actions ?? []),
+  ];
+  return merged
+    .filter((a) => a && typeof a.kind === "string")
+    .map((a) => ({
+      id: a.id ? String(a.id) : undefined,
+      kind: String(a.kind),
+      label: a.label ? String(a.label) : undefined,
+      rationale: a.rationale ? String(a.rationale) : undefined,
+      params: (a.params && typeof a.params === "object") ? a.params : {},
+      requiresConfirmation: Boolean(a.requiresConfirmation),
+    }));
 }
 
 function adaptProviderStatus(raw: Partial<ProviderStatus> | undefined): ProviderStatus | null {
@@ -126,6 +179,8 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
     focus: input.focus ?? "all",
     context: input.context ?? "",
     sessionId: input.sessionId ?? undefined,
+    conversation: input.conversation ?? undefined,
+    ui: input.ui ?? undefined,
   });
 
   let res: Response;
@@ -185,6 +240,7 @@ export async function askManagementAi(input: ManagementAiAskInput): Promise<Mana
     providerStatus: providerStatus!,
     auditLogHref: data.auditLog?.href ?? data.audit_log?.href ?? null,
     conversationHref: data.conversation?.href ?? null,
+    uiActions: adaptUiActions(data),
   };
 
 }
@@ -234,14 +290,21 @@ interface RawConversationResponse {
   };
 }
 
+/**
+ * Read the full conversation history for a session.
+ *
+ * Per 2026-06-03 directive: do NOT pass trace_id when loading the full
+ * conversation — trace_id is for single-turn audit linking only. The
+ * second parameter is accepted but ignored to preserve call sites.
+ */
 export async function fetchManagementAiConversation(
   sessionId: string,
-  traceId?: string | null,
+  _traceIdIgnored?: string | null,
 ): Promise<ConversationResyncResult> {
   const base = detectBaseUrl();
   if (!base) return { ok: false, kind: "failure", status: null, message: "BFF base URL is not configured." };
   const headers = buildHeaders({ method: "GET" });
-  const url = `${base}${paths.managementAiConversation(sessionId, traceId ?? undefined)}`;
+  const url = `${base}${paths.managementAiConversation(sessionId)}`;
   let res: Response;
   try {
     res = await fetch(url, { method: "GET", headers, credentials: "include" });
