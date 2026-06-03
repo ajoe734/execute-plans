@@ -39,7 +39,6 @@ export function FloatingAgentPanel() {
   if (!mounted || typeof document === "undefined") return null;
 
   if (panel.mode === "minimized" || panel.mode === "closed") {
-    if (panel.mode === "closed") return null;
     return createPortal(
       <button
         type="button"
