@@ -41,6 +41,7 @@ export default tseslint.config(
           ],
         },
       ],
+
     },
   },
   {
@@ -54,4 +55,24 @@ export default tseslint.config(
     ],
     rules: { "no-restricted-imports": "off" },
   },
+  {
+    // 2026-06-03 — Management AI runtime path MUST go through Pantheon BFF,
+    // never through Agora Ask compatibility paths.
+    files: ["src/management/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/bff/agora", "@/lib/bff/agora.*"],
+              message:
+                "Management AI must not import Agora Ask client. Use @/lib/bff-v1/managementAi instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
+
