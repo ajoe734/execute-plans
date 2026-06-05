@@ -48,6 +48,11 @@ export interface ManagementAiAnswerDegraded {
   sessionId: string | null;
   traceId: string | null;
   message: string;
+  /** Optional BFF deterministic/degraded answer. FE must label it as degraded, not AI-authored. */
+  answer: string | null;
+  auditLogHref: string | null;
+  conversationHref: string | null;
+  uiActions: ManagementAiUiAction[];
 }
 
 export interface ManagementAiTransportFailure {
@@ -249,6 +254,10 @@ export async function askManagementAi(
       providerStatus,
       sessionId,
       traceId,
+      answer: typeof data.answer === "string" && data.answer.trim() ? data.answer : null,
+      auditLogHref: data.auditLog?.href ?? data.audit_log?.href ?? null,
+      conversationHref: data.conversation?.href ?? null,
+      uiActions: adaptUiActions(data),
       message: providerStatus
         ? `Provider ${providerStatus.provider}/${providerStatus.runtime} status=${providerStatus.status} used=${providerStatus.used}`
         : "Pantheon BFF returned no providerStatus.",
