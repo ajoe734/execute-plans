@@ -28,6 +28,12 @@ export interface ProviderStatus {
   status: ProviderRuntimeStatus | string;
   used: boolean;
   fallback: string | null;
+  reason?: string | null;
+  reasonCode?: string | null;
+  severity?: string | null;
+  displayMessage?: string | null;
+  operatorAction?: string | null;
+  runId?: string | null;
 }
 
 export interface ManagementAiAnswerOk {
