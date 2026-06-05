@@ -165,14 +165,28 @@ function adaptUiActions(raw: RawAskResponse["data"]): ManagementAiUiAction[] {
     }));
 }
 
-function adaptProviderStatus(raw: Partial<ProviderStatus> | undefined): ProviderStatus | null {
+function adaptProviderStatus(raw: Partial<ProviderStatus> & Record<string, unknown> | undefined): ProviderStatus | null {
   if (!raw) return null;
+  const r = raw as Record<string, unknown>;
+  const pick = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = r[k];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+    return null;
+  };
   return {
     provider: String(raw.provider ?? "unknown"),
     runtime: String(raw.runtime ?? "unknown"),
     status: String(raw.status ?? "unknown"),
     used: Boolean(raw.used),
-    fallback: raw.fallback ?? null,
+    fallback: (raw.fallback as string | null) ?? null,
+    reason: pick("reason"),
+    reasonCode: pick("reasonCode", "reason_code"),
+    severity: pick("severity"),
+    displayMessage: pick("displayMessage", "display_message"),
+    operatorAction: pick("operatorAction", "operator_action"),
+    runId: pick("runId", "run_id"),
   };
 }
 
