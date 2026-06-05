@@ -571,6 +571,19 @@ export function AgentPanelBody() {
       if (sid && requestBucket === NEW_SESSION_SENTINEL) activeSessionRef.current = sid;
       setSessionId(sid);
       setTraceId(result.traceId);
+      if (result.answer) {
+        setTurns((prev) => [...prev, {
+          id: turnId("a_degraded"),
+          role: "assistant",
+          text: result.answer,
+          providerStatus: result.providerStatus,
+          auditLogHref: result.auditLogHref,
+          conversationHref: result.conversationHref,
+          traceId: result.traceId,
+          uiActions: result.uiActions,
+          createdAt: Date.now(),
+        }]);
+      }
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
       if (sid) upsertSessionIndex(sid, question || (attachmentsForTurn[0]?.filename ?? "圖片對話"));
     } else {
