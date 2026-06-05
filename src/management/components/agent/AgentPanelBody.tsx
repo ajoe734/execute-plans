@@ -20,7 +20,8 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import {
   askManagementAi,
   fetchManagementAiConversation,
@@ -194,18 +195,61 @@ function buildConversationPayload(turns: ChatTurn[]): {
   return out;
 }
 
-function ProviderStatusBar({ s }: { s: ProviderStatus }) {
-  const tone = s.used && String(s.status).toLowerCase() === "completed"
-    ? "text-emerald-700 dark:text-emerald-400"
-    : "text-amber-700 dark:text-amber-400";
+type StatusTone = "ok" | "warn" | "off";
+
+function classifyProvider(s: ProviderStatus | null): { label: string; tone: StatusTone } {
+  if (!s) return { label: "Unknown", tone: "warn" };
+  const status = String(s.status).toLowerCase();
+  const needsReauth =
+    s.reason === "CODEX_AUTH_UNAVAILABLE" ||
+    s.reasonCode === "CODEX_AUTH_UNAVAILABLE" ||
+    s.operatorAction === "reauth_codex_service_user";
+  if (needsReauth) return { label: "需要重新登入", tone: "warn" };
+  if (status === "completed" && s.used) return { label: "AI Ready", tone: "ok" };
+  if (status === "disabled") return { label: "Provider Off", tone: "off" };
+  if (status === "degraded") return { label: "Provider Degraded", tone: "warn" };
+  return { label: status || "Unknown", tone: "warn" };
+}
+
+function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
+  const { label, tone } = classifyProvider(s);
+  const cls =
+    tone === "ok" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : tone === "off" ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400";
   return (
-    <div className={`text-[10px] font-mono ${tone} flex flex-wrap gap-x-2 gap-y-0.5`}>
-      <span>provider={s.provider}</span>
-      <span>runtime={s.runtime}</span>
-      <span>status={String(s.status)}</span>
-      <span>used={String(s.used)}</span>
-      <span>fallback={s.fallback ?? "null"}</span>
-    </div>
+    <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function ProviderTechDetails({ s }: { s: ProviderStatus }) {
+  const rows: Array<[string, string | null | undefined]> = [
+    ["reason", s.reason],
+    ["reasonCode", s.reasonCode],
+    ["provider", s.provider],
+    ["runtime", s.runtime],
+    ["status", String(s.status)],
+    ["used", String(s.used)],
+    ["fallback", s.fallback],
+    ["run_id", s.runId],
+  ];
+  return (
+    <details className="mt-1.5 group">
+      <summary className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none hover:text-foreground list-none">
+        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
+        技術細節
+      </summary>
+      <div className="mt-1 rounded border bg-muted/30 p-1.5 font-mono text-[10px] leading-relaxed space-y-0.5">
+        {rows.filter(([, v]) => v != null && v !== "").map(([k, v]) => (
+          <div key={k} className="flex gap-1.5">
+            <span className="text-muted-foreground shrink-0">{k}</span>
+            <span className="break-all select-text">{v}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -678,24 +722,20 @@ export function AgentPanelBody() {
           </div>
         </div>
 
-        {lastProviderStatus && (
-          <div className="border-b px-2 py-1 bg-muted/10">
-            <ProviderStatusBar s={lastProviderStatus} />
-            {(lastLinks.audit || lastLinks.conversation || traceId) && (
-              <div className="text-[10px] mt-0.5 flex gap-2">
-                {lastLinks.audit && (
-                  <a href={lastLinks.audit} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                    audit log <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                )}
-                {lastLinks.conversation && (
-                  <a href={lastLinks.conversation} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                    conversation <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                )}
-                {traceId && <span className="text-muted-foreground">trace={traceId.slice(0, 12)}…</span>}
-              </div>
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
+          <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
+            {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
+            {lastLinks.audit && (
+              <a href={lastLinks.audit} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline">
+                audit log <ExternalLink className="h-2.5 w-2.5" />
+              </a>
             )}
+            {lastLinks.conversation && (
+              <a href={lastLinks.conversation} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline">
+                conversation <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            )}
+            {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
           </div>
         )}
 
@@ -766,16 +806,41 @@ export function AgentPanelBody() {
             {pending && (
               <div className="px-4 py-2"><Shimmer>透過 OpenClaw 等候 Codex 回應…</Shimmer></div>
             )}
-            {degraded && (
-              <div className="mx-4 my-2 rounded-md border border-amber-500/60 bg-amber-500/10 p-2 space-y-1 text-xs">
-                <div className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400 font-medium">
-                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>Pantheon BFF / OpenClaw provider degraded — FE 不會自行回答。</span>
+            {degraded && (() => {
+              const ps = degraded.providerStatus;
+              const displayMsg = ps?.displayMessage?.trim() || "AI provider 暫時不可用，目前改用規則式摘要。";
+              const needsReauth = ps?.operatorAction === "reauth_codex_service_user";
+              const onReauth = () => {
+                if (sessionId) void resync();
+                toast({
+                  title: "需要重新授權",
+                  description: "請由 operator 在 Codex service-user 裝置登入流程完成授權。",
+                });
+              };
+              return (
+                <div className="mx-4 my-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs">
+                  <div className="flex items-start gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="font-medium text-amber-800 dark:text-amber-300">Management AI 暫時降級</div>
+                      <div className="text-foreground/80 break-words">{displayMsg}</div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {needsReauth && (
+                          <Button size="sm" variant="default" className="h-7 text-[11px] gap-1" onClick={onReauth}>
+                            <LogIn className="h-3 w-3" /> 重新登入
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => void resync()} disabled={!sessionId}>
+                          <RefreshCcw className="h-3 w-3" /> Resync
+                        </Button>
+                        {ps && <span className="self-center"><ProviderStatusPill s={ps} /></span>}
+                      </div>
+                      {ps && <ProviderTechDetails s={ps} />}
+                    </div>
+                  </div>
                 </div>
-                <div className="font-mono text-[10px] text-muted-foreground break-all">{degraded.message}</div>
-                {degraded.providerStatus && <ProviderStatusBar s={degraded.providerStatus} />}
-              </div>
-            )}
+              );
+            })()}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
