@@ -722,24 +722,20 @@ export function AgentPanelBody() {
           </div>
         </div>
 
-        {lastProviderStatus && (
-          <div className="border-b px-2 py-1 bg-muted/10">
-            <ProviderStatusBar s={lastProviderStatus} />
-            {(lastLinks.audit || lastLinks.conversation || traceId) && (
-              <div className="text-[10px] mt-0.5 flex gap-2">
-                {lastLinks.audit && (
-                  <a href={lastLinks.audit} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                    audit log <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                )}
-                {lastLinks.conversation && (
-                  <a href={lastLinks.conversation} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                    conversation <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                )}
-                {traceId && <span className="text-muted-foreground">trace={traceId.slice(0, 12)}…</span>}
-              </div>
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
+          <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
+            {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
+            {lastLinks.audit && (
+              <a href={lastLinks.audit} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline">
+                audit log <ExternalLink className="h-2.5 w-2.5" />
+              </a>
             )}
+            {lastLinks.conversation && (
+              <a href={lastLinks.conversation} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline">
+                conversation <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            )}
+            {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
           </div>
         )}
 
