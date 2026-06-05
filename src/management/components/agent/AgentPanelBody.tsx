@@ -195,18 +195,61 @@ function buildConversationPayload(turns: ChatTurn[]): {
   return out;
 }
 
-function ProviderStatusBar({ s }: { s: ProviderStatus }) {
-  const tone = s.used && String(s.status).toLowerCase() === "completed"
-    ? "text-emerald-700 dark:text-emerald-400"
-    : "text-amber-700 dark:text-amber-400";
+type StatusTone = "ok" | "warn" | "off";
+
+function classifyProvider(s: ProviderStatus | null): { label: string; tone: StatusTone } {
+  if (!s) return { label: "Unknown", tone: "warn" };
+  const status = String(s.status).toLowerCase();
+  const needsReauth =
+    s.reason === "CODEX_AUTH_UNAVAILABLE" ||
+    s.reasonCode === "CODEX_AUTH_UNAVAILABLE" ||
+    s.operatorAction === "reauth_codex_service_user";
+  if (needsReauth) return { label: "需要重新登入", tone: "warn" };
+  if (status === "completed" && s.used) return { label: "AI Ready", tone: "ok" };
+  if (status === "disabled") return { label: "Provider Off", tone: "off" };
+  if (status === "degraded") return { label: "Provider Degraded", tone: "warn" };
+  return { label: status || "Unknown", tone: "warn" };
+}
+
+function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
+  const { label, tone } = classifyProvider(s);
+  const cls =
+    tone === "ok" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : tone === "off" ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400";
   return (
-    <div className={`text-[10px] font-mono ${tone} flex flex-wrap gap-x-2 gap-y-0.5`}>
-      <span>provider={s.provider}</span>
-      <span>runtime={s.runtime}</span>
-      <span>status={String(s.status)}</span>
-      <span>used={String(s.used)}</span>
-      <span>fallback={s.fallback ?? "null"}</span>
-    </div>
+    <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function ProviderTechDetails({ s }: { s: ProviderStatus }) {
+  const rows: Array<[string, string | null | undefined]> = [
+    ["reason", s.reason],
+    ["reasonCode", s.reasonCode],
+    ["provider", s.provider],
+    ["runtime", s.runtime],
+    ["status", String(s.status)],
+    ["used", String(s.used)],
+    ["fallback", s.fallback],
+    ["run_id", s.runId],
+  ];
+  return (
+    <details className="mt-1.5 group">
+      <summary className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none hover:text-foreground list-none">
+        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
+        技術細節
+      </summary>
+      <div className="mt-1 rounded border bg-muted/30 p-1.5 font-mono text-[10px] leading-relaxed space-y-0.5">
+        {rows.filter(([, v]) => v != null && v !== "").map(([k, v]) => (
+          <div key={k} className="flex gap-1.5">
+            <span className="text-muted-foreground shrink-0">{k}</span>
+            <span className="break-all select-text">{v}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
