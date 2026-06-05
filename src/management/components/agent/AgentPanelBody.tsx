@@ -806,16 +806,41 @@ export function AgentPanelBody() {
             {pending && (
               <div className="px-4 py-2"><Shimmer>透過 OpenClaw 等候 Codex 回應…</Shimmer></div>
             )}
-            {degraded && (
-              <div className="mx-4 my-2 rounded-md border border-amber-500/60 bg-amber-500/10 p-2 space-y-1 text-xs">
-                <div className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400 font-medium">
-                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>Pantheon BFF / OpenClaw provider degraded — FE 不會自行回答。</span>
+            {degraded && (() => {
+              const ps = degraded.providerStatus;
+              const displayMsg = ps?.displayMessage?.trim() || "AI provider 暫時不可用，目前改用規則式摘要。";
+              const needsReauth = ps?.operatorAction === "reauth_codex_service_user";
+              const onReauth = () => {
+                if (sessionId) void resync();
+                toast({
+                  title: "需要重新授權",
+                  description: "請由 operator 在 Codex service-user 裝置登入流程完成授權。",
+                });
+              };
+              return (
+                <div className="mx-4 my-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs">
+                  <div className="flex items-start gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="font-medium text-amber-800 dark:text-amber-300">Management AI 暫時降級</div>
+                      <div className="text-foreground/80 break-words">{displayMsg}</div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {needsReauth && (
+                          <Button size="sm" variant="default" className="h-7 text-[11px] gap-1" onClick={onReauth}>
+                            <LogIn className="h-3 w-3" /> 重新登入
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => void resync()} disabled={!sessionId}>
+                          <RefreshCcw className="h-3 w-3" /> Resync
+                        </Button>
+                        {ps && <span className="self-center"><ProviderStatusPill s={ps} /></span>}
+                      </div>
+                      {ps && <ProviderTechDetails s={ps} />}
+                    </div>
+                  </div>
                 </div>
-                <div className="font-mono text-[10px] text-muted-foreground break-all">{degraded.message}</div>
-                {degraded.providerStatus && <ProviderStatusBar s={degraded.providerStatus} />}
-              </div>
-            )}
+              );
+            })()}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
