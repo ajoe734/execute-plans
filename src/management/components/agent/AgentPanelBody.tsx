@@ -632,7 +632,7 @@ export function AgentPanelBody() {
 
     if (abortRef.current === controller) abortRef.current = null;
 
-    if (activeSessionRef.current !== requestBucket && activeSessionRef.current !== (result.kind === "ok" || result.kind === "provider_degraded" ? result.sessionId : null)) return;
+    if (activeSessionRef.current !== requestBucket) return;
 
     if (result.kind === "aborted") {
       setPending(false);
