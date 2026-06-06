@@ -80,6 +80,15 @@ const RECENT_CHAR_BUDGET = 32_000; // ~8k tokens of context
 const RECENT_HARD_TURN_CAP = 200;
 const CACHE_MAX_TURNS = 500;
 const NEW_SESSION_SENTINEL = "__new__";
+const CLIENT_SESSION_PREFIX = "cli_";
+
+function mkClientSessionId(): string {
+  return `${CLIENT_SESSION_PREFIX}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isClientSessionId(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith(CLIENT_SESSION_PREFIX);
+}
 
 function loadSessionIndex(): SessionIndexEntry[] {
   if (typeof window === "undefined") return [];
