@@ -80,6 +80,15 @@ const RECENT_CHAR_BUDGET = 32_000; // ~8k tokens of context
 const RECENT_HARD_TURN_CAP = 200;
 const CACHE_MAX_TURNS = 500;
 const NEW_SESSION_SENTINEL = "__new__";
+const CLIENT_SESSION_PREFIX = "cli_";
+
+function mkClientSessionId(): string {
+  return `${CLIENT_SESSION_PREFIX}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isClientSessionId(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith(CLIENT_SESSION_PREFIX);
+}
 
 function loadSessionIndex(): SessionIndexEntry[] {
   if (typeof window === "undefined") return [];
@@ -350,6 +359,25 @@ export function AgentPanelBody() {
     });
   }, []);
 
+  /** Reconcile a client-side temporary session id with the BFF-issued id. */
+  const renameSession = useCallback((oldId: string, newId: string) => {
+    if (oldId === newId) return;
+    setSessions((prev) => {
+      const entry = prev.find((s) => s.id === oldId);
+      if (!entry) return prev;
+      const withoutOld = prev.filter((s) => s.id !== oldId && s.id !== newId);
+      const list = [{ ...entry, id: newId, updatedAt: Date.now() }, ...withoutOld].slice(0, 50);
+      saveSessionIndex(list);
+      return list;
+    });
+    // Move turns cache from cli id → bff id.
+    try {
+      const cached = loadTurnsCache(oldId);
+      if (cached.length > 0) void saveTurnsCache(newId, cached);
+    } catch { /* ignore */ }
+    clearTurnsCache(oldId);
+  }, []);
+
   const abortInflight = useCallback((reason: "switch" | "new") => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -384,6 +412,11 @@ export function AgentPanelBody() {
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
+    // Client-side temp ids are not known to BFF — skip remote fetch.
+    if (isClientSessionId(target)) {
+      setResyncNotice("此對話尚未由 BFF 建立 session id（仍為本地暫存），送出下一則訊息後會自動同步。");
+      return;
+    }
     const requestBucket = target;
     const res = await fetchManagementAiConversation(target);
 
@@ -536,7 +569,18 @@ export function AgentPanelBody() {
       attachments: attachmentsForTurn.length > 0 ? attachmentsForTurn : undefined,
     };
 
-    const requestBucket = activeSessionRef.current;
+    // Mint a client-side session id immediately so the sidebar shows this
+    // conversation even before BFF responds (or if BFF degrades without
+    // returning a sessionId). The id will be reconciled to BFF's id below.
+    let localSessionId = sessionId;
+    const titleSeed = question || (attachmentsForTurn[0]?.filename ?? "圖片對話");
+    if (!localSessionId) {
+      localSessionId = mkClientSessionId();
+      setSessionId(localSessionId);
+      activeSessionRef.current = localSessionId;
+      upsertSessionIndex(localSessionId, titleSeed);
+    }
+    const requestBucket = localSessionId;
 
     const nextTurns = [...turns, userTurn];
     setTurns(nextTurns);
@@ -544,10 +588,13 @@ export function AgentPanelBody() {
 
     const ui = buildUiSnapshot();
     const conv = buildConversationPayload(nextTurns);
+    // Never send a client-only id to BFF — it will 404 / error.
+    const sessionIdForBff = isClientSessionId(localSessionId) ? null : localSessionId;
     if (import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
       console.debug("[mgmtAi] sending", {
-        sessionId,
+        sessionId: sessionIdForBff,
+        localSessionId,
         totalTurns: nextTurns.length,
         recentTurnsSent: conv.recentTurns.length,
         summary: conv.summary ?? null,
@@ -561,7 +608,7 @@ export function AgentPanelBody() {
     const result: ManagementAiResult = await askManagementAi({
       question,
       focus: "all",
-      sessionId,
+      sessionId: sessionIdForBff,
       context: JSON.stringify({
         route: location.pathname,
         pageLabel: nlCtx.pageLabel,
@@ -592,10 +639,24 @@ export function AgentPanelBody() {
       return;
     }
 
+    // Reconcile cli_* → BFF sessionId if BFF returned one.
+    const reconcile = (bffSid: string | null): string | null => {
+      if (bffSid && isClientSessionId(localSessionId!) && bffSid !== localSessionId) {
+        renameSession(localSessionId!, bffSid);
+        setSessionId(bffSid);
+        activeSessionRef.current = bffSid;
+        return bffSid;
+      }
+      if (bffSid && !localSessionId) {
+        setSessionId(bffSid);
+        activeSessionRef.current = bffSid;
+        return bffSid;
+      }
+      return bffSid ?? localSessionId;
+    };
+
     if (result.kind === "ok") {
-      const sid = result.sessionId ?? sessionId;
-      if (sid && requestBucket === NEW_SESSION_SENTINEL) activeSessionRef.current = sid;
-      setSessionId(sid);
+      const sid = reconcile(result.sessionId ?? null);
       setTraceId(result.traceId);
       setTurns((prev) => [...prev, {
         id: turnId("a"),
@@ -609,11 +670,9 @@ export function AgentPanelBody() {
         createdAt: Date.now(),
       }]);
       setDegraded(null);
-      if (sid) upsertSessionIndex(sid, question || (attachmentsForTurn[0]?.filename ?? "圖片對話"));
+      if (sid) upsertSessionIndex(sid, titleSeed);
     } else if (result.kind === "provider_degraded") {
-      const sid = result.sessionId ?? sessionId;
-      if (sid && requestBucket === NEW_SESSION_SENTINEL) activeSessionRef.current = sid;
-      setSessionId(sid);
+      const sid = reconcile(result.sessionId ?? null);
       setTraceId(result.traceId);
       if (result.answer) {
         setTurns((prev) => [...prev, {
@@ -629,7 +688,7 @@ export function AgentPanelBody() {
         }]);
       }
       setDegraded({ message: result.message, providerStatus: result.providerStatus });
-      if (sid) upsertSessionIndex(sid, question || (attachmentsForTurn[0]?.filename ?? "圖片對話"));
+      if (sid) upsertSessionIndex(sid, titleSeed);
     } else {
       setDegraded({
         message: result.status
@@ -637,11 +696,13 @@ export function AgentPanelBody() {
           : `BFF transport failure: ${result.message}`,
         providerStatus: null,
       });
+      // Keep cli_* session in sidebar so the user can retry on the same thread.
+      if (localSessionId) upsertSessionIndex(localSessionId, titleSeed);
     }
 
     setPending(false);
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [pending, pendingAttachments, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex]);
+  }, [pending, pendingAttachments, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession]);
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
