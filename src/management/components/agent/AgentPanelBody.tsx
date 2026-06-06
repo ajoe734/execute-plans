@@ -412,6 +412,11 @@ export function AgentPanelBody() {
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
+    // Client-side temp ids are not known to BFF — skip remote fetch.
+    if (isClientSessionId(target)) {
+      setResyncNotice("此對話尚未由 BFF 建立 session id（仍為本地暫存），送出下一則訊息後會自動同步。");
+      return;
+    }
     const requestBucket = target;
     const res = await fetchManagementAiConversation(target);
 
