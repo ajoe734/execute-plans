@@ -359,6 +359,25 @@ export function AgentPanelBody() {
     });
   }, []);
 
+  /** Reconcile a client-side temporary session id with the BFF-issued id. */
+  const renameSession = useCallback((oldId: string, newId: string) => {
+    if (oldId === newId) return;
+    setSessions((prev) => {
+      const entry = prev.find((s) => s.id === oldId);
+      if (!entry) return prev;
+      const withoutOld = prev.filter((s) => s.id !== oldId && s.id !== newId);
+      const list = [{ ...entry, id: newId, updatedAt: Date.now() }, ...withoutOld].slice(0, 50);
+      saveSessionIndex(list);
+      return list;
+    });
+    // Move turns cache from cli id → bff id.
+    try {
+      const cached = loadTurnsCache(oldId);
+      if (cached.length > 0) void saveTurnsCache(newId, cached);
+    } catch { /* ignore */ }
+    clearTurnsCache(oldId);
+  }, []);
+
   const abortInflight = useCallback((reason: "switch" | "new") => {
     if (abortRef.current) {
       abortRef.current.abort();
