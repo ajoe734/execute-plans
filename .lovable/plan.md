@@ -1,84 +1,39 @@
-# Management AI：解決截斷 + 圖片上傳
+## 問題
+左側「對話紀錄」只有在 BFF `/bff/management/nl/ask` 回傳 `data.sessionId` 後（`AgentPanelBody.tsx` L612 / L632 的 `upsertSessionIndex`）才會新增。所以：
+- 按 `+` 開新對話 → 左側不會立刻多一筆（這是設計上的留白）
+- 但即使送出第一則訊息，只要 BFF 回應還沒回來、或回應 degraded 沒給 `sessionId`、或 transport_failure，左側就永遠不會出現該對話 → 使用者覺得「新對話消失了」
+- 截圖正是這個狀態：header 顯示 `new session · 1 則訊息`，但 sidebar 仍只有兩筆舊對話
 
-## 1. 為什麼還在截斷（根因）
+## 修法（純前端，不動 BFF）
+在 `src/management/components/agent/AgentPanelBody.tsx`：
 
-目前 `AgentPanelBody.tsx` / `managementAi.ts` 有三層截斷：
+1. **送出第一則訊息時立刻建立 client-side sessionId**，並寫入 sidebar
+   - 在 `submit()` 內，若 `sessionId == null`，先 `mkClientSessionId()` 產生 `cli_xxx`，立刻 `setSessionId` + `activeSessionRef.current = cli_xxx` + `upsertSessionIndex(cli_xxx, question | filename)`
+   - 用該 id 作為 `requestBucket`，turns cache 也立即落到該 id
 
-1. **`RECENT_TURNS_LIMIT = 12`** — 每次發問只把最後 12 則塞進 `conversation.recentTurns` 給 BFF。對話一長，LLM 就「忘了」前面。
-2. **`loadSession()` 會 `setTurns([])`** — 點側欄切換對話時先清空，再靠 BFF `/bff/management/ai/conversations/{id}` 回填。BFF 若回 `turns: []`（degraded/stale，現在實測就是 stale cache）→ 畫面變空，merge 也救不回來。
-3. **沒有本地 per-session 快取** — 重新整理或切回舊對話，只能靠 BFF。BFF 一截，FE 也跟著截。
+2. **BFF 回應時 reconcile 成 BFF sessionId**
+   - 若 result 帶回 `sessionId` 且不同於 client id：
+     - 從 sessions index 移除 client id、新增 BFF id（保留 title / updatedAt）
+     - `clearTurnsCache(cli id)` → `saveTurnsCache(bff id, turns)`
+     - `setSessionId(bff id)`、`activeSessionRef.current = bff id`
+   - 若 BFF 沒給 sessionId（degraded / transport_failure）：保留 client id，使用者下一輪仍能繼續同一條 thread（送出時若 sessionId 是 `cli_*` 則 **不** 傳給 BFF — 維持 `sessionId: undefined`，避免 BE 收到不認識的 id）
 
-## 2. 修法（前端範圍）
+3. **送 BFF 時過濾 client-side id**
+   - `askManagementAi({ sessionId: sessionId?.startsWith("cli_") ? null : sessionId, ... })`
 
-### A. Per-session 本地快取（localStorage）
-- key：`pantheon.mgmtAi.turns.v1.<sessionId>`，存該 session 完整 `ChatTurn[]`。
-- 每次 `setTurns` 後 debounce 寫入；上限例如 500 turns / 1MB，超過就丟最舊。
-- `loadSession(id)`：先從 localStorage hydrate 顯示，再 `resync(id)` merge BFF 結果（已 merge by id），BFF 回空也不會清畫面。
-- `deleteSession`：同步清掉該 key。
+4. **小細節**
+   - `loadSession(cli_id)` 仍能 hydrate 本地 cache，但呼叫 `resync` 時若是 `cli_*` 直接 short-circuit（不打 BFF，免得 404）
+   - `deleteSession` 對 cli id 一樣可用
+   - sidebar 顯示時 `cli_*` 的 id 截斷顯示沒問題；可選擇對 cli id 加灰色「本地」小標（範圍內加，不擴張）
 
-### B. 拿掉「只送 12 則」的硬截
-- `RECENT_TURNS_LIMIT` 改成可調且預設較大（例如 80 turns 或 ~32KB chars，以字元數為準）。
-- 新增 `buildConversationPayload()`：
-  - 若總 char 數 ≤ 上限 → 全送。
-  - 超過 → 保留最後 N turns + 前面塞一段 `summary`（先用 client 端拼成「前 X 則摘要：…」純文字 placeholder；真正摘要交給 BFF/LLM 做。FE 不自己呼叫 LLM）。
-- `summary` 欄位繼續維持 BFF 契約相容。
+## 驗證
+- 開新對話 → 送一則訊息 → 左側立刻出現該對話、active 高亮
+- BFF degraded 回應後，左側那筆仍在；再送一則仍是同一筆
+- BFF 成功回應後，sidebar 該筆的 id 從 `cli_*` 變成 BFF 真實 sessionId，刷新後仍能 Resync
+- 既有 BFF id 對話不受影響
 
-### C. `loadSession` 不再清空
-- 拿掉 `setTurns([])`；先 hydrate localStorage，再 merge resync。
-- `resyncNotice` 仍保留（BFF 空回 / 失敗顯示提示）。
+## 不動範圍
+- BFF / `managementAi.ts` 契約
+- degraded callout、provider status pill、attachment 流程
 
-### D. Diagnostic
-- `console.debug` 印出 `local hydrated / resync merged / sent recentTurns count` 三個數字，方便之後判斷是 BFF 截還是 FE 截。
-
-## 3. 圖片上傳到後端
-
-### UI（在 `AgentPanelBody` composer 區）
-- PromptInput footer 左側加一顆 paperclip icon button → 隱藏 `<input type="file" accept="image/*" multiple>`。
-- 也支援：
-  - **貼上**：textarea `onPaste` 抓 `clipboardData.files`。
-  - **拖放**：composer 容器 `onDrop`。
-- 預覽列：textarea 上方顯示縮圖 chips（檔名 + 大小 + ✕ 移除）。
-- 限制：每張 ≤ 5MB、單次最多 4 張、總計 ≤ 15MB；超過給 inline error。
-
-### 資料路徑
-- 圖片轉 base64 data URL（`FileReader.readAsDataURL`），FE 不另外打 storage。
-- `ManagementAiAskInput` 新增：
-  ```ts
-  attachments?: Array<{
-    kind: "image";
-    mimeType: string;   // image/png | image/jpeg | image/webp | image/gif
-    filename: string;
-    sizeBytes: number;
-    dataBase64: string; // 不含 data:...;base64, 前綴
-  }>;
-  ```
-- POST body 新增 `attachments` 欄位送到 `/bff/management/nl/ask`，由 BFF 轉給 OpenClaw / Codex multimodal。
-- 沒附件就不送該欄位（保持向後相容）。
-
-### 顯示
-- User turn 渲染：文字下方顯示縮圖 grid（點開放大用 `<a target="_blank">` 開 data URL）。
-- localStorage 快取也要存 attachments（含 base64），但加 per-turn size guard：若 turn 超過 800KB 就只存 metadata + 縮圖（壓成 max 256px webp）以免爆 quota。
-
-### Assistant 回覆
-- 不變。BFF 回來文字 / uiActions 照舊。
-
-## 4. 不動的範圍
-
-- 不碰 `/bff/management/nl/ask` 以外的 BFF 契約（只新增 optional `attachments`，向後相容）。
-- 不加 Lovable AI fallback。degraded banner 行為不變。
-- 不動 uiActionRegistry。
-- 不動 BFF / 後端，純 FE 改動。
-
-## 5. Files to touch
-
-- `src/lib/bff-v1/managementAi.ts` — 加 `attachments` 欄位；`buildConversationPayload` helper。
-- `src/management/components/agent/AgentPanelBody.tsx` — localStorage per-session cache、拿掉清空、附件 UI / paste / drop、user message render attachments。
-- 新檔 `src/management/components/agent/attachmentUtils.ts` — file → base64、image 壓縮（canvas）、size guard。
-
-## 6. Definition of Done
-
-- 連發 30 則訊息、切走再切回來，畫面不會少。
-- 重新整理頁面再點同一個 session，本地至少看得到原本的訊息（BFF 即使回空）。
-- 點 paperclip 或貼上圖片，textarea 上方出現縮圖；送出後 user bubble 顯示縮圖；BFF payload 的 `attachments` 帶 base64。
-- 對話長度 > 12 turns 時，BFF 收到的 `recentTurns` 不再只有 12（debug log 可驗證）。
-- 不引入 Lovable AI fallback；degraded 行為不變。
+檔案：`src/management/components/agent/AgentPanelBody.tsx`（單檔）
