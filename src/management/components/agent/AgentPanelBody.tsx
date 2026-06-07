@@ -393,19 +393,24 @@ export function AgentPanelBody() {
     clearTurnsCache(oldId);
   }, []);
 
-  const abortInflight = useCallback((reason: "switch" | "new") => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
+  // Append a turn to a (possibly non-active) session.
+  // Active session → update view state + cache.
+  // Background session → write directly to its localStorage cache.
+  const appendTurnTo = useCallback((sid: string, turn: ChatTurn) => {
+    if (activeSessionRef.current === sid) {
+      const base = turnsRef.current;
+      const next = [...base, turn];
+      turnsRef.current = next;
+      setTurns(next);
+      void saveTurnsCache(sid, next);
+    } else {
+      const base = loadTurnsCache(sid);
+      const next = [...base, turn];
+      void saveTurnsCache(sid, next);
     }
-    if (pending) {
-      setPending(false);
-      setResyncNotice(reason === "new" ? "已取消進行中的請求並開新對話。" : "切換對話時取消了上一則進行中的請求。");
-    }
-  }, [pending]);
+  }, []);
 
   const startNewConversation = useCallback(() => {
-    abortInflight("new");
     activeSessionRef.current = NEW_SESSION_SENTINEL;
     setTurns([]);
     setSessionId(null);
@@ -418,7 +423,7 @@ export function AgentPanelBody() {
     setPendingAttachments([]);
     setAttachmentError(null);
     inputRef.current?.focus();
-  }, [abortInflight]);
+  }, []);
 
   /**
    * Pull conversation history from BFF and MERGE into local turns by id.
@@ -473,7 +478,6 @@ export function AgentPanelBody() {
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
-    abortInflight("switch");
     activeSessionRef.current = id;
     setSessionId(id);
     setTraceId(null);
@@ -486,14 +490,30 @@ export function AgentPanelBody() {
     // Hydrate from local cache FIRST — switching never blanks the screen.
     const cached = loadTurnsCache(id);
     setTurns(cached);
+    if (pendingSessions[id]) {
+      setResyncNotice("此對話仍在等待 BFF 回覆，請稍候。");
+    } else {
+      setResyncNotice(null);
+    }
     if (import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
       console.debug("[mgmtAi] loadSession hydrated", { sessionId: id, cached: cached.length });
     }
     await resync(id);
-  }, [sessionId, resync, abortInflight]);
+  }, [sessionId, resync, pendingSessions]);
 
   const deleteSession = useCallback((id: string) => {
+    // Cancel any in-flight request for this thread.
+    const ctrl = inflightRef.current.get(id);
+    if (ctrl) {
+      try { ctrl.abort(); } catch { /* noop */ }
+      inflightRef.current.delete(id);
+    }
+    setPendingSessions((prev) => {
+      if (!prev[id]) return prev;
+      const { [id]: _drop, ...rest } = prev;
+      return rest;
+    });
     setSessions((prev) => {
       const list = prev.filter((s) => s.id !== id);
       saveSessionIndex(list);
@@ -502,6 +522,8 @@ export function AgentPanelBody() {
     clearTurnsCache(id);
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
+
+
 
   // ---- UI snapshot (sent on every turn) ----
   const buildUiSnapshot = useCallback((): ManagementAiUiSnapshot => {
