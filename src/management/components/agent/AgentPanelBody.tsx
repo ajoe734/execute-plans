@@ -592,10 +592,10 @@ export function AgentPanelBody() {
   const submit = useCallback(async (raw: string) => {
     const question = raw.trim();
     const hasAttachments = pendingAttachments.length > 0;
-    if ((!question && !hasAttachments) || pending) return;
-    setPending(true);
-    setDegraded(null);
-    setResyncNotice(null);
+    if (!question && !hasAttachments) return;
+    // Block only if THIS conversation is already in-flight.
+    if (sessionId && pendingSessions[sessionId]) return;
+
     const now = Date.now();
     const attachmentsForTurn = pendingAttachments;
     const userTurn: ChatTurn = {
@@ -611,17 +611,33 @@ export function AgentPanelBody() {
     // returning a sessionId). The id will be reconciled to BFF's id below.
     let localSessionId = sessionId;
     const titleSeed = question || (attachmentsForTurn[0]?.filename ?? "圖片對話");
+    const isNewThread = !localSessionId;
     if (!localSessionId) {
       localSessionId = mkClientSessionId();
       setSessionId(localSessionId);
       activeSessionRef.current = localSessionId;
-      upsertSessionIndex(localSessionId, titleSeed);
     }
+    upsertSessionIndex(localSessionId, titleSeed);
     const requestBucket = localSessionId;
 
-    const nextTurns = [...turns, userTurn];
-    setTurns(nextTurns);
+    if (activeSessionRef.current === requestBucket) {
+      setDegraded(null);
+      setResyncNotice(null);
+    }
+
+    // Append the user turn into the correct thread bucket.
+    const baseTurns = activeSessionRef.current === requestBucket
+      ? turnsRef.current
+      : loadTurnsCache(requestBucket);
+    const nextTurns = [...baseTurns, userTurn];
+    if (activeSessionRef.current === requestBucket) {
+      turnsRef.current = nextTurns;
+      setTurns(nextTurns);
+    }
+    void saveTurnsCache(requestBucket, nextTurns);
     setPendingAttachments([]);
+
+    setPendingSessions((prev) => ({ ...prev, [requestBucket]: true }));
 
     const ui = buildUiSnapshot();
     const conv = buildConversationPayload(nextTurns);
@@ -632,6 +648,7 @@ export function AgentPanelBody() {
       console.debug("[mgmtAi] sending", {
         sessionId: sessionIdForBff,
         localSessionId,
+        isNewThread,
         totalTurns: nextTurns.length,
         recentTurnsSent: conv.recentTurns.length,
         summary: conv.summary ?? null,
@@ -640,62 +657,86 @@ export function AgentPanelBody() {
     }
 
     const controller = new AbortController();
-    abortRef.current = controller;
+    inflightRef.current.set(requestBucket, controller);
 
-    const result: ManagementAiResult = await askManagementAi({
-      question,
-      focus: "all",
-      sessionId: sessionIdForBff,
-      context: JSON.stringify({
-        route: location.pathname,
-        pageLabel: nlCtx.pageLabel,
-        selectedEntity: ui.selectedEntity,
-      }),
-      conversation: {
-        recentTurns: conv.recentTurns,
-        summary: conv.summary ?? conversationSummary,
-      },
-      ui,
-      attachments: attachmentsForTurn.length > 0
-        ? attachmentsForTurn.map((a) => ({
-            kind: a.kind,
-            mimeType: a.mimeType,
-            filename: a.filename,
-            sizeBytes: a.sizeBytes,
-            dataBase64: a.dataBase64,
-          }))
-        : undefined,
-    }, { signal: controller.signal });
+    let result: ManagementAiResult;
+    try {
+      result = await askManagementAi({
+        question,
+        focus: "all",
+        sessionId: sessionIdForBff,
+        context: JSON.stringify({
+          route: location.pathname,
+          pageLabel: nlCtx.pageLabel,
+          selectedEntity: ui.selectedEntity,
+        }),
+        conversation: {
+          recentTurns: conv.recentTurns,
+          summary: conv.summary ?? conversationSummary,
+        },
+        ui,
+        attachments: attachmentsForTurn.length > 0
+          ? attachmentsForTurn.map((a) => ({
+              kind: a.kind,
+              mimeType: a.mimeType,
+              filename: a.filename,
+              sizeBytes: a.sizeBytes,
+              dataBase64: a.dataBase64,
+            }))
+          : undefined,
+      }, { signal: controller.signal });
+    } finally {
+      if (inflightRef.current.get(requestBucket) === controller) {
+        inflightRef.current.delete(requestBucket);
+      }
+    }
 
-    if (abortRef.current === controller) abortRef.current = null;
-
-    if (activeSessionRef.current !== requestBucket) return;
+    // Always release the per-session pending flag, regardless of which
+    // conversation the user is currently viewing.
+    const clearPending = () => {
+      setPendingSessions((prev) => {
+        if (!prev[requestBucket]) return prev;
+        const { [requestBucket]: _drop, ...rest } = prev;
+        return rest;
+      });
+    };
 
     if (result.kind === "aborted") {
-      setPending(false);
+      clearPending();
       return;
     }
 
     // Reconcile cli_* → BFF sessionId if BFF returned one.
-    const reconcile = (bffSid: string | null): string | null => {
+    // Works even when this thread is not the currently-viewed one.
+    const reconcile = (bffSid: string | null): string => {
       if (bffSid && isClientSessionId(localSessionId!) && bffSid !== localSessionId) {
         renameSession(localSessionId!, bffSid);
-        setSessionId(bffSid);
-        activeSessionRef.current = bffSid;
+        // Move pending flag from cli → bff id.
+        setPendingSessions((prev) => {
+          if (!prev[localSessionId!]) return prev;
+          const { [localSessionId!]: _drop, ...rest } = prev;
+          return { ...rest, [bffSid]: true };
+        });
+        // Also move the inflight controller bookkeeping.
+        const ctrl = inflightRef.current.get(localSessionId!);
+        if (ctrl) {
+          inflightRef.current.delete(localSessionId!);
+          inflightRef.current.set(bffSid, ctrl);
+        }
+        if (activeSessionRef.current === localSessionId) {
+          activeSessionRef.current = bffSid;
+          setSessionId(bffSid);
+        }
         return bffSid;
       }
-      if (bffSid && !localSessionId) {
-        setSessionId(bffSid);
-        activeSessionRef.current = bffSid;
-        return bffSid;
-      }
-      return bffSid ?? localSessionId;
+      return bffSid ?? localSessionId!;
     };
+
+    const isActive = (sid: string) => activeSessionRef.current === sid;
 
     if (result.kind === "ok") {
       const sid = reconcile(result.sessionId ?? null);
-      setTraceId(result.traceId);
-      setTurns((prev) => [...prev, {
+      const assistantTurn: ChatTurn = {
         id: turnId("a"),
         role: "assistant",
         text: result.answer,
@@ -705,14 +746,17 @@ export function AgentPanelBody() {
         traceId: result.traceId,
         uiActions: result.uiActions,
         createdAt: Date.now(),
-      }]);
-      setDegraded(null);
-      if (sid) upsertSessionIndex(sid, titleSeed);
+      };
+      appendTurnTo(sid, assistantTurn);
+      if (isActive(sid)) {
+        setTraceId(result.traceId);
+        setDegraded(null);
+      }
+      upsertSessionIndex(sid, titleSeed);
     } else if (result.kind === "provider_degraded") {
       const sid = reconcile(result.sessionId ?? null);
-      setTraceId(result.traceId);
       if (result.answer) {
-        setTurns((prev) => [...prev, {
+        const assistantTurn: ChatTurn = {
           id: turnId("a_degraded"),
           role: "assistant",
           text: result.answer,
@@ -722,24 +766,33 @@ export function AgentPanelBody() {
           traceId: result.traceId,
           uiActions: result.uiActions,
           createdAt: Date.now(),
-        }]);
+        };
+        appendTurnTo(sid, assistantTurn);
       }
-      setDegraded({ message: result.message, providerStatus: result.providerStatus });
-      if (sid) upsertSessionIndex(sid, titleSeed);
+      if (isActive(sid)) {
+        setTraceId(result.traceId);
+        setDegraded({ message: result.message, providerStatus: result.providerStatus });
+      }
+      upsertSessionIndex(sid, titleSeed);
     } else {
-      setDegraded({
-        message: result.status
-          ? `Pantheon BFF returned ${result.status}: ${result.message}`
-          : `BFF transport failure: ${result.message}`,
-        providerStatus: null,
-      });
+      if (isActive(requestBucket)) {
+        setDegraded({
+          message: result.status
+            ? `Pantheon BFF returned ${result.status}: ${result.message}`
+            : `BFF transport failure: ${result.message}`,
+          providerStatus: null,
+        });
+      }
       // Keep cli_* session in sidebar so the user can retry on the same thread.
-      if (localSessionId) upsertSessionIndex(localSessionId, titleSeed);
+      upsertSessionIndex(requestBucket, titleSeed);
     }
 
-    setPending(false);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [pending, pendingAttachments, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession]);
+    clearPending();
+    if (activeSessionRef.current === requestBucket || activeSessionRef.current === (result.kind === "ok" || result.kind === "provider_degraded" ? (result.sessionId ?? requestBucket) : requestBucket)) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [pendingAttachments, sessionId, pendingSessions, buildUiSnapshot, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession, appendTurnTo]);
+
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
