@@ -820,12 +820,13 @@ export function AgentPanelBody() {
             <Plus className="h-3 w-3" />
           </Button>
         </div>
-        <div className={`flex-1 min-h-0 overflow-y-auto ${pending ? "cursor-progress" : ""}`}>
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {sessions.length === 0 && (
             <div className="px-2 py-3 text-[10px] text-muted-foreground">尚無對話紀錄</div>
           )}
           {sessions.map((s) => {
             const active = s.id === sessionId;
+            const isPending = !!pendingSessions[s.id];
             return (
               <div
                 key={s.id}
@@ -833,7 +834,15 @@ export function AgentPanelBody() {
                 onClick={() => void loadSession(s.id)}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] truncate">{s.title}</div>
+                  <div className="text-[11px] truncate flex items-center gap-1">
+                    <span className="truncate">{s.title}</span>
+                    {isPending && (
+                      <Loader2
+                        className="h-2.5 w-2.5 shrink-0 animate-spin text-muted-foreground"
+                        aria-label="此對話正在等待 BFF 回覆"
+                      />
+                    )}
+                  </div>
                   <div className="text-[9px] text-muted-foreground font-mono">{s.id.slice(0, 10)}…</div>
                 </div>
                 <button
@@ -848,6 +857,7 @@ export function AgentPanelBody() {
             );
           })}
         </div>
+
       </aside>
 
       {/* Main chat column */}
