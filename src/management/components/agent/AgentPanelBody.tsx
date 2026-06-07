@@ -20,7 +20,7 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   askManagementAi,
@@ -300,7 +300,7 @@ export function AgentPanelBody() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
-  const [pending, setPending] = useState(false);
+  const [pendingSessions, setPendingSessions] = useState<Record<string, true>>({});
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
   const [resyncNotice, setResyncNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -312,9 +312,23 @@ export function AgentPanelBody() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ---- in-flight guards ----
-  const abortRef = useRef<AbortController | null>(null);
+  // ---- in-flight guards (per-session, so multiple conversations run in parallel) ----
+  const inflightRef = useRef<Map<string, AbortController>>(new Map());
   const activeSessionRef = useRef<string>(NEW_SESSION_SENTINEL);
+  const turnsRef = useRef<ChatTurn[]>([]);
+  useEffect(() => { turnsRef.current = turns; }, [turns]);
+
+  // Active-session pending flag — drives input/submit disable & shimmer.
+  const pending = sessionId ? !!pendingSessions[sessionId] : false;
+
+  // Unmount: abort any still-running requests so we don't leak fetches.
+  useEffect(() => {
+    const map = inflightRef.current;
+    return () => {
+      map.forEach((c) => { try { c.abort(); } catch { /* noop */ } });
+      map.clear();
+    };
+  }, []);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -328,6 +342,7 @@ export function AgentPanelBody() {
     const id = window.requestAnimationFrame(() => { void saveTurnsCache(sessionId, turns); });
     return () => window.cancelAnimationFrame(id);
   }, [sessionId, turns]);
+
 
   const lastProviderStatus = useMemo<ProviderStatus | null>(() => {
     for (let i = turns.length - 1; i >= 0; i--) {
@@ -378,19 +393,24 @@ export function AgentPanelBody() {
     clearTurnsCache(oldId);
   }, []);
 
-  const abortInflight = useCallback((reason: "switch" | "new") => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
+  // Append a turn to a (possibly non-active) session.
+  // Active session → update view state + cache.
+  // Background session → write directly to its localStorage cache.
+  const appendTurnTo = useCallback((sid: string, turn: ChatTurn) => {
+    if (activeSessionRef.current === sid) {
+      const base = turnsRef.current;
+      const next = [...base, turn];
+      turnsRef.current = next;
+      setTurns(next);
+      void saveTurnsCache(sid, next);
+    } else {
+      const base = loadTurnsCache(sid);
+      const next = [...base, turn];
+      void saveTurnsCache(sid, next);
     }
-    if (pending) {
-      setPending(false);
-      setResyncNotice(reason === "new" ? "已取消進行中的請求並開新對話。" : "切換對話時取消了上一則進行中的請求。");
-    }
-  }, [pending]);
+  }, []);
 
   const startNewConversation = useCallback(() => {
-    abortInflight("new");
     activeSessionRef.current = NEW_SESSION_SENTINEL;
     setTurns([]);
     setSessionId(null);
@@ -403,7 +423,7 @@ export function AgentPanelBody() {
     setPendingAttachments([]);
     setAttachmentError(null);
     inputRef.current?.focus();
-  }, [abortInflight]);
+  }, []);
 
   /**
    * Pull conversation history from BFF and MERGE into local turns by id.
@@ -458,7 +478,6 @@ export function AgentPanelBody() {
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
-    abortInflight("switch");
     activeSessionRef.current = id;
     setSessionId(id);
     setTraceId(null);
@@ -471,14 +490,30 @@ export function AgentPanelBody() {
     // Hydrate from local cache FIRST — switching never blanks the screen.
     const cached = loadTurnsCache(id);
     setTurns(cached);
+    if (pendingSessions[id]) {
+      setResyncNotice("此對話仍在等待 BFF 回覆，請稍候。");
+    } else {
+      setResyncNotice(null);
+    }
     if (import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
       console.debug("[mgmtAi] loadSession hydrated", { sessionId: id, cached: cached.length });
     }
     await resync(id);
-  }, [sessionId, resync, abortInflight]);
+  }, [sessionId, resync, pendingSessions]);
 
   const deleteSession = useCallback((id: string) => {
+    // Cancel any in-flight request for this thread.
+    const ctrl = inflightRef.current.get(id);
+    if (ctrl) {
+      try { ctrl.abort(); } catch { /* noop */ }
+      inflightRef.current.delete(id);
+    }
+    setPendingSessions((prev) => {
+      if (!prev[id]) return prev;
+      const { [id]: _drop, ...rest } = prev;
+      return rest;
+    });
     setSessions((prev) => {
       const list = prev.filter((s) => s.id !== id);
       saveSessionIndex(list);
@@ -487,6 +522,8 @@ export function AgentPanelBody() {
     clearTurnsCache(id);
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
+
+
 
   // ---- UI snapshot (sent on every turn) ----
   const buildUiSnapshot = useCallback((): ManagementAiUiSnapshot => {
@@ -555,10 +592,10 @@ export function AgentPanelBody() {
   const submit = useCallback(async (raw: string) => {
     const question = raw.trim();
     const hasAttachments = pendingAttachments.length > 0;
-    if ((!question && !hasAttachments) || pending) return;
-    setPending(true);
-    setDegraded(null);
-    setResyncNotice(null);
+    if (!question && !hasAttachments) return;
+    // Block only if THIS conversation is already in-flight.
+    if (sessionId && pendingSessions[sessionId]) return;
+
     const now = Date.now();
     const attachmentsForTurn = pendingAttachments;
     const userTurn: ChatTurn = {
@@ -574,17 +611,33 @@ export function AgentPanelBody() {
     // returning a sessionId). The id will be reconciled to BFF's id below.
     let localSessionId = sessionId;
     const titleSeed = question || (attachmentsForTurn[0]?.filename ?? "圖片對話");
+    const isNewThread = !localSessionId;
     if (!localSessionId) {
       localSessionId = mkClientSessionId();
       setSessionId(localSessionId);
       activeSessionRef.current = localSessionId;
-      upsertSessionIndex(localSessionId, titleSeed);
     }
+    upsertSessionIndex(localSessionId, titleSeed);
     const requestBucket = localSessionId;
 
-    const nextTurns = [...turns, userTurn];
-    setTurns(nextTurns);
+    if (activeSessionRef.current === requestBucket) {
+      setDegraded(null);
+      setResyncNotice(null);
+    }
+
+    // Append the user turn into the correct thread bucket.
+    const baseTurns = activeSessionRef.current === requestBucket
+      ? turnsRef.current
+      : loadTurnsCache(requestBucket);
+    const nextTurns = [...baseTurns, userTurn];
+    if (activeSessionRef.current === requestBucket) {
+      turnsRef.current = nextTurns;
+      setTurns(nextTurns);
+    }
+    void saveTurnsCache(requestBucket, nextTurns);
     setPendingAttachments([]);
+
+    setPendingSessions((prev) => ({ ...prev, [requestBucket]: true }));
 
     const ui = buildUiSnapshot();
     const conv = buildConversationPayload(nextTurns);
@@ -595,6 +648,7 @@ export function AgentPanelBody() {
       console.debug("[mgmtAi] sending", {
         sessionId: sessionIdForBff,
         localSessionId,
+        isNewThread,
         totalTurns: nextTurns.length,
         recentTurnsSent: conv.recentTurns.length,
         summary: conv.summary ?? null,
@@ -603,62 +657,86 @@ export function AgentPanelBody() {
     }
 
     const controller = new AbortController();
-    abortRef.current = controller;
+    inflightRef.current.set(requestBucket, controller);
 
-    const result: ManagementAiResult = await askManagementAi({
-      question,
-      focus: "all",
-      sessionId: sessionIdForBff,
-      context: JSON.stringify({
-        route: location.pathname,
-        pageLabel: nlCtx.pageLabel,
-        selectedEntity: ui.selectedEntity,
-      }),
-      conversation: {
-        recentTurns: conv.recentTurns,
-        summary: conv.summary ?? conversationSummary,
-      },
-      ui,
-      attachments: attachmentsForTurn.length > 0
-        ? attachmentsForTurn.map((a) => ({
-            kind: a.kind,
-            mimeType: a.mimeType,
-            filename: a.filename,
-            sizeBytes: a.sizeBytes,
-            dataBase64: a.dataBase64,
-          }))
-        : undefined,
-    }, { signal: controller.signal });
+    let result: ManagementAiResult;
+    try {
+      result = await askManagementAi({
+        question,
+        focus: "all",
+        sessionId: sessionIdForBff,
+        context: JSON.stringify({
+          route: location.pathname,
+          pageLabel: nlCtx.pageLabel,
+          selectedEntity: ui.selectedEntity,
+        }),
+        conversation: {
+          recentTurns: conv.recentTurns,
+          summary: conv.summary ?? conversationSummary,
+        },
+        ui,
+        attachments: attachmentsForTurn.length > 0
+          ? attachmentsForTurn.map((a) => ({
+              kind: a.kind,
+              mimeType: a.mimeType,
+              filename: a.filename,
+              sizeBytes: a.sizeBytes,
+              dataBase64: a.dataBase64,
+            }))
+          : undefined,
+      }, { signal: controller.signal });
+    } finally {
+      if (inflightRef.current.get(requestBucket) === controller) {
+        inflightRef.current.delete(requestBucket);
+      }
+    }
 
-    if (abortRef.current === controller) abortRef.current = null;
-
-    if (activeSessionRef.current !== requestBucket) return;
+    // Always release the per-session pending flag, regardless of which
+    // conversation the user is currently viewing.
+    const clearPending = () => {
+      setPendingSessions((prev) => {
+        if (!prev[requestBucket]) return prev;
+        const { [requestBucket]: _drop, ...rest } = prev;
+        return rest;
+      });
+    };
 
     if (result.kind === "aborted") {
-      setPending(false);
+      clearPending();
       return;
     }
 
     // Reconcile cli_* → BFF sessionId if BFF returned one.
-    const reconcile = (bffSid: string | null): string | null => {
+    // Works even when this thread is not the currently-viewed one.
+    const reconcile = (bffSid: string | null): string => {
       if (bffSid && isClientSessionId(localSessionId!) && bffSid !== localSessionId) {
         renameSession(localSessionId!, bffSid);
-        setSessionId(bffSid);
-        activeSessionRef.current = bffSid;
+        // Move pending flag from cli → bff id.
+        setPendingSessions((prev) => {
+          if (!prev[localSessionId!]) return prev;
+          const { [localSessionId!]: _drop, ...rest } = prev;
+          return { ...rest, [bffSid]: true };
+        });
+        // Also move the inflight controller bookkeeping.
+        const ctrl = inflightRef.current.get(localSessionId!);
+        if (ctrl) {
+          inflightRef.current.delete(localSessionId!);
+          inflightRef.current.set(bffSid, ctrl);
+        }
+        if (activeSessionRef.current === localSessionId) {
+          activeSessionRef.current = bffSid;
+          setSessionId(bffSid);
+        }
         return bffSid;
       }
-      if (bffSid && !localSessionId) {
-        setSessionId(bffSid);
-        activeSessionRef.current = bffSid;
-        return bffSid;
-      }
-      return bffSid ?? localSessionId;
+      return bffSid ?? localSessionId!;
     };
+
+    const isActive = (sid: string) => activeSessionRef.current === sid;
 
     if (result.kind === "ok") {
       const sid = reconcile(result.sessionId ?? null);
-      setTraceId(result.traceId);
-      setTurns((prev) => [...prev, {
+      const assistantTurn: ChatTurn = {
         id: turnId("a"),
         role: "assistant",
         text: result.answer,
@@ -668,14 +746,17 @@ export function AgentPanelBody() {
         traceId: result.traceId,
         uiActions: result.uiActions,
         createdAt: Date.now(),
-      }]);
-      setDegraded(null);
-      if (sid) upsertSessionIndex(sid, titleSeed);
+      };
+      appendTurnTo(sid, assistantTurn);
+      if (isActive(sid)) {
+        setTraceId(result.traceId);
+        setDegraded(null);
+      }
+      upsertSessionIndex(sid, titleSeed);
     } else if (result.kind === "provider_degraded") {
       const sid = reconcile(result.sessionId ?? null);
-      setTraceId(result.traceId);
       if (result.answer) {
-        setTurns((prev) => [...prev, {
+        const assistantTurn: ChatTurn = {
           id: turnId("a_degraded"),
           role: "assistant",
           text: result.answer,
@@ -685,24 +766,33 @@ export function AgentPanelBody() {
           traceId: result.traceId,
           uiActions: result.uiActions,
           createdAt: Date.now(),
-        }]);
+        };
+        appendTurnTo(sid, assistantTurn);
       }
-      setDegraded({ message: result.message, providerStatus: result.providerStatus });
-      if (sid) upsertSessionIndex(sid, titleSeed);
+      if (isActive(sid)) {
+        setTraceId(result.traceId);
+        setDegraded({ message: result.message, providerStatus: result.providerStatus });
+      }
+      upsertSessionIndex(sid, titleSeed);
     } else {
-      setDegraded({
-        message: result.status
-          ? `Pantheon BFF returned ${result.status}: ${result.message}`
-          : `BFF transport failure: ${result.message}`,
-        providerStatus: null,
-      });
+      if (isActive(requestBucket)) {
+        setDegraded({
+          message: result.status
+            ? `Pantheon BFF returned ${result.status}: ${result.message}`
+            : `BFF transport failure: ${result.message}`,
+          providerStatus: null,
+        });
+      }
       // Keep cli_* session in sidebar so the user can retry on the same thread.
-      if (localSessionId) upsertSessionIndex(localSessionId, titleSeed);
+      upsertSessionIndex(requestBucket, titleSeed);
     }
 
-    setPending(false);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [pending, pendingAttachments, turns, buildUiSnapshot, sessionId, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession]);
+    clearPending();
+    if (activeSessionRef.current === requestBucket || activeSessionRef.current === (result.kind === "ok" || result.kind === "provider_degraded" ? (result.sessionId ?? requestBucket) : requestBucket)) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [pendingAttachments, sessionId, pendingSessions, buildUiSnapshot, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession, appendTurnTo]);
+
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -730,12 +820,13 @@ export function AgentPanelBody() {
             <Plus className="h-3 w-3" />
           </Button>
         </div>
-        <div className={`flex-1 min-h-0 overflow-y-auto ${pending ? "cursor-progress" : ""}`}>
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {sessions.length === 0 && (
             <div className="px-2 py-3 text-[10px] text-muted-foreground">尚無對話紀錄</div>
           )}
           {sessions.map((s) => {
             const active = s.id === sessionId;
+            const isPending = !!pendingSessions[s.id];
             return (
               <div
                 key={s.id}
@@ -743,7 +834,15 @@ export function AgentPanelBody() {
                 onClick={() => void loadSession(s.id)}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] truncate">{s.title}</div>
+                  <div className="text-[11px] truncate flex items-center gap-1">
+                    <span className="truncate">{s.title}</span>
+                    {isPending && (
+                      <Loader2
+                        className="h-2.5 w-2.5 shrink-0 animate-spin text-muted-foreground"
+                        aria-label="此對話正在等待 BFF 回覆"
+                      />
+                    )}
+                  </div>
                   <div className="text-[9px] text-muted-foreground font-mono">{s.id.slice(0, 10)}…</div>
                 </div>
                 <button
@@ -758,6 +857,7 @@ export function AgentPanelBody() {
             );
           })}
         </div>
+
       </aside>
 
       {/* Main chat column */}
