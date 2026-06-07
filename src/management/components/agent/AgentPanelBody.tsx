@@ -300,7 +300,7 @@ export function AgentPanelBody() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
-  const [pending, setPending] = useState(false);
+  const [pendingSessions, setPendingSessions] = useState<Record<string, true>>({});
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
   const [resyncNotice, setResyncNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -312,9 +312,23 @@ export function AgentPanelBody() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ---- in-flight guards ----
-  const abortRef = useRef<AbortController | null>(null);
+  // ---- in-flight guards (per-session, so multiple conversations run in parallel) ----
+  const inflightRef = useRef<Map<string, AbortController>>(new Map());
   const activeSessionRef = useRef<string>(NEW_SESSION_SENTINEL);
+  const turnsRef = useRef<ChatTurn[]>([]);
+  useEffect(() => { turnsRef.current = turns; }, [turns]);
+
+  // Active-session pending flag — drives input/submit disable & shimmer.
+  const pending = sessionId ? !!pendingSessions[sessionId] : false;
+
+  // Unmount: abort any still-running requests so we don't leak fetches.
+  useEffect(() => {
+    const map = inflightRef.current;
+    return () => {
+      map.forEach((c) => { try { c.abort(); } catch { /* noop */ } });
+      map.clear();
+    };
+  }, []);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -328,6 +342,7 @@ export function AgentPanelBody() {
     const id = window.requestAnimationFrame(() => { void saveTurnsCache(sessionId, turns); });
     return () => window.cancelAnimationFrame(id);
   }, [sessionId, turns]);
+
 
   const lastProviderStatus = useMemo<ProviderStatus | null>(() => {
     for (let i = turns.length - 1; i >= 0; i--) {
