@@ -27,13 +27,15 @@ describe("LiveStatusBanner", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("warns that hybrid mode has seed fallback armed", () => {
+  it("shows live source for healthy hybrid mode without claiming seed fallback", () => {
     stubLiveEnv("auto");
 
     render(<LiveStatusBanner />);
 
     expect(screen.getByRole("status")).toHaveTextContent("hybrid");
-    expect(screen.getByRole("status")).toHaveTextContent("資料來源：live / seed fallback armed");
+    expect(screen.getByRole("status")).toHaveTextContent("資料來源：live / fallback standby");
+    expect(screen.getByRole("status")).not.toHaveTextContent("seed fallback armed");
+    expect(screen.queryByText("資料來源：seed")).not.toBeInTheDocument();
   });
 
   it("shows seed source after hybrid transport fallback", () => {

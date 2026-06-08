@@ -5,8 +5,8 @@
 //                     a known-safe state and does not need a reminder).
 //   "real-error"    — strict live mode hit a typed transport error; never label
 //                     this as seed/mock data.
-//   "hybrid"        — live mode with auto fallback; warning strip states that seed
-//                     fallback is armed.
+//   "hybrid"        — live mode with auto fallback standby; do not label the
+//                     current source as seed unless fallback actually happens.
 //   "mock-fallback" — hybrid live fell back to seed; prominent "資料來源：seed" warning
 //                     with retry action.
 //   "mock"          — pure seed mode; "資料來源：seed" warning indicator.
@@ -143,7 +143,7 @@ function BannerContent({ snap }: { snap: LiveStatusSnapshot }) {
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="font-mono uppercase tracking-wider">hybrid</span>
-          <span className="text-foreground/70 truncate">資料來源：live / seed fallback armed</span>
+          <span className="text-foreground/70 truncate">資料來源：live / fallback standby</span>
         </div>
         {apiVersionMismatch && <VersionMismatchStrip serverApiVersion={serverApiVersion} />}
       </>
