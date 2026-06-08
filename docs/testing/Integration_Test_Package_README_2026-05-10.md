@@ -59,14 +59,14 @@ npm run test:contract
 5. 跑匿名路由註冊 probe：
 
 ```bash
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
 node scripts/probe-bff-routes.mjs --anonymous
 ```
 
 6. 跑 authenticated smoke，需 token：
 
 ```bash
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
 PANTHEON_BFF_SMOKE_BEARER_TOKEN=... \
 node scripts/probe-bff-authenticated-live.mjs
 ```
@@ -74,8 +74,8 @@ node scripts/probe-bff-authenticated-live.mjs
 7. 跑 hosted browser probe：
 
 ```bash
-PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app \
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
 PANTHEON_OLD_BFF_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io \
 node scripts/probe-hosted-browser-bff.mjs
 ```
@@ -83,8 +83,8 @@ node scripts/probe-hosted-browser-bff.mjs
 8. 跑 Playwright E2E：
 
 ```bash
-PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app \
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io \
+PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
 npm run e2e
 ```
 
@@ -93,5 +93,7 @@ npm run e2e
 - `mock` 模式可用於本地開發與 UI 快速驗證。
 - `hybrid` 模式可用於 demo，但不能作為整合通過依據。
 - `strict` 模式是 CI / release gate 的基準；live BFF failure 不得 fallback mock。
+- dev hosted browser 驗收必須使用 Pantheon-owned FE，不得使用 Lovable publish
+  state 當作 dev host 或 release truth。
 - browser probe 必須證明部署後 bundle 指向正確 BFF URL，且沒有舊 URL。
 - authenticated smoke 必須證明 BFF 不是只有 route 註冊，而是真的返回 contract DTO。

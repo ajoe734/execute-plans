@@ -4,7 +4,8 @@
 
 - [ ] `execute-plans` branch is clean and points to release candidate SHA.
 - [ ] `pantheon` backend/BFF SHA is recorded.
-- [ ] `PANTHEON_FE_BASE_URL` points to intended Lovable deployment.
+- [ ] `PANTHEON_FE_BASE_URL` points to the intended Pantheon-owned FE
+  deployment, not Lovable.
 - [ ] `PANTHEON_BFF_BASE_URL` points to intended BFF.
 - [ ] No obsolete BFF URL appears in hosted JS bundle.
 - [ ] Auth token or test OIDC path available for authenticated smoke.
@@ -83,5 +84,5 @@ Authenticated:
 
 - [ ] All critical gates pass.
 - [ ] Exceptions documented with owner and expiry.
-- [ ] Evidence written to `.lovable/audits/`.
+- [ ] Evidence written to the configured audit output path.
 - [ ] Backend SHA + frontend SHA + BFF URL recorded.
