@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "http://127.0.0.1:4173");
+const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
 const UPSTREAM_BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE);
 const OLD_BFF_URL = normalizeOldBffUrl(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");

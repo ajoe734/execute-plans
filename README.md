@@ -1,4 +1,4 @@
-# Pantheon Frontend (Lovable)
+# Pantheon Frontend (`execute-plans`)
 
 Pantheon 是一個雙產品（**Management Console** + **Agora Workbench**）的內部營運與研究操作介面。
 目前支援 mock 與 Pantheon BFF live 模式；`VITE_BFF_FALLBACK=auto` 是 dev/hybrid fallback，
@@ -18,22 +18,30 @@ npm run build        # production build
 npm run lint         # lint
 ```
 
-## Lovable / Pantheon BFF 串接
+## Pantheon Dev FE / BFF 串接
 
-這個 repo 是新的 Lovable app（execute-plans），不是舊的 `front-ai-trading-system`
-專案。三個常用 env 範本：
+這個 repo 是 Pantheon 目前的前端系統，不是舊的
+`front-ai-trading-system` 專案。Dev frontend 不再以 Lovable publish 狀態作為
+host 或驗收來源；請從 Pantheon dev 環境服務 `execute-plans` build。
+
+目前 dev FE / BFF 目標：
+
+- FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
+- BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+
+常用 env 範本：
 
 - `.env.example`：預設 mock，本地無後端時使用。
 - `.env.dev.example`：shared dev BFF，`live + auto` fallback。
 - `.env.development.example`：lupin dev BFF，`live + auto` fallback。
 - `.env.staging-live.example`：staging-live BFF，`live + strict`，驗證時不得靜默 mock。
 
-Lovable shared dev hosting 請設定：
+Pantheon dev frontend build 請設定：
 
 ```env
 VITE_BFF_MODE=live
-VITE_BFF_BASE_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io
-VITE_BFF_FALLBACK=auto
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
@@ -54,7 +62,7 @@ Auth/session access is explicit:
 - Browser cookie session：live fetch 使用 `credentials: "include"`。
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
-- Optional Lovable dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
+- Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
   dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
