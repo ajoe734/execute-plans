@@ -28,7 +28,9 @@ export interface LiveStatusSnapshot {
   configuredMode: ManagementMode;
   /** True only when the current rendered data source is seed/mock. */
   usingSeed: boolean;
-  /** True when live mode can automatically switch to seed after transport failure. */
+  /** True when live mode is healthy and automatic fallback is available but idle. */
+  fallbackStandby: boolean;
+  /** Deprecated compatibility flag. True only after seed fallback is actually active. */
   seedFallbackArmed: boolean;
   /** True when strict live failed and the UI should show typed-error state. */
   typedError: boolean;
@@ -48,6 +50,7 @@ function snapshotKey(snapshot: LiveStatusSnapshot): string {
     snapshot.transportMode,
     snapshot.configuredMode,
     snapshot.usingSeed,
+    snapshot.fallbackStandby,
     snapshot.seedFallbackArmed,
     snapshot.typedError,
     snapshot.fellBack,
@@ -75,6 +78,7 @@ function computeSnapshot(): LiveStatusSnapshot {
       transportMode: "mock",
       configuredMode,
       usingSeed: true,
+      fallbackStandby: false,
       seedFallbackArmed: false,
       typedError: false,
       fellBack: false,
@@ -86,6 +90,7 @@ function computeSnapshot(): LiveStatusSnapshot {
       transportMode: "real-error",
       configuredMode,
       usingSeed: false,
+      fallbackStandby: false,
       seedFallbackArmed: false,
       typedError: true,
       fellBack: false,
@@ -101,6 +106,7 @@ function computeSnapshot(): LiveStatusSnapshot {
       transportMode: "mock-fallback",
       configuredMode,
       usingSeed: true,
+      fallbackStandby: false,
       seedFallbackArmed: true,
       typedError: false,
       fellBack: true,
@@ -116,6 +122,7 @@ function computeSnapshot(): LiveStatusSnapshot {
       transportMode: "real",
       configuredMode,
       usingSeed: false,
+      fallbackStandby: false,
       seedFallbackArmed: false,
       typedError: false,
       fellBack: false,
@@ -128,7 +135,8 @@ function computeSnapshot(): LiveStatusSnapshot {
     transportMode: "hybrid",
     configuredMode,
     usingSeed: false,
-    seedFallbackArmed: true,
+    fallbackStandby: true,
+    seedFallbackArmed: false,
     typedError: false,
     fellBack: false,
     apiVersionMismatch: status.apiVersionMismatch,

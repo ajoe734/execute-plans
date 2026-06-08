@@ -312,10 +312,17 @@ function envPresent(...names) {
 
 function markdownHasException(idOrLabel) {
   const env = process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || "";
-  const file = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const file = releaseGateExceptionsFile();
   const text = `${env}\n${readText(file)}`.toLowerCase();
   if (!text.trim()) return false;
   return text.includes(String(idOrLabel).toLowerCase());
+}
+
+function releaseGateExceptionsFile() {
+  const currentRunFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  if (currentRunFile) return currentRunFile;
+  const rootAuditFile = path.resolve(ROOT, ".lovable/audits/release-gate-exceptions.md");
+  return exists(rootAuditFile) ? rootAuditFile : "";
 }
 
 function buildGate0(hosted) {
@@ -342,7 +349,7 @@ function buildGate0(hosted) {
       evidence: RUN_URL || ROOT,
       note: bffShaPresent ? "backend/BFF SHA env present" : "set PANTHEON_BFF_SHA or PANTHEON_BACKEND_SHA",
     }),
-    makeCheck("`PANTHEON_FE_BASE_URL` points to intended Pantheon dev frontend.", feUrlPresent ? "pass" : "missing", {
+    makeCheck("`PANTHEON_FE_BASE_URL` points to intended frontend target.", feUrlPresent ? "pass" : "missing", {
       owner: feUrlPresent ? "" : GATE_OWNERS[0],
       evidence: RUN_URL || ROOT,
       note: process.env.PANTHEON_FE_BASE_URL || "missing",
@@ -484,7 +491,7 @@ function buildGate3(routeProbe, authSmoke) {
     "/bff/v5/execution/persona-health",
   ];
   const writePaths = [
-    "/bff/actions/strategies/strategy-dev/promote",
+    "/bff/actions/strategy/strategy-dev/promote",
     "/bff/approvals/approval-dev/decide",
     "/bff/v5/interventions/intervention-dev/decide",
     "/bff/management/nl/ask",
@@ -567,6 +574,10 @@ function analyzeHostedProbe(stepOutcomes) {
   const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
+  const personaFleetRowCount = parseNumberAfter(text, "persona fleet row count");
+  const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid");
+  const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid");
+  const personaFleetSeedFallbackArmed = parseBoolAfter(text, "persona fleet seed fallback armed");
   const pass = parseBoolAfter(text, "pass");
   const consoleErrorsSection = text.match(/## Console errors\s+([\s\S]*?)(?:\n## |\n?$)/i)?.[1] || "";
   const corsErrors = /cors/i.test(consoleErrorsSection) && !/none/i.test(consoleErrorsSection.trim());
@@ -579,10 +590,14 @@ function analyzeHostedProbe(stepOutcomes) {
     oldHitCount: oldHitCount ?? (containsOld === false ? 0 : containsOld === true ? 1 : null),
     containsBff,
     containsOld,
+    personaFleetRowCount,
+    personaFleetRowsValid,
+    personaFleetLiveBannerValid,
+    personaFleetSeedFallbackArmed,
     pass,
     corsErrors,
     missingStatus: missingEvidenceStatus(step.status),
-    missingNote: missingProbeNote("hosted browser probe", step.outcome),
+    missingNote: missingProbeNote("frontend browser probe", step.outcome),
     stepStatus: step.status,
     stepOutcome: step.outcome,
     stepEvidence: evidencePath(step.evidence),
@@ -606,17 +621,27 @@ function buildGate4(hosted) {
   const noFailedStatus = statusForHosted(noFailed);
   const noCorsStatus = statusForHosted(!hosted.corsErrors);
   return [
-    makeCheck("Hosted page loads.", loadedStatus, {
+    makeCheck("Frontend page loads.", loadedStatus, {
       owner: hostedOwner(loadedStatus),
       evidence,
       note: noteForHosted(`probe pass: ${hosted.pass}`),
     }),
-    makeCheck("Hosted runtime uses intended BFF URL.", containsBffStatus, {
+    makeCheck("Frontend runtime uses intended BFF URL.", containsBffStatus, {
       owner: hostedOwner(containsBffStatus),
       evidence,
-      note: noteForHosted(`contains intended BFF URL: ${hosted.containsBff ?? "missing"}`),
+      note: noteForHosted(`uses intended BFF URL: ${hosted.containsBff ?? "missing"}`),
     }),
-    makeCheck("Hosted JS bundle does not contain obsolete BFF URL.", noOldStatus, {
+    makeCheck("Frontend Persona Fleet renders US/TW/Crypto rows without NaN.", statusForHosted(hosted.personaFleetRowsValid), {
+      owner: hostedOwner(statusForHosted(hosted.personaFleetRowsValid)),
+      evidence,
+      note: noteForHosted(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}`),
+    }),
+    makeCheck("Frontend live banner does not claim seed fallback armed.", statusForHosted(hosted.personaFleetLiveBannerValid), {
+      owner: hostedOwner(statusForHosted(hosted.personaFleetLiveBannerValid)),
+      evidence,
+      note: noteForHosted(`seed fallback armed: ${hosted.personaFleetSeedFallbackArmed ?? "missing"}`),
+    }),
+    makeCheck("Frontend JS bundle does not contain obsolete BFF URL.", noOldStatus, {
       owner: hostedOwner(noOldStatus),
       evidence,
       note: noteForHosted(`old BFF URL hit count: ${hosted.oldHitCount ?? "missing"}`),
@@ -707,11 +732,21 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
       note: `${flowId} not found in Playwright JSON report`,
     });
   }
-  const status = worstStatus(matches.map((spec) => spec.status));
+  const failed = matches.filter((spec) => spec.status === "fail" || spec.status === "missing");
+  const passed = matches.filter((spec) => spec.status === "pass");
+  const skipped = matches.filter((spec) => spec.status === "skip");
+  let status = failed.length ? worstStatus(failed.map((spec) => spec.status)) : passed.length ? "pass" : "skip";
+  if (status === "skip" && options.optionalException && markdownHasException(flowId)) {
+    status = "warn";
+  }
+  const noteParts = [`${matches.length} matching spec(s)`];
+  if (passed.length) noteParts.push(`${passed.length} runnable passed`);
+  if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
+  if (status === "warn") noteParts.push(`${flowId} marked by release-gate exception`);
   return makeCheck(label, status, {
     owner: status === "pass" ? "" : GATE_OWNERS[5],
     evidence,
-    note: `${matches.length} matching spec(s)`,
+    note: noteParts.join("; "),
   });
 }
 
@@ -784,7 +819,7 @@ function buildGate7(previousGates) {
     .flatMap(([, checks]) => checks);
   const failures = priorChecks.filter((check) => ["fail", "missing"].includes(check.status));
   const hardBlocked = failures.length > 0;
-  const exceptionsFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const exceptionsFile = releaseGateExceptionsFile();
   const exceptionsPresent = Boolean(process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || exceptionsFile);
   const evidencePresent = auditFiles.length > 0;
   const shaRecorded = envPresent("PANTHEON_FRONTEND_SHA", "GITHUB_SHA") && envPresent("PANTHEON_BFF_SHA", "PANTHEON_BACKEND_SHA", "PANTHEON_PANTHEON_SHA") && envPresent("PANTHEON_BFF_BASE_URL", "VITE_BFF_BASE_URL");

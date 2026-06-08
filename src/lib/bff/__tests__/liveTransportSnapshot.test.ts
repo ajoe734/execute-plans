@@ -32,14 +32,15 @@ describe("BFF live transport snapshot", () => {
     expect(snap.typedError).toBe(false);
   });
 
-  it("reports hybrid live as seed fallback armed without claiming seed is active", () => {
+  it("reports healthy hybrid live as fallback standby without claiming seed is armed", () => {
     stubLiveEnv("auto");
 
     const snap = getLiveStatusSnapshot();
 
     expect(snap.transportMode).toBe("hybrid");
     expect(snap.usingSeed).toBe(false);
-    expect(snap.seedFallbackArmed).toBe(true);
+    expect(snap.fallbackStandby).toBe(true);
+    expect(snap.seedFallbackArmed).toBe(false);
     expect(snap.typedError).toBe(false);
   });
 
@@ -51,6 +52,7 @@ describe("BFF live transport snapshot", () => {
 
     expect(snap.transportMode).toBe("real");
     expect(snap.configuredMode).toBe("real");
+    expect(snap.fallbackStandby).toBe(false);
     expect(snap.seedFallbackArmed).toBe(false);
   });
 
@@ -64,6 +66,7 @@ describe("BFF live transport snapshot", () => {
 
     expect(snap.transportMode).toBe("real");
     expect(snap.configuredMode).toBe("real");
+    expect(snap.fallbackStandby).toBe(false);
     expect(snap.seedFallbackArmed).toBe(false);
   });
 
@@ -75,6 +78,7 @@ describe("BFF live transport snapshot", () => {
 
     expect(snap.transportMode).toBe("mock-fallback");
     expect(snap.usingSeed).toBe(true);
+    expect(snap.fallbackStandby).toBe(false);
     expect(snap.seedFallbackArmed).toBe(true);
     expect(snap.fellBack).toBe(true);
   });
