@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       fe_base_url:
-        description: "Hosted frontend URL"
+        description: "Frontend URL. Defaults to the repo dev server on the runner."
         required: false
-        default: "https://pantheon-dev.lovable.app"
+        default: "http://127.0.0.1:4173"
       bff_base_url:
         description: "BFF base URL"
         required: false
@@ -38,30 +38,27 @@ jobs:
   integration-gate:
     runs-on: ubuntu-latest
     env:
-      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
+      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
       # Spec compatibility aliases. Some autoworker-written specs read
       # FRONTEND_BASE_URL / PLAYWRIGHT_BASE_URL instead of PANTHEON_FE_BASE_URL
       # and fall back to http://127.0.0.1:5173 (Vite dev server) when those
-      # are unset. CI does not run a dev server, so the fallback produces
-      # ECONNREFUSED on every page.goto. Mirror the canonical value into both
-      # aliases so existing specs hit the hosted FE regardless of which env
-      # name they read. Source of truth remains PANTHEON_FE_BASE_URL.
-      FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
-      PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
-      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || '' }}
+      # are unset. Mirror the canonical value into both aliases so existing
+      # specs hit the same direct execute-plans frontend target regardless of
+      # which env name they read. Source of truth remains PANTHEON_FE_BASE_URL.
+      FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
+      PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
+      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/fleet"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
+      PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
-      # VITE_BFF_* are build-time vars for the Vite FE bundle. CI does not
-      # build or serve the FE (it tests against the hosted Lovable app), so
-      # setting them at job level has no effect on the FE under test but DOES
-      # leak into the vitest process and override unit tests that exercise
-      # hybrid/auto fallback paths. Keep them unset at job level; the strict
-      # signal that matters to Playwright is PANTHEON_E2E_STRICT.
+      # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
+      # at job level so unit tests can exercise hybrid/auto fallback paths.
+      # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
       PANTHEON_E2E_STRICT: "1"
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
@@ -137,11 +134,37 @@ jobs:
           set -o pipefail
           npx playwright install chromium --with-deps 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-install.log"
 
-      - name: Hosted browser BFF probe
+      - name: Start frontend under test
+        id: pr_preview
+        if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          VITE_BFF_MODE=live \
+          VITE_BFF_BASE_URL="" \
+          VITE_BFF_FALLBACK=strict \
+          npm run dev -- --host 127.0.0.1 --port 4173 > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
+          echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
+          for i in {1..60}; do
+            if curl -fsS "$PANTHEON_FE_BASE_URL/" >/dev/null; then
+              echo "frontend under test ready at $PANTHEON_FE_BASE_URL"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log"
+          exit 1
+
+      - name: Frontend browser BFF probe
         id: browser_probe
         continue-on-error: true
         run: |
           set -o pipefail
+          BROWSER_BFF_BASE="$PANTHEON_BFF_BASE_URL"
+          if [ "$PANTHEON_FE_BASE_URL" = "http://127.0.0.1:4173" ]; then
+            BROWSER_BFF_BASE="$PANTHEON_FE_BASE_URL"
+          fi
+          PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
       - name: Playwright E2E
@@ -149,7 +172,22 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
+          FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
+          FRONTEND_BASE_URL="$FE_UNDER_TEST" \
+          PLAYWRIGHT_BASE_URL="$FE_UNDER_TEST" \
+          PANTHEON_FE_BASE_URL="$FE_UNDER_TEST" \
+          PANTHEON_SSE_ORIGIN_URL="$FE_UNDER_TEST" \
+          VITE_BFF_FALLBACK=strict \
+          BFF_FALLBACK=strict \
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
+          npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
+
+      - name: Stop frontend under test
+        if: always()
+        run: |
+          if [ -f "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid" ]; then
+            kill "$(cat "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid")" 2>/dev/null || true
+          fi
 
       - name: Record gate step outcomes
         if: always()
@@ -165,6 +203,7 @@ jobs:
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
+            "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
           JSON

@@ -14,9 +14,10 @@
 
 import { buildHeaders } from "./headers";
 import { paths } from "./paths";
+import { readBffEnv } from "./runtimeEnv";
 
 function detectBaseUrl(): string {
-  const env = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const env = readBffEnv();
   return env.VITE_BFF_BASE_URL ?? "";
 }
 
@@ -34,6 +35,72 @@ export interface ProviderStatus {
   displayMessage?: string | null;
   operatorAction?: string | null;
   runId?: string | null;
+}
+
+export interface AssistantOpenClawToolPolicyStatus {
+  status?: string;
+  effectiveStatus?: string;
+  upstreamStatus?: string;
+  assistantCommandAllowed?: boolean;
+  assistantCommandEffective?: boolean;
+  assistantCommandUsable?: boolean;
+  assistantCommandStatus?: string;
+  assistantCommandTool?: string;
+  allowedTools?: string[];
+  effectiveTools?: string[];
+  allowedWorkflows?: string[];
+  defaultPosture?: string | null;
+  source?: string;
+}
+
+export interface AssistantOrchestratorStatus {
+  status?: string;
+  providerStatus?: ProviderStatus | null;
+  openclawToolPolicy?: AssistantOpenClawToolPolicyStatus | null;
+}
+
+export type AssistantOrchestratorStatusResult =
+  | { ok: true; kind: "ok"; status: AssistantOrchestratorStatus }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export interface AssistantControlModeStatus {
+  state?: string;
+  active?: boolean;
+  reason?: string | null;
+  configured?: boolean;
+  requiresRole?: string[];
+  requiresCapabilityPrefix?: string;
+  requiresMfa?: boolean;
+  mode?: string;
+  activationId?: string;
+  expiresAt?: string;
+  idleExpiresAt?: string;
+  ttlSeconds?: number;
+  idleTtlSeconds?: number;
+  commandClasses?: string[];
+}
+
+export interface AssistantModeStatus {
+  productDefaultMode?: string;
+  kernelEnabled?: boolean;
+  controlMode?: AssistantControlModeStatus | null;
+}
+
+export type AssistantModeStatusResult =
+  | { ok: true; kind: "ok"; status: AssistantModeStatus }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export type AssistantControlModeMutationResult =
+  | { ok: true; kind: "ok"; controlMode: AssistantControlModeStatus }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export interface ActivateAssistantControlModeInput {
+  passphrase: string;
+  mode: "kernel_debug" | "kernel_repair";
+  reason: string;
+  ttlSeconds?: number;
+  idleTtlSeconds?: number;
+  managementSessionId?: string | null;
 }
 
 export interface ManagementAiAnswerOk {
@@ -190,6 +257,69 @@ function adaptProviderStatus(raw: Partial<ProviderStatus> & Record<string, unkno
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    status: asString(r.status),
+    effectiveStatus: asString(r.effectiveStatus ?? r.effective_status),
+    upstreamStatus: asString(r.upstreamStatus ?? r.upstream_status),
+    assistantCommandAllowed: asBoolean(r.assistantCommandAllowed ?? r.assistant_command_allowed),
+    assistantCommandEffective: asBoolean(r.assistantCommandEffective ?? r.assistant_command_effective),
+    assistantCommandUsable: asBoolean(r.assistantCommandUsable ?? r.assistant_command_usable),
+    assistantCommandStatus: asString(r.assistantCommandStatus ?? r.assistant_command_status),
+    assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
+    allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
+    effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
+    allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
+    defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
+    source: asString(r.source),
+  };
+}
+
+function adaptControlModeStatus(raw: unknown): AssistantControlModeStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    state: asString(r.state),
+    active: asBoolean(r.active),
+    reason: asString(r.reason) ?? null,
+    configured: asBoolean(r.configured),
+    requiresRole: asStringArray(r.requiresRole ?? r.requires_role),
+    requiresCapabilityPrefix: asString(r.requiresCapabilityPrefix ?? r.requires_capability_prefix),
+    requiresMfa: asBoolean(r.requiresMfa ?? r.requires_mfa),
+    mode: asString(r.mode),
+    activationId: asString(r.activationId ?? r.activation_id),
+    expiresAt: asString(r.expiresAt ?? r.expires_at),
+    idleExpiresAt: asString(r.idleExpiresAt ?? r.idle_expires_at),
+    ttlSeconds: asNumber(r.ttlSeconds ?? r.ttl_seconds),
+    idleTtlSeconds: asNumber(r.idleTtlSeconds ?? r.idle_ttl_seconds),
+    commandClasses: asStringArray(r.commandClasses ?? r.command_classes),
+  };
+}
+
 function isDegraded(s: ProviderStatus | null): boolean {
   if (!s) return true;
   if (!s.used) return true;
@@ -296,6 +426,240 @@ export async function askManagementAi(
     uiActions: adaptUiActions(data),
   };
 
+}
+
+export async function fetchAssistantOrchestratorStatus(
+  options?: { signal?: AbortSignal },
+): Promise<AssistantOrchestratorStatusResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantOrchestratorStatus()}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: Record<string, unknown> } | undefined;
+  try { parsed = text ? JSON.parse(text) as { data?: Record<string, unknown> } : undefined; } catch { parsed = undefined; }
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = parsed?.data ?? {};
+  const providerRaw = asRecord(data.providerStatus ?? data.provider_status);
+  return {
+    ok: true,
+    kind: "ok",
+    status: {
+      status: asString(data.status),
+      providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
+      openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
+    },
+  };
+}
+
+export async function fetchAssistantModeStatus(
+  options?: { signal?: AbortSignal },
+): Promise<AssistantModeStatusResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantMode()}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: Record<string, unknown> } | undefined;
+  try { parsed = text ? JSON.parse(text) as { data?: Record<string, unknown> } : undefined; } catch { parsed = undefined; }
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = parsed?.data ?? {};
+  return {
+    ok: true,
+    kind: "ok",
+    status: {
+      productDefaultMode: asString(data.productDefaultMode ?? data.product_default_mode),
+      kernelEnabled: asBoolean(data.kernelEnabled ?? data.kernel_enabled),
+      controlMode: adaptControlModeStatus(data.controlMode ?? data.control_mode),
+    },
+  };
+}
+
+export async function activateAssistantControlMode(
+  input: ActivateAssistantControlModeInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantControlModeMutationResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    passphrase: input.passphrase,
+    mode: input.mode,
+    reason: input.reason,
+    ttlSeconds: input.ttlSeconds,
+    idleTtlSeconds: input.idleTtlSeconds,
+    managementSessionId: input.managementSessionId ?? undefined,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantControlModeActivate()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; detail?: unknown } | undefined;
+  try { parsed = text ? JSON.parse(text) as { data?: unknown; detail?: unknown } : undefined; } catch { parsed = undefined; }
+  if (!res.ok) {
+    const detail = asRecord(parsed?.detail);
+    const error = asRecord(detail?.error);
+    const reason = asString(error?.message) ?? asString(error?.details) ?? asString(detail?.message);
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: reason ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  return {
+    ok: true,
+    kind: "ok",
+    controlMode: adaptControlModeStatus(parsed?.data) ?? { state: "unknown", active: false },
+  };
+}
+
+export async function deactivateAssistantControlMode(
+  reason = "operator_deactivated_from_frontend",
+  options?: { signal?: AbortSignal },
+): Promise<AssistantControlModeMutationResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantControlModeDeactivate()}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ reason }),
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; detail?: unknown } | undefined;
+  try { parsed = text ? JSON.parse(text) as { data?: unknown; detail?: unknown } : undefined; } catch { parsed = undefined; }
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+  return {
+    ok: true,
+    kind: "ok",
+    controlMode: adaptControlModeStatus(parsed?.data) ?? { state: "inactive", active: false },
+  };
 }
 
 // ---- Conversation resync ----

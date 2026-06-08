@@ -198,7 +198,7 @@ const WRITE_ENDPOINTS = [
   { route: "/bff/actions/strategy/strategy-dev/promote", method: "POST" },
   { route: "/bff/approvals/approval-dev/decide", method: "POST", body: "invalid-smoke-payload" },
   { route: "/bff/v5/interventions/intervention-dev/decide", method: "POST" },
-  { route: "/bff/management/nl/ask", method: "POST", body: "invalid-smoke-payload" },
+  { route: "/bff/management/nl/ask", method: "POST", body: {} },
 ];
 
 async function main() {
