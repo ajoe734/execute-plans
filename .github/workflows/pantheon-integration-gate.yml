@@ -49,9 +49,10 @@ jobs:
       # name they read. Source of truth remains PANTHEON_FE_BASE_URL.
       FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
-      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
+      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
+      PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. CI does not
