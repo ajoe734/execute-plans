@@ -40,12 +40,38 @@ Lovable:
 - `POST /bff/assistant/dev-docs/generate`
 - `POST /bff/assistant/dev-bridge/task-packet`
 
+`/bff/assistant/tools/*` is not the VM file-system access surface. It is the
+governed Pantheon action surface for BFF-owned preview, validation, and execute
+contracts. Do not use it as proof that Management AI can read, write, search, or
+debug VM files.
+
 Provider readiness alone is not enough. Before claiming Management AI can
 read/write VM files or coordinate debugging through OpenClaw, verify
 `/bff/assistant/mode` reports `kernel_enabled: true` and that control mode is
 activatable by an authorized operator/admin session. If provider readiness is
 ready but kernel is disabled, fix the dev BFF configuration in `pantheon`; do
 not patch around it in frontend code.
+
+OpenClaw-backed VM inspection/debugging is reached through Pantheon BFF
+conversation routes, primarily `POST /bff/management/nl/ask`, with the BFF
+calling the OpenClaw gateway adapter. The frontend must not call the OpenClaw
+adapter directly and must not write files from the browser.
+
+For write-capable repair, the request must run under active `kernel_repair` and
+send valid `openclaw.repair` metadata:
+
+- `task_id`
+- `task_worktree`
+- `declared_scope`
+- `expected_branch`
+- `remote`
+- `merge_target`
+
+The repair worktree must already exist under the backend-configured repair root,
+be clean, be checked out on `expected_branch`, and be limited to repo-relative
+`declared_scope` entries. Do not use `.` as a blanket write scope. If the UI
+cannot provide this metadata yet, treat VM write capability as incomplete and
+add the governed BFF/backend preparation path first.
 
 ## Repository Discipline
 
