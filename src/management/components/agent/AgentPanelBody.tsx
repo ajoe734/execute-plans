@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
@@ -34,6 +35,8 @@ import {
   fetchManagementAiConversation,
   fetchAssistantOrchestratorStatus,
   generateAssistantDevDocs,
+  prepareAssistantRepairWorktree,
+  type AssistantRepairMetadata,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
@@ -63,6 +66,47 @@ import {
   formatBytes,
   validateNewFiles,
 } from "./attachmentUtils";
+
+type RepairRepoKey = "execute-plans" | "pantheon";
+
+const REPAIR_SCOPE_DEFAULTS: Record<RepairRepoKey, string[]> = {
+  "execute-plans": [
+    "src/management/components/agent",
+    "src/lib/bff-v1",
+    "src/lib/bff-v1/paths.ts",
+    "AGENTS.md",
+  ],
+  pantheon: [
+    "services/control-plane/bff",
+    "services/openclaw-gateway-adapter",
+    "scripts",
+    "docs",
+    "docker-compose.yml",
+  ],
+};
+
+function repairScopeText(repoKey: RepairRepoKey): string {
+  return REPAIR_SCOPE_DEFAULTS[repoKey].join("\n");
+}
+
+function parseRepairScope(value: string): string[] {
+  return Array.from(new Set(
+    value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ));
+}
+
+function repairMergeTarget(repoKey: RepairRepoKey): string {
+  return repoKey === "execute-plans" ? "main" : "dev";
+}
+
+function makeRepairTaskId(repoKey: RepairRepoKey): string {
+  const stamp = new Date().toISOString().replace(/[-:.]/g, "").replace("Z", "Z");
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `MGMT-AI-REPAIR-${repoKey.toUpperCase()}-${stamp}-${suffix}`;
+}
 
 interface ChatTurn {
   id: string;
@@ -440,6 +484,9 @@ export function AgentPanelBody() {
   const [controlPassphrase, setControlPassphrase] = useState("");
   const [controlTargetMode, setControlTargetMode] = useState<"kernel_debug" | "kernel_repair">("kernel_repair");
   const [controlReason, setControlReason] = useState("Management AI dev repair");
+  const [repairRepoKey, setRepairRepoKey] = useState<RepairRepoKey>("execute-plans");
+  const [repairDeclaredScope, setRepairDeclaredScope] = useState(repairScopeText("execute-plans"));
+  const [lastRepairMetadata, setLastRepairMetadata] = useState<AssistantRepairMetadata | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
   const [devDocsBusy, setDevDocsBusy] = useState(false);
@@ -945,32 +992,69 @@ export function AgentPanelBody() {
     const controller = new AbortController();
     inflightRef.current.set(requestBucket, controller);
 
-    let result: ManagementAiResult;
+    let result: ManagementAiResult | null = null;
     try {
-      result = await askManagementAi({
-        question,
-        focus: "all",
-        sessionId: sessionIdForBff,
-        context: JSON.stringify({
-          route: location.pathname,
-          pageLabel: nlCtx.pageLabel,
-          selectedEntity: ui.selectedEntity,
-        }),
-        conversation: {
-          recentTurns: conv.recentTurns,
-          summary: conv.summary ?? conversationSummary,
-        },
-        ui,
-        attachments: attachmentsForTurn.length > 0
-          ? attachmentsForTurn.map((a) => ({
-              kind: a.kind,
-              mimeType: a.mimeType,
-              filename: a.filename,
-              sizeBytes: a.sizeBytes,
-              dataBase64: a.dataBase64,
-            }))
-          : undefined,
-      }, { signal: controller.signal });
+      let repairMetadata: AssistantRepairMetadata | undefined;
+      const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
+      if (currentControlMode?.active && currentControlMode.mode === "kernel_repair") {
+        const declaredScope = parseRepairScope(repairDeclaredScope);
+        if (declaredScope.length === 0) {
+          result = {
+            ok: false,
+            kind: "transport_failure",
+            status: null,
+            message: "Repair scope is empty.",
+          };
+        } else {
+          const taskId = makeRepairTaskId(repairRepoKey);
+          const prepared = await prepareAssistantRepairWorktree({
+            taskId,
+            repoKey: repairRepoKey,
+            declaredScope,
+            expectedBranch: `task/${taskId}`,
+            mergeTarget: repairMergeTarget(repairRepoKey),
+            reason: controlReason.trim() || "Management AI dev repair",
+          }, { signal: controller.signal });
+          if (prepared.ok) {
+            repairMetadata = prepared.repair;
+            setLastRepairMetadata(prepared.repair);
+          } else {
+            result = {
+              ok: false,
+              kind: "transport_failure",
+              status: prepared.statusCode,
+              message: `Repair worktree prepare failed: ${prepared.message}`,
+            };
+          }
+        }
+      }
+      if (result === null) {
+        result = await askManagementAi({
+          question,
+          focus: "all",
+          sessionId: sessionIdForBff,
+          context: JSON.stringify({
+            route: location.pathname,
+            pageLabel: nlCtx.pageLabel,
+            selectedEntity: ui.selectedEntity,
+          }),
+          conversation: {
+            recentTurns: conv.recentTurns,
+            summary: conv.summary ?? conversationSummary,
+          },
+          ui,
+          attachments: attachmentsForTurn.length > 0
+            ? attachmentsForTurn.map((a) => ({
+                kind: a.kind,
+                mimeType: a.mimeType,
+                filename: a.filename,
+                sizeBytes: a.sizeBytes,
+                dataBase64: a.dataBase64,
+              }))
+            : undefined,
+          openclaw: repairMetadata ? { repair: repairMetadata } : undefined,
+        }, { signal: controller.signal });
+      }
     } finally {
       if (inflightRef.current.get(requestBucket) === controller) {
         inflightRef.current.delete(requestBucket);
@@ -986,6 +1070,11 @@ export function AgentPanelBody() {
         return rest;
       });
     };
+
+    if (result === null) {
+      clearPending();
+      return;
+    }
 
     if (result.kind === "aborted") {
       clearPending();
@@ -1077,7 +1166,22 @@ export function AgentPanelBody() {
     if (activeSessionRef.current === requestBucket || activeSessionRef.current === (result.kind === "ok" || result.kind === "provider_degraded" ? (result.sessionId ?? requestBucket) : requestBucket)) {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [pendingAttachments, sessionId, pendingSessions, buildUiSnapshot, location.pathname, nlCtx.pageLabel, conversationSummary, upsertSessionIndex, renameSession, appendTurnTo]);
+  }, [
+    pendingAttachments,
+    sessionId,
+    pendingSessions,
+    buildUiSnapshot,
+    assistantModeStatus,
+    repairDeclaredScope,
+    repairRepoKey,
+    controlReason,
+    location.pathname,
+    nlCtx.pageLabel,
+    conversationSummary,
+    upsertSessionIndex,
+    renameSession,
+    appendTurnTo,
+  ]);
 
 
   const onSubmit = (_msg: unknown, e: React.FormEvent<HTMLFormElement>) => {
@@ -1264,11 +1368,46 @@ export function AgentPanelBody() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Repo</Label>
+                  <Select
+                    value={repairRepoKey}
+                    onValueChange={(value) => {
+                      const next = value as RepairRepoKey;
+                      setRepairRepoKey(next);
+                      setRepairDeclaredScope(repairScopeText(next));
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="execute-plans">execute-plans</SelectItem>
+                      <SelectItem value="pantheon">pantheon</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Merge</Label>
+                  <Input value={repairMergeTarget(repairRepoKey)} readOnly className="h-8 text-xs" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mgmt-ai-repair-scope" className="text-xs">Scope</Label>
+                <Textarea
+                  id="mgmt-ai-repair-scope"
+                  value={repairDeclaredScope}
+                  onChange={(e) => setRepairDeclaredScope(e.target.value)}
+                  className="min-h-20 resize-none text-xs"
+                />
+              </div>
               <div className="rounded border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
                 <div>kernel={kernelEnabled ? "on" : "off"}</div>
                 <div>state={controlMode?.state ?? "unknown"}</div>
                 {controlMode?.mode && <div>mode={controlMode.mode}</div>}
                 {controlMode?.idleExpiresAt && <div>idle={controlMode.idleExpiresAt}</div>}
+                {lastRepairMetadata?.task_id && <div>repair={lastRepairMetadata.repo_key ?? repairRepoKey}:{lastRepairMetadata.task_id}</div>}
               </div>
               {controlError && (
                 <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
