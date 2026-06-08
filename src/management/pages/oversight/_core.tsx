@@ -32,6 +32,7 @@ import {
 } from "@/lib/v5/management/humanInbox";
 import { buildLinkSet } from "@/lib/v5/management/links";
 import { mgmt } from "@/lib/bff-v1";
+import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 // =====================================================================
@@ -83,33 +84,62 @@ export const OneRingCockpitPage = () => {
 // Persona Fleet
 // =====================================================================
 
-interface FleetRow {
-  personaId: string; owner: string; ooda: "Observe" | "Orient" | "Decide" | "Act";
-  autonomy: "manual" | "supervised" | "autonomous"; perfDelta: number; humanNeeded: boolean;
-  lastMutation: string;
-  /** Lifecycle state from Pack D D02. Optional for backward-compat. */
-  state?: "draft" | "active" | "paused" | "deprecated" | "retired" | "archived" | string;
-  /** Free-form tags (e.g. "dev-probe", "test"). */
-  tags?: string[];
-}
-
-const FLEET: FleetRow[] = [
-  { personaId: "alpha-trader", owner: "research-1", ooda: "Decide", autonomy: "supervised", perfDelta: +0.024, humanNeeded: true, lastMutation: "2026-05-19", state: "active" },
-  { personaId: "risk-guard",   owner: "research-1", ooda: "Observe", autonomy: "autonomous", perfDelta: +0.005, humanNeeded: false, lastMutation: "2026-05-12", state: "active" },
-  { personaId: "fx-scout",     owner: "trading-1", ooda: "Orient",  autonomy: "supervised", perfDelta: -0.011, humanNeeded: false, lastMutation: "2026-05-17", state: "active" },
-  { personaId: "capital-steward", owner: "capital-1", ooda: "Act", autonomy: "manual",     perfDelta: +0.002, humanNeeded: true,  lastMutation: "2026-05-15", state: "active" },
+const FLEET: ManagementPersonaFleetRow[] = [
+  {
+    personaId: "persona-crypto",
+    personaName: "Crypto Persona",
+    owner: "pathreon-management",
+    ooda: "Act",
+    autonomy: "supervised",
+    perfDelta: 0.182,
+    humanNeeded: true,
+    lastMutation: "2026-06-07",
+    state: "paper_running",
+    marketScope: ["CRYPTO"],
+    currentWork: "paper broker sandbox readback and funding-rate stress review",
+  },
+  {
+    personaId: "persona-us-equity",
+    personaName: "US Equity Persona",
+    owner: "pathreon-management",
+    ooda: "Orient",
+    autonomy: "supervised",
+    perfDelta: 0.14,
+    humanNeeded: true,
+    lastMutation: "2026-06-07",
+    state: "researching",
+    marketScope: ["US"],
+    currentWork: "paper observation and OOS cost review",
+  },
+  {
+    personaId: "persona-tw-equity",
+    personaName: "Taiwan Equity Persona",
+    owner: "pathreon-management",
+    ooda: "Decide",
+    autonomy: "supervised",
+    perfDelta: 0.095,
+    humanNeeded: true,
+    lastMutation: "2026-06-07",
+    state: "needs_human_approval",
+    marketScope: ["TW"],
+    currentWork: "TW corporate-action and session-boundary evidence review",
+  },
 ];
 
 const HIDDEN_STATES = new Set(["retired", "deprecated", "archived"]);
 
-function isDevProbe(r: FleetRow): boolean {
+function isDevProbe(r: ManagementPersonaFleetRow): boolean {
   if (r.tags?.some((t) => t === "dev-probe" || t === "test")) return true;
   return /^dev-probe/i.test(r.personaId);
 }
 
+function formatPerfDelta(value: number): string {
+  return Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : "—";
+}
+
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.personaFleet.get<FleetRow>(() => FLEET), []);
+  const { data } = useV5Live(() => mgmt.personaFleet.get(() => FLEET), []);
   const rows = data ?? FLEET;
 
   const [showRetired, setShowRetired] = useState(false);
@@ -182,8 +212,8 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
-                  <td className={"px-3 py-2 " + (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
-                    {(r.perfDelta * 100).toFixed(2)}%
+                  <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
+                    {formatPerfDelta(r.perfDelta)}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.lastMutation}</td>
                   <td className="px-3 py-2">

@@ -43,6 +43,24 @@ const unwrap = (raw: unknown): unknown =>
 const asArray = <T>(raw: unknown): T[] | null =>
   Array.isArray(raw) ? (raw as T[]) : null;
 
+export type ManagementOodaStage = "Observe" | "Orient" | "Decide" | "Act";
+export type ManagementAutonomyMode = "manual" | "supervised" | "autonomous";
+
+export interface ManagementPersonaFleetRow {
+  personaId: string;
+  personaName?: string;
+  owner: string;
+  ooda: ManagementOodaStage;
+  autonomy: ManagementAutonomyMode;
+  perfDelta: number;
+  humanNeeded: boolean;
+  lastMutation: string;
+  state?: "draft" | "active" | "paused" | "deprecated" | "retired" | "archived" | string;
+  tags?: string[];
+  marketScope?: string[];
+  currentWork?: string;
+}
+
 /** Wraps `body` so adapter errors degrade to seedFn output. */
 function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
   return (raw: unknown): T => {
@@ -53,6 +71,105 @@ function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
       return seedFn();
     }
   };
+}
+
+const asString = (value: unknown, fallback = ""): string => {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+};
+
+const asFiniteNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const asBoolean = (value: unknown, fallback = false): boolean => {
+  if (typeof value === "boolean") return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "y"].includes(text)) return true;
+  if (["0", "false", "no", "n"].includes(text)) return false;
+  return fallback;
+};
+
+const asStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => asString(item)).filter(Boolean)
+    : [];
+
+const normalizeOoda = (value: unknown): ManagementOodaStage => {
+  const stage = asString(value).toLowerCase();
+  if (stage.startsWith("orient")) return "Orient";
+  if (stage.startsWith("decid")) return "Decide";
+  if (stage.startsWith("act")) return "Act";
+  return "Observe";
+};
+
+const normalizeAutonomy = (value: unknown): ManagementAutonomyMode => {
+  const mode = asString(value).toLowerCase();
+  if (mode === "autonomous") return "autonomous";
+  if (mode === "manual") return "manual";
+  return "supervised";
+};
+
+function firstArrayValue(...values: unknown[]): unknown[] | null {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return null;
+}
+
+function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null {
+  if (!isObject(value)) return null;
+  const metrics = isObject(value.metrics) ? value.metrics : {};
+  const personaId = asString(value.personaId ?? value.persona_id ?? value.id);
+  if (!personaId) return null;
+
+  const explicitDelta = value.perfDelta ?? value.perf_delta;
+  const trainingImprovement = metrics.training_improvement_pct ?? metrics.trainingImprovementPct;
+  const perfDelta = Number.isFinite(Number(explicitDelta))
+    ? asFiniteNumber(explicitDelta)
+    : asFiniteNumber(trainingImprovement) / 100;
+
+  const recommendation = asString(value.recommendation).toLowerCase();
+  const governanceRequired = asBoolean(value.governanceRequired ?? value.governance_required, false);
+  const humanNeeded = asBoolean(
+    value.humanNeeded ?? value.human_needed,
+    governanceRequired && !["", "none", "no_change"].includes(recommendation),
+  );
+
+  const updated = asString(value.lastMutation ?? value.last_mutation ?? value.updatedAt ?? value.updated_at, "unknown");
+
+  return {
+    personaId,
+    personaName: asString(value.personaName ?? value.persona_name ?? value.name, personaId),
+    owner: asString(value.owner ?? value.owner_id ?? value.capitalPoolId ?? value.capital_pool_id, "pathreon-management"),
+    ooda: normalizeOoda(value.ooda ?? value.oodaStage ?? value.ooda_stage),
+    autonomy: normalizeAutonomy(value.autonomy),
+    perfDelta: Number.isFinite(perfDelta) ? perfDelta : 0,
+    humanNeeded,
+    lastMutation: updated.length >= 10 ? updated.slice(0, 10) : updated,
+    state: asString(value.state ?? value.lifecycleState ?? value.lifecycle_state ?? value.status),
+    tags: asStringArray(value.tags),
+    marketScope: asStringArray(value.marketScope ?? value.market_scope),
+    currentWork: asString(value.currentWork ?? value.current_work),
+  };
+}
+
+export function adaptManagementPersonaFleet(raw: unknown): ManagementPersonaFleetRow[] | null {
+  const data = unwrap(raw);
+  const nested = isObject(data) ? unwrap(data) : data;
+  const arr = firstArrayValue(
+    nested,
+    isObject(nested) ? nested.items : undefined,
+    isObject(nested) ? nested.persona_fleet : undefined,
+    isObject(nested) ? nested.personaFleet : undefined,
+    isObject(data) ? data.items : undefined,
+    isObject(data) ? data.persona_fleet : undefined,
+    isObject(data) ? data.personaFleet : undefined,
+  );
+  if (!arr) return null;
+  const rows = arr.map(adaptPersonaFleetRow).filter((row): row is ManagementPersonaFleetRow => row !== null);
+  return rows.length > 0 ? rows : null;
 }
 
 // ---------- PM-3 Cockpit ----------
@@ -163,11 +280,13 @@ export const mgmt = {
   },
 
   personaFleet: {
-    get: <T>(seedFn: () => T[]): Promise<T[]> =>
-      withLiveOrMock<T[]>(
+    get: (
+      seedFn: () => ManagementPersonaFleetRow[],
+    ): Promise<ManagementPersonaFleetRow[]> =>
+      withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
         { method: "GET", path: paths.mgmtPersonaFleet() },
         async () => seedFn(),
-        safeAdapt(adaptArrayPassthrough<T>, seedFn),
+        safeAdapt(adaptManagementPersonaFleet, seedFn),
       ),
   },
 
