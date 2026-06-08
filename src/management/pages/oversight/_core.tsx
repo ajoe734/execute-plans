@@ -97,6 +97,63 @@ const FLEET: ManagementPersonaFleetRow[] = [
     state: "paper_running",
     marketScope: ["CRYPTO"],
     currentWork: "paper broker sandbox readback and funding-rate stress review",
+    dataSourceStatus: {
+      state: "datasource_smoke_ok",
+      summary: "Kraken datasource smoke has a normalized quote projection; repo-local network readback remains disabled.",
+      providerStatuses: { kraken: "datasource_smoke_ok", coingecko: "read_unavailable" },
+      readbackRefs: ["support/evidence/MGMT-BROKER-006/datasource-smoke/datasource-smoke.json"],
+      unavailableRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/coingecko.json"],
+      readOnly: true,
+      orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
+      liveIngestionEnabled: false,
+    },
+    dataSources: [
+      {
+        providerKey: "kraken",
+        provider: "Kraken market data",
+        status: "datasource_smoke_ok",
+        sourceClass: "broker_execution",
+        orderPath: "validate_only",
+        orderCapableProvider: true,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+      {
+        providerKey: "coingecko",
+        provider: "CoinGecko",
+        status: "read_unavailable",
+        sourceClass: "research_grade",
+        orderCapableProvider: false,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+    ],
+    researchStatus: {
+      stage: "act",
+      frameworks: ["vectorbt", "statsmodels", "finrl-rllib"],
+      strategyId: "strategy-crypto-trend-carry",
+      artifactId: "artifact-crypto-trend-carry-v1",
+      deploymentStage: "paper",
+      registryAdmissionStatus: "not_requested",
+      pendingTaskIds: [],
+      canDeploy: false,
+      summary: "paper broker sandbox readback and funding-rate stress review",
+    },
+    currentResearchProjects: [
+      {
+        projectId: "research-crypto-paper-001",
+        title: "paper broker sandbox readback and funding-rate stress review",
+        stage: "act",
+        status: "paper_running",
+        frameworks: ["vectorbt", "statsmodels", "finrl-rllib"],
+        artifactId: "artifact-crypto-trend-carry-v1",
+        blockedByTaskIds: [],
+        canDeploy: false,
+      },
+    ],
   },
   {
     personaId: "persona-us-equity",
@@ -110,6 +167,54 @@ const FLEET: ManagementPersonaFleetRow[] = [
     state: "researching",
     marketScope: ["US"],
     currentWork: "paper observation and OOS cost review",
+    dataSourceStatus: {
+      state: "quote_readback_ok",
+      summary: "IBKR quote readback is present; order path is disabled for marketdata smoke.",
+      providerStatuses: { ibkr: "read_ok" },
+      readbackRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/ibkr.json"],
+      unavailableRefs: [],
+      readbackCapturedAt: "2026-05-01T17:20:00Z",
+      readOnly: true,
+      orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
+      liveIngestionEnabled: false,
+    },
+    dataSources: [
+      {
+        providerKey: "ibkr",
+        provider: "IBKR market data",
+        status: "read_ok",
+        sourceClass: "broker_execution",
+        orderPath: "disabled_for_marketdata_smoke",
+        orderCapableProvider: true,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+    ],
+    researchStatus: {
+      stage: "orient",
+      frameworks: ["vectorbt", "statsmodels", "quantlib"],
+      strategyId: "strategy-us-equity-momentum",
+      artifactId: "artifact-us-equity-momentum-v1",
+      deploymentStage: "paper",
+      registryAdmissionStatus: "not_requested",
+      pendingTaskIds: [],
+      canDeploy: false,
+      summary: "paper observation and OOS cost review",
+    },
+    currentResearchProjects: [
+      {
+        projectId: "research-us-paper-001",
+        title: "paper observation and OOS cost review",
+        stage: "orient",
+        status: "researching",
+        frameworks: ["vectorbt", "statsmodels", "quantlib"],
+        artifactId: "artifact-us-equity-momentum-v1",
+        blockedByTaskIds: [],
+        canDeploy: false,
+      },
+    ],
   },
   {
     personaId: "persona-tw-equity",
@@ -123,6 +228,104 @@ const FLEET: ManagementPersonaFleetRow[] = [
     state: "needs_human_approval",
     marketScope: ["TW"],
     currentWork: "TW corporate-action and session-boundary evidence review",
+    dataSourceStatus: {
+      state: "partial_readback",
+      summary: "Shioaji quote readback is present; TWSE, TPEx, MOPS, and TEJ are explicit unavailable/credential-unavailable repo-local smoke evidence.",
+      providerStatuses: {
+        twse: "read_unavailable",
+        tpex: "read_unavailable",
+        mops: "public_reference_unavailable",
+        tej: "credential_unavailable",
+        shioaji: "read_ok",
+      },
+      readbackRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/shioaji.json"],
+      unavailableRefs: [
+        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/twse.json",
+        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/tpex.json",
+        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/mops.json",
+        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/tej.json",
+      ],
+      researchDatasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
+      researchDatasetAsOf: "2026-01-05T00:00:00Z",
+      readbackCapturedAt: "2026-05-01T17:20:00Z",
+      readOnly: true,
+      orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
+      liveIngestionEnabled: false,
+    },
+    dataSources: [
+      {
+        providerKey: "shioaji",
+        provider: "Shioaji quote",
+        status: "read_ok",
+        sourceClass: "broker_execution",
+        orderPath: "disabled_for_marketdata_smoke",
+        orderCapableProvider: true,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+      {
+        providerKey: "twse",
+        provider: "TWSE OpenAPI",
+        status: "read_unavailable",
+        sourceClass: "official_reference",
+        orderCapableProvider: false,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+      {
+        providerKey: "tpex",
+        provider: "TPEx E-Data",
+        status: "read_unavailable",
+        sourceClass: "official_reference",
+        orderCapableProvider: false,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+      {
+        providerKey: "tej",
+        provider: "TEJ API",
+        status: "credential_unavailable",
+        sourceClass: "research_grade",
+        orderCapableProvider: false,
+        readOnly: true,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
+      },
+    ],
+    researchStatus: {
+      stage: "management_review_linked",
+      framework: "qlib",
+      frameworks: ["qlib", "vectorbt", "statsmodels"],
+      experimentId: "exp-mgmt-qlib-006",
+      strategyId: "tw-cross-sectional-equity-alpha",
+      strategySpecId: "qlib-tw-cross-sectional-alpha-spec-v1",
+      artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+      artifactState: "draft",
+      deploymentStage: "none",
+      datasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
+      registryAdmissionStatus: "pending_upstream_task",
+      pendingTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
+      canDeploy: false,
+      summary: "Qlib TW cross-sectional alpha draft is linked for Management review.",
+    },
+    currentResearchProjects: [
+      {
+        projectId: "MGMT-QLIB-006",
+        title: "Qlib TW cross-sectional equity alpha admission linkage",
+        stage: "management_review_linked",
+        status: "needs_human_approval",
+        frameworks: ["qlib", "vectorbt", "statsmodels"],
+        datasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
+        artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+        experimentId: "exp-mgmt-qlib-006",
+        blockedByTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
+        canDeploy: false,
+      },
+    ],
   },
 ];
 
@@ -135,6 +338,33 @@ function isDevProbe(r: ManagementPersonaFleetRow): boolean {
 
 function formatPerfDelta(value: number): string {
   return Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : "—";
+}
+
+function formatToken(value?: string): string {
+  return value ? value.replace(/_/g, " ") : "—";
+}
+
+function dataSourceTone(state?: string): string {
+  const token = String(state ?? "").toLowerCase();
+  if (token.includes("read_ok") || token.includes("readback_ok") || token.includes("smoke_ok")) {
+    return "bg-status-success/10 text-status-success border-status-success/30";
+  }
+  if (token.includes("partial") || token.includes("unavailable")) {
+    return "bg-status-warning/15 text-status-warning border-status-warning/30";
+  }
+  return "bg-muted text-muted-foreground";
+}
+
+function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: number } {
+  const statuses = r.dataSourceStatus?.providerStatuses ?? {};
+  const values = Object.values(statuses);
+  const total = values.length || r.dataSources?.length || 0;
+  const ok = values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length;
+  return { ok, total };
+}
+
+function firstResearchProject(r: ManagementPersonaFleetRow) {
+  return r.currentResearchProjects?.[0];
 }
 
 export const PersonaFleetPage = () => {
@@ -195,6 +425,7 @@ export const PersonaFleetPage = () => {
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
+              <th className="px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="px-3 py-2">{t("mgmt.fleet.research")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.state")}</th>
@@ -206,6 +437,12 @@ export const PersonaFleetPage = () => {
             {filtered.map((r) => {
               const retired = r.state && HIDDEN_STATES.has(r.state);
               const probe = isDevProbe(r);
+              const sourceCount = providerOkCount(r);
+              const project = firstResearchProject(r);
+              const sourceBadges = r.dataSources?.slice(0, 4) ?? [];
+              const frameworkText = project?.frameworks?.length
+                ? project.frameworks.join(" / ")
+                : r.researchStatus?.frameworks?.join(" / ");
               return (
                 <tr key={r.personaId} className={"border-b border-border/50 " + (retired ? "opacity-60" : "")}>
                   <td className="px-3 py-2">
@@ -215,6 +452,51 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
+                  <td className="px-3 py-2 min-w-[240px]">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline" className={dataSourceTone(r.dataSourceStatus?.state)}>
+                        {formatToken(r.dataSourceStatus?.state)}
+                      </Badge>
+                      {sourceCount.total > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {sourceBadges.map((source) => (
+                        <Badge key={source.providerKey} variant="outline" className="text-[10px]">
+                          {source.providerKey}: {formatToken(source.status)}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {r.dataSourceStatus?.liveIngestionEnabled
+                        ? t("mgmt.fleet.liveOn")
+                        : t("mgmt.fleet.liveOff")}
+                      {" · "}
+                      {r.dataSourceStatus?.orderSideEffectsAllowed
+                        ? t("mgmt.fleet.sideEffectsOn")
+                        : t("mgmt.fleet.sideEffectsOff")}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 min-w-[260px]">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
+                      {r.researchStatus?.canDeploy === false && (
+                        <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">
+                          {t("mgmt.fleet.governed")}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 max-w-[320px] truncate font-medium text-foreground">
+                      {project?.title || r.currentWork || r.researchStatus?.summary || "—"}
+                    </div>
+                    <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
+                      {frameworkText || "—"}
+                      {r.researchStatus?.artifactId ? ` · ${r.researchStatus.artifactId}` : ""}
+                    </div>
+                  </td>
                   <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
                     {formatPerfDelta(r.perfDelta)}
                   </td>
