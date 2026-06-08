@@ -4,9 +4,16 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import reportMd from "../../../.lovable/audits/spec-gap-2026-05-06-D.md?raw";
 import blockersMd from "../../../.lovable/audits/spec-gap-2026-05-06-D-blockers.md?raw";
 import summaryCsv from "../../../.lovable/audits/spec-gap-2026-05-06-D-summary.csv?raw";
-import indexMd from "../../../.lovable/audits/INDEX.md?raw";
 import packEQuestionsMd from "../../../.lovable/feedback/2026-05-06-E/Pack_E_Planner_Questions.md?raw";
 import packEConflictMd from "../../../.lovable/audits/spec-conflict-2026-05-06-E.md?raw";
+
+const indexMd = `# Spec Gap Audit Index
+
+Historical audit index content is intentionally not bundled into the dev
+frontend because it contains obsolete deployment URLs from earlier BFF/Lovable
+cutovers. Use the source file at .lovable/audits/INDEX.md when historical
+evidence is needed.
+`;
 
 const MarkdownPre = ({ text }: { text: string }) => (
   <pre className="whitespace-pre-wrap text-sm leading-6 font-mono bg-card border border-border rounded-md p-4 overflow-auto max-h-[calc(100vh-220px)]">

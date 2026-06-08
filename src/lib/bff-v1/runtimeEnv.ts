@@ -1,13 +1,13 @@
 const DEV_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "pantheon-dev.lovable.app",
+  "pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
 ]);
 
 const FALLBACK_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "pantheon-dev.lovable.app",
+  "pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
 ]);
 
 const REAL_WRITE_KEYS = [
@@ -43,7 +43,7 @@ export function isDevRuntimeWriteGateHost(hostname = browserHostname()): boolean
 }
 
 export function isRuntimeFallbackHost(hostname = browserHostname()): boolean {
-  return FALLBACK_RUNTIME_HOSTS.has(hostname) || hostname.endsWith(".lovable.app");
+  return FALLBACK_RUNTIME_HOSTS.has(hostname);
 }
 
 function readRuntimeConfigValue(key: string): string | undefined {
