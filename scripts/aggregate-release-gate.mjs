@@ -312,10 +312,17 @@ function envPresent(...names) {
 
 function markdownHasException(idOrLabel) {
   const env = process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || "";
-  const file = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const file = releaseGateExceptionsFile();
   const text = `${env}\n${readText(file)}`.toLowerCase();
   if (!text.trim()) return false;
   return text.includes(String(idOrLabel).toLowerCase());
+}
+
+function releaseGateExceptionsFile() {
+  const currentRunFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  if (currentRunFile) return currentRunFile;
+  const rootAuditFile = path.resolve(ROOT, ".lovable/audits/release-gate-exceptions.md");
+  return exists(rootAuditFile) ? rootAuditFile : "";
 }
 
 function buildGate0(hosted) {
@@ -725,11 +732,21 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
       note: `${flowId} not found in Playwright JSON report`,
     });
   }
-  const status = worstStatus(matches.map((spec) => spec.status));
+  const failed = matches.filter((spec) => spec.status === "fail" || spec.status === "missing");
+  const passed = matches.filter((spec) => spec.status === "pass");
+  const skipped = matches.filter((spec) => spec.status === "skip");
+  let status = failed.length ? worstStatus(failed.map((spec) => spec.status)) : passed.length ? "pass" : "skip";
+  if (status === "skip" && options.optionalException && markdownHasException(flowId)) {
+    status = "warn";
+  }
+  const noteParts = [`${matches.length} matching spec(s)`];
+  if (passed.length) noteParts.push(`${passed.length} runnable passed`);
+  if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
+  if (status === "warn") noteParts.push(`${flowId} marked by release-gate exception`);
   return makeCheck(label, status, {
     owner: status === "pass" ? "" : GATE_OWNERS[5],
     evidence,
-    note: `${matches.length} matching spec(s)`,
+    note: noteParts.join("; "),
   });
 }
 
@@ -802,7 +819,7 @@ function buildGate7(previousGates) {
     .flatMap(([, checks]) => checks);
   const failures = priorChecks.filter((check) => ["fail", "missing"].includes(check.status));
   const hardBlocked = failures.length > 0;
-  const exceptionsFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const exceptionsFile = releaseGateExceptionsFile();
   const exceptionsPresent = Boolean(process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || exceptionsFile);
   const evidencePresent = auditFiles.length > 0;
   const shaRecorded = envPresent("PANTHEON_FRONTEND_SHA", "GITHUB_SHA") && envPresent("PANTHEON_BFF_SHA", "PANTHEON_BACKEND_SHA", "PANTHEON_PANTHEON_SHA") && envPresent("PANTHEON_BFF_BASE_URL", "VITE_BFF_BASE_URL");

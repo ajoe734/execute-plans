@@ -173,9 +173,14 @@ jobs:
         run: |
           set -o pipefail
           FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
+          BROWSER_BFF_BASE="$PANTHEON_BFF_BASE_URL"
+          if [ "$FE_UNDER_TEST" = "http://127.0.0.1:4173" ]; then
+            BROWSER_BFF_BASE="$FE_UNDER_TEST"
+          fi
           FRONTEND_BASE_URL="$FE_UNDER_TEST" \
           PLAYWRIGHT_BASE_URL="$FE_UNDER_TEST" \
           PANTHEON_FE_BASE_URL="$FE_UNDER_TEST" \
+          PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
           PANTHEON_SSE_ORIGIN_URL="$FE_UNDER_TEST" \
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
