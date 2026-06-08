@@ -534,6 +534,10 @@ function analyzeHostedProbe(stepOutcomes) {
   const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
+  const personaFleetRowCount = parseNumberAfter(text, "persona fleet row count");
+  const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid");
+  const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid");
+  const personaFleetSeedFallbackArmed = parseBoolAfter(text, "persona fleet seed fallback armed");
   const pass = parseBoolAfter(text, "pass");
   const consoleErrorsSection = text.match(/## Console errors\s+([\s\S]*?)(?:\n## |\n?$)/i)?.[1] || "";
   const corsErrors = /cors/i.test(consoleErrorsSection) && !/none/i.test(consoleErrorsSection.trim());
@@ -546,6 +550,10 @@ function analyzeHostedProbe(stepOutcomes) {
     oldHitCount: oldHitCount ?? (containsOld === false ? 0 : containsOld === true ? 1 : null),
     containsBff,
     containsOld,
+    personaFleetRowCount,
+    personaFleetRowsValid,
+    personaFleetLiveBannerValid,
+    personaFleetSeedFallbackArmed,
     pass,
     corsErrors,
     missingStatus: missingEvidenceStatus(step.status),
@@ -571,10 +579,20 @@ function buildGate4(hosted) {
       evidence,
       note: hostedNote(`probe pass: ${hosted.pass}`),
     }),
-    makeCheck("Hosted JS bundle contains intended BFF URL.", hostedStatus(hosted.containsBff), {
+    makeCheck("Hosted app uses intended BFF URL.", hostedStatus(hosted.containsBff), {
       owner: hostedOwner(hosted.containsBff),
       evidence,
-      note: hostedNote(`contains intended BFF URL: ${hosted.containsBff ?? "missing"}`),
+      note: hostedNote(`uses intended BFF URL: ${hosted.containsBff ?? "missing"}`),
+    }),
+    makeCheck("Hosted Persona Fleet renders US/TW/Crypto rows without NaN.", hostedStatus(hosted.personaFleetRowsValid), {
+      owner: hostedOwner(hosted.personaFleetRowsValid),
+      evidence,
+      note: hostedNote(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}`),
+    }),
+    makeCheck("Hosted live banner does not claim seed fallback armed.", hostedStatus(hosted.personaFleetLiveBannerValid), {
+      owner: hostedOwner(hosted.personaFleetLiveBannerValid),
+      evidence,
+      note: hostedNote(`seed fallback armed: ${hosted.personaFleetSeedFallbackArmed ?? "missing"}`),
     }),
     makeCheck("Hosted JS bundle does not contain obsolete BFF URL.", hostedStatus(noOld), {
       owner: hostedOwner(noOld),

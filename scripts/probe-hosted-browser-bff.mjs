@@ -5,12 +5,15 @@ import path from "node:path";
 
 const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-dev.lovable.app");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
-const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
+const OLD_BFF_URL = normalizeOldBffUrl(process.env.PANTHEON_OLD_BFF_URL || "");
+const FE_PATH = normalizePath(process.env.PANTHEON_HOSTED_PROBE_PATH || "/management/persona-fleet");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
-const REQUIRED_CORE_BFF_PATHS = ["/bff/v5/control-room"];
+const REQUIRED_CORE_BFF_PATHS = parsePathList(process.env.PANTHEON_HOSTED_REQUIRED_BFF_PATHS, [
+  "/bff/management/fleet",
+]);
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const probeStartedAt = Date.now();
@@ -38,6 +41,26 @@ function withNoCache(url) {
 
 function trimTrailingSlash(value) {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeOldBffUrl(value) {
+  const clean = trimTrailingSlash(value.trim());
+  return clean && clean !== BFF_BASE ? clean : "";
+}
+
+function normalizePath(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return "/";
+  return clean.startsWith("/") ? clean : `/${clean}`;
+}
+
+function parsePathList(value, fallback) {
+  if (!value) return fallback;
+  const parsed = value
+    .split(",")
+    .map(normalizePath)
+    .filter(Boolean);
+  return parsed.length ? parsed : fallback;
 }
 
 function matchesUrlNeedle(url, needle) {
@@ -128,6 +151,7 @@ const consoleErrors = [];
 const coreResponses = [];
 let html = "";
 let bundleText = "";
+let personaFleetChecks = null;
 const bundleFetches = [];
 
 page.on("request", req => {
@@ -149,7 +173,7 @@ page.on("console", msg => {
   if (msg.type() === "error") consoleErrors.push(msg.text());
 });
 
-const pageUrl = withNoCache(`${FE_BASE}/management`);
+const pageUrl = withNoCache(`${FE_BASE}${FE_PATH}`);
 try {
   const requiredCoreResponsePromises = REQUIRED_CORE_BFF_PATHS.map(expectedPath =>
     waitForCoreBffResponse(page, expectedPath)
@@ -161,6 +185,49 @@ try {
   await page.goto(pageUrl, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: remainingTimeoutMs() });
   coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
   coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
+
+  await page.locator("body").innerText({ timeout: Math.min(5_000, remainingTimeoutMs()) }).catch(() => "");
+  if (FE_PATH.includes("persona-fleet")) {
+    personaFleetChecks = await page.evaluate(() => {
+      const text = document.body.innerText || "";
+      const rows = Array.from(document.querySelectorAll("tbody tr"))
+        .map((tr) => (tr.textContent || "").trim())
+        .filter(Boolean);
+      const hasUS = /US Equity Persona|US.*Equity/i.test(text);
+      const hasTW = /Taiwan Equity Persona|Taiwan.*Equity|TW Equity/i.test(text);
+      const hasCrypto = /Crypto Persona|Crypto/i.test(text);
+      const hasShioaji = /shioaji/i.test(text);
+      const hasQlib = /qlib/i.test(text);
+      const hasNaN = /NaN/.test(text);
+      const hasSeedFallbackArmed = /seed fallback armed/i.test(text);
+      const hasFallbackStandby = /fallback standby/i.test(text);
+      return {
+        rowCount: rows.length,
+        hasUS,
+        hasTW,
+        hasCrypto,
+        hasShioaji,
+        hasQlib,
+        hasNaN,
+        hasSeedFallbackArmed,
+        hasFallbackStandby,
+        rowsValid: rows.length > 0 && hasUS && hasTW && hasCrypto && hasShioaji && hasQlib && !hasNaN,
+        liveBannerValid: !hasSeedFallbackArmed,
+      };
+    }).catch(() => ({
+      rowCount: 0,
+      hasUS: false,
+      hasTW: false,
+      hasCrypto: false,
+      hasShioaji: false,
+      hasQlib: false,
+      hasNaN: false,
+      hasSeedFallbackArmed: false,
+      hasFallbackStandby: false,
+      rowsValid: false,
+      liveBannerValid: false,
+    }));
+  }
 
   html = await page.content();
   const scripts = await page.locator("script[src]").evaluateAll(nodes => nodes.map(n => n.src));
@@ -177,8 +244,9 @@ try {
   await browser.close();
 }
 
-const containsBff = bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
-const containsOld = bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL);
+const containsBffStatic = bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
+const usesIntendedBff = containsBffStatic || requests.length > 0 || responses.length > 0;
+const containsOld = Boolean(OLD_BFF_URL) && (bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL));
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
 oldUrlHits.push(...textHits("bundle", bundleText, OLD_BFF_URL));
 const oldUrlHitCount = oldUrlHits.reduce((total, hit) => total + (hit.count ?? 1), 0);
@@ -186,11 +254,12 @@ const requiredCoreResponseOk =
   REQUIRED_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
+const personaFleetOk = !personaFleetChecks || (personaFleetChecks.rowsValid && personaFleetChecks.liveBannerValid);
 const optionalCoreResponsesObserved =
   OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
-const pass = containsBff && requiredCoreResponseOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
+const pass = usesIntendedBff && requiredCoreResponseOk && personaFleetOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
@@ -200,7 +269,7 @@ const md = [
   `FE: ${FE_BASE}`,
   `Page URL: ${pageUrl}`,
   `BFF: ${BFF_BASE}`,
-  `Old BFF: ${OLD_BFF_URL}`,
+  `Old BFF: ${OLD_BFF_URL || "(disabled)"}`,
   `nocache: ${NOCACHE_SHA}`,
   `timeout ms: ${OVERALL_TIMEOUT_MS}`,
   `navigation waitUntil: ${NAVIGATION_WAIT_UNTIL}`,
@@ -210,11 +279,23 @@ const md = [
   ``,
   `## Summary`,
   ``,
-  `- contains intended BFF URL: ${containsBff}`,
+  `- contains intended BFF URL: ${usesIntendedBff}`,
+  `- contains intended BFF URL in html/bundle: ${containsBffStatic}`,
+  `- intended BFF runtime request count: ${requests.length}`,
   `- contains old BFF URL: ${containsOld}`,
   `- old BFF URL hit count: ${oldUrlHitCount}`,
   `- required core BFF responses complete: ${requiredCoreResponseOk}`,
   `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
+  ...(personaFleetChecks ? [
+    `- persona fleet row count: ${personaFleetChecks.rowCount}`,
+    `- persona fleet has US/TW/Crypto: ${personaFleetChecks.hasUS && personaFleetChecks.hasTW && personaFleetChecks.hasCrypto}`,
+    `- persona fleet has shioaji/qlib: ${personaFleetChecks.hasShioaji && personaFleetChecks.hasQlib}`,
+    `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
+    `- persona fleet seed fallback armed: ${personaFleetChecks.hasSeedFallbackArmed}`,
+    `- persona fleet fallback standby: ${personaFleetChecks.hasFallbackStandby}`,
+    `- persona fleet rows valid: ${personaFleetChecks.rowsValid}`,
+    `- persona fleet live banner valid: ${personaFleetChecks.liveBannerValid}`,
+  ] : []),
   `- request count: ${requests.length}`,
   `- response count: ${responses.length}`,
   `- failed count: ${failed.length}`,

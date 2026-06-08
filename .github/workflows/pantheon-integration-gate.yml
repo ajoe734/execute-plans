@@ -49,7 +49,9 @@ jobs:
       # name they read. Source of truth remains PANTHEON_FE_BASE_URL.
       FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
-      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
+      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || '' }}
+      PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/fleet"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
