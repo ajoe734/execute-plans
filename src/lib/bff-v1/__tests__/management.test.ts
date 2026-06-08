@@ -89,6 +89,65 @@ describe("mgmt façade (PM-Live)", () => {
             metrics: { training_improvement_pct: 9.5 },
             updated_at: "2026-06-07T13:00:00Z",
             status: "needs_human_approval",
+            data_source_status: {
+              state: "partial_readback",
+              provider_statuses: {
+                twse: "read_unavailable",
+                tpex: "read_unavailable",
+                mops: "public_reference_unavailable",
+                tej: "credential_unavailable",
+                shioaji: "read_ok",
+              },
+              readback_refs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/shioaji.json"],
+              unavailable_refs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/twse.json"],
+              live_ingestion_enabled: false,
+              order_side_effects_allowed: false,
+              capital_side_effects_allowed: false,
+            },
+            data_sources: [
+              {
+                provider_key: "shioaji",
+                provider: "Shioaji quote",
+                source_class: "broker_execution",
+                status: "read_ok",
+                evidence_ref: "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/shioaji.json",
+                order_path: "disabled_for_marketdata_smoke",
+                order_capable_provider: true,
+                read_only: true,
+                order_side_effects_allowed: false,
+                capital_side_effects_allowed: false,
+              },
+              {
+                provider_key: "twse",
+                provider: "TWSE OpenAPI",
+                source_class: "official_reference",
+                status: "read_unavailable",
+                evidence_ref: "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/twse.json",
+                order_path: "not_applicable",
+              },
+            ],
+            research_status: {
+              stage: "management_review_linked",
+              framework: "qlib",
+              frameworks: ["qlib", "vectorbt"],
+              experiment_id: "exp-mgmt-qlib-006",
+              artifact_id: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+              registry_admission_status: "pending_upstream_task",
+              pending_task_ids: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
+              can_deploy: false,
+            },
+            current_research_projects: [
+              {
+                project_id: "MGMT-QLIB-006",
+                title: "Qlib TW cross-sectional equity alpha admission linkage",
+                stage: "management_review_linked",
+                frameworks: ["qlib", "vectorbt"],
+                artifact_id: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+                experiment_id: "exp-mgmt-qlib-006",
+                blocked_by_task_ids: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
+                can_deploy: false,
+              },
+            ],
           },
           {},
         ],
@@ -106,6 +165,31 @@ describe("mgmt façade (PM-Live)", () => {
       humanNeeded: true,
       lastMutation: "2026-06-07",
       state: "needs_human_approval",
+    });
+    expect(rows?.[0].dataSourceStatus).toMatchObject({
+      state: "partial_readback",
+      providerStatuses: {
+        twse: "read_unavailable",
+        shioaji: "read_ok",
+      },
+      liveIngestionEnabled: false,
+      orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
+    });
+    expect(rows?.[0].dataSources?.map((source) => source.providerKey)).toEqual(["shioaji", "twse"]);
+    expect(rows?.[0].researchStatus).toMatchObject({
+      stage: "management_review_linked",
+      framework: "qlib",
+      experimentId: "exp-mgmt-qlib-006",
+      artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+      registryAdmissionStatus: "pending_upstream_task",
+      canDeploy: false,
+    });
+    expect(rows?.[0].currentResearchProjects?.[0]).toMatchObject({
+      projectId: "MGMT-QLIB-006",
+      artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+      blockedByTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
+      canDeploy: false,
     });
     expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
   });

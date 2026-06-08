@@ -46,6 +46,67 @@ const asArray = <T>(raw: unknown): T[] | null =>
 export type ManagementOodaStage = "Observe" | "Orient" | "Decide" | "Act";
 export type ManagementAutonomyMode = "manual" | "supervised" | "autonomous";
 
+export interface ManagementDataSourceStatus {
+  state: string;
+  summary?: string;
+  providerStatuses: Record<string, string>;
+  readbackRefs: string[];
+  unavailableRefs: string[];
+  researchDatasetRef?: string;
+  researchDatasetManifestRef?: string;
+  researchDatasetAsOf?: string;
+  readbackCapturedAt?: string;
+  readOnly: boolean;
+  orderSideEffectsAllowed: boolean;
+  capitalSideEffectsAllowed: boolean;
+  liveIngestionEnabled: boolean;
+}
+
+export interface ManagementDataSource {
+  providerKey: string;
+  provider: string;
+  market?: string;
+  sourceClass?: string;
+  status: string;
+  evidenceRef?: string;
+  orderPath?: string;
+  orderCapableProvider: boolean;
+  readOnly: boolean;
+  orderSideEffectsAllowed: boolean;
+  capitalSideEffectsAllowed: boolean;
+  reason?: string;
+}
+
+export interface ManagementResearchStatus {
+  stage: string;
+  framework?: string;
+  frameworks: string[];
+  experimentId?: string;
+  strategyId?: string;
+  strategySpecId?: string;
+  artifactId?: string;
+  artifactState?: string;
+  deploymentStage?: string;
+  datasetRef?: string;
+  registryAdmissionStatus?: string;
+  pendingTaskIds: string[];
+  canDeploy: boolean;
+  summary?: string;
+}
+
+export interface ManagementResearchProject {
+  projectId: string;
+  title: string;
+  stage: string;
+  status?: string;
+  frameworks: string[];
+  datasetRef?: string;
+  artifactId?: string;
+  experimentId?: string;
+  blockedByTaskIds: string[];
+  canDeploy: boolean;
+}
+
 export interface ManagementPersonaFleetRow {
   personaId: string;
   personaName?: string;
@@ -59,6 +120,10 @@ export interface ManagementPersonaFleetRow {
   tags?: string[];
   marketScope?: string[];
   currentWork?: string;
+  dataSourceStatus?: ManagementDataSourceStatus;
+  dataSources?: ManagementDataSource[];
+  researchStatus?: ManagementResearchStatus;
+  currentResearchProjects?: ManagementResearchProject[];
 }
 
 /** Wraps `body` so adapter errors degrade to seedFn output. */
@@ -96,6 +161,15 @@ const asStringArray = (value: unknown): string[] =>
     ? value.map((item) => asString(item)).filter(Boolean)
     : [];
 
+const asStringRecord = (value: unknown): Record<string, string> => {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, asString(item)] as const)
+      .filter(([, item]) => item.length > 0),
+  );
+};
+
 const normalizeOoda = (value: unknown): ManagementOodaStage => {
   const stage = asString(value).toLowerCase();
   if (stage.startsWith("orient")) return "Orient";
@@ -110,6 +184,87 @@ const normalizeAutonomy = (value: unknown): ManagementAutonomyMode => {
   if (mode === "manual") return "manual";
   return "supervised";
 };
+
+function adaptDataSourceStatus(value: unknown): ManagementDataSourceStatus | undefined {
+  if (!isObject(value)) return undefined;
+  return {
+    state: asString(value.state, "not_declared"),
+    summary: asString(value.summary),
+    providerStatuses: asStringRecord(value.providerStatuses ?? value.provider_statuses),
+    readbackRefs: asStringArray(value.readbackRefs ?? value.readback_refs),
+    unavailableRefs: asStringArray(value.unavailableRefs ?? value.unavailable_refs),
+    researchDatasetRef: asString(value.researchDatasetRef ?? value.research_dataset_ref),
+    researchDatasetManifestRef: asString(value.researchDatasetManifestRef ?? value.research_dataset_manifest_ref),
+    researchDatasetAsOf: asString(value.researchDatasetAsOf ?? value.research_dataset_as_of),
+    readbackCapturedAt: asString(value.readbackCapturedAt ?? value.readback_captured_at),
+    readOnly: asBoolean(value.readOnly ?? value.read_only, true),
+    orderSideEffectsAllowed: asBoolean(value.orderSideEffectsAllowed ?? value.order_side_effects_allowed, false),
+    capitalSideEffectsAllowed: asBoolean(value.capitalSideEffectsAllowed ?? value.capital_side_effects_allowed, false),
+    liveIngestionEnabled: asBoolean(value.liveIngestionEnabled ?? value.live_ingestion_enabled, false),
+  };
+}
+
+function adaptDataSource(value: unknown): ManagementDataSource | null {
+  if (!isObject(value)) return null;
+  const providerKey = asString(value.providerKey ?? value.provider_key);
+  const provider = asString(value.provider, providerKey);
+  if (!providerKey && !provider) return null;
+  return {
+    providerKey: providerKey || provider,
+    provider,
+    market: asString(value.market),
+    sourceClass: asString(value.sourceClass ?? value.source_class),
+    status: asString(value.status, "unknown"),
+    evidenceRef: asString(value.evidenceRef ?? value.evidence_ref),
+    orderPath: asString(value.orderPath ?? value.order_path),
+    orderCapableProvider: asBoolean(value.orderCapableProvider ?? value.order_capable_provider, false),
+    readOnly: asBoolean(value.readOnly ?? value.read_only, true),
+    orderSideEffectsAllowed: asBoolean(value.orderSideEffectsAllowed ?? value.order_side_effects_allowed, false),
+    capitalSideEffectsAllowed: asBoolean(value.capitalSideEffectsAllowed ?? value.capital_side_effects_allowed, false),
+    reason: asString(value.reason),
+  };
+}
+
+function adaptResearchStatus(value: unknown): ManagementResearchStatus | undefined {
+  if (!isObject(value)) return undefined;
+  const framework = asString(value.framework);
+  const frameworks = asStringArray(value.frameworks);
+  return {
+    stage: asString(value.stage, "observe"),
+    framework,
+    frameworks: frameworks.length > 0 ? frameworks : framework ? [framework] : [],
+    experimentId: asString(value.experimentId ?? value.experiment_id),
+    strategyId: asString(value.strategyId ?? value.strategy_id),
+    strategySpecId: asString(value.strategySpecId ?? value.strategy_spec_id),
+    artifactId: asString(value.artifactId ?? value.artifact_id),
+    artifactState: asString(value.artifactState ?? value.artifact_state),
+    deploymentStage: asString(value.deploymentStage ?? value.deployment_stage),
+    datasetRef: asString(value.datasetRef ?? value.dataset_ref),
+    registryAdmissionStatus: asString(value.registryAdmissionStatus ?? value.registry_admission_status),
+    pendingTaskIds: asStringArray(value.pendingTaskIds ?? value.pending_task_ids),
+    canDeploy: asBoolean(value.canDeploy ?? value.can_deploy, false),
+    summary: asString(value.summary),
+  };
+}
+
+function adaptResearchProject(value: unknown): ManagementResearchProject | null {
+  if (!isObject(value)) return null;
+  const projectId = asString(value.projectId ?? value.project_id);
+  const title = asString(value.title, projectId);
+  if (!projectId && !title) return null;
+  return {
+    projectId: projectId || title,
+    title,
+    stage: asString(value.stage, "observe"),
+    status: asString(value.status),
+    frameworks: asStringArray(value.frameworks),
+    datasetRef: asString(value.datasetRef ?? value.dataset_ref),
+    artifactId: asString(value.artifactId ?? value.artifact_id),
+    experimentId: asString(value.experimentId ?? value.experiment_id),
+    blockedByTaskIds: asStringArray(value.blockedByTaskIds ?? value.blocked_by_task_ids),
+    canDeploy: asBoolean(value.canDeploy ?? value.can_deploy, false),
+  };
+}
 
 function firstArrayValue(...values: unknown[]): unknown[] | null {
   for (const value of values) {
@@ -138,6 +293,12 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
   );
 
   const updated = asString(value.lastMutation ?? value.last_mutation ?? value.updatedAt ?? value.updated_at, "unknown");
+  const dataSources = firstArrayValue(value.dataSources, value.data_sources)
+    ?.map(adaptDataSource)
+    .filter((source): source is ManagementDataSource => source !== null);
+  const currentResearchProjects = firstArrayValue(value.currentResearchProjects, value.current_research_projects)
+    ?.map(adaptResearchProject)
+    .filter((project): project is ManagementResearchProject => project !== null);
 
   return {
     personaId,
@@ -152,6 +313,10 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     tags: asStringArray(value.tags),
     marketScope: asStringArray(value.marketScope ?? value.market_scope),
     currentWork: asString(value.currentWork ?? value.current_work),
+    dataSourceStatus: adaptDataSourceStatus(value.dataSourceStatus ?? value.data_source_status),
+    dataSources,
+    researchStatus: adaptResearchStatus(value.researchStatus ?? value.research_status),
+    currentResearchProjects,
   };
 }
 
