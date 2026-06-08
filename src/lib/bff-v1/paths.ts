@@ -142,7 +142,7 @@ export const paths = {
   // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
   // Mock providers continue returning seeds; live providers hit these.
   mgmtCockpit: () => `${BASE}/management/cockpit`,
-  mgmtPersonaFleet: () => `${BASE}/management/persona-fleet`,
+  mgmtPersonaFleet: () => `${BASE}/management/fleet`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
   mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,

@@ -2,7 +2,11 @@
 // mode and that all 14 mgmt paths are reachable through the helpers.
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { mgmt } from "@/lib/bff-v1/management";
+import {
+  adaptManagementPersonaFleet,
+  mgmt,
+  type ManagementPersonaFleetRow,
+} from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
@@ -51,16 +55,64 @@ describe("mgmt façade (PM-Live)", () => {
 
   it("array helpers pass seed through", async () => {
     const seed = [{ id: 1 }, { id: 2 }] as never[];
-    expect(await mgmt.personaFleet.get(() => seed)).toBe(seed);
     expect(await mgmt.evolutionJournal.list(() => seed)).toBe(seed);
     expect(await mgmt.evidence.list(() => seed)).toBe(seed);
     expect(await mgmt.tradingPulse.get(() => seed)).toBe(seed);
     expect(await mgmt.personaIntent.list(() => seed as never)).toBe(seed);
   });
 
+  it("personaFleet.get passes canonical seed through in mock mode", async () => {
+    const seed: ManagementPersonaFleetRow[] = [{
+      personaId: "persona-tw-equity",
+      owner: "pathreon-management",
+      ooda: "Decide",
+      autonomy: "supervised",
+      perfDelta: 0.095,
+      humanNeeded: true,
+      lastMutation: "2026-06-07",
+      state: "needs_human_approval",
+    }];
+    expect(await mgmt.personaFleet.get(() => seed)).toBe(seed);
+  });
+
+  it("adapts Pathreon management fleet envelopes into UI-safe rows", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        persona_fleet: [
+          {
+            persona_id: "persona-tw-equity",
+            persona_name: "Taiwan Equity Persona",
+            owner: "pathreon-management",
+            ooda_stage: "decide",
+            governance_required: true,
+            recommendation: "hold_for_risk_owner_review",
+            metrics: { training_improvement_pct: 9.5 },
+            updated_at: "2026-06-07T13:00:00Z",
+            status: "needs_human_approval",
+          },
+          {},
+        ],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-tw-equity",
+      personaName: "Taiwan Equity Persona",
+      owner: "pathreon-management",
+      ooda: "Decide",
+      autonomy: "supervised",
+      perfDelta: 0.095,
+      humanNeeded: true,
+      lastMutation: "2026-06-07",
+      state: "needs_human_approval",
+    });
+    expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
+  });
+
   it("all 14 mgmt paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
-    expect(paths.mgmtPersonaFleet()).toMatch(/persona-fleet$/);
+    expect(paths.mgmtPersonaFleet()).toMatch(/management\/fleet$/);
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
     expect(paths.mgmtHumanInboxItem("xyz")).toMatch(/human-inbox\/xyz$/);
     expect(paths.mgmtTradingPulse()).toMatch(/trading-pulse$/);
