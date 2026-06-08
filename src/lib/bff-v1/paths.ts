@@ -165,7 +165,9 @@ export const paths = {
   assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
   assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
   assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
-
+  assistantDevDocsGenerate: () => `${BASE}/assistant/dev-docs/generate`,
+  assistantDevDocsPacket: (packetId: string) => `${BASE}/assistant/dev-docs/${enc(packetId)}`,
+  assistantDevBridgeTaskPacket: () => `${BASE}/assistant/dev-bridge/task-packet`,
 
 
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
