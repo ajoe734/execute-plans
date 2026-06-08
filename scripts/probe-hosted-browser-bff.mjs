@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-dev.lovable.app");
+const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
 const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
@@ -198,7 +198,7 @@ const pass = containsBff && requiredCoreResponseOk && oldUrlHitCount === 0 && re
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
-  `# Hosted Browser BFF Probe`,
+  `# Frontend Browser BFF Probe`,
   ``,
   `Date: ${new Date().toISOString()}`,
   `FE: ${FE_BASE}`,

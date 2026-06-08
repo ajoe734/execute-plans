@@ -58,7 +58,7 @@ const gateTitles = {
   1: "Static / Build / Unit",
   2: "Contract Drift",
   3: "BFF Route Probes",
-  4: "Browser Hosted E2E",
+  4: "Browser Frontend E2E",
   5: "Playwright User Flows",
   6: "A11y / Perf",
   7: "Release Decision",
@@ -342,7 +342,7 @@ function buildGate0(hosted) {
       evidence: RUN_URL || ROOT,
       note: bffShaPresent ? "backend/BFF SHA env present" : "set PANTHEON_BFF_SHA or PANTHEON_BACKEND_SHA",
     }),
-    makeCheck("`PANTHEON_FE_BASE_URL` points to intended Lovable deployment.", feUrlPresent ? "pass" : "missing", {
+    makeCheck("`PANTHEON_FE_BASE_URL` points to intended Pantheon dev frontend.", feUrlPresent ? "pass" : "missing", {
       owner: feUrlPresent ? "" : GATE_OWNERS[0],
       evidence: RUN_URL || ROOT,
       note: process.env.PANTHEON_FE_BASE_URL || "missing",
@@ -352,10 +352,10 @@ function buildGate0(hosted) {
       evidence: RUN_URL || ROOT,
       note: process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "missing",
     }),
-    makeCheck("No obsolete BFF URL appears in hosted JS bundle.", noOldStatus, {
+    makeCheck("No obsolete BFF URL appears in frontend JS bundle.", noOldStatus, {
       owner: noOldStatus === "pass" ? "" : GATE_OWNERS[4],
       evidence: hostedEvidence,
-      note: hostedNote(noOldUrl === null ? hosted.missingNote || "hosted browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`),
+      note: hostedNote(noOldUrl === null ? hosted.missingNote || "frontend browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`),
     }),
     makeCheck("Auth token or test OIDC path available for authenticated smoke.", authPresent ? "pass" : "missing", {
       owner: authPresent ? "" : GATE_OWNERS[3],

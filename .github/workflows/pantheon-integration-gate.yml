@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       fe_base_url:
-        description: "Hosted frontend URL"
+        description: "Pantheon dev frontend URL"
         required: false
-        default: "https://pantheon-dev.lovable.app"
+        default: "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io"
       bff_base_url:
         description: "BFF base URL"
         required: false
@@ -38,7 +38,7 @@ jobs:
   integration-gate:
     runs-on: ubuntu-latest
     env:
-      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
+      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io' }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
       # Spec compatibility aliases. Some autoworker-written specs read
       # FRONTEND_BASE_URL / PLAYWRIGHT_BASE_URL instead of PANTHEON_FE_BASE_URL
@@ -47,8 +47,8 @@ jobs:
       # ECONNREFUSED on every page.goto. Mirror the canonical value into both
       # aliases so existing specs hit the hosted FE regardless of which env
       # name they read. Source of truth remains PANTHEON_FE_BASE_URL.
-      FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
-      PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}
+      FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io' }}
+      PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io' }}
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
@@ -56,8 +56,9 @@ jobs:
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. CI does not
-      # build or serve the FE (it tests against the hosted Lovable app), so
-      # setting them at job level has no effect on the FE under test but DOES
+      # build or serve the hosted FE on push/main (it tests against the
+      # Pantheon-owned dev frontend), so setting them at job level has no effect
+      # on the FE under test but DOES
       # leak into the vitest process and override unit tests that exercise
       # hybrid/auto fallback paths. Keep them unset at job level; the strict
       # signal that matters to Playwright is PANTHEON_E2E_STRICT.
@@ -136,7 +137,7 @@ jobs:
           set -o pipefail
           npx playwright install chromium --with-deps 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-install.log"
 
-      - name: Hosted browser BFF probe
+      - name: Frontend browser BFF probe
         id: browser_probe
         continue-on-error: true
         run: |
@@ -176,7 +177,7 @@ jobs:
           FRONTEND_BASE_URL="$FE_UNDER_TEST" \
           PLAYWRIGHT_BASE_URL="$FE_UNDER_TEST" \
           PANTHEON_FE_BASE_URL="$FE_UNDER_TEST" \
-          PANTHEON_SSE_ORIGIN_URL="${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}" \
+          PANTHEON_SSE_ORIGIN_URL="${{ inputs.fe_base_url || 'https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io' }}" \
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
