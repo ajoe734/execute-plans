@@ -165,6 +165,7 @@ export const paths = {
   assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
   assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
   assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
+  assistantRepairWorktreePrepare: () => `${BASE}/assistant/repair-worktrees/prepare`,
   assistantDevDocsGenerate: () => `${BASE}/assistant/dev-docs/generate`,
   assistantDevDocsPacket: (packetId: string) => `${BASE}/assistant/dev-docs/${enc(packetId)}`,
   assistantDevBridgeTaskPacket: () => `${BASE}/assistant/dev-bridge/task-packet`,

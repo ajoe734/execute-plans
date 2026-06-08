@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activateAssistantControlMode,
+  askManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
   generateAssistantDevDocs,
+  prepareAssistantRepairWorktree,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -259,5 +261,118 @@ describe("Management AI SA/SD dev bridge", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(403);
     expect(result.message).toContain("Control mode is required");
+  });
+});
+
+describe("Management AI OpenClaw repair worktrees", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("prepares a repair worktree through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        created: true,
+        repair: {
+          task_id: "MGMT-AI-REPAIR-FE",
+          taskId: "MGMT-AI-REPAIR-FE",
+          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
+          taskWorktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
+          declared_scope: ["src/management/components/agent", "src/lib/bff-v1"],
+          declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
+          expected_branch: "task/MGMT-AI-REPAIR-FE",
+          expectedBranch: "task/MGMT-AI-REPAIR-FE",
+          remote: "origin",
+          merge_target: "main",
+          mergeTarget: "main",
+          require_clean: true,
+          requireClean: true,
+          repo_key: "execute-plans",
+          repoKey: "execute-plans",
+        },
+        workflow: { clean: true },
+      },
+      meta: { openclawAdapterStatus: "ok" },
+    }, 201));
+    globalThis.fetch = fetchMock;
+
+    const result = await prepareAssistantRepairWorktree({
+      taskId: "MGMT-AI-REPAIR-FE",
+      repoKey: "execute-plans",
+      declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
+      expectedBranch: "task/MGMT-AI-REPAIR-FE",
+      mergeTarget: "main",
+      reason: "repair frontend Management AI",
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/repair-worktrees/prepare");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      taskId: "MGMT-AI-REPAIR-FE",
+      repoKey: "execute-plans",
+      declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
+      expectedBranch: "task/MGMT-AI-REPAIR-FE",
+      mergeTarget: "main",
+    });
+    expect(result.repair.repo_key).toBe("execute-plans");
+    expect(result.repair.task_worktree).toContain("/execute-plans/");
+    expect(result.workflow?.clean).toBe(true);
+  });
+
+  it("sends prepared openclaw repair metadata with Management AI ask", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        answer: "ok",
+        sessionId: "mgmt-nl-123",
+        traceId: "trace-123",
+        providerStatus: {
+          provider: "codex_cli",
+          runtime: "openclaw_gateway_cli_mount",
+          status: "completed",
+          used: true,
+          fallback: null,
+        },
+      },
+    }, 202));
+    globalThis.fetch = fetchMock;
+
+    const result = await askManagementAi({
+      question: "修 Management AI 前端",
+      openclaw: {
+        repair: {
+          task_id: "MGMT-AI-REPAIR-FE",
+          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
+          declared_scope: ["src/management/components/agent"],
+          expected_branch: "task/MGMT-AI-REPAIR-FE",
+          remote: "origin",
+          merge_target: "main",
+          require_clean: true,
+          repo_key: "execute-plans",
+        },
+      },
+    });
+
+    expect(result.kind).toBe("ok");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/management/nl/ask");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      question: "修 Management AI 前端",
+      openclaw: {
+        repair: {
+          task_id: "MGMT-AI-REPAIR-FE",
+          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
+          declared_scope: ["src/management/components/agent"],
+          expected_branch: "task/MGMT-AI-REPAIR-FE",
+          repo_key: "execute-plans",
+        },
+      },
+    });
   });
 });

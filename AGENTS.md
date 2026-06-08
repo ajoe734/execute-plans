@@ -39,6 +39,7 @@ Lovable:
 - `GET /bff/assistant/orchestrator/status`
 - `POST /bff/assistant/dev-docs/generate`
 - `POST /bff/assistant/dev-bridge/task-packet`
+- `POST /bff/assistant/repair-worktrees/prepare`
 
 `/bff/assistant/tools/*` is not the VM file-system access surface. It is the
 governed Pantheon action surface for BFF-owned preview, validation, and execute
@@ -58,8 +59,14 @@ calling the OpenClaw gateway adapter. The frontend must not call the OpenClaw
 adapter directly and must not write files from the browser.
 
 For write-capable repair, the request must run under active `kernel_repair` and
-send valid `openclaw.repair` metadata:
+the frontend must call `prepareAssistantRepairWorktree` /
+`POST /bff/assistant/repair-worktrees/prepare` before sending the chat turn.
+Use `repoKey: execute-plans` and merge target `main` for frontend work; use
+`repoKey: pantheon` and merge target `dev` only for backend/BFF repair. The
+subsequent `POST /bff/management/nl/ask` request must include the returned
+`openclaw.repair` metadata:
 
+- `repo_key`
 - `task_id`
 - `task_worktree`
 - `declared_scope`
@@ -69,9 +76,9 @@ send valid `openclaw.repair` metadata:
 
 The repair worktree must already exist under the backend-configured repair root,
 be clean, be checked out on `expected_branch`, and be limited to repo-relative
-`declared_scope` entries. Do not use `.` as a blanket write scope. If the UI
-cannot provide this metadata yet, treat VM write capability as incomplete and
-add the governed BFF/backend preparation path first.
+`declared_scope` entries. Do not use `.` as a blanket write scope. If the
+prepare route fails, the UI must fail closed and must not ask Management AI to
+perform VM writes in that turn.
 
 ## Repository Discipline
 

@@ -136,6 +136,45 @@ export type AssistantDevDocsGenerateResult =
     }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
+export interface AssistantRepairMetadata {
+  task_id: string;
+  taskId?: string;
+  task_worktree: string;
+  taskWorktree?: string;
+  declared_scope: string[];
+  declaredScope?: string[];
+  expected_branch: string;
+  expectedBranch?: string;
+  remote: string;
+  merge_target: string;
+  mergeTarget?: string;
+  require_clean?: boolean;
+  requireClean?: boolean;
+  repo_key?: string;
+  repoKey?: string;
+}
+
+export interface AssistantRepairWorktreePrepareInput {
+  taskId?: string;
+  repoKey?: "pantheon" | "execute-plans" | string;
+  declaredScope: string[];
+  expectedBranch?: string;
+  mergeTarget?: string;
+  remote?: string;
+  reason?: string;
+  traceId?: string;
+}
+
+export type AssistantRepairWorktreePrepareResult =
+  | {
+      ok: true;
+      kind: "ok";
+      repair: AssistantRepairMetadata;
+      created: boolean | null;
+      workflow: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
 export interface ManagementAiAnswerOk {
   ok: true;
   kind: "ok";
@@ -223,6 +262,9 @@ export interface ManagementAiAskInput {
   };
   ui?: ManagementAiUiSnapshot;
   attachments?: ManagementAiAttachment[];
+  openclaw?: {
+    repair?: AssistantRepairMetadata;
+  };
 }
 
 interface RawAskResponse {
@@ -364,6 +406,39 @@ function adaptArchiveLocations(raw: unknown): AssistantDevDocsArchiveLocations |
   };
 }
 
+function adaptRepairMetadata(raw: unknown): AssistantRepairMetadata | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const taskId = asString(r.task_id ?? r.taskId);
+  const taskWorktree = asString(r.task_worktree ?? r.taskWorktree);
+  const declaredScope = asStringArray(r.declared_scope ?? r.declaredScope);
+  const expectedBranch = asString(r.expected_branch ?? r.expectedBranch);
+  const remote = asString(r.remote);
+  const mergeTarget = asString(r.merge_target ?? r.mergeTarget);
+  if (!taskId || !taskWorktree || !declaredScope?.length || !expectedBranch || !remote || !mergeTarget) {
+    return null;
+  }
+  const requireClean = asBoolean(r.require_clean ?? r.requireClean);
+  const repoKey = asString(r.repo_key ?? r.repoKey);
+  return {
+    task_id: taskId,
+    taskId,
+    task_worktree: taskWorktree,
+    taskWorktree,
+    declared_scope: declaredScope,
+    declaredScope,
+    expected_branch: expectedBranch,
+    expectedBranch,
+    remote,
+    merge_target: mergeTarget,
+    mergeTarget,
+    require_clean: requireClean,
+    requireClean,
+    repo_key: repoKey,
+    repoKey,
+  };
+}
+
 function extractBffFailureMessage(raw: unknown): string | null {
   const parsed = asRecord(raw);
   const detail = asRecord(parsed?.detail);
@@ -413,6 +488,7 @@ export async function askManagementAi(
     conversation: input.conversation ?? undefined,
     ui: input.ui ?? undefined,
     attachments: input.attachments && input.attachments.length > 0 ? input.attachments : undefined,
+    openclaw: input.openclaw ?? undefined,
   });
 
   let res: Response;
@@ -642,6 +718,88 @@ export async function generateAssistantDevDocs(
     taskPacketQueuePath: asString(queueReceipt?.path ?? queueReceipt?.inbox) ?? null,
     taskCount: asNumber(meta.taskCount ?? meta.task_count ?? queueReceipt?.taskCount ?? queueReceipt?.task_count) ?? executionTasks.length,
     taskPacket: asRecord(meta.taskPacket ?? meta.task_packet) ?? null,
+  };
+}
+
+export async function prepareAssistantRepairWorktree(
+  input: AssistantRepairWorktreePrepareInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantRepairWorktreePrepareResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    taskId: input.taskId,
+    repoKey: input.repoKey,
+    declaredScope: input.declaredScope,
+    expectedBranch: input.expectedBranch,
+    mergeTarget: input.mergeTarget,
+    remote: input.remote,
+    reason: input.reason,
+    traceId: input.traceId,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantRepairWorktreePrepare()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = asRecord(parsed?.data) ?? {};
+  const repair = adaptRepairMetadata(data.repair ?? data.repairMetadata);
+  if (!repair) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no repair metadata.",
+    };
+  }
+  return {
+    ok: true,
+    kind: "ok",
+    repair,
+    created: asBoolean(data.created) ?? null,
+    workflow: asRecord(data.workflow) ?? null,
   };
 }
 
