@@ -34,6 +34,7 @@ import { buildLinkSet } from "@/lib/v5/management/links";
 import { mgmt } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { visibleDataSources } from "./personaFleetDataSources";
 
 // =====================================================================
 // Pathreon Management Cockpit (PM-3)
@@ -439,7 +440,7 @@ export const PersonaFleetPage = () => {
               const probe = isDevProbe(r);
               const sourceCount = providerOkCount(r);
               const project = firstResearchProject(r);
-              const sourceBadges = r.dataSources?.slice(0, 4) ?? [];
+              const sourceBadges = visibleDataSources(r);
               const frameworkText = project?.frameworks?.length
                 ? project.frameworks.join(" / ")
                 : r.researchStatus?.frameworks?.join(" / ");
