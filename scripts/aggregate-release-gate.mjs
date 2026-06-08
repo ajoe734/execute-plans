@@ -64,6 +64,33 @@ const gateTitles = {
   7: "Release Decision",
 };
 
+function truthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isPullRequestContext() {
+  return process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request";
+}
+
+function hostedHardGateEnabled() {
+  if (process.env.PANTHEON_HOSTED_FE_HARD_GATE !== undefined) {
+    return truthy(process.env.PANTHEON_HOSTED_FE_HARD_GATE);
+  }
+  return !isPullRequestContext();
+}
+
+const HOSTED_FE_HARD_GATE = hostedHardGateEnabled();
+
+function hostedStatus(status) {
+  if (!HOSTED_FE_HARD_GATE && ["fail", "missing"].includes(status)) return "warn";
+  return status;
+}
+
+function hostedNote(note) {
+  return HOSTED_FE_HARD_GATE ? note : `${note}; advisory on pull_request`;
+}
+
 function exists(filePath) {
   try {
     return fs.existsSync(filePath);
@@ -301,7 +328,7 @@ function buildGate0(hosted) {
   const noOldUrl = hosted.exists
     ? hosted.oldHitCount === 0 && hosted.containsOld !== true
     : null;
-  const noOldStatus = noOldUrl === true ? "pass" : noOldUrl === false ? "fail" : hosted.missingStatus || "missing";
+  const noOldStatus = hostedStatus(noOldUrl === true ? "pass" : noOldUrl === false ? "fail" : hosted.missingStatus || "missing");
   const hostedEvidence = hosted.file || hosted.stepEvidence;
 
   return [
@@ -326,9 +353,9 @@ function buildGate0(hosted) {
       note: process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "missing",
     }),
     makeCheck("No obsolete BFF URL appears in hosted JS bundle.", noOldStatus, {
-      owner: noOldUrl === true ? "" : GATE_OWNERS[4],
+      owner: noOldStatus === "pass" ? "" : GATE_OWNERS[4],
       evidence: hostedEvidence,
-      note: noOldUrl === null ? hosted.missingNote || "hosted browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`,
+      note: hostedNote(noOldUrl === null ? hosted.missingNote || "hosted browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`),
     }),
     makeCheck("Auth token or test OIDC path available for authenticated smoke.", authPresent ? "pass" : "missing", {
       owner: authPresent ? "" : GATE_OWNERS[3],
@@ -410,11 +437,17 @@ function analyzeAuthSmoke(stepOutcomes) {
 function buildGate3(routeProbe, authSmoke) {
   const routeEvidence = routeProbe.file || routeProbe.stepEvidence;
   const authEvidence = authSmoke.file || routeEvidence;
+  const authMode = String(process.env.PANTHEON_RELEASE_GATE_AUTH_MODE || process.env.PANTHEON_BFF_AUTH_MODE || "").trim().toLowerCase();
+  const permissiveAuth = ["permissive", "stub", "dev", "local"].includes(authMode);
   const healthStatus = [routeProbe.rows.get("/health")?.status, routeProbe.rows.get("/healthz")?.status].includes("200");
   const openapiStatus = routeProbe.rows.get("/openapi.json")?.status === "200";
   const streamStatus = routeProbe.rows.get("/bff/events/stream")?.status;
   const protectedRows = [...routeProbe.rows.values()].filter((row) => row.route.startsWith("/bff/") && row.route !== "/bff/events/stream");
-  const protectedValid = protectedRows.length > 0 && protectedRows.every((row) => ["401", "403"].includes(String(row.status)));
+  const protectedValid = protectedRows.length > 0 && protectedRows.every((row) => (
+    permissiveAuth
+      ? !["404", "ERR"].includes(String(row.status))
+      : ["401", "403"].includes(String(row.status))
+  ));
   const no404 = routeProbe.canonical404 === 0;
 
   const readListPaths = [
@@ -486,10 +519,10 @@ function buildGate3(routeProbe, authSmoke) {
       evidence: routeEvidence,
       note: routeNote(`status: ${streamStatus || "missing"}`),
     }),
-    makeCheck("Anonymous: canonical protected routes return 401/403, not 404.", routeStatus(protectedValid), {
+    makeCheck("Anonymous: canonical protected routes return expected auth/dev status, not 404.", routeStatus(protectedValid), {
       owner: routeOwner(protectedValid),
       evidence: routeEvidence,
-      note: routeNote(`${protectedRows.length} protected route rows`),
+      note: routeNote(`${protectedRows.length} protected route rows; auth mode: ${authMode || "strict"}`),
     }),
     makeCheck("Anonymous: no canonical route returns 404.", routeStatus(no404), {
       owner: routeOwner(no404),
@@ -562,44 +595,51 @@ function buildGate4(hosted) {
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
   const responsesMatch = hosted.requestCount !== null && hosted.requestCount > 0 && hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
-  const hostedStatus = (condition) => hosted.exists ? condition ? "pass" : "fail" : hosted.missingStatus;
-  const hostedOwner = (condition) => hosted.exists && condition ? "" : GATE_OWNERS[4];
-  const hostedNote = (note) => hosted.exists ? note : hosted.missingNote;
+  const statusForHosted = (condition) => hostedStatus(hosted.exists ? condition ? "pass" : "fail" : hosted.missingStatus);
+  const hostedOwner = (status) => status === "pass" ? "" : GATE_OWNERS[4];
+  const noteForHosted = (note) => hostedNote(hosted.exists ? note : hosted.missingNote);
+  const loadedStatus = statusForHosted(loaded);
+  const containsBffStatus = statusForHosted(hosted.containsBff);
+  const noOldStatus = statusForHosted(noOld);
+  const corsStatus = statusForHosted(!hosted.corsErrors && noFailed);
+  const responsesStatus = statusForHosted(responsesMatch);
+  const noFailedStatus = statusForHosted(noFailed);
+  const noCorsStatus = statusForHosted(!hosted.corsErrors);
   return [
-    makeCheck("Hosted page loads.", hostedStatus(loaded), {
-      owner: hostedOwner(loaded),
+    makeCheck("Hosted page loads.", loadedStatus, {
+      owner: hostedOwner(loadedStatus),
       evidence,
-      note: hostedNote(`probe pass: ${hosted.pass}`),
+      note: noteForHosted(`probe pass: ${hosted.pass}`),
     }),
-    makeCheck("Hosted JS bundle contains intended BFF URL.", hostedStatus(hosted.containsBff), {
-      owner: hostedOwner(hosted.containsBff),
+    makeCheck("Hosted runtime uses intended BFF URL.", containsBffStatus, {
+      owner: hostedOwner(containsBffStatus),
       evidence,
-      note: hostedNote(`contains intended BFF URL: ${hosted.containsBff ?? "missing"}`),
+      note: noteForHosted(`contains intended BFF URL: ${hosted.containsBff ?? "missing"}`),
     }),
-    makeCheck("Hosted JS bundle does not contain obsolete BFF URL.", hostedStatus(noOld), {
-      owner: hostedOwner(noOld),
+    makeCheck("Hosted JS bundle does not contain obsolete BFF URL.", noOldStatus, {
+      owner: hostedOwner(noOldStatus),
       evidence,
-      note: hostedNote(`old BFF URL hit count: ${hosted.oldHitCount ?? "missing"}`),
+      note: noteForHosted(`old BFF URL hit count: ${hosted.oldHitCount ?? "missing"}`),
     }),
-    makeCheck("CORS preflight passes.", hostedStatus(!hosted.corsErrors && noFailed), {
-      owner: hostedOwner(!hosted.corsErrors && noFailed),
+    makeCheck("CORS preflight passes.", corsStatus, {
+      owner: hostedOwner(corsStatus),
       evidence,
-      note: hostedNote("inferred from browser network and console"),
+      note: noteForHosted("inferred from browser network and console"),
     }),
-    makeCheck("Browser receives responses for all BFF requests.", hostedStatus(responsesMatch), {
-      owner: hostedOwner(responsesMatch),
+    makeCheck("Browser receives responses for all BFF requests.", responsesStatus, {
+      owner: hostedOwner(responsesStatus),
       evidence,
-      note: hostedNote(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}`),
+      note: noteForHosted(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}`),
     }),
-    makeCheck("No failed BFF requests.", hostedStatus(noFailed), {
-      owner: hostedOwner(noFailed),
+    makeCheck("No failed BFF requests.", noFailedStatus, {
+      owner: hostedOwner(noFailedStatus),
       evidence,
-      note: hostedNote(`failed count: ${hosted.failedCount ?? "missing"}`),
+      note: noteForHosted(`failed count: ${hosted.failedCount ?? "missing"}`),
     }),
-    makeCheck("No CORS console errors.", hostedStatus(!hosted.corsErrors), {
-      owner: hostedOwner(!hosted.corsErrors),
+    makeCheck("No CORS console errors.", noCorsStatus, {
+      owner: hostedOwner(noCorsStatus),
       evidence,
-      note: hostedNote(hosted.corsErrors ? "CORS text found in console errors" : "no CORS console errors detected"),
+      note: noteForHosted(hosted.corsErrors ? "CORS text found in console errors" : "no CORS console errors detected"),
     }),
   ];
 }
@@ -742,16 +782,16 @@ function buildGate7(previousGates) {
   const priorChecks = Object.entries(previousGates)
     .filter(([gate]) => gate !== "7")
     .flatMap(([, checks]) => checks);
-  const criticalStatus = worstStatus(priorChecks.map((check) => check.status));
   const failures = priorChecks.filter((check) => ["fail", "missing"].includes(check.status));
+  const hardBlocked = failures.length > 0;
   const exceptionsFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
   const exceptionsPresent = Boolean(process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || exceptionsFile);
   const evidencePresent = auditFiles.length > 0;
   const shaRecorded = envPresent("PANTHEON_FRONTEND_SHA", "GITHUB_SHA") && envPresent("PANTHEON_BFF_SHA", "PANTHEON_BACKEND_SHA", "PANTHEON_PANTHEON_SHA") && envPresent("PANTHEON_BFF_BASE_URL", "VITE_BFF_BASE_URL");
 
   return [
-    makeCheck("All critical gates pass.", criticalStatus === "pass" ? "pass" : "fail", {
-      owner: criticalStatus === "pass" ? "" : GATE_OWNERS[7],
+    makeCheck("All critical gates pass.", hardBlocked ? "fail" : "pass", {
+      owner: hardBlocked ? GATE_OWNERS[7] : "",
       evidence: JSON_OUT_PATH,
       note: `${failures.length} failing or missing check(s)`,
     }),

@@ -5,12 +5,12 @@ import path from "node:path";
 
 const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-dev.lovable.app");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
-const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
+const OLD_BFF_URL = trimTrailingSlash(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
-const REQUIRED_CORE_BFF_PATHS = ["/bff/v5/control-room"];
+const REQUIRED_CORE_BFF_PATHS = ["/bff/management/cockpit"];
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const probeStartedAt = Date.now();
@@ -177,7 +177,11 @@ try {
   await browser.close();
 }
 
-const containsBff = bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
+const observedIntendedBff =
+  requests.some((request) => request.url.startsWith(BFF_BASE)) ||
+  responses.some((response) => response.url.startsWith(BFF_BASE)) ||
+  coreResponses.some((response) => response.url?.startsWith(BFF_BASE));
+const containsBff = bundleText.includes(BFF_BASE) || html.includes(BFF_BASE) || observedIntendedBff;
 const containsOld = bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL);
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
 oldUrlHits.push(...textHits("bundle", bundleText, OLD_BFF_URL));

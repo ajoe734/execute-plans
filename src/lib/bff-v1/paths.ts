@@ -161,6 +161,10 @@ export const paths = {
   managementNlAsk: () => `${BASE}/management/nl/ask`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+  assistantMode: () => `${BASE}/assistant/mode`,
+  assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
+  assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
+  assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
 
 
 

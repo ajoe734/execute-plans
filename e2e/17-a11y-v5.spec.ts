@@ -359,9 +359,9 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
   test("ESC closes only the top overlay before closing the underlying drawer", async ({ page }) => {
     await gotoReady(page, "/management/sentinel", /Sentinel|Findings|critical|confidence/i);
 
-    const findingTrigger = await firstVisible(
-      page.locator("ul button").filter({ hasText: /critical|warning|watch/i }),
-    );
+    const findingTriggers = page.locator("ul button").filter({ hasText: /critical|warning|watch/i });
+    await expect(findingTriggers.first()).toBeVisible();
+    const findingTrigger = await firstVisible(findingTriggers);
     await findingTrigger.focus();
     await findingTrigger.click();
 

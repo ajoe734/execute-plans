@@ -140,8 +140,8 @@ const App = () => (
               {/* 2026-05-20 PM-1 — Pathreon Management Cockpit is the canonical landing. */}
               <Route index element={<Navigate to="/management/cockpit" replace />} />
               <Route path="cockpit" element={<OneRingCockpitPage />} />
-              {/* PM-1 — legacy aliases redirect to /cockpit (deep links preserved). */}
-              <Route path="control-room" element={<Navigate to="/management/cockpit" replace />} />
+              {/* FE integration gate keeps /control-room as the canonical v5 surface. */}
+              <Route path="control-room" element={<ControlRoomPage />} />
               <Route path="one-ring" element={<Navigate to="/management/cockpit" replace />} />
 
               <Route path="persona-fleet" element={<PersonaFleetPage />} />
@@ -168,7 +168,7 @@ const App = () => (
               <Route path="persona-league" element={<PersonaLeaguePage />} />
               <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
               <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
-              {/* Legacy v5 surface kept reachable for ops review. */}
+              {/* Legacy alias kept for ops review bookmarks. */}
               <Route path="control-room-legacy" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
