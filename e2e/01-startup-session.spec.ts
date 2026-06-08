@@ -34,12 +34,27 @@ const SERVING_MOCK_BANNER =
 type JsonRecord = Record<string, unknown>;
 
 function frontendUrl(path = "/"): string {
-  const base =
+  return urlFromBase(frontendBaseUrl(), path);
+}
+
+function frontendBaseUrl(): string {
+  return (
     process.env.PANTHEON_FE_BASE_URL ||
     process.env.FRONTEND_BASE_URL ||
     process.env.PLAYWRIGHT_BASE_URL ||
-    DEFAULT_FRONTEND_BASE_URL;
+    DEFAULT_FRONTEND_BASE_URL
+  );
+}
+
+function urlFromBase(base: string, path = "/"): string {
   return `${base.replace(/\/$/, "")}${path}`;
+}
+
+function sseOriginUrl(path = "/"): string {
+  const base =
+    process.env.PANTHEON_SSE_ORIGIN_URL ||
+    frontendBaseUrl();
+  return urlFromBase(base, path);
 }
 
 function bffUrl(path: string): string {
@@ -217,7 +232,7 @@ test.describe("F01 startup session", () => {
   test("opens the browser-native SSE EventSource stream", async ({ page }) => {
     const streamUrl = bffUrl("/bff/events/stream?channel=system");
 
-    await page.goto(frontendUrl("/"), { waitUntil: "domcontentloaded" });
+    await page.goto(sseOriginUrl("/"), { waitUntil: "domcontentloaded" });
 
     const opened = await page.evaluate(
       ({ url }) =>

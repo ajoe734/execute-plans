@@ -143,12 +143,44 @@ jobs:
           set -o pipefail
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
+      - name: Start PR frontend under test
+        id: pr_preview
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          VITE_BFF_MODE=live \
+          VITE_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
+          VITE_BFF_FALLBACK=strict \
+          npm run dev -- --host 127.0.0.1 --port 4173 > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
+          echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
+          for i in {1..60}; do
+            if curl -fsS "http://127.0.0.1:4173/" >/dev/null; then
+              echo "PR frontend ready at http://127.0.0.1:4173"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log"
+          exit 1
+
       - name: Playwright E2E
         id: e2e
         continue-on-error: true
         run: |
           set -o pipefail
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
+          FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FE_UNDER_TEST="http://127.0.0.1:4173"
+          fi
+          FRONTEND_BASE_URL="$FE_UNDER_TEST" \
+          PLAYWRIGHT_BASE_URL="$FE_UNDER_TEST" \
+          PANTHEON_FE_BASE_URL="$FE_UNDER_TEST" \
+          PANTHEON_SSE_ORIGIN_URL="${{ inputs.fe_base_url || 'https://pantheon-dev.lovable.app' }}" \
+          VITE_BFF_FALLBACK=strict \
+          BFF_FALLBACK=strict \
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
+          npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
       - name: Record gate step outcomes
         if: always()
@@ -164,6 +196,7 @@ jobs:
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
+            "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
           JSON
