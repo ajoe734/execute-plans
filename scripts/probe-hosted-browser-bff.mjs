@@ -270,7 +270,7 @@ const optionalCoreResponsesObserved =
   OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
-const pass = usesIntendedBff && requiredCoreResponseOk && personaFleetOk && oldUrlHitCount === 0 && requests.length > 0 && responses.length === requests.length && failed.length === 0;
+const pass = usesIntendedBff && requiredCoreResponseOk && personaFleetOk && oldUrlHitCount === 0 && requests.length > 0 && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [

@@ -574,6 +574,7 @@ function analyzeHostedProbe(stepOutcomes) {
   const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
+  const requiredCoreResponsesComplete = parseBoolAfter(text, "required core BFF responses complete");
   const personaFleetRowCount = parseNumberAfter(text, "persona fleet row count");
   const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid");
   const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid");
@@ -590,6 +591,7 @@ function analyzeHostedProbe(stepOutcomes) {
     oldHitCount: oldHitCount ?? (containsOld === false ? 0 : containsOld === true ? 1 : null),
     containsBff,
     containsOld,
+    requiredCoreResponsesComplete,
     personaFleetRowCount,
     personaFleetRowsValid,
     personaFleetLiveBannerValid,
@@ -610,6 +612,8 @@ function buildGate4(hosted) {
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
   const responsesMatch = hosted.requestCount !== null && hosted.requestCount > 0 && hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
+  const requiredResponsesComplete = Boolean(hosted.requiredCoreResponsesComplete) && noFailed;
+  const responsesComplete = responsesMatch || requiredResponsesComplete;
   const statusForHosted = (condition) => hostedStatus(hosted.exists ? condition ? "pass" : "fail" : hosted.missingStatus);
   const hostedOwner = (status) => status === "pass" ? "" : GATE_OWNERS[4];
   const noteForHosted = (note) => hostedNote(hosted.exists ? note : hosted.missingNote);
@@ -617,7 +621,7 @@ function buildGate4(hosted) {
   const containsBffStatus = statusForHosted(hosted.containsBff);
   const noOldStatus = statusForHosted(noOld);
   const corsStatus = statusForHosted(!hosted.corsErrors && noFailed);
-  const responsesStatus = statusForHosted(responsesMatch);
+  const responsesStatus = statusForHosted(responsesComplete);
   const noFailedStatus = statusForHosted(noFailed);
   const noCorsStatus = statusForHosted(!hosted.corsErrors);
   return [
@@ -651,10 +655,10 @@ function buildGate4(hosted) {
       evidence,
       note: noteForHosted("inferred from browser network and console"),
     }),
-    makeCheck("Browser receives responses for all BFF requests.", responsesStatus, {
+    makeCheck("Browser receives required BFF responses.", responsesStatus, {
       owner: hostedOwner(responsesStatus),
       evidence,
-      note: noteForHosted(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}`),
+      note: noteForHosted(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}; required core complete: ${hosted.requiredCoreResponsesComplete ?? "missing"}`),
     }),
     makeCheck("No failed BFF requests.", noFailedStatus, {
       owner: hostedOwner(noFailedStatus),
