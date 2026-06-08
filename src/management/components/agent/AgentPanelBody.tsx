@@ -1,7 +1,7 @@
 // Management AI chat panel — Pantheon BFF runtime ONLY.
 //
 // Runtime path:
-//   User → Lovable FE → POST /bff/management/nl/ask → Pantheon BFF
+//   User → Pantheon FE → POST /bff/management/nl/ask → Pantheon BFF
 //                                                 → OpenClaw gateway / Codex
 //
 // 2026-06-03e (anti-truncation v2 + image attachments):
@@ -24,7 +24,7 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound, FileText } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   activateAssistantControlMode,
@@ -33,6 +33,7 @@ import {
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
   fetchAssistantOrchestratorStatus,
+  generateAssistantDevDocs,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
@@ -42,6 +43,7 @@ import {
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
   type AssistantOrchestratorStatusResult,
+  type AssistantDevDocsGenerateResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -379,6 +381,40 @@ function AttachmentThumbs({ items, onRemove }: { items: ChatAttachment[]; onRemo
   );
 }
 
+type AssistantDevDocsOk = Extract<AssistantDevDocsGenerateResult, { ok: true }>;
+
+function latestFeatureSummary(turns: ChatTurn[]): string {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (turn.role !== "user") continue;
+    const text = turn.text.trim().replace(/\s+/g, " ");
+    if (text) return text.slice(0, 240);
+  }
+  return "Management AI conversation requested a Pantheon development change.";
+}
+
+function compactPath(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const parts = path.split("/").filter(Boolean);
+  return parts.slice(-4).join("/");
+}
+
+function devDocsReceiptText(result: AssistantDevDocsOk): string {
+  const archive = result.archiveLocations;
+  const lines = [
+    "SA/SD packet generated for supervisor/autoworker pickup.",
+    `packet: ${result.packetId}`,
+    `tasks: ${result.taskCount}`,
+    archive?.requirementCapture ? `requirements: ${archive.requirementCapture}` : null,
+    archive?.systemAnalysis ? `SA: ${archive.systemAnalysis}` : null,
+    archive?.systemDesign ? `SD: ${archive.systemDesign}` : null,
+    result.taskPacketQueued
+      ? `dev bridge queue: ${result.taskPacketQueuePath ?? "queued"}`
+      : "dev bridge queue: not queued",
+  ].filter((line): line is string => Boolean(line));
+  return lines.join("\n");
+}
+
 export function AgentPanelBody() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -406,6 +442,8 @@ export function AgentPanelBody() {
   const [controlReason, setControlReason] = useState("Management AI dev repair");
   const [controlBusy, setControlBusy] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
+  const [devDocsBusy, setDevDocsBusy] = useState(false);
+  const [devDocsNotice, setDevDocsNotice] = useState<AssistantDevDocsGenerateResult | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -530,6 +568,7 @@ export function AgentPanelBody() {
     setText("");
     setActionFeedback({});
     setResyncNotice(null);
+    setDevDocsNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     inputRef.current?.focus();
@@ -569,7 +608,6 @@ export function AgentPanelBody() {
     setTurns((prev) => {
       const merged = mergeTurns(prev, incoming);
       if (import.meta.env?.DEV) {
-        // eslint-disable-next-line no-console
         console.debug("[mgmtAi] resync", {
           sessionId: target,
           receivedFromBff: incoming.length,
@@ -596,6 +634,7 @@ export function AgentPanelBody() {
     setDegraded(null);
     setText("");
     setActionFeedback({});
+    setDevDocsNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     // Hydrate from local cache FIRST — switching never blanks the screen.
@@ -607,7 +646,6 @@ export function AgentPanelBody() {
       setResyncNotice(null);
     }
     if (import.meta.env?.DEV) {
-      // eslint-disable-next-line no-console
       console.debug("[mgmtAi] loadSession hydrated", { sessionId: id, cached: cached.length });
     }
     await resync(id);
@@ -720,6 +758,94 @@ export function AgentPanelBody() {
     }
   }, [refreshAssistantRuntimeStatus]);
 
+  const generateDevDocs = useCallback(async () => {
+    const targetSessionId = sessionId;
+    if (!targetSessionId || isClientSessionId(targetSessionId)) {
+      const result: AssistantDevDocsGenerateResult = {
+        ok: false,
+        kind: "failure",
+        statusCode: null,
+        message: "需要先送出一則訊息，讓 BFF 建立正式 session id。",
+      };
+      setDevDocsNotice(result);
+      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
+      return;
+    }
+
+    const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
+    if (!currentControlMode?.active) {
+      const result: AssistantDevDocsGenerateResult = {
+        ok: false,
+        kind: "failure",
+        statusCode: null,
+        message: "需要先啟用 control mode。",
+      };
+      setDevDocsNotice(result);
+      setControlError(null);
+      setControlDialogOpen(true);
+      toast({ title: "需要 Control mode", description: result.message });
+      return;
+    }
+
+    const ui = buildUiSnapshot();
+    const affectedModules = Array.from(new Set([
+      "execute-plans:management-ai",
+      "pantheon:bff-assistant",
+      "pantheon:openclaw-dev-bridge",
+      `route:${location.pathname}`,
+      ui.selectedEntity ? `${ui.selectedEntity.kind}:${ui.selectedEntity.id}` : "",
+    ].filter(Boolean)));
+
+    setDevDocsBusy(true);
+    setDevDocsNotice(null);
+    try {
+      const result = await generateAssistantDevDocs({
+        conversationId: targetSessionId,
+        featureSummary: latestFeatureSummary(turns),
+        affectedModules,
+        proposedOwner: "Codex",
+        proposedReviewer: "Supervisor",
+        archive: true,
+        emitTaskPacket: true,
+        queueTaskPacket: true,
+        extraContext: {
+          route: location.pathname,
+          pageLabel: nlCtx.pageLabel,
+          selectedEntity: ui.selectedEntity,
+          source: "execute-plans.management_ai_panel",
+        },
+      });
+      setDevDocsNotice(result);
+
+      if (result.ok) {
+        appendTurnTo(targetSessionId, {
+          id: turnId("a_devdocs"),
+          role: "assistant",
+          text: devDocsReceiptText(result),
+          createdAt: Date.now(),
+        });
+        toast({
+          title: "SA/SD 已產生",
+          description: result.taskPacketQueued ? "已送進 supervisor dev bridge inbox" : "已產生文件，尚未 queue task packet",
+        });
+        await refreshAssistantRuntimeStatus();
+      } else {
+        toast({ title: "SA/SD 失敗", description: result.message, variant: "destructive" });
+      }
+    } finally {
+      setDevDocsBusy(false);
+    }
+  }, [
+    sessionId,
+    assistantModeStatus,
+    buildUiSnapshot,
+    location.pathname,
+    nlCtx.pageLabel,
+    turns,
+    appendTurnTo,
+    refreshAssistantRuntimeStatus,
+  ]);
+
   // ---- Attachment handlers ----
   const addFiles = useCallback(async (files: File[]) => {
     setAttachmentError(null);
@@ -805,7 +931,6 @@ export function AgentPanelBody() {
     // Never send a client-only id to BFF — it will 404 / error.
     const sessionIdForBff = isClientSessionId(localSessionId) ? null : localSessionId;
     if (import.meta.env?.DEV) {
-      // eslint-disable-next-line no-console
       console.debug("[mgmtAi] sending", {
         sessionId: sessionIdForBff,
         localSessionId,
@@ -969,6 +1094,9 @@ export function AgentPanelBody() {
   const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
   const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
   const controlActive = Boolean(controlMode?.active);
+  const canGenerateDevDocs = Boolean(sessionId && !isClientSessionId(sessionId) && turns.length > 0 && !pending && !devDocsBusy);
+  const devDocsSystemDesignPath = devDocsNotice?.ok ? compactPath(devDocsNotice.archiveLocations?.systemDesign) : null;
+  const devDocsQueuePath = devDocsNotice?.ok ? compactPath(devDocsNotice.taskPacketQueuePath) : null;
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -1052,6 +1180,17 @@ export function AgentPanelBody() {
             </Button>
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void resync()} disabled={!sessionId}>
               <RefreshCcw className="h-3 w-3 mr-1" />Resync
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[10px]"
+              onClick={() => void generateDevDocs()}
+              disabled={!canGenerateDevDocs}
+              title={controlActive ? "產生 SA/SD 並送進 dev bridge" : "需要先啟用 control mode"}
+            >
+              {devDocsBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FileText className="h-3 w-3 mr-1" />}
+              SA/SD
             </Button>
             <Button
               size="sm"
@@ -1191,6 +1330,39 @@ export function AgentPanelBody() {
               className="text-muted-foreground hover:text-foreground"
               onClick={() => setResyncNotice(null)}
               aria-label="關閉提示"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {devDocsNotice && (
+          <div
+            className={`border-b px-2 py-1 text-[10px] flex items-start gap-1 ${
+              devDocsNotice.ok
+                ? "bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
+                : "bg-amber-500/10 text-amber-800 dark:text-amber-300"
+            }`}
+            title={devDocsNotice.ok ? (devDocsNotice.taskPacketQueuePath ?? devDocsNotice.packetId) : devDocsNotice.message}
+          >
+            <FileText className="h-3 w-3 mt-0.5 shrink-0" />
+            <span className="flex-1 min-w-0">
+              {devDocsNotice.ok ? (
+                <>
+                  SA/SD {devDocsNotice.packetId.slice(0, 18)} · tasks {devDocsNotice.taskCount}
+                  {devDocsNotice.taskPacketQueued ? " · queued" : " · not queued"}
+                  {devDocsSystemDesignPath ? <span className="font-mono"> · SD {devDocsSystemDesignPath}</span> : null}
+                  {devDocsQueuePath ? <span className="font-mono"> · inbox {devDocsQueuePath}</span> : null}
+                </>
+              ) : (
+                <>SA/SD 失敗：{devDocsNotice.message}</>
+              )}
+            </span>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setDevDocsNotice(null)}
+              aria-label="關閉 SA/SD 提示"
             >
               ×
             </button>

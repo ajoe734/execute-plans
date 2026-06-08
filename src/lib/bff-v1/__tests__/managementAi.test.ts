@@ -3,6 +3,7 @@ import {
   activateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
+  generateAssistantDevDocs,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -166,5 +167,97 @@ describe("Management AI control mode", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(403);
     expect(result.message).toContain("Kernel sessions are disabled");
+  });
+});
+
+describe("Management AI SA/SD dev bridge", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("posts archive and queue intent to the assistant dev-docs endpoint", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        packetId: "devdocs_mgmt_123",
+        conversationId: "mgmt-nl-123",
+        archiveLocations: {
+          requirementCapture: "docs/dev/devdocs_mgmt_123/requirement_capture.md",
+          systemAnalysis: "docs/dev/devdocs_mgmt_123/system_analysis.md",
+          systemDesign: "docs/dev/devdocs_mgmt_123/system_design.md",
+          taskBriefs: ["docs/dev/devdocs_mgmt_123/tasks/task_1.md"],
+        },
+        executionTasks: [{ taskId: "task_1" }],
+      },
+      meta: {
+        archived: true,
+        taskPacketQueued: true,
+        taskPacketQueueReceipt: {
+          queued: true,
+          path: "/repo/.orchestrator/assistant-dev-packets/pending/bridge_devdocs_mgmt_123.json",
+          taskCount: 1,
+        },
+        taskPacket: { packetId: "bridge_devdocs_mgmt_123" },
+      },
+    }, 201));
+    globalThis.fetch = fetchMock;
+
+    const result = await generateAssistantDevDocs({
+      conversationId: "mgmt-nl-123",
+      featureSummary: "Let Management AI create SA/SD and queue worker tasks",
+      affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
+      proposedOwner: "Codex",
+      proposedReviewer: "Supervisor",
+      archive: true,
+      emitTaskPacket: true,
+      queueTaskPacket: true,
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/dev-docs/generate");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      conversationId: "mgmt-nl-123",
+      featureSummary: "Let Management AI create SA/SD and queue worker tasks",
+      affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
+      proposedOwner: "Codex",
+      proposedReviewer: "Supervisor",
+      archive: true,
+      emitTaskPacket: true,
+      queueTaskPacket: true,
+    });
+    expect(result.packetId).toBe("devdocs_mgmt_123");
+    expect(result.archiveLocations?.systemDesign).toContain("system_design.md");
+    expect(result.taskPacketQueued).toBe(true);
+    expect(result.taskPacketQueuePath).toContain("bridge_devdocs_mgmt_123.json");
+    expect(result.taskCount).toBe(1);
+    expect(result.taskPacket?.packetId).toBe("bridge_devdocs_mgmt_123");
+  });
+
+  it("surfaces BFF control-mode precondition failures", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
+      detail: {
+        error: {
+          message: "Control mode is required before generating SA/SD artifacts.",
+        },
+      },
+    }, 403));
+
+    const result = await generateAssistantDevDocs({
+      conversationId: "mgmt-nl-123",
+      featureSummary: "Generate worker-ready SA/SD",
+    });
+
+    expect(result.kind).toBe("failure");
+    if (result.kind !== "failure") throw new Error("expected failure");
+    expect(result.statusCode).toBe(403);
+    expect(result.message).toContain("Control mode is required");
   });
 });

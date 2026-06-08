@@ -1,7 +1,7 @@
 // Management AI runtime client.
 //
 // Runtime path (per 2026-06-03 directive):
-//   User → Lovable FE → Pantheon BFF → OpenClaw gateway adapter / Codex provider
+//   User → Pantheon FE → Pantheon BFF → OpenClaw gateway adapter / Codex provider
 //                    ← Pantheon BFF ← provider
 //
 // FE rules enforced by this client:
@@ -102,6 +102,39 @@ export interface ActivateAssistantControlModeInput {
   idleTtlSeconds?: number;
   managementSessionId?: string | null;
 }
+
+export interface AssistantDevDocsArchiveLocations {
+  requirementCapture?: string | null;
+  systemAnalysis?: string | null;
+  systemDesign?: string | null;
+  taskBriefs: string[];
+}
+
+export interface AssistantDevDocsGenerateInput {
+  conversationId: string;
+  featureSummary: string;
+  affectedModules?: string[];
+  proposedOwner?: string;
+  proposedReviewer?: string;
+  archive?: boolean;
+  emitTaskPacket?: boolean;
+  queueTaskPacket?: boolean;
+  extraContext?: Record<string, unknown>;
+}
+
+export type AssistantDevDocsGenerateResult =
+  | {
+      ok: true;
+      kind: "ok";
+      packetId: string;
+      conversationId: string | null;
+      archiveLocations: AssistantDevDocsArchiveLocations | null;
+      taskPacketQueued: boolean;
+      taskPacketQueuePath: string | null;
+      taskCount: number;
+      taskPacket: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface ManagementAiAnswerOk {
   ok: true;
@@ -320,6 +353,30 @@ function adaptControlModeStatus(raw: unknown): AssistantControlModeStatus | null
   };
 }
 
+function adaptArchiveLocations(raw: unknown): AssistantDevDocsArchiveLocations | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    requirementCapture: asString(r.requirementCapture ?? r.requirement_capture) ?? null,
+    systemAnalysis: asString(r.systemAnalysis ?? r.system_analysis) ?? null,
+    systemDesign: asString(r.systemDesign ?? r.system_design) ?? null,
+    taskBriefs: asStringArray(r.taskBriefs ?? r.task_briefs) ?? [],
+  };
+}
+
+function extractBffFailureMessage(raw: unknown): string | null {
+  const parsed = asRecord(raw);
+  const detail = asRecord(parsed?.detail);
+  const error = asRecord(detail?.error);
+  return (
+    asString(error?.message) ??
+    asString(error?.details) ??
+    asString(detail?.message) ??
+    asString(parsed?.message) ??
+    null
+  );
+}
+
 function isDegraded(s: ProviderStatus | null): boolean {
   if (!s) return true;
   if (!s.used) return true;
@@ -483,6 +540,108 @@ export async function fetchAssistantOrchestratorStatus(
       providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
       openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
     },
+  };
+}
+
+export async function generateAssistantDevDocs(
+  input: AssistantDevDocsGenerateInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantDevDocsGenerateResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    conversationId: input.conversationId,
+    featureSummary: input.featureSummary,
+    affectedModules: input.affectedModules ?? [],
+    proposedOwner: input.proposedOwner,
+    proposedReviewer: input.proposedReviewer,
+    archive: input.archive ?? true,
+    emitTaskPacket: input.emitTaskPacket ?? true,
+    queueTaskPacket: input.queueTaskPacket ?? true,
+    extraContext: input.extraContext,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantDevDocsGenerate()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = asRecord(parsed?.data) ?? {};
+  const meta = asRecord(parsed?.meta) ?? {};
+  const queueReceipt = asRecord(meta.taskPacketQueueReceipt ?? meta.task_packet_queue_receipt);
+  const packetId = asString(data.packetId ?? data.packet_id);
+  if (!packetId) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no dev-doc packetId.",
+    };
+  }
+
+  const executionTasks = Array.isArray(data.executionTasks)
+    ? data.executionTasks
+    : Array.isArray(data.execution_tasks)
+      ? data.execution_tasks
+      : [];
+
+  return {
+    ok: true,
+    kind: "ok",
+    packetId,
+    conversationId: asString(data.conversationId ?? data.conversation_id) ?? null,
+    archiveLocations: adaptArchiveLocations(
+      meta.archiveLocations ??
+      meta.archive_locations ??
+      data.archiveLocations ??
+      data.archive_locations,
+    ),
+    taskPacketQueued: asBoolean(meta.taskPacketQueued ?? meta.task_packet_queued) ?? asBoolean(queueReceipt?.queued) ?? false,
+    taskPacketQueuePath: asString(queueReceipt?.path ?? queueReceipt?.inbox) ?? null,
+    taskCount: asNumber(meta.taskCount ?? meta.task_count ?? queueReceipt?.taskCount ?? queueReceipt?.task_count) ?? executionTasks.length,
+    taskPacket: asRecord(meta.taskPacket ?? meta.task_packet) ?? null,
   };
 }
 
