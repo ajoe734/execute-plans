@@ -748,16 +748,16 @@ function buildGate7(previousGates) {
   const priorChecks = Object.entries(previousGates)
     .filter(([gate]) => gate !== "7")
     .flatMap(([, checks]) => checks);
-  const criticalStatus = worstStatus(priorChecks.map((check) => check.status));
   const failures = priorChecks.filter((check) => ["fail", "missing"].includes(check.status));
+  const hardBlocked = failures.length > 0;
   const exceptionsFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
   const exceptionsPresent = Boolean(process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || exceptionsFile);
   const evidencePresent = auditFiles.length > 0;
   const shaRecorded = envPresent("PANTHEON_FRONTEND_SHA", "GITHUB_SHA") && envPresent("PANTHEON_BFF_SHA", "PANTHEON_BACKEND_SHA", "PANTHEON_PANTHEON_SHA") && envPresent("PANTHEON_BFF_BASE_URL", "VITE_BFF_BASE_URL");
 
   return [
-    makeCheck("All critical gates pass.", criticalStatus === "pass" ? "pass" : "fail", {
-      owner: criticalStatus === "pass" ? "" : GATE_OWNERS[7],
+    makeCheck("All critical gates pass.", hardBlocked ? "fail" : "pass", {
+      owner: hardBlocked ? GATE_OWNERS[7] : "",
       evidence: JSON_OUT_PATH,
       note: `${failures.length} failing or missing check(s)`,
     }),

@@ -554,6 +554,12 @@ async function installEventSourceRedirect(page: Page, baseUrl: string): Promise<
   );
 }
 
+async function installStrictFallbackRuntime(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
+  });
+}
+
 function collectPageFailures(page: Page): string[] {
   const failures: string[] = [];
   page.on("pageerror", (error) => failures.push(error.message));
@@ -665,6 +671,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     await harness.start();
     try {
       await installEventSourceRedirect(page, harness.baseUrl);
+      await installStrictFallbackRuntime(page);
       const counters = routeCounters();
       const failures = collectPageFailures(page);
       await installPerfRoutes(page, counters);
