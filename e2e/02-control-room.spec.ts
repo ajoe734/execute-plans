@@ -2,7 +2,7 @@
  * FE-INT-GATE-B02 / F02 - Control Room drill-down and empty-data gate.
  *
  * Coverage:
- *   1. /management/control-room renders KPI cards plus loop, sentinel, and
+ *   1. /management/control-room-legacy renders KPI cards plus loop, sentinel, and
  *      intervention data from the v5 control-room read model.
  *   2. Drill-down affordances can reach loop, sentinel, and intervention
  *      surfaces without relying on mock/seed fallback banners.
@@ -28,7 +28,7 @@ const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
 
-const CONTROL_ROOM_PATH = "/management/control-room";
+const CONTROL_ROOM_PATH = "/management/control-room-legacy";
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|fallback data|hybrid fallback active|seed fallback active|資料來源：seed/i;
 const CRASH_TEXT =

@@ -18,7 +18,7 @@ import type { AddressInfo } from "node:net";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
-const CONTROL_ROOM_PATH = "/management/control-room";
+const CONTROL_ROOM_PATH = "/management/control-room-legacy";
 const ENTITY_LIST_PATH = "/management/strategies";
 const SENTINEL_PATH = "/management/sentinel";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
