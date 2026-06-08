@@ -28,7 +28,7 @@
 | hybrid | `VITE_BFF_MODE=live`, `VITE_BFF_FALLBACK=auto` | demo / 探索 | 否 |
 | strict | `VITE_BFF_MODE=live`, `VITE_BFF_FALLBACK=strict` | 真整合測試 | 是 |
 | real-write smoke | `VITE_BFF_REAL_WRITES=true` | 安全寫入 / dry-run | 條件式 |
-| hosted browser | `PANTHEON_FE_BASE_URL=https://pantheon-dev.lovable.app` | 部署驗證 | 是 |
+| hosted browser | `PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io` | Pantheon-owned dev 部署驗證 | 是 |
 
 ---
 
