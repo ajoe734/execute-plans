@@ -16,7 +16,7 @@ const routes = [
   ["GET", "/bff/me"],
   ["POST", "/bff/auth/refresh"],
   ["POST", "/bff/logout"],
-  ["POST", "/bff/actions/strategies/strategy-dev/promote"],
+  ["POST", "/bff/actions/strategy/strategy-dev/promote"],
   ["GET", "/bff/strategies"],
   ["GET", "/bff/strategies/strategy-dev"],
   ["GET", "/bff/personas"],

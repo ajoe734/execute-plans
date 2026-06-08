@@ -46,11 +46,11 @@ const ENDPOINTS = [
   { batch: "P0-D", route: "/bff/skills", method: "POST", body: { name: "dev-probe" } },
 
   // ── P1-A — Action commands ────────────────────────────────────────
-  { batch: "P1-A", route: "/bff/actions/strategies/strategy-dev/promote_live", method: "POST", body: {} },
-  { batch: "P1-A", route: "/bff/actions/strategies/strategy-dev/pause", method: "POST", body: {} },
-  { batch: "P1-A", route: "/bff/actions/strategies/strategy-dev/throttle", method: "POST", body: { factor: 0.5 } },
-  { batch: "P1-A", route: "/bff/actions/strategies/strategy-dev/archive", method: "POST", body: {} },
-  { batch: "P1-A", route: "/bff/actions/strategies/strategy-dev/edit", method: "POST", body: { patch: {} } },
+  { batch: "P1-A", route: "/bff/actions/strategy/strategy-dev/promote_live", method: "POST", body: {} },
+  { batch: "P1-A", route: "/bff/actions/strategy/strategy-dev/pause", method: "POST", body: {} },
+  { batch: "P1-A", route: "/bff/actions/strategy/strategy-dev/throttle", method: "POST", body: { factor: 0.5 } },
+  { batch: "P1-A", route: "/bff/actions/strategy/strategy-dev/archive", method: "POST", body: {} },
+  { batch: "P1-A", route: "/bff/actions/strategy/strategy-dev/edit", method: "POST", body: { patch: {} } },
   { batch: "P1-A", route: "/bff/approvals/approval-dev/decide", method: "POST", body: { decision: "approve", reason: "probe" } },
   { batch: "P1-A", route: "/bff/command-confirmations/token-dev/confirm", method: "POST", body: {} },
 

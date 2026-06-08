@@ -13,6 +13,9 @@
  *     default: http://127.0.0.1:5173
  *   PANTHEON_BFF_BASE_URL, BFF_BASE_URL, or VITE_BFF_BASE_URL
  *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
+ *   PANTHEON_BROWSER_BFF_BASE_URL
+ *     optional browser-observed BFF base, usually the frontend origin when
+ *     the repo dev server proxies /bff to the upstream BFF.
  *   BFF_AUTH_TOKEN
  *     optional; when omitted the dev stub token is used.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
@@ -58,12 +61,21 @@ function sseOriginUrl(path = "/"): string {
 }
 
 function bffUrl(path: string): string {
+  return `${bffBaseUrl().replace(/\/$/, "")}${path}`;
+}
+
+function browserBffUrl(path: string): string {
+  const base = process.env.PANTHEON_BROWSER_BFF_BASE_URL || bffBaseUrl();
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+function bffBaseUrl(): string {
   const base =
     process.env.PANTHEON_BFF_BASE_URL ||
     process.env.BFF_BASE_URL ||
     process.env.VITE_BFF_BASE_URL ||
     DEFAULT_BFF_BASE_URL;
-  return `${base.replace(/\/$/, "")}${path}`;
+  return base;
 }
 
 function authHeader(): string {
@@ -230,7 +242,7 @@ test.describe("F01 startup session", () => {
   });
 
   test("opens the browser-native SSE EventSource stream", async ({ page }) => {
-    const streamUrl = bffUrl("/bff/events/stream?channel=system");
+    const streamUrl = browserBffUrl("/bff/events/stream?channel=system");
 
     await page.goto(sseOriginUrl("/"), { waitUntil: "domcontentloaded" });
 
