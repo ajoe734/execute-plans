@@ -14,9 +14,10 @@
 
 import { buildHeaders } from "./headers";
 import { paths } from "./paths";
+import { readBffEnv } from "./runtimeEnv";
 
 function detectBaseUrl(): string {
-  const env = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const env = readBffEnv();
   return env.VITE_BFF_BASE_URL ?? "";
 }
 
@@ -35,6 +36,32 @@ export interface ProviderStatus {
   operatorAction?: string | null;
   runId?: string | null;
 }
+
+export interface AssistantOpenClawToolPolicyStatus {
+  status?: string;
+  effectiveStatus?: string;
+  upstreamStatus?: string;
+  assistantCommandAllowed?: boolean;
+  assistantCommandEffective?: boolean;
+  assistantCommandUsable?: boolean;
+  assistantCommandStatus?: string;
+  assistantCommandTool?: string;
+  allowedTools?: string[];
+  effectiveTools?: string[];
+  allowedWorkflows?: string[];
+  defaultPosture?: string | null;
+  source?: string;
+}
+
+export interface AssistantOrchestratorStatus {
+  status?: string;
+  providerStatus?: ProviderStatus | null;
+  openclawToolPolicy?: AssistantOpenClawToolPolicyStatus | null;
+}
+
+export type AssistantOrchestratorStatusResult =
+  | { ok: true; kind: "ok"; status: AssistantOrchestratorStatus }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface ManagementAiAnswerOk {
   ok: true;
@@ -190,6 +217,44 @@ function adaptProviderStatus(raw: Partial<ProviderStatus> & Record<string, unkno
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    status: asString(r.status),
+    effectiveStatus: asString(r.effectiveStatus ?? r.effective_status),
+    upstreamStatus: asString(r.upstreamStatus ?? r.upstream_status),
+    assistantCommandAllowed: asBoolean(r.assistantCommandAllowed ?? r.assistant_command_allowed),
+    assistantCommandEffective: asBoolean(r.assistantCommandEffective ?? r.assistant_command_effective),
+    assistantCommandUsable: asBoolean(r.assistantCommandUsable ?? r.assistant_command_usable),
+    assistantCommandStatus: asString(r.assistantCommandStatus ?? r.assistant_command_status),
+    assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
+    allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
+    effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
+    allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
+    defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
+    source: asString(r.source),
+  };
+}
+
 function isDegraded(s: ProviderStatus | null): boolean {
   if (!s) return true;
   if (!s.used) return true;
@@ -296,6 +361,64 @@ export async function askManagementAi(
     uiActions: adaptUiActions(data),
   };
 
+}
+
+export async function fetchAssistantOrchestratorStatus(
+  options?: { signal?: AbortSignal },
+): Promise<AssistantOrchestratorStatusResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantOrchestratorStatus()}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: Record<string, unknown> } | undefined;
+  try { parsed = text ? JSON.parse(text) as { data?: Record<string, unknown> } : undefined; } catch { parsed = undefined; }
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = parsed?.data ?? {};
+  const providerRaw = asRecord(data.providerStatus ?? data.provider_status);
+  return {
+    ok: true,
+    kind: "ok",
+    status: {
+      status: asString(data.status),
+      providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
+      openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
+    },
+  };
 }
 
 // ---- Conversation resync ----

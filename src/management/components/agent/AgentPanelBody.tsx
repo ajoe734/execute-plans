@@ -25,11 +25,14 @@ import { toast } from "@/hooks/use-toast";
 import {
   askManagementAi,
   fetchManagementAiConversation,
+  fetchAssistantOrchestratorStatus,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
   type ManagementAiRecentTurn,
   type ProviderStatus,
+  type AssistantOpenClawToolPolicyStatus,
+  type AssistantOrchestratorStatusResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -233,6 +236,44 @@ function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
   );
 }
 
+function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null | undefined): boolean {
+  if (!policy) return false;
+  return policy.assistantCommandUsable ?? policy.assistantCommandAllowed ?? false;
+}
+
+function commandPolicyLabel(policy: AssistantOpenClawToolPolicyStatus | null | undefined): string {
+  if (!policy) return "assistant.command unknown";
+  return `assistant.command ${policy.assistantCommandStatus ?? (commandPolicyIsUsable(policy) ? "usable" : "blocked")}`;
+}
+
+function ToolPolicyPill({ policy, failure }: {
+  policy?: AssistantOpenClawToolPolicyStatus | null;
+  failure?: Extract<AssistantOrchestratorStatusResult, { ok: false }>;
+}) {
+  if (failure) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+        title={failure.message}
+      >
+        OpenClaw status unavailable
+      </span>
+    );
+  }
+  const usable = commandPolicyIsUsable(policy);
+  const cls = usable
+    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
+      title={`OpenClaw ${policy?.status ?? "unknown"} / upstream ${policy?.upstreamStatus ?? "unknown"}`}
+    >
+      {commandPolicyLabel(policy)}
+    </span>
+  );
+}
+
 function ProviderTechDetails({ s }: { s: ProviderStatus }) {
   const rows: Array<[string, string | null | undefined]> = [
     ["reason", s.reason],
@@ -309,6 +350,7 @@ export function AgentPanelBody() {
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [orchestratorStatus, setOrchestratorStatus] = useState<AssistantOrchestratorStatusResult | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -321,6 +363,11 @@ export function AgentPanelBody() {
   // Active-session pending flag — drives input/submit disable & shimmer.
   const pending = sessionId ? !!pendingSessions[sessionId] : false;
 
+  const refreshOrchestratorStatus = useCallback(async () => {
+    const res = await fetchAssistantOrchestratorStatus();
+    setOrchestratorStatus(res);
+  }, []);
+
   // Unmount: abort any still-running requests so we don't leak fetches.
   useEffect(() => {
     const map = inflightRef.current;
@@ -329,6 +376,10 @@ export function AgentPanelBody() {
       map.clear();
     };
   }, []);
+
+  useEffect(() => {
+    void refreshOrchestratorStatus();
+  }, [refreshOrchestratorStatus]);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -432,6 +483,7 @@ export function AgentPanelBody() {
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
+    void refreshOrchestratorStatus();
     // Client-side temp ids are not known to BFF — skip remote fetch.
     if (isClientSessionId(target)) {
       setResyncNotice("此對話尚未由 BFF 建立 session id（仍為本地暫存），送出下一則訊息後會自動同步。");
@@ -474,7 +526,7 @@ export function AgentPanelBody() {
     } else {
       setResyncNotice(null);
     }
-  }, [sessionId]);
+  }, [sessionId, refreshOrchestratorStatus]);
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
@@ -802,6 +854,8 @@ export function AgentPanelBody() {
   };
 
   const canSubmit = (text.trim().length > 0 || pendingAttachments.length > 0) && !pending;
+  const toolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
+  const toolPolicyFailure = orchestratorStatus?.kind === "failure" ? orchestratorStatus : undefined;
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -873,12 +927,18 @@ export function AgentPanelBody() {
             {sessionId ? `session ${sessionId.slice(0, 10)}…` : "new session"}
           </span>
           <span className="text-[10px] text-muted-foreground">· {turns.length} 則訊息</span>
+          {orchestratorStatus && (
+            <ToolPolicyPill policy={toolPolicy} failure={toolPolicyFailure} />
+          )}
           <div className="ml-auto flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={startNewConversation}>
               新對話
             </Button>
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void resync()} disabled={!sessionId}>
               <RefreshCcw className="h-3 w-3 mr-1" />Resync
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void refreshOrchestratorStatus()}>
+              OpenClaw
             </Button>
           </div>
         </div>
@@ -897,6 +957,11 @@ export function AgentPanelBody() {
               </a>
             )}
             {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
+            {toolPolicy && (
+              <span className="text-[10px] text-muted-foreground font-mono">
+                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"}
+              </span>
+            )}
           </div>
         )}
 

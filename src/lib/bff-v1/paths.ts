@@ -161,6 +161,7 @@ export const paths = {
   managementNlAsk: () => `${BASE}/management/nl/ask`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+  assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
 
 
 
