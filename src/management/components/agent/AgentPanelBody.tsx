@@ -16,14 +16,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2 } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
+  activateAssistantControlMode,
   askManagementAi,
+  deactivateAssistantControlMode,
+  fetchAssistantModeStatus,
   fetchManagementAiConversation,
   fetchAssistantOrchestratorStatus,
   type ManagementAiResult,
@@ -32,6 +39,8 @@ import {
   type ManagementAiRecentTurn,
   type ProviderStatus,
   type AssistantOpenClawToolPolicyStatus,
+  type AssistantControlModeStatus,
+  type AssistantModeStatusResult,
   type AssistantOrchestratorStatusResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -274,6 +283,45 @@ function ToolPolicyPill({ policy, failure }: {
   );
 }
 
+function controlModeLabel(status: AssistantControlModeStatus | null | undefined): string {
+  if (!status) return "control unknown";
+  if (status.active) return `control ${status.mode ?? "active"}`;
+  return "control inactive";
+}
+
+function ControlModePill({ status, failure }: {
+  status?: AssistantModeStatusResult | null;
+  failure?: Extract<AssistantModeStatusResult, { ok: false }>;
+}) {
+  if (failure) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+        title={failure.message}
+      >
+        control unavailable
+      </span>
+    );
+  }
+  const kernelEnabled = status?.ok ? status.status.kernelEnabled : undefined;
+  const controlMode = status?.ok ? status.status.controlMode : null;
+  const active = Boolean(controlMode?.active);
+  const cls = active
+    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : kernelEnabled
+      ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+      : "border-muted-foreground/30 bg-muted/40 text-muted-foreground";
+  const kernelLabel = kernelEnabled === true ? "kernel on" : kernelEnabled === false ? "kernel off" : "kernel unknown";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
+      title={`${kernelLabel} / ${controlModeLabel(controlMode)} / ${controlMode?.reason ?? controlMode?.state ?? "unknown"}`}
+    >
+      {kernelLabel} · {controlModeLabel(controlMode)}
+    </span>
+  );
+}
+
 function ProviderTechDetails({ s }: { s: ProviderStatus }) {
   const rows: Array<[string, string | null | undefined]> = [
     ["reason", s.reason],
@@ -351,6 +399,13 @@ export function AgentPanelBody() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [orchestratorStatus, setOrchestratorStatus] = useState<AssistantOrchestratorStatusResult | null>(null);
+  const [assistantModeStatus, setAssistantModeStatus] = useState<AssistantModeStatusResult | null>(null);
+  const [controlDialogOpen, setControlDialogOpen] = useState(false);
+  const [controlPassphrase, setControlPassphrase] = useState("");
+  const [controlTargetMode, setControlTargetMode] = useState<"kernel_debug" | "kernel_repair">("kernel_repair");
+  const [controlReason, setControlReason] = useState("Management AI dev repair");
+  const [controlBusy, setControlBusy] = useState(false);
+  const [controlError, setControlError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -363,9 +418,13 @@ export function AgentPanelBody() {
   // Active-session pending flag — drives input/submit disable & shimmer.
   const pending = sessionId ? !!pendingSessions[sessionId] : false;
 
-  const refreshOrchestratorStatus = useCallback(async () => {
-    const res = await fetchAssistantOrchestratorStatus();
-    setOrchestratorStatus(res);
+  const refreshAssistantRuntimeStatus = useCallback(async () => {
+    const [orchestrator, mode] = await Promise.all([
+      fetchAssistantOrchestratorStatus(),
+      fetchAssistantModeStatus(),
+    ]);
+    setOrchestratorStatus(orchestrator);
+    setAssistantModeStatus(mode);
   }, []);
 
   // Unmount: abort any still-running requests so we don't leak fetches.
@@ -378,8 +437,8 @@ export function AgentPanelBody() {
   }, []);
 
   useEffect(() => {
-    void refreshOrchestratorStatus();
-  }, [refreshOrchestratorStatus]);
+    void refreshAssistantRuntimeStatus();
+  }, [refreshAssistantRuntimeStatus]);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -483,7 +542,7 @@ export function AgentPanelBody() {
   const resync = useCallback(async (id?: string | null) => {
     const target = id ?? sessionId;
     if (!target) return;
-    void refreshOrchestratorStatus();
+    void refreshAssistantRuntimeStatus();
     // Client-side temp ids are not known to BFF — skip remote fetch.
     if (isClientSessionId(target)) {
       setResyncNotice("此對話尚未由 BFF 建立 session id（仍為本地暫存），送出下一則訊息後會自動同步。");
@@ -526,7 +585,7 @@ export function AgentPanelBody() {
     } else {
       setResyncNotice(null);
     }
-  }, [sessionId, refreshOrchestratorStatus]);
+  }, [sessionId, refreshAssistantRuntimeStatus]);
 
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
@@ -610,6 +669,56 @@ export function AgentPanelBody() {
       [key]: result.ok ? "已執行" : (result.reason ?? "未執行"),
     }));
   }, [navigate, searchParams, setSearchParams]);
+
+  const activateControlMode = useCallback(async () => {
+    const passphrase = controlPassphrase.trim();
+    if (!passphrase) {
+      setControlError("需要 passphrase");
+      return;
+    }
+    setControlBusy(true);
+    setControlError(null);
+    try {
+      const result = await activateAssistantControlMode({
+        passphrase,
+        mode: controlTargetMode,
+        reason: controlReason.trim() || "Management AI control mode",
+        ttlSeconds: 900,
+        idleTtlSeconds: 300,
+        managementSessionId: sessionId && !isClientSessionId(sessionId) ? sessionId : null,
+      });
+      setControlPassphrase("");
+      if (result.kind === "failure") {
+        setControlError(result.message);
+        return;
+      }
+      toast({
+        title: "Control mode active",
+        description: result.controlMode.mode ?? controlTargetMode,
+      });
+      setControlDialogOpen(false);
+      await refreshAssistantRuntimeStatus();
+    } finally {
+      setControlBusy(false);
+    }
+  }, [controlPassphrase, controlTargetMode, controlReason, sessionId, refreshAssistantRuntimeStatus]);
+
+  const deactivateControlMode = useCallback(async () => {
+    setControlBusy(true);
+    setControlError(null);
+    try {
+      const result = await deactivateAssistantControlMode();
+      if (result.kind === "failure") {
+        setControlError(result.message);
+        return;
+      }
+      toast({ title: "Control mode inactive" });
+      setControlDialogOpen(false);
+      await refreshAssistantRuntimeStatus();
+    } finally {
+      setControlBusy(false);
+    }
+  }, [refreshAssistantRuntimeStatus]);
 
   // ---- Attachment handlers ----
   const addFiles = useCallback(async (files: File[]) => {
@@ -856,6 +965,10 @@ export function AgentPanelBody() {
   const canSubmit = (text.trim().length > 0 || pendingAttachments.length > 0) && !pending;
   const toolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
   const toolPolicyFailure = orchestratorStatus?.kind === "failure" ? orchestratorStatus : undefined;
+  const assistantModeFailure = assistantModeStatus?.kind === "failure" ? assistantModeStatus : undefined;
+  const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
+  const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
+  const controlActive = Boolean(controlMode?.active);
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -921,7 +1034,7 @@ export function AgentPanelBody() {
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
       >
-        <div className="border-b px-2 py-1 flex items-center gap-2 bg-muted/20">
+        <div className="border-b px-2 py-1 flex flex-wrap items-center gap-2 bg-muted/20">
           <span className="text-[11px] font-medium">Management AI</span>
           <span className="text-[10px] text-muted-foreground">
             {sessionId ? `session ${sessionId.slice(0, 10)}…` : "new session"}
@@ -930,6 +1043,9 @@ export function AgentPanelBody() {
           {orchestratorStatus && (
             <ToolPolicyPill policy={toolPolicy} failure={toolPolicyFailure} />
           )}
+          {assistantModeStatus && (
+            <ControlModePill status={assistantModeStatus} failure={assistantModeFailure} />
+          )}
           <div className="ml-auto flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={startNewConversation}>
               新對話
@@ -937,11 +1053,112 @@ export function AgentPanelBody() {
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void resync()} disabled={!sessionId}>
               <RefreshCcw className="h-3 w-3 mr-1" />Resync
             </Button>
-            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void refreshOrchestratorStatus()}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-[10px]"
+              onClick={() => {
+                setControlError(null);
+                setControlDialogOpen(true);
+              }}
+            >
+              <KeyRound className="h-3 w-3 mr-1" />Control
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void refreshAssistantRuntimeStatus()}>
               OpenClaw
             </Button>
           </div>
         </div>
+
+        <Dialog
+          open={controlDialogOpen}
+          onOpenChange={(open) => {
+            setControlDialogOpen(open);
+            if (!open) {
+              setControlPassphrase("");
+              setControlError(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md gap-3">
+            <DialogHeader>
+              <DialogTitle className="text-base">Control mode</DialogTitle>
+              <DialogDescription className="text-xs">
+                {kernelEnabled ? controlModeLabel(controlMode) : "kernel off"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="mgmt-ai-control-passphrase" className="text-xs">Passphrase</Label>
+                <Input
+                  id="mgmt-ai-control-passphrase"
+                  type="password"
+                  autoComplete="off"
+                  value={controlPassphrase}
+                  onChange={(e) => setControlPassphrase(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Mode</Label>
+                  <Select
+                    value={controlTargetMode}
+                    onValueChange={(value) => setControlTargetMode(value as "kernel_debug" | "kernel_repair")}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kernel_debug">kernel_debug</SelectItem>
+                      <SelectItem value="kernel_repair">kernel_repair</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mgmt-ai-control-reason" className="text-xs">Reason</Label>
+                  <Input
+                    id="mgmt-ai-control-reason"
+                    value={controlReason}
+                    onChange={(e) => setControlReason(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="rounded border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+                <div>kernel={kernelEnabled ? "on" : "off"}</div>
+                <div>state={controlMode?.state ?? "unknown"}</div>
+                {controlMode?.mode && <div>mode={controlMode.mode}</div>}
+                {controlMode?.idleExpiresAt && <div>idle={controlMode.idleExpiresAt}</div>}
+              </div>
+              {controlError && (
+                <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+                  {controlError}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void deactivateControlMode()}
+                disabled={controlBusy || !controlActive}
+              >
+                Deactivate
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1"
+                onClick={() => void activateControlMode()}
+                disabled={controlBusy || !kernelEnabled}
+              >
+                {controlBusy ? <><Loader2 className="h-3 w-3 animate-spin" />Activating</> : "Activate"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
