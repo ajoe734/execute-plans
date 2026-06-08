@@ -87,7 +87,7 @@ export const OneRingCockpitPage = () => {
 const FLEET: ManagementPersonaFleetRow[] = [
   {
     personaId: "persona-crypto",
-    personaName: "Crypto Persona",
+    personaName: "Crypto Macro Persona",
     owner: "pathreon-management",
     ooda: "Act",
     autonomy: "supervised",
@@ -208,7 +208,10 @@ export const PersonaFleetPage = () => {
               const probe = isDevProbe(r);
               return (
                 <tr key={r.personaId} className={"border-b border-border/50 " + (retired ? "opacity-60" : "")}>
-                  <td className="px-3 py-2 font-mono">{r.personaId}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-foreground">{r.personaName || r.personaId}</div>
+                    <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.personaId}</div>
+                  </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
                   <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
