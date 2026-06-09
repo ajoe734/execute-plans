@@ -24,6 +24,25 @@ npm run lint         # lint
 `front-ai-trading-system` 專案。Dev frontend 不再以 Lovable publish 狀態作為
 host 或驗收來源；請從 Pantheon dev 環境服務 `execute-plans` build。
 
+### Branch / deploy policy
+
+`main` 是這個 repo 作為 Lovable 專案時留下的歷史整合線。現在 dev frontend
+改由 Pantheon-owned dev 環境部署後，日常開發規範如下：
+
+- `dev`：日常 frontend integration branch，也是 Pantheon dev FE deployment
+  的來源。
+- feature / repair / Codex task branches：PR target 預設為 `dev`。
+- `main`：只在明確 promotion、stable cut 或一次性 repo bootstrap 時使用。
+- 不再用 Lovable publish 狀態判斷 dev 是否完成；必須以 `execute-plans`
+  commit、Pantheon dev FE deployment、direct browser/BFF integration gate 為準。
+
+宣稱「已 publish 到 dev」前，至少要能指出：
+
+- `execute-plans` commit 已在 `dev`。
+- dev FE host 已由該 commit build/deploy。
+- `Pantheon FE-BFF Integration Gate` 或等價 probe 已通過 direct
+  execute-plans frontend + Pantheon dev BFF。
+
 目前 dev FE / BFF 目標：
 
 - FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
@@ -218,7 +237,9 @@ npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
 ```
 
-CI workflow: `.github/workflows/pantheon-integration-gate.yml`（`workflow_dispatch`，需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；`PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
+CI workflow: `.github/workflows/pantheon-integration-gate.yml`（PR、`dev`/`main`
+push、`workflow_dispatch`；需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
+`PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
 證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
 
 ## 相關文件
