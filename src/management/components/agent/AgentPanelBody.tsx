@@ -46,6 +46,7 @@ import {
   type AssistantOpenClawToolPolicyStatus,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
+  type AssistantOrchestratorStatus,
   type AssistantOrchestratorStatusResult,
   type AssistantDevDocsGenerateResult,
   type AssistantProviderReauthResult,
@@ -335,6 +336,72 @@ function controlModeLabel(status: AssistantControlModeStatus | null | undefined)
   if (!status) return "control unknown";
   if (status.active) return `control ${status.mode ?? "active"}`;
   return "control inactive";
+}
+
+function taskStatusCounts(tasks: AssistantOrchestratorStatus["tasks"]): string {
+  const counts = new Map<string, number>();
+  for (const task of tasks ?? []) {
+    const key = task.status ?? "unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([status, count]) => `${status}:${count}`).join(" · ") || "none";
+}
+
+function compactList(items: Array<string | undefined>, limit = 3): string {
+  const values = items.filter((item): item is string => Boolean(item));
+  if (values.length <= limit) return values.join(", ");
+  return `${values.slice(0, limit).join(", ")} +${values.length - limit}`;
+}
+
+function SystemStatusDetails({ status }: { status: AssistantOrchestratorStatus | null | undefined }) {
+  if (!status) return null;
+  const supervisor = status.supervisor;
+  const provider = status.providerReadiness;
+  const bridge = status.assistantDevBridge;
+  const inbox = bridge?.inbox;
+  const tasks = status.tasks ?? [];
+  const activeTasks = tasks
+    .filter((task) => ["in_progress", "running", "review_approved", "todo"].includes(task.status ?? ""))
+    .slice(0, 4);
+  const execution = supervisor?.modeOccupancy?.execution;
+  const sourceSummary = compactList((status.sourceRefs ?? []).map((ref) => `${ref.sourceType ?? ref.path}:${ref.status ?? (ref.available ? "ok" : "missing")}`), 4);
+  const taskSummary = taskStatusCounts(tasks);
+
+  return (
+    <details className="w-full group rounded border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground">
+      <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-2 gap-y-0.5 list-none">
+        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
+        <span className="font-medium text-foreground">System</span>
+        <span>snapshot={status.snapshotAt ?? "unknown"}</span>
+        <span>supervisor={supervisor?.lifecycle ?? "unknown"}/{supervisor?.modeStatus ?? "unknown"}</span>
+        <span>tasks={tasks.length}</span>
+        <span>bridge={bridge?.status ?? "unknown"}:p{inbox?.pendingCount ?? 0}/f{inbox?.failedCount ?? 0}</span>
+      </summary>
+      <div className="mt-1 grid gap-1 sm:grid-cols-2">
+        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
+          <div>project={status.project ?? "unknown"}</div>
+          <div>provider={provider?.providerName ?? provider?.provider ?? "unknown"} ready={String(provider?.ready ?? false)} read={String(provider?.capabilities?.read ?? false)} repair={String(provider?.capabilities?.repairWrite ?? false)}</div>
+          <div>workspace={provider?.repairWorkspace?.status ?? "unknown"} writable={String(provider?.repairWorkspace?.writable ?? false)} worktrees={provider?.repairWorkspace?.worktreeCount ?? 0}</div>
+          <div>supervisor_focus={supervisor?.focusMode ?? "unknown"} execution={execution ? `r${execution.running ?? 0}/p${execution.pending ?? 0}/q${execution.queued ?? 0}` : "unknown"}</div>
+        </div>
+        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
+          <div>dev_bridge={bridge?.status ?? "unknown"} pending={inbox?.pendingCount ?? 0} processed={inbox?.processedCount ?? 0} failed={inbox?.failedCount ?? 0}</div>
+          <div>sources={sourceSummary || "none"}</div>
+          <div>coordination=files:{status.coordination?.fileCount ?? 0} features:{status.coordination?.featureCount ?? 0}</div>
+          <div>task_status={taskSummary}</div>
+        </div>
+      </div>
+      {activeTasks.length > 0 && (
+        <div className="mt-1 space-y-0.5 font-mono">
+          {activeTasks.map((task) => (
+            <div key={task.id ?? task.title} className="truncate" title={task.next ?? task.title ?? task.id}>
+              {task.status ?? "unknown"}:{task.owner ?? "?"}:{task.id ?? task.title}
+            </div>
+          ))}
+        </div>
+      )}
+    </details>
+  );
 }
 
 function ControlModePill({ status, failure }: {
@@ -1526,7 +1593,7 @@ export function AgentPanelBody() {
           </DialogContent>
         </Dialog>
 
-        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId || orchestratorStatus?.ok) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
             {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
             {lastLinks.audit && (
@@ -1545,6 +1612,7 @@ export function AgentPanelBody() {
                 OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"}
               </span>
             )}
+            {orchestratorStatus?.ok && <SystemStatusDetails status={orchestratorStatus.status} />}
           </div>
         )}
 
