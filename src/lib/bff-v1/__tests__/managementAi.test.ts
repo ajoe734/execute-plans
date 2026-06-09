@@ -4,8 +4,10 @@ import {
   askManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
+  fetchAssistantProviderReauthStatus,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
+  startAssistantProviderReauth,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -169,6 +171,100 @@ describe("Management AI control mode", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(403);
     expect(result.message).toContain("Kernel sessions are disabled");
+  });
+});
+
+
+describe("Management AI provider reauth", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("starts Codex provider reauth through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "codex",
+        status: "pending",
+        reauth_session_id: "reauth_123",
+        verification_uri: "https://github.com/login/device",
+        user_code: "ABCD-EFGH",
+        expires_at: "2026-06-09T05:30:00Z",
+        interval_seconds: 5,
+        credential_exchange: {
+          bff_handles_credentials: false,
+          frontend_handles_credentials: false,
+          method: "device_flow",
+        },
+      },
+    }, 202));
+    globalThis.fetch = fetchMock;
+
+    const result = await startAssistantProviderReauth({
+      provider: "codex",
+      reason: "CODEX_AUTH_UNAVAILABLE",
+      traceId: "mnl-trace-test",
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/provider/reauth");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "codex",
+      reason: "CODEX_AUTH_UNAVAILABLE",
+      traceId: "mnl-trace-test",
+    });
+    expect(result.reauth.reauthSessionId).toBe("reauth_123");
+    expect(result.reauth.verificationUri).toBe("https://github.com/login/device");
+    expect(result.reauth.userCode).toBe("ABCD-EFGH");
+    expect(result.reauth.credentialExchange?.bffHandlesCredentials).toBe(false);
+    expect(result.reauth.credentialExchange?.frontendHandlesCredentials).toBe(false);
+  });
+
+  it("reads provider reauth status with provider query", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "codex",
+        status: "authorized",
+        reauthSessionId: "reauth_123",
+        verificationUriComplete: "https://github.com/login/device?user_code=ABCD-EFGH",
+        userCode: "ABCD-EFGH",
+      },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchAssistantProviderReauthStatus("reauth_123", "codex");
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/provider/reauth/reauth_123?provider=codex");
+    expect(result.reauth.status).toBe("authorized");
+    expect(result.reauth.verificationUriComplete).toContain("user_code=ABCD-EFGH");
+  });
+
+  it("surfaces provider reauth control-mode precondition failures", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
+      detail: {
+        error: {
+          message: "Assistant dev workflow requires active control mode",
+        },
+      },
+    }, 409));
+
+    const result = await startAssistantProviderReauth({ provider: "codex" });
+
+    expect(result.kind).toBe("failure");
+    if (result.kind !== "failure") throw new Error("expected failure");
+    expect(result.statusCode).toBe(409);
+    expect(result.message).toContain("active control mode");
   });
 });
 

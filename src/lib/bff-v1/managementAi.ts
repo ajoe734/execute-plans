@@ -175,6 +175,35 @@ export type AssistantRepairWorktreePrepareResult =
     }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
+export interface AssistantProviderCredentialExchange {
+  bffHandlesCredentials?: boolean;
+  frontendHandlesCredentials?: boolean;
+  method?: string;
+  [key: string]: unknown;
+}
+
+export interface AssistantProviderReauthSession {
+  provider: string | null;
+  status: string | null;
+  reauthSessionId: string;
+  verificationUri: string | null;
+  verificationUriComplete: string | null;
+  userCode: string | null;
+  expiresAt: string | null;
+  intervalSeconds: number | null;
+  credentialExchange: AssistantProviderCredentialExchange | null;
+}
+
+export interface AssistantProviderReauthInput {
+  provider?: string;
+  reason?: string;
+  traceId?: string;
+}
+
+export type AssistantProviderReauthResult =
+  | { ok: true; kind: "ok"; reauth: AssistantProviderReauthSession }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
 export interface ManagementAiAnswerOk {
   ok: true;
   kind: "ok";
@@ -436,6 +465,35 @@ function adaptRepairMetadata(raw: unknown): AssistantRepairMetadata | null {
     requireClean,
     repo_key: repoKey,
     repoKey,
+  };
+}
+
+function adaptProviderCredentialExchange(raw: unknown): AssistantProviderCredentialExchange | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    ...r,
+    bffHandlesCredentials: asBoolean(r.bffHandlesCredentials ?? r.bff_handles_credentials),
+    frontendHandlesCredentials: asBoolean(r.frontendHandlesCredentials ?? r.frontend_handles_credentials),
+    method: asString(r.method),
+  };
+}
+
+function adaptProviderReauthSession(raw: unknown): AssistantProviderReauthSession | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const reauthSessionId = asString(r.reauthSessionId ?? r.reauth_session_id ?? r.sessionId ?? r.session_id);
+  if (!reauthSessionId) return null;
+  return {
+    provider: asString(r.provider) ?? null,
+    status: asString(r.status) ?? null,
+    reauthSessionId,
+    verificationUri: asString(r.verificationUri ?? r.verification_uri) ?? null,
+    verificationUriComplete: asString(r.verificationUriComplete ?? r.verification_uri_complete) ?? null,
+    userCode: asString(r.userCode ?? r.user_code) ?? null,
+    expiresAt: asString(r.expiresAt ?? r.expires_at) ?? null,
+    intervalSeconds: asNumber(r.intervalSeconds ?? r.interval_seconds) ?? null,
+    credentialExchange: adaptProviderCredentialExchange(r.credentialExchange ?? r.credential_exchange),
   };
 }
 
@@ -719,6 +777,147 @@ export async function generateAssistantDevDocs(
     taskCount: asNumber(meta.taskCount ?? meta.task_count ?? queueReceipt?.taskCount ?? queueReceipt?.task_count) ?? executionTasks.length,
     taskPacket: asRecord(meta.taskPacket ?? meta.task_packet) ?? null,
   };
+}
+
+export async function startAssistantProviderReauth(
+  input: AssistantProviderReauthInput = {},
+  options?: { signal?: AbortSignal },
+): Promise<AssistantProviderReauthResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    provider: input.provider ?? "codex",
+    reason: input.reason,
+    traceId: input.traceId,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviderReauth()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const reauth = adaptProviderReauthSession(parsed?.data);
+  if (!reauth) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no provider reauth session.",
+    };
+  }
+  return { ok: true, kind: "ok", reauth };
+}
+
+export async function fetchAssistantProviderReauthStatus(
+  sessionId: string,
+  provider = "codex",
+  options?: { signal?: AbortSignal },
+): Promise<AssistantProviderReauthResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviderReauthStatus(sessionId, provider)}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = asRecord(parsed?.data) ?? {};
+  const reauth = adaptProviderReauthSession({
+    ...data,
+    reauthSessionId: data.reauthSessionId ?? data.reauth_session_id ?? sessionId,
+    provider: data.provider ?? provider,
+  });
+  if (!reauth) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no provider reauth session status.",
+    };
+  }
+  return { ok: true, kind: "ok", reauth };
 }
 
 export async function prepareAssistantRepairWorktree(
