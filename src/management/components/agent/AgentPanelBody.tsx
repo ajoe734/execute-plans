@@ -36,6 +36,7 @@ import {
   fetchAssistantOrchestratorStatus,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
+  startAssistantProviderReauth,
   type AssistantRepairMetadata,
   type ManagementAiResult,
   type ManagementAiUiAction,
@@ -47,6 +48,7 @@ import {
   type AssistantModeStatusResult,
   type AssistantOrchestratorStatusResult,
   type AssistantDevDocsGenerateResult,
+  type AssistantProviderReauthResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -368,6 +370,40 @@ function ControlModePill({ status, failure }: {
   );
 }
 
+function ProviderReauthNotice({ result }: { result: AssistantProviderReauthResult }) {
+  if (!result.ok) {
+    return (
+      <div className="mt-1.5 rounded border border-amber-500/40 bg-background/60 px-2 py-1.5 text-[10px] text-amber-800 dark:text-amber-300">
+        Reauth 失敗：{result.message}
+      </div>
+    );
+  }
+
+  const r = result.reauth;
+  const verificationHref = r.verificationUriComplete ?? r.verificationUri;
+  return (
+    <div className="mt-1.5 rounded border border-amber-500/40 bg-background/60 px-2 py-1.5 text-[10px] text-foreground/80 space-y-1">
+      <div className="font-medium text-amber-800 dark:text-amber-300">
+        Codex reauth {r.status ?? "pending"}
+      </div>
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+        {r.userCode && <span className="font-mono select-text">code={r.userCode}</span>}
+        {verificationHref && (
+          <a href={verificationHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline break-all">
+            login <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+        )}
+        <span className="font-mono text-muted-foreground">session={r.reauthSessionId}</span>
+      </div>
+      {r.credentialExchange && (
+        <div className="font-mono text-muted-foreground">
+          bff_credentials={String(r.credentialExchange.bffHandlesCredentials ?? false)} frontend_credentials={String(r.credentialExchange.frontendHandlesCredentials ?? false)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProviderTechDetails({ s }: { s: ProviderStatus }) {
   const rows: Array<[string, string | null | undefined]> = [
     ["reason", s.reason],
@@ -491,6 +527,8 @@ export function AgentPanelBody() {
   const [controlError, setControlError] = useState<string | null>(null);
   const [devDocsBusy, setDevDocsBusy] = useState(false);
   const [devDocsNotice, setDevDocsNotice] = useState<AssistantDevDocsGenerateResult | null>(null);
+  const [providerReauthBusy, setProviderReauthBusy] = useState(false);
+  const [providerReauthNotice, setProviderReauthNotice] = useState<AssistantProviderReauthResult | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -616,6 +654,7 @@ export function AgentPanelBody() {
     setActionFeedback({});
     setResyncNotice(null);
     setDevDocsNotice(null);
+    setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     inputRef.current?.focus();
@@ -672,6 +711,54 @@ export function AgentPanelBody() {
     }
   }, [sessionId, refreshAssistantRuntimeStatus]);
 
+  const beginProviderReauth = useCallback(async (ps: ProviderStatus | null, displayMsg: string) => {
+    const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
+    if (!currentControlMode?.active) {
+      const result: AssistantProviderReauthResult = {
+        ok: false,
+        kind: "failure",
+        statusCode: null,
+        message: "需要先啟用 control mode。",
+      };
+      setProviderReauthNotice(result);
+      setControlTargetMode("kernel_debug");
+      setControlReason("Codex provider reauth");
+      setControlError(null);
+      setControlDialogOpen(true);
+      toast({ title: "需要 Control mode", description: result.message });
+      return;
+    }
+
+    setProviderReauthBusy(true);
+    setProviderReauthNotice(null);
+    try {
+      const result = await startAssistantProviderReauth({
+        provider: "codex",
+        reason: ps?.displayMessage ?? ps?.reasonCode ?? ps?.reason ?? displayMsg,
+        traceId: ps?.runId ?? traceId ?? undefined,
+      });
+      setProviderReauthNotice(result);
+      if (result.ok) {
+        toast({
+          title: "Codex reauth started",
+          description: result.reauth.userCode ? `code ${result.reauth.userCode}` : (result.reauth.status ?? "pending"),
+        });
+        await refreshAssistantRuntimeStatus();
+        if (sessionId) void resync(sessionId);
+      } else {
+        if (result.statusCode === 403 || result.statusCode === 409) {
+          setControlTargetMode("kernel_debug");
+          setControlReason("Codex provider reauth");
+          setControlError(null);
+          setControlDialogOpen(true);
+        }
+        toast({ title: "Reauth 失敗", description: result.message, variant: "destructive" });
+      }
+    } finally {
+      setProviderReauthBusy(false);
+    }
+  }, [assistantModeStatus, traceId, refreshAssistantRuntimeStatus, sessionId, resync]);
+
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
     activeSessionRef.current = id;
@@ -682,6 +769,7 @@ export function AgentPanelBody() {
     setText("");
     setActionFeedback({});
     setDevDocsNotice(null);
+    setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     // Hydrate from local cache FIRST — switching never blanks the screen.
@@ -1565,11 +1653,7 @@ export function AgentPanelBody() {
               const displayMsg = ps?.displayMessage?.trim() || "AI provider 暫時不可用，目前改用規則式摘要。";
               const needsReauth = ps?.operatorAction === "reauth_codex_service_user";
               const onReauth = () => {
-                if (sessionId) void resync();
-                toast({
-                  title: "需要重新授權",
-                  description: "請由 operator 在 Codex service-user 裝置登入流程完成授權。",
-                });
+                void beginProviderReauth(ps ?? null, displayMsg);
               };
               return (
                 <div className="mx-4 my-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs">
@@ -1580,8 +1664,9 @@ export function AgentPanelBody() {
                       <div className="text-foreground/80 break-words">{displayMsg}</div>
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {needsReauth && (
-                          <Button size="sm" variant="default" className="h-7 text-[11px] gap-1" onClick={onReauth}>
-                            <LogIn className="h-3 w-3" /> 重新登入
+                          <Button size="sm" variant="default" className="h-7 text-[11px] gap-1" onClick={onReauth} disabled={providerReauthBusy}>
+                            {providerReauthBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogIn className="h-3 w-3" />}
+                            重新登入
                           </Button>
                         )}
                         <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => void resync()} disabled={!sessionId}>
@@ -1589,6 +1674,7 @@ export function AgentPanelBody() {
                         </Button>
                         {ps && <span className="self-center"><ProviderStatusPill s={ps} /></span>}
                       </div>
+                      {providerReauthNotice && <ProviderReauthNotice result={providerReauthNotice} />}
                       {ps && <ProviderTechDetails s={ps} />}
                     </div>
                   </div>
