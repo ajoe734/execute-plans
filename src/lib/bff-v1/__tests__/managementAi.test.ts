@@ -425,8 +425,8 @@ describe("Management AI OpenClaw repair worktrees", () => {
           expected_branch: "task/MGMT-AI-REPAIR-FE",
           expectedBranch: "task/MGMT-AI-REPAIR-FE",
           remote: "origin",
-          merge_target: "main",
-          mergeTarget: "main",
+          merge_target: "dev",
+          mergeTarget: "dev",
           require_clean: true,
           requireClean: true,
           repo_key: "execute-plans",
@@ -443,7 +443,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
       repoKey: "execute-plans",
       declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
       expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "main",
+      mergeTarget: "dev",
       reason: "repair frontend Management AI",
     });
 
@@ -456,7 +456,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
       repoKey: "execute-plans",
       declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
       expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "main",
+      mergeTarget: "dev",
     });
     expect(result.repair.repo_key).toBe("execute-plans");
     expect(result.repair.task_worktree).toContain("/execute-plans/");
@@ -490,7 +490,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
           declared_scope: ["src/management/components/agent"],
           expected_branch: "task/MGMT-AI-REPAIR-FE",
           remote: "origin",
-          merge_target: "main",
+          merge_target: "dev",
           require_clean: true,
           repo_key: "execute-plans",
         },

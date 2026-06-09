@@ -101,8 +101,8 @@ function parseRepairScope(value: string): string[] {
   ));
 }
 
-function repairMergeTarget(repoKey: RepairRepoKey): string {
-  return repoKey === "execute-plans" ? "main" : "dev";
+function repairMergeTarget(_repoKey: RepairRepoKey): string {
+  return "dev";
 }
 
 function makeRepairTaskId(repoKey: RepairRepoKey): string {
