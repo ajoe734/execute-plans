@@ -682,19 +682,29 @@ function analyzePlaywright() {
     const nextParents = suite.title ? [...parents, suite.title] : parents;
     for (const spec of suite.specs || []) {
       const results = [];
+      const finalStatuses = [];
       for (const test of spec.tests || []) {
+        if (test.status) finalStatuses.push(test.status);
         for (const result of test.results || []) {
           results.push(result.status || "");
         }
       }
-      const failed = results.some((status) => ["failed", "timedOut", "interrupted"].includes(status));
-      const skipped = results.length > 0 && results.every((status) => status === "skipped");
-      const passed = results.length > 0 && !failed && !skipped;
+      const unexpected = ["unexpected", "failed", "timedOut", "interrupted"];
+      const failed = finalStatuses.length
+        ? finalStatuses.some((status) => unexpected.includes(status))
+        : results.some((status) => unexpected.includes(status));
+      const skipped = finalStatuses.length
+        ? finalStatuses.every((status) => status === "skipped")
+        : results.length > 0 && results.every((status) => status === "skipped");
+      const passed = finalStatuses.length
+        ? finalStatuses.every((status) => ["expected", "flaky"].includes(status))
+        : results.length > 0 && !failed && !skipped;
       specs.push({
         title: [...nextParents, spec.title].filter(Boolean).join(" > "),
         file: spec.file || suite.file || "",
         status: failed ? "fail" : skipped ? "skip" : passed ? "pass" : "missing",
         results,
+        finalStatuses,
       });
     }
     for (const child of suite.suites || []) visitSuite(child, nextParents);
