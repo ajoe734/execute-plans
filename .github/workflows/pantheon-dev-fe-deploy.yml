@@ -1,0 +1,110 @@
+name: Pantheon Dev FE Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - Pantheon FE-BFF Integration Gate
+    types:
+      - completed
+    branches:
+      - dev
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA, branch, or tag to deploy. Defaults to dev."
+        required: false
+        default: "dev"
+        type: string
+      skip_probe:
+        description: "Emergency only: deploy without the browser/BFF probe."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pantheon-dev-fe-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy execute-plans to Pantheon dev VM
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'dev'
+        )
+      }}
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - pantheon-dev-vm
+      - execute-plans-deploy
+    env:
+      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_branch }}
+      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+      PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
+      PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/management/fleet
+      PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
+
+    steps:
+      - name: Checkout target ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_REF || 'dev' }}
+          fetch-depth: 0
+
+      - name: Resolve deployment SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Prepare audit directory
+        run: |
+          rm -rf "$PANTHEON_AUDIT_OUT_DIR"
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+
+      - name: Deploy static build
+        env:
+          PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
+          PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
+          GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+        run: bash scripts/deploy-dev-vm.sh
+
+      - name: Upload deploy evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantheon-dev-fe-deploy-evidence
+          path: |
+            .lovable/audits/current-run/**/*.md
+            .lovable/audits/current-run/**/*.json
+            .lovable/audits/current-run/**/*.log
+
+      - name: Summarize deployment
+        if: always()
+        run: |
+          {
+            echo "## Pantheon Dev FE Deploy"
+            echo "- target ref: \`${TARGET_REF}\`"
+            echo "- deployed sha: \`${{ steps.sha.outputs.sha }}\`"
+            echo "- FE: ${PANTHEON_DEV_FE_HOST}"
+            echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
+            echo "- evidence: pantheon-dev-fe-deploy-evidence"
+          } >> "$GITHUB_STEP_SUMMARY"
