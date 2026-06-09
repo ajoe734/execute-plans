@@ -91,6 +91,7 @@ export const ManagementLayout = () => {
       { to: "/management/studios", label: t("nav.studios"), icon: Beaker },
     ]},
     { label: t("groups.system"), items: [
+      { to: "/management/data-sources", label: t("nav.dataSourcesManagement"), icon: Database },
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},

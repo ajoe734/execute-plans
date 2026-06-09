@@ -100,6 +100,7 @@ import {
   CapitalBindingLiveReadinessPage,
   BffHaReadinessPage,
   StrictPublishAuditPage,
+  DataSourceManagementPage,
   Ep5CanaryReadinessPage,
   ManagementNlConsole,
   HumanGateDetailPage,
@@ -160,6 +161,7 @@ const App = () => (
               <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessPage />} />
               <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
+              <Route path="data-sources" element={<DataSourceManagementPage />} />
               <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="ask" element={<ManagementNlConsole />} />
