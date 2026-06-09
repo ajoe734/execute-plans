@@ -46,6 +46,28 @@ VITE_BFF_REAL_WRITES=false
 Only enable real writes when the operator explicitly asks for governed write
 testing.
 
+## Branch And Dev Deployment Policy
+
+`main` was the historical Lovable integration branch. Now that this repo is
+served by Pantheon-owned dev infrastructure, ordinary frontend development must
+follow the same governed branch posture as the rest of Pantheon:
+
+- `dev` is the canonical integration branch for execute-plans development and
+  the source branch for Pantheon dev FE deployment.
+- Feature, repair, and Codex task branches should open PRs against `dev`.
+- `main` is a stable/promotion branch. Merge to `main` only for an explicit
+  promotion, compatibility cut, or repository bootstrap task.
+- Do not claim a frontend change is published to dev until the target commit is
+  present on `dev`, the dev FE deployment has been updated from that commit, and
+  the direct execute-plans browser/BFF gate passes against the Pantheon dev BFF.
+- Lovable publish state is obsolete evidence for dev readiness. It may be useful
+  only as historical context.
+
+If a local checkout lacks `origin/dev`, create or request the one-time
+`dev` branch from the current accepted repository head before starting normal
+frontend feature work. Do not keep opening routine dev PRs to `main` just
+because this repo used to be Lovable-hosted.
+
 ## Management AI
 
 Management AI SA/SD generation is owned by Pantheon BFF assistant routes, not by
@@ -77,8 +99,10 @@ adapter directly and must not write files from the browser.
 For write-capable repair, the request must run under active `kernel_repair` and
 the frontend must call `prepareAssistantRepairWorktree` /
 `POST /bff/assistant/repair-worktrees/prepare` before sending the chat turn.
-Use `repoKey: execute-plans` and merge target `main` for frontend work; use
-`repoKey: pantheon` and merge target `dev` only for backend/BFF repair. The
+Use `repoKey: execute-plans` and merge target `dev` for frontend work; use
+`repoKey: pantheon` and merge target `dev` for backend/BFF repair. Use
+`execute-plans` merge target `main` only when the operator explicitly requests a
+stable/promotion cut. The
 subsequent `POST /bff/management/nl/ask` request must include the returned
 `openclaw.repair` metadata:
 
@@ -100,5 +124,9 @@ perform VM writes in that turn.
 
 Before editing, inspect `git status -sb`, current branch, and remote. Keep
 generated `dist/`, runtime evidence, and unrelated local changes out of commits.
-Run relevant local validation, stage only intentional files, commit, push, and
-open a PR for repository changes.
+For routine frontend work, branch from `origin/dev` and open the PR against
+`dev`; use `origin/main` only for this repository's initial dev-branch bootstrap
+or an explicit promotion task. Run relevant local validation, stage only
+intentional files, commit, push, open a PR for repository changes, wait for the
+integration gate, merge, and report whether the dev deployment was actually
+updated.
