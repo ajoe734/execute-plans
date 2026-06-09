@@ -23,6 +23,7 @@ import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAn
 import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapitalSnapshot";
 import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
+import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
 import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -52,6 +53,7 @@ export const OneRingCockpitPage = () => {
   const qSnap = useMemo(() => defaultQuarterlySnapshot(), []);
   const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
   const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
@@ -65,10 +67,11 @@ export const OneRingCockpitPage = () => {
         </Button>
       </header>
       <SystemStateStrip model={model.strip} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
         <PersonaLeagueSnapshot rows={league ?? lSeed} />
         <QuarterlyRankingCountdown snap={qSnap} />
+        <DataSourceHealthSnapshot rows={fleetRows ?? PERSONA_FLEET_SEED} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LoopFlowMap model={model.loopFlow} />
@@ -85,7 +88,10 @@ export const OneRingCockpitPage = () => {
 // Persona Fleet
 // =====================================================================
 
-const FLEET: ManagementPersonaFleetRow[] = [
+// Shared seed for management surfaces that currently derive system-level state
+// from the live persona fleet contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export const PERSONA_FLEET_SEED: ManagementPersonaFleetRow[] = [
   {
     personaId: "persona-crypto",
     personaName: "Crypto Macro Persona",
@@ -370,8 +376,8 @@ function firstResearchProject(r: ManagementPersonaFleetRow) {
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.personaFleet.get(() => FLEET), []);
-  const rows = data ?? FLEET;
+  const { data } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
+  const rows = data ?? PERSONA_FLEET_SEED;
 
   const [showRetired, setShowRetired] = useState(false);
   const [showDevProbe, setShowDevProbe] = useState(false);
