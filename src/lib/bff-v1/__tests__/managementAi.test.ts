@@ -48,6 +48,37 @@ describe("Management AI orchestrator status", () => {
           assistantCommandStatus: "usable",
           effectiveTools: ["assistant.command"],
         },
+        snapshotAt: "2026-06-09T12:55:19Z",
+        project: "pantheon",
+        sprint: "2026-06-03-pantheon-assistant-existing-architecture",
+        sourceRefs: [
+          { source_type: "task_status", path: "ai-status.json", available: true, status: "ok", last_modified_at: "2026-06-09T12:48:23Z" },
+        ],
+        supervisor: {
+          lifecycle: "running",
+          mode_status: "active",
+          focus_mode: "execution",
+          last_heartbeat_at: "2026-06-09T12:54:04Z",
+          mode_occupancy: { execution: { running: 2, pending: 0, queued: 1 } },
+        },
+        providerReadiness: {
+          available: true,
+          provider_name: "codex",
+          ready: true,
+          status: "ready",
+          mount_mode: "rw",
+          capabilities: { read: true, repair_write: true },
+          repair_workspace: { root: "/srv/pantheon-assistant/worktrees", ready: true, writable: true, worktree_count: 1 },
+        },
+        assistantDevBridge: {
+          status: "idle",
+          inbox: { path: "/workspace/status-root/.orchestrator/assistant-dev-packets", exists: true, pending_count: 0, processed_count: 1, failed_count: 0, receipt_count: 1 },
+          recent_receipts: [{ packet_id: "bridge_smoke", status: "processed", error_count: 0 }],
+        },
+        tasks: [
+          { id: "MPOS-P1-RISK-001", title: "Create first class RiskPolicy evaluator contract", owner: "Codex", status: "in_progress", last_update: "2026-06-09T12:34:33Z" },
+        ],
+        coordination: { file_count: 669, feature_count: 47, feature_ids: ["PKT-011-health-status-board"] },
       },
     }));
     globalThis.fetch = fetchMock;
@@ -61,6 +92,17 @@ describe("Management AI orchestrator status", () => {
     expect(result.status.openclawToolPolicy?.assistantCommandUsable).toBe(true);
     expect(result.status.openclawToolPolicy?.assistantCommandStatus).toBe("usable");
     expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command"]);
+    expect(result.status.snapshotAt).toBe("2026-06-09T12:55:19Z");
+    expect(result.status.sourceRefs?.[0].sourceType).toBe("task_status");
+    expect(result.status.supervisor?.lifecycle).toBe("running");
+    expect(result.status.supervisor?.modeOccupancy?.execution.running).toBe(2);
+    expect(result.status.providerReadiness?.providerName).toBe("codex");
+    expect(result.status.providerReadiness?.capabilities?.repairWrite).toBe(true);
+    expect(result.status.providerReadiness?.repairWorkspace?.worktreeCount).toBe(1);
+    expect(result.status.assistantDevBridge?.inbox?.processedCount).toBe(1);
+    expect(result.status.assistantDevBridge?.recentReceipts?.[0].packetId).toBe("bridge_smoke");
+    expect(result.status.tasks?.[0].id).toBe("MPOS-P1-RISK-001");
+    expect(result.status.coordination?.featureIds).toEqual(["PKT-011-health-status-board"]);
   });
 
   it("returns a visible failure when the BFF status endpoint is missing", async () => {
