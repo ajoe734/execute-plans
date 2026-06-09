@@ -24,6 +24,8 @@ const BFF_BASE_URL = (process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_
 const BEARER_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const ROOT = process.cwd();
+const READ_RETRY_ATTEMPTS = Number(process.env.PANTHEON_BFF_SMOKE_READ_RETRIES || "3");
+const READ_RETRY_DELAY_MS = Number(process.env.PANTHEON_BFF_SMOKE_RETRY_DELAY_MS || "750");
 
 if (!BFF_BASE_URL) {
   console.error("[auth-smoke] PANTHEON_BFF_BASE_URL is not set; cannot probe.");
@@ -132,33 +134,60 @@ function isBffErrorEnvelope(j) {
   );
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function maxAttemptsFor(method) {
+  if (method !== "GET") return 1;
+  return Number.isFinite(READ_RETRY_ATTEMPTS) && READ_RETRY_ATTEMPTS > 0 ? Math.floor(READ_RETRY_ATTEMPTS) : 1;
+}
+
+function isRetryableReadFailure(result) {
+  return Boolean(result.error) || [429, 500, 502, 503, 504].includes(result.status);
+}
+
 async function fetchEndpoint(route, { method = "GET", body } = {}) {
   const url = new URL(route, BFF_BASE_URL).toString();
-  const headers = {
-    Authorization: `Bearer ${BEARER_TOKEN}`,
-    Accept: "application/json",
-    "X-Request-Id": `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  };
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-  }
-  try {
-    const res = await fetch(url, {
-      method,
-      headers,
-      signal: AbortSignal.timeout(15000),
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    let json = null;
-    try {
-      json = await res.json();
-    } catch {
-      // ignore non-JSON body
+  const maxAttempts = maxAttemptsFor(method);
+  let lastResult = { status: 0, json: null, ok: false, error: "not attempted", attempts: 0 };
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const headers = {
+      Authorization: `Bearer ${BEARER_TOKEN}`,
+      Accept: "application/json",
+      "X-Request-Id": `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${attempt}`,
+    };
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
     }
-    return { status: res.status, json, ok: res.ok, error: null };
-  } catch (err) {
-    return { status: 0, json: null, ok: false, error: String(err) };
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        signal: AbortSignal.timeout(15000),
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        // ignore non-JSON body
+      }
+      lastResult = { status: res.status, json, ok: res.ok, error: null, attempts: attempt };
+    } catch (err) {
+      lastResult = { status: 0, json: null, ok: false, error: String(err), attempts: attempt };
+    }
+
+    if (attempt >= maxAttempts || !isRetryableReadFailure(lastResult)) {
+      return lastResult;
+    }
+
+    await sleep(READ_RETRY_DELAY_MS * attempt);
   }
+
+  return lastResult;
 }
 
 // Canonical list endpoints checked by the release gate aggregate (Gate 3).
@@ -208,10 +237,11 @@ async function main() {
   const results = [];
   let passed = 0;
   let total = 0;
+  const noteWithAttempts = (note, attempts) => (attempts > 1 ? `${note}; attempts=${attempts}` : note);
 
   // /bff/me — non-list identity endpoint; uses isMeResponse validator
   {
-    const { status, json, error } = await fetchEndpoint("/bff/me");
+    const { status, json, error, attempts } = await fetchEndpoint("/bff/me");
     const valid = !error && status === 200 && isMeResponse(json);
     total++;
     if (valid) passed++;
@@ -220,13 +250,16 @@ async function main() {
       method: "GET",
       status: error ? "ERR" : String(status),
       passed: valid,
-      note: error ? error.slice(0, 80) : valid ? "MeResponse user/tenant/capabilities present" : `unexpected shape or status ${status}`,
+      note: noteWithAttempts(
+        error ? error.slice(0, 80) : valid ? "MeResponse user/tenant/capabilities present" : `unexpected shape or status ${status}`,
+        attempts,
+      ),
     });
   }
 
   // List endpoints — use isListEnvelope (top-level items + page_info.total)
   for (const route of LIST_ENDPOINTS) {
-    const { status, json, error } = await fetchEndpoint(route);
+    const { status, json, error, attempts } = await fetchEndpoint(route);
     const envelope = classifyReadEnvelope(route, json);
     const valid = !error && status === 200 && envelope.valid;
     total++;
@@ -236,17 +269,20 @@ async function main() {
       method: "GET",
       status: error ? "ERR" : String(status),
       passed: valid,
-      note: error
-        ? error.slice(0, 80)
-        : valid
-        ? envelope.note
-        : `status=${status} ${envelope.note}`,
+      note: noteWithAttempts(
+        error
+          ? error.slice(0, 80)
+          : valid
+          ? envelope.note
+          : `status=${status} ${envelope.note}`,
+        attempts,
+      ),
     });
   }
 
   // Write/precondition endpoints — expected 4xx typed error envelope
   for (const { route, method, body = {} } of WRITE_ENDPOINTS) {
-    const { status, json, error } = await fetchEndpoint(route, { method, body });
+    const { status, json, error, attempts } = await fetchEndpoint(route, { method, body });
     const statusOk = !error && status >= 400 && status < 500;
     const valid = statusOk && isBffErrorEnvelope(json);
     total++;
@@ -256,11 +292,14 @@ async function main() {
       method,
       status: error ? "ERR" : String(status),
       passed: valid,
-      note: error
-        ? error.slice(0, 80)
-        : valid
-        ? "typed/validation error envelope ok"
-        : `unexpected: status=${status} envelope=${isBffErrorEnvelope(json)}`,
+      note: noteWithAttempts(
+        error
+          ? error.slice(0, 80)
+          : valid
+          ? "typed/validation error envelope ok"
+          : `unexpected: status=${status} envelope=${isBffErrorEnvelope(json)}`,
+        attempts,
+      ),
     });
   }
 
