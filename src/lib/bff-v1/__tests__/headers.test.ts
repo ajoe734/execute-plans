@@ -72,16 +72,16 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
 
   it("injects non-secret dev bearer fallback only in live mode", () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:reviewer");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
 
     const h = buildHeaders({ method: "GET" });
 
-    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:reviewer");
+    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
   });
 
   it("does not inject dev bearer fallback in mock mode", () => {
     vi.stubEnv("VITE_BFF_MODE", "mock");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:reviewer");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
 
     const h = buildHeaders({ method: "GET" });
 

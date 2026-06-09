@@ -64,6 +64,9 @@ Auth/session access is explicit:
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
 - Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
   dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
+  Pantheon-owned dev Management AI control-mode smoke 需要 operator/admin +
+  MFA + `assistant.kernel.*` capability；目前 dev FE 使用
+  `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
 Route-by-route live/fallback behavior:

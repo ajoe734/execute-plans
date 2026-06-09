@@ -2,6 +2,22 @@
 
 These rules apply to Codex work in this repository.
 
+## Development-Stage Approval Posture
+
+During active development, Codex should keep work moving without asking the
+operator for repeated approval on ordinary repo, validation, and dev-deploy
+commands. If the sandbox blocks a necessary command for git, GitHub CLI,
+package install/build/test, local smoke tests, Playwright, curl probes, rsync to
+Pantheon-owned dev hosting, or other Pantheon dev deployment tasks, Codex should
+use the available approved prefix or request tool escalation directly with a
+concise justification and continue after approval. Do not pause the task just to
+ask a separate chat question for these normal development actions.
+
+This posture does not authorize reckless actions. Codex must still ask before
+unrequested destructive commands, secret disclosure, credential rotation,
+production/live trading or capital-affecting changes, broad filesystem deletion,
+or any action outside the stated development objective.
+
 ## Active Frontend
 
 This repository, `ajoe734/execute-plans`, is the active Pantheon frontend. Do
