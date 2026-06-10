@@ -48,9 +48,22 @@ export interface AssistantOpenClawToolPolicyStatus {
   assistantCommandTool?: string;
   allowedTools?: string[];
   effectiveTools?: string[];
+  effectiveSkills?: AssistantOpenClawSkillDescriptor[];
   allowedWorkflows?: string[];
   defaultPosture?: string | null;
   source?: string;
+}
+
+export interface AssistantOpenClawSkillDescriptor {
+  id?: string;
+  title?: string;
+  surface?: string;
+  handlerRef?: string;
+  resultSurface?: string;
+  confirmPolicy?: string;
+  role?: string;
+  modeGate?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
 }
 
 export interface AssistantStatusSourceRef {
@@ -526,10 +539,25 @@ function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatu
     assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
     allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
     effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
+    effectiveSkills: adaptOpenClawSkillDescriptors(r.effectiveSkills ?? r.effective_skills),
     allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
     defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
     source: asString(r.source),
   };
+}
+
+function adaptOpenClawSkillDescriptors(raw: unknown): AssistantOpenClawSkillDescriptor[] {
+  return asRecordArray(raw).map((r) => ({
+    id: asString(r.id),
+    title: asString(r.title),
+    surface: asString(r.surface),
+    handlerRef: asString(r.handlerRef ?? r.handler_ref),
+    resultSurface: asString(r.resultSurface ?? r.result_surface),
+    confirmPolicy: asString(r.confirmPolicy ?? r.confirm_policy),
+    role: asString(r.role),
+    modeGate: asRecord(r.modeGate ?? r.mode_gate) ?? undefined,
+    inputSchema: asRecord(r.inputSchema ?? r.input_schema) ?? undefined,
+  }));
 }
 
 function adaptSourceRefs(raw: unknown): AssistantStatusSourceRef[] {

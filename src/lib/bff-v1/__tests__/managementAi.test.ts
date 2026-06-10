@@ -46,7 +46,19 @@ describe("Management AI orchestrator status", () => {
           assistantCommandEffective: true,
           assistantCommandUsable: true,
           assistantCommandStatus: "usable",
-          effectiveTools: ["assistant.command"],
+          effectiveTools: ["assistant.command", "assistant.sa_sd.generate"],
+          effective_skills: [
+            {
+              id: "assistant.sa_sd.generate",
+              title: "Generate SA/SD",
+              surface: "assistant_command",
+              handler_ref: "bff.route:POST /bff/assistant/dev-docs/generate",
+              result_surface: "assistant_dev_docs_packet",
+              confirm_policy: "control_mode",
+              mode_gate: { allowed_modes: ["kernel_debug", "kernel_repair"] },
+              input_schema: { type: "object" },
+            },
+          ],
         },
         snapshotAt: "2026-06-09T12:55:19Z",
         project: "pantheon",
@@ -91,7 +103,16 @@ describe("Management AI orchestrator status", () => {
     expect(result.status.providerStatus?.runId).toBe("mnl-trace-test");
     expect(result.status.openclawToolPolicy?.assistantCommandUsable).toBe(true);
     expect(result.status.openclawToolPolicy?.assistantCommandStatus).toBe("usable");
-    expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command"]);
+    expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command", "assistant.sa_sd.generate"]);
+    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0]).toMatchObject({
+      id: "assistant.sa_sd.generate",
+      title: "Generate SA/SD",
+      surface: "assistant_command",
+      handlerRef: "bff.route:POST /bff/assistant/dev-docs/generate",
+      resultSurface: "assistant_dev_docs_packet",
+      confirmPolicy: "control_mode",
+    });
+    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0].modeGate).toMatchObject({ allowed_modes: ["kernel_debug", "kernel_repair"] });
     expect(result.status.snapshotAt).toBe("2026-06-09T12:55:19Z");
     expect(result.status.sourceRefs?.[0].sourceType).toBe("task_status");
     expect(result.status.supervisor?.lifecycle).toBe("running");
