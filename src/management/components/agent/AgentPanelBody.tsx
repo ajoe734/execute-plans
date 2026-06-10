@@ -43,6 +43,7 @@ import {
   type ManagementAiUiSnapshot,
   type ManagementAiRecentTurn,
   type ProviderStatus,
+  type AssistantOpenClawSkillDescriptor,
   type AssistantOpenClawToolPolicyStatus,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
@@ -294,6 +295,9 @@ function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
   );
 }
 
+const SA_SD_GENERATE_SKILL_ID = "assistant.sa_sd.generate";
+const SA_SD_GENERATE_HANDLER_REF = "bff.route:POST /bff/assistant/dev-docs/generate";
+
 function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null | undefined): boolean {
   if (!policy) return false;
   return policy.assistantCommandUsable ?? policy.assistantCommandAllowed ?? false;
@@ -302,6 +306,16 @@ function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null 
 function commandPolicyLabel(policy: AssistantOpenClawToolPolicyStatus | null | undefined): string {
   if (!policy) return "assistant.command unknown";
   return `assistant.command ${policy.assistantCommandStatus ?? (commandPolicyIsUsable(policy) ? "usable" : "blocked")}`;
+}
+
+function saSdGenerateSkill(policy: AssistantOpenClawToolPolicyStatus | null | undefined): AssistantOpenClawSkillDescriptor | null {
+  return policy?.effectiveSkills?.find((skill) => (
+    skill.id === SA_SD_GENERATE_SKILL_ID && skill.handlerRef === SA_SD_GENERATE_HANDLER_REF
+  )) ?? null;
+}
+
+function saSdSkillLabel(skill: AssistantOpenClawSkillDescriptor | null): string {
+  return skill ? `${skill.id} via ${skill.handlerRef}` : `${SA_SD_GENERATE_SKILL_ID} unavailable`;
 }
 
 function ToolPolicyPill({ policy, failure }: {
@@ -989,6 +1003,19 @@ export function AgentPanelBody() {
       return;
     }
 
+    const currentToolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
+    if (!saSdGenerateSkill(currentToolPolicy)) {
+      const result: AssistantDevDocsGenerateResult = {
+        ok: false,
+        kind: "failure",
+        statusCode: null,
+        message: "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate。",
+      };
+      setDevDocsNotice(result);
+      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
+      return;
+    }
+
     const ui = buildUiSnapshot();
     const affectedModules = Array.from(new Set([
       "execute-plans:management-ai",
@@ -1040,6 +1067,7 @@ export function AgentPanelBody() {
   }, [
     sessionId,
     assistantModeStatus,
+    orchestratorStatus,
     buildUiSnapshot,
     location.pathname,
     nlCtx.pageLabel,
@@ -1353,7 +1381,24 @@ export function AgentPanelBody() {
   const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
   const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
   const controlActive = Boolean(controlMode?.active);
-  const canGenerateDevDocs = Boolean(sessionId && !isClientSessionId(sessionId) && turns.length > 0 && !pending && !devDocsBusy);
+  const hasBffSession = Boolean(sessionId && !isClientSessionId(sessionId));
+  const hasConversationTurns = turns.length > 0;
+  const saSdSkill = saSdGenerateSkill(toolPolicy);
+  const saSdSkillAvailable = Boolean(saSdSkill);
+  const canGenerateDevDocs = Boolean(
+    hasBffSession && hasConversationTurns && !pending && !devDocsBusy && controlActive && saSdSkillAvailable,
+  );
+  const devDocsButtonTitle = !hasBffSession
+    ? "需要先送出一則訊息，讓 BFF 建立正式 session id"
+    : !hasConversationTurns
+      ? "需要先有對話內容"
+      : pending || devDocsBusy
+        ? "Management AI 正在處理"
+        : !controlActive
+          ? "需要先啟用 control mode"
+          : !saSdSkillAvailable
+            ? "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate"
+            : "產生 SA/SD 並送進 dev bridge";
   const devDocsSystemDesignPath = devDocsNotice?.ok ? compactPath(devDocsNotice.archiveLocations?.systemDesign) : null;
   const devDocsQueuePath = devDocsNotice?.ok ? compactPath(devDocsNotice.taskPacketQueuePath) : null;
 
@@ -1446,7 +1491,7 @@ export function AgentPanelBody() {
               className="h-6 text-[10px]"
               onClick={() => void generateDevDocs()}
               disabled={!canGenerateDevDocs}
-              title={controlActive ? "產生 SA/SD 並送進 dev bridge" : "需要先啟用 control mode"}
+              title={devDocsButtonTitle}
             >
               {devDocsBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FileText className="h-3 w-3 mr-1" />}
               SA/SD
@@ -1609,7 +1654,12 @@ export function AgentPanelBody() {
             {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
             {toolPolicy && (
               <span className="text-[10px] text-muted-foreground font-mono">
-                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"}
+                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"} · SA/SD={saSdSkillAvailable ? "ready" : "blocked"}
+              </span>
+            )}
+            {toolPolicy && (
+              <span className="text-[10px] text-muted-foreground font-mono" title={saSdSkillLabel(saSdSkill)}>
+                skill={saSdSkillAvailable ? SA_SD_GENERATE_SKILL_ID : "missing"}
               </span>
             )}
             {orchestratorStatus?.ok && <SystemStatusDetails status={orchestratorStatus.status} />}
