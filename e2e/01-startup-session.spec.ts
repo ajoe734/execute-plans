@@ -23,7 +23,7 @@
  */
 
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -80,7 +80,7 @@ function bffBaseUrl(): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 }
 
@@ -148,6 +148,21 @@ async function bodyText(page: import("@playwright/test").Page): Promise<string> 
   return page.locator("body").innerText({ timeout: 10_000 });
 }
 
+async function requestMeWithTransientRetry(
+  request: APIRequestContext,
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; body: string }> {
+  let last = { status: 0, body: "" };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await request.get(url, { headers, timeout: 10_000 });
+    last = { status: response.status(), body: await response.text() };
+    if (![502, 503, 504].includes(last.status)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+  }
+  return last;
+}
+
 test.describe("F01 startup session", () => {
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
@@ -162,13 +177,10 @@ test.describe("F01 startup session", () => {
       headers["X-Tenant-Id"] = tenantId;
     }
 
-    const response = await request.get(bffUrl("/bff/me"), {
-      headers,
-      timeout: 10_000,
-    });
+    const response = await requestMeWithTransientRetry(request, bffUrl("/bff/me"), headers);
 
-    expect(response.status(), await response.text()).toBe(200);
-    const payload = recordAt(await response.json(), "MeResponse");
+    expect(response.status, response.body).toBe(200);
+    const payload = recordAt(JSON.parse(response.body), "MeResponse");
     const data = recordAt(payload.data, "MeResponse.data");
     const meta = recordAt(payload.meta, "MeResponse.meta");
 

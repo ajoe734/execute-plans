@@ -104,6 +104,11 @@ Auth/session access is explicit:
   `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
+Management AI SA/SD dispatch is BFF-owned. The frontend calls
+`POST /bff/assistant/dev-docs/generate` and lets the supervisor drain the dev
+bridge inbox. `Supervisor` is not a dispatchable reviewer identity; frontend
+SA/SD packets should use real worker names such as `Codex` and `Claude`.
+
 Route-by-route live/fallback behavior:
 
 - `GET /health`
