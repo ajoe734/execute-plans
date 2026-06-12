@@ -106,6 +106,11 @@ activatable by an authorized operator/admin session. If provider readiness is
 ready but kernel is disabled, fix the dev BFF configuration in `pantheon`; do
 not patch around it in frontend code.
 
+Supervisor is the queue/drain process, not a worker identity. SA/SD task
+packets emitted by the frontend must use dispatchable worker names such as
+`Codex` and `Claude`; do not set `proposedReviewer: "Supervisor"` or similar
+non-agent values.
+
 OpenClaw-backed VM inspection/debugging is reached through Pantheon BFF
 conversation routes, primarily `POST /bff/management/nl/ask`, with the BFF
 calling the OpenClaw gateway adapter. The frontend must not call the OpenClaw

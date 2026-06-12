@@ -1033,7 +1033,7 @@ export function AgentPanelBody() {
         featureSummary: latestFeatureSummary(turns),
         affectedModules,
         proposedOwner: "Codex",
-        proposedReviewer: "Supervisor",
+        proposedReviewer: "Claude",
         archive: true,
         emitTaskPacket: true,
         queueTaskPacket: true,
