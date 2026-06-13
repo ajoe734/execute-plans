@@ -113,6 +113,12 @@ jobs:
           set -o pipefail
           npm run test:contract 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/contract-drift.log"
 
+      - name: Management persona 3000 validation
+        id: mgmt_persona_3000
+        run: |
+          set -o pipefail
+          npm run validate:mgmt-persona:3000 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/mgmt-persona-3000-validation.log"
+
       - name: Anonymous BFF route probe
         id: route_probe
         continue-on-error: true
