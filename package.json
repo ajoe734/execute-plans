@@ -14,8 +14,10 @@
     "test:contract": "vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
     "probe:bff:routes": "node scripts/probe-bff-routes.mjs --anonymous",
     "probe:bff:auth": "node scripts/probe-bff-authenticated-live.mjs",
+    "probe:bff:writes": "node scripts/probe-bff-write-paths.mjs",
     "probe:browser": "node scripts/probe-hosted-browser-bff.mjs",
     "validate:mgmt-persona:3000": "node scripts/validate-management-persona-3000.mjs",
+    "validate:mgmt-live:deep": "node scripts/validate-management-live-deep.mjs",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "gate:integration": "npm run test && npm run build && npm run test:contract && npm run probe:bff:routes && npm run probe:browser && npm run e2e"

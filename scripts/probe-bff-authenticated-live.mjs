@@ -153,11 +153,17 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
   let lastResult = { status: 0, json: null, ok: false, error: "not attempted", attempts: 0 };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const requestId = `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${attempt}`;
     const headers = {
       Authorization: `Bearer ${BEARER_TOKEN}`,
       Accept: "application/json",
-      "X-Request-Id": `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${attempt}`,
+      "X-Request-Id": requestId,
     };
+    if (method !== "GET") {
+      headers["X-Dry-Run"] = "1";
+      headers["Idempotency-Key"] = `idk-${requestId}`;
+      headers["X-Idempotency-Key"] = `idk-${requestId}`;
+    }
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
@@ -332,7 +338,7 @@ async function main() {
     "It does not unwrap or accept `{data: {items: [...]}}` for list endpoints.",
     "Non-list endpoints (e.g. `/bff/me`) use a separate `isMeResponse` validator that accepts",
     "wrapped `{data: {user, tenant, capabilities, ...}}` or the same fields at the flat root.",
-    "Write endpoints are probed with dev-only IDs and are expected to return typed 4xx error envelopes.",
+    "Write endpoints are probed with dev-only IDs, `X-Dry-Run: 1`, and idempotency keys, and are expected to return typed 4xx error envelopes.",
     "",
     "## Results",
     "",

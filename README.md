@@ -253,6 +253,8 @@ export $(grep -v '^#' .env.integration | xargs)
 npm run test:contract        # vitest contract-drift
 npm run probe:bff:routes     # 匿名 BFF route probe，輸出 .lovable/audits/
 npm run probe:bff:auth       # 需 PANTHEON_BFF_SMOKE_BEARER_TOKEN
+npm run probe:bff:writes     # live dry-run write probe；預設跳過 create 類 valid writes
+npm run validate:mgmt-live:deep # RBAC token matrix / operator race / long SSE reconnect
 npm run probe:browser        # hosted bundle BFF probe
 npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
@@ -260,6 +262,8 @@ npm run gate:integration     # 全部串起來
 
 CI workflow: `.github/workflows/pantheon-integration-gate.yml`（PR、`dev`/`main`
 push、`workflow_dispatch`；需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
+完整 RBAC / two-man race 證據需再設定 `PANTHEON_BFF_RBAC_TOKENS_JSON` 或各角色 token
+secret，以及 `PANTHEON_BFF_OPERATOR_A_TOKEN` / `PANTHEON_BFF_OPERATOR_B_TOKEN`；
 `PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
 證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
 
