@@ -211,6 +211,7 @@ jobs:
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
+            "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
