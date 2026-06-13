@@ -227,12 +227,23 @@ jobs:
         continue-on-error: ${{ (inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false') == 'true' }}
         run: node scripts/aggregate-release-gate.mjs
 
+      - name: Prepare evidence artifact paths
+        if: always()
+        run: |
+          rm -rf pantheon-audits
+          mkdir -p pantheon-audits
+          if [ -d .lovable/audits ]; then
+            cp -a .lovable/audits/. pantheon-audits/
+          fi
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-integration-evidence
+          include-hidden-files: true
           path: |
+            pantheon-audits
             .lovable/audits/*.md
             .lovable/audits/*.json
             .lovable/audits/current-run/**/*.md
