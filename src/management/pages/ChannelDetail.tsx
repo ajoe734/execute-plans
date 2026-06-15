@@ -19,7 +19,7 @@ export const ChannelDetail = () => {
   useEffect(() => {
     if (!id) return;
     bff.channels.get(id).then(setC);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("channel."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
   }, [id]);
 
   const recent = c ? Array.from({ length: 6 }).map((_, i) => ({

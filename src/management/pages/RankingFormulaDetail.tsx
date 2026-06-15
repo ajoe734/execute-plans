@@ -25,7 +25,7 @@ export const RankingFormulaDetail = () => {
     if (!id) return;
     bff.rankingFormulas.list().then((rows) => setF(rows.find((x) => x.id === id)));
     bff.strategies.list().then(setStrategies);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("ranking."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking."))));
   }, [id]);
 
   if (!f) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;

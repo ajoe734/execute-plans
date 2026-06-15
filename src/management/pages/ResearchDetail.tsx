@@ -24,7 +24,7 @@ export const ResearchDetail = () => {
   useEffect(() => {
     if (!id) return;
     bff.research.get(id).then(setX);
-    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action.startsWith("research."))));
+    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
   }, [id]);
 
   if (!x) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;

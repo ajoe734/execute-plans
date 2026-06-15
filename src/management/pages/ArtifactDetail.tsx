@@ -29,7 +29,7 @@ export const ArtifactDetail = () => {
     if (!id) return;
     bff.artifacts.get(id).then(setA);
     bff.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
-    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action.startsWith("artifact."))));
+    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact."))));
   }, [id]);
 
   if (!a) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
