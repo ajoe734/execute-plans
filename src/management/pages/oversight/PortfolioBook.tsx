@@ -99,7 +99,7 @@ export const PortfolioBookPage = () => {
                   <Badge variant="outline" className={statusTone(p.status)}>{p.status}</Badge>
                 </td>
                 <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={p.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+                  <Button asChild size="sm" variant="ghost"><Link to={p.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
                 </td>
               </tr>
             ))}
@@ -148,7 +148,7 @@ export const PortfolioBookPage = () => {
                 <td className={`px-3 py-2 font-mono ${h.unrealizedPnl < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(h.unrealizedPnl)}</td>
                 <td className="px-3 py-2 font-mono">{fmtPct(h.exposurePct)}</td>
                 <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={h.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+                  <Button asChild size="sm" variant="ghost"><Link to={h.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
                 </td>
               </tr>
             ))}

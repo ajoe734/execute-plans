@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 
+const rtNum = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 const envTone = (e: Runtime["env"]) => {
   if (e === "live") return "bg-env-live-bg text-status-success border-status-success/30";
   if (e === "paper") return "bg-env-paper-bg text-status-warning border-status-warning/30";
@@ -45,10 +47,10 @@ export const RuntimesPage = () => {
             { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs uppercase tracking-wider text-muted-foreground">{r.kind}</span> },
             { key: "env", header: t("table.env"), cell: (r) => <Badge variant="outline" className={`uppercase text-[10px] ${envTone(r.env)}`}>{r.env}</Badge> },
             { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-            { key: "cpu", header: "CPU", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={r.cpu * 100} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{(r.cpu * 100).toFixed(0)}%</span></div> },
-            { key: "mem", header: "Memory", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={r.memory * 100} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{(r.memory * 100).toFixed(0)}%</span></div> },
-            { key: "lat", header: "p95 latency", cell: (r) => <span className={`text-mono text-xs ${r.latencyP95Ms > 1000 ? "text-status-warning" : ""}`}>{r.latencyP95Ms}ms</span> },
-            { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{r.uptimePct.toFixed(2)}%</span> },
+            { key: "cpu", header: "CPU", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={rtNum(r.cpu) * 100} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{(rtNum(r.cpu) * 100).toFixed(0)}%</span></div> },
+            { key: "mem", header: "Memory", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={rtNum(r.memory) * 100} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{(rtNum(r.memory) * 100).toFixed(0)}%</span></div> },
+            { key: "lat", header: "p95 latency", cell: (r) => <span className={`text-mono text-xs ${rtNum(r.latencyP95Ms) > 1000 ? "text-status-warning" : ""}`}>{rtNum(r.latencyP95Ms)}ms</span> },
+            { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{rtNum(r.uptimePct).toFixed(2)}%</span> },
             { key: "region", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{r.region}</span> },
             { key: "act", header: "", cell: (r) => (
               <DropdownMenu>

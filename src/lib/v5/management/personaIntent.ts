@@ -56,6 +56,8 @@ export function intentDisplayRules(v: PersonaIntentVisibility): PersonaIntentDis
         badge: "redacted",
       };
     case "restricted":
+    default:
+      // Unknown/missing visibility from live data → safest (restricted) view.
       return {
         showSummary: false, showInterpretation: false, showToolsUsed: false,
         showRiskFlags: false, showEvidenceRefs: false, showOnlyMetadata: true,
