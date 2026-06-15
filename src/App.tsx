@@ -70,6 +70,11 @@ import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplat
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
 import { LoopsPage } from "@/management/pages/v5/V5Pages";
+// Studios: only the two cross-entity/sandbox tools that have no equivalent on the
+// per-entity detail pages are kept (FormulaStudio A/B-compare+backtest, SkillSandbox
+// test harness). The per-entity studios were removed — operate on the detail page.
+import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
+import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
 import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
 import { ResearchLoopPage } from "@/management/pages/v5/ResearchLoop";
@@ -238,9 +243,10 @@ const App = () => (
               <Route path="skills/:id" element={<SkillDetail />} />
               <Route path="channels" element={<ChannelsList />} />
               <Route path="channels/:id" element={<ChannelDetail />} />
-              {/* 2026-06-15 cleanup — Studios authoring layer removed: it was a
-                  fully-mock, backend-less parallel surface whose panels already live
-                  on the entity detail pages. Re-introduce per studio when its BE lands. */}
+              {/* 2026-06-15 cleanup — per-entity Studios removed (operate on the
+                  detail page). Kept: the two tools with no detail-page equivalent. */}
+              <Route path="studios/formula" element={<FormulaStudio />} />
+              <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
             </Route>
 
             {/* Agora Workbench */}

@@ -18,6 +18,30 @@ Live probe basis: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
 6. **Collapsed 4 duplicate readiness route-aliases to redirects** (`broker-live`,
    `capital-live`, `system/bff-ha`, `system/strict-publish` → canonical `readiness/*`).
 
+## A1b. Usage-based re-audit (round 3)
+
+Decisions were re-made from the **operator usage** angle (which surface best lets you
+monitor / manage / operate — NOT which page is simplest or has a backend):
+
+- **Human-decision cluster — no redundancy, all kept.** `interventions` (HIQ) is the
+  unified batch-triage queue; `approvals` is the *deeper* single-approval workbench
+  (diff/change summary, multi-stage approval, high-risk typed confirm) — HIQ does not
+  replace it; `sentinel` owns the findings→remediation flow; `human-inbox` is the
+  oversight-altitude inbox with consequence framing. Complementary, not duplicate.
+- **Ranking cluster — all kept.** `ranking` (continuous multi-scope ranking ops:
+  recalc/freeze/publish/override), `persona-league` (tiered standings + movers),
+  `quarterly-ranking` (quarterly eligibility gate). Same data, different operator
+  jobs/cadences.
+- **Studios — partially restored.** `FormulaStudio` (formula A/B-compare + backtest)
+  and `SkillSandboxStudio` (skill test harness) are the only authoring surfaces with
+  **no per-entity-detail equivalent**, so they are kept. The per-entity studios
+  (capital/allocation/rebalance-ops/evolution/fitness + hub) stay removed — you
+  operate on the entity's own detail page.
+- **Loops — dead code removed.** `V5Pages.tsx` carried unused E1 placeholder copies of
+  Control Room / Sentinel / HIQ; removed (the live pages are `v5/Sentinel.tsx`,
+  `v5/Interventions.tsx`; Control Room folded into Cockpit). The dedicated per-loop
+  pages (execution/optimization/research) are richer than the generic list and stay.
+
 ## A2. Studios layer removed — rationale
 
 The `/management/studios/*` section (StudiosOverview, FormulaStudio,

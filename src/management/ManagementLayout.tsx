@@ -11,6 +11,7 @@ import {
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
   Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart, CalendarClock,
+  Beaker, Calculator,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -52,6 +53,7 @@ export const ManagementLayout = () => {
       { to: "/management/personas", label: t("nav.personaRegistry"), icon: Users, dedupeKey: "personas" },
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
+      { to: "/management/studios/formula", label: t("studios.formula"), icon: Calculator },
       { to: "/management/rebalance", label: t("nav.rebalance"), icon: Repeat },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
@@ -85,6 +87,7 @@ export const ManagementLayout = () => {
       { to: "/management/tools", label: t("nav.tools"), icon: Wrench },
       { to: "/management/mcp", label: t("nav.mcp"), icon: Network },
       { to: "/management/skills", label: t("nav.skills"), icon: Sparkles },
+      { to: "/management/studios/skill-sandbox", label: t("studios.skill"), icon: Beaker },
       { to: "/management/workflows", label: t("nav.workflowTemplates"), icon: Workflow },
       { to: "/management/hooks", label: t("nav.hooks"), icon: Clock },
       { to: "/management/channels", label: t("nav.channels"), icon: Radio },
