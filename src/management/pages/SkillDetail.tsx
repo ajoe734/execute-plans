@@ -33,7 +33,7 @@ export const SkillDetail = () => {
     if (!id) return;
     bff.skills.get(id).then(setSkill);
     bff.personas.list().then(setPersonas);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("skill."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
   }, [id]);
 
   const machineState: SkillState = useMemo(() => {

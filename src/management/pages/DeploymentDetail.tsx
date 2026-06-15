@@ -43,7 +43,7 @@ export const DeploymentDetail = () => {
     bff.deployments.get(id).then(setD);
     bff.runtimes.list().then(setRuntimes);
     bff.approvals.list().then(setApprovals);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("deployment."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment."))));
   }, [id]);
   if (!d) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 

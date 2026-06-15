@@ -55,7 +55,7 @@ export const EvolutionDetail = () => {
     if (!id) return;
     bff.evolution.get(id).then(setE);
     bff.research.list().then(setExperiments);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("evolution."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution."))));
     bff.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
     bff.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
   }, [id]);

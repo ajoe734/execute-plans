@@ -272,7 +272,7 @@ export const StrategyDetail = () => {
                           <td className="p-3 font-medium">{row.metric}</td>
                           <td className="p-3 text-right text-mono text-sm">{row.paper}</td>
                           <td className="p-3 text-right text-mono text-sm">{row.live}</td>
-                          <td className={`p-3 text-right text-mono text-sm ${row.delta.startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
+                          <td className={`p-3 text-right text-mono text-sm ${(row.delta ?? "").startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
                         </tr>
                       ))}
                     </tbody>

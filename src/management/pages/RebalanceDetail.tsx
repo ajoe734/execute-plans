@@ -59,7 +59,7 @@ export const RebalanceDetail = () => {
       }
     });
     bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("rebalance"))));
-    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action.startsWith("rebalance."))));
+    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
     bff.strategies.list().then(setStrategies);
   }, [id]);
 
