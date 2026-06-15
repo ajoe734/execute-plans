@@ -14,10 +14,10 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { skillMachine, type SkillState } from "@/lib/stateMachines";
 import { Send, Archive } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
-import { ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 export const SkillDetail = () => {

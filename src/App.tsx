@@ -8,7 +8,6 @@ import "@/i18n";
 import { PlatformShell } from "@/platform/PlatformShell";
 import { ManagementLayout } from "@/management/ManagementLayout";
 import { AgoraLayout } from "@/agora/AgoraLayout";
-import { ManagementOverview } from "@/management/pages/Overview";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";
 import PersonaOnboarding from "@/management/pages/PersonaOnboarding";
@@ -70,16 +69,12 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
-import { StudiosOverview } from "@/management/pages/studios/StudiosOverview";
-import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
-import { FitnessFormulaStudio } from "@/management/pages/studios/FitnessFormulaStudio";
-import { EvolutionStudio } from "@/management/pages/studios/EvolutionStudio";
-import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
-import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
-import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
-import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { LoopsPage } from "@/management/pages/v5/V5Pages";
-import { ControlRoomPage } from "@/management/pages/v5/ControlRoom";
+// Studios: only the two cross-entity/sandbox tools that have no equivalent on the
+// per-entity detail pages are kept (FormulaStudio A/B-compare+backtest, SkillSandbox
+// test harness). The per-entity studios were removed — operate on the detail page.
+import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
+import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
 import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
 import { ResearchLoopPage } from "@/management/pages/v5/ResearchLoop";
@@ -141,8 +136,11 @@ const App = () => (
               {/* 2026-05-20 PM-1 — Pathreon Management Cockpit is the canonical landing. */}
               <Route index element={<Navigate to="/management/cockpit" replace />} />
               <Route path="cockpit" element={<OneRingCockpitPage />} />
-              {/* FE integration gate keeps /control-room as the canonical v5 surface. */}
-              <Route path="control-room" element={<ControlRoomPage />} />
+              {/* Console consolidation (2026-06-15): Cockpit is the single canonical
+                  management console. Control Room / Command Center / Overview / One Ring
+                  all redirect here. Loop-level detail lives under /loops, /sentinel,
+                  /interventions. */}
+              <Route path="control-room" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="one-ring" element={<Navigate to="/management/cockpit" replace />} />
 
               <Route path="persona-fleet" element={<PersonaFleetPage />} />
@@ -154,24 +152,24 @@ const App = () => (
               <Route path="evidence/:id" element={<EvidencePacketDetailPage />} />
               <Route path="persona-intent" element={<PersonaIntentTracesPage />} />
               <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailPage />} />
-              <Route path="broker-live" element={<BrokerLiveReadinessPage />} />
-              <Route path="capital-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="broker-live" element={<Navigate to="/management/readiness/broker-live" replace />} />
+              <Route path="capital-live" element={<Navigate to="/management/readiness/capital-binding-live" replace />} />
               <Route path="readiness/ep5" element={<Ep5CanaryReadinessPage />} />
               <Route path="readiness/broker-live" element={<BrokerLiveReadinessPage />} />
               <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessPage />} />
               <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="data-sources" element={<DataSourceManagementPage />} />
-              <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
-              <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
+              <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
+              <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
               <Route path="ask" element={<ManagementNlConsole />} />
               {/* PM-12 — Performance & League */}
               <Route path="portfolio-book" element={<PortfolioBookPage />} />
               <Route path="persona-league" element={<PersonaLeaguePage />} />
               <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
               <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
-              {/* Legacy alias kept for ops review bookmarks. */}
-              <Route path="control-room-legacy" element={<ControlRoomPage />} />
+              {/* Legacy alias kept for ops review bookmarks → Cockpit. */}
+              <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
               <Route path="loops/optimization" element={<OptimizationLoopPage />} />
@@ -179,10 +177,10 @@ const App = () => (
               <Route path="loops/:kind" element={<LoopsPage />} />
               <Route path="sentinel" element={<SentinelPage />} />
               <Route path="interventions" element={<InterventionsPage />} />
-              <Route path="overview" element={<Navigate to="/management/control-room" replace />} />
-              <Route path="overview-legacy" element={<ManagementOverview />} />
-              {/* Pack E E7 (Q23) — command-center is now an alias for Control Room. */}
-              <Route path="command-center" element={<Navigate to="/management/control-room" replace />} />
+              <Route path="overview" element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="overview-legacy" element={<Navigate to="/management/cockpit" replace />} />
+              {/* command-center folded into the single Cockpit console. */}
+              <Route path="command-center" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
               <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />
@@ -245,13 +243,9 @@ const App = () => (
               <Route path="skills/:id" element={<SkillDetail />} />
               <Route path="channels" element={<ChannelsList />} />
               <Route path="channels/:id" element={<ChannelDetail />} />
-              <Route path="studios" element={<StudiosOverview />} />
+              {/* 2026-06-15 cleanup — per-entity Studios removed (operate on the
+                  detail page). Kept: the two tools with no detail-page equivalent. */}
               <Route path="studios/formula" element={<FormulaStudio />} />
-              <Route path="studios/fitness" element={<FitnessFormulaStudio />} />
-              <Route path="studios/evolution" element={<EvolutionStudio />} />
-              <Route path="studios/allocation" element={<AllocationStudio />} />
-              <Route path="studios/rebalance-ops" element={<RebalanceOpsStudio />} />
-              <Route path="studios/capital" element={<CapitalStudio />} />
               <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
             </Route>
 
@@ -283,7 +277,8 @@ const App = () => (
               <Route path="channels" element={<AgoraChannels />} />
             </Route>
 
-            <Route path="/qa" element={<QAChecklist />} />
+            {/* Dev-only QA harness — not mounted in production builds. */}
+            {import.meta.env.DEV && <Route path="/qa" element={<QAChecklist />} />}
             <Route path="/audits" element={<AuditViewer />} />
           </Route>
 
