@@ -17,7 +17,6 @@ import { Send, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
-import { ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 export const SkillDetail = () => {
@@ -88,19 +87,6 @@ export const SkillDetail = () => {
             ),
           },
           { value: "prompt", label: t("skill.tab.prompt"), content: <SkillPromptEditor skill={skill} /> },
-          { value: "sandbox", label: t("phase13.skill.tabs.sandbox"), content: (
-            <Card className="p-4 space-y-3">
-              <div>
-                <div className="text-sm font-semibold">{t("phase13.skill.tabs.sandbox")}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Run this skill against mock inputs in the dedicated Skill Sandbox studio. Mock trace + token cost are produced inline; no live calls.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => nav(`/management/studios/skill-sandbox?id=${skill.id}`)}>
-                <ExternalLink className="h-3.5 w-3.5 mr-1" />Open Sandbox Studio
-              </Button>
-            </Card>
-          ) },
           { value: "risk", label: t("phase13.skill.tabs.risk"), content: <SkillRiskPanel skill={skill} /> },
           { value: "evals", label: t("skill.evals"), content: (
             <>

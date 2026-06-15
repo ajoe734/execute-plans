@@ -62,7 +62,6 @@ export const RankingFormulasList = () => {
       title={t("nav.rankingFormulas")}
       loader={lists.rankingFormulas}
       basePath="/management/ranking-formulas" liveKinds={["RankingFormula"]}
-      createBehavior={{ kind: "redirect", to: "/management/studios/formula", intent: "create" }}
       extraColumns={[
         { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
         { key: "applied", header: t("section.relatedObjects"), cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },

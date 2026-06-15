@@ -69,14 +69,6 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
-import { StudiosOverview } from "@/management/pages/studios/StudiosOverview";
-import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
-import { FitnessFormulaStudio } from "@/management/pages/studios/FitnessFormulaStudio";
-import { EvolutionStudio } from "@/management/pages/studios/EvolutionStudio";
-import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
-import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
-import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
-import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { LoopsPage } from "@/management/pages/v5/V5Pages";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
 import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
@@ -155,16 +147,16 @@ const App = () => (
               <Route path="evidence/:id" element={<EvidencePacketDetailPage />} />
               <Route path="persona-intent" element={<PersonaIntentTracesPage />} />
               <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailPage />} />
-              <Route path="broker-live" element={<BrokerLiveReadinessPage />} />
-              <Route path="capital-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="broker-live" element={<Navigate to="/management/readiness/broker-live" replace />} />
+              <Route path="capital-live" element={<Navigate to="/management/readiness/capital-binding-live" replace />} />
               <Route path="readiness/ep5" element={<Ep5CanaryReadinessPage />} />
               <Route path="readiness/broker-live" element={<BrokerLiveReadinessPage />} />
               <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessPage />} />
               <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="data-sources" element={<DataSourceManagementPage />} />
-              <Route path="system/bff-ha" element={<BffHaReadinessPage />} />
-              <Route path="system/strict-publish" element={<StrictPublishAuditPage />} />
+              <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
+              <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
               <Route path="ask" element={<ManagementNlConsole />} />
               {/* PM-12 — Performance & League */}
               <Route path="portfolio-book" element={<PortfolioBookPage />} />
@@ -246,14 +238,9 @@ const App = () => (
               <Route path="skills/:id" element={<SkillDetail />} />
               <Route path="channels" element={<ChannelsList />} />
               <Route path="channels/:id" element={<ChannelDetail />} />
-              <Route path="studios" element={<StudiosOverview />} />
-              <Route path="studios/formula" element={<FormulaStudio />} />
-              <Route path="studios/fitness" element={<FitnessFormulaStudio />} />
-              <Route path="studios/evolution" element={<EvolutionStudio />} />
-              <Route path="studios/allocation" element={<AllocationStudio />} />
-              <Route path="studios/rebalance-ops" element={<RebalanceOpsStudio />} />
-              <Route path="studios/capital" element={<CapitalStudio />} />
-              <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
+              {/* 2026-06-15 cleanup — Studios authoring layer removed: it was a
+                  fully-mock, backend-less parallel surface whose panels already live
+                  on the entity detail pages. Re-introduce per studio when its BE lands. */}
             </Route>
 
             {/* Agora Workbench */}

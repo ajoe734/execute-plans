@@ -66,7 +66,6 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/workflows", i18nKey: "nav.workflowTemplates", parent: "/management" },
   { path: "/management/hooks", i18nKey: "nav.hooks", parent: "/management" },
   { path: "/management/channels", i18nKey: "nav.channels", parent: "/management" },
-  { path: "/management/studios", i18nKey: "nav.studios", parent: "/management" },
 
   // system
   { path: "/management/audit", i18nKey: "nav.audit", parent: "/management" },

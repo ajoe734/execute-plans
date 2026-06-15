@@ -14,8 +14,32 @@ Live probe basis: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
    and `src/management/pages/Overview.tsx` (old `ManagementOverview`).
 3. **Removed the `legacy` nav group** in `ManagementLayout.tsx`.
 4. **`/qa` is now dev-only** (`import.meta.env.DEV` guard) — not mounted in prod builds.
+5. **Removed the entire Studios authoring layer** (8 pages + 3 components) — see §A2.
+6. **Collapsed 4 duplicate readiness route-aliases to redirects** (`broker-live`,
+   `capital-live`, `system/bff-ha`, `system/strict-publish` → canonical `readiness/*`).
 
-Everything else is **kept** — every feature page is a fully-built UI that is
+## A2. Studios layer removed — rationale
+
+The `/management/studios/*` section (StudiosOverview, FormulaStudio,
+FitnessFormulaStudio, EvolutionStudio, AllocationStudio, RebalanceOpsStudio,
+CapitalStudio, SkillSandboxStudio) was removed because, after a per-page audit:
+
+- It was **100% mock with zero backend** — every action is a local `toast`
+  ("queued"/"executed"); there is no `/bff/studios/*` endpoint of any kind.
+- Its panels **already live on the entity detail pages**: `RiskBudgetPanel` +
+  `BindingsMatrix` on `CapitalPoolDetail`, `AllocationSimulationPanel` on
+  `RebalanceDetail`/`CapitalPoolDetail`, `ConstraintChecker`/`EvolutionRunsPanel`
+  on the rebalance/evolution details. The studios just re-wrapped them behind a
+  dropdown picker.
+- It is **premature for the current product stage** (no real strategies, formulas,
+  or rebalances exist yet to author).
+
+Inbound links were repaired: the `RankingFormulasList` "create" redirect and the
+`SkillDetail` "Open Sandbox Studio" tab were removed. When a real authoring/backtest
+**backend** lands, the relevant studio can be reintroduced against the live contract
+(FormulaStudio + SkillSandboxStudio are the strongest candidates to bring back).
+
+Everything else is **kept** — every other feature page is a fully-built UI that is
 on-vision for Pathreon. Pages that look "empty" are blocked on a **backend gap**,
 not a frontend problem. The backlog below tracks those gaps so BE can be filled in.
 
@@ -62,7 +86,6 @@ Built UIs with no backend at all. Keep the page; build the endpoint.
 | `/management/lineage` | LineageExplorer | `GET /bff/lineage` (data/artifact lineage graph) |
 | `/management/knowledge` | KnowledgeInbox | `GET /bff/knowledge` (knowledge inbox) |
 | `/management/alpha-factory` | AlphaFactoryBoard | `GET /bff/alpha-factory` (idea→strategy board) |
-| `/management/studios` (+ formula/fitness/evolution/allocation/rebalance-ops/capital/skill-sandbox) | Studios* (8) | studio authoring/backtest endpoints (no `/bff/studios/*`) |
 | `/management/data-sources` | DataSourceManagement | `GET /bff/management/data-sources` |
 | `/management/governance/permissions` | PermissionMatrix | `GET /bff/management/permissions` |
 | `/management/governance/memory` | MemoryGovernance | `GET /bff/management/memory-governance` |
