@@ -96,11 +96,11 @@ export const CapitalPoolDetail = () => {
               return (
                 <>
                   <div className="grid grid-cols-3 gap-4">
-                    <StatCard label={t("section.holdings")} value={`${c.currency} ${c.allocated.toLocaleString()}`} />
+                    <StatCard label={t("section.holdings")} value={`${c.currency} ${(c.allocated ?? 0).toLocaleString()}`} />
                     <StatCard
                       label={utilMetric ? `Capital utilization (%)` : t("table.utilization")}
                       value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
-                      hint={`${c.currency} ${c.utilized.toLocaleString()}`}
+                      hint={`${c.currency} ${(c.utilized ?? 0).toLocaleString()}`}
                     />
                     <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
                   </div>
@@ -119,7 +119,7 @@ export const CapitalPoolDetail = () => {
                     <Progress value={breach.utilizationPct * 100} className="h-2" />
                     <div className="flex justify-between text-xs text-muted-foreground text-mono">
                       <span>0</span>
-                      <span>{c.allocated.toLocaleString()}</span>
+                      <span>{(c.allocated ?? 0).toLocaleString()}</span>
                     </div>
                   </Section>
                 </>
@@ -196,7 +196,7 @@ export const CapitalPoolDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="VaR (mock)" value={`${c.currency} ${(c.allocated * c.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
+                  <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
                   <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
                   <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
                   <Field label={t("table.value")} value={c.currency} mono />
