@@ -6,7 +6,7 @@ import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
 import { useT } from "@/platform/hooks";
 import {
-  LayoutDashboard, Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
+  Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
@@ -95,10 +95,8 @@ export const ManagementLayout = () => {
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },
     ]},
-    { label: t("groups.legacy"), items: [
-      { to: "/management/control-room-legacy", label: t("nav.controlRoom"), icon: Compass, dedupeKey: "cockpit" },
-      { to: "/management/overview-legacy", label: t("nav.overview"), icon: LayoutDashboard, dedupeKey: "cockpit" },
-    ]},
+    // 2026-06-15 console consolidation — legacy nav group removed.
+    // Control Room / Overview now redirect to the single Cockpit console.
 
   ];
 
