@@ -33,7 +33,7 @@ export const ChannelDetail = () => {
   return (
     <ObjectDetailLayout
       object={c}
-      subtitle={`${c.kind.toUpperCase()} · ${c.subscribers} subscribers`}
+      subtitle={`${(c.kind ?? "").toUpperCase()} · ${c.subscribers ?? 0} subscribers`}
       actions={
         <Button size="sm" variant="outline" onClick={() => toast.success("Test message sent")}>
           <Send className="h-4 w-4 mr-1" />Send test
@@ -45,7 +45,7 @@ export const ChannelDetail = () => {
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Kind" value={c.kind.toUpperCase()} />
+                <StatCard label="Kind" value={(c.kind ?? "—").toUpperCase()} />
                 <StatCard label="Subscribers" value={c.subscribers} />
                 <StatCard label={t("table.owner")} value={c.owner} />
                 <StatCard label={t("table.state")} value={c.state} />
