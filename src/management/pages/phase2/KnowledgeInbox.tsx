@@ -1,6 +1,8 @@
 // Knowledge Inbox — Spec Part 3 §19.6.
 // Insight triage queue, can be promoted to Artifact / Postmortem.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { paths, withLiveOrMock } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,8 +30,23 @@ const SEED: Insight[] = [
 
 export const KnowledgeInboxPage = () => {
   const t = useT();
-  const [items, setItems] = useState(SEED);
-  const [active, setActive] = useState<Insight | null>(SEED[0]);
+  // Live-wire GET /bff/knowledge. Real items render when present; until the
+  // backend carries data the curated SEED is kept so the page is never blank.
+  const { data: live } = useV5Live(
+    () => withLiveOrMock<Insight[]>(
+      { method: "GET", path: paths.knowledgeInbox() },
+      async () => SEED,
+      (resp: { items?: Insight[] }) => (resp?.items?.length ? resp.items : SEED),
+    ),
+    [],
+  );
+  const [items, setItems] = useState<Insight[]>(SEED);
+  const [active, setActive] = useState<Insight | null>(SEED[0] ?? null);
+  useEffect(() => {
+    if (!live) return;
+    setItems(live);
+    setActive((prev) => prev ?? live[0] ?? null);
+  }, [live]);
 
   const dismiss = (id: string) => {
     setItems((xs) => xs.filter((x) => x.id !== id));
