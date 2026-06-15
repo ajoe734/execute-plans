@@ -142,6 +142,11 @@ export const paths = {
   // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
   // Mock providers continue returning seeds; live providers hit these.
   mgmtCockpit: () => `${BASE}/management/cockpit`,
+  // Console-gap endpoints (2026-06-15): dedicated read surfaces for pages that
+  // previously had no backend. See docs/04/pantheon_bff_console_gap_2026-06-15.
+  knowledgeInbox: () => `${BASE}/knowledge`,
+  workflowTemplates: () => `${BASE}/workflows`,
+  hookRegistry: () => `${BASE}/hooks`,
   mgmtPersonaFleet: () => `${BASE}/management/fleet`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
