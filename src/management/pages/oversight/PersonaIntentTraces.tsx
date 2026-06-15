@@ -86,12 +86,12 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
         <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <dt className="text-muted-foreground">persona</dt><dd className="font-mono">{trace.ringPersonaId}</dd>
           <dt className="text-muted-foreground">visibility</dt><dd>{trace.visibility}</dd>
-          <dt className="text-muted-foreground">riskFlags</dt><dd>{trace.riskFlags.length}</dd>
-          <dt className="text-muted-foreground">evidenceRefs</dt><dd>{trace.evidenceRefs.length}</dd>
-          {trace.redaction.policyRef && (
+          <dt className="text-muted-foreground">riskFlags</dt><dd>{trace.riskFlags?.length ?? 0}</dd>
+          <dt className="text-muted-foreground">evidenceRefs</dt><dd>{trace.evidenceRefs?.length ?? 0}</dd>
+          {trace.redaction?.policyRef && (
             <>
               <dt className="text-muted-foreground">policyRef</dt>
-              <dd className="font-mono">{trace.redaction.policyRef}</dd>
+              <dd className="font-mono">{trace.redaction?.policyRef}</dd>
             </>
           )}
         </dl>
@@ -101,19 +101,19 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
           {r.showInterpretation && trace.personaInterpretation && (
             <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.interpretationFmt", { text: trace.personaInterpretation })}</p>
           )}
-          {r.showToolsUsed && trace.toolsUsed.length > 0 && (
-            <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: trace.toolsUsed.join(", ") })}</p>
+          {r.showToolsUsed && (trace.toolsUsed?.length ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: (trace.toolsUsed ?? []).join(", ") })}</p>
           )}
-          {r.showRiskFlags && trace.riskFlags.length > 0 && (
+          {r.showRiskFlags && (trace.riskFlags?.length ?? 0) > 0 && (
             <p className="text-xs">
-              {trace.riskFlags.map((f) => (
+              {(trace.riskFlags ?? []).map((f) => (
                 <Badge key={f} variant="outline" className="mr-1 bg-status-warning/15 text-status-warning border-status-warning/30">{f}</Badge>
               ))}
             </p>
           )}
-          {r.showEvidenceRefs && trace.evidenceRefs.length > 0 && (
+          {r.showEvidenceRefs && (trace.evidenceRefs?.length ?? 0) > 0 && (
             <p className="text-xs text-muted-foreground">
-              {t("mgmt.personaIntent.evidenceLabel")} {trace.evidenceRefs.map((e) => (
+              {t("mgmt.personaIntent.evidenceLabel")} {(trace.evidenceRefs ?? []).map((e) => (
                 <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
               ))}
             </p>

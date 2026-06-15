@@ -685,14 +685,14 @@ export const TradingPulsePage = () => {
       </Card>
       <div className="grid gap-3 sm:grid-cols-3">
         {visible.map((p) => {
-          const delta = p.current - p.baselineValue;
+          const delta = (p.current ?? 0) - (p.baselineValue ?? 0);
           return (
             <Card key={`${p.surface}-${p.baselineKind}`} className="p-4">
               <div className="flex items-center justify-between">
                 <Badge variant="outline">{p.surface}</Badge>
                 <Badge variant="outline">{baselineLabel(p.baselineKind, p.baselineLabel)}</Badge>
               </div>
-              <div className="mt-2 text-2xl font-semibold">{p.current.toFixed(2)}</div>
+              <div className="mt-2 text-2xl font-semibold">{(p.current ?? 0).toFixed(2)}</div>
               <div className={"text-xs " + (delta >= 0 ? "text-status-success" : "text-status-failed")}>
                 {delta >= 0 ? "+" : ""}{delta.toFixed(2)} {t("mgmt.pulse.vsFmt", { baseline: baselineLabel(p.baselineKind) })}
               </div>
@@ -719,13 +719,13 @@ const RankingBlocks = () => {
       {blocks.map((b) => (
         <Card key={b.kind} className="p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
-          {b.rows.length === 0 ? (
+          {(b.rows?.length ?? 0) === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.pulse.noRows")}</p>
           ) : (
             <ul className="mt-2 space-y-1 text-xs">
-              {b.rows.map((r) => (
+              {(b.rows ?? []).map((r) => (
                 <li key={r.subjectId} className="flex items-center justify-between gap-2">
-                  <Link to={r.links.manageHref} className="font-mono text-primary underline-offset-4 hover:underline">
+                  <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
                     {r.subjectLabel}
                   </Link>
                   <span className="text-muted-foreground">

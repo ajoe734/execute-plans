@@ -3,6 +3,12 @@ import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
 
+// Defensive numeric formatters — live BFF rows can omit numeric fields; never crash a cell.
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const fix = (v: unknown, d = 2): string => num(v).toFixed(d);
+const pct = (v: unknown, d = 0): string => `${(num(v) * 100).toFixed(d)}%`;
+const loc = (v: unknown): string => num(v).toLocaleString();
+
 export const StrategiesList = () => {
   const t = useT();
   return (
@@ -13,8 +19,8 @@ export const StrategiesList = () => {
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       extraColumns={[
         { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
-        { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
-        { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+        { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${num(r.pnl30d) >= 0 ? "text-status-success" : "text-status-failed"}`}>{pct(r.pnl30d, 2)}</span> },
+        { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{fix(r.sharpe)}</span> },
       ]}
     />
   );
@@ -31,7 +37,7 @@ export const PersonasList = () => {
       extraColumns={[
         { key: "arch", header: t("table.type"), cell: (r) => r.archetype },
         { key: "rs", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.routedStrategies}</span> },
-        { key: "sr", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{(r.successRate * 100).toFixed(0)}%</span> },
+        { key: "sr", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{pct(r.successRate)}</span> },
       ]}
     />
   );
@@ -47,9 +53,9 @@ export const CapitalPoolsList = () => {
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
         { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
-        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{r.allocated.toLocaleString()}</span> },
-        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{r.utilized.toLocaleString()}</span> },
-        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
+        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{loc(r.allocated)}</span> },
+        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{loc(r.utilized)}</span> },
+        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pct(r.riskBudget, 1)}</span> },
       ]}
     />
   );
@@ -81,7 +87,7 @@ export const RebalancesList = () => {
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
-        { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
+        { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{pct(r.proposedDelta, 1)}</span> },
       ]}
     />
   );
@@ -114,8 +120,8 @@ export const EvolutionList = () => {
       extraColumns={[
         { key: "gen", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
         { key: "pop", header: t("section.members"), cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
-        { key: "fit", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{r.bestFitness.toFixed(2)}</span> },
-        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
+        { key: "fit", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{fix(r.bestFitness)}</span> },
+        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{pct(r.progress)}</span> },
       ]}
     />
   );
@@ -132,7 +138,7 @@ export const ResearchList = () => {
       extraColumns={[
         { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
         { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
-        { key: "val", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.metricValue.toFixed(2)}</span> },
+        { key: "val", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{fix(r.metricValue)}</span> },
       ]}
     />
   );
@@ -149,7 +155,7 @@ export const ArtifactsList = () => {
       extraColumns={[
         { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
-        { key: "size", header: "Size (MB)", cell: (r) => <span className="text-mono text-xs">{r.sizeMb.toLocaleString()}</span> },
+        { key: "size", header: "Size (MB)", cell: (r) => <span className="text-mono text-xs">{loc(r.sizeMb)}</span> },
         { key: "hash", header: "Hash", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.hash}</span> },
       ]}
     />

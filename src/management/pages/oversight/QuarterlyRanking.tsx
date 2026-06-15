@@ -67,7 +67,7 @@ export const QuarterlyRankingPage = () => {
       <Card className="p-3">
         <h2 className="text-sm font-semibold text-foreground mb-2">{t("mgmt.quarterly.formulaWeights")}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-          {Object.entries(f.weights).map(([k, v]) => (
+          {Object.entries(f.weights ?? {}).map(([k, v]) => (
             <div key={k} className="flex justify-between">
               <span className="text-muted-foreground">{t(`mgmt.quarterly.weightKeys.${k}`)}</span>
               <span className="font-mono">{fmtNum(v as number)}</span>
@@ -75,8 +75,8 @@ export const QuarterlyRankingPage = () => {
           ))}
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
-          {t("mgmt.quarterly.minTradingDays")}: <span className="font-mono text-foreground">{f.minDataRequirements.minTradingDays}</span>
-          {"  ·  "}{t("mgmt.quarterly.minTrades")}: <span className="font-mono text-foreground">{f.minDataRequirements.minTrades}</span>
+          {t("mgmt.quarterly.minTradingDays")}: <span className="font-mono text-foreground">{f.minDataRequirements?.minTradingDays ?? "—"}</span>
+          {"  ·  "}{t("mgmt.quarterly.minTrades")}: <span className="font-mono text-foreground">{f.minDataRequirements?.minTrades ?? "—"}</span>
         </div>
       </Card>
 
