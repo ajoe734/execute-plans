@@ -46,7 +46,7 @@ export const McpServersList = () => {
         { key: "tc", header: t("table.tools"), cell: (r) => <span className="text-mono text-xs">{r.toolCount}</span> },
         { key: "envs", header: t("table.envs"), cell: (r) => (
           <div className="flex gap-1">
-            {r.envAllowed.map((e) => (
+            {(r.envAllowed ?? []).map((e) => (
               <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
             ))}
           </div>

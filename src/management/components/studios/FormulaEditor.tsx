@@ -25,7 +25,7 @@ export const FormulaEditor = ({
   rightSlot?: React.ReactNode;
 }) => {
   const t = useT();
-  const [expr, setExpr] = useState(initialExpression);
+  const [expr, setExpr] = useState(initialExpression ?? "");
   const [touched, setTouched] = useState(false);
 
   const metricIds = useMemo(() => new Set(METRIC_LIBRARY.map((m) => m.id)), []);
