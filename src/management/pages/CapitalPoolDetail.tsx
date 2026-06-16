@@ -43,7 +43,7 @@ export const CapitalPoolDetail = () => {
     bff.capitalPools.get(id).then(setC);
     bff.strategies.list().then((all) => setStrats(all.filter((s) => s.capitalPoolId === id)));
     bff.rebalances.list().then((all) => setRebalances(all.filter((r) => r.targetPoolId === id)));
-    bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("capital"))));
+    bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("capital"))));
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance."))));
   }, [id]);
 

@@ -622,9 +622,15 @@ export const HumanInboxPage = () => {
             <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
           </dl>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
-            {it.links.evidenceHref ? (
+            {/* Live BFF inbox items lack the FE-composed detailHref/links; guard
+                so a degraded/real payload renders instead of crashing the page. */}
+            {it.detailHref && (
+              <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
+            )}
+            {it.links?.manageHref && (
+              <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+            )}
+            {it.links?.evidenceHref ? (
               <Button asChild size="sm" variant="outline"><Link to={it.links.evidenceHref}>{t("mgmt.actions.evidence")}</Link></Button>
             ) : (
               <span className="text-xs text-muted-foreground self-center">{t("mgmt.actions.evidenceMissing")}</span>
