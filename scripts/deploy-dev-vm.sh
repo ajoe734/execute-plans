@@ -77,7 +77,7 @@ VITE_BFF_MODE=live \
 VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
 VITE_BFF_REAL_WRITES=false \
-VITE_BFF_DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair}" \
+VITE_BFF_DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}" \
 npm run build
 
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
