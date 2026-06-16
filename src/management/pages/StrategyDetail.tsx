@@ -172,7 +172,7 @@ export const StrategyDetail = () => {
                   <LinkedBlock
                     icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
                     title={t("phase13.strategy.linked.identity")}
-                    items={[{ id: s.owner, label: s.owner, meta: t("table.owner") }, ...s.personaIds.map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` }))]}
+                    items={[{ id: s.owner, label: s.owner, meta: t("table.owner") }, ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` }))]}
                   />
                   <LinkedBlock
                     icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -440,13 +440,13 @@ export const StrategyDetail = () => {
                 { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
                 { id: s.capitalPoolId, label: s.capitalPoolId, type: "CapitalPool", state: "deployed", risk: "medium" },
                 { id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk, highlight: true },
-                ...s.personaIds.map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
+                ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
                 { id: `dp_${s.id}`, label: `${s.id} → live`, type: "Deployment", state: "deployed", risk: s.risk },
               ];
               const edges: LineageEdge[] = [
                 { from: "alpha_src", to: s.id, label: "alpha" },
                 { from: s.capitalPoolId, to: s.id, label: "capital" },
-                ...s.personaIds.map((p) => ({ from: p, to: s.id, label: "persona" })),
+                ...(s.personaIds ?? []).map((p) => ({ from: p, to: s.id, label: "persona" })),
                 { from: s.id, to: `dp_${s.id}`, label: "deploys" },
               ];
               return (
