@@ -746,8 +746,16 @@ const RankingBlocks = () => {
 // =====================================================================
 
 interface EvolutionEntry {
-  id: string; mutation: string; before: number; after: number;
-  verdict: "improved" | "degraded" | "inconclusive"; landedAt: string;
+  id: string;
+  // Legacy in-process mock shape (kept so seed/tests still render).
+  mutation?: string; before?: number; after?: number;
+  verdict?: string; landedAt?: string;
+  // Live BFF shape: /bff/management/evolution-journal aggregate emits
+  // mutation_review journal entries with a different field set.
+  title?: string; summary?: string; status?: string; entryType?: string;
+  risk_level?: string; action_type?: string;
+  target?: { type?: string; id?: string; version?: string } | null;
+  occurred_at?: string; created_at?: string;
 }
 
 const EVOLUTION: EvolutionEntry[] = [
@@ -756,10 +764,12 @@ const EVOLUTION: EvolutionEntry[] = [
   { id: "ev-103", mutation: "Switch to vol-target rebal weekly", before: 1.10, after: 0.98, verdict: "degraded", landedAt: "2026-05-15" },
 ];
 
-const verdictTone = (v: EvolutionEntry["verdict"]) =>
-  v === "improved" ? "bg-status-success/15 text-status-success border-status-success/30" :
-  v === "degraded" ? "bg-status-failed/15 text-status-failed border-status-failed/30" :
-                    "bg-muted text-muted-foreground border-border";
+const verdictTone = (v?: string) =>
+  v === "improved" || v === "accepted" || v === "approved"
+    ? "bg-status-success/15 text-status-success border-status-success/30"
+    : v === "degraded" || v === "rejected" || v === "failed"
+      ? "bg-status-failed/15 text-status-failed border-status-failed/30"
+      : "bg-muted text-muted-foreground border-border";
 
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
@@ -771,21 +781,53 @@ export const EvolutionJournalPage = () => {
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
-      {rows.map((e) => (
-        <Card key={e.id} className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm">
-              <span className="font-mono">{e.id}</span> · {e.mutation}
-            </div>
-            <Badge variant="outline" className={verdictTone(e.verdict)}>{e.verdict}</Badge>
-          </div>
-          <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="text-foreground">{e.before.toFixed(2)}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="text-foreground">{e.after.toFixed(2)}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{e.landedAt}</dd></div>
-          </dl>
+      {rows.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("common.awaitingData", { defaultValue: "No data yet" })}
         </Card>
-      ))}
+      )}
+      {rows.map((e) => {
+        // The live aggregate and the legacy mock have different field sets;
+        // normalize defensively so neither shape throws (real entries have no
+        // numeric before/after — calling .toFixed on those crashed the page).
+        const headline = e.title ?? e.mutation ?? e.id;
+        const status = e.status ?? e.verdict;
+        const action = e.action_type;
+        const risk = e.risk_level;
+        const target = e.target
+          ? [e.target.type, e.target.id].filter(Boolean).join(":") +
+            (e.target.version ? ` (${e.target.version})` : "")
+          : undefined;
+        const whenRaw = e.occurred_at ?? e.created_at ?? e.landedAt;
+        const when = whenRaw
+          ? (Number.isNaN(new Date(whenRaw).getTime()) ? whenRaw : new Date(whenRaw).toLocaleString())
+          : undefined;
+        const hasMetrics = typeof e.before === "number" && typeof e.after === "number";
+        return (
+          <Card key={e.id} className="p-4 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-medium text-foreground">{headline}</div>
+              {status && (
+                <Badge variant="outline" className={verdictTone(status)}>{status}</Badge>
+              )}
+            </div>
+            <div className="font-mono text-xs text-muted-foreground">{e.id}</div>
+            {e.summary && <p className="text-sm text-muted-foreground">{e.summary}</p>}
+            <dl className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+              {hasMetrics && (
+                <>
+                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="text-foreground">{e.before!.toFixed(2)}</dd></div>
+                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="text-foreground">{e.after!.toFixed(2)}</dd></div>
+                </>
+              )}
+              {action && <div><dt className="text-muted-foreground">{t("mgmt.evolution.action", { defaultValue: "Action" })}</dt><dd className="text-foreground">{action}</dd></div>}
+              {risk && <div><dt className="text-muted-foreground">{t("mgmt.evolution.risk", { defaultValue: "Risk" })}</dt><dd className="text-foreground">{risk}</dd></div>}
+              {target && <div><dt className="text-muted-foreground">{t("mgmt.evolution.target", { defaultValue: "Target" })}</dt><dd className="font-mono text-foreground">{target}</dd></div>}
+              {when && <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{when}</dd></div>}
+            </dl>
+          </Card>
+        );
+      })}
     </section>
   );
 };
