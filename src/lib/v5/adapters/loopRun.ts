@@ -72,7 +72,7 @@ export function deriveLoopRuns(ctx: DeriveCtx): LoopRun[] {
 
   // Optimization loop runs — one per pending rebalance
   for (const r of ctx.rebalances.filter((x) => x.state === "review" || x.state === "draft")) {
-    const approval = ctx.approvals.find((a) => a.subject.includes(r.id) || a.kind.toLowerCase().includes("rebalance"));
+    const approval = ctx.approvals.find((a) => (a.subject ?? "").includes(r.id) || (a.kind ?? "").toLowerCase().includes("rebalance"));
     const stages: LoopStage[] = [
       { id: `stg_${r.id}_propose`, name: "Propose", status: "succeeded" },
       { id: `stg_${r.id}_review`, name: "Review", status: approval?.state === "approved" ? "succeeded" : approval ? "running" : "pending", warnAfterMs: DEFAULT_TIMEOUT_POLICY.runningWarnMs, timeoutPolicySource: V5_TIMEOUT_POLICY_VERSION },

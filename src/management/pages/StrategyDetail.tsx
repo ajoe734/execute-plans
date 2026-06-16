@@ -64,9 +64,9 @@ export const StrategyDetail = () => {
       bff.watchers.forSubject("Strategy", id), bff.decisionJournal.forSubject("Strategy", id),
     ]).then(([strat, j, a, ap, al, inc, ar, ex, ev, w, dj]) => {
       setS(strat); setJobs(j);
-      setAudit(a.filter((x) => x.target === id || x.target.includes(id)));
-      setApprovals(ap.filter((x) => x.subject.includes(id)));
-      setAlerts(al.filter((x) => x.relatedTarget === id || x.source.includes(id) || x.title.includes(id)));
+      setAudit(a.filter((x) => x.target === id || (x.target ?? "").includes(id)));
+      setApprovals(ap.filter((x) => (x.subject ?? "").includes(id)));
+      setAlerts(al.filter((x) => x.relatedTarget === id || (x.source ?? "").includes(id) || (x.title ?? "").includes(id)));
       setIncidents(inc.filter((x) => x.affected?.includes(id)));
       setArtifacts(ar.slice(0, 5));
       setExperiments(ex.slice(0, 6));

@@ -120,7 +120,11 @@ export const DeploymentDetail = () => {
             );
           })() },
           { value: "approvals", label: t("nav.approvals"), content: (() => {
-            const filtered = approvals.filter((a) => a.subject.includes(d.version) || a.kind.includes("deploy"));
+            // Live approval rows may omit subject/kind; guard so a real payload
+            // doesn't crash the deployment detail page.
+            const filtered = approvals.filter(
+              (a) => (a.subject ?? "").includes(d.version ?? "") || (a.kind ?? "").includes("deploy"),
+            );
             return (
               <DataTable rows={filtered} columns={[
                 { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
