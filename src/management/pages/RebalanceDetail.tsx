@@ -198,7 +198,7 @@ export const RebalanceDetail = () => {
             destructive={activeTr.uiPattern === "destructive_modal"}
             actionId={v3ActionId}
             confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
-            confirmToken={!v3ActionId && activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
+            confirmToken={!v3ActionId && activeTr.risk === "critical" ? (activeTr.action ?? "").toUpperCase() : undefined}
             onConfirm={async (memo, token) => {
               await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, { confirmToken: token });
               setMachineState(activeTr.to);

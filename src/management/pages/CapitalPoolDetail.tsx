@@ -106,7 +106,7 @@ export const CapitalPoolDetail = () => {
                   </div>
                   <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Badge variant="outline" className={breachToneCls[breach.level]}>{breach.level.toUpperCase()}</Badge>
+                      <Badge variant="outline" className={breachToneCls[breach.level]}>{(breach.level ?? "").toUpperCase()}</Badge>
                       {breach.riskBudgetUsagePct != null && rbuMetric && (
                         <span className="text-xs text-muted-foreground text-mono">
                           {rbuMetric.id}={(breach.riskBudgetUsagePct * 100).toFixed(rbuMetric.precision)}%
@@ -170,7 +170,7 @@ export const CapitalPoolDetail = () => {
                 rows={strats.map((s) => ({ id: s.id, name: s.name, sharpe: s.sharpe, dd: s.drawdown, pnl: s.pnl30d }))}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{(r.sharpe ?? 0).toFixed(2)}</span> },
                   { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.dd * 100).toFixed(2)}%</span> },
                   { key: "pnl", header: "PnL 30d", cell: (r) => <span className="text-mono text-xs">{(r.pnl * 100).toFixed(2)}%</span> },
                 ]}
