@@ -98,7 +98,7 @@ export const McpServerDetail = () => {
                 <Field label="URL" value={s.endpoint} mono />
                 <Field label={t("table.env")} value={
                   <div className="flex gap-1 mt-1">
-                    {s.envAllowed.map((e) => (
+                    {(s.envAllowed ?? []).map((e) => (
                       <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
                     ))}
                   </div>
@@ -118,7 +118,7 @@ export const McpServerDetail = () => {
                 { key: "scope", header: t("section.permissions"), cell: (r) => <span className={`text-xs uppercase tracking-wider ${scopeTone(r.scope)}`}>{r.scope}</span> },
                 { key: "envs", header: "Granted Envs", cell: (r) => (
                   <div className="flex gap-1">
-                    {r.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
+                    {(r.envGrants ?? []).map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
                   </div>
                 )},
                 { key: "calls", header: "Calls 24h", cell: (r) => <span className="text-mono text-xs">{(r.callsLast24h ?? 0).toLocaleString()}</span> },
@@ -148,7 +148,7 @@ export const McpServerDetail = () => {
           content: (
             <Section title={t("detail.section.allowedEnvs")}>
               <div className="flex gap-1">
-                {s.envAllowed.map((e) => (
+                {(s.envAllowed ?? []).map((e) => (
                   <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
                 ))}
               </div>
@@ -237,7 +237,7 @@ export const McpToolDetail = () => {
                   } />
                   <Field label={t("table.env")} value={
                     <div className="flex gap-1 mt-1">
-                      {tool.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
+                      {(tool.envGrants ?? []).map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
                     </div>
                   } />
                 </Section>

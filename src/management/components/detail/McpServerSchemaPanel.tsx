@@ -94,7 +94,7 @@ export const McpServerSchemaPanel = ({ server }: { server: McpServer }) => {
                 <code className="text-mono text-xs font-semibold truncate">{tool.name}</code>
                 <Badge variant="outline" className={`text-[10px] uppercase ${scopeTone(tool.scope)}`}>{tool.scope}</Badge>
                 <div className="flex gap-1">
-                  {tool.envGrants.map((e) => (
+                  {(tool.envGrants ?? []).map((e) => (
                     <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
                   ))}
                 </div>
