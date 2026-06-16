@@ -410,6 +410,8 @@ export default {
   common: {
     owner: "Owner", updated: "Last updated", state: "State", name: "Name", createNotConfigured: "Create flow not configured",
     actions: "Actions", noResults: "No results", loading: "Loading…",
+    awaitingData: "No data yet",
+    awaitingDataDesc: "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
     all: "All", back: "Back", risk: "Risk", successRate: "Success", none: "None",
     justNow: "just now",
     notFound: "Oops! Page not found", returnHome: "Return to Home",

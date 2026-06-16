@@ -12,6 +12,7 @@ export * from "./sse/protocol";
 export * from "./sse/bridge";
 export * from "./sse/liveSse";
 export * from "./lists";
+export * from "./degradation";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
