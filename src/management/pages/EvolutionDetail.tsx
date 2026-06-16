@@ -84,7 +84,7 @@ export const EvolutionDetail = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label="Generation" value={`G${e.generation}`} />
                   <StatCard label="Population" value={e.population.toString()} />
-                  <StatCard label="Best Fitness" value={e.bestFitness.toFixed(3)} tone="success" />
+                  <StatCard label="Best Fitness" value={(e.bestFitness ?? 0).toFixed(3)} tone="success" />
                   <StatCard label="Progress" value={`${(e.progress * 100).toFixed(0)}%`} />
                 </div>
                 <Section title={t("detail.section.generationProgress")}>
@@ -188,7 +188,7 @@ export const EvolutionDetail = () => {
             <DataTable rows={experiments} onRowClick={(r) => nav(`/management/experiments/${r.id}`)} columns={[
               { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-              { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {r.metricValue.toFixed(3)}</span> },
+              { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
               { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "concluded" ? "success" : r.status === "running" ? "running" : "pending"} /> },
             ]} empty={t("empty.noResults")} />
           ) },

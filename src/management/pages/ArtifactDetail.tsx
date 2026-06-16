@@ -53,9 +53,9 @@ export const ArtifactDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Kind" value={a.kind.toUpperCase()} />
+                  <StatCard label="Kind" value={(a.kind ?? "").toUpperCase()} />
                   <StatCard label={t("table.version")} value={a.version} />
-                  <StatCard label="Size" value={`${a.sizeMb.toLocaleString()} MB`} />
+                  <StatCard label="Size" value={`${(a.sizeMb ?? 0).toLocaleString()} MB`} />
                   <StatCard label={t("table.owner")} value={a.owner} />
                 </div>
                 <Section title={t("detail.section.hash")}>

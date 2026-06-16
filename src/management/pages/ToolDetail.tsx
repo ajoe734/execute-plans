@@ -111,7 +111,7 @@ export const ToolDetail = () => {
                   <LifecycleStepper machine={toolMachine} current={machineState} />
                 </Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Category" value={tool.category.toUpperCase()} />
+                  <StatCard label="Category" value={(tool.category ?? "").toUpperCase()} />
                   <StatCard label={t("table.version")} value={tool.version} />
                   <StatCard label="Inputs" value={tool.inputs} />
                   <StatCard label="Used by" value={tool.usedBy} />

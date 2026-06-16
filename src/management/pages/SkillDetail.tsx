@@ -118,7 +118,7 @@ export const SkillDetail = () => {
                 ]}
                 columns={[
                   { key: "suite", header: "Suite", cell: (r) => <span className="text-mono text-xs">{r.suite}</span> },
-                  { key: "score", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{r.score.toFixed(2)}</span> },
+                  { key: "score", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{(r.score ?? 0).toFixed(2)}</span> },
                   { key: "passed", header: "Passed", cell: (r) => <span className="text-mono text-xs text-status-success">{r.passed}</span> },
                   { key: "failed", header: "Failed", cell: (r) => <span className={`text-mono text-xs ${r.failed > 0 ? "text-risk-high" : "text-muted-foreground"}`}>{r.failed}</span> },
                 ]}

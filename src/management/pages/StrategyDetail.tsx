@@ -100,7 +100,7 @@ export const StrategyDetail = () => {
   ];
 
   const paperLive = [
-    { metric: "Sharpe",      paper: (s.sharpe + 0.3).toFixed(2), live: s.sharpe.toFixed(2),  delta: "-0.30" },
+    { metric: "Sharpe",      paper: (s.sharpe + 0.3).toFixed(2), live: (s.sharpe ?? 0).toFixed(2),  delta: "-0.30" },
     { metric: "PnL 30d",     paper: `${((s.pnl30d + 0.012) * 100).toFixed(2)}%`, live: `${(s.pnl30d * 100).toFixed(2)}%`, delta: "-1.20%" },
     { metric: "Max Drawdown",paper: `${((s.drawdown + 0.005) * 100).toFixed(2)}%`, live: `${(s.drawdown * 100).toFixed(2)}%`, delta: "+0.50%" },
     { metric: "Win Rate",    paper: "57.4%", live: "54.1%", delta: "-3.30%" },
@@ -165,7 +165,7 @@ export const StrategyDetail = () => {
                 </Section>
                 <div className="grid grid-cols-3 gap-4 mt-4">
                   <StatCard label="PnL 30d" value={`${(s.pnl30d * 100).toFixed(2)}%`} tone={s.pnl30d >= 0 ? "success" : "danger"} />
-                  <StatCard label={t("table.sharpe")} value={s.sharpe.toFixed(2)} />
+                  <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
                   <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
@@ -242,7 +242,7 @@ export const StrategyDetail = () => {
                   { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
                   { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
-                  { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {r.metricValue.toFixed(3)}</span> },
+                  { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
                   { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "concluded" ? "success" : r.status === "running" ? "running" : r.status === "review" ? "review" : "pending"} /> },
                 ]}
                 empty={t("empty.noResults")}
@@ -381,7 +381,7 @@ export const StrategyDetail = () => {
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
                   { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px] uppercase">{r.kind}</Badge> },
                   { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
-                  { key: "size", header: t("strategyDetail.size"), cell: (r) => <span className="text-mono text-xs">{r.sizeMb.toFixed(1)} MB</span> },
+                  { key: "size", header: t("strategyDetail.size"), cell: (r) => <span className="text-mono text-xs">{(r.sizeMb ?? 0).toFixed(1)} MB</span> },
                 ]}
                 empty={t("empty.noResults")}
               />
@@ -399,7 +399,7 @@ export const StrategyDetail = () => {
                   { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
                   { key: "gen", header: t("strategyDetail.generation"), cell: (r) => <span className="text-mono text-xs">{r.generation}</span> },
-                  { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{r.bestFitness.toFixed(3)}</span> },
+                  { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{(r.bestFitness ?? 0).toFixed(3)}</span> },
                   { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
                 ]}
               />
