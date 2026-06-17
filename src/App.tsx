@@ -97,7 +97,6 @@ import {
   StrictPublishAuditPage,
   DataSourceManagementPage,
   Ep5CanaryReadinessPage,
-  ManagementNlConsole,
   HumanGateDetailPage,
 } from "@/management/pages/oversight/_stubs";
 // 2026-05-22 PM-12 — Performance & League pages.
@@ -162,7 +161,8 @@ const App = () => (
               <Route path="data-sources" element={<DataSourceManagementPage />} />
               <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
               <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
-              <Route path="ask" element={<ManagementNlConsole />} />
+              {/* ask page retired — redundant with the floating agent panel */}
+              <Route path="ask" element={<Navigate to="/management/cockpit" replace />} />
               {/* PM-12 — Performance & League */}
               <Route path="portfolio-book" element={<PortfolioBookPage />} />
               <Route path="persona-league" element={<PersonaLeaguePage />} />

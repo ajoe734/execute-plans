@@ -29,7 +29,8 @@ export const ManagementLayout = () => {
       { to: "/management/evolution-journal", label: t("nav.evolutionJournal"), icon: GitBranch },
       { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
       { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
-      { to: "/management/ask", label: t("nav.askManagement"), icon: MessagesSquare },
+      // /management/ask removed — the ask flow is the always-available floating
+      // agent panel (bottom-right); the standalone mock NL page was redundant.
     ]},
 
     // 2026-05-22 PM-12 — Performance & League group.
