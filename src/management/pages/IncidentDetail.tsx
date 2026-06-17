@@ -23,6 +23,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { useOverlay } from "@/platform/overlayStore";
 import type { RollbackSagaDTO } from "@/lib/v4/rollbackSaga";
 import { findAsyncTransitionPolicy } from "@/lib/v4/asyncTransitionPolicy";
+import { safeDateTime } from "@/lib/utils";
 
 export const IncidentDetail = () => {
   const t = useT();

@@ -35,6 +35,7 @@ import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPap
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
 import { Eye, BookOpen, User } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 export const StrategyDetail = () => {
   const { id } = useParams();

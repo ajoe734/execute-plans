@@ -5,6 +5,7 @@ import type { Deployment } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { Check, AlertTriangle } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const ENV_STAGES = ["research", "paper", "live"] as const;
 

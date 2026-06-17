@@ -12,6 +12,7 @@ import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { ConsultRule, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 const ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];
 const MODES: ConsultRule["mode"][] = ["advisory", "blocking", "ack"];

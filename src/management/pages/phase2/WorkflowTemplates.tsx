@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface Template {
   id: string;

@@ -8,6 +8,7 @@ import { Wifi, WifiOff, Activity, Plug, PlugZap } from "lucide-react";
 import { useLiveStatus, useRealtimeStatus } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 export const RealtimeStatusBadge = () => {
   const t = useT();

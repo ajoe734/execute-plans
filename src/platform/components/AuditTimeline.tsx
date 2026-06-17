@@ -8,6 +8,7 @@ import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "@/platform/hooks";
 import { resolveEntity, lineageHref, decisionsHref } from "@/lib/entityLinks";
+import { safeDateTime } from "@/lib/utils";
 
 export interface AuditEntry {
   id?: string;

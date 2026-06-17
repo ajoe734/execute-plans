@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { bff } from "@/lib/bff-v1";
 import type { AuditEvent } from "@/lib/bff/types";
 import { useNavigate } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 
 export interface InspectorTarget {
   id: string;

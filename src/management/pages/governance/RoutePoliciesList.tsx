@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { bff } from "@/lib/bff-v1";
 import type { Persona, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 export const RoutePoliciesList = () => {
   const t = useT();

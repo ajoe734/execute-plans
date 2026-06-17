@@ -6,6 +6,7 @@ import { useT } from "@/platform/hooks";
 import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { safeDateTime } from "@/lib/utils";
 
 interface Incident {
   id: string;

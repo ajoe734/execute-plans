@@ -17,6 +17,7 @@ import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
 import { AlertTriangle, ClipboardCheck, Loader2, ShieldAlert } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 interface NCState {
   open: boolean;

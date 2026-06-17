@@ -17,6 +17,7 @@ import {
 } from "@/lib/v5";
 import { v5 } from "@/lib/bff-v1";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const stageTone: Record<string, string> = {
   succeeded: "bg-status-success/15 text-status-success border-status-success/30",

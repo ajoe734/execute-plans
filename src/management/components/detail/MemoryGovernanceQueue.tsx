@@ -8,6 +8,7 @@ import type { MemoryUpdate } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 
 const stateTone: Record<string, string> = {
   queued: "border-accent/40 text-accent",

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import type { MemoryUpdate, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 const stateTone: Record<MemoryUpdate["state"], string> = {
   queued: "border-accent/40 text-accent",

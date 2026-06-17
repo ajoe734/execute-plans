@@ -19,6 +19,7 @@ import { usePlatform } from "@/platform/store";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, AlertOctagon, Activity, Wallet, Inbox } from "lucide-react";
 import { isLive, lifecycleOf } from "@/lib/v4/strategyTripleDerive";
+import { safeDateTime } from "@/lib/utils";
 
 const relTime = (iso: string, locale: string, justNow: string) => {
   const diffMs = new Date(iso).getTime() - Date.now();

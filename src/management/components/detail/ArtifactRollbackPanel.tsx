@@ -9,6 +9,7 @@ import type { Artifact } from "@/lib/bff/types";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { safeDateTime } from "@/lib/utils";
 
 interface VersionEntry {
   version: string;
