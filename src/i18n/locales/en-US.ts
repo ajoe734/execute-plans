@@ -2208,6 +2208,9 @@ export default {
       weightKeys: {
         pnl: "PnL",
         sharpe: "Sharpe",
+        risk: "Risk",
+        execution: "Execution",
+        activity: "Activity",
         drawdownControl: "Drawdown control",
         executionQuality: "Execution quality",
         riskCompliance: "Risk compliance",

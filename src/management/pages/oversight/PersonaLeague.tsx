@@ -15,10 +15,12 @@ import {
 import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number, d = 2) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n);
+  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n) : "—";
 
 const tierTone = (tier: string) =>
   tier === "S" ? "bg-status-success/20 text-status-success border-status-success/30" :

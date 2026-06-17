@@ -2190,6 +2190,9 @@ export default {
       weightKeys: {
         pnl: "損益",
         sharpe: "Sharpe",
+        risk: "風險",
+        execution: "執行",
+        activity: "活躍度",
         drawdownControl: "回撤控制",
         executionQuality: "執行品質",
         riskCompliance: "風險合規",
