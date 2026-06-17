@@ -9,7 +9,7 @@
 // continues to drive UI.
 
 import { realtime } from "@/lib/bff/realtime";
-import { liveStatus, shouldUseLive } from "../liveStatus";
+import { liveStatus } from "../liveStatus";
 import { isSseEvent, type SseEvent } from "./channels";
 import { buildSseUrl, nextBackoffMs, type SseConnectInit } from "./protocol";
 import { paths } from "../paths";
@@ -39,9 +39,16 @@ function readBaseUrl(): string {
   }
 }
 
-/** Open / re-open the live SSE connection. No-op when not in live mode. */
+/** Configured live mode (not the *effective* mode). We keep probing SSE while
+ *  configured for live even after a fallback, so a transient outage recovers
+ *  on its own instead of latching until a manual retry. */
+function isLiveModeConfigured(): boolean {
+  return liveStatus.get().mode === "live";
+}
+
+/** Open / re-open the live SSE connection. No-op when not configured for live. */
 export function connectLiveSse(init: SseConnectInit = {}): () => void {
-  if (!shouldUseLive() || typeof EventSource === "undefined") {
+  if (!isLiveModeConfigured() || typeof EventSource === "undefined") {
     return () => {};
   }
   // Single-flight.
@@ -72,9 +79,12 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   es.addEventListener("error", () => {
     realtime.markLiveError();
     if (!opened) {
-      // never opened → transport failure, fall back.
+      // Never opened → transport failure. Fall back to seed for reads, but KEEP
+      // probing (scheduleReconnect) so connectivity recovery auto-clears the
+      // banner and resumes live — previously this gave up and latched until a
+      // manual retry click.
       liveStatus.reportFallback("sse_open_failed");
-      cleanup();
+      cleanup(/*scheduleReconnect*/ true);
       return;
     }
     // transient — schedule reconnect with backoff
@@ -84,7 +94,9 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   function cleanup(scheduleReconnect = false) {
     try { es.close(); } catch { /* noop */ }
     current = null;
-    if (scheduleReconnect && shouldUseLive()) {
+    // Gate on the *configured* mode, not the effective one: after a fallback the
+    // effective mode is "mock", but we still want to keep retrying to recover.
+    if (scheduleReconnect && isLiveModeConfigured()) {
       const delay = nextBackoffMs(attempt++);
       clearTimer();
       reconnectTimer = setTimeout(() => connectLiveSse(init), delay);
