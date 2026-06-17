@@ -614,13 +614,21 @@ export const HumanInboxPage = () => {
                 </Badge>
               )}
             </div>
-            <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
+            {it.requiredRole && (
+              <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
+            )}
           </div>
-          <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
-          </dl>
+          {it.summary && <p className="mt-2 text-sm text-muted-foreground">{it.summary}</p>}
+          {/* The consequence triplet only exists on the mock/legacy shape; live
+              governance items carry a summary instead — show the grid only when
+              populated so real payloads don't render three blank cells. */}
+          {(it.consequenceIfApproved || it.consequenceIfRejected || it.consequenceIfIgnored) && (
+            <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
+            </dl>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {/* Live BFF inbox items lack the FE-composed detailHref/links; guard
                 so a degraded/real payload renders instead of crashing the page. */}
