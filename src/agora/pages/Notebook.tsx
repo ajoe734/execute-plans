@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,7 @@ export const Notebook = () => {
             {notes.map((n) => (
               <Card key={n.id} className="p-4">
                 <div className="font-semibold">{n.title}</div>
-                <div className="text-xs text-muted-foreground text-mono mt-0.5">{new Date(n.ts).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground text-mono mt-0.5">{safeDateTime(n.ts)}</div>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {n.tags.map((tag) => <span key={tag} className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">#{tag}</span>)}
                   {n.artifactId && <span className="rounded border border-accent/30 px-1.5 py-0.5 text-[10px] text-accent">{n.artifactId}</span>}

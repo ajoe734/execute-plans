@@ -143,7 +143,7 @@ export const ConsultRulesPage = () => {
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
                 <span>{t("table.owner")}: <span className="text-mono text-foreground">{r.owner}</span></span>
                 <span>·</span>
-                <span>{t("table.updated")}: {new Date(r.updatedAt).toLocaleString()}</span>
+                <span>{t("table.updated")}: {safeDateTime(r.updatedAt)}</span>
                 <span className="ml-auto text-mono">{personaName(r.fromPersonaId)} → {personaName(r.toPersonaId)}</span>
               </div>
             </Card>

@@ -14,10 +14,12 @@ import {
 } from "@/lib/v5/management/portfolio";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
+  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n) : "—";
 
 const statusTone = (s: PortfolioStatus) =>
   s === "ok" ? "bg-status-success/15 text-status-success border-status-success/30" :

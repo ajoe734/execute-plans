@@ -97,7 +97,7 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                   )}</span>
                 )}
                 <span className="text-mono text-xs text-muted-foreground ml-auto">
-                  {new Date(e.ts).toLocaleString()}
+                  {safeDateTime(e.ts)}
                 </span>
               </div>
               {e.memo && <p className="text-xs text-muted-foreground mt-0.5">{e.memo}</p>}

@@ -41,7 +41,7 @@ export const RoutePolicyPreview = ({ personaId }: { personaId: string }) => {
         <div>
           <div className="text-sm font-semibold">{policy.name}</div>
           <div className="text-mono text-[10px] text-muted-foreground">
-            {policy.id} · {policy.version} · {policy.publishedAt ? new Date(policy.publishedAt).toLocaleDateString() : "—"}
+            {policy.id} · {policy.version} · {policy.publishedAt ? safeDateTime(policy.publishedAt, "date") : "—"}
           </div>
         </div>
         <Button size="sm" variant="outline" disabled>{t("persona.routePolicy.editStub")}</Button>
@@ -70,7 +70,7 @@ export const RoutePolicyPreview = ({ personaId }: { personaId: string }) => {
             <div key={v.id} className="p-3 rounded-md border border-border">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">{v.version}</span>
-                <span className="text-mono text-[10px] text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</span>
+                <span className="text-mono text-[10px] text-muted-foreground">{safeDateTime(v.createdAt)}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">{v.note} · {v.rules.length} rules</div>
             </div>

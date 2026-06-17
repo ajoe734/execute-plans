@@ -3,7 +3,7 @@
 // Only the current pending stage is actionable; previous stages show their decision.
 import { Check, X, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, safeDateTime } from "@/lib/utils";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "./SlaCountdown";
 import { PermissionAwareButton } from "./PermissionAwareButton";
@@ -54,7 +54,7 @@ export const StageDecisionPanel = ({ stages, i18nPrefix = "lifecycle.approval", 
                   <div className="text-sm font-medium truncate">{label(stage.name)}</div>
                   {stage.decidedBy && (
                     <div className="text-mono text-[10px] text-muted-foreground">
-                      {stage.decidedBy} · {stage.decidedAt ? new Date(stage.decidedAt).toLocaleString() : ""}
+                      {stage.decidedBy} · {stage.decidedAt ? safeDateTime(stage.decidedAt) : ""}
                     </div>
                   )}
                 </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -87,7 +88,7 @@ export const DeploymentDetail = () => {
                   <StatCard label={t("table.target")} value={(d.target ?? "—").toUpperCase()} tone={targetTone(d.target ?? "")} />
                   <StatCard label={t("table.version")} value={d.version} />
                   <StatCard label="Previous" value={d.previousVersion ?? "—"} />
-                  <StatCard label="Promoted" value={d.promotedAt ? new Date(d.promotedAt).toLocaleString() : "—"} />
+                  <StatCard label="Promoted" value={d.promotedAt ? safeDateTime(d.promotedAt) : "—"} />
                 </div>
                 <Section title={t("detail.section.linkedObjects")}>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -203,7 +204,7 @@ export const DeploymentDetail = () => {
             <Button variant="outline" onClick={() => setScheduleOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
               await mutations.scheduleDeployment(d.id, new Date(scheduleAt).toISOString(), `scheduled by user`);
-              toast.success(t("deployment.schedule.toast", { when: new Date(scheduleAt).toLocaleString() }));
+              toast.success(t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }));
               setScheduleOpen(false);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>

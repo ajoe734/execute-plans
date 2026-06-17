@@ -59,8 +59,8 @@ export const HookCronManagerPage = () => {
                 { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
                 { key: "sched", header: t("hooks.schedule"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.schedule}</code> },
                 { key: "tgt", header: t("hooks.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
-                { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.lastRun).toLocaleString()}</span> },
-                { key: "next", header: t("hooks.nextRun"), cell: (r) => <span className="text-mono text-xs">{new Date(r.nextRun).toLocaleString()}</span> },
+                { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.lastRun)}</span> },
+                { key: "next", header: t("hooks.nextRun"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.nextRun)}</span> },
                 { key: "en", header: t("hooks.enabled"), cell: (r) => <Switch defaultChecked={r.enabled} /> },
               ]} />
             </Card>

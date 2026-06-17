@@ -76,7 +76,7 @@ export const RoutePolicyDetail = () => {
             </div>
             <div>
               <div className="text-[10px] uppercase text-muted-foreground tracking-wider">{t("governance.policy.published")}</div>
-              <div className="mt-1 text-xs">{policy.publishedAt ? new Date(policy.publishedAt).toLocaleString() : "—"}</div>
+              <div className="mt-1 text-xs">{policy.publishedAt ? safeDateTime(policy.publishedAt) : "—"}</div>
             </div>
             <div>
               <div className="text-[10px] uppercase text-muted-foreground tracking-wider">{t("table.version")}</div>
@@ -114,7 +114,7 @@ export const RoutePolicyDetail = () => {
                     <tr key={v.id} className="border-t border-border">
                       <td className="px-4 py-2 text-mono">{v.version}</td>
                       <td className="px-4 py-2 text-mono text-xs">{v.author}</td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">{safeDateTime(v.createdAt)}</td>
                       <td className="px-4 py-2 text-mono text-xs">{v.rules.length}</td>
                       <td className="px-4 py-2 text-xs">{v.note ?? "—"}</td>
                     </tr>

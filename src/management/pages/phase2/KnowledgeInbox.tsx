@@ -88,7 +88,7 @@ export const KnowledgeInboxPage = () => {
                 <div className="flex items-center gap-2"><RiskBadge level={active.risk} /><Badge variant="outline">{active.kind}</Badge><span className="text-mono text-xs text-muted-foreground">{active.id}</span></div>
                 <h2 className="text-lg font-semibold">{active.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{active.body}</p>
-                <div className="text-xs text-muted-foreground text-mono">{active.source} · {new Date(active.ts).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground text-mono">{active.source} · {safeDateTime(active.ts)}</div>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                   <Button size="sm" onClick={() => promote("Artifact")}>{t("knowledge.promoteArtifact")}</Button>
                   <Button size="sm" variant="outline" onClick={() => promote("Postmortem")}>{t("knowledge.promotePostmortem")}</Button>

@@ -62,7 +62,7 @@ export const WorkflowTemplatesPage = () => {
             { key: "cat", header: t("table.category"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${catTone(r.category)}`}>{r.category}</Badge> },
             { key: "steps", header: t("workflows.steps"), cell: (r) => <span className="text-mono text-xs">{r.steps.length}</span> },
             { key: "runs", header: t("workflows.runs"), cell: (r) => <span className="text-mono text-xs">{r.runs}</span> },
-            { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.lastRun).toLocaleString()}</span> },
+            { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.lastRun)}</span> },
             { key: "own", header: t("table.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
           ]} />
         </Card>

@@ -93,7 +93,7 @@ export const MemoryGovernancePage = () => {
                   <Badge variant="outline" className="text-[10px] uppercase">{personaName(m.personaId)}</Badge>
                   <Badge variant="outline" className="text-[10px] uppercase">{m.kind}</Badge>
                   <Badge variant="outline" className="text-[10px] uppercase">{m.source}</Badge>
-                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{m.proposedBy} · {new Date(m.proposedAt).toLocaleString()}</span>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{m.proposedBy} · {safeDateTime(m.proposedAt)}</span>
                 </div>
                 {m.before && <div className="text-xs text-muted-foreground line-through">{m.before}</div>}
                 <div className="text-sm">{m.after}</div>
@@ -157,7 +157,7 @@ export const MemoryGovernancePage = () => {
                       <td className="px-4 py-2 text-xs"><Badge variant="outline" className="text-[10px] uppercase">{m.kind}</Badge></td>
                       <td className="px-4 py-2"><Badge variant="outline" className={`text-[10px] uppercase ${stateTone[m.state]}`}>{m.state}</Badge></td>
                       <td className="px-4 py-2 text-xs truncate max-w-md">{m.after}</td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">{new Date(m.proposedAt).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">{safeDateTime(m.proposedAt)}</td>
                     </tr>
                   ))}
                   {decided.length === 0 && <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-6">{t("empty.none")}</td></tr>}

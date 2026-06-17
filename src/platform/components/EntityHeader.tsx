@@ -50,7 +50,7 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
               {t("common.owner")}: <span className="text-mono text-foreground/80">{object.owner}</span>
             </span>
             <span>
-              {t("common.updated")}: <span className="text-mono text-foreground/80">{new Date(object.updatedAt).toLocaleString()}</span>
+              {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
             </span>
           </div>
         </div>

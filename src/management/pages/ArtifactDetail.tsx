@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
@@ -106,7 +107,7 @@ export const ArtifactDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <Field label="Format" value={a.kind === "model" ? "ONNX" : a.kind === "dataset" ? "Parquet" : a.kind === "container" ? "OCI" : "PDF"} mono />
-                  <Field label={t("table.created")} value={new Date(a.updatedAt).toLocaleDateString()} mono />
+                  <Field label={t("table.created")} value={safeDateTime(a.updatedAt, "date")} mono />
                   <Field label="License" value="Internal" mono />
                 </div>
               </Section>

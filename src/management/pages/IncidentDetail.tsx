@@ -152,7 +152,7 @@ export const IncidentDetail = () => {
       <PageBody>
         <Card className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label={t("incident.commander")} value={incident.commander ?? "—"} mono />
-          <Field label={t("incident.opened")} value={new Date(incident.openedAt).toLocaleString()} mono />
+          <Field label={t("incident.opened")} value={safeDateTime(incident.openedAt)} mono />
           <Field label={t("incident.severity")} value={incident.severity} mono />
           <Field label={t("incident.status")} value={incident.status} mono />
         </Card>
@@ -181,7 +181,7 @@ export const IncidentDetail = () => {
               <ol className="space-y-3">
                 {(incident.timeline ?? []).map((e, i) => (
                   <li key={i} className="text-sm flex gap-3">
-                    <span className="text-mono text-xs text-muted-foreground whitespace-nowrap w-32">{new Date(e.ts).toLocaleString()}</span>
+                    <span className="text-mono text-xs text-muted-foreground whitespace-nowrap w-32">{safeDateTime(e.ts)}</span>
                     <span className="text-mono text-xs text-accent w-20">{e.actor}</span>
                     <span className="flex-1">{e.note}</span>
                   </li>
@@ -259,7 +259,7 @@ export const IncidentDetail = () => {
               <ol className="text-sm space-y-1.5">
                 {mitigationEntries.length === 0 ? <li className="text-xs text-muted-foreground">{t("incident.mitigation.empty")}</li> :
                   mitigationEntries.map((e, i) => (
-                    <li key={i} className="flex gap-3"><span className="text-mono text-xs text-muted-foreground w-32">{new Date(e.ts).toLocaleString()}</span><span className="flex-1">{e.note}</span></li>
+                    <li key={i} className="flex gap-3"><span className="text-mono text-xs text-muted-foreground w-32">{safeDateTime(e.ts)}</span><span className="flex-1">{e.note}</span></li>
                   ))}
               </ol>
               <Textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t("incident.mitigation.placeholder")} rows={3} />

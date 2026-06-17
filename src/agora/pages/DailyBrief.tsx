@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ export const DailyBrief = () => {
 
   return (
     <>
-      <PageHeader title={t("daily.title")} subtitle={t("daily.subtitle", { date: new Date().toLocaleDateString() })} />
+      <PageHeader title={t("daily.title")} subtitle={t("daily.subtitle", { date: safeDateTime(Date.now(), "date") })} />
       <PageBody>
         <Card className="p-3">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">

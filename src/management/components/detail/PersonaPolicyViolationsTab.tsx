@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import type { PolicyViolation } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
@@ -22,7 +23,7 @@ export const PersonaPolicyViolationsTab = ({ personaId }: { personaId: string })
     <DataTable
       rows={rows}
       columns={[
-        { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+        { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
         { key: "policy", header: t("phase13.persona.violations.policy"), cell: (r) => <div><div className="text-sm">{r.policyName}</div><div className="text-mono text-[10px] text-muted-foreground">{r.policyId}</div></div> },
         { key: "severity", header: t("table.risk"), cell: (r) => <RiskBadge level={r.severity} /> },
         { key: "state", header: t("phase13.persona.violations.state"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${stateTone[r.state]}`}>{r.state}</Badge> },

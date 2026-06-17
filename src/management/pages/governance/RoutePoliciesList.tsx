@@ -48,7 +48,7 @@ export const RoutePoliciesList = () => {
             { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
             { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
             { key: "updated", header: t("table.updated"), cell: (r) => (
-              <span className="text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleDateString()}</span>
+              <span className="text-xs text-muted-foreground">{safeDateTime(r.updatedAt, "date")}</span>
             ) },
           ]}
         />

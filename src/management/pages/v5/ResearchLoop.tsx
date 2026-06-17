@@ -139,7 +139,7 @@ export const ResearchLoopPage = () => {
                     <div className="text-[10px] text-muted-foreground mt-1">{r.stages.map((s) => s.name).join(" → ")}</div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.nextAction?.label ?? r.nextAction?.kind ?? "—"}</td>
-                  <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</td>
                 </tr>
               ))}
               {!runs.data && (

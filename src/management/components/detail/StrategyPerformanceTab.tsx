@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import type { PerformanceSeries } from "@/lib/bff/types";
 import { Card } from "@/components/ui/card";
@@ -15,7 +16,7 @@ type Benchmark = "BTC" | "ETH" | "SP500" | "none";
 const Chart = ({ series, label, showBenchmark, benchmarkLabel }: { series: PerformanceSeries | undefined; label: string; showBenchmark: boolean; benchmarkLabel: string }) => {
   if (!series) return <Card className="p-8 text-center text-sm text-muted-foreground">—</Card>;
   const data = series.points.map((p) => ({
-    ts: new Date(p.ts).toLocaleDateString(),
+    ts: safeDateTime(p.ts, "date"),
     pnl: +(p.pnl * 100).toFixed(2),
     benchmark: +(p.benchmark * 100).toFixed(2),
   }));

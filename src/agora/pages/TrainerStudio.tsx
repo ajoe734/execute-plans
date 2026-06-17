@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -150,7 +151,7 @@ const TrainerOverview = () => {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline" className="text-[10px]">{t(`agora.trainerStudio.sources.${activeFb.source}`)}</Badge>
                   <span className="text-mono text-[10px] text-muted-foreground">{activeFb.persona}</span>
-                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(activeFb.capturedAt).toLocaleString()}</span>
+                  <span className="text-mono text-[10px] text-muted-foreground ml-auto">{safeDateTime(activeFb.capturedAt)}</span>
                 </div>
                 <p className="text-sm">{activeFb.summary}</p>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">{t("common.evidence")}</div>
@@ -340,7 +341,7 @@ const PersonaTrainer = ({ personaId }: { personaId: string }) => {
                   {m.before && <div className="text-xs line-through text-muted-foreground">{m.before}</div>}
                   <div className="text-sm">{m.after}</div>
                 </div>
-                <div className="text-[10px] text-muted-foreground text-mono whitespace-nowrap">{new Date(m.proposedAt).toLocaleDateString()}</div>
+                <div className="text-[10px] text-muted-foreground text-mono whitespace-nowrap">{safeDateTime(m.proposedAt, "date")}</div>
               </div>
             ))}
           </Card>

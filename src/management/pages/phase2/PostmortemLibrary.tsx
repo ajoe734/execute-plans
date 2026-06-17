@@ -47,7 +47,7 @@ export const PostmortemLibraryPage = () => {
             { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
             { key: "inc", header: t("postmortem.incident"), cell: (r) => <span className="text-mono text-xs">{r.incidentId}</span> },
             { key: "by", header: t("postmortem.author"), cell: (r) => <span className="text-mono text-xs">{r.authoredBy}</span> },
-            { key: "ts", header: t("postmortem.resolved"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.resolved).toLocaleString()}</span> },
+            { key: "ts", header: t("postmortem.resolved"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.resolved)}</span> },
           ]} />
         </Card>
       </PageBody>
@@ -64,7 +64,7 @@ export const PostmortemLibraryPage = () => {
                 <Card className="p-4 grid grid-cols-2 gap-4">
                   <Field label={t("postmortem.incident")} value={active.incidentId} mono />
                   <Field label={t("postmortem.author")} value={active.authoredBy} mono />
-                  <Field label={t("postmortem.resolved")} value={new Date(active.resolved).toLocaleString()} mono />
+                  <Field label={t("postmortem.resolved")} value={safeDateTime(active.resolved)} mono />
                 </Card>
                 <Card className="p-4 space-y-3">
                   <div><div className="text-xs uppercase tracking-wider text-muted-foreground">{t("postmortem.rootCause")}</div><div className="text-sm mt-1">{active.rootCause}</div></div>

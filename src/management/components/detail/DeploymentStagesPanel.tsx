@@ -68,7 +68,7 @@ export const DeploymentStagesPanel = ({ deployment }: { deployment: Deployment }
                 {s.active && <Badge variant="outline" className="text-[10px] uppercase">{t("deployment.stages.current")}</Badge>}
                 {s.promotedAt && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    {new Date(s.promotedAt).toLocaleDateString()}
+                    {safeDateTime(s.promotedAt, "date")}
                   </div>
                 )}
               </div>

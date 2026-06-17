@@ -94,7 +94,7 @@ export const SkillSandboxStudio = () => {
             <div className="space-y-1">
               {trace.map((entry, i) => (
                 <div key={i} className="flex items-start gap-2 text-mono text-[11px]">
-                  <span className="text-muted-foreground">{new Date(entry.ts).toLocaleTimeString()}</span>
+                  <span className="text-muted-foreground">{safeDateTime(entry.ts, "time")}</span>
                   <Badge variant="outline" className={`text-[9px] uppercase ${entry.level === "warn" ? "border-status-warning/40 text-status-warning" : "border-border text-muted-foreground"}`}>
                     {entry.level}
                   </Badge>
