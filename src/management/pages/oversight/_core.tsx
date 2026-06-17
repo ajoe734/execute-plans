@@ -853,9 +853,20 @@ export const EvolutionJournalPage = () => {
 interface EvidenceRow {
   id: string; kind: string; status: string;
   hash: string; linkedObject: string; createdAt: string;
-  // Live BFF evidence shape uses different field names.
-  refId?: string; sourceType?: string; linkType?: string; sourceRef?: string;
-  credibility?: string; linkedObjectSummary?: string; capturedAt?: string;
+  // Live BFF evidence shape uses different field names; some are objects.
+  refId?: string; sourceType?: string; linkType?: string; capturedAt?: string;
+  sourceRef?: unknown; credibility?: unknown; linkedObjectSummary?: unknown;
+}
+
+// Coerce a possibly-object evidence field to a display string.
+function evidenceText(v: unknown): string | undefined {
+  if (typeof v === "string") return v || undefined;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const s = o.display_label ?? o.displayLabel ?? o.tier ?? o.entity_ref ?? o.entityRef ?? o.label;
+    return typeof s === "string" && s ? s : undefined;
+  }
+  return undefined;
 }
 
 const EVIDENCE: EvidenceRow[] = [
@@ -886,10 +897,11 @@ export const EvidenceExplorerPage = () => {
           <tbody>
             {rows.map((e) => {
               // Fall back to live BFF field names when the mock fields are absent.
+              // credibility / linkedObjectSummary / sourceRef arrive as objects.
               const kind = e.kind ?? e.sourceType ?? e.linkType ?? "—";
-              const status = e.status ?? e.credibility ?? "—";
-              const hash = e.hash ?? e.refId ?? e.sourceRef ?? "—";
-              const linkedObject = e.linkedObject ?? e.linkedObjectSummary ?? "—";
+              const status = e.status ?? evidenceText(e.credibility) ?? "—";
+              const hash = e.hash ?? e.refId ?? evidenceText(e.sourceRef) ?? "—";
+              const linkedObject = e.linkedObject ?? evidenceText(e.linkedObjectSummary) ?? "—";
               const createdAt = e.createdAt ?? e.capturedAt ?? "—";
               return (
                 <tr key={e.id} className="border-b border-border/50">

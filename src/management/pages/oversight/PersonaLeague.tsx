@@ -74,9 +74,11 @@ export const PersonaLeaguePage = () => {
         <Card className="p-3">
           <div className="text-xs text-muted-foreground mb-2">{t("mgmt.league.tierDistribution")}</div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(tiers).map(([tier, count]) => (
-              <Badge key={tier} variant="outline" className={tierTone(tier)}>{tier}: {count}</Badge>
-            ))}
+            {Object.entries(tiers)
+              .filter(([tier, count]) => tier && tier !== "undefined" && Number.isFinite(count as number))
+              .map(([tier, count]) => (
+                <Badge key={tier} variant="outline" className={tierTone(tier)}>{tier}: {count}</Badge>
+              ))}
           </div>
         </Card>
         <Card className="p-3">
