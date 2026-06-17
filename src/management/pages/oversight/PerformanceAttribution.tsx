@@ -73,7 +73,7 @@ export const PerformanceAttributionPage = () => {
           >
             <option value="all">{t("mgmt.attribution.allDimensions")}</option>
             {ATTRIBUTION_DIMENSIONS.map((d) => (
-              <option key={d} value={d}>{t(`mgmt.attribution.dimensions.${d}`)}</option>
+              <option key={d} value={d}>{t(`mgmt.attribution.dimensions.${d}`, { defaultValue: d })}</option>
             ))}
           </select>
           <select
@@ -83,7 +83,7 @@ export const PerformanceAttributionPage = () => {
             aria-label={t("mgmt.attribution.period")}
           >
             {PERIODS.map((p) => (
-              <option key={p} value={p}>{t(`mgmt.attribution.periods.${p}`)}</option>
+              <option key={p} value={p}>{t(`mgmt.attribution.periods.${p}`, { defaultValue: p })}</option>
             ))}
           </select>
         </div>
@@ -105,7 +105,7 @@ export const PerformanceAttributionPage = () => {
           <tbody>
             {rows.map((r) => (
               <tr key={`${r.dimension}-${r.key}`} className="border-b border-border/50">
-                <td className="px-3 py-2"><Badge variant="outline">{t(`mgmt.attribution.dimensions.${r.dimension}`)}</Badge></td>
+                <td className="px-3 py-2"><Badge variant="outline">{t(`mgmt.attribution.dimensions.${r.dimension}`, { defaultValue: r.dimension })}</Badge></td>
                 <td className="px-3 py-2 font-mono">{r.label}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContribution < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(r.pnlContribution)}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContributionPct < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtPct(r.pnlContributionPct)}</td>
