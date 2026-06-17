@@ -76,9 +76,17 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={badgeTone(r.badge)}>{r.badge}</Badge>
-          <time className="text-xs text-muted-foreground" dateTime={trace.createdAt}>
-            {new Date(trace.createdAt).toLocaleString()}
-          </time>
+          {(() => {
+            // Live traces use occurred_at/created_at (snake); guard against an
+            // undefined/invalid timestamp rendering "Invalid Date".
+            const tr = trace as typeof trace & { occurredAt?: string; occurred_at?: string; created_at?: string };
+            const ts = tr.createdAt ?? tr.occurredAt ?? tr.occurred_at ?? tr.created_at;
+            const d = ts ? new Date(ts) : null;
+            const label = d && !Number.isNaN(d.getTime()) ? d.toLocaleString() : "—";
+            return (
+              <time className="text-xs text-muted-foreground" dateTime={ts ?? undefined}>{label}</time>
+            );
+          })()}
         </div>
       </div>
 

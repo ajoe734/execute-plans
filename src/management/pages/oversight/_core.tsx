@@ -851,8 +851,11 @@ export const EvolutionJournalPage = () => {
 // =====================================================================
 
 interface EvidenceRow {
-  id: string; kind: string; status: "verified" | "stale" | "missing";
+  id: string; kind: string; status: string;
   hash: string; linkedObject: string; createdAt: string;
+  // Live BFF evidence shape uses different field names.
+  refId?: string; sourceType?: string; linkType?: string; sourceRef?: string;
+  credibility?: string; linkedObjectSummary?: string; capturedAt?: string;
 }
 
 const EVIDENCE: EvidenceRow[] = [
@@ -881,16 +884,24 @@ export const EvidenceExplorerPage = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.map((e) => (
-              <tr key={e.id} className="border-b border-border/50">
-                <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
-                <td className="px-3 py-2">{e.kind}</td>
-                <td className="px-3 py-2"><Badge variant="outline">{e.status}</Badge></td>
-                <td className="px-3 py-2 font-mono text-xs">{e.hash}</td>
-                <td className="px-3 py-2 font-mono text-xs">{e.linkedObject}</td>
-                <td className="px-3 py-2 text-muted-foreground">{e.createdAt}</td>
-              </tr>
-            ))}
+            {rows.map((e) => {
+              // Fall back to live BFF field names when the mock fields are absent.
+              const kind = e.kind ?? e.sourceType ?? e.linkType ?? "—";
+              const status = e.status ?? e.credibility ?? "—";
+              const hash = e.hash ?? e.refId ?? e.sourceRef ?? "—";
+              const linkedObject = e.linkedObject ?? e.linkedObjectSummary ?? "—";
+              const createdAt = e.createdAt ?? e.capturedAt ?? "—";
+              return (
+                <tr key={e.id} className="border-b border-border/50">
+                  <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
+                  <td className="px-3 py-2">{kind}</td>
+                  <td className="px-3 py-2"><Badge variant="outline">{status}</Badge></td>
+                  <td className="px-3 py-2 font-mono text-xs">{hash}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{linkedObject}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{createdAt}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>

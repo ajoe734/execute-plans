@@ -14,10 +14,12 @@ import {
 import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number, d = 2) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n);
+  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n) : "—";
 
 const deltaArrow = (d?: number) =>
   d === undefined ? "·" : d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${Math.abs(d)}` : "—";
@@ -34,7 +36,26 @@ export const QuarterlyRankingPage = () => {
   const { data: formula } = useV5Live(
     () => mgmt.quarterlyRanking.formula(() => seedFormula), [],
   );
-  const ranking: QuarterlyRankingRow[] = rows ?? seedRows;
+  // Normalize live rows: the BFF shape carries overallScore/tierLabel/metrics
+  // and no `eligibility` field, so map them onto the FE view-model (otherwise
+  // every persona is treated as disqualified and score/pnl render NaN).
+  const ranking: QuarterlyRankingRow[] = (rows ?? seedRows).map((raw, i) => {
+    const r = raw as QuarterlyRankingRow & {
+      overallScore?: number; tierLabel?: string; name?: string; rank?: number;
+      metrics?: { pnl?: number | null; sharpe?: number | null };
+    };
+    if (typeof r.eligibility === "string" && typeof r.score === "number") return r;
+    return {
+      ...r,
+      eligibility: r.eligibility ?? "eligible",
+      currentRank: r.currentRank ?? r.rank ?? i + 1,
+      personaName: r.personaName ?? r.name ?? r.personaId ?? r.id,
+      score: r.score ?? r.overallScore ?? NaN,
+      tier: r.tier ?? r.tierLabel ?? "—",
+      pnlQuarter: r.pnlQuarter ?? r.metrics?.pnl ?? NaN,
+      sharpeQuarter: r.sharpeQuarter ?? r.metrics?.sharpe ?? NaN,
+    } as QuarterlyRankingRow;
+  });
   const f = formula ?? seedFormula;
 
   const disqualified = ranking.filter((r) => r.eligibility !== "eligible");
@@ -69,7 +90,7 @@ export const QuarterlyRankingPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           {Object.entries(f.weights ?? {}).map(([k, v]) => (
             <div key={k} className="flex justify-between">
-              <span className="text-muted-foreground">{t(`mgmt.quarterly.weightKeys.${k}`)}</span>
+              <span className="text-muted-foreground">{t(`mgmt.quarterly.weightKeys.${k}`, { defaultValue: k })}</span>
               <span className="font-mono">{fmtNum(v as number)}</span>
             </div>
           ))}
@@ -110,7 +131,7 @@ export const QuarterlyRankingPage = () => {
                 <td className="px-3 py-2 font-mono">{fmtNum(r.score, 1)}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlQuarter < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(r.pnlQuarter)}</td>
                 <td className="px-3 py-2 font-mono">{fmtNum(r.sharpeQuarter)}</td>
-                <td className="px-3 py-2 text-xs">{t(`mgmt.quarterly.eligibilityValues.${r.eligibility}`)}</td>
+                <td className="px-3 py-2 text-xs">{t(`mgmt.quarterly.eligibilityValues.${r.eligibility}`, { defaultValue: String(r.eligibility ?? "—") })}</td>
                 <td className="px-3 py-2">
                   {r.recommendation && r.recommendation !== "no_change" ? (
                     <Button
@@ -144,7 +165,7 @@ export const QuarterlyRankingPage = () => {
             {disqualified.map((d) => (
               <li key={d.personaId}>
                 <Link to={d.links.manageHref} className="text-primary hover:underline font-mono">{d.personaName}</Link>
-                <span className="text-muted-foreground"> — {d.disqualificationReason ?? t(`mgmt.quarterly.eligibilityValues.${d.eligibility}`)}</span>
+                <span className="text-muted-foreground"> — {d.disqualificationReason ?? t(`mgmt.quarterly.eligibilityValues.${d.eligibility}`, { defaultValue: String(d.eligibility ?? "—") })}</span>
               </li>
             ))}
           </ul>
