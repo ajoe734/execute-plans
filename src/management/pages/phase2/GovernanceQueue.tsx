@@ -151,7 +151,7 @@ export const GovernanceQueuePage = () => {
                   </div>
                 );
               }},
-              { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
+              { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
             ]}
           />
         </Card>

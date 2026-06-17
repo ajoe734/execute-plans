@@ -131,7 +131,7 @@ export const OptimizationLoopPage = () => {
                         ? <Link to={approvalHref(approvalEv.id)} className="text-mono text-xs hover:underline" aria-label={`Open approval ${approvalEv.id}`}>{approvalEv.id}</Link>
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</td>
                   </tr>
                 );
               })}

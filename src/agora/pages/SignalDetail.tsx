@@ -83,7 +83,7 @@ export const SignalDetail = () => {
             <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("signal.field.risk")}</div>
             <div className="mt-1"><RiskBadge level={signal.risk} /></div>
           </div>
-          <Field label={t("signal.field.generated")} value={new Date(signal.generatedAt).toLocaleString()} mono />
+          <Field label={t("signal.field.generated")} value={safeDateTime(signal.generatedAt)} mono />
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -164,8 +164,8 @@ export const SignalDetail = () => {
               <TabsContent value="audit" className="mt-4">
                 <Card className="p-4 text-sm">
                   <ol className="space-y-1">
-                    <li className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{new Date(signal.generatedAt).toLocaleString()}</span><span>signal.created</span></li>
-                    {decision && <li className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{new Date().toLocaleString()}</span><span>signal.{decision}</span></li>}
+                    <li className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{safeDateTime(signal.generatedAt)}</span><span>signal.created</span></li>
+                    {decision && <li className="flex gap-3"><span className="text-mono text-xs text-muted-foreground">{safeDateTime()}</span><span>signal.{decision}</span></li>}
                   </ol>
                 </Card>
               </TabsContent>

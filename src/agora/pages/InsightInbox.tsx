@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ export const InsightInbox = () => {
                       <Badge variant="outline" className={`text-[10px] uppercase ${meta.tone}`}>{meta.label}</Badge>
                       <span className="text-mono text-[10px] text-muted-foreground">{i.source}</span>
                       <span className="text-mono text-[10px] text-muted-foreground">· conf {(i.confidence * 100).toFixed(0)}%</span>
-                      <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(i.ts).toLocaleString()}</span>
+                      <span className="text-mono text-[10px] text-muted-foreground ml-auto">{safeDateTime(i.ts)}</span>
                     </div>
                     <h3 className="font-semibold text-sm">{i.title}</h3>
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{i.body}</p>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff/types";
 import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -50,7 +51,7 @@ export function ObjectListPage<T extends BaseObject>({
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
     ...extraColumns,
     { key: "owner", header: t("common.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
-    { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</span> },
+    { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span> },
   ];
 
   const renderCreateAction = () => {

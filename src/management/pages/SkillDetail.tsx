@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
@@ -82,7 +83,7 @@ export const SkillDetail = () => {
                 </Section>
                 <Section title={t("section.metadata")}>
                   <Field label={t("table.type")} value={skill.archetype} mono />
-                  <Field label={t("table.created")} value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleString() : "—"} mono />
+                  <Field label={t("table.created")} value={skill.publishedAt ? safeDateTime(skill.publishedAt) : "—"} mono />
                 </Section>
               </>
             ),
@@ -108,7 +109,7 @@ export const SkillDetail = () => {
                 <StatCard label={t("section.performance")} value={skill.evalScore?.toFixed(2) ?? "—"} tone={(skill.evalScore ?? 0) > 0.85 ? "success" : "warning"} />
                 <StatCard label="Pass rate" value={`${Math.round((skill.evalScore ?? 0) * 100)}%`} />
                 <StatCard label="Suites" value={3} />
-                <StatCard label="Last run" value={skill.publishedAt ? new Date(skill.publishedAt).toLocaleDateString() : "—"} />
+                <StatCard label="Last run" value={skill.publishedAt ? safeDateTime(skill.publishedAt, "date") : "—"} />
               </div>
               <DataTable
                 rows={[
@@ -138,7 +139,7 @@ export const SkillDetail = () => {
                   { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
                   { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
                   { key: "ex", header: t("table.description"), cell: (r) => <span className="text-sm">{r.excerpt}</span> },
-                  { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleDateString()}</span> },
+                  { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.ts, "date")}</span> },
                 ]}
               />
             </Section>

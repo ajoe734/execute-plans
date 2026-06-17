@@ -814,7 +814,7 @@ export const EvolutionJournalPage = () => {
           : undefined;
         const whenRaw = e.occurred_at ?? e.created_at ?? e.landedAt;
         const when = whenRaw
-          ? (Number.isNaN(new Date(whenRaw).getTime()) ? whenRaw : new Date(whenRaw).toLocaleString())
+          ? (Number.isNaN(new Date(whenRaw).getTime()) ? whenRaw : safeDateTime(whenRaw))
           : undefined;
         const hasMetrics = typeof e.before === "number" && typeof e.after === "number";
         return (

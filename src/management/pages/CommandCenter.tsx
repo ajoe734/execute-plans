@@ -255,7 +255,7 @@ export const CommandCenter = () => {
               { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               { key: "title", header: t("commandCenter.col.signal"), cell: (r) => <span className="font-medium">{r.title}</span> },
               { key: "source", header: t("commandCenter.col.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-              { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleString()}</span> },
+              { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.ts)}</span> },
               { key: "act", header: "", cell: () => <Button size="sm" variant="outline">{t("commandCenter.convert")}</Button> },
             ]}
           />
@@ -267,7 +267,7 @@ export const CommandCenter = () => {
           <ol className="mt-3 space-y-2">
             {d.audit.slice(0, 8).map((e) => (
               <li key={e.id} className="text-sm flex gap-3 items-baseline">
-                <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{new Date(e.ts).toLocaleTimeString()}</span>
+                <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{safeDateTime(e.ts, "time")}</span>
                 <span className="text-mono text-xs text-accent">{e.actor}</span>
                 <span className="text-mono text-xs">{e.action}</span>
                 <span className="text-xs text-muted-foreground">→ {e.target}</span>

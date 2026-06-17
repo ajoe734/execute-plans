@@ -145,7 +145,7 @@ export const CommitteeRoom = () => {
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="outline" className="text-mono text-[10px] uppercase">{s.template.replace(/_/g, " ")}</Badge>
                 <Badge variant="outline" className={statusTone(s.status)}>{t(`committee.status.${s.status}`)}</Badge>
-                <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(s.createdAt).toLocaleString()}</span>
+                <span className="text-mono text-[10px] text-muted-foreground ml-auto">{safeDateTime(s.createdAt)}</span>
               </div>
               <div className="font-semibold text-sm">{s.objective}</div>
               <div className="text-mono text-xs text-muted-foreground mt-1">target: {s.targetObject}</div>

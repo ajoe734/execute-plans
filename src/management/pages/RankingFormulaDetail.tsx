@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
@@ -80,7 +81,7 @@ export const RankingFormulaDetail = () => {
           { value: "history", label: t("section.history"), content: (
             <DataTable rows={versions.map((v) => ({ ...v, id: v.v }))} columns={[
               { key: "v", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.v}</span> },
-              { key: "at", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs">{new Date(r.at).toLocaleString()}</span> },
+              { key: "at", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.at)}</span> },
               { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.by}</span> },
               { key: "note", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.note}</span> },
             ]} />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { MetricFreeze } from "@/lib/bff/types";
@@ -25,7 +26,7 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
           { key: "metric", header: t("phase13.rebalance.freeze.metric"), cell: (r) => <span className="text-mono text-sm">{r.metric}</span> },
           { key: "state", header: t("table.state"), cell: (r) => <MetricFreezeBadge frozen={r.frozen} /> },
           { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.frozenBy ?? "—"}</span> },
-          { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.frozenAt ? new Date(r.frozenAt).toLocaleString() : "—"}</span> },
+          { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.frozenAt ? safeDateTime(r.frozenAt) : "—"}</span> },
           {
             key: "act", header: t("phase13.rebalance.freeze.action"),
             cell: (r) => (

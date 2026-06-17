@@ -160,7 +160,7 @@ export const StrategyDetail = () => {
                     <Field label="Alpha" value={s.alpha} mono />
                     <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
                     <Field label={t("nav.personas")} value={s.personaIds.join(", ")} mono />
-                    <Field label={t("table.updated")} value={new Date(s.updatedAt).toLocaleString()} mono />
+                    <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
                 <div className="grid grid-cols-3 gap-4 mt-4">
@@ -177,13 +177,13 @@ export const StrategyDetail = () => {
                   <LinkedBlock
                     icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
                     title={t("phase13.strategy.linked.watchers")}
-                    items={watchers.map((w) => ({ id: w.id, label: w.user, meta: new Date(w.since).toLocaleDateString() }))}
+                    items={watchers.map((w) => ({ id: w.id, label: w.user, meta: safeDateTime(w.since, "date") }))}
                     emptyHint={t("empty.noResults")}
                   />
                   <LinkedBlock
                     icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
                     title={t("phase13.strategy.linked.journal")}
-                    items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${new Date(d.decidedAt).toLocaleDateString()}` }))}
+                    items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${safeDateTime(d.decidedAt, "date")}` }))}
                     emptyHint={t("empty.noResults")}
                   />
                 </div>
@@ -302,7 +302,7 @@ export const StrategyDetail = () => {
                       { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                       { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
                       { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-                      { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                      { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
                           {!r.acknowledged && (
@@ -343,7 +343,7 @@ export const StrategyDetail = () => {
                   { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
                   { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
                   { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
-                  { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                  { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                   { key: "act", header: "", cell: (r) => (
                     <div className="flex gap-1 justify-end">
                       {r.status !== "resolved" && (

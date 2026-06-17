@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +28,7 @@ export const EvidencePacketList = ({ packets }: { packets: ReadinessPacket[] }) 
                   id: <span className="font-mono">{p.id}</span>
                   {p.hash && <> · hash: <span className="font-mono">{p.hash.slice(0, 12)}…</span></>}
                   {p.linkedObject && <> · linked: <span className="font-mono">{p.linkedObject}</span></>}
-                  {" · "}<time dateTime={p.createdAt}>{new Date(p.createdAt).toLocaleString()}</time>
+                  {" · "}<time dateTime={p.createdAt}>{safeDateTime(p.createdAt)}</time>
                 </div>
               </div>
               <div className="flex items-center gap-2">

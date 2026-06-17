@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import type { EvaluationRun } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
@@ -31,7 +32,7 @@ export const PersonaEvaluationsTab = ({ personaId }: { personaId: string }) => {
             </div>
           ),
         },
-        { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ranAt).toLocaleString()}</span> },
+        { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ranAt)}</span> },
       ]}
       empty={t("phase13.persona.evaluations.empty")}
     />

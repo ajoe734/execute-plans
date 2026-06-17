@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -138,7 +139,7 @@ export const EvolutionDetail = () => {
                     <li key={c.id} className="flex items-center gap-3 text-mono text-xs">
                       <Badge variant="outline" className="text-[10px]">{c.id}</Badge>
                       <span className="flex-1">{c.expr}</span>
-                      <span className="text-muted-foreground">{new Date(c.ts).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground">{safeDateTime(c.ts, "date")}</span>
                     </li>
                   ))}
                 </ul>

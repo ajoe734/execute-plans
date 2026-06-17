@@ -42,7 +42,7 @@ export const SkillRiskPanel = ({ skill }: { skill: Skill }) => {
           rows={incidents}
           empty={t("phase13.skill.risk.empty")}
           columns={[
-            { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.ts).toLocaleDateString()}</span> },
+            { key: "ts", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.ts, "date")}</span> },
             { key: "sev", header: t("table.risk"), cell: (r) => <RiskBadge level={r.severity} /> },
             { key: "sum", header: t("table.description"), cell: (r) => <span className="text-sm">{r.summary}</span> },
             { key: "state", header: t("table.state"), cell: (r) => (
