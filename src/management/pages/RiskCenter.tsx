@@ -20,6 +20,11 @@ import { useNavigate } from "react-router-dom";
 
 const RISK_WEIGHT: Record<RiskLevel, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
+// Live list rows may omit numeric fields; render "—" instead of NaN / crash.
+const safeFixed = (n: number, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : "—");
+const safePct = (n: number, d = 1) => (Number.isFinite(n) ? `${(n * 100).toFixed(d)}%` : "—");
+const safeRound = (n: number) => (Number.isFinite(n) ? `${Math.round(n)}` : "—");
+
 export const RiskCenter = () => {
   const t = useT();
   const navigate = useNavigate();
@@ -87,12 +92,12 @@ export const RiskCenter = () => {
               onRowClick={(r) => navigate(`/management/capital-pools/${r.id}`)}
               columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
-                { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{(r.allocated / 1_000_000).toFixed(1)}M {r.currency}</span> },
+                { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.allocated / 1_000_000, 1)}M {r.currency}</span> },
                 { key: "util", header: t("table.utilization"), cell: (r) => {
-                  const pct = Math.round((r.utilized / r.allocated) * 100);
-                  return <span className={`text-mono text-xs ${pct > 90 ? "text-risk-critical" : pct > 75 ? "text-risk-high" : ""}`}>{pct}%</span>;
+                  const pct = (r.utilized / r.allocated) * 100;
+                  return <span className={`text-mono text-xs ${pct > 90 ? "text-risk-critical" : pct > 75 ? "text-risk-high" : ""}`}>{safeRound(pct)}%</span>;
                 }},
-                { key: "budget", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{(r.riskBudget * 100).toFixed(1)}%</span> },
+                { key: "budget", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{safePct(r.riskBudget, 1)}</span> },
                 { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
             />
@@ -105,8 +110,8 @@ export const RiskCenter = () => {
               columns={[
                 { key: "name", header: t("nav.strategies"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className={`text-mono text-xs ${r.drawdown < -0.1 ? "text-risk-critical" : ""}`}>{(r.drawdown * 100).toFixed(1)}%</span> },
-                { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className={`text-mono text-xs ${r.drawdown < -0.1 ? "text-risk-critical" : ""}`}>{safePct(r.drawdown, 1)}</span> },
+                { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.sharpe, 2)}</span> },
                 { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
             />
@@ -119,7 +124,7 @@ export const RiskCenter = () => {
               columns={[
                 { key: "name", header: t("nav.personas"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "arch", header: t("table.type"), cell: (r) => <span className="text-mono text-xs">{r.archetype}</span> },
-                { key: "succ", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{Math.round(r.successRate * 100)}%</span> },
+                { key: "succ", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{safeRound(r.successRate * 100)}%</span> },
                 { key: "routed", header: t("nav.strategies"), cell: (r) => r.routedStrategies },
                 { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
@@ -134,9 +139,9 @@ export const RiskCenter = () => {
                 { key: "name", header: t("nav.runtimes"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "env", header: t("table.env"), cell: (r) => <span className="text-mono text-xs uppercase">{r.env}</span> },
                 { key: "status", header: t("table.state"), cell: (r) => <StatusBadge state={r.status} /> },
-                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{Math.round(r.cpu * 100)}%</span> },
-                { key: "lat", header: "p95", cell: (r) => <span className={`text-mono text-xs ${r.latencyP95Ms > 1000 ? "text-risk-high" : ""}`}>{r.latencyP95Ms}ms</span> },
-                { key: "up", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{r.uptimePct.toFixed(2)}%</span> },
+                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{safeRound(r.cpu * 100)}%</span> },
+                { key: "lat", header: "p95", cell: (r) => <span className={`text-mono text-xs ${r.latencyP95Ms > 1000 ? "text-risk-high" : ""}`}>{Number.isFinite(r.latencyP95Ms) ? `${r.latencyP95Ms}ms` : "—"}</span> },
+                { key: "up", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.uptimePct, 2)}%</span> },
               ]}
             />
           </TabsContent>
@@ -191,7 +196,10 @@ export const RiskCenter = () => {
                 { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                 { key: "title", header: t("table.title"), cell: (r) => <span className="font-medium">{r.title}</span> },
                 { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-                { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+                { key: "opened", header: t("table.opened"), cell: (r) => {
+                  const d = r.openedAt ? new Date(r.openedAt) : null;
+                  return <span className="text-mono text-xs text-muted-foreground">{d && !Number.isNaN(d.getTime()) ? d.toLocaleString() : "—"}</span>;
+                } },
               ]}
             />
             <DataTable
