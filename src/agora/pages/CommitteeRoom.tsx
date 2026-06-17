@@ -26,6 +26,7 @@ import {
   EVIDENCE_LIMITS,
   type EvidenceMime,
 } from "@/lib/v3/committeeEvidence";
+import { safeDateTime } from "@/lib/utils";
 
 type SessionStatus = "open" | "discussing" | "memo_ready" | "submitted" | "closed";
 type Template =

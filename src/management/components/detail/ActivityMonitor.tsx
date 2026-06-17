@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 interface Event { id: string; ts: string; kind: string; status: string; owner?: string; }
 

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { bff } from "@/lib/bff-v1";
 import type { PolicyVersion, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 const kindTone: Record<string, string> = {
   tool: "border-accent/40 text-accent",

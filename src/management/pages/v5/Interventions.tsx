@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
 import type { InterventionItem } from "@/lib/v5";
 import type { InterventionDecision } from "@/lib/v5/enums";
+import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",

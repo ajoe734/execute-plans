@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ReadinessHeaderModel } from "@/lib/v5/management/readiness";
+import { safeDateTime } from "@/lib/utils";
 
 const statusTone = (s: ReadinessHeaderModel["status"]) =>
   s === "ready" ? "bg-status-success/15 text-status-success border-status-success/30" :

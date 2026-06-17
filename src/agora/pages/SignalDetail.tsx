@@ -15,6 +15,7 @@ import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useHandoff } from "@/lib/handoff";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface SignalView {
   id: string;

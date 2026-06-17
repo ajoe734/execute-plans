@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShieldCheck } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",

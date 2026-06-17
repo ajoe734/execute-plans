@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",

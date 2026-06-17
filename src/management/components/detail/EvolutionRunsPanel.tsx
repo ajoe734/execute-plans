@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { safeDateTime } from "@/lib/utils";
 
 export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: string; mode?: "all" | "runs" | "candidates" }) => {
   const t = useT();

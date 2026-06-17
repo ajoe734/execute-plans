@@ -14,6 +14,7 @@ import { RoutePolicyEditor } from "@/management/components/governance/RoutePolic
 import { PolicyVersionDiff } from "@/management/components/governance/PolicyVersionDiff";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { safeDateTime } from "@/lib/utils";
 
 export const RoutePolicyDetail = () => {
   const { id } = useParams();

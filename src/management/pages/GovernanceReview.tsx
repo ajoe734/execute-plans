@@ -21,6 +21,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
 import { PolicyValidatorPanel } from "@/management/components/governance/PolicyValidatorPanel";
+import { safeDateTime } from "@/lib/utils";
 
 type StageDecision = { stageName: string; decision: "approve" | "reject" };
 

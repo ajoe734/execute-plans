@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface Insight {
   id: string;

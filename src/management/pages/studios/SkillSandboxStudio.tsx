@@ -12,6 +12,7 @@ import type { Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Play } from "lucide-react";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface TraceEntry { ts: string; level: "info" | "warn"; msg: string; }
 

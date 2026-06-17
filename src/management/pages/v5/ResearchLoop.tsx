@@ -17,6 +17,7 @@ import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FlaskConical } from "lucide-react";
 import type { LoopRun } from "@/lib/v5";
+import { safeDateTime } from "@/lib/utils";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",

@@ -17,6 +17,7 @@ import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
+import { safeDateTime } from "@/lib/utils";
 
 function quorumProgressFor(r: ApprovalRequest) {
   const stages = r.stages ?? [];
