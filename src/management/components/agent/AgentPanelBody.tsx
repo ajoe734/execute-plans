@@ -1245,14 +1245,26 @@ export function AgentPanelBody() {
     }
 
     // Always release the per-session pending flag, regardless of which
-    // conversation the user is currently viewing.
-    const clearPending = () => {
+    // conversation the user is currently viewing. After a cli_* → BFF sessionId
+    // reconcile (new threads), the flag is MOVED to the BFF id, so we must clear
+    // that reconciled id too — clearing only requestBucket leaves a brand-new
+    // thread spinning forever and blocks the next turn (canSubmit gates on
+    // !pending, and pending reads pendingSessions[sessionId] = the BFF id).
+    const clearPending = (extraKey?: string | null) => {
       setPendingSessions((prev) => {
-        if (!prev[requestBucket]) return prev;
-        const { [requestBucket]: _drop, ...rest } = prev;
-        return rest;
+        const next = { ...prev };
+        let changed = false;
+        for (const key of [requestBucket, extraKey]) {
+          if (key && next[key]) {
+            delete next[key];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
       });
     };
+    // Effective session id after reconcile (BFF id for new threads, else requestBucket).
+    let settledBucket: string | null = null;
 
     if (result === null) {
       clearPending();
@@ -1294,6 +1306,7 @@ export function AgentPanelBody() {
 
     if (result.kind === "ok") {
       const sid = reconcile(result.sessionId ?? null);
+      settledBucket = sid;
       const assistantTurn: ChatTurn = {
         id: turnId("a"),
         role: "assistant",
@@ -1313,6 +1326,7 @@ export function AgentPanelBody() {
       upsertSessionIndex(sid, titleSeed);
     } else if (result.kind === "provider_degraded") {
       const sid = reconcile(result.sessionId ?? null);
+      settledBucket = sid;
       if (result.answer) {
         const assistantTurn: ChatTurn = {
           id: turnId("a_degraded"),
@@ -1345,7 +1359,7 @@ export function AgentPanelBody() {
       upsertSessionIndex(requestBucket, titleSeed);
     }
 
-    clearPending();
+    clearPending(settledBucket);
     if (activeSessionRef.current === requestBucket || activeSessionRef.current === (result.kind === "ok" || result.kind === "provider_degraded" ? (result.sessionId ?? requestBucket) : requestBucket)) {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
