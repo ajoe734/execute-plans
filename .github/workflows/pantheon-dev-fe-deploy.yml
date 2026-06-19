@@ -1,11 +1,11 @@
 name: Pantheon Dev FE Deploy
 
 on:
-  workflow_run:
-    workflows:
-      - Pantheon FE-BFF Integration Gate
-    types:
-      - completed
+  # Auto-deploy on every merge/push to dev. Decoupled from the FE-BFF
+  # integration gate (which keeps running as an informational PR/push check):
+  # "merge to dev" now == "deploy to dev FE", no manual workflow_dispatch needed.
+  # dev-only target; staging/prod still go through their own promotion path.
+  push:
     branches:
       - dev
   workflow_dispatch:
@@ -35,11 +35,7 @@ jobs:
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_branch == 'dev'
-        )
+        github.event_name == 'push'
       }}
     runs-on:
       - self-hosted
@@ -48,8 +44,8 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
-      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_branch }}
+      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
       PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
       PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
