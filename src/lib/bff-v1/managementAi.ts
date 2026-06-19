@@ -912,6 +912,118 @@ export async function askManagementAi(
 
 }
 
+export interface ManagementAiStreamCallbacks {
+  /** Called as each token chunk arrives; `full` is the accumulated reply so far. */
+  onDelta?: (chunk: string, full: string) => void;
+  /** Called once when the BFF emits the meta event (session/trace ids). */
+  onMeta?: (meta: { sessionId: string | null; traceId: string | null; messageId: string | null }) => void;
+}
+
+/**
+ * POST /bff/management/nl/ask/stream — SSE token streaming.
+ *
+ * Drives progressive rendering: invokes onDelta as chunks arrive, then resolves
+ * to the SAME ManagementAiResult shape as askManagementAi() so the caller's
+ * reconcile/persist logic is unchanged. Never synthesizes an answer locally.
+ */
+export async function streamManagementAi(
+  input: ManagementAiAskInput,
+  callbacks: ManagementAiStreamCallbacks = {},
+  options?: { signal?: AbortSignal },
+): Promise<ManagementAiResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return { ok: false, kind: "transport_failure", status: null, message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing)." };
+  }
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  headers["Accept"] = "text/event-stream";
+  const body = JSON.stringify({
+    question: input.question,
+    focus: input.focus ?? "all",
+    context: input.context ?? "",
+    sessionId: input.sessionId ?? undefined,
+    conversation: input.conversation ?? undefined,
+    ui: input.ui ?? undefined,
+    openclaw: input.openclaw ?? undefined,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.managementNlAskStream()}`, {
+      method: "POST", headers, body, credentials: "include", signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) return { ok: false, kind: "aborted" };
+    return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Network error contacting Pantheon BFF." };
+  }
+  if (!res.ok || !res.body) {
+    return { ok: false, kind: "transport_failure", status: res.status, message: `BFF ${res.status} ${res.statusText || ""}`.trim() };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+  let sessionId: string | null = input.sessionId ?? null;
+  let traceId: string | null = null;
+  let streamError: { code: string; message: string } | null = null;
+
+  const handlePayload = (payload: string): void => {
+    if (!payload || payload === "[DONE]") return;
+    let evt: Record<string, unknown>;
+    try { evt = JSON.parse(payload) as Record<string, unknown>; } catch { return; }
+    const t = evt.type;
+    if (t === "meta") {
+      sessionId = (evt.sessionId as string) ?? (evt.session_id as string) ?? sessionId;
+      traceId = (evt.traceId as string) ?? (evt.trace_id as string) ?? traceId;
+      callbacks.onMeta?.({ sessionId, traceId, messageId: (evt.messageId as string) ?? null });
+    } else if (t === "delta") {
+      const chunk = String(evt.text ?? "");
+      if (chunk) { full += chunk; callbacks.onDelta?.(chunk, full); }
+    } else if (t === "error") {
+      streamError = { code: String(evt.error_code ?? "OPENCLAW_STREAM_ERROR"), message: String(evt.message ?? "stream error") };
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        for (const line of frame.split("\n")) {
+          const s = line.trim();
+          if (s.startsWith("data:")) handlePayload(s.slice(5).trim());
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) return { ok: false, kind: "aborted" };
+    return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Stream read error." };
+  }
+
+  const providerStatus: ProviderStatus = {
+    provider: "openclaw", runtime: "openclaw_gateway_agent_cli",
+    status: streamError ? "degraded" : "completed", used: !streamError, fallback: null,
+    reasonCode: streamError?.code ?? null,
+  };
+
+  if (streamError && !full.trim()) {
+    return {
+      ok: false, kind: "provider_degraded", providerStatus, sessionId, traceId,
+      answer: null, auditLogHref: null, conversationHref: null, uiActions: [],
+      message: streamError.message,
+    };
+  }
+  return {
+    ok: true, kind: "ok", answer: full, sessionId, traceId, providerStatus,
+    auditLogHref: null, conversationHref: null, uiActions: [],
+  };
+}
+
 export async function fetchAssistantOrchestratorStatus(
   options?: { signal?: AbortSignal },
 ): Promise<AssistantOrchestratorStatusResult> {

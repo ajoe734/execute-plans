@@ -164,6 +164,8 @@ export const paths = {
   // ---- 2026-06-03 — Management AI runtime (OpenClaw gateway adapter / Codex). ----
   // FE submits prompts here; never to /bff/agora/ask.
   managementNlAsk: () => `${BASE}/management/nl/ask`,
+  // SSE token-streaming variant (progressive rendering).
+  managementNlAskStream: () => `${BASE}/management/nl/ask/stream`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
   assistantMode: () => `${BASE}/assistant/mode`,
