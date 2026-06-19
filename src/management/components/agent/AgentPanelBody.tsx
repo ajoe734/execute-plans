@@ -29,7 +29,7 @@ import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Pl
 import { toast } from "@/hooks/use-toast";
 import {
   activateAssistantControlMode,
-  askManagementAi,
+  streamManagementAi,
   deactivateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
@@ -587,6 +587,8 @@ export function AgentPanelBody() {
   const [traceId, setTraceId] = useState<string | null>(null);
   const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
   const [pendingSessions, setPendingSessions] = useState<Record<string, true>>({});
+  // Transient token-streaming preview for the in-flight turn (cleared on completion).
+  const [streamingPreview, setStreamingPreview] = useState<{ sid: string; text: string } | null>(null);
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
   const [resyncNotice, setResyncNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -1212,7 +1214,7 @@ export function AgentPanelBody() {
         }
       }
       if (result === null) {
-        result = await askManagementAi({
+        result = await streamManagementAi({
           question,
           focus: "all",
           sessionId: sessionIdForBff,
@@ -1236,9 +1238,16 @@ export function AgentPanelBody() {
               }))
             : undefined,
           openclaw: repairMetadata ? { repair: repairMetadata } : undefined,
+        }, {
+          // Progressive rendering: show tokens as they arrive in a transient
+          // bubble for the thread that initiated the request. The final turn is
+          // still appended by the result-handling below; this preview is cleared
+          // in finally, so existing reconcile/persist logic is untouched.
+          onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
         }, { signal: controller.signal });
       }
     } finally {
+      setStreamingPreview(null);
       if (inflightRef.current.get(requestBucket) === controller) {
         inflightRef.current.delete(requestBucket);
       }
@@ -1777,8 +1786,15 @@ export function AgentPanelBody() {
                 )}
               </div>
             ))}
-            {pending && (
-              <div className="px-4 py-2"><Shimmer>透過 OpenClaw 等候 Codex 回應…</Shimmer></div>
+            {streamingPreview && streamingPreview.sid === sessionId && streamingPreview.text && (
+              <div key="__streaming__" className="space-y-1">
+                <Message from="assistant">
+                  <MessageResponse>{streamingPreview.text}</MessageResponse>
+                </Message>
+              </div>
+            )}
+            {pending && !(streamingPreview && streamingPreview.sid === sessionId && streamingPreview.text) && (
+              <div className="px-4 py-2"><Shimmer>透過 OpenClaw 串流回應中…</Shimmer></div>
             )}
             {degraded && (() => {
               const ps = degraded.providerStatus;
