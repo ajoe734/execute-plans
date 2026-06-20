@@ -76,6 +76,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout Pantheon contract bundle
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || 'dev' }}
+          path: pantheon-contract
+          token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -118,6 +126,8 @@ jobs:
       - name: Contract drift
         id: contract
         continue-on-error: true
+        env:
+          PANTHEON_CONTRACT_ROOT: pantheon-contract
         run: |
           set -o pipefail
           npm run test:contract 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/contract-drift.log"
