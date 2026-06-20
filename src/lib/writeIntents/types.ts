@@ -53,6 +53,18 @@ export interface PersonaCreateInput extends BaseCreateInput {
   description?: string;
   // v0 overlay execution mode, mapped to a canonical lifecycle status at build time.
   initialMode?: PersonaInitialMode;
+  // Real persona identity + trading-character traits. These flow through the BFF
+  // (create_persona) into the persona's OpenClaw agent SOUL so it runs as itself,
+  // not a thin archetype placeholder. All optional; sparse fields are honestly
+  // surfaced downstream rather than faked.
+  mandate?: string;
+  strategyFamily?: string;
+  instruments?: string;
+  riskAppetite?: string;
+  decisionStyle?: string;
+  timeHorizon?: string;
+  hardRules?: string;
+  personaVoice?: string;
 }
 
 export interface CapitalPoolCreateInput extends BaseCreateInput {
