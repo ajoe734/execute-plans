@@ -50,6 +50,19 @@ export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
   successRate: number;
+  // Real persona identity + trading-character traits, persisted by the BFF and
+  // projected back in the persona DTO. These are what get rendered into the
+  // persona's OpenClaw agent SOUL, so a persona runs as itself.
+  mandate?: string;
+  strategyFamily?: string;
+  traits?: {
+    instruments?: string;
+    risk_appetite?: string;
+    decision_style?: string;
+    time_horizon?: string;
+    hard_rules?: string;
+    persona_voice?: string;
+  };
 }
 
 export interface CapitalPool extends BaseObject {
