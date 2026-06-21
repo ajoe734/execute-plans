@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activateAssistantControlMode,
   askManagementAi,
+  streamManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
   fetchAssistantProviderReauthStatus,
@@ -14,6 +15,19 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+function streamResponse(frames: string[], status = 200): Response {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(frame));
+      controller.close();
+    },
+  }), {
+    status,
+    headers: { "Content-Type": "text/event-stream" },
   });
 }
 
@@ -533,5 +547,60 @@ describe("Management AI OpenClaw repair worktrees", () => {
         },
       },
     });
+  });
+});
+
+
+describe("Management AI stream", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("adapts done provider status and stops on DONE", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(streamResponse([
+      'data: {"type":"meta","sessionId":"mgmt-chat-1","traceId":"trace-1","messageId":"mnl-1"}\n\n',
+      'data: {"type":"delta","text":"Control mode is inactive"}\n\n',
+      'data: {"type":"done","text":"Control mode is inactive","providerStatus":{"provider":"pantheon_bff","runtime":"management_nl_control_command_interceptor","status":"completed","used":true,"fallback":null},"auditLog":{"href":"/audit/1"},"conversation":{"href":"/conversation/1"}}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    globalThis.fetch = fetchMock;
+
+    const previews: string[] = [];
+    const result = await streamManagementAi(
+      { question: "/control status" },
+      { onDelta: (_chunk, full) => previews.push(full) },
+    );
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/management/nl/ask/stream");
+    expect(result.answer).toBe("Control mode is inactive");
+    expect(result.providerStatus.provider).toBe("pantheon_bff");
+    expect(result.providerStatus.runtime).toBe("management_nl_control_command_interceptor");
+    expect(result.auditLogHref).toBe("/audit/1");
+    expect(result.conversationHref).toBe("/conversation/1");
+    expect(previews.at(-1)).toBe("Control mode is inactive");
+  });
+
+  it("surfaces stream errors as provider degradation", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(streamResponse([
+      'data: {"type":"meta","sessionId":"mgmt-chat-err","traceId":"trace-err"}\n\n',
+      'data: {"type":"error","error_code":"OPENCLAW_RESPONSES_FAILED","message":"provider failed"}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+
+    const result = await streamManagementAi({ question: "?" });
+
+    expect(result.kind).toBe("provider_degraded");
+    if (result.kind !== "provider_degraded") throw new Error("expected provider_degraded");
+    expect(result.sessionId).toBe("mgmt-chat-err");
+    expect(result.providerStatus?.status).toBe("degraded");
+    expect(result.providerStatus?.reasonCode).toBe("OPENCLAW_RESPONSES_FAILED");
+    expect(result.message).toBe("provider failed");
   });
 });
