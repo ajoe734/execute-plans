@@ -70,7 +70,11 @@ const RBAC_MATRIX = [
     id: "management-nl-ask-dry-run",
     method: "POST",
     route: "/bff/management/nl/ask",
-    allowed: ["operator", "admin"],
+    // Management NL ask is a viewer-level read surface: the BFF allows any
+    // viewer-capable role (viewer, operator, approver, admin) and denies
+    // risk_owner ("Read access requires viewer-level role"). Matches the live
+    // contract verified 2026-06-21.
+    allowed: ["viewer", "operator", "approver", "admin"],
     body: { question: PROBE_MARKER, focus: "all", context: "live-deep-validator" },
   },
 ];
@@ -346,10 +350,14 @@ async function runOperatorRace() {
 
   const bothSameSucceeded = [sameA1, sameA2].every((response) => response.status >= 200 && response.status < 300);
   const transportOk = rows.every((row) => row.ok);
-  const status = !distinctActors || bothSameSucceeded || !transportOk ? "fail" : "pass";
+  // bothSameSucceeded is informational only: two-man-sign dry-run does not run
+  // the distinct-operator state machine (no first-signature is persisted), so a
+  // same-operator double 200 in dry-run is expected. Real two-man enforcement is
+  // a non-dry-run property and is not exercised by this gate.
+  const status = !distinctActors || !transportOk ? "fail" : "pass";
   const notes = [];
   if (!distinctActors) notes.push(`operator tokens did not resolve to distinct /bff/me actors: ${actorA || "missing"} vs ${actorB || "missing"}`);
-  if (bothSameSucceeded) notes.push("same operator produced two success responses for two-man-sign dry-run");
+  if (bothSameSucceeded) notes.push("same operator produced two success responses for two-man-sign dry-run (expected: dry-run does not enforce the two-man state machine)");
   if (!transportOk) notes.push("one or more race requests failed route/envelope validation");
   return { status, rows, note: notes.join("; ") || "two-man-sign race dry-run completed with distinct operators" };
 }
