@@ -5,7 +5,11 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // Ignore the Pantheon contract bundle: CI checks out the pantheon repo into
+  // ./pantheon-contract for contract-drift validation, and that repo vendors a
+  // runtime mirror of execute-plans. Linting that foreign checkout surfaced
+  // errors from code this repo does not own and broke `npm run lint` in the gate.
+  { ignores: ["dist", "pantheon-contract", "pantheon-contract/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
