@@ -13,8 +13,9 @@
 import React, { useEffect, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { getServant, ensureServant, AgoraServantError } from "@/lib/bff-v1/agora/servant";
+import { agoraServantClient } from "@/lib/bff-v1/agora/servant";
 import type { ServantProfile, ServantStatus } from "@/lib/bff-v1/agora/servant";
+import { agoraIdentityClient } from "@/lib/bff-v1/agora/identity";
 
 type AgoraTab = "trading-room" | "strategy-workshop" | "strategy-performance";
 
@@ -153,18 +154,12 @@ export function AgoraApp() {
 
     async function initServant() {
       try {
-        let profile = await getServant();
-        if (!profile) {
-          const key = crypto.randomUUID();
-          profile = await ensureServant(key, {});
-        }
+        await Promise.all([agoraIdentityClient.getMe(), agoraIdentityClient.getCapabilities()]);
+        const profile = await agoraServantClient.ensure();
         if (!cancelled) setServantState({ kind: "ready", profile });
       } catch (err) {
         if (!cancelled) {
-          const message =
-            err instanceof AgoraServantError || err instanceof Error
-              ? err.message
-              : "Servant 服務無法連線";
+          const message = err instanceof Error ? err.message : "Servant 服務無法連線";
           setServantState({ kind: "error", message });
         }
       }

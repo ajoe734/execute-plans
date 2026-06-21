@@ -1,11 +1,12 @@
 // BFF client for agora.servant.v1 capability.
-// Routes: /bff/agora/servant (get/ensure).
+// Routes: /bff/agora/servant/ensure (POST).
 // Schema: servant_profile.schema.json.
-// Strict live-only — no mock fallback. Throws AgoraServantError on non-2xx.
 // The browser must never submit another user's identity; tenant_id and
 // agora_user_id are always derived server-side from the authenticated subject.
 
 import type { AgoraCapability, AgoraServantPolicy } from "./identity";
+import { bffFetch } from "@/lib/bff-v1/client";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 export type ServantStatus = "active" | "suspended" | "paper_only" | "shadow_only" | "retired";
 
@@ -163,6 +164,42 @@ function normalizeServantProfile(raw: unknown): ServantProfile {
   };
 }
 
+const MOCK_SERVANT: ServantProfile = {
+  spec_version: "1.0",
+  persona_id: "mock-servant",
+  display_name: "Agora Servant (mock)",
+  status: "active",
+  tenant_id: "mock-tenant",
+  agora_user_id: "mock-user",
+  persona_class: "agora_servant",
+  owner_scope: "user_private",
+  visibility_scope: "private",
+  memory_scope: "private_user",
+  capability_summary: { can_ask: true, can_research: false, can_workshop: false },
+  policy: {
+    persona_class: "agora_servant",
+    owner_scope: "user_private",
+    visibility_scope: "private",
+    memory_scope: "private_user",
+    persona_registry_backed: true,
+    execution_authority: "none",
+    prohibited_authority: ["runtime_binding", "broker_order", "capital_binding"],
+  },
+};
+
+async function ensureWithLiveStatus(): Promise<ServantProfile> {
+  if (liveStatus.get().mode !== "live") return MOCK_SERVANT;
+  const data = await bffFetch<unknown>({
+    method: "POST",
+    path: "/bff/agora/servant/ensure",
+    body: {},
+    mode: "live",
+  });
+  return normalizeServantProfile(data);
+}
+
+export const agoraServantClient = { ensure: ensureWithLiveStatus } as const;
+
 /**
  * GET /bff/agora/servant — get the current user's servant profile.
  * Returns null when the servant is not yet provisioned (HTTP 404).
@@ -205,7 +242,7 @@ export async function ensureServant(
       Accept: "application/json",
       "Content-Type": "application/json",
       "Idempotency-Key": idempotencyKey,
-      "X-Request-Id": idempotencyKey,
+      "X-Request-Id": crypto.randomUUID(),
     },
     body: JSON.stringify(request),
   });

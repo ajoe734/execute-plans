@@ -1,7 +1,9 @@
 // BFF client for agora.identity.v1 capability.
-// Routes: /bff/agora/sessions (list/create/get).
+// Routes: /bff/agora/me, /bff/agora/capabilities, /bff/agora/sessions.
 // Schemas: agora_user_scope.schema.json, servant_profile.schema.json.
-// Strict live-only — no mock fallback. Throws AgoraIdentityError on non-2xx.
+// Strict live-only — no mock fallback on network errors. Throws BffError on non-2xx.
+
+import { withStrictLiveOrMock } from "@/lib/bff/liveRead";
 
 export type AgoraCapability =
   | "agora.identity.v1"
@@ -77,6 +79,84 @@ export class AgoraIdentityError extends Error {
     this.status = status;
   }
 }
+
+// ── /bff/agora/me and /bff/agora/capabilities ─────────────────────────────
+
+const MOCK_USER_SCOPE: AgoraUserScope = {
+  spec_version: "1.0",
+  scope_id: "mock-scope",
+  tenant_id: "mock-tenant",
+  user_id: "mock-user",
+  operator_id: "mock-operator",
+  granted_capabilities: [],
+  read_predicate: {
+    tenant_id: "mock-tenant",
+    user_id: "mock-user",
+    required_fields: ["tenant_id", "user_id"],
+    fail_closed: true,
+  },
+  servant_policy: {
+    persona_class: "agora_servant",
+    owner_scope: "user_private",
+    visibility_scope: "private",
+    memory_scope: "private_user",
+    persona_registry_backed: true,
+    execution_authority: "none",
+    prohibited_authority: ["runtime_binding", "broker_order", "capital_binding"],
+  },
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+function adaptUserScope(body: unknown): AgoraUserScope {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid /bff/agora/me response");
+  }
+  const envelope = body as Record<string, unknown>;
+  const data = envelope.data ?? envelope;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid /bff/agora/me response: missing data");
+  }
+  const scope = data as Record<string, unknown>;
+  if (typeof scope.scope_id !== "string") {
+    throw new Error("Invalid /bff/agora/me response: missing scope_id");
+  }
+  return scope as unknown as AgoraUserScope;
+}
+
+function adaptCapabilities(body: unknown): AgoraCapability[] {
+  if (Array.isArray(body)) return body.filter((c) => typeof c === "string") as AgoraCapability[];
+  if (!body || typeof body !== "object") return [];
+  const envelope = body as Record<string, unknown>;
+  const direct = envelope.capabilities ?? envelope.granted_capabilities;
+  if (Array.isArray(direct)) return direct.filter((c) => typeof c === "string") as AgoraCapability[];
+  const data = envelope.data;
+  if (Array.isArray(data)) return data.filter((c) => typeof c === "string") as AgoraCapability[];
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const nested = (data as Record<string, unknown>).capabilities ?? (data as Record<string, unknown>).granted_capabilities;
+    if (Array.isArray(nested)) return nested.filter((c) => typeof c === "string") as AgoraCapability[];
+  }
+  return [];
+}
+
+async function getMe(): Promise<AgoraUserScope> {
+  return withStrictLiveOrMock<AgoraUserScope>(
+    { method: "GET", path: "/bff/agora/me" },
+    async () => MOCK_USER_SCOPE,
+    adaptUserScope,
+  );
+}
+
+async function getCapabilities(): Promise<AgoraCapability[]> {
+  return withStrictLiveOrMock<AgoraCapability[]>(
+    { method: "GET", path: "/bff/agora/capabilities" },
+    async () => [],
+    adaptCapabilities,
+  );
+}
+
+export const agoraIdentityClient = { getMe, getCapabilities } as const;
+
+// ── /bff/agora/sessions ────────────────────────────────────────────────────
 
 function resolvedBase(baseUrl?: string): string {
   if (baseUrl) return baseUrl.replace(/\/+$/, "");
