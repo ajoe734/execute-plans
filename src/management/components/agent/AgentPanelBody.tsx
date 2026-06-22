@@ -1246,6 +1246,15 @@ export function AgentPanelBody() {
           onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
         }, { signal: controller.signal });
       }
+    } catch (err) {
+      result = controller.signal.aborted
+        ? { ok: false, kind: "aborted" }
+        : {
+            ok: false,
+            kind: "transport_failure",
+            status: null,
+            message: (err as Error)?.message ?? "Management AI request failed before a BFF result was returned.",
+          };
     } finally {
       setStreamingPreview(null);
       if (inflightRef.current.get(requestBucket) === controller) {
