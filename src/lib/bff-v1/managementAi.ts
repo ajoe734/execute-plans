@@ -813,6 +813,12 @@ function newIdempotencyKey(): string {
   return `idk_mai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const MANAGEMENT_AI_STREAM_READ_TIMEOUT_MS = 45_000;
+
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  return (err as { name?: string } | null)?.name === "AbortError" || Boolean(signal?.aborted);
+}
+
 /** POST /bff/management/nl/ask — never returns a locally-synthesized answer. */
 export async function askManagementAi(
   input: ManagementAiAskInput,
@@ -852,7 +858,7 @@ export async function askManagementAi(
       signal: options?.signal,
     });
   } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+    if (isAbortError(err, options?.signal)) {
       return { ok: false, kind: "aborted" };
     }
     return {
@@ -953,7 +959,7 @@ export async function streamManagementAi(
       method: "POST", headers, body, credentials: "include", signal: options?.signal,
     });
   } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) return { ok: false, kind: "aborted" };
+    if (isAbortError(err, options?.signal)) return { ok: false, kind: "aborted" };
     return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Network error contacting Pantheon BFF." };
   }
   if (!res.ok || !res.body) {
@@ -967,27 +973,70 @@ export async function streamManagementAi(
   let sessionId: string | null = input.sessionId ?? null;
   let traceId: string | null = null;
   let streamError: { code: string; message: string } | null = null;
+  let finalProviderStatus: ProviderStatus | null = null;
+  let auditLogHref: string | null = null;
+  let conversationHref: string | null = null;
+  let uiActions: ManagementAiUiAction[] = [];
 
-  const handlePayload = (payload: string): void => {
-    if (!payload || payload === "[DONE]") return;
+  const readWithTimeout = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Management AI stream timed out waiting for BFF data."));
+          }, MANAGEMENT_AI_STREAM_READ_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+
+  const appendDelta = (chunk: string): void => {
+    if (!chunk) return;
+    full += chunk;
+    callbacks.onDelta?.(chunk, full);
+  };
+
+  const replaceWithDoneText = (text: string): void => {
+    if (!text || text === full) return;
+    const chunk = text.startsWith(full) ? text.slice(full.length) : text;
+    full = text;
+    if (chunk) callbacks.onDelta?.(chunk, full);
+  };
+
+  const handlePayload = (payload: string): boolean => {
+    if (!payload) return false;
+    if (payload === "[DONE]") return true;
     let evt: Record<string, unknown>;
-    try { evt = JSON.parse(payload) as Record<string, unknown>; } catch { return; }
+    try { evt = JSON.parse(payload) as Record<string, unknown>; } catch { return false; }
     const t = evt.type;
     if (t === "meta") {
       sessionId = (evt.sessionId as string) ?? (evt.session_id as string) ?? sessionId;
       traceId = (evt.traceId as string) ?? (evt.trace_id as string) ?? traceId;
       callbacks.onMeta?.({ sessionId, traceId, messageId: (evt.messageId as string) ?? null });
     } else if (t === "delta") {
-      const chunk = String(evt.text ?? "");
-      if (chunk) { full += chunk; callbacks.onDelta?.(chunk, full); }
+      appendDelta(String(evt.text ?? ""));
+    } else if (t === "done") {
+      replaceWithDoneText(String(evt.text ?? ""));
+      finalProviderStatus = adaptProviderStatus((evt.provider_status ?? evt.providerStatus) as (Partial<ProviderStatus> & Record<string, unknown>) | undefined) ?? finalProviderStatus;
+      const auditLog = asRecord(evt.auditLog ?? evt.audit_log);
+      const conversation = asRecord(evt.conversation);
+      auditLogHref = asString(auditLog?.href) ?? auditLogHref;
+      conversationHref = asString(conversation?.href) ?? conversationHref;
+      uiActions = adaptUiActions(evt as RawAskResponse["data"]);
     } else if (t === "error") {
       streamError = { code: String(evt.error_code ?? "OPENCLAW_STREAM_ERROR"), message: String(evt.message ?? "stream error") };
     }
+    return false;
   };
 
   try {
+    let sawDone = false;
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithTimeout();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let sep: number;
@@ -996,31 +1045,43 @@ export async function streamManagementAi(
         buffer = buffer.slice(sep + 2);
         for (const line of frame.split("\n")) {
           const s = line.trim();
-          if (s.startsWith("data:")) handlePayload(s.slice(5).trim());
+          if (s.startsWith("data:") && handlePayload(s.slice(5).trim())) sawDone = true;
         }
+      }
+      if (sawDone) {
+        try { await reader.cancel(); } catch { /* ignore */ }
+        break;
       }
     }
   } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) return { ok: false, kind: "aborted" };
+    try { await reader.cancel(); } catch { /* ignore */ }
+    if (isAbortError(err, options?.signal)) return { ok: false, kind: "aborted" };
     return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Stream read error." };
   }
 
-  const providerStatus: ProviderStatus = {
+  const providerStatus: ProviderStatus = finalProviderStatus ?? {
     provider: "openclaw", runtime: "openclaw_gateway_agent_cli",
     status: streamError ? "degraded" : "completed", used: !streamError, fallback: null,
     reasonCode: streamError?.code ?? null,
   };
 
-  if (streamError && !full.trim()) {
+  if (streamError) {
+    providerStatus.status = "degraded";
+    providerStatus.used = false;
+    providerStatus.reasonCode = providerStatus.reasonCode ?? streamError.code;
+    providerStatus.reason = providerStatus.reason ?? streamError.code;
+  }
+
+  if (streamError || isDegraded(providerStatus)) {
     return {
       ok: false, kind: "provider_degraded", providerStatus, sessionId, traceId,
-      answer: null, auditLogHref: null, conversationHref: null, uiActions: [],
-      message: streamError.message,
+      answer: full.trim() ? full : null, auditLogHref, conversationHref, uiActions,
+      message: streamError?.message ?? `Provider ${providerStatus.provider}/${providerStatus.runtime} status=${providerStatus.status} used=${providerStatus.used}`,
     };
   }
   return {
     ok: true, kind: "ok", answer: full, sessionId, traceId, providerStatus,
-    auditLogHref: null, conversationHref: null, uiActions: [],
+    auditLogHref, conversationHref, uiActions,
   };
 }
 

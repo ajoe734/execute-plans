@@ -10,6 +10,8 @@ import { AgentPanelBody } from "./AgentPanelBody";
 
 const SNAP_RADIUS = 80;
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
 type DragKind = "move" | "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 interface DragState {
@@ -91,21 +93,33 @@ export function FloatingAgentPanel() {
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
     const vw = window.innerWidth, vh = window.innerHeight;
+    const maxSize = normalPanelMaxSize({ width: vw, height: vh });
+    const minW = Math.min(PANEL_MIN_W, maxSize.w);
+    const minH = Math.min(PANEL_MIN_H, maxSize.h);
     let { origX: x, origY: y, origW: w, origH: h } = d;
 
     if (d.kind === "move") {
-      x = d.origX + dx; y = d.origY + dy;
+      x = clamp(d.origX + dx, PANEL_EDGE, Math.max(PANEL_EDGE, vw - w - PANEL_EDGE));
+      y = clamp(d.origY + dy, PANEL_EDGE, Math.max(PANEL_EDGE, vh - h - PANEL_EDGE));
     } else {
-      if (d.kind.includes("e")) w = Math.max(PANEL_MIN_W, Math.min(vw - x - PANEL_EDGE, d.origW + dx));
-      if (d.kind.includes("s")) h = Math.max(PANEL_MIN_H, Math.min(vh - y - PANEL_EDGE, d.origH + dy));
+      const right = d.origX + d.origW;
+      const bottom = d.origY + d.origH;
+      if (d.kind.includes("e")) {
+        w = clamp(d.origW + dx, minW, Math.min(maxSize.w, vw - d.origX - PANEL_EDGE));
+      }
+      if (d.kind.includes("s")) {
+        h = clamp(d.origH + dy, minH, Math.min(maxSize.h, vh - d.origY - PANEL_EDGE));
+      }
       if (d.kind.includes("w")) {
-        const newW = Math.max(PANEL_MIN_W, d.origW - dx);
-        x = d.origX + (d.origW - newW); w = newW;
+        w = clamp(d.origW - dx, minW, Math.min(maxSize.w, right - PANEL_EDGE));
+        x = right - w;
       }
       if (d.kind.includes("n")) {
-        const newH = Math.max(PANEL_MIN_H, d.origH - dy);
-        y = d.origY + (d.origH - newH); h = newH;
+        h = clamp(d.origH - dy, minH, Math.min(maxSize.h, bottom - PANEL_EDGE));
+        y = bottom - h;
       }
+      x = clamp(x, PANEL_EDGE, Math.max(PANEL_EDGE, vw - w - PANEL_EDGE));
+      y = clamp(y, PANEL_EDGE, Math.max(PANEL_EDGE, vh - h - PANEL_EDGE));
     }
     panel.setRect({ x, y, w, h });
   };
