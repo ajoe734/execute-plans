@@ -8,6 +8,8 @@ import "@/i18n";
 import { PlatformShell } from "@/platform/PlatformShell";
 import { ManagementLayout } from "@/management/ManagementLayout";
 import { AgoraLayout } from "@/agora/AgoraLayout";
+import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
+import { StrategyWorkshopPage } from "@/agora/pages/StrategyWorkshopPage";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";
 import PersonaOnboarding from "@/management/pages/PersonaOnboarding";
@@ -247,6 +249,15 @@ const App = () => (
                   detail page). Kept: the two tools with no detail-page equivalent. */}
               <Route path="studios/formula" element={<FormulaStudio />} />
               <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
+            </Route>
+
+            {/* TradingDesk — three-tab shell (trading-room, strategy-workshop, strategy-performance).
+                Separate from AgoraLayout so it renders its own CommandBar/TabBar/ServantDrawer/BottomStrip. */}
+            <Route path="/agora" element={<TradingDeskLayout />}>
+              <Route path="trading-room" element={<div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">交易操盤室 — 即將推出</div>} />
+              <Route path="strategy-workshop" element={<StrategyWorkshopPage />} />
+              <Route path="strategy-workshop/:workshopId" element={<StrategyWorkshopPage />} />
+              <Route path="strategy-performance" element={<div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">策略執行與績效 — 即將推出</div>} />
             </Route>
 
             {/* Agora Workbench */}
