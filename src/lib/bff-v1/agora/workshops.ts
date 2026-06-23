@@ -22,20 +22,59 @@ export type WorkshopCardType =
   | "version_compare"
   | "readiness_gate";
 
+export type WorkshopCardStatus =
+  | "informational"
+  | "action_required"
+  | "running"
+  | "completed"
+  | "failed"
+  | "stale";
+
 export type WorkshopReadinessGate =
   | "preliminary_research"
   | "full_validation"
   | "trading_room";
 
+export interface WorkshopEvidenceRef {
+  ref_type:
+    | "evidence_bundle"
+    | "evidence_item"
+    | "source_record"
+    | "citation"
+    | "experiment_artifact"
+    | "registry_entry"
+    | "consult_memo"
+    | "research_run"
+    | "telemetry_snapshot"
+    | "market_context";
+  ref_id: string;
+  summary?: string;
+  data_cutoff?: string;
+}
+
+export type WorkshopAllowedActions = Record<string, boolean>;
+
 export interface WorkshopCard {
+  spec_version?: "1.0";
   card_id: string;
-  workshop_id: string;
   card_type: WorkshopCardType;
-  sequence: number;
-  emitted_by: "user" | "servant";
-  persona_id?: string;
+  workshop_id: string;
+  sequence_no: number;
+  source_event_ids?: string[];
+  workshop_version_id?: string;
+  strategy_spec_registry_id?: string;
+  status: WorkshopCardStatus;
+  title: string;
+  summary?: string;
   payload: Record<string, unknown>;
+  evidence_refs?: WorkshopEvidenceRef[];
+  allowed_actions?: WorkshopAllowedActions;
   created_at: string;
+  updated_at?: string;
+  // Compatibility with the pre-v1.3 AG-FE-SW-001 projection while the BFF rolls.
+  sequence?: number;
+  emitted_by?: "user" | "servant";
+  persona_id?: string;
 }
 
 export interface WorkshopReadinessAssessment {
