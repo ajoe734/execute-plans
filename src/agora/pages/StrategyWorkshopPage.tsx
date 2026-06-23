@@ -12,6 +12,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
+import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import {
   listWorkshops,
   getWorkshop,
@@ -20,7 +22,7 @@ import {
   getWorkshopReadiness,
   postWorkshopMessage,
   type WorkshopCard,
-  type WorkshopCardType,
+  type WorkshopReadinessAssessment,
 } from "@/lib/bff-v1/agora/workshops";
 import type {
   StrategyWorkshop,
@@ -74,26 +76,6 @@ function WorkshopListPanel({ workshops }: { workshops: StrategyWorkshop[] }) {
   );
 }
 
-// ─── Card type label ──────────────────────────────────────────────────────────
-
-function cardTypeLabel(type: WorkshopCardType): string {
-  const labels: Record<WorkshopCardType, string> = {
-    user_strategy_description: "Strategy Description",
-    servant_reconstruction: "Servant Reconstruction",
-    completeness_update: "Completeness Update",
-    missing_definition: "Missing Definition",
-    next_question: "Question",
-    research_plan_proposal: "Research Plan",
-    research_progress: "Research Progress",
-    research_result: "Research Result",
-    consult_result: "Consult Result",
-    version_patch_proposal: "Version Patch",
-    version_compare: "Version Compare",
-    readiness_gate: "Readiness Gate",
-  };
-  return labels[type] ?? type;
-}
-
 // ─── WorkshopConversation ─────────────────────────────────────────────────────
 
 function WorkshopConversation({
@@ -129,107 +111,9 @@ function WorkshopConversation({
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
       {cards.map((card) => (
-        <div
-          className={cn(
-            "rounded-lg border p-3 text-sm",
-            card.emitted_by === "user"
-              ? "ml-auto max-w-[75%] border-blue-200 bg-blue-50"
-              : "mr-auto max-w-[90%] border-slate-200 bg-white",
-          )}
-          key={card.card_id}
-        >
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-500">
-              {cardTypeLabel(card.card_type)}
-            </span>
-            <span className="text-xs text-slate-300">#{card.sequence}</span>
-          </div>
-          <pre className="whitespace-pre-wrap text-xs text-slate-700 font-sans">
-            {JSON.stringify(card.payload, null, 2)}
-          </pre>
-        </div>
+        <WorkshopCardRenderer card={card} key={card.card_id} />
       ))}
       <div ref={bottomRef} />
-    </div>
-  );
-}
-
-// ─── StrategyCompletenessRail ─────────────────────────────────────────────────
-
-function StrategyCompletenessRail({
-  completeness,
-}: {
-  completeness: StrategyCompleteness | null;
-}) {
-  if (!completeness) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
-        <p className="text-xs text-slate-400">策略完整度尚未評估</p>
-      </div>
-    );
-  }
-
-  const gradeColor: Record<StrategyCompleteness["overall_grade"], string> = {
-    complete: "text-green-700",
-    mostly_complete: "text-amber-600",
-    partial: "text-orange-600",
-    incomplete: "text-red-600",
-  };
-
-  return (
-    <div className="flex flex-col gap-3 overflow-y-auto p-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Completeness
-        </span>
-        <span className={cn("text-xs font-medium", gradeColor[completeness.overall_grade])}>
-          {completeness.overall_grade.replace(/_/g, " ")}
-        </span>
-      </div>
-
-      {completeness.dimensions.map((dim) => (
-        <div className="rounded border border-slate-100 bg-slate-50 p-2" key={dim.dimension}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-700">
-              {dim.dimension.replace(/_/g, " ")}
-            </span>
-            <span
-              className={cn(
-                "text-xs",
-                dim.grade === "complete"
-                  ? "text-green-600"
-                  : dim.grade === "partial"
-                    ? "text-amber-600"
-                    : "text-red-500",
-              )}
-            >
-              {dim.grade}
-            </span>
-          </div>
-          {dim.gaps && dim.gaps.length > 0 && (
-            <ul className="mt-1 list-disc pl-4">
-              {dim.gaps.map((gap, i) => (
-                <li className="text-xs text-slate-400" key={i}>
-                  {gap}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
-
-      {completeness.blockers && completeness.blockers.length > 0 && (
-        <div className="rounded border border-red-100 bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-700">Blockers</p>
-          <ul className="mt-1 list-disc pl-4">
-            {completeness.blockers.map((b, i) => (
-              <li className="text-xs text-red-600" key={i}>
-                {b}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -299,6 +183,7 @@ export function StrategyWorkshopPage() {
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [cards, setCards] = useState<WorkshopCard[]>([]);
   const [completeness, setCompleteness] = useState<StrategyCompleteness | null>(null);
+  const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -323,10 +208,11 @@ export function StrategyWorkshopPage() {
       getWorkshopCompleteness(workshopId),
       getWorkshopReadiness(workshopId),
     ])
-      .then(([ws, cardsRes, comp]) => {
+      .then(([ws, cardsRes, comp, readinessAssessment]) => {
         setWorkshop(ws);
         setCards(cardsRes.items);
         setCompleteness(comp);
+        setReadiness(readinessAssessment);
       })
       .catch((err) => {
         console.error("[StrategyWorkshopPage] session load error", err);
@@ -341,9 +227,14 @@ export function StrategyWorkshopPage() {
       setSendError(null);
       try {
         await postWorkshopMessage(workshopId, { content: text });
-        // Reload cards after sending
-        const cardsRes = await listWorkshopCards(workshopId);
+        const [cardsRes, comp, readinessAssessment] = await Promise.all([
+          listWorkshopCards(workshopId),
+          getWorkshopCompleteness(workshopId),
+          getWorkshopReadiness(workshopId),
+        ]);
         setCards(cardsRes.items);
+        setCompleteness(comp);
+        setReadiness(readinessAssessment);
       } catch (err) {
         setSendError(err instanceof Error ? err.message : "送出失敗");
         if (process.env.NODE_ENV !== "production") {
@@ -427,7 +318,7 @@ export function StrategyWorkshopPage() {
               Completeness
             </span>
           </div>
-          <StrategyCompletenessRail completeness={completeness} />
+          <StrategyCompletenessRail completeness={completeness} readiness={readiness} />
         </div>
       </div>
     </div>
