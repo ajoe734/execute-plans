@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -109,7 +110,7 @@ export const EvaluationSuites = () => {
               <div>
                 <h3 className="font-semibold">{active.name}</h3>
                 <div className="text-mono text-xs text-muted-foreground mt-0.5">{active.target} · {active.archetype}</div>
-                {active.lastRun && <div className="text-mono text-[10px] text-muted-foreground mt-1">Last run: {new Date(active.lastRun).toLocaleString()}</div>}
+                {active.lastRun && <div className="text-mono text-[10px] text-muted-foreground mt-1">Last run: {safeDateTime(active.lastRun)}</div>}
               </div>
               <Button size="sm" onClick={run} disabled={running}><Play className="h-4 w-4 mr-1" />{running ? "Running…" : "Re-run"}</Button>
             </div>

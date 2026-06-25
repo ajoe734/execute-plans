@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
@@ -25,7 +26,7 @@ export const RankingFormulaDetail = () => {
     if (!id) return;
     bff.rankingFormulas.list().then((rows) => setF(rows.find((x) => x.id === id)));
     bff.strategies.list().then(setStrategies);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("ranking."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking."))));
   }, [id]);
 
   if (!f) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -72,15 +73,15 @@ export const RankingFormulaDetail = () => {
             <DataTable rows={ranked.map((r, i) => ({ ...r, id: r.id, rank: i + 1 }))} onRowClick={(r) => nav(`/management/strategies/${r.id}`)} columns={[
               { key: "rank", header: "#", cell: (r) => <span className="text-mono text-xs">{r.rank}</span> },
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-              { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+              { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{(r.sharpe ?? 0).toFixed(2)}</span> },
               { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.drawdown * 100).toFixed(2)}%</span> },
-              { key: "score", header: t("rankingDashboard.score"), cell: (r) => <span className="text-mono text-xs text-accent">{r.score.toFixed(3)}</span> },
+              { key: "score", header: t("rankingDashboard.score"), cell: (r) => <span className="text-mono text-xs text-accent">{(r.score ?? 0).toFixed(3)}</span> },
             ]} />
           ) },
           { value: "history", label: t("section.history"), content: (
             <DataTable rows={versions.map((v) => ({ ...v, id: v.v }))} columns={[
               { key: "v", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.v}</span> },
-              { key: "at", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs">{new Date(r.at).toLocaleString()}</span> },
+              { key: "at", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.at)}</span> },
               { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.by}</span> },
               { key: "note", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.note}</span> },
             ]} />

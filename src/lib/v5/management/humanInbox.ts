@@ -24,6 +24,8 @@ export interface HumanInboxItem {
   id: string;
   kind: HumanInboxKind;
   title: string;
+  /** Live BFF items carry a one-line summary instead of the mock consequence triplet. */
+  summary?: string;
   requiredRole: string;
   consequenceIfApproved: string;
   consequenceIfRejected: string;

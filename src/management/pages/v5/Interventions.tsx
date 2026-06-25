@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
 import type { InterventionItem } from "@/lib/v5";
 import type { InterventionDecision } from "@/lib/v5/enums";
+import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
@@ -220,7 +221,7 @@ export const InterventionsPage = () => {
                   <td className="px-3 py-2 cursor-pointer" onClick={() => setActive(it)}><Badge variant="outline" className={sevCls[it.severity]}>{it.severity}</Badge></td>
                   <td className="px-3 py-2 text-xs cursor-pointer" onClick={() => setActive(it)}>{it.recommendedDecision ?? "—"}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{it.requiredRoles.join(", ")}</td>
-                  <td className="px-3 py-2 text-right text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{new Date(it.updatedAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{safeDateTime(it.updatedAt)}</td>
                 </tr>
               ))}
               {visible.length === 0 && (
@@ -296,7 +297,7 @@ const InterventionDrawer = ({
             <Field label={t("v5.interventions.recommended")} value={item.recommendedDecision ?? "—"} />
             <Field label={t("v5.interventions.roles")} value={item.requiredRoles.join(", ") || "—"} />
             <Field label={t("v5.interventions.modifyAllowed")} value={item.modifyAllowed ? "yes" : "no"} />
-            <Field label={t("v5.col.updated")} value={new Date(item.updatedAt).toLocaleString()} />
+            <Field label={t("v5.col.updated")} value={safeDateTime(item.updatedAt)} />
           </div>
 
           {sourceLink && (

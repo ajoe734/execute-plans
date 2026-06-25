@@ -25,7 +25,15 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
 
   useEffect(() => {
     let active = true;
-    void bff.search(q).then((r) => active && setResults(r as SearchResult[]));
+    // Don't fire on mount with an empty query, and never let a failed/aborted
+    // search bubble as an unhandled rejection (strict-mode transport throws).
+    if (!q.trim()) {
+      setResults([]);
+      return;
+    }
+    bff.search(q)
+      .then((r) => { if (active) setResults(r as SearchResult[]); })
+      .catch(() => { if (active) setResults([]); });
     return () => { active = false; };
   }, [q]);
 

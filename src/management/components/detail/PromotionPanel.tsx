@@ -12,6 +12,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { Section } from "@/management/pages/ObjectDetailLayout";
+import { safeDateTime } from "@/lib/utils";
 
 type PromotionTarget = "paper" | "live";
 
@@ -108,7 +109,7 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
               { key: "ds", header: t("phase13.evolution.promotion.deltaSharpe"), cell: (r) => <span className="text-mono text-xs">{r.deltaSharpe >= 0 ? "+" : ""}{r.deltaSharpe.toFixed(3)}</span> },
               { key: "dd", header: t("phase13.evolution.promotion.deltaDD"), cell: (r) => <span className="text-mono text-xs">{r.deltaDrawdown >= 0 ? "+" : ""}{r.deltaDrawdown.toFixed(3)}</span> },
               { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.promotedBy}</span> },
-              { key: "at", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.promotedAt).toLocaleString()}</span> },
+              { key: "at", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.promotedAt)}</span> },
             ]}
           />
         </Card>

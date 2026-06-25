@@ -6,6 +6,12 @@ import { paths } from "../paths";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
 import { ACTION_COMMAND_STATUSES, EVIDENCE_CAPABILITY_MAP } from "../dto";
 import { SSE_CHANNELS } from "../sse/channels";
+import {
+  AGORA_CAPABILITIES,
+  AGORA_CONTRACT_SNAPSHOT,
+  AGORA_ROUTE_PATHS,
+  AGORA_SCHEMA_FILES,
+} from "../agora/types";
 
 const repoRoot = process.cwd();
 
@@ -94,5 +100,24 @@ describe("BFF v1 contract drift", () => {
       expect(cap.length).toBeGreaterThan(0);
       expect(cap).toMatch(/^([a-z0-9_]+|\*)(\.[a-z0-9_*]+)*$/);
     }
+  });
+
+  it("Agora v1 generated types carry the AG-XR-001 bundle snapshot", () => {
+    expect(AGORA_CONTRACT_SNAPSHOT.bundleVersion).toBe("1.0");
+    expect(AGORA_CONTRACT_SNAPSHOT.frozenBy).toBe("AG-XR-001");
+    expect(AGORA_SCHEMA_FILES).toHaveLength(13);
+    expect(AGORA_CAPABILITIES.map((capability) => capability.name)).toEqual([
+      "agora.identity.v1",
+      "agora.session.v1",
+      "agora.workshop.v1",
+      "agora.research.v1",
+      "agora.trading.v1",
+      "agora.dashboard.v1",
+      "agora.personalization.v1",
+    ]);
+    expect(AGORA_ROUTE_PATHS).toContain("/bff/agora/ask");
+    expect(AGORA_ROUTE_PATHS).toContain("/bff/agora/signals/{signal_id}/feedback");
+    expect(AGORA_CONTRACT_SNAPSHOT.files["openapi/agora_v1.openapi.yaml"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(AGORA_CONTRACT_SNAPSHOT.files)).toHaveLength(15);
   });
 });

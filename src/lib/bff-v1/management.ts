@@ -359,9 +359,35 @@ export type InboxItemSeedFn = () => HumanInboxDetail;
 
 function adaptInboxList(raw: unknown): HumanInboxItem[] | null {
   const data = unwrap(raw);
-  const arr = asArray<HumanInboxItem>(data) ??
-              (isObject(data) ? asArray<HumanInboxItem>(data.items) : null);
-  return arr;
+  const arr =
+    asArray<Record<string, unknown>>(data) ??
+    (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
+  if (!arr) return null;
+  return arr.map((it) => {
+    // Mock/older items already match the view-model → pass through.
+    if (typeof it.kind === "string" && typeof it.detailHref === "string") {
+      return it as unknown as HumanInboxItem;
+    }
+    // Live BFF item: inboxType / route / summary / target, no consequence triplet.
+    const detailHref = String(it.route ?? it.bff_detail_path ?? "");
+    const kind = String(it.kind ?? it.inboxType ?? it.source_type ?? "approval");
+    const actionState = String(it.action_state ?? it.status ?? "");
+    return {
+      id: String(it.id ?? it.inbox_id ?? ""),
+      kind: kind as HumanInboxItem["kind"],
+      title: String(it.title ?? it.summary ?? it.id ?? ""),
+      summary: typeof it.summary === "string" ? it.summary : undefined,
+      requiredRole: String(it.requiredRole ?? it.required_role ?? ""),
+      consequenceIfApproved: String(it.consequenceIfApproved ?? ""),
+      consequenceIfRejected: String(it.consequenceIfRejected ?? ""),
+      consequenceIfIgnored: String(it.consequenceIfIgnored ?? ""),
+      canDecide: typeof it.canDecide === "boolean" ? it.canDecide : true,
+      canProceed:
+        typeof it.canProceed === "boolean" ? it.canProceed : actionState !== "pending" && actionState !== "proposed",
+      detailHref,
+      links: (it.links as HumanInboxItem["links"]) ?? undefined,
+    } as unknown as HumanInboxItem;
+  });
 }
 function adaptInboxItem(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
@@ -370,10 +396,64 @@ function adaptInboxItem(raw: unknown): HumanInboxDetail | null {
 
 // ---------- PM-4 Trading Pulse ----------
 
+// Pull a numeric metric off a live ranking item, tolerating camel/snake names
+// and a few metric aliases the BFF uses (sharpe→sharpeRatio, execution→fillRate).
+function rankingMetricValue(it: Record<string, unknown>, metric: string): number {
+  const aliases: Record<string, string[]> = {
+    pnl: ["pnl"],
+    drawdown: ["drawdown", "maxDrawdown", "max_drawdown"],
+    sharpe: ["sharpeRatio", "sharpe_ratio", "sharpe"],
+    execution: ["fillRate", "fill_rate"],
+    fill_rate: ["fillRate", "fill_rate"],
+    slippage: ["avgSlippageBps", "avg_slippage_bps"],
+  };
+  const camel = metric.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
+  const keys = aliases[metric] ?? [metric, camel];
+  for (const k of keys) {
+    const v = it[k];
+    if (typeof v === "number") return v;
+  }
+  return 0;
+}
+
 function adaptRankings(raw: unknown): TradingPulseRankBlock[] | null {
   const data = unwrap(raw);
-  return asArray<TradingPulseRankBlock>(data) ??
-         (isObject(data) ? asArray<TradingPulseRankBlock>(data.blocks ?? data.items) : null);
+  const blocks =
+    asArray<Record<string, unknown>>(data) ??
+    (isObject(data)
+      ? asArray<Record<string, unknown>>(
+          data.rankingBlocks ?? data.ranking_blocks ?? data.rankings ?? data.blocks ?? data.items,
+        )
+      : null);
+  if (!blocks) return null;
+  return blocks.map((b) => {
+    // Already FE-shaped (mock seed / older contract) → pass through untouched.
+    if (Array.isArray((b as { rows?: unknown }).rows)) {
+      return b as unknown as TradingPulseRankBlock;
+    }
+    // Live BFF shape: block.items[] with runtime fields → map to FE rows so the
+    // card renders the entries instead of an empty "no data" state.
+    const metric = String(b.metric ?? "");
+    const rawItems = asArray<Record<string, unknown>>(b.items) ?? [];
+    const rows = rawItems.map((it) => {
+      const subjectId = String(
+        it.runtimeBindingId ?? it.runtime_binding_id ?? it.runtimeId ?? it.runtime_id ?? it.subjectId ?? "",
+      );
+      return {
+        subjectId,
+        subjectLabel: String(it.runtimeId ?? it.runtime_id ?? it.subjectLabel ?? subjectId ?? "—"),
+        metric: String(b.label ?? metric),
+        metricValue: rankingMetricValue(it, metric),
+        metricUnit: undefined,
+        links: undefined,
+      };
+    });
+    return {
+      kind: String(b.blockId ?? b.block_id ?? b.kind ?? metric),
+      label: String(b.label ?? metric),
+      rows,
+    } as unknown as TradingPulseRankBlock;
+  });
 }
 
 // ---------- PM-7 Persona Fleet / PM-11 Evolution / PM-1 Evidence ----------

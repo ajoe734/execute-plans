@@ -1,6 +1,8 @@
 // Workflow Templates — Spec Part 3 §18.9.
 // Reusable workflow recipes: skill assembly, rebalance run, evolution loop, etc.
 import { useState } from "react";
+import { paths, withLiveOrMock } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/platform/components/DataTable";
@@ -9,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface Template {
   id: string;
@@ -37,6 +40,15 @@ const catTone = (c: Template["category"]) =>
 export const WorkflowTemplatesPage = () => {
   const t = useT();
   const [active, setActive] = useState<Template | null>(null);
+  // Live-wire GET /bff/workflows; fall back to SEED until the registry has data.
+  const { data: rows } = useV5Live(
+    () => withLiveOrMock<Template[]>(
+      { method: "GET", path: paths.workflowTemplates() },
+      async () => SEED,
+      (resp: { items?: Template[] }) => (resp?.items?.length ? resp.items : SEED),
+    ),
+    [],
+  );
 
   return (
     <>
@@ -45,13 +57,13 @@ export const WorkflowTemplatesPage = () => {
       }/>
       <PageBody>
         <Card>
-          <DataTable<Template> rows={SEED} onRowClick={setActive} columns={[
+          <DataTable<Template> rows={rows ?? SEED} onRowClick={setActive} columns={[
             { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
             { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
             { key: "cat", header: t("table.category"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${catTone(r.category)}`}>{r.category}</Badge> },
             { key: "steps", header: t("workflows.steps"), cell: (r) => <span className="text-mono text-xs">{r.steps.length}</span> },
             { key: "runs", header: t("workflows.runs"), cell: (r) => <span className="text-mono text-xs">{r.runs}</span> },
-            { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.lastRun).toLocaleString()}</span> },
+            { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.lastRun)}</span> },
             { key: "own", header: t("table.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
           ]} />
         </Card>

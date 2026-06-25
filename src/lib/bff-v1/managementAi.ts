@@ -48,15 +48,149 @@ export interface AssistantOpenClawToolPolicyStatus {
   assistantCommandTool?: string;
   allowedTools?: string[];
   effectiveTools?: string[];
+  effectiveSkills?: AssistantOpenClawSkillDescriptor[];
   allowedWorkflows?: string[];
   defaultPosture?: string | null;
   source?: string;
 }
 
+export interface AssistantOpenClawSkillDescriptor {
+  id?: string;
+  title?: string;
+  surface?: string;
+  handlerRef?: string;
+  resultSurface?: string;
+  confirmPolicy?: string;
+  role?: string;
+  modeGate?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface AssistantStatusSourceRef {
+  sourceType?: string;
+  path?: string;
+  available?: boolean;
+  status?: string;
+  snapshotAt?: string;
+  lastModifiedAt?: string;
+}
+
+export interface AssistantSupervisorOccupancy {
+  running?: number;
+  pending?: number;
+  queued?: number;
+}
+
+export interface AssistantSupervisorStatus {
+  pid?: number;
+  lifecycle?: string;
+  modeStatus?: string;
+  focusMode?: string;
+  startedAt?: string;
+  lastHeartbeatAt?: string;
+  lastSuccessfulLoopAt?: string;
+  lastLoopStartedAt?: string;
+  lastLoopFinishedAt?: string;
+  lastLoopDurationMs?: number;
+  lastLoopError?: string | null;
+  modeOccupancy?: Record<string, AssistantSupervisorOccupancy>;
+}
+
+export interface AssistantRepairWorkspaceStatus {
+  root?: string;
+  exists?: boolean;
+  isDir?: boolean;
+  writable?: boolean;
+  ready?: boolean;
+  status?: string;
+  worktreeCount?: number;
+}
+
+export interface AssistantProviderReadinessStatus {
+  available?: boolean;
+  provider?: string;
+  providerName?: string;
+  runtime?: string;
+  ready?: boolean;
+  status?: string;
+  reason?: string | null;
+  degradedReason?: string | null;
+  auth?: string;
+  authStatus?: string;
+  version?: string;
+  mountMode?: string;
+  checkedAt?: string;
+  source?: string;
+  capabilities?: { read?: boolean; repairWrite?: boolean };
+  repairWorkspace?: AssistantRepairWorkspaceStatus | null;
+}
+
+export interface AssistantDevBridgeInboxStatus {
+  path?: string;
+  exists?: boolean;
+  pendingCount?: number;
+  processedCount?: number;
+  failedCount?: number;
+  receiptCount?: number;
+}
+
+export interface AssistantDevBridgeReceipt {
+  packetId?: string;
+  status?: string;
+  drainedAt?: string;
+  dryRun?: boolean;
+  errorCount?: number;
+  archivedPath?: string;
+  error?: string | null;
+}
+
+export interface AssistantDevBridgeStatus {
+  status?: string;
+  inbox?: AssistantDevBridgeInboxStatus | null;
+  lastDrainAt?: string;
+  recentReceipts?: AssistantDevBridgeReceipt[];
+}
+
+export interface AssistantTaskStatusSummary {
+  id?: string;
+  title?: string;
+  owner?: string;
+  reviewer?: string;
+  status?: string;
+  phase?: string;
+  next?: string;
+  lastUpdate?: string;
+  waitingFor?: string | null;
+  briefPath?: string | null;
+  blockers?: string[];
+}
+
+export interface AssistantCoordinationStatus {
+  lastScanAt?: string;
+  fileCount?: number;
+  featureCount?: number;
+  featureIds?: string[];
+}
+
 export interface AssistantOrchestratorStatus {
   status?: string;
+  snapshotAt?: string;
+  project?: string;
+  sprint?: string;
+  objective?: string;
   providerStatus?: ProviderStatus | null;
   openclawToolPolicy?: AssistantOpenClawToolPolicyStatus | null;
+  sourceRefs?: AssistantStatusSourceRef[];
+  tasks?: AssistantTaskStatusSummary[];
+  supervisor?: AssistantSupervisorStatus | null;
+  providerReadiness?: AssistantProviderReadinessStatus | null;
+  assistantDevBridge?: AssistantDevBridgeStatus | null;
+  coordination?: AssistantCoordinationStatus | null;
+  queue?: Record<string, unknown> | unknown[] | null;
+  workers?: Record<string, unknown> | unknown[] | null;
+  handoffs?: unknown[];
+  blockers?: unknown[];
+  providerGuardrails?: Record<string, unknown> | null;
 }
 
 export type AssistantOrchestratorStatusResult =
@@ -383,6 +517,14 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
+}
+
+function asUnknownArray(value: unknown): unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined;
+}
+
 function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatus | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -397,9 +539,160 @@ function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatu
     assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
     allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
     effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
+    effectiveSkills: adaptOpenClawSkillDescriptors(r.effectiveSkills ?? r.effective_skills),
     allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
     defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
     source: asString(r.source),
+  };
+}
+
+function adaptOpenClawSkillDescriptors(raw: unknown): AssistantOpenClawSkillDescriptor[] {
+  return asRecordArray(raw).map((r) => ({
+    id: asString(r.id),
+    title: asString(r.title),
+    surface: asString(r.surface),
+    handlerRef: asString(r.handlerRef ?? r.handler_ref),
+    resultSurface: asString(r.resultSurface ?? r.result_surface),
+    confirmPolicy: asString(r.confirmPolicy ?? r.confirm_policy),
+    role: asString(r.role),
+    modeGate: asRecord(r.modeGate ?? r.mode_gate) ?? undefined,
+    inputSchema: asRecord(r.inputSchema ?? r.input_schema) ?? undefined,
+  }));
+}
+
+function adaptSourceRefs(raw: unknown): AssistantStatusSourceRef[] {
+  return asRecordArray(raw).map((r) => ({
+    sourceType: asString(r.sourceType ?? r.source_type),
+    path: asString(r.path),
+    available: asBoolean(r.available),
+    status: asString(r.status),
+    snapshotAt: asString(r.snapshotAt ?? r.snapshot_at),
+    lastModifiedAt: asString(r.lastModifiedAt ?? r.last_modified_at),
+  }));
+}
+
+function adaptSupervisorStatus(raw: unknown): AssistantSupervisorStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const occupancyRaw = asRecord(r.modeOccupancy ?? r.mode_occupancy);
+  const modeOccupancy = occupancyRaw
+    ? Object.fromEntries(Object.entries(occupancyRaw).map(([mode, value]) => {
+        const item = asRecord(value) ?? {};
+        return [mode, {
+          running: asNumber(item.running),
+          pending: asNumber(item.pending),
+          queued: asNumber(item.queued),
+        }];
+      }))
+    : undefined;
+  return {
+    pid: asNumber(r.pid),
+    lifecycle: asString(r.lifecycle),
+    modeStatus: asString(r.modeStatus ?? r.mode_status),
+    focusMode: asString(r.focusMode ?? r.focus_mode),
+    startedAt: asString(r.startedAt ?? r.started_at),
+    lastHeartbeatAt: asString(r.lastHeartbeatAt ?? r.last_heartbeat_at),
+    lastSuccessfulLoopAt: asString(r.lastSuccessfulLoopAt ?? r.last_successful_loop_at),
+    lastLoopStartedAt: asString(r.lastLoopStartedAt ?? r.last_loop_started_at),
+    lastLoopFinishedAt: asString(r.lastLoopFinishedAt ?? r.last_loop_finished_at),
+    lastLoopDurationMs: asNumber(r.lastLoopDurationMs ?? r.last_loop_duration_ms),
+    lastLoopError: asString(r.lastLoopError ?? r.last_loop_error) ?? null,
+    modeOccupancy,
+  };
+}
+
+function adaptRepairWorkspaceStatus(raw: unknown): AssistantRepairWorkspaceStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    root: asString(r.root),
+    exists: asBoolean(r.exists),
+    isDir: asBoolean(r.isDir ?? r.is_dir),
+    writable: asBoolean(r.writable),
+    ready: asBoolean(r.ready),
+    status: asString(r.status),
+    worktreeCount: asNumber(r.worktreeCount ?? r.worktree_count),
+  };
+}
+
+function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const capabilities = asRecord(r.capabilities);
+  return {
+    available: asBoolean(r.available),
+    provider: asString(r.provider),
+    providerName: asString(r.providerName ?? r.provider_name),
+    runtime: asString(r.runtime),
+    ready: asBoolean(r.ready),
+    status: asString(r.status),
+    reason: asString(r.reason) ?? null,
+    degradedReason: asString(r.degradedReason ?? r.degraded_reason) ?? null,
+    auth: asString(r.auth),
+    authStatus: asString(r.authStatus ?? r.auth_status),
+    version: asString(r.version),
+    mountMode: asString(r.mountMode ?? r.mount_mode),
+    checkedAt: asString(r.checkedAt ?? r.checked_at),
+    source: asString(r.source),
+    capabilities: capabilities ? {
+      read: asBoolean(capabilities.read),
+      repairWrite: asBoolean(capabilities.repairWrite ?? capabilities.repair_write),
+    } : undefined,
+    repairWorkspace: adaptRepairWorkspaceStatus(r.repairWorkspace ?? r.repair_workspace),
+  };
+}
+
+function adaptDevBridgeStatus(raw: unknown): AssistantDevBridgeStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const inbox = asRecord(r.inbox);
+  return {
+    status: asString(r.status),
+    inbox: inbox ? {
+      path: asString(inbox.path),
+      exists: asBoolean(inbox.exists),
+      pendingCount: asNumber(inbox.pendingCount ?? inbox.pending_count),
+      processedCount: asNumber(inbox.processedCount ?? inbox.processed_count),
+      failedCount: asNumber(inbox.failedCount ?? inbox.failed_count),
+      receiptCount: asNumber(inbox.receiptCount ?? inbox.receipt_count),
+    } : null,
+    lastDrainAt: asString(r.lastDrainAt ?? r.last_drain_at),
+    recentReceipts: asRecordArray(r.recentReceipts ?? r.recent_receipts).map((receipt) => ({
+      packetId: asString(receipt.packetId ?? receipt.packet_id),
+      status: asString(receipt.status),
+      drainedAt: asString(receipt.drainedAt ?? receipt.drained_at),
+      dryRun: asBoolean(receipt.dryRun ?? receipt.dry_run),
+      errorCount: asNumber(receipt.errorCount ?? receipt.error_count),
+      archivedPath: asString(receipt.archivedPath ?? receipt.archived_path),
+      error: asString(receipt.error) ?? null,
+    })),
+  };
+}
+
+function adaptTaskSummaries(raw: unknown): AssistantTaskStatusSummary[] {
+  return asRecordArray(raw).map((r) => ({
+    id: asString(r.id),
+    title: asString(r.title),
+    owner: asString(r.owner),
+    reviewer: asString(r.reviewer),
+    status: asString(r.status),
+    phase: asString(r.phase),
+    next: asString(r.next),
+    lastUpdate: asString(r.lastUpdate ?? r.last_update),
+    waitingFor: asString(r.waitingFor ?? r.waiting_for) ?? null,
+    briefPath: asString(r.briefPath ?? r.brief_path) ?? null,
+    blockers: asStringArray(r.blockers) ?? [],
+  }));
+}
+
+function adaptCoordinationStatus(raw: unknown): AssistantCoordinationStatus | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    lastScanAt: asString(r.lastScanAt ?? r.last_scan_at),
+    fileCount: asNumber(r.fileCount ?? r.file_count),
+    featureCount: asNumber(r.featureCount ?? r.feature_count),
+    featureIds: asStringArray(r.featureIds ?? r.feature_ids),
   };
 }
 
@@ -520,6 +813,12 @@ function newIdempotencyKey(): string {
   return `idk_mai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const MANAGEMENT_AI_STREAM_READ_TIMEOUT_MS = 45_000;
+
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  return (err as { name?: string } | null)?.name === "AbortError" || Boolean(signal?.aborted);
+}
+
 /** POST /bff/management/nl/ask — never returns a locally-synthesized answer. */
 export async function askManagementAi(
   input: ManagementAiAskInput,
@@ -559,7 +858,7 @@ export async function askManagementAi(
       signal: options?.signal,
     });
   } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+    if (isAbortError(err, options?.signal)) {
       return { ok: false, kind: "aborted" };
     }
     return {
@@ -619,6 +918,173 @@ export async function askManagementAi(
 
 }
 
+export interface ManagementAiStreamCallbacks {
+  /** Called as each token chunk arrives; `full` is the accumulated reply so far. */
+  onDelta?: (chunk: string, full: string) => void;
+  /** Called once when the BFF emits the meta event (session/trace ids). */
+  onMeta?: (meta: { sessionId: string | null; traceId: string | null; messageId: string | null }) => void;
+}
+
+/**
+ * POST /bff/management/nl/ask/stream — SSE token streaming.
+ *
+ * Drives progressive rendering: invokes onDelta as chunks arrive, then resolves
+ * to the SAME ManagementAiResult shape as askManagementAi() so the caller's
+ * reconcile/persist logic is unchanged. Never synthesizes an answer locally.
+ */
+export async function streamManagementAi(
+  input: ManagementAiAskInput,
+  callbacks: ManagementAiStreamCallbacks = {},
+  options?: { signal?: AbortSignal },
+): Promise<ManagementAiResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return { ok: false, kind: "transport_failure", status: null, message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing)." };
+  }
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  headers["Accept"] = "text/event-stream";
+  const body = JSON.stringify({
+    question: input.question,
+    focus: input.focus ?? "all",
+    context: input.context ?? "",
+    sessionId: input.sessionId ?? undefined,
+    conversation: input.conversation ?? undefined,
+    ui: input.ui ?? undefined,
+    openclaw: input.openclaw ?? undefined,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.managementNlAskStream()}`, {
+      method: "POST", headers, body, credentials: "include", signal: options?.signal,
+    });
+  } catch (err) {
+    if (isAbortError(err, options?.signal)) return { ok: false, kind: "aborted" };
+    return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Network error contacting Pantheon BFF." };
+  }
+  if (!res.ok || !res.body) {
+    return { ok: false, kind: "transport_failure", status: res.status, message: `BFF ${res.status} ${res.statusText || ""}`.trim() };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+  let sessionId: string | null = input.sessionId ?? null;
+  let traceId: string | null = null;
+  let streamError: { code: string; message: string } | null = null;
+  let finalProviderStatus: ProviderStatus | null = null;
+  let auditLogHref: string | null = null;
+  let conversationHref: string | null = null;
+  let uiActions: ManagementAiUiAction[] = [];
+
+  const readWithTimeout = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Management AI stream timed out waiting for BFF data."));
+          }, MANAGEMENT_AI_STREAM_READ_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+
+  const appendDelta = (chunk: string): void => {
+    if (!chunk) return;
+    full += chunk;
+    callbacks.onDelta?.(chunk, full);
+  };
+
+  const replaceWithDoneText = (text: string): void => {
+    if (!text || text === full) return;
+    const chunk = text.startsWith(full) ? text.slice(full.length) : text;
+    full = text;
+    if (chunk) callbacks.onDelta?.(chunk, full);
+  };
+
+  const handlePayload = (payload: string): boolean => {
+    if (!payload) return false;
+    if (payload === "[DONE]") return true;
+    let evt: Record<string, unknown>;
+    try { evt = JSON.parse(payload) as Record<string, unknown>; } catch { return false; }
+    const t = evt.type;
+    if (t === "meta") {
+      sessionId = (evt.sessionId as string) ?? (evt.session_id as string) ?? sessionId;
+      traceId = (evt.traceId as string) ?? (evt.trace_id as string) ?? traceId;
+      callbacks.onMeta?.({ sessionId, traceId, messageId: (evt.messageId as string) ?? null });
+    } else if (t === "delta") {
+      appendDelta(String(evt.text ?? ""));
+    } else if (t === "done") {
+      replaceWithDoneText(String(evt.text ?? ""));
+      finalProviderStatus = adaptProviderStatus((evt.provider_status ?? evt.providerStatus) as (Partial<ProviderStatus> & Record<string, unknown>) | undefined) ?? finalProviderStatus;
+      const auditLog = asRecord(evt.auditLog ?? evt.audit_log);
+      const conversation = asRecord(evt.conversation);
+      auditLogHref = asString(auditLog?.href) ?? auditLogHref;
+      conversationHref = asString(conversation?.href) ?? conversationHref;
+      uiActions = adaptUiActions(evt as RawAskResponse["data"]);
+    } else if (t === "error") {
+      streamError = { code: String(evt.error_code ?? "OPENCLAW_STREAM_ERROR"), message: String(evt.message ?? "stream error") };
+    }
+    return false;
+  };
+
+  try {
+    let sawDone = false;
+    for (;;) {
+      const { done, value } = await readWithTimeout();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        for (const line of frame.split("\n")) {
+          const s = line.trim();
+          if (s.startsWith("data:") && handlePayload(s.slice(5).trim())) sawDone = true;
+        }
+      }
+      if (sawDone) {
+        try { await reader.cancel(); } catch { /* ignore */ }
+        break;
+      }
+    }
+  } catch (err) {
+    try { await reader.cancel(); } catch { /* ignore */ }
+    if (isAbortError(err, options?.signal)) return { ok: false, kind: "aborted" };
+    return { ok: false, kind: "transport_failure", status: null, message: (err as Error)?.message ?? "Stream read error." };
+  }
+
+  const providerStatus: ProviderStatus = finalProviderStatus ?? {
+    provider: "openclaw", runtime: "openclaw_gateway_agent_cli",
+    status: streamError ? "degraded" : "completed", used: !streamError, fallback: null,
+    reasonCode: streamError?.code ?? null,
+  };
+
+  if (streamError) {
+    providerStatus.status = "degraded";
+    providerStatus.used = false;
+    providerStatus.reasonCode = providerStatus.reasonCode ?? streamError.code;
+    providerStatus.reason = providerStatus.reason ?? streamError.code;
+  }
+
+  if (streamError || isDegraded(providerStatus)) {
+    return {
+      ok: false, kind: "provider_degraded", providerStatus, sessionId, traceId,
+      answer: full.trim() ? full : null, auditLogHref, conversationHref, uiActions,
+      message: streamError?.message ?? `Provider ${providerStatus.provider}/${providerStatus.runtime} status=${providerStatus.status} used=${providerStatus.used}`,
+    };
+  }
+  return {
+    ok: true, kind: "ok", answer: full, sessionId, traceId, providerStatus,
+    auditLogHref, conversationHref, uiActions,
+  };
+}
+
 export async function fetchAssistantOrchestratorStatus(
   options?: { signal?: AbortSignal },
 ): Promise<AssistantOrchestratorStatusResult> {
@@ -671,8 +1137,23 @@ export async function fetchAssistantOrchestratorStatus(
     kind: "ok",
     status: {
       status: asString(data.status),
+      snapshotAt: asString(data.snapshotAt ?? data.snapshot_at),
+      project: asString(data.project),
+      sprint: asString(data.sprint),
+      objective: asString(data.objective),
       providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
       openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
+      sourceRefs: adaptSourceRefs(data.sourceRefs ?? data.source_refs),
+      tasks: adaptTaskSummaries(data.tasks),
+      supervisor: adaptSupervisorStatus(data.supervisor),
+      providerReadiness: adaptProviderReadinessStatus(data.providerReadiness ?? data.provider_readiness),
+      assistantDevBridge: adaptDevBridgeStatus(data.assistantDevBridge ?? data.assistant_dev_bridge),
+      coordination: adaptCoordinationStatus(data.coordination),
+      queue: asRecord(data.queue) ?? asUnknownArray(data.queue) ?? null,
+      workers: asRecord(data.workers) ?? asUnknownArray(data.workers) ?? null,
+      handoffs: asUnknownArray(data.handoffs) ?? [],
+      blockers: asUnknownArray(data.blockers) ?? [],
+      providerGuardrails: asRecord(data.providerGuardrails ?? data.provider_guardrails) ?? null,
     },
   };
 }

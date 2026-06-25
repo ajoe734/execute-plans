@@ -22,5 +22,6 @@ export { BrokerLiveReadinessPage } from "./BrokerLiveReadiness";
 export { CapitalBindingLiveReadinessPage } from "./CapitalBindingLiveReadiness";
 export { BffHaReadinessPage } from "./BffHaReadiness";
 export { StrictPublishAuditPage } from "./StrictPublishAudit";
+export { DataSourceManagementPage } from "./DataSourceManagement";
 export { ManagementNlConsole } from "./NlConsole";
 export { HumanGateDetailPage } from "./HumanGateDetail";

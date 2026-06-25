@@ -39,14 +39,30 @@ host 或驗收來源；請從 Pantheon dev 環境服務 `execute-plans` build。
 宣稱「已 publish 到 dev」前，至少要能指出：
 
 - `execute-plans` commit 已在 `dev`。
-- dev FE host 已由該 commit build/deploy。
-- `Pantheon FE-BFF Integration Gate` 或等價 probe 已通過 direct
-  execute-plans frontend + Pantheon dev BFF。
+- `Pantheon FE-BFF Integration Gate` 已對該 commit 通過。
+- `Pantheon Dev FE Deploy` 已在 VM self-hosted runner 對該 commit 通過。
+- dev FE host 的 `/deployment.json` 回報同一個 commit。
+- direct browser/BFF probe 已通過 deployed `execute-plans` frontend +
+  Pantheon dev BFF。
 
 目前 dev FE / BFF 目標：
 
 - FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
 - BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+
+Dev FE 是這台 Pantheon dev VM 上的 Caddy static site：
+
+- Caddy root: `/var/www/pantheon-dev-fe`
+- release store: `/var/www/pantheon-dev-fe-releases`
+- deploy script: `scripts/deploy-dev-vm.sh`
+- deploy workflow: `.github/workflows/pantheon-dev-fe-deploy.yml`
+- runbook: `docs/deployment/pantheon-dev-fe-vm.md`
+
+部署流程是 gate-first：`dev` push 先跑 `Pantheon FE-BFF Integration Gate`，
+成功後 `Pantheon Dev FE Deploy` 的 `workflow_run` 才會在 VM self-hosted
+runner（labels: `pantheon-dev-vm`, `execute-plans-deploy`）部署同一個 SHA。
+手動部署可用 workflow_dispatch 指定 ref，但仍應選已通過 integration gate 的
+commit。
 
 常用 env 範本：
 
@@ -87,6 +103,11 @@ Auth/session access is explicit:
   MFA + `assistant.kernel.*` capability；目前 dev FE 使用
   `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
+
+Management AI SA/SD dispatch is BFF-owned. The frontend calls
+`POST /bff/assistant/dev-docs/generate` and lets the supervisor drain the dev
+bridge inbox. `Supervisor` is not a dispatchable reviewer identity; frontend
+SA/SD packets should use real worker names such as `Codex` and `Claude`.
 
 Route-by-route live/fallback behavior:
 
@@ -232,6 +253,8 @@ export $(grep -v '^#' .env.integration | xargs)
 npm run test:contract        # vitest contract-drift
 npm run probe:bff:routes     # 匿名 BFF route probe，輸出 .lovable/audits/
 npm run probe:bff:auth       # 需 PANTHEON_BFF_SMOKE_BEARER_TOKEN
+npm run probe:bff:writes     # live dry-run write probe；預設跳過 create 類 valid writes
+npm run validate:mgmt-live:deep # RBAC token matrix / operator race / long SSE reconnect
 npm run probe:browser        # hosted bundle BFF probe
 npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
@@ -239,6 +262,8 @@ npm run gate:integration     # 全部串起來
 
 CI workflow: `.github/workflows/pantheon-integration-gate.yml`（PR、`dev`/`main`
 push、`workflow_dispatch`；需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
+完整 RBAC / two-man race 證據需再設定 `PANTHEON_BFF_RBAC_TOKENS_JSON` 或各角色 token
+secret，以及 `PANTHEON_BFF_OPERATOR_A_TOKEN` / `PANTHEON_BFF_OPERATOR_B_TOKEN`；
 `PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
 證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
 

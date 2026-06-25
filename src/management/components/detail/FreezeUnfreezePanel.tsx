@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { PoolFreeze } from "@/lib/bff/types";
@@ -32,7 +33,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
             <div key={f.id} className="flex items-center justify-between rounded border border-status-warning/40 bg-status-warning/10 px-3 py-2">
               <div>
                 <div className="text-sm font-medium">{f.reason}</div>
-                <div className="text-[11px] text-muted-foreground">{f.frozenBy} · {new Date(f.frozenAt).toLocaleString()}</div>
+                <div className="text-[11px] text-muted-foreground">{f.frozenBy} · {safeDateTime(f.frozenAt)}</div>
               </div>
               <PermissionAwareButton requiredAction="unfreeze_pool" size="sm" variant="outline" onClick={() => setUnfreezeTarget(f)}>
                 {t("phase13.capital.freeze.unfreeze")}
@@ -53,7 +54,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           columns={[
             { key: "reason", header: t("phase13.capital.freeze.reason"), cell: (r) => <span className="text-sm">{r.reason}</span> },
             { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.frozenBy}</span> },
-            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.frozenAt).toLocaleString()}</span> },
+            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.frozenAt)}</span> },
             { key: "active", header: t("table.state"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.active ? "active" : "lifted"}</Badge> },
           ]}
           empty={t("empty.none")}

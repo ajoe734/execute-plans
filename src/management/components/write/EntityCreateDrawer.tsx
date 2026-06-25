@@ -83,7 +83,9 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
   const base = { name: "", owner: "you", memo: "" };
   switch (entity) {
     case "strategy": return { ...base, alpha: "", capitalPoolId: "", personaIds: [] as string[] };
-    case "persona": return { ...base, archetype: "", description: "", initialMode: "shadow" };
+    case "persona": return { ...base, archetype: "", description: "", initialMode: "shadow",
+      mandate: "", strategyFamily: "", instruments: "", riskAppetite: "",
+      decisionStyle: "", timeHorizon: "", hardRules: "", personaVoice: "" };
     case "capitalPool": return { ...base, currency: "USD", allocated: 0, riskBudget: 0.1 };
     case "rankingFormula": return { ...base, expression: "" };
     case "rebalance": return { ...base, quarter: "", targetPoolId: "", proposedDelta: 0 };
@@ -116,6 +118,14 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
       return [
         baseName, owner,
         { name: "archetype", labelKey: "archetype", type: "select", required: true, placeholderKey: "personaArchetype", hintKey: "archetype", options: personaArchetypeOptions },
+        { name: "mandate", labelKey: "mandate", type: "textarea", hintKey: "mandate" },
+        { name: "strategyFamily", labelKey: "strategyFamily", type: "text", hintKey: "strategyFamily" },
+        { name: "instruments", labelKey: "instruments", type: "text", hintKey: "instruments" },
+        { name: "riskAppetite", labelKey: "riskAppetite", type: "text", hintKey: "riskAppetite" },
+        { name: "decisionStyle", labelKey: "decisionStyle", type: "text", hintKey: "decisionStyle" },
+        { name: "timeHorizon", labelKey: "timeHorizon", type: "text", hintKey: "timeHorizon" },
+        { name: "hardRules", labelKey: "hardRules", type: "textarea", hintKey: "hardRules" },
+        { name: "personaVoice", labelKey: "personaVoice", type: "text", hintKey: "personaVoice" },
         { name: "description", labelKey: "description", type: "textarea" },
         { name: "initialMode", labelKey: "initialMode", type: "select", hintKey: "initialMode", options: [
           { value: "shadow", labelKey: "initialMode.shadow" },

@@ -1,5 +1,5 @@
 import { Check, Circle, Loader2, AlertCircle, MinusCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeDateTime } from "@/lib/utils";
 import type { WorkflowStep } from "@/lib/bff/types";
 
 interface Props {
@@ -46,7 +46,7 @@ export const WorkflowStepper = ({ steps, onStepClick, orientation = "horizontal"
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium">{i + 1}. {s.label}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {s.actor ? `${s.actor} · ` : ""}{s.ts ? new Date(s.ts).toLocaleString() : "—"}
+                  {s.actor ? `${s.actor} · ` : ""}{s.ts ? safeDateTime(s.ts) : "—"}
                 </div>
                 {s.note && <div className="text-xs mt-1">{s.note}</div>}
               </div>

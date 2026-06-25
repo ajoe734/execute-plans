@@ -8,10 +8,12 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff/types";
-import { useLiveListV1, type ListEnvelope } from "@/lib/bff-v1";
+import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import { withOverlay } from "@/lib/bff/writeOverlay";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
@@ -39,8 +41,9 @@ export function ObjectListPage<T extends BaseObject>({
         items, cursor: {}, pageSize: items.length, estimatedTotal: items.length, totalCountExact: true,
       })))
     : loader;
-  const { items: rows, pending, refresh } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
+  const { items: rows, pending, refresh, meta } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const degradation = extractDegradation(meta);
 
   const columns: Column<T>[] = [
     { key: "name", header: t("common.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
@@ -48,7 +51,7 @@ export function ObjectListPage<T extends BaseObject>({
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
     ...extraColumns,
     { key: "owner", header: t("common.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
-    { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</span> },
+    { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span> },
   ];
 
   const renderCreateAction = () => {
@@ -124,7 +127,26 @@ export function ObjectListPage<T extends BaseObject>({
             {t("realtime.newUpdates", { count: pending, defaultValue: `${pending} new update(s) — click to refresh` })}
           </button>
         )}
-        <DataTable rows={rows} columns={columns} onRowClick={(r) => navigate(`${basePath}/${r.id}`)} />
+        {rows.length === 0 && degradation.degraded ? (
+          <EmptyState
+            icon={<Inbox className="h-8 w-8" />}
+            title={t("common.awaitingData", { defaultValue: "No data yet" })}
+            description={
+              degradation.reason ||
+              t("common.awaitingDataDesc", {
+                defaultValue:
+                  "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
+              })
+            }
+          />
+        ) : (
+          <DataTable
+            rows={rows}
+            columns={columns}
+            empty={t("common.noResults")}
+            onRowClick={(r) => navigate(`${basePath}/${r.id}`)}
+          />
+        )}
       </PageBody>
     </>
   );

@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { bff } from "@/lib/bff-v1";
 import type { AuditEvent } from "@/lib/bff/types";
 import { useNavigate } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 
 export interface InspectorTarget {
   id: string;
@@ -94,7 +95,7 @@ export const RightDrawer = () => {
               <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("inspector.metadata")}</div>
               <div className="space-y-1.5 text-sm">
                 {target.owner && <Row label={t("common.owner")} value={target.owner} />}
-                {target.updatedAt && <Row label={t("common.updated")} value={new Date(target.updatedAt).toLocaleString()} />}
+                {target.updatedAt && <Row label={t("common.updated")} value={safeDateTime(target.updatedAt)} />}
                 {target.meta?.map((m) => <Row key={m.label} label={m.label} value={m.value} />)}
               </div>
             </section>
@@ -165,7 +166,7 @@ export const RightDrawer = () => {
                 <ul className="space-y-1.5">
                   {audit.map((a) => (
                     <li key={a.id} className="text-xs flex items-start gap-2">
-                      <span className="text-mono text-muted-foreground shrink-0">{new Date(a.ts).toLocaleTimeString()}</span>
+                      <span className="text-mono text-muted-foreground shrink-0">{safeDateTime(a.ts, "time")}</span>
                       <span><span className="text-mono">{a.actor}</span> · {a.action}</span>
                     </li>
                   ))}

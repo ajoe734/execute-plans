@@ -525,7 +525,11 @@ async function clickDrilldown(
 test.describe("F02 Control Room", () => {
   test.describe.configure({ timeout: 60_000 });
 
-  test("renders KPI cards, loops, sentinel findings, and interventions", async ({
+  // 2026-06-15 console consolidation: the standalone Control Room page was folded
+  // into the single Cockpit console. The legacy console routes now redirect to
+  // /management/cockpit; loop / sentinel / intervention detail keeps its own routes
+  // (/management/loops, /sentinel, /interventions) covered by their own specs.
+  test("redirects consolidated console aliases to the cockpit", async ({
     page,
   }) => {
     const failures = collectPageFailures(page);
@@ -533,35 +537,40 @@ test.describe("F02 Control Room", () => {
       controlRoom: NON_EMPTY_CONTROL_ROOM,
     });
 
-    await gotoControlRoom(page);
+    for (const alias of [
+      "/management/control-room",
+      "/management/control-room-legacy",
+      "/management/command-center",
+      "/management/overview",
+      "/management/one-ring",
+    ]) {
+      await page.goto(frontendUrl(alias), {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect
+        .poll(() => new URL(page.url()).pathname, {
+          message: `${alias} should redirect to the cockpit console`,
+          timeout: 10_000,
+        })
+        .toBe("/management/cockpit");
+    }
 
-    await expect(page.locator("body")).not.toContainText(SERVING_MOCK_BANNER);
     await expect(page.locator("body")).not.toContainText(CRASH_TEXT);
-
     await expectAnyVisibleText(
       page,
-      [/control room/i, /控制/i],
-      "Control Room heading",
+      [/cockpit/i, /pathreon/i, /管理/i, /control room/i],
+      "cockpit console heading",
     );
-    await expectAnyVisibleText(page, [/active loops/i, /\bloops?\b/i], "loop KPI");
-    await expectAnyVisibleText(
-      page,
-      [/open findings/i, /sentinel/i, /finding/i],
-      "sentinel KPI",
-    );
-    await expectAnyVisibleText(
-      page,
-      [/pending interventions/i, /interventions?/i, /待處理介入|人為介入|介入佇列/],
-      "intervention KPI",
-    );
-
-    await expect(page.getByText(LOOP_RECORD.title, { exact: false }).first()).toBeVisible();
-    await expect(page.getByText(SENTINEL_RECORD.title, { exact: false }).first()).toBeVisible();
-    await expect(page.getByText(INTERVENTION_DISPLAY_TITLE, { exact: false }).first()).toBeVisible();
-    expect(failures, "page should not emit console/page errors").toEqual([]);
+    const text = await bodyText(page);
+    expect(text.trim(), "cockpit body should not be blank").not.toBe("");
+    expect(failures, "cockpit should not emit console/page errors").toEqual([]);
   });
 
-  test("drill-down link reaches the loop surface", async ({ page }) => {
+  // Skipped 2026-06-15: drill-down originated from the removed Control Room page.
+  // Loop/sentinel/intervention surfaces are reached from the Cockpit and covered
+  // by their own specs.
+  test.skip("drill-down link reaches the loop surface (consolidated into Cockpit)", async ({ page }) => {
     const seenDetailPaths: string[] = [];
     await installBffFixtureRoutes(
       page,
@@ -599,7 +608,7 @@ test.describe("F02 Control Room", () => {
       .toBe(true);
   });
 
-  test("drill-down link reaches the sentinel surface", async ({ page }) => {
+  test.skip("drill-down link reaches the sentinel surface (consolidated into Cockpit)", async ({ page }) => {
     const seenDetailPaths: string[] = [];
     await installBffFixtureRoutes(
       page,
@@ -642,7 +651,7 @@ test.describe("F02 Control Room", () => {
       .toBe(true);
   });
 
-  test("drill-down link reaches the intervention surface", async ({ page }) => {
+  test.skip("drill-down link reaches the intervention surface (consolidated into Cockpit)", async ({ page }) => {
     const seenDetailPaths: string[] = [];
     await installBffFixtureRoutes(
       page,

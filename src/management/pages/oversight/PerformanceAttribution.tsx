@@ -12,8 +12,10 @@ import {
 } from "@/lib/v5/management/performanceAttribution";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 
 const PERIODS: AttributionPeriod[] = ["7d", "30d", "quarter", "ytd"];
 
@@ -31,10 +33,28 @@ export const PerformanceAttributionPage = () => {
     ),
     [dimension, period],
   );
-  const allRows: PerformanceAttributionRow[] = data ?? seed;
+  // Live rows nest the numbers under `metrics`; map them onto the flat
+  // view-model so the table shows real values instead of NaN.
+  const allRows: PerformanceAttributionRow[] = (data ?? seed).map((raw) => {
+    const r = raw as PerformanceAttributionRow & {
+      key?: string; dimensionKey?: string;
+      metrics?: { totalPnl?: number | null; pnlContributionPct?: number | null;
+        riskContributionPct?: number | null; worstDrawdown?: number | null };
+    };
+    if (typeof r.pnlContribution === "number" && typeof r.key === "string") return r;
+    const m = r.metrics ?? {};
+    return {
+      ...r,
+      key: r.key ?? r.dimensionKey ?? r.label,
+      pnlContribution: r.pnlContribution ?? m.totalPnl ?? NaN,
+      pnlContributionPct: r.pnlContributionPct ?? m.pnlContributionPct ?? NaN,
+      riskContributionPct: r.riskContributionPct ?? m.riskContributionPct ?? NaN,
+      drawdownContributionPct: r.drawdownContributionPct ?? m.worstDrawdown ?? NaN,
+    } as PerformanceAttributionRow;
+  });
   const rows = useMemo(() => {
     const filtered = dimension === "all" ? allRows : allRows.filter((r) => r.dimension === dimension);
-    return [...filtered].sort((a, b) => b.pnlContribution - a.pnlContribution);
+    return [...filtered].sort((a, b) => (b.pnlContribution || 0) - (a.pnlContribution || 0));
   }, [allRows, dimension]);
 
   return (
@@ -53,7 +73,7 @@ export const PerformanceAttributionPage = () => {
           >
             <option value="all">{t("mgmt.attribution.allDimensions")}</option>
             {ATTRIBUTION_DIMENSIONS.map((d) => (
-              <option key={d} value={d}>{t(`mgmt.attribution.dimensions.${d}`)}</option>
+              <option key={d} value={d}>{t(`mgmt.attribution.dimensions.${d}`, { defaultValue: d })}</option>
             ))}
           </select>
           <select
@@ -63,7 +83,7 @@ export const PerformanceAttributionPage = () => {
             aria-label={t("mgmt.attribution.period")}
           >
             {PERIODS.map((p) => (
-              <option key={p} value={p}>{t(`mgmt.attribution.periods.${p}`)}</option>
+              <option key={p} value={p}>{t(`mgmt.attribution.periods.${p}`, { defaultValue: p })}</option>
             ))}
           </select>
         </div>
@@ -85,7 +105,7 @@ export const PerformanceAttributionPage = () => {
           <tbody>
             {rows.map((r) => (
               <tr key={`${r.dimension}-${r.key}`} className="border-b border-border/50">
-                <td className="px-3 py-2"><Badge variant="outline">{t(`mgmt.attribution.dimensions.${r.dimension}`)}</Badge></td>
+                <td className="px-3 py-2"><Badge variant="outline">{t(`mgmt.attribution.dimensions.${r.dimension}`, { defaultValue: r.dimension })}</Badge></td>
                 <td className="px-3 py-2 font-mono">{r.label}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContribution < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(r.pnlContribution)}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContributionPct < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtPct(r.pnlContributionPct)}</td>

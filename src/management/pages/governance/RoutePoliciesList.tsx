@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { bff } from "@/lib/bff-v1";
 import type { Persona, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 export const RoutePoliciesList = () => {
   const t = useT();
@@ -48,7 +49,7 @@ export const RoutePoliciesList = () => {
             { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
             { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
             { key: "updated", header: t("table.updated"), cell: (r) => (
-              <span className="text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleDateString()}</span>
+              <span className="text-xs text-muted-foreground">{safeDateTime(r.updatedAt, "date")}</span>
             ) },
           ]}
         />

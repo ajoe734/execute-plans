@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activateAssistantControlMode,
   askManagementAi,
+  streamManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
   fetchAssistantProviderReauthStatus,
@@ -14,6 +15,19 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+function streamResponse(frames: string[], status = 200): Response {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(frame));
+      controller.close();
+    },
+  }), {
+    status,
+    headers: { "Content-Type": "text/event-stream" },
   });
 }
 
@@ -46,8 +60,51 @@ describe("Management AI orchestrator status", () => {
           assistantCommandEffective: true,
           assistantCommandUsable: true,
           assistantCommandStatus: "usable",
-          effectiveTools: ["assistant.command"],
+          effectiveTools: ["assistant.command", "assistant.sa_sd.generate"],
+          effective_skills: [
+            {
+              id: "assistant.sa_sd.generate",
+              title: "Generate SA/SD",
+              surface: "assistant_command",
+              handler_ref: "bff.route:POST /bff/assistant/dev-docs/generate",
+              result_surface: "assistant_dev_docs_packet",
+              confirm_policy: "control_mode",
+              mode_gate: { allowed_modes: ["kernel_debug", "kernel_repair"] },
+              input_schema: { type: "object" },
+            },
+          ],
         },
+        snapshotAt: "2026-06-09T12:55:19Z",
+        project: "pantheon",
+        sprint: "2026-06-03-pantheon-assistant-existing-architecture",
+        sourceRefs: [
+          { source_type: "task_status", path: "ai-status.json", available: true, status: "ok", last_modified_at: "2026-06-09T12:48:23Z" },
+        ],
+        supervisor: {
+          lifecycle: "running",
+          mode_status: "active",
+          focus_mode: "execution",
+          last_heartbeat_at: "2026-06-09T12:54:04Z",
+          mode_occupancy: { execution: { running: 2, pending: 0, queued: 1 } },
+        },
+        providerReadiness: {
+          available: true,
+          provider_name: "codex",
+          ready: true,
+          status: "ready",
+          mount_mode: "rw",
+          capabilities: { read: true, repair_write: true },
+          repair_workspace: { root: "/srv/pantheon-assistant/worktrees", ready: true, writable: true, worktree_count: 1 },
+        },
+        assistantDevBridge: {
+          status: "idle",
+          inbox: { path: "/workspace/status-root/.orchestrator/assistant-dev-packets", exists: true, pending_count: 0, processed_count: 1, failed_count: 0, receipt_count: 1 },
+          recent_receipts: [{ packet_id: "bridge_smoke", status: "processed", error_count: 0 }],
+        },
+        tasks: [
+          { id: "MPOS-P1-RISK-001", title: "Create first class RiskPolicy evaluator contract", owner: "Codex", status: "in_progress", last_update: "2026-06-09T12:34:33Z" },
+        ],
+        coordination: { file_count: 669, feature_count: 47, feature_ids: ["PKT-011-health-status-board"] },
       },
     }));
     globalThis.fetch = fetchMock;
@@ -60,7 +117,27 @@ describe("Management AI orchestrator status", () => {
     expect(result.status.providerStatus?.runId).toBe("mnl-trace-test");
     expect(result.status.openclawToolPolicy?.assistantCommandUsable).toBe(true);
     expect(result.status.openclawToolPolicy?.assistantCommandStatus).toBe("usable");
-    expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command"]);
+    expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command", "assistant.sa_sd.generate"]);
+    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0]).toMatchObject({
+      id: "assistant.sa_sd.generate",
+      title: "Generate SA/SD",
+      surface: "assistant_command",
+      handlerRef: "bff.route:POST /bff/assistant/dev-docs/generate",
+      resultSurface: "assistant_dev_docs_packet",
+      confirmPolicy: "control_mode",
+    });
+    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0].modeGate).toMatchObject({ allowed_modes: ["kernel_debug", "kernel_repair"] });
+    expect(result.status.snapshotAt).toBe("2026-06-09T12:55:19Z");
+    expect(result.status.sourceRefs?.[0].sourceType).toBe("task_status");
+    expect(result.status.supervisor?.lifecycle).toBe("running");
+    expect(result.status.supervisor?.modeOccupancy?.execution.running).toBe(2);
+    expect(result.status.providerReadiness?.providerName).toBe("codex");
+    expect(result.status.providerReadiness?.capabilities?.repairWrite).toBe(true);
+    expect(result.status.providerReadiness?.repairWorkspace?.worktreeCount).toBe(1);
+    expect(result.status.assistantDevBridge?.inbox?.processedCount).toBe(1);
+    expect(result.status.assistantDevBridge?.recentReceipts?.[0].packetId).toBe("bridge_smoke");
+    expect(result.status.tasks?.[0].id).toBe("MPOS-P1-RISK-001");
+    expect(result.status.coordination?.featureIds).toEqual(["PKT-011-health-status-board"]);
   });
 
   it("returns a visible failure when the BFF status endpoint is missing", async () => {
@@ -308,7 +385,7 @@ describe("Management AI SA/SD dev bridge", () => {
       featureSummary: "Let Management AI create SA/SD and queue worker tasks",
       affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
       proposedOwner: "Codex",
-      proposedReviewer: "Supervisor",
+      proposedReviewer: "Claude",
       archive: true,
       emitTaskPacket: true,
       queueTaskPacket: true,
@@ -325,7 +402,7 @@ describe("Management AI SA/SD dev bridge", () => {
       featureSummary: "Let Management AI create SA/SD and queue worker tasks",
       affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
       proposedOwner: "Codex",
-      proposedReviewer: "Supervisor",
+      proposedReviewer: "Claude",
       archive: true,
       emitTaskPacket: true,
       queueTaskPacket: true,
@@ -383,8 +460,8 @@ describe("Management AI OpenClaw repair worktrees", () => {
           expected_branch: "task/MGMT-AI-REPAIR-FE",
           expectedBranch: "task/MGMT-AI-REPAIR-FE",
           remote: "origin",
-          merge_target: "main",
-          mergeTarget: "main",
+          merge_target: "dev",
+          mergeTarget: "dev",
           require_clean: true,
           requireClean: true,
           repo_key: "execute-plans",
@@ -401,7 +478,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
       repoKey: "execute-plans",
       declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
       expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "main",
+      mergeTarget: "dev",
       reason: "repair frontend Management AI",
     });
 
@@ -414,7 +491,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
       repoKey: "execute-plans",
       declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
       expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "main",
+      mergeTarget: "dev",
     });
     expect(result.repair.repo_key).toBe("execute-plans");
     expect(result.repair.task_worktree).toContain("/execute-plans/");
@@ -448,7 +525,7 @@ describe("Management AI OpenClaw repair worktrees", () => {
           declared_scope: ["src/management/components/agent"],
           expected_branch: "task/MGMT-AI-REPAIR-FE",
           remote: "origin",
-          merge_target: "main",
+          merge_target: "dev",
           require_clean: true,
           repo_key: "execute-plans",
         },
@@ -470,5 +547,60 @@ describe("Management AI OpenClaw repair worktrees", () => {
         },
       },
     });
+  });
+});
+
+
+describe("Management AI stream", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("adapts done provider status and stops on DONE", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(streamResponse([
+      'data: {"type":"meta","sessionId":"mgmt-chat-1","traceId":"trace-1","messageId":"mnl-1"}\n\n',
+      'data: {"type":"delta","text":"Control mode is inactive"}\n\n',
+      'data: {"type":"done","text":"Control mode is inactive","providerStatus":{"provider":"pantheon_bff","runtime":"management_nl_control_command_interceptor","status":"completed","used":true,"fallback":null},"auditLog":{"href":"/audit/1"},"conversation":{"href":"/conversation/1"}}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    globalThis.fetch = fetchMock;
+
+    const previews: string[] = [];
+    const result = await streamManagementAi(
+      { question: "/control status" },
+      { onDelta: (_chunk, full) => previews.push(full) },
+    );
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/management/nl/ask/stream");
+    expect(result.answer).toBe("Control mode is inactive");
+    expect(result.providerStatus.provider).toBe("pantheon_bff");
+    expect(result.providerStatus.runtime).toBe("management_nl_control_command_interceptor");
+    expect(result.auditLogHref).toBe("/audit/1");
+    expect(result.conversationHref).toBe("/conversation/1");
+    expect(previews.at(-1)).toBe("Control mode is inactive");
+  });
+
+  it("surfaces stream errors as provider degradation", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(streamResponse([
+      'data: {"type":"meta","sessionId":"mgmt-chat-err","traceId":"trace-err"}\n\n',
+      'data: {"type":"error","error_code":"OPENCLAW_RESPONSES_FAILED","message":"provider failed"}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+
+    const result = await streamManagementAi({ question: "?" });
+
+    expect(result.kind).toBe("provider_degraded");
+    if (result.kind !== "provider_degraded") throw new Error("expected provider_degraded");
+    expect(result.sessionId).toBe("mgmt-chat-err");
+    expect(result.providerStatus?.status).toBe("degraded");
+    expect(result.providerStatus?.reasonCode).toBe("OPENCLAW_RESPONSES_FAILED");
+    expect(result.message).toBe("provider failed");
   });
 });

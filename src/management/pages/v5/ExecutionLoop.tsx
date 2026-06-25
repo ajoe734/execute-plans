@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",
@@ -141,7 +142,7 @@ export const ExecutionLoopPage = () => {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.nextAction?.label ?? r.nextAction?.kind ?? "—"}</td>
-                  <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</td>
                 </tr>
               ))}
               {!runs.data && (

@@ -43,8 +43,8 @@ export const CapitalPoolDetail = () => {
     bff.capitalPools.get(id).then(setC);
     bff.strategies.list().then((all) => setStrats(all.filter((s) => s.capitalPoolId === id)));
     bff.rebalances.list().then((all) => setRebalances(all.filter((r) => r.targetPoolId === id)));
-    bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("capital"))));
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("capital.") || x.action.startsWith("rebalance."))));
+    bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("capital"))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance."))));
   }, [id]);
 
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -96,17 +96,17 @@ export const CapitalPoolDetail = () => {
               return (
                 <>
                   <div className="grid grid-cols-3 gap-4">
-                    <StatCard label={t("section.holdings")} value={`${c.currency} ${c.allocated.toLocaleString()}`} />
+                    <StatCard label={t("section.holdings")} value={`${c.currency} ${(c.allocated ?? 0).toLocaleString()}`} />
                     <StatCard
                       label={utilMetric ? `Capital utilization (%)` : t("table.utilization")}
                       value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
-                      hint={`${c.currency} ${c.utilized.toLocaleString()}`}
+                      hint={`${c.currency} ${(c.utilized ?? 0).toLocaleString()}`}
                     />
                     <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
                   </div>
                   <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Badge variant="outline" className={breachToneCls[breach.level]}>{breach.level.toUpperCase()}</Badge>
+                      <Badge variant="outline" className={breachToneCls[breach.level]}>{(breach.level ?? "").toUpperCase()}</Badge>
                       {breach.riskBudgetUsagePct != null && rbuMetric && (
                         <span className="text-xs text-muted-foreground text-mono">
                           {rbuMetric.id}={(breach.riskBudgetUsagePct * 100).toFixed(rbuMetric.precision)}%
@@ -119,7 +119,7 @@ export const CapitalPoolDetail = () => {
                     <Progress value={breach.utilizationPct * 100} className="h-2" />
                     <div className="flex justify-between text-xs text-muted-foreground text-mono">
                       <span>0</span>
-                      <span>{c.allocated.toLocaleString()}</span>
+                      <span>{(c.allocated ?? 0).toLocaleString()}</span>
                     </div>
                   </Section>
                 </>
@@ -170,7 +170,7 @@ export const CapitalPoolDetail = () => {
                 rows={strats.map((s) => ({ id: s.id, name: s.name, sharpe: s.sharpe, dd: s.drawdown, pnl: s.pnl30d }))}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{r.sharpe.toFixed(2)}</span> },
+                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{(r.sharpe ?? 0).toFixed(2)}</span> },
                   { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.dd * 100).toFixed(2)}%</span> },
                   { key: "pnl", header: "PnL 30d", cell: (r) => <span className="text-mono text-xs">{(r.pnl * 100).toFixed(2)}%</span> },
                 ]}
@@ -196,7 +196,7 @@ export const CapitalPoolDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="VaR (mock)" value={`${c.currency} ${(c.allocated * c.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
+                  <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
                   <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
                   <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
                   <Field label={t("table.value")} value={c.currency} mono />

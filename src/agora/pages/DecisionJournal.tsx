@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -151,7 +152,7 @@ export const DecisionJournal = () => {
                 const r = resolveEntity(d.subjectId);
                 return (
                   <li key={d.id} className="flex flex-wrap items-baseline gap-2 text-sm">
-                    <span className="text-mono text-xs text-muted-foreground">{new Date(d.decidedAt).toLocaleString()}</span>
+                    <span className="text-mono text-xs text-muted-foreground">{safeDateTime(d.decidedAt)}</span>
                     <span className="text-mono text-xs text-accent">{d.decidedBy}</span>
                     <span>{d.title}</span>
                     {d.outcome && <Badge variant="outline" className={`uppercase text-[10px] ${tone(d.outcome)}`}>{d.outcome}</Badge>}
@@ -177,7 +178,7 @@ export const DecisionJournal = () => {
                     <h3 className="font-semibold">{d.title}</h3>
                     {d.outcome && <Badge variant="outline" className={`uppercase text-[10px] ${tone(d.outcome)}`}>{d.outcome}</Badge>}
                   </div>
-                  <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{new Date(d.ts).toLocaleString()}</span>
+                  <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{safeDateTime(d.ts)}</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">

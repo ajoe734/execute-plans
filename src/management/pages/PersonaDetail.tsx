@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
@@ -209,7 +210,7 @@ export const PersonaDetail = () => {
             value: "audit", label: t("nav.audit"),
             content: (
               <DataTable rows={audit} columns={[
-                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
                 { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
                 { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
               ]} empty={t("empty.noResults")} />

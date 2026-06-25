@@ -17,6 +17,7 @@ import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
+import { safeDateTime } from "@/lib/utils";
 
 function quorumProgressFor(r: ApprovalRequest) {
   const stages = r.stages ?? [];
@@ -151,7 +152,7 @@ export const GovernanceQueuePage = () => {
                   </div>
                 );
               }},
-              { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
+              { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
             ]}
           />
         </Card>

@@ -23,6 +23,7 @@ import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAn
 import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapitalSnapshot";
 import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
+import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
 import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -35,6 +36,7 @@ import { mgmt } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { visibleDataSources } from "./personaFleetDataSources";
+import { safeDateTime } from "@/lib/utils";
 
 // =====================================================================
 // Pathreon Management Cockpit (PM-3)
@@ -52,6 +54,7 @@ export const OneRingCockpitPage = () => {
   const qSnap = useMemo(() => defaultQuarterlySnapshot(), []);
   const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
   const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
@@ -65,10 +68,11 @@ export const OneRingCockpitPage = () => {
         </Button>
       </header>
       <SystemStateStrip model={model.strip} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
         <PersonaLeagueSnapshot rows={league ?? lSeed} />
         <QuarterlyRankingCountdown snap={qSnap} />
+        <DataSourceHealthSnapshot rows={fleetRows ?? PERSONA_FLEET_SEED} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LoopFlowMap model={model.loopFlow} />
@@ -85,7 +89,10 @@ export const OneRingCockpitPage = () => {
 // Persona Fleet
 // =====================================================================
 
-const FLEET: ManagementPersonaFleetRow[] = [
+// Shared seed for management surfaces that currently derive system-level state
+// from the live persona fleet contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export const PERSONA_FLEET_SEED: ManagementPersonaFleetRow[] = [
   {
     personaId: "persona-crypto",
     personaName: "Crypto Macro Persona",
@@ -370,8 +377,8 @@ function firstResearchProject(r: ManagementPersonaFleetRow) {
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.personaFleet.get(() => FLEET), []);
-  const rows = data ?? FLEET;
+  const { data } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
+  const rows = data ?? PERSONA_FLEET_SEED;
 
   const [showRetired, setShowRetired] = useState(false);
   const [showDevProbe, setShowDevProbe] = useState(false);
@@ -608,17 +615,31 @@ export const HumanInboxPage = () => {
                 </Badge>
               )}
             </div>
-            <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
+            {it.requiredRole && (
+              <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
+            )}
           </div>
-          <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
-          </dl>
+          {it.summary && <p className="mt-2 text-sm text-muted-foreground">{it.summary}</p>}
+          {/* The consequence triplet only exists on the mock/legacy shape; live
+              governance items carry a summary instead — show the grid only when
+              populated so real payloads don't render three blank cells. */}
+          {(it.consequenceIfApproved || it.consequenceIfRejected || it.consequenceIfIgnored) && (
+            <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{it.consequenceIfRejected}</dd></div>
+              <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
+            </dl>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
-            {it.links.evidenceHref ? (
+            {/* Live BFF inbox items lack the FE-composed detailHref/links; guard
+                so a degraded/real payload renders instead of crashing the page. */}
+            {it.detailHref && (
+              <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
+            )}
+            {it.links?.manageHref && (
+              <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+            )}
+            {it.links?.evidenceHref ? (
               <Button asChild size="sm" variant="outline"><Link to={it.links.evidenceHref}>{t("mgmt.actions.evidence")}</Link></Button>
             ) : (
               <span className="text-xs text-muted-foreground self-center">{t("mgmt.actions.evidenceMissing")}</span>
@@ -679,14 +700,14 @@ export const TradingPulsePage = () => {
       </Card>
       <div className="grid gap-3 sm:grid-cols-3">
         {visible.map((p) => {
-          const delta = p.current - p.baselineValue;
+          const delta = (p.current ?? 0) - (p.baselineValue ?? 0);
           return (
             <Card key={`${p.surface}-${p.baselineKind}`} className="p-4">
               <div className="flex items-center justify-between">
                 <Badge variant="outline">{p.surface}</Badge>
                 <Badge variant="outline">{baselineLabel(p.baselineKind, p.baselineLabel)}</Badge>
               </div>
-              <div className="mt-2 text-2xl font-semibold">{p.current.toFixed(2)}</div>
+              <div className="mt-2 text-2xl font-semibold">{(p.current ?? 0).toFixed(2)}</div>
               <div className={"text-xs " + (delta >= 0 ? "text-status-success" : "text-status-failed")}>
                 {delta >= 0 ? "+" : ""}{delta.toFixed(2)} {t("mgmt.pulse.vsFmt", { baseline: baselineLabel(p.baselineKind) })}
               </div>
@@ -713,13 +734,13 @@ const RankingBlocks = () => {
       {blocks.map((b) => (
         <Card key={b.kind} className="p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
-          {b.rows.length === 0 ? (
+          {(b.rows?.length ?? 0) === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.pulse.noRows")}</p>
           ) : (
             <ul className="mt-2 space-y-1 text-xs">
-              {b.rows.map((r) => (
+              {(b.rows ?? []).map((r) => (
                 <li key={r.subjectId} className="flex items-center justify-between gap-2">
-                  <Link to={r.links.manageHref} className="font-mono text-primary underline-offset-4 hover:underline">
+                  <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
                     {r.subjectLabel}
                   </Link>
                   <span className="text-muted-foreground">
@@ -740,8 +761,16 @@ const RankingBlocks = () => {
 // =====================================================================
 
 interface EvolutionEntry {
-  id: string; mutation: string; before: number; after: number;
-  verdict: "improved" | "degraded" | "inconclusive"; landedAt: string;
+  id: string;
+  // Legacy in-process mock shape (kept so seed/tests still render).
+  mutation?: string; before?: number; after?: number;
+  verdict?: string; landedAt?: string;
+  // Live BFF shape: /bff/management/evolution-journal aggregate emits
+  // mutation_review journal entries with a different field set.
+  title?: string; summary?: string; status?: string; entryType?: string;
+  risk_level?: string; action_type?: string;
+  target?: { type?: string; id?: string; version?: string } | null;
+  occurred_at?: string; created_at?: string;
 }
 
 const EVOLUTION: EvolutionEntry[] = [
@@ -750,10 +779,12 @@ const EVOLUTION: EvolutionEntry[] = [
   { id: "ev-103", mutation: "Switch to vol-target rebal weekly", before: 1.10, after: 0.98, verdict: "degraded", landedAt: "2026-05-15" },
 ];
 
-const verdictTone = (v: EvolutionEntry["verdict"]) =>
-  v === "improved" ? "bg-status-success/15 text-status-success border-status-success/30" :
-  v === "degraded" ? "bg-status-failed/15 text-status-failed border-status-failed/30" :
-                    "bg-muted text-muted-foreground border-border";
+const verdictTone = (v?: string) =>
+  v === "improved" || v === "accepted" || v === "approved"
+    ? "bg-status-success/15 text-status-success border-status-success/30"
+    : v === "degraded" || v === "rejected" || v === "failed"
+      ? "bg-status-failed/15 text-status-failed border-status-failed/30"
+      : "bg-muted text-muted-foreground border-border";
 
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
@@ -765,21 +796,53 @@ export const EvolutionJournalPage = () => {
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
-      {rows.map((e) => (
-        <Card key={e.id} className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm">
-              <span className="font-mono">{e.id}</span> · {e.mutation}
-            </div>
-            <Badge variant="outline" className={verdictTone(e.verdict)}>{e.verdict}</Badge>
-          </div>
-          <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="text-foreground">{e.before.toFixed(2)}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="text-foreground">{e.after.toFixed(2)}</dd></div>
-            <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{e.landedAt}</dd></div>
-          </dl>
+      {rows.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("common.awaitingData", { defaultValue: "No data yet" })}
         </Card>
-      ))}
+      )}
+      {rows.map((e) => {
+        // The live aggregate and the legacy mock have different field sets;
+        // normalize defensively so neither shape throws (real entries have no
+        // numeric before/after — calling .toFixed on those crashed the page).
+        const headline = e.title ?? e.mutation ?? e.id;
+        const status = e.status ?? e.verdict;
+        const action = e.action_type;
+        const risk = e.risk_level;
+        const target = e.target
+          ? [e.target.type, e.target.id].filter(Boolean).join(":") +
+            (e.target.version ? ` (${e.target.version})` : "")
+          : undefined;
+        const whenRaw = e.occurred_at ?? e.created_at ?? e.landedAt;
+        const when = whenRaw
+          ? (Number.isNaN(new Date(whenRaw).getTime()) ? whenRaw : safeDateTime(whenRaw))
+          : undefined;
+        const hasMetrics = typeof e.before === "number" && typeof e.after === "number";
+        return (
+          <Card key={e.id} className="p-4 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-medium text-foreground">{headline}</div>
+              {status && (
+                <Badge variant="outline" className={verdictTone(status)}>{status}</Badge>
+              )}
+            </div>
+            <div className="font-mono text-xs text-muted-foreground">{e.id}</div>
+            {e.summary && <p className="text-sm text-muted-foreground">{e.summary}</p>}
+            <dl className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+              {hasMetrics && (
+                <>
+                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="text-foreground">{e.before!.toFixed(2)}</dd></div>
+                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="text-foreground">{e.after!.toFixed(2)}</dd></div>
+                </>
+              )}
+              {action && <div><dt className="text-muted-foreground">{t("mgmt.evolution.action", { defaultValue: "Action" })}</dt><dd className="text-foreground">{action}</dd></div>}
+              {risk && <div><dt className="text-muted-foreground">{t("mgmt.evolution.risk", { defaultValue: "Risk" })}</dt><dd className="text-foreground">{risk}</dd></div>}
+              {target && <div><dt className="text-muted-foreground">{t("mgmt.evolution.target", { defaultValue: "Target" })}</dt><dd className="font-mono text-foreground">{target}</dd></div>}
+              {when && <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{when}</dd></div>}
+            </dl>
+          </Card>
+        );
+      })}
     </section>
   );
 };
@@ -789,8 +852,22 @@ export const EvolutionJournalPage = () => {
 // =====================================================================
 
 interface EvidenceRow {
-  id: string; kind: string; status: "verified" | "stale" | "missing";
+  id: string; kind: string; status: string;
   hash: string; linkedObject: string; createdAt: string;
+  // Live BFF evidence shape uses different field names; some are objects.
+  refId?: string; sourceType?: string; linkType?: string; capturedAt?: string;
+  sourceRef?: unknown; credibility?: unknown; linkedObjectSummary?: unknown;
+}
+
+// Coerce a possibly-object evidence field to a display string.
+function evidenceText(v: unknown): string | undefined {
+  if (typeof v === "string") return v || undefined;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const s = o.display_label ?? o.displayLabel ?? o.tier ?? o.entity_ref ?? o.entityRef ?? o.label;
+    return typeof s === "string" && s ? s : undefined;
+  }
+  return undefined;
 }
 
 const EVIDENCE: EvidenceRow[] = [
@@ -819,16 +896,25 @@ export const EvidenceExplorerPage = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.map((e) => (
-              <tr key={e.id} className="border-b border-border/50">
-                <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
-                <td className="px-3 py-2">{e.kind}</td>
-                <td className="px-3 py-2"><Badge variant="outline">{e.status}</Badge></td>
-                <td className="px-3 py-2 font-mono text-xs">{e.hash}</td>
-                <td className="px-3 py-2 font-mono text-xs">{e.linkedObject}</td>
-                <td className="px-3 py-2 text-muted-foreground">{e.createdAt}</td>
-              </tr>
-            ))}
+            {rows.map((e) => {
+              // Fall back to live BFF field names when the mock fields are absent.
+              // credibility / linkedObjectSummary / sourceRef arrive as objects.
+              const kind = e.kind ?? e.sourceType ?? e.linkType ?? "—";
+              const status = e.status ?? evidenceText(e.credibility) ?? "—";
+              const hash = e.hash ?? e.refId ?? evidenceText(e.sourceRef) ?? "—";
+              const linkedObject = e.linkedObject ?? evidenceText(e.linkedObjectSummary) ?? "—";
+              const createdAt = e.createdAt ?? e.capturedAt ?? "—";
+              return (
+                <tr key={e.id} className="border-b border-border/50">
+                  <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
+                  <td className="px-3 py-2">{kind}</td>
+                  <td className="px-3 py-2"><Badge variant="outline">{status}</Badge></td>
+                  <td className="px-3 py-2 font-mono text-xs">{hash}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{linkedObject}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{createdAt}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>

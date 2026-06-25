@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { safeDateTime } from "@/lib/utils";
 
 export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: string; mode?: "all" | "runs" | "candidates" }) => {
   const t = useT();
@@ -44,7 +45,7 @@ export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: str
               <StatusBadge state={r.status} />
             </div>
             <div className="text-mono text-[10px] text-muted-foreground mt-1">
-              fitness {r.bestFitness.toFixed(3)} · {r.candidates} candidates · {new Date(r.startedAt).toLocaleString()}
+              fitness {r.bestFitness.toFixed(3)} · {r.candidates} candidates · {safeDateTime(r.startedAt)}
             </div>
           </button>
         ))}

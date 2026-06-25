@@ -14,10 +14,12 @@ import {
 } from "@/lib/v5/management/portfolio";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
+  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n) : "—";
 
 const statusTone = (s: PortfolioStatus) =>
   s === "ok" ? "bg-status-success/15 text-status-success border-status-success/30" :
@@ -99,7 +101,7 @@ export const PortfolioBookPage = () => {
                   <Badge variant="outline" className={statusTone(p.status)}>{p.status}</Badge>
                 </td>
                 <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={p.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+                  <Button asChild size="sm" variant="ghost"><Link to={p.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
                 </td>
               </tr>
             ))}
@@ -148,7 +150,7 @@ export const PortfolioBookPage = () => {
                 <td className={`px-3 py-2 font-mono ${h.unrealizedPnl < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(h.unrealizedPnl)}</td>
                 <td className="px-3 py-2 font-mono">{fmtPct(h.exposurePct)}</td>
                 <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={h.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+                  <Button asChild size="sm" variant="ghost"><Link to={h.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
                 </td>
               </tr>
             ))}

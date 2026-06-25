@@ -224,6 +224,12 @@ function parseBoolAfter(text, label) {
   return match[1].toLowerCase() === "true";
 }
 
+function parseStatusAfter(text, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(new RegExp(`${escaped}\\s*:?\\s*(pass|warn|partial|fail|missing|skip)`, "i"));
+  return match ? match[1].toLowerCase() : null;
+}
+
 function parseTables(text) {
   const rows = [];
   for (const line of text.split(/\r?\n/)) {
@@ -379,6 +385,7 @@ function buildGate1(stepOutcomes) {
     stepCheck(stepOutcomes, "test", "`npm run test` passes.", ".lovable/audits/npm-run-test.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "build", "`npm run build` passes.", ".lovable/audits/npm-run-build.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "contract", "`npm run test:contract` passes.", ".lovable/audits/contract-drift.log", GATE_OWNERS[2]),
+    stepCheck(stepOutcomes, "mgmt_persona_3000", "`npm run validate:mgmt-persona:3000` passes.", ".lovable/audits/mgmt-persona-3000-validation.log", GATE_OWNERS[1]),
   ];
 }
 
@@ -441,9 +448,72 @@ function analyzeAuthSmoke(stepOutcomes) {
   };
 }
 
-function buildGate3(routeProbe, authSmoke) {
+function analyzeWriteProbe(stepOutcomes) {
+  const step = stepInfo(stepOutcomes, "write_probe", ".lovable/audits/bff-write-path-probe.log");
+  const file = latestAuditFile([/^bff-backend-write-probe-.*\.md$/]) || evidencePath(step.evidence);
+  const text = readText(file);
+  return {
+    exists: Boolean(text),
+    file,
+    skippedCreates: parseNumberAfter(text, "Skipped create dry-run endpoints"),
+    createDryRunEnabled: parseBoolAfter(text, "Create dry-run enabled"),
+    implemented: parseNumberAfter(text, "implemented or typed rejected"),
+    typed4xx: parseNumberAfter(text, "typed 4xx BffErrorEnvelope responses"),
+    missing: parseNumberAfter(text, "route missing/not implemented"),
+    optionalMissing: parseNumberAfter(text, "optional route missing/not implemented"),
+    untyped4xx: parseNumberAfter(text, "untyped 4xx"),
+    beError: parseNumberAfter(text, "backend 5xx"),
+    network: parseNumberAfter(text, "network errors"),
+    other: parseNumberAfter(text, "other unexpected"),
+    sideEffectLeaks: parseNumberAfter(text, "side-effect marker leaks"),
+    readbackFailures: parseNumberAfter(text, "readback failures"),
+    missingStatus: missingEvidenceStatus(step.status),
+    missingNote: missingProbeNote("live dry-run write probe", step.outcome),
+    stepStatus: step.status,
+    stepOutcome: step.outcome,
+    stepEvidence: evidencePath(step.evidence),
+  };
+}
+
+function liveDeepStatus(value) {
+  if (value === "pass") return "pass";
+  if (value === "warn" || value === "partial") return "warn";
+  if (value === "fail") return "fail";
+  if (value === "skip") return "skip";
+  return "missing";
+}
+
+function analyzeLiveDeep(stepOutcomes) {
+  const step = stepInfo(stepOutcomes, "mgmt_live_deep", ".lovable/audits/management-live-deep-validation.log");
+  const jsonFile = latestAuditFile([/^management-live-deep-validation-.*\.json$/]);
+  const mdFile = latestAuditFile([/^management-live-deep-validation-.*\.md$/]);
+  const report = readJson(jsonFile);
+  const text = readText(mdFile);
+  return {
+    exists: Boolean(report || text),
+    file: jsonFile || mdFile || evidencePath(step.evidence),
+    overall: report?.overall || parseStatusAfter(text, "Overall"),
+    rbacStatus: report?.rbac?.status || parseStatusAfter(text, "RBAC status"),
+    rbacPresentRoles: report?.rbac?.presentRoles || [],
+    rbacMissingRoles: report?.rbac?.missingRoles || [],
+    operatorRaceStatus: report?.operatorRace?.status || parseStatusAfter(text, "Operator race status"),
+    operatorRaceNote: report?.operatorRace?.note || "",
+    sseStatus: report?.sse?.status || parseStatusAfter(text, "SSE status"),
+    sseNote: report?.sse?.note || "",
+    sseDurationMs: report?.sse?.durationMs || parseNumberAfter(text, "SSE duration ms"),
+    missingStatus: missingEvidenceStatus(step.status),
+    missingNote: missingProbeNote("management live deep validation", step.outcome),
+    stepStatus: step.status,
+    stepOutcome: step.outcome,
+    stepEvidence: evidencePath(step.evidence),
+  };
+}
+
+function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const routeEvidence = routeProbe.file || routeProbe.stepEvidence;
   const authEvidence = authSmoke.file || routeEvidence;
+  const writeEvidence = writeProbe.file || authEvidence;
+  const liveDeepEvidence = liveDeep.file || writeEvidence;
   const authMode = String(process.env.PANTHEON_RELEASE_GATE_AUTH_MODE || process.env.PANTHEON_BFF_AUTH_MODE || "").trim().toLowerCase();
   const permissiveAuth = ["permissive", "stub", "dev", "local"].includes(authMode);
   const healthStatus = [routeProbe.rows.get("/health")?.status, routeProbe.rows.get("/healthz")?.status].includes("200");
@@ -508,7 +578,23 @@ function buildGate3(routeProbe, authSmoke) {
   const v5Result = authSmoke.exists ? allRowsPass(authSmoke.rows, v5Paths) : authMissingResult;
   const writeResult = authSmoke.exists ? allRowsPass(authSmoke.rows, writePaths) : authMissingResult;
   const meRow = authSmoke.rows.get("/bff/me");
-  const authAllPassed = authSmoke.exists && authSmoke.passed !== null && authSmoke.total !== null && authSmoke.passed === authSmoke.total;
+  const writeProbeClean = writeProbe.exists &&
+    (writeProbe.missing ?? 1) === 0 &&
+    (writeProbe.untyped4xx ?? 1) === 0 &&
+    (writeProbe.beError ?? 1) === 0 &&
+    (writeProbe.network ?? 1) === 0 &&
+    (writeProbe.other ?? 1) === 0;
+  const writeProbeNoSideEffects = writeProbe.exists &&
+    (writeProbe.sideEffectLeaks ?? 1) === 0 &&
+    (writeProbe.readbackFailures ?? 1) === 0;
+  const writeProbeCreateCoverage = writeProbe.exists && (writeProbe.skippedCreates ?? 1) === 0;
+  const writeProbeStatus = (condition) => writeProbe.exists ? condition ? "pass" : "fail" : writeProbe.missingStatus;
+  const writeProbeWarnStatus = (condition) => writeProbe.exists ? condition ? "pass" : "warn" : writeProbe.missingStatus;
+  const writeProbeOwner = (condition) => writeProbe.exists && condition ? "" : GATE_OWNERS[3];
+  const writeProbeNote = (note) => writeProbe.exists ? note : writeProbe.missingNote;
+  const liveDeepGateStatus = (status) => liveDeep.exists ? liveDeepStatus(status) : liveDeep.missingStatus;
+  const liveDeepOwner = (status) => liveDeepGateStatus(status) === "pass" ? "" : GATE_OWNERS[3];
+  const liveDeepNote = (note) => liveDeep.exists ? note : liveDeep.missingNote;
 
   return [
     makeCheck("Anonymous: `/health` or `/healthz` returns 200.", routeStatus(healthStatus), {
@@ -556,10 +642,35 @@ function buildGate3(routeProbe, authSmoke) {
       evidence: authEvidence,
       note: writeResult.note,
     }),
-    makeCheck("Authenticated: safe write / dry-run endpoints do not create live capital side effects.", authStatus(authAllPassed), {
-      owner: authOwner(authAllPassed),
-      evidence: authEvidence,
-      note: authNote(`authenticated smoke passed ${authSmoke.passed}/${authSmoke.total}`),
+    makeCheck("Authenticated: expanded live dry-run write probe has no missing routes, untyped 4xx, or 5xx.", writeProbeStatus(writeProbeClean), {
+      owner: writeProbeOwner(writeProbeClean),
+      evidence: writeEvidence,
+      note: writeProbeNote(`missing=${writeProbe.missing ?? "?"}; optionalMissing=${writeProbe.optionalMissing ?? "?"}; untyped4xx=${writeProbe.untyped4xx ?? "?"}; 5xx=${writeProbe.beError ?? "?"}; network=${writeProbe.network ?? "?"}; skippedCreates=${writeProbe.skippedCreates ?? "?"}`),
+    }),
+    makeCheck("Authenticated: dry-run write marker does not appear in readback lists.", writeProbeStatus(writeProbeNoSideEffects), {
+      owner: writeProbeOwner(writeProbeNoSideEffects),
+      evidence: writeEvidence,
+      note: writeProbeNote(`side-effect marker leaks=${writeProbe.sideEffectLeaks ?? "?"}; readback failures=${writeProbe.readbackFailures ?? "?"}`),
+    }),
+    makeCheck("Authenticated: create dry-run endpoints are explicitly exercised.", writeProbeWarnStatus(writeProbeCreateCoverage), {
+      owner: writeProbeCreateCoverage ? "" : GATE_OWNERS[3],
+      evidence: writeEvidence,
+      note: writeProbeNote(`createDryRunEnabled=${writeProbe.createDryRunEnabled ?? "?"}; skippedCreates=${writeProbe.skippedCreates ?? "?"}`),
+    }),
+    makeCheck("Live deep: bearer-token RBAC matrix is proven for configured role tokens.", liveDeepGateStatus(liveDeep.rbacStatus), {
+      owner: liveDeepOwner(liveDeep.rbacStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(`status=${liveDeep.rbacStatus || "missing"}; present=${liveDeep.rbacPresentRoles.join(",") || "none"}; missing=${liveDeep.rbacMissingRoles.join(",") || "none"}`),
+    }),
+    makeCheck("Live deep: multi-operator two-man race is exercised.", liveDeepGateStatus(liveDeep.operatorRaceStatus), {
+      owner: liveDeepOwner(liveDeep.operatorRaceStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(liveDeep.operatorRaceNote || `status=${liveDeep.operatorRaceStatus || "missing"}`),
+    }),
+    makeCheck("Live deep: SSE long reconnect has no duplicate replay.", liveDeepGateStatus(liveDeep.sseStatus), {
+      owner: liveDeepOwner(liveDeep.sseStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(`${liveDeep.sseNote || `status=${liveDeep.sseStatus || "missing"}`}; duration=${liveDeep.sseDurationMs ?? "?"}ms`),
     }),
   ];
 }
@@ -682,19 +793,29 @@ function analyzePlaywright() {
     const nextParents = suite.title ? [...parents, suite.title] : parents;
     for (const spec of suite.specs || []) {
       const results = [];
+      const finalStatuses = [];
       for (const test of spec.tests || []) {
+        if (test.status) finalStatuses.push(test.status);
         for (const result of test.results || []) {
           results.push(result.status || "");
         }
       }
-      const failed = results.some((status) => ["failed", "timedOut", "interrupted"].includes(status));
-      const skipped = results.length > 0 && results.every((status) => status === "skipped");
-      const passed = results.length > 0 && !failed && !skipped;
+      const unexpected = ["unexpected", "failed", "timedOut", "interrupted"];
+      const failed = finalStatuses.length
+        ? finalStatuses.some((status) => unexpected.includes(status))
+        : results.some((status) => unexpected.includes(status));
+      const skipped = finalStatuses.length
+        ? finalStatuses.every((status) => status === "skipped")
+        : results.length > 0 && results.every((status) => status === "skipped");
+      const passed = finalStatuses.length
+        ? finalStatuses.every((status) => ["expected", "flaky"].includes(status))
+        : results.length > 0 && !failed && !skipped;
       specs.push({
         title: [...nextParents, spec.title].filter(Boolean).join(" > "),
         file: spec.file || suite.file || "",
         status: failed ? "fail" : skipped ? "skip" : passed ? "pass" : "missing",
         results,
+        finalStatuses,
       });
     }
     for (const child of suite.suites || []) visitSuite(child, nextParents);
@@ -913,6 +1034,8 @@ function main() {
   const stepOutcomes = getStepOutcomes();
   const routeProbe = analyzeRouteProbe(stepOutcomes);
   const authSmoke = analyzeAuthSmoke(stepOutcomes);
+  const writeProbe = analyzeWriteProbe(stepOutcomes);
+  const liveDeep = analyzeLiveDeep(stepOutcomes);
   const hosted = analyzeHostedProbe(stepOutcomes);
   const playwright = analyzePlaywright();
 
@@ -920,7 +1043,7 @@ function main() {
     0: buildGate0(hosted),
     1: buildGate1(stepOutcomes),
     2: buildGate2(stepOutcomes),
-    3: buildGate3(routeProbe, authSmoke),
+    3: buildGate3(routeProbe, authSmoke, writeProbe, liveDeep),
     4: buildGate4(hosted),
     5: buildGate5(playwright),
     6: buildGate6(playwright),

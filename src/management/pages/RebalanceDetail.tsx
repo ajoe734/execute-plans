@@ -58,8 +58,8 @@ export const RebalanceDetail = () => {
         bff.capitalPools.get(rb.targetPoolId).then(setPool);
       }
     });
-    bff.approvals.list().then((all) => setApprovals(all.filter((a) => a.subject.includes(id) || a.kind.includes("rebalance"))));
-    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action.startsWith("rebalance."))));
+    bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
+    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
     bff.strategies.list().then(setStrategies);
   }, [id]);
 
@@ -198,7 +198,7 @@ export const RebalanceDetail = () => {
             destructive={activeTr.uiPattern === "destructive_modal"}
             actionId={v3ActionId}
             confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
-            confirmToken={!v3ActionId && activeTr.risk === "critical" ? activeTr.action.toUpperCase() : undefined}
+            confirmToken={!v3ActionId && activeTr.risk === "critical" ? (activeTr.action ?? "").toUpperCase() : undefined}
             onConfirm={async (memo, token) => {
               await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, { confirmToken: token });
               setMachineState(activeTr.to);

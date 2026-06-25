@@ -8,6 +8,7 @@ import type { MemoryUpdate } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 
 const stateTone: Record<string, string> = {
   queued: "border-accent/40 text-accent",
@@ -43,7 +44,7 @@ export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
               <Badge variant="outline" className="text-[10px] uppercase">{m.kind}</Badge>
               <Badge variant="outline" className="text-[10px] uppercase">{m.source}</Badge>
               <Badge variant="outline" className={`text-[10px] uppercase ${stateTone[m.state]}`}>{m.state}</Badge>
-              <span className="text-mono text-[10px] text-muted-foreground ml-auto">{new Date(m.proposedAt).toLocaleString()}</span>
+              <span className="text-mono text-[10px] text-muted-foreground ml-auto">{safeDateTime(m.proposedAt)}</span>
             </div>
             {m.before && <div className="text-xs text-muted-foreground line-through">{m.before}</div>}
             <div className="text-sm">{m.after}</div>

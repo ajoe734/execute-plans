@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
@@ -44,7 +45,7 @@ export const JobsPage = () => {
           { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
           { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
           { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
-          { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span> },
+          { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.startedAt)}</span> },
         ]} />
       </PageBody>
     </>
@@ -80,7 +81,7 @@ export const AlertsPage = () => {
           { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
           { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
           { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
           { key: "ack", header: t("table.status"), cell: (r) => r.acknowledged ? <span className="text-status-success text-xs">✓ {t("table_actions.acknowledged")}</span> : <span className="text-status-warning text-xs">{t("table_actions.open")}</span> },
           { key: "act", header: "", cell: (r) => !r.acknowledged && (
             <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ack(r.id); }}>{t("table_actions.acknowledge")}</Button>
@@ -104,7 +105,7 @@ export const AlertsPage = () => {
                   <Field label={t("table.metric")} value={active.metric ?? "—"} mono />
                   <Field label={t("table.threshold")} value={active.threshold ?? "—"} mono />
                   <Field label={t("table.observed")} value={active.observed ?? "—"} mono />
-                  <Field label={t("table.opened")} value={new Date(active.openedAt).toLocaleString()} mono />
+                  <Field label={t("table.opened")} value={safeDateTime(active.openedAt)} mono />
                 </Card>
                 {active.suggestedAction && (
                   <Card className="p-4">
@@ -147,7 +148,7 @@ export const IncidentsPage = () => {
           { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
           { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
           { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.openedAt).toLocaleString()}</span> },
+          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
         ]} />
       </PageBody>
 
@@ -174,7 +175,7 @@ export const IncidentsPage = () => {
                   <ol className="space-y-2">
                     {(active.timeline ?? []).map((e, i) => (
                       <li key={i} className="text-sm flex gap-3">
-                        <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{new Date(e.ts).toLocaleTimeString()}</span>
+                        <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{safeDateTime(e.ts, "time")}</span>
                         <span className="text-mono text-xs text-accent">{e.actor}</span>
                         <span>{e.note}</span>
                       </li>
@@ -242,7 +243,7 @@ export const ApprovalsPage = () => {
           { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
           { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
           { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-          { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span> },
+          { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
         ]} />
       </PageBody>
 
@@ -262,7 +263,7 @@ export const ApprovalsPage = () => {
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
                   <Field label={t("table.requester")} value={active.requester} mono />
-                  <Field label={t("table.created")} value={new Date(active.createdAt).toLocaleString()} mono />
+                  <Field label={t("table.created")} value={safeDateTime(active.createdAt)} mono />
                 </Card>
                 {active.rationale && (
                   <Card className="p-4">
@@ -395,7 +396,7 @@ export const AuditPage = () => {
           <AuditTimeline entries={filtered} title={target} />
         ) : (
           <DataTable rows={filtered} columns={[
-            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
             { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
             { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
             { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },

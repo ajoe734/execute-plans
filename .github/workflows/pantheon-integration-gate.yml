@@ -63,9 +63,26 @@ jobs:
       PANTHEON_E2E_STRICT: "1"
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
+      PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
+      PANTHEON_BFF_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_TOKEN }}
+      PANTHEON_BFF_APPROVER_TOKEN: ${{ secrets.PANTHEON_BFF_APPROVER_TOKEN }}
+      PANTHEON_BFF_RISK_OWNER_TOKEN: ${{ secrets.PANTHEON_BFF_RISK_OWNER_TOKEN }}
+      PANTHEON_BFF_ADMIN_TOKEN: ${{ secrets.PANTHEON_BFF_ADMIN_TOKEN }}
+      PANTHEON_BFF_OPERATOR_A_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+      PANTHEON_BFF_OPERATOR_B_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_B_TOKEN }}
+      PANTHEON_LIVE_DEEP_SSE_MS: ${{ vars.PANTHEON_LIVE_DEEP_SSE_MS || '65000' }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout Pantheon contract bundle
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || 'dev' }}
+          path: pantheon-contract
+          token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -109,9 +126,17 @@ jobs:
       - name: Contract drift
         id: contract
         continue-on-error: true
+        env:
+          PANTHEON_CONTRACT_ROOT: pantheon-contract
         run: |
           set -o pipefail
           npm run test:contract 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/contract-drift.log"
+
+      - name: Management persona 3000 validation
+        id: mgmt_persona_3000
+        run: |
+          set -o pipefail
+          npm run validate:mgmt-persona:3000 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/mgmt-persona-3000-validation.log"
 
       - name: Anonymous BFF route probe
         id: route_probe
@@ -127,6 +152,21 @@ jobs:
         run: |
           set -o pipefail
           node scripts/probe-bff-authenticated-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-authenticated-live-smoke.log"
+
+      - name: Live dry-run write probe
+        id: write_probe
+        if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
+
+      - name: Management live deep validation
+        id: mgmt_live_deep
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run validate:mgmt-live:deep 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-live-deep-validation.log"
 
       - name: Install Playwright
         id: install_playwright
@@ -205,8 +245,11 @@ jobs:
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
+            "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
+            "write_probe": { "outcome": "${{ steps.write_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-write-path-probe.log" },
+            "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
@@ -220,17 +263,23 @@ jobs:
         continue-on-error: ${{ (inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false') == 'true' }}
         run: node scripts/aggregate-release-gate.mjs
 
+      - name: Prepare evidence artifact paths
+        if: always()
+        run: |
+          rm -rf pantheon-audits
+          mkdir -p pantheon-audits/current-run
+          if [ -d "$PANTHEON_AUDIT_OUT_DIR" ]; then
+            cp -a "$PANTHEON_AUDIT_OUT_DIR"/. pantheon-audits/current-run/
+          fi
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-integration-evidence
+          include-hidden-files: true
           path: |
-            .lovable/audits/*.md
-            .lovable/audits/*.json
-            .lovable/audits/current-run/**/*.md
-            .lovable/audits/current-run/**/*.json
-            .lovable/audits/current-run/**/*.log
+            pantheon-audits/current-run
             playwright-report
             test-results
 

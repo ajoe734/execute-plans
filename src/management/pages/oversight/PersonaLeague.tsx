@@ -15,10 +15,12 @@ import {
 import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
 
 const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
+    : "—";
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number, d = 2) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n);
+  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n) : "—";
 
 const tierTone = (tier: string) =>
   tier === "S" ? "bg-status-success/20 text-status-success border-status-success/30" :
@@ -72,9 +74,11 @@ export const PersonaLeaguePage = () => {
         <Card className="p-3">
           <div className="text-xs text-muted-foreground mb-2">{t("mgmt.league.tierDistribution")}</div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(tiers).map(([tier, count]) => (
-              <Badge key={tier} variant="outline" className={tierTone(tier)}>{tier}: {count}</Badge>
-            ))}
+            {Object.entries(tiers)
+              .filter(([tier, count]) => tier && tier !== "undefined" && Number.isFinite(count as number))
+              .map(([tier, count]) => (
+                <Badge key={tier} variant="outline" className={tierTone(tier)}>{tier}: {count}</Badge>
+              ))}
           </div>
         </Card>
         <Card className="p-3">

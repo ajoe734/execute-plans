@@ -8,6 +8,7 @@ import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "@/platform/hooks";
 import { resolveEntity, lineageHref, decisionsHref } from "@/lib/entityLinks";
+import { safeDateTime } from "@/lib/utils";
 
 export interface AuditEntry {
   id?: string;
@@ -97,7 +98,7 @@ export const AuditTimeline = ({ entries, framed = true, title, limit, emptyText 
                   )}</span>
                 )}
                 <span className="text-mono text-xs text-muted-foreground ml-auto">
-                  {new Date(e.ts).toLocaleString()}
+                  {safeDateTime(e.ts)}
                 </span>
               </div>
               {e.memo && <p className="text-xs text-muted-foreground mt-0.5">{e.memo}</p>}

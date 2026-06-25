@@ -5,6 +5,7 @@ import type { Deployment } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { Check, AlertTriangle } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const ENV_STAGES = ["research", "paper", "live"] as const;
 
@@ -68,7 +69,7 @@ export const DeploymentStagesPanel = ({ deployment }: { deployment: Deployment }
                 {s.active && <Badge variant="outline" className="text-[10px] uppercase">{t("deployment.stages.current")}</Badge>}
                 {s.promotedAt && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    {new Date(s.promotedAt).toLocaleDateString()}
+                    {safeDateTime(s.promotedAt, "date")}
                   </div>
                 )}
               </div>

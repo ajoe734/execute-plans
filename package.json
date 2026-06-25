@@ -11,10 +11,16 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:contract": "vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
+    "contract:drift": "node scripts/contract-drift-check.mjs",
+    "contract:drift:update": "node scripts/contract-drift-check.mjs --write",
+    "test:contract": "npm run contract:drift && vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
     "probe:bff:routes": "node scripts/probe-bff-routes.mjs --anonymous",
     "probe:bff:auth": "node scripts/probe-bff-authenticated-live.mjs",
+    "probe:bff:writes": "node scripts/probe-bff-write-paths.mjs",
     "probe:browser": "node scripts/probe-hosted-browser-bff.mjs",
+    "audit:render": "node scripts/audit-console-render.mjs",
+    "validate:mgmt-persona:3000": "node scripts/validate-management-persona-3000.mjs",
+    "validate:mgmt-live:deep": "node scripts/validate-management-live-deep.mjs",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "gate:integration": "npm run test && npm run build && npm run test:contract && npm run probe:bff:routes && npm run probe:browser && npm run e2e"
@@ -85,7 +91,10 @@
     "use-stick-to-bottom": "^1.1.4",
     "vaul": "^0.9.9",
     "zod": "^3.25.76",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "echarts": "^5.6.0",
+    "echarts-for-react": "^3.0.2",
+    "react-grid-layout": "^1.5.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -112,6 +121,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@types/react-grid-layout": "^1.3.5"
   }
 }

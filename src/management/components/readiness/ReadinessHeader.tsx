@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ReadinessHeaderModel } from "@/lib/v5/management/readiness";
+import { safeDateTime } from "@/lib/utils";
 
 const statusTone = (s: ReadinessHeaderModel["status"]) =>
   s === "ready" ? "bg-status-success/15 text-status-success border-status-success/30" :
@@ -19,7 +20,7 @@ export const ReadinessHeader = ({ model }: { model: ReadinessHeaderModel }) => {
           <h1 className="text-2xl font-semibold text-foreground">{model.title}</h1>
           <div className="mt-1 text-xs text-muted-foreground">
             {t("mgmt.readiness.envFmt", { env: model.environment })}{" "}
-            <time dateTime={model.lastUpdated}>{new Date(model.lastUpdated).toLocaleString()}</time>
+            <time dateTime={model.lastUpdated}>{safeDateTime(model.lastUpdated)}</time>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

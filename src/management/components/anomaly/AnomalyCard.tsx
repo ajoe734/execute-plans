@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export const AnomalyCard = ({ anomaly }: { anomaly: ManagementAnomaly }) => {
           <span className="text-sm font-medium text-foreground">{anomaly.title}</span>
         </div>
         <time className="text-xs text-muted-foreground" dateTime={anomaly.detectedAt}>
-          {new Date(anomaly.detectedAt).toLocaleString()}
+          {safeDateTime(anomaly.detectedAt)}
         </time>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">

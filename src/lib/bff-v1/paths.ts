@@ -142,6 +142,11 @@ export const paths = {
   // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
   // Mock providers continue returning seeds; live providers hit these.
   mgmtCockpit: () => `${BASE}/management/cockpit`,
+  // Console-gap endpoints (2026-06-15): dedicated read surfaces for pages that
+  // previously had no backend. See docs/04/pantheon_bff_console_gap_2026-06-15.
+  knowledgeInbox: () => `${BASE}/knowledge`,
+  workflowTemplates: () => `${BASE}/workflows`,
+  hookRegistry: () => `${BASE}/hooks`,
   mgmtPersonaFleet: () => `${BASE}/management/fleet`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
@@ -159,6 +164,8 @@ export const paths = {
   // ---- 2026-06-03 — Management AI runtime (OpenClaw gateway adapter / Codex). ----
   // FE submits prompts here; never to /bff/agora/ask.
   managementNlAsk: () => `${BASE}/management/nl/ask`,
+  // SSE token-streaming variant (progressive rendering).
+  managementNlAskStream: () => `${BASE}/management/nl/ask/stream`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
   assistantMode: () => `${BASE}/assistant/mode`,

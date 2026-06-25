@@ -12,6 +12,7 @@ export * from "./sse/protocol";
 export * from "./sse/bridge";
 export * from "./sse/liveSse";
 export * from "./lists";
+export * from "./degradation";
 export * from "./useLiveListV1";
 export * from "./writes";
 export * from "./me";
@@ -26,3 +27,5 @@ export * from "./legacy";
 export * from "./v5";
 // 2026-05-22 PM-Live — Management Oversight live wiring (PM-1..PM-11).
 export * from "./management";
+// AG-XR-002 — generated Agora v1 schema/OpenAPI contract types.
+export * from "./agora/types";

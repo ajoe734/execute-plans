@@ -46,6 +46,19 @@ VITE_BFF_REAL_WRITES=false
 Only enable real writes when the operator explicitly asks for governed write
 testing.
 
+The dev FE host is a Caddy static site on the Pantheon dev VM:
+
+- Caddy FE root: `/var/www/pantheon-dev-fe`
+- release store: `/var/www/pantheon-dev-fe-releases`
+- deploy workflow: `.github/workflows/pantheon-dev-fe-deploy.yml`
+- deploy script: `scripts/deploy-dev-vm.sh`
+- deployment evidence: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
+
+The deployment workflow runs on the VM self-hosted GitHub runner with labels
+`self-hosted`, `Linux`, `X64`, `pantheon-dev-vm`, and
+`execute-plans-deploy`. It is triggered only after `Pantheon FE-BFF Integration
+Gate` succeeds for a `dev` push, or by explicit `workflow_dispatch`.
+
 ## Branch And Dev Deployment Policy
 
 `main` was the historical Lovable integration branch. Now that this repo is
@@ -58,8 +71,10 @@ follow the same governed branch posture as the rest of Pantheon:
 - `main` is a stable/promotion branch. Merge to `main` only for an explicit
   promotion, compatibility cut, or repository bootstrap task.
 - Do not claim a frontend change is published to dev until the target commit is
-  present on `dev`, the dev FE deployment has been updated from that commit, and
-  the direct execute-plans browser/BFF gate passes against the Pantheon dev BFF.
+  present on `dev`, the integration gate has passed for that commit, the dev FE
+  deployment workflow has updated the VM from that commit, `/deployment.json`
+  reports that commit, and the direct execute-plans browser/BFF gate passes
+  against the Pantheon dev BFF.
 - Lovable publish state is obsolete evidence for dev readiness. It may be useful
   only as historical context.
 
@@ -90,6 +105,11 @@ read/write VM files or coordinate debugging through OpenClaw, verify
 activatable by an authorized operator/admin session. If provider readiness is
 ready but kernel is disabled, fix the dev BFF configuration in `pantheon`; do
 not patch around it in frontend code.
+
+Supervisor is the queue/drain process, not a worker identity. SA/SD task
+packets emitted by the frontend must use dispatchable worker names such as
+`Codex` and `Claude`; do not set `proposedReviewer: "Supervisor"` or similar
+non-agent values.
 
 OpenClaw-backed VM inspection/debugging is reached through Pantheon BFF
 conversation routes, primarily `POST /bff/management/nl/ask`, with the BFF

@@ -17,6 +17,7 @@ import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
 import { AlertTriangle, ClipboardCheck, Loader2, ShieldAlert } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 interface NCState {
   open: boolean;
@@ -106,7 +107,7 @@ export const NotificationCenter = () => {
                     {!a.acknowledged && <Badge variant="outline" className="text-[10px] ml-auto">{t("notifications.unack")}</Badge>}
                   </div>
                   <div className="text-sm mt-1">{a.title}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{new Date(a.openedAt).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{safeDateTime(a.openedAt)}</div>
                 </button>
               ))}
             </TabsContent>
@@ -122,7 +123,7 @@ export const NotificationCenter = () => {
                     {i.commander && <span className="text-mono text-[10px] text-muted-foreground ml-auto">{i.commander}</span>}
                   </div>
                   <div className="text-sm mt-1">{i.title}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{new Date(i.openedAt).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{safeDateTime(i.openedAt)}</div>
                 </button>
               ))}
             </TabsContent>
@@ -138,7 +139,7 @@ export const NotificationCenter = () => {
                     <RiskBadge level={a.riskLevel} />
                   </div>
                   <div className="text-sm mt-1">{a.subject}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{a.requester} · {new Date(a.createdAt).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{a.requester} · {safeDateTime(a.createdAt)}</div>
                 </button>
               ))}
             </TabsContent>
@@ -153,7 +154,7 @@ export const NotificationCenter = () => {
                     <StatusBadge state={j.status} />
                   </div>
                   <div className="text-sm mt-1 text-mono text-xs">{j.kind}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{j.owner} · {new Date(j.startedAt).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{j.owner} · {safeDateTime(j.startedAt)}</div>
                 </button>
               ))}
             </TabsContent>

@@ -29,7 +29,7 @@ import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Pl
 import { toast } from "@/hooks/use-toast";
 import {
   activateAssistantControlMode,
-  askManagementAi,
+  streamManagementAi,
   deactivateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
@@ -43,9 +43,11 @@ import {
   type ManagementAiUiSnapshot,
   type ManagementAiRecentTurn,
   type ProviderStatus,
+  type AssistantOpenClawSkillDescriptor,
   type AssistantOpenClawToolPolicyStatus,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
+  type AssistantOrchestratorStatus,
   type AssistantOrchestratorStatusResult,
   type AssistantDevDocsGenerateResult,
   type AssistantProviderReauthResult,
@@ -100,8 +102,8 @@ function parseRepairScope(value: string): string[] {
   ));
 }
 
-function repairMergeTarget(repoKey: RepairRepoKey): string {
-  return repoKey === "execute-plans" ? "main" : "dev";
+function repairMergeTarget(_repoKey: RepairRepoKey): string {
+  return "dev";
 }
 
 function makeRepairTaskId(repoKey: RepairRepoKey): string {
@@ -293,6 +295,9 @@ function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
   );
 }
 
+const SA_SD_GENERATE_SKILL_ID = "assistant.sa_sd.generate";
+const SA_SD_GENERATE_HANDLER_REF = "bff.route:POST /bff/assistant/dev-docs/generate";
+
 function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null | undefined): boolean {
   if (!policy) return false;
   return policy.assistantCommandUsable ?? policy.assistantCommandAllowed ?? false;
@@ -301,6 +306,16 @@ function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null 
 function commandPolicyLabel(policy: AssistantOpenClawToolPolicyStatus | null | undefined): string {
   if (!policy) return "assistant.command unknown";
   return `assistant.command ${policy.assistantCommandStatus ?? (commandPolicyIsUsable(policy) ? "usable" : "blocked")}`;
+}
+
+function saSdGenerateSkill(policy: AssistantOpenClawToolPolicyStatus | null | undefined): AssistantOpenClawSkillDescriptor | null {
+  return policy?.effectiveSkills?.find((skill) => (
+    skill.id === SA_SD_GENERATE_SKILL_ID && skill.handlerRef === SA_SD_GENERATE_HANDLER_REF
+  )) ?? null;
+}
+
+function saSdSkillLabel(skill: AssistantOpenClawSkillDescriptor | null): string {
+  return skill ? `${skill.id} via ${skill.handlerRef}` : `${SA_SD_GENERATE_SKILL_ID} unavailable`;
 }
 
 function ToolPolicyPill({ policy, failure }: {
@@ -335,6 +350,72 @@ function controlModeLabel(status: AssistantControlModeStatus | null | undefined)
   if (!status) return "control unknown";
   if (status.active) return `control ${status.mode ?? "active"}`;
   return "control inactive";
+}
+
+function taskStatusCounts(tasks: AssistantOrchestratorStatus["tasks"]): string {
+  const counts = new Map<string, number>();
+  for (const task of tasks ?? []) {
+    const key = task.status ?? "unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([status, count]) => `${status}:${count}`).join(" · ") || "none";
+}
+
+function compactList(items: Array<string | undefined>, limit = 3): string {
+  const values = items.filter((item): item is string => Boolean(item));
+  if (values.length <= limit) return values.join(", ");
+  return `${values.slice(0, limit).join(", ")} +${values.length - limit}`;
+}
+
+function SystemStatusDetails({ status }: { status: AssistantOrchestratorStatus | null | undefined }) {
+  if (!status) return null;
+  const supervisor = status.supervisor;
+  const provider = status.providerReadiness;
+  const bridge = status.assistantDevBridge;
+  const inbox = bridge?.inbox;
+  const tasks = status.tasks ?? [];
+  const activeTasks = tasks
+    .filter((task) => ["in_progress", "running", "review_approved", "todo"].includes(task.status ?? ""))
+    .slice(0, 4);
+  const execution = supervisor?.modeOccupancy?.execution;
+  const sourceSummary = compactList((status.sourceRefs ?? []).map((ref) => `${ref.sourceType ?? ref.path}:${ref.status ?? (ref.available ? "ok" : "missing")}`), 4);
+  const taskSummary = taskStatusCounts(tasks);
+
+  return (
+    <details className="w-full group rounded border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground">
+      <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-2 gap-y-0.5 list-none">
+        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
+        <span className="font-medium text-foreground">System</span>
+        <span>snapshot={status.snapshotAt ?? "unknown"}</span>
+        <span>supervisor={supervisor?.lifecycle ?? "unknown"}/{supervisor?.modeStatus ?? "unknown"}</span>
+        <span>tasks={tasks.length}</span>
+        <span>bridge={bridge?.status ?? "unknown"}:p{inbox?.pendingCount ?? 0}/f{inbox?.failedCount ?? 0}</span>
+      </summary>
+      <div className="mt-1 grid gap-1 sm:grid-cols-2">
+        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
+          <div>project={status.project ?? "unknown"}</div>
+          <div>provider={provider?.providerName ?? provider?.provider ?? "unknown"} ready={String(provider?.ready ?? false)} read={String(provider?.capabilities?.read ?? false)} repair={String(provider?.capabilities?.repairWrite ?? false)}</div>
+          <div>workspace={provider?.repairWorkspace?.status ?? "unknown"} writable={String(provider?.repairWorkspace?.writable ?? false)} worktrees={provider?.repairWorkspace?.worktreeCount ?? 0}</div>
+          <div>supervisor_focus={supervisor?.focusMode ?? "unknown"} execution={execution ? `r${execution.running ?? 0}/p${execution.pending ?? 0}/q${execution.queued ?? 0}` : "unknown"}</div>
+        </div>
+        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
+          <div>dev_bridge={bridge?.status ?? "unknown"} pending={inbox?.pendingCount ?? 0} processed={inbox?.processedCount ?? 0} failed={inbox?.failedCount ?? 0}</div>
+          <div>sources={sourceSummary || "none"}</div>
+          <div>coordination=files:{status.coordination?.fileCount ?? 0} features:{status.coordination?.featureCount ?? 0}</div>
+          <div>task_status={taskSummary}</div>
+        </div>
+      </div>
+      {activeTasks.length > 0 && (
+        <div className="mt-1 space-y-0.5 font-mono">
+          {activeTasks.map((task) => (
+            <div key={task.id ?? task.title} className="truncate" title={task.next ?? task.title ?? task.id}>
+              {task.status ?? "unknown"}:{task.owner ?? "?"}:{task.id ?? task.title}
+            </div>
+          ))}
+        </div>
+      )}
+    </details>
+  );
 }
 
 function ControlModePill({ status, failure }: {
@@ -506,6 +587,8 @@ export function AgentPanelBody() {
   const [traceId, setTraceId] = useState<string | null>(null);
   const [conversationSummary, setConversationSummary] = useState<string | undefined>(undefined);
   const [pendingSessions, setPendingSessions] = useState<Record<string, true>>({});
+  // Transient token-streaming preview for the in-flight turn (cleared on completion).
+  const [streamingPreview, setStreamingPreview] = useState<{ sid: string; text: string } | null>(null);
   const [degraded, setDegraded] = useState<DegradedState | null>(null);
   const [resyncNotice, setResyncNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -922,6 +1005,19 @@ export function AgentPanelBody() {
       return;
     }
 
+    const currentToolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
+    if (!saSdGenerateSkill(currentToolPolicy)) {
+      const result: AssistantDevDocsGenerateResult = {
+        ok: false,
+        kind: "failure",
+        statusCode: null,
+        message: "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate。",
+      };
+      setDevDocsNotice(result);
+      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
+      return;
+    }
+
     const ui = buildUiSnapshot();
     const affectedModules = Array.from(new Set([
       "execute-plans:management-ai",
@@ -939,7 +1035,7 @@ export function AgentPanelBody() {
         featureSummary: latestFeatureSummary(turns),
         affectedModules,
         proposedOwner: "Codex",
-        proposedReviewer: "Supervisor",
+        proposedReviewer: "Claude",
         archive: true,
         emitTaskPacket: true,
         queueTaskPacket: true,
@@ -973,6 +1069,7 @@ export function AgentPanelBody() {
   }, [
     sessionId,
     assistantModeStatus,
+    orchestratorStatus,
     buildUiSnapshot,
     location.pathname,
     nlCtx.pageLabel,
@@ -1117,7 +1214,7 @@ export function AgentPanelBody() {
         }
       }
       if (result === null) {
-        result = await askManagementAi({
+        result = await streamManagementAi({
           question,
           focus: "all",
           sessionId: sessionIdForBff,
@@ -1141,23 +1238,51 @@ export function AgentPanelBody() {
               }))
             : undefined,
           openclaw: repairMetadata ? { repair: repairMetadata } : undefined,
+        }, {
+          // Progressive rendering: show tokens as they arrive in a transient
+          // bubble for the thread that initiated the request. The final turn is
+          // still appended by the result-handling below; this preview is cleared
+          // in finally, so existing reconcile/persist logic is untouched.
+          onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
         }, { signal: controller.signal });
       }
+    } catch (err) {
+      result = controller.signal.aborted
+        ? { ok: false, kind: "aborted" }
+        : {
+            ok: false,
+            kind: "transport_failure",
+            status: null,
+            message: (err as Error)?.message ?? "Management AI request failed before a BFF result was returned.",
+          };
     } finally {
+      setStreamingPreview(null);
       if (inflightRef.current.get(requestBucket) === controller) {
         inflightRef.current.delete(requestBucket);
       }
     }
 
     // Always release the per-session pending flag, regardless of which
-    // conversation the user is currently viewing.
-    const clearPending = () => {
+    // conversation the user is currently viewing. After a cli_* → BFF sessionId
+    // reconcile (new threads), the flag is MOVED to the BFF id, so we must clear
+    // that reconciled id too — clearing only requestBucket leaves a brand-new
+    // thread spinning forever and blocks the next turn (canSubmit gates on
+    // !pending, and pending reads pendingSessions[sessionId] = the BFF id).
+    const clearPending = (extraKey?: string | null) => {
       setPendingSessions((prev) => {
-        if (!prev[requestBucket]) return prev;
-        const { [requestBucket]: _drop, ...rest } = prev;
-        return rest;
+        const next = { ...prev };
+        let changed = false;
+        for (const key of [requestBucket, extraKey]) {
+          if (key && next[key]) {
+            delete next[key];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
       });
     };
+    // Effective session id after reconcile (BFF id for new threads, else requestBucket).
+    let settledBucket: string | null = null;
 
     if (result === null) {
       clearPending();
@@ -1199,6 +1324,7 @@ export function AgentPanelBody() {
 
     if (result.kind === "ok") {
       const sid = reconcile(result.sessionId ?? null);
+      settledBucket = sid;
       const assistantTurn: ChatTurn = {
         id: turnId("a"),
         role: "assistant",
@@ -1218,6 +1344,7 @@ export function AgentPanelBody() {
       upsertSessionIndex(sid, titleSeed);
     } else if (result.kind === "provider_degraded") {
       const sid = reconcile(result.sessionId ?? null);
+      settledBucket = sid;
       if (result.answer) {
         const assistantTurn: ChatTurn = {
           id: turnId("a_degraded"),
@@ -1250,7 +1377,7 @@ export function AgentPanelBody() {
       upsertSessionIndex(requestBucket, titleSeed);
     }
 
-    clearPending();
+    clearPending(settledBucket);
     if (activeSessionRef.current === requestBucket || activeSessionRef.current === (result.kind === "ok" || result.kind === "provider_degraded" ? (result.sessionId ?? requestBucket) : requestBucket)) {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
@@ -1286,7 +1413,24 @@ export function AgentPanelBody() {
   const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
   const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
   const controlActive = Boolean(controlMode?.active);
-  const canGenerateDevDocs = Boolean(sessionId && !isClientSessionId(sessionId) && turns.length > 0 && !pending && !devDocsBusy);
+  const hasBffSession = Boolean(sessionId && !isClientSessionId(sessionId));
+  const hasConversationTurns = turns.length > 0;
+  const saSdSkill = saSdGenerateSkill(toolPolicy);
+  const saSdSkillAvailable = Boolean(saSdSkill);
+  const canGenerateDevDocs = Boolean(
+    hasBffSession && hasConversationTurns && !pending && !devDocsBusy && controlActive && saSdSkillAvailable,
+  );
+  const devDocsButtonTitle = !hasBffSession
+    ? "需要先送出一則訊息，讓 BFF 建立正式 session id"
+    : !hasConversationTurns
+      ? "需要先有對話內容"
+      : pending || devDocsBusy
+        ? "Management AI 正在處理"
+        : !controlActive
+          ? "需要先啟用 control mode"
+          : !saSdSkillAvailable
+            ? "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate"
+            : "產生 SA/SD 並送進 dev bridge";
   const devDocsSystemDesignPath = devDocsNotice?.ok ? compactPath(devDocsNotice.archiveLocations?.systemDesign) : null;
   const devDocsQueuePath = devDocsNotice?.ok ? compactPath(devDocsNotice.taskPacketQueuePath) : null;
 
@@ -1379,7 +1523,7 @@ export function AgentPanelBody() {
               className="h-6 text-[10px]"
               onClick={() => void generateDevDocs()}
               disabled={!canGenerateDevDocs}
-              title={controlActive ? "產生 SA/SD 並送進 dev bridge" : "需要先啟用 control mode"}
+              title={devDocsButtonTitle}
             >
               {devDocsBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FileText className="h-3 w-3 mr-1" />}
               SA/SD
@@ -1526,7 +1670,7 @@ export function AgentPanelBody() {
           </DialogContent>
         </Dialog>
 
-        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId || orchestratorStatus?.ok) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
             {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
             {lastLinks.audit && (
@@ -1542,9 +1686,15 @@ export function AgentPanelBody() {
             {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
             {toolPolicy && (
               <span className="text-[10px] text-muted-foreground font-mono">
-                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"}
+                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"} · SA/SD={saSdSkillAvailable ? "ready" : "blocked"}
               </span>
             )}
+            {toolPolicy && (
+              <span className="text-[10px] text-muted-foreground font-mono" title={saSdSkillLabel(saSdSkill)}>
+                skill={saSdSkillAvailable ? SA_SD_GENERATE_SKILL_ID : "missing"}
+              </span>
+            )}
+            {orchestratorStatus?.ok && <SystemStatusDetails status={orchestratorStatus.status} />}
           </div>
         )}
 
@@ -1645,8 +1795,15 @@ export function AgentPanelBody() {
                 )}
               </div>
             ))}
-            {pending && (
-              <div className="px-4 py-2"><Shimmer>透過 OpenClaw 等候 Codex 回應…</Shimmer></div>
+            {streamingPreview && streamingPreview.sid === sessionId && streamingPreview.text && (
+              <div key="__streaming__" className="space-y-1">
+                <Message from="assistant">
+                  <MessageResponse>{streamingPreview.text}</MessageResponse>
+                </Message>
+              </div>
+            )}
+            {pending && !(streamingPreview && streamingPreview.sid === sessionId && streamingPreview.text) && (
+              <div className="px-4 py-2"><Shimmer>透過 OpenClaw 串流回應中…</Shimmer></div>
             )}
             {degraded && (() => {
               const ps = degraded.providerStatus;
