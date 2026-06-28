@@ -21,8 +21,7 @@ import {
 
 const registryPath = path.resolve(
   process.cwd(),
-  "..",
-  "docs/04/pantheon_agora_cross_repo_2026-06-20/design-closure/widget_registry.v1.json",
+  "src/agora/widgets/widget_registry.v1.json",
 );
 
 function sha256(filePath: string): string {
