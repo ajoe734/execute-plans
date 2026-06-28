@@ -31,7 +31,7 @@ export default {
   app: {
     name: "Pantheon",
     management: "管理控制台",
-    agora: "Agora 工作台",
+    agora: "Agora 交易台",
   },
   ui: {
     pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
@@ -81,6 +81,9 @@ export default {
     mcp: "MCP 伺服器",
     skills: "技能",
     channels: "通道",
+    tradingRoom: "交易操盤室",
+    strategyWorkshop: "策略工坊",
+    strategyPerformance: "策略執行與績效",
     daily: "每日簡報",
     market: "市場與 Watchlist",
     signals: "訊號審查",

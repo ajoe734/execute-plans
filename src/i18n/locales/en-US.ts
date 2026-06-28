@@ -31,7 +31,7 @@ export default {
   app: {
     name: "Pantheon",
     management: "Management Console",
-    agora: "Agora Workbench",
+    agora: "Agora Trading Desk",
   },
   ui: {
     pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
@@ -86,6 +86,9 @@ export default {
     skills: "Skills",
     channels: "Channels",
     // Agora
+    tradingRoom: "Trading Room",
+    strategyWorkshop: "Strategy Workshop",
+    strategyPerformance: "Strategy Performance",
     daily: "Daily Brief",
     market: "Market & Watchlist",
     signals: "Signal Review",

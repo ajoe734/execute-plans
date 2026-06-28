@@ -14,7 +14,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { v5 } from "@/lib/bff-v1";
+import { BffError, v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
@@ -187,6 +187,7 @@ const FindingDrawer = ({
 }: { finding: SentinelFinding | null; onClose: () => void; onActed: () => void; triggerRef?: { current: HTMLElement | null } }) => {
   const t = useT();
   const [pendingEmergency, setPendingEmergency] = useState<RemediationAction | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (!finding) return null;
 
@@ -204,12 +205,24 @@ const FindingDrawer = ({
   };
 
   const execute = async (a: RemediationAction) => {
-    const r = await v5.remediation.execute(a);
-    toast({
-      title: t("v5.sentinel.actionExecuted"),
-      description: `${a.label} · overlay=${r.overlayUpdated ? "updated" : "noop"}`,
-    });
-    onActed();
+    setActionError(null);
+    try {
+      const r = await v5.remediation.execute(a);
+      toast({
+        title: t("v5.sentinel.actionExecuted"),
+        description: `${a.label} · overlay=${r.overlayUpdated ? "updated" : "noop"}`,
+      });
+      onActed();
+    } catch (error) {
+      const message =
+        error instanceof BffError && error.requiresConfirmToken()
+          ? t("errors.CONFIRM_TOKEN_REQUIRED", { defaultValue: "Confirmation token required" })
+          : error instanceof Error
+            ? error.message
+            : t("errors.UNKNOWN_ERROR", { defaultValue: "Action failed" });
+      setActionError(message);
+      toast({ title: message });
+    }
   };
 
   const acknowledge = async () => {
@@ -280,6 +293,11 @@ const FindingDrawer = ({
             {/* Remediation actions */}
             <div className="space-y-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("v5.sentinel.remediation")}</div>
+              {actionError ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {actionError}
+                </div>
+              ) : null}
 
               <ActionGroup
                 title={t("v5.remediation.advisory")}

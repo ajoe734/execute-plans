@@ -6,6 +6,7 @@
 import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
 import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
 import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import {
@@ -739,7 +740,7 @@ export const bffV5 = {
     /** Q10 — only mutates v5ActionOverlay. Existing seed remains untouched. */
     execute: async (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
       if (realWritesEnabled()) {
-        await withLiveOrMock<unknown>({
+        await bffFetch<unknown>({
           method: "POST",
           path: `${paths.v5Intervention(action.id)}/remediate`,
           body: {
@@ -747,7 +748,8 @@ export const bffV5 = {
             remediation_action: action.kind,
           },
           idempotencyKey: `execute-plans-${action.id}-${Date.now()}`,
-        }, async () => ({ ok: true }));
+          mode: "live",
+        });
       }
       let overlayUpdated = false;
       if (action.targetKind === "persona" && action.targetId) {

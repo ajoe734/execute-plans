@@ -2,7 +2,7 @@ import { CheckCircle2, CircleAlert, CircleDashed, ShieldCheck } from "lucide-rea
 
 import { cn } from "@/lib/utils";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
-import type { WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
+import type { WorkshopCard, WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
 import {
   KeyValueGrid,
   Pill,
@@ -10,7 +10,7 @@ import {
   Section,
   TextList,
 } from "./WorkshopCardPrimitives";
-import { asRecord, formatLabel, stringList } from "./workshopCardUtils";
+import { asRecord, booleanValue, formatLabel, recordList, stringList, stringValue } from "./workshopCardUtils";
 
 const OVERALL_TONE: Record<StrategyCompleteness["overall_grade"], string> = {
   complete: "text-green-700",
@@ -39,34 +39,80 @@ function ReadinessPanel({
   readiness,
   metadata,
 }: {
-  readiness?: WorkshopReadinessAssessment | null;
+  readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
   metadata?: Record<string, unknown>;
 }) {
-  const gates = stringList(metadata?.readiness_gates);
-  if (!readiness && gates.length === 0) return null;
+  const readinessRecord = asRecord(readiness);
+  const explicitGates = recordList(readinessRecord.gates);
+  const metadataGates = stringList(metadata?.readiness_gates);
+  const singleGate = stringValue(readinessRecord.gate);
+  const gateRows =
+    explicitGates.length > 0
+      ? explicitGates
+      : singleGate
+        ? [readinessRecord]
+        : metadataGates.map((gate) => ({ gate }));
 
   return (
     <Section title="Readiness">
-      <div className="space-y-2">
-        {readiness ? (
-          <div className="space-y-2 border-l border-slate-200 pl-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-xs font-medium text-slate-800">{formatLabel(readiness.gate)}</span>
-              <Pill tone={readiness.passed ? "green" : "amber"}>
-                {readiness.passed ? "Passed" : "Blocked"}
-              </Pill>
-            </div>
-            <TextList items={readiness.blockers} tone="red" />
-            <p className="text-[11px] text-slate-400">{readiness.assessed_at}</p>
-          </div>
+      <div className="space-y-2" data-testid={gateRows.length === 0 ? "readiness-gates-empty" : undefined}>
+        {gateRows.length === 0 ? (
+          <p className="text-xs text-slate-400">Readiness gates have not been assessed.</p>
+        ) : (
+          gateRows.map((gateRecord) => {
+            const gate = stringValue(gateRecord.gate, "unknown");
+            const state = stringValue(gateRecord.state);
+            const passed = booleanValue(gateRecord.passed);
+            const stateLabel = state ? formatLabel(state) : passed === undefined ? "Not assessed" : passed ? "Passed" : "Blocked";
+            return (
+              <div
+                className="space-y-2 border-l border-slate-200 pl-3"
+                data-testid={`readiness-gate-${gate}`}
+                key={gate}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-xs font-medium text-slate-800">{formatLabel(gate)}</span>
+                  <Pill tone={passed === true || state === "ready" || state === "passed" ? "green" : "amber"}>
+                    <span data-testid={`readiness-gate-${gate}-state`}>{stateLabel}</span>
+                  </Pill>
+                </div>
+                <TextList items={gateRecord.blockers ?? gateRecord.blocking_requirement_ids} tone="red" />
+                {gateRecord.assessed_at ? (
+                  <p className="text-[11px] text-slate-400">{stringValue(gateRecord.assessed_at)}</p>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
+  if (!card || card.card_type !== "next_question") return null;
+
+  const payload = asRecord(card.payload);
+  const question = stringValue(payload.question);
+  const whyNow = stringValue(payload.why_now);
+  const score = stringValue(payload.score_total ?? payload.score);
+
+  if (!question && !whyNow && !score) return null;
+
+  return (
+    <Section title="Next Question">
+      <div className="space-y-2" data-testid="next-question-section">
+        {question ? (
+          <p className="text-xs font-medium leading-5 text-slate-700" data-testid="next-question-text">
+            {question}
+          </p>
         ) : null}
-        {gates.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {gates.map((gate) => (
-              <Pill key={gate}>{formatLabel(gate)}</Pill>
-            ))}
-          </div>
+        {whyNow ? <p className="text-xs leading-5 text-slate-500">{whyNow}</p> : null}
+        {score ? (
+          <Pill tone="blue">
+            <span data-testid="next-question-score">{score}</span>
+          </Pill>
         ) : null}
       </div>
     </Section>
@@ -76,27 +122,37 @@ function ReadinessPanel({
 export function StrategyCompletenessRail({
   completeness,
   readiness,
+  nextQuestion,
 }: {
   completeness: StrategyCompleteness | null;
-  readiness?: WorkshopReadinessAssessment | null;
+  readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
+  nextQuestion?: WorkshopCard | null;
 }) {
+  const metadata = asRecord(completeness?.metadata);
+
   if (!completeness) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
-        <p className="text-xs text-slate-400">策略完整度尚未評估</p>
+      <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
+        <div className="flex flex-col items-center justify-center gap-2 p-4 text-center" data-testid="completeness-empty">
+          <p className="text-xs text-slate-400">策略完整度尚未評估</p>
+        </div>
+        <ReadinessPanel readiness={readiness} metadata={metadata} />
+        <NextQuestionPanel card={nextQuestion} />
       </div>
     );
   }
 
-  const metadata = asRecord(completeness.metadata);
   const progress = dimensionProgress(completeness);
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto p-3">
+    <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Completeness</span>
-          <span className={cn("text-xs font-semibold", OVERALL_TONE[completeness.overall_grade])}>
+          <span
+            className={cn("text-xs font-semibold", OVERALL_TONE[completeness.overall_grade])}
+            data-testid="completeness-overall-grade"
+          >
             {formatLabel(completeness.overall_grade)}
           </span>
         </div>
@@ -114,14 +170,18 @@ export function StrategyCompletenessRail({
       <Section title="Dimensions">
         <div className="space-y-3">
           {completeness.dimensions.map((dim) => (
-            <div className="space-y-2 border-l border-slate-200 pl-3" key={dim.dimension}>
+            <div
+              className="space-y-2 border-l border-slate-200 pl-3"
+              data-testid={`completeness-dimension-${dim.dimension}`}
+              key={dim.dimension}
+            >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-700">
                   <DimensionIcon grade={dim.grade} />
                   <span className="truncate">{formatLabel(dim.dimension)}</span>
                 </span>
                 <Pill tone={dim.grade === "complete" ? "green" : dim.grade === "partial" ? "amber" : "red"}>
-                  {formatLabel(dim.grade)}
+                  <span data-testid={`completeness-dimension-${dim.dimension}-grade`}>{formatLabel(dim.grade)}</span>
                 </Pill>
               </div>
               <TextList items={dim.gaps} tone="amber" />
@@ -136,6 +196,7 @@ export function StrategyCompletenessRail({
       </Section>
 
       <ReadinessPanel readiness={readiness} metadata={metadata} />
+      <NextQuestionPanel card={nextQuestion} />
     </div>
   );
 }

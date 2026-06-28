@@ -525,10 +525,10 @@ async function clickDrilldown(
 test.describe("F02 Control Room", () => {
   test.describe.configure({ timeout: 60_000 });
 
-  // 2026-06-15 console consolidation: the standalone Control Room page was folded
-  // into the single Cockpit console. The legacy console routes now redirect to
-  // /management/cockpit; loop / sentinel / intervention detail keeps its own routes
-  // (/management/loops, /sentinel, /interventions) covered by their own specs.
+  // 2026-06-15 console consolidation: the public Control Room route was folded
+  // into the single Cockpit console. The release-gate legacy read fixture route
+  // stays on /management/control-room-legacy so F02/F18 can exercise
+  // /bff/v5/control-room without making it a canonical console entry.
   test("redirects consolidated console aliases to the cockpit", async ({
     page,
   }) => {
@@ -539,7 +539,6 @@ test.describe("F02 Control Room", () => {
 
     for (const alias of [
       "/management/control-room",
-      "/management/control-room-legacy",
       "/management/command-center",
       "/management/overview",
       "/management/one-ring",
