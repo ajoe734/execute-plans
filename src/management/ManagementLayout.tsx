@@ -11,7 +11,7 @@ import {
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
   Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart, CalendarClock,
-  Beaker, Calculator,
+  Beaker, Calculator, KeyRound,
 } from "lucide-react";
 
 export const ManagementLayout = () => {
@@ -94,6 +94,7 @@ export const ManagementLayout = () => {
       { to: "/management/channels", label: t("nav.channels"), icon: Radio },
     ]},
     { label: t("groups.system"), items: [
+      { to: "/management/openclaw-llm-auth", label: "OpenClaw LLM Auth", icon: KeyRound },
       { to: "/management/data-sources", label: t("nav.dataSourcesManagement"), icon: Database },
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },

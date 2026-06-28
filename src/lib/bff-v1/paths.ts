@@ -172,6 +172,8 @@ export const paths = {
   managementAiConversations: (limit?: number) =>
     `${BASE}/management/ai/conversations${limit ? `?limit=${enc(String(limit))}` : ""}`,
   assistantMode: () => `${BASE}/assistant/mode`,
+  assistantProviders: (authProbe = false) =>
+    `${BASE}/assistant/providers${authProbe ? "?auth_probe=true" : ""}`,
   assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
   assistantProviderReauthStatus: (sessionId: string, provider?: string) =>
     `${BASE}/assistant/provider/reauth/${enc(sessionId)}${provider ? `?provider=${enc(provider)}` : ""}`,

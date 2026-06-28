@@ -5,6 +5,7 @@ import {
   streamManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
+  fetchAssistantProviders,
   fetchAssistantProviderReauthStatus,
   fetchManagementAiConversationList,
   generateAssistantDevDocs,
@@ -151,6 +152,57 @@ describe("Management AI orchestrator status", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(404);
     expect(result.message).toContain("BFF 404");
+  });
+
+  it("reads assistant provider auth readiness with usage quota from the BFF", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      status: "ok",
+      data: [
+        {
+          provider: "codex",
+          provider_name: "Codex CLI",
+          runtime: "openclaw_gateway_cli_mount",
+          ready: false,
+          status: "degraded",
+          auth_status: "failed",
+          degraded_reason: "refresh token expired",
+          mount_mode: "service_user",
+          usage: {
+            status: "captured",
+            source: "snapshot",
+            remaining: 12,
+            remaining_percent: 24,
+            limit: 50,
+            used: 38,
+            unit: "requests",
+            reset_at: "2026-06-29T00:00:00Z",
+          },
+        },
+      ],
+      meta: { auth_probe: true },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchAssistantProviders({ authProbe: true });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers?auth_probe=true");
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex",
+      providerName: "Codex CLI",
+      ready: false,
+      authStatus: "failed",
+      degradedReason: "refresh token expired",
+    });
+    expect(result.providers[0].usage).toMatchObject({
+      remaining: 12,
+      remainingPercent: 24,
+      limit: 50,
+      used: 38,
+      resetAt: "2026-06-29T00:00:00Z",
+    });
   });
 });
 

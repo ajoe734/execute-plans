@@ -24,6 +24,7 @@ import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapit
 import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
+import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
 import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -68,6 +69,7 @@ export const OneRingCockpitPage = () => {
         </Button>
       </header>
       <SystemStateStrip model={model.strip} />
+      <OpenClawLlmAuthPanel mode="summary" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
         <PersonaLeagueSnapshot rows={league ?? lSeed} />

@@ -83,6 +83,7 @@ import {
   DataSourceManagementPage,
   Ep5CanaryReadinessPage,
   HumanGateDetailPage,
+  OpenClawLlmAuthPage,
 } from "@/management/pages/oversight/_stubs";
 // 2026-05-22 PM-12 — Performance & League pages.
 import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
@@ -144,6 +145,7 @@ const App = () => (
               <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="data-sources" element={<DataSourceManagementPage />} />
+              <Route path="openclaw-llm-auth" element={<OpenClawLlmAuthPage />} />
               <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
               <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
               {/* ask page retired — redundant with the floating agent panel */}
