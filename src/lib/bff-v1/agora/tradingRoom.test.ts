@@ -206,6 +206,35 @@ describe("getTradingRoom — read-only, no mutation headers", () => {
     expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
   });
+
+  it("normalizes missing live aggregate sections to safe UI defaults", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        data: {
+          strategies: [
+            {
+              id: "strategy-live-1",
+              name: "Live Strategy",
+            },
+          ],
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const aggregate = await getTradingRoom(BASE);
+
+    expect(aggregate.queue_summary).toEqual({ entry: 0, add: 0, reduce: 0, exit: 0, review: 0 });
+    expect(aggregate.risk_summary).toEqual({ state: "normal", summary: undefined, alerts: [] });
+    expect(aggregate.strategies[0]).toMatchObject({
+      strategy_id: "strategy-live-1",
+      strategy_spec_registry_id: "strategy-live-1",
+      title: "Live Strategy",
+      readiness_state: "blocked",
+      monitoring_state: "inactive",
+      pending_event_counts: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+    });
+  });
 });
 
 describe("getDecisionEvent — returns null on 404", () => {
