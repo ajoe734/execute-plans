@@ -6,6 +6,7 @@ import {
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
   fetchAssistantProviderReauthStatus,
+  fetchManagementAiConversationList,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
   startAssistantProviderReauth,
@@ -602,5 +603,58 @@ describe("Management AI stream", () => {
     expect(result.providerStatus?.status).toBe("degraded");
     expect(result.providerStatus?.reasonCode).toBe("OPENCLAW_RESPONSES_FAILED");
     expect(result.message).toBe("provider failed");
+  });
+});
+
+describe("Management AI conversation list (history index hydration)", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("lists server-side conversations and normalizes snake/camel fields", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: [
+        { session_id: "mgmt-nl-aaa", title: "first chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        { sessionId: "mgmt-nl-bbb", title: "", updatedAt: "2026-06-21T11:00:00Z", turnCount: 2 },
+        { title: "no id — dropped" },
+      ],
+      meta: { count: 2 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(50);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(2);
+    expect(res.conversations[0]).toEqual({
+      sessionId: "mgmt-nl-aaa",
+      title: "first chat",
+      updatedAt: "2026-06-20T10:00:00Z",
+      createdAt: "2026-06-20T09:00:00Z",
+      turnCount: 4,
+    });
+    expect(res.conversations[1].sessionId).toBe("mgmt-nl-bbb");
+    expect(res.conversations[1].turnCount).toBe(2);
+
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain("/management/ai/conversations");
+    expect(calledUrl).toContain("limit=50");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "GET" });
+  });
+
+  it("returns a visible failure when the BFF list endpoint errors", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ detail: "boom" }, 500));
+
+    const res = await fetchManagementAiConversationList();
+
+    expect(res.ok).toBe(false);
+    if (res.kind !== "failure") throw new Error("expected failure");
+    expect(res.status).toBe(500);
   });
 });

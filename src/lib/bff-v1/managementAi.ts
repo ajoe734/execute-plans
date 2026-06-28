@@ -1739,3 +1739,77 @@ export async function fetchManagementAiConversation(
   }));
   return { ok: true, kind: "ok", sessionId: String(data.sessionId ?? data.session_id ?? sessionId), turns };
 }
+
+
+// ---- Conversation list (server-side history index) ----
+
+export interface ManagementAiConversationSummary {
+  sessionId: string;
+  title: string;
+  updatedAt: string | null;
+  createdAt: string | null;
+  turnCount: number;
+}
+
+export interface ConversationListOk {
+  ok: true;
+  kind: "ok";
+  conversations: ManagementAiConversationSummary[];
+}
+
+export interface ConversationListFailure {
+  ok: false;
+  kind: "failure";
+  status: number | null;
+  message: string;
+}
+
+export type ConversationListResult = ConversationListOk | ConversationListFailure;
+
+/**
+ * List the caller's server-side Management AI conversations.
+ *
+ * The left-rail history index is a localStorage cache, NOT the source of
+ * truth. When localStorage is cleared (fresh browser, cache wipe, FE redeploy
+ * that bumps the storage key) the rail goes empty even though the server still
+ * has every session. This pulls the authoritative list so the FE can rebuild
+ * the index. Independent of OpenClaw / provider health — history readback must
+ * not be gated on the tool-policy degraded banner.
+ */
+export async function fetchManagementAiConversationList(
+  limit = 50,
+): Promise<ConversationListResult> {
+  const base = detectBaseUrl();
+  if (!base) return { ok: false, kind: "failure", status: null, message: "BFF base URL is not configured." };
+  const headers = buildHeaders({ method: "GET" });
+  const url = `${base}${paths.managementAiConversations(limit)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET", headers, credentials: "include" });
+  } catch (err) {
+    return { ok: false, kind: "failure", status: null, message: (err as Error)?.message ?? "Network error." };
+  }
+  const body = await res.text();
+  if (!res.ok) return { ok: false, kind: "failure", status: res.status, message: `BFF ${res.status}` };
+  let parsed: { data?: unknown; items?: unknown } | undefined;
+  try { parsed = body ? JSON.parse(body) as { data?: unknown; items?: unknown } : undefined; } catch { parsed = undefined; }
+  const rawItems = Array.isArray(parsed?.data)
+    ? parsed!.data
+    : Array.isArray(parsed?.items)
+      ? parsed!.items
+      : [];
+  const conversations: ManagementAiConversationSummary[] = [];
+  for (const item of rawItems as Array<Record<string, unknown>>) {
+    const sessionId = asString(item.sessionId ?? item.session_id ?? item.id);
+    if (!sessionId) continue;
+    const turnCountRaw = item.turnCount ?? item.turn_count;
+    conversations.push({
+      sessionId,
+      title: asString(item.title) ?? "",
+      updatedAt: asString(item.updatedAt ?? item.updated_at) ?? null,
+      createdAt: asString(item.createdAt ?? item.created_at) ?? null,
+      turnCount: typeof turnCountRaw === "number" ? turnCountRaw : 0,
+    });
+  }
+  return { ok: true, kind: "ok", conversations };
+}

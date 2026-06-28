@@ -168,6 +168,9 @@ export const paths = {
   managementNlAskStream: () => `${BASE}/management/nl/ask/stream`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+  // List the caller's server-side conversations (history index source of truth).
+  managementAiConversations: (limit?: number) =>
+    `${BASE}/management/ai/conversations${limit ? `?limit=${enc(String(limit))}` : ""}`,
   assistantMode: () => `${BASE}/assistant/mode`,
   assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
   assistantProviderReauthStatus: (sessionId: string, provider?: string) =>
