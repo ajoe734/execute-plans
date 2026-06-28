@@ -106,6 +106,21 @@ export interface AssistantRepairWorkspaceStatus {
   worktreeCount?: number;
 }
 
+export interface AssistantProviderUsage {
+  status?: string | null;
+  source?: string | null;
+  remaining?: number | string | null;
+  remainingPercent?: number | string | null;
+  limit?: number | string | null;
+  used?: number | string | null;
+  unit?: string | null;
+  resetAt?: string | null;
+  updatedAt?: string | null;
+  checkedAt?: string | null;
+  reason?: string | null;
+  [key: string]: unknown;
+}
+
 export interface AssistantProviderReadinessStatus {
   available?: boolean;
   provider?: string;
@@ -121,9 +136,22 @@ export interface AssistantProviderReadinessStatus {
   mountMode?: string;
   checkedAt?: string;
   source?: string;
+  message?: string | null;
+  usage?: AssistantProviderUsage | Record<string, unknown> | null;
+  quota?: AssistantProviderUsage | Record<string, unknown> | null;
   capabilities?: { read?: boolean; repairWrite?: boolean };
   repairWorkspace?: AssistantRepairWorkspaceStatus | null;
 }
+
+export type AssistantProvidersResult =
+  | {
+      ok: true;
+      kind: "ok";
+      status: string | null;
+      providers: AssistantProviderReadinessStatus[];
+      meta: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface AssistantDevBridgeInboxStatus {
   path?: string;
@@ -615,6 +643,25 @@ function adaptRepairWorkspaceStatus(raw: unknown): AssistantRepairWorkspaceStatu
   };
 }
 
+function adaptProviderUsage(raw: unknown): AssistantProviderUsage | Record<string, unknown> | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    ...r,
+    status: asString(r.status) ?? null,
+    source: asString(r.source) ?? null,
+    remaining: (r.remaining as number | string | null | undefined) ?? null,
+    remainingPercent: ((r.remainingPercent ?? r.remaining_percent) as number | string | null | undefined) ?? null,
+    limit: (r.limit as number | string | null | undefined) ?? null,
+    used: (r.used as number | string | null | undefined) ?? null,
+    unit: asString(r.unit) ?? null,
+    resetAt: asString(r.resetAt ?? r.reset_at) ?? null,
+    updatedAt: asString(r.updatedAt ?? r.updated_at) ?? null,
+    checkedAt: asString(r.checkedAt ?? r.checked_at) ?? null,
+    reason: asString(r.reason) ?? null,
+  };
+}
+
 function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessStatus | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -634,11 +681,76 @@ function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessS
     mountMode: asString(r.mountMode ?? r.mount_mode),
     checkedAt: asString(r.checkedAt ?? r.checked_at),
     source: asString(r.source),
+    message: asString(r.message) ?? null,
+    usage: adaptProviderUsage(r.usage),
+    quota: adaptProviderUsage(r.quota),
     capabilities: capabilities ? {
       read: asBoolean(capabilities.read),
       repairWrite: asBoolean(capabilities.repairWrite ?? capabilities.repair_write),
     } : undefined,
     repairWorkspace: adaptRepairWorkspaceStatus(r.repairWorkspace ?? r.repair_workspace),
+  };
+}
+
+export async function fetchAssistantProviders(
+  options?: { authProbe?: boolean; signal?: AbortSignal },
+): Promise<AssistantProvidersResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviders(options?.authProbe ?? false)}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const providers = asRecordArray(parsed?.data)
+    .map(adaptProviderReadinessStatus)
+    .filter((item): item is AssistantProviderReadinessStatus => Boolean(item));
+  return {
+    ok: true,
+    kind: "ok",
+    status: asString(parsed?.status) ?? null,
+    providers,
+    meta: asRecord(parsed?.meta) ?? null,
   };
 }
 
