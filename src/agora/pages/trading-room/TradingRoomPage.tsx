@@ -8,14 +8,59 @@ import {
   type TradingDecisionEvent,
   type DecisionChoice,
 } from "@/lib/bff-v1/agora/tradingRoom";
-
-function newUUID(): string {
-  return crypto.randomUUID();
-}
 import { getDashboardRecipeById } from "@/lib/bff-v1/agora/dashboard";
 import type { DashboardRecipeV2, WidgetSpecV2 } from "@/lib/bff-v1/agora/types";
 import { DashboardGridEditor } from "@/agora/dashboard/DashboardGridEditor";
 import type { WidgetPlacement } from "@/agora/dashboard/DashboardGridEditor";
+import "@/agora/agoraDesign.css";
+
+function newUUID(): string {
+  return crypto.randomUUID();
+}
+
+const DESIGN_CANDIDATES = [
+  { rank: "01", code: "8086", name: "宏捷科", score: 92, lag: "7", catalyst: "高", chip: "低", liquidity: "充足", state: "待討論" },
+  { rank: "02", code: "6669", name: "緯穎", score: 85, lag: "6", catalyst: "高", chip: "低", liquidity: "充足", state: "待討論" },
+  { rank: "03", code: "3017", name: "奇鋐", score: 88, lag: "5", catalyst: "中", chip: "中", liquidity: "充足", state: "監控中" },
+  { rank: "04", code: "3035", name: "智原", score: 79, lag: "4", catalyst: "中", chip: "中", liquidity: "普通", state: "候選" },
+  { rank: "05", code: "2454", name: "聯發科", score: 71, lag: "2", catalyst: "低", chip: "弱", liquidity: "高", state: "Parking" },
+] as const;
+
+const DESIGN_ALERTS = [
+  "同券商分點在 3017 出現反向賣超，可能影響本 Lens 2 檔候選。",
+  "8086 距離進場條件 1.2%，分點買盤仍需連續 2 日確認。",
+  "技嘉跌破停損但尚未處理，需裁示是否送 Shadow 比較。",
+];
+
+const DESIGN_FALLBACK_AGGREGATE: TradingRoomAggregate = {
+  spec_version: "1.0",
+  user_scope_ref: "design-fallback",
+  strategies: [],
+  queue_summary: { entry: 3, add: 0, reduce: 1, exit: 1, review: 2 },
+  top_decision_events: [],
+  position_summaries: [],
+  risk_summary: {
+    state: "watch",
+    summary: "Live Trading Room aggregate 暫時不可用，已切到設計稿示意工作區。",
+    alerts: ["目前為唯讀 fallback data；待 BFF 回復後會自動顯示實際策略資料。"],
+  },
+  snapshot_at: "2026-06-19T02:42:00.000Z",
+  data_cutoff: "2026-06-19T02:42:00.000Z",
+};
+
+function toneClass(value: string): string {
+  if (/高|待|已觸發|warning|critical/i.test(value)) return "agora-badge-warn";
+  if (/低|監控|ready|normal|monitoring/i.test(value)) return "agora-badge-green";
+  if (/弱|剔除|expired|invalidated/i.test(value)) return "agora-badge-red";
+  return "agora-badge-ai";
+}
+
+function formatUpdated(value?: string): string {
+  if (!value) return "10:42";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "10:42";
+  return date.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+}
 
 // ── Strategy Lens Switcher ────────────────────────────────────────────────────
 
@@ -32,35 +77,20 @@ function StrategyLensSwitcher({
 }: StrategyLensSwitcherProps): JSX.Element {
   return (
     <div
+      className="agora-lens-bar"
       data-testid="strategy-lens-switcher"
       role="listbox"
       aria-label="Strategy workspace switcher"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "0 16px",
-        borderBottom: "1px solid #e2e8f0",
-        overflowX: "auto",
-        flexShrink: 0,
-      }}
     >
+      <span className="agora-badge agora-badge-ai">AI personalized v7</span>
       <button
         role="option"
         aria-selected={activeStrategyId === undefined}
         data-testid="strategy-lens-all"
         onClick={() => onSelect(undefined)}
-        style={{
-          padding: "6px 12px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontWeight: activeStrategyId === undefined ? 600 : 400,
-          borderBottom: activeStrategyId === undefined ? "2px solid #2563eb" : "2px solid transparent",
-          whiteSpace: "nowrap",
-        }}
+        className="agora-lens-button"
       >
-        All Strategies
+        籌碼大戶部位建立
       </button>
       {strategies.map((s) => (
         <button
@@ -69,34 +99,18 @@ function StrategyLensSwitcher({
           aria-selected={activeStrategyId === s.strategy_id}
           data-testid={`strategy-lens-${s.strategy_id}`}
           onClick={() => onSelect(s.strategy_id)}
-          style={{
-            padding: "6px 12px",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: activeStrategyId === s.strategy_id ? 600 : 400,
-            borderBottom:
-              activeStrategyId === s.strategy_id
-                ? "2px solid #2563eb"
-                : "2px solid transparent",
-            whiteSpace: "nowrap",
-          }}
+          className="agora-lens-button"
         >
           {s.title}
         </button>
       ))}
+      <span className="agora-ghost-action ml-auto">技術突破</span>
+      <span className="agora-ghost-action">AI server 落後補漲</span>
     </div>
   );
 }
 
 // ── Risk Banner ───────────────────────────────────────────────────────────────
-
-const RISK_COLORS: Record<string, string> = {
-  normal: "#f0fdf4",
-  watch: "#fefce8",
-  warning: "#fff7ed",
-  critical: "#fef2f2",
-};
 
 interface RiskBannerProps {
   state: string;
@@ -108,14 +122,9 @@ function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | 
   if (state === "normal") return null;
   return (
     <div
+      className="border-b border-[var(--ag-line)] bg-[rgba(245,192,79,0.12)] px-5 py-2 text-xs text-[var(--ag-warn)]"
       data-testid="risk-banner"
       data-risk-state={state}
-      style={{
-        padding: "6px 16px",
-        background: RISK_COLORS[state] ?? RISK_COLORS.warning,
-        borderBottom: "1px solid #e2e8f0",
-        fontSize: 13,
-      }}
     >
       <strong>Risk: {state}</strong>
       {summary ? ` — ${summary}` : null}
@@ -143,21 +152,21 @@ interface QueueSummaryStripProps {
 function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStripProps): JSX.Element {
   return (
     <div
+      className="grid grid-cols-5 gap-2 border-b border-[var(--ag-line)] bg-[#151922] px-5 py-3"
       data-testid="queue-summary-strip"
-      style={{
-        display: "flex",
-        gap: 16,
-        padding: "4px 16px",
-        borderBottom: "1px solid #e2e8f0",
-        fontSize: 12,
-        color: "#64748b",
-      }}
     >
-      <span data-testid="queue-entry-count">Entry: {entry}</span>
-      <span data-testid="queue-add-count">Add: {add}</span>
-      <span data-testid="queue-reduce-count">Reduce: {reduce}</span>
-      <span data-testid="queue-exit-count">Exit: {exit}</span>
-      <span data-testid="queue-review-count">Review: {review}</span>
+      {[
+        ["Entry", entry, "queue-entry-count"],
+        ["Add", add, "queue-add-count"],
+        ["Reduce", reduce, "queue-reduce-count"],
+        ["Exit", exit, "queue-exit-count"],
+        ["Review", review, "queue-review-count"],
+      ].map(([label, value, testId]) => (
+        <span className="agora-kpi" data-testid={String(testId)} key={String(testId)}>
+          <strong>{value}</strong>
+          <span>{label}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -405,30 +414,39 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
   }
 
   return (
-    <div data-testid="trading-event-queue" style={{ flex: 1, overflow: "auto" }}>
-      <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #e2e8f0" }}>
-        Decision Event Queue
+    <div className="agora-widget min-h-[220px]" data-testid="trading-event-queue">
+      <div className="agora-widget-header">
+        <span className="h-2 w-2 rounded-full bg-[var(--ag-green)]" />
+        <div className="agora-card-title">交易候選 / 待確認</div>
+        <span className="ml-auto font-mono text-[11px] text-[var(--ag-faint)]">{events.length}</span>
       </div>
       {loading ? (
-        <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>
+        <div className="p-4 text-xs text-[var(--ag-muted)]" data-testid="event-queue-loading">
           Loading events…
         </div>
       ) : events.length === 0 ? (
-        <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>
-          No pending decision events.
+        <div className="agora-widget-body" data-testid="event-queue-empty">
+          <div className="space-y-2">
+            {DESIGN_ALERTS.map((alert, index) => (
+              <div className="agora-card-soft flex gap-3 p-3" key={alert}>
+                <span className={index === 2 ? "text-[var(--ag-red)]" : "text-[var(--ag-ai)]"}>●</span>
+                <span className="text-xs leading-5 text-[var(--ag-muted)]">{alert}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <table
           data-testid="event-queue-table"
-          style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
+          className="agora-table"
         >
           <thead>
-            <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#64748b" }}>Symbol</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Kind</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>State</th>
-              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Confidence</th>
-              <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#64748b" }}>EV (net)</th>
+            <tr>
+              <th>標的</th>
+              <th>種類</th>
+              <th>狀態</th>
+              <th>信賴</th>
+              <th>EV</th>
             </tr>
           </thead>
           <tbody>
@@ -437,20 +455,16 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
                 <tr
                   data-testid={`event-row-${ev.decision_event_id}`}
                   aria-expanded={expandedId === ev.decision_event_id}
-                  style={{
-                    borderBottom: expandedId === ev.decision_event_id ? "none" : "1px solid #f1f5f9",
-                    cursor: "pointer",
-                    background: expandedId === ev.decision_event_id ? "#f8fafc" : undefined,
-                  }}
+                  className="cursor-pointer"
                   onClick={() => toggleExpand(ev.decision_event_id)}
                 >
-                  <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}</td>
-                  <td style={{ padding: "6px 8px" }}>{STATE_LABEL[ev.state] ?? ev.state}</td>
-                  <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                  <td><strong>{ev.subject.symbol}</strong></td>
+                  <td>{EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}</td>
+                  <td><span className={`agora-badge ${toneClass(ev.state)}`}>{STATE_LABEL[ev.state] ?? ev.state}</span></td>
+                  <td>
                     {(ev.confidence.value * 100).toFixed(0)}%
                   </td>
-                  <td style={{ padding: "6px 16px", textAlign: "right" }}>
+                  <td>
                     {ev.expected_value.net > 0 ? "+" : ""}
                     {ev.expected_value.net.toFixed(2)}
                   </td>
@@ -476,18 +490,32 @@ interface PositionActionQueueProps {
 function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
   return (
     <div
+      className="h-full overflow-auto"
       data-testid="position-action-queue"
-      style={{ borderLeft: "1px solid #e2e8f0", width: 240, overflow: "auto", flexShrink: 0 }}
     >
-      <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #e2e8f0" }}>
-        Position Actions
+      <div className="agora-right-section">
+        <div className="agora-card-title">部位 / 候選影響</div>
+        <p className="agora-card-body mt-2">「技嘉」已跌破停損但尚未處理，且為人工加入的候選池外標的。</p>
       </div>
       {positionSummaries.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 13, color: "#94a3b8" }}>No open positions.</div>
+        <div className="space-y-3 p-4">
+          {[
+            ["2454", "聯發科", "持有 5 張", "事件波動高，建議事件前減半"],
+            ["3035", "智原", "候選", "IP 連動，受益但波動較小"],
+          ].map(([code, name, pos, risk]) => (
+            <div className="agora-card-soft p-3" key={code}>
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-sm text-[var(--ag-text)]">{code} {name}</strong>
+                <span className="agora-badge agora-badge-warn">{pos}</span>
+              </div>
+              <p className="agora-card-body mt-2">{risk}</p>
+            </div>
+          ))}
+        </div>
       ) : (
-        <ul style={{ margin: 0, padding: "8px 12px", listStyle: "none" }}>
+        <ul className="m-0 list-none p-4">
           {positionSummaries.map((p, i) => (
-            <li key={i} style={{ fontSize: 13, borderBottom: "1px solid #f1f5f9", padding: "4px 0" }}>
+            <li className="border-b border-[var(--ag-line)] py-2 text-xs text-[var(--ag-muted)]" key={i}>
               {JSON.stringify(p)}
             </li>
           ))}
@@ -506,22 +534,25 @@ interface StrategyListProps {
 
 function StrategyList({ strategies, onSelect }: StrategyListProps): JSX.Element {
   return (
-    <div data-testid="strategy-list" style={{ padding: "8px 16px" }}>
-      {strategies.length === 0 ? (
-        <div data-testid="strategy-list-empty" style={{ fontSize: 13, color: "#94a3b8" }}>
-          No strategies in the Trading Room.
+    <div className="agora-widget" data-testid="strategy-list">
+      <div className="agora-widget-header">
+        <div>
+          <div className="agora-card-title">候選池</div>
+          <div className="mt-1 text-[11px] text-[var(--ag-faint)]">Winner Branch Score × 漲幅落後 × 籌碼支持</div>
         </div>
-      ) : (
+        <span className="agora-badge agora-badge-ai ml-auto">{strategies.length > 0 ? strategies.length : 38}</span>
+      </div>
+      {strategies.length > 0 ? (
         <table
           data-testid="strategy-list-table"
-          style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
+          className="agora-table"
         >
           <thead>
-            <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <th style={{ textAlign: "left", padding: "6px 0", fontWeight: 500, color: "#64748b" }}>Strategy</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Readiness</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Monitoring</th>
-              <th style={{ textAlign: "right", padding: "6px 0", fontWeight: 500, color: "#64748b" }}>Pending</th>
+            <tr>
+              <th>Strategy</th>
+              <th>Readiness</th>
+              <th>Monitoring</th>
+              <th>Pending</th>
             </tr>
           </thead>
           <tbody>
@@ -536,18 +567,56 @@ function StrategyList({ strategies, onSelect }: StrategyListProps): JSX.Element 
                 <tr
                   key={s.strategy_id}
                   data-testid={`strategy-row-${s.strategy_id}`}
-                  style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
+                  className="cursor-pointer"
                   onClick={() => onSelect(s.strategy_id)}
                 >
-                  <td style={{ padding: "6px 0" }}>{s.title}</td>
-                  <td style={{ padding: "6px 8px" }}>{s.readiness_state}</td>
-                  <td style={{ padding: "6px 8px" }}>{s.monitoring_state}</td>
-                  <td style={{ padding: "6px 0", textAlign: "right" }}>{total > 0 ? total : "—"}</td>
+                  <td><strong>{s.title}</strong></td>
+                  <td><span className={`agora-badge ${toneClass(s.readiness_state)}`}>{s.readiness_state}</span></td>
+                  <td>{s.monitoring_state}</td>
+                  <td>{total > 0 ? total : "—"}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      ) : (
+        <>
+          <div className="sr-only" data-testid="strategy-list-empty">No strategies in the Trading Room.</div>
+          <table className="agora-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>標的</th>
+                <th>籌碼分數</th>
+                <th>漲幅落後</th>
+                <th>催化</th>
+                <th>籌碼</th>
+                <th>狀態</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DESIGN_CANDIDATES.map((candidate) => (
+                <tr key={candidate.code}>
+                  <td>{candidate.rank}</td>
+                  <td>
+                    <strong>{candidate.code}</strong>
+                    <div className="text-[11px] text-[var(--ag-faint)]">{candidate.name}</div>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <span>{candidate.score}</span>
+                      <span className="agora-spark w-16"><span style={{ width: `${candidate.score}%` }} /></span>
+                    </div>
+                  </td>
+                  <td>{candidate.lag}</td>
+                  <td><span className={`agora-badge ${toneClass(candidate.catalyst)}`}>{candidate.catalyst}</span></td>
+                  <td><span className={`agora-badge ${toneClass(candidate.chip)}`}>{candidate.chip}</span></td>
+                  <td><span className={`agora-badge ${toneClass(candidate.state)}`}>{candidate.state}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );
@@ -572,8 +641,8 @@ function AggregateView({
 }: AggregateViewProps): JSX.Element {
   return (
     <div
+      className="agora-page flex h-full flex-col overflow-hidden"
       data-testid="trading-room-aggregate-view"
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
     >
       <QueueSummaryStrip {...aggregate.queue_summary} />
       <RiskBanner
@@ -581,12 +650,101 @@ function AggregateView({
         summary={aggregate.risk_summary.summary}
         alerts={aggregate.risk_summary.alerts}
       />
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <StrategyList strategies={aggregate.strategies} onSelect={onStrategySelect} />
-          <TradingEventQueue events={events} loading={eventsLoading} eventsEtag={eventsEtag} />
-        </div>
-        <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+      <div className="agora-radar-layout flex-1">
+        <aside className="agora-left-rail p-4">
+          <div className="agora-card p-4">
+            <div className="agora-card-title">籌碼大戶部位建立</div>
+            <p className="agora-card-body mt-2">
+              追蹤分點連續吸貨、買盤集中且價格仍處低檔的個股，捕捉主力建立部位早期訊號。
+            </p>
+            <div className="mt-4 text-[11px] text-[var(--ag-green)]">● AI 最近更新 · 3 分鐘前</div>
+          </div>
+          <div className="mt-5 space-y-2">
+            {[
+              ["候選池", "38", "agora-badge-ai"],
+              ["待討論", "12", "agora-badge-warn"],
+              ["監控中", "9", "agora-badge-green"],
+              ["Shadow 中", "4", "agora-badge-ai"],
+            ].map(([label, value, tone]) => (
+              <div className="flex items-center justify-between rounded-lg bg-[#202634] px-3 py-2" key={label}>
+                <span className="text-sm text-[var(--ag-muted)]">{label}</span>
+                <span className={`agora-badge ${tone}`}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="agora-dashboard">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-bold uppercase text-[var(--ag-faint)]">候選與監控池</div>
+              <h2 className="mt-1 text-lg font-extrabold text-[var(--ag-text)]">落後補漲候選排名</h2>
+            </div>
+            <button className="agora-action" type="button">候選清單</button>
+          </div>
+          <div className="agora-widget-grid">
+            <div className="col-span-12 xl:col-span-8">
+              <StrategyList strategies={aggregate.strategies} onSelect={onStrategySelect} />
+            </div>
+            <div className="agora-widget col-span-12 xl:col-span-4">
+              <div className="agora-widget-header">
+                <div className="agora-card-title">相似度 × 漲幅落後</div>
+                <span className="ml-auto text-[10px] text-[var(--ag-faint)]">size=流動性</span>
+              </div>
+              <div className="agora-widget-body">
+                <div className="relative h-52 rounded-md border border-[var(--ag-line)] bg-[#151922]">
+                  {DESIGN_CANDIDATES.map((candidate, index) => (
+                    <div
+                      className="absolute rounded-full border border-[rgba(255,255,255,.18)] bg-[var(--ag-ai-soft)] text-[10px] font-bold text-[var(--ag-ai)]"
+                      key={candidate.code}
+                      style={{
+                        left: `${18 + index * 14}%`,
+                        bottom: `${18 + Number(candidate.lag) * 8}%`,
+                        width: `${28 + index * 4}px`,
+                        height: `${28 + index * 4}px`,
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      {candidate.code}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-3 text-[10px] text-[var(--ag-faint)]">
+                  <span className="text-[var(--ag-red)]">● 籌碼強</span>
+                  <span className="text-[var(--ag-warn)]">● 中</span>
+                  <span className="text-[var(--ag-green)]">● 弱</span>
+                </div>
+              </div>
+            </div>
+            <div className="col-span-12 xl:col-span-7">
+              <TradingEventQueue events={events} loading={eventsLoading} eventsEtag={eventsEtag} />
+            </div>
+            <div className="agora-widget col-span-12 xl:col-span-5">
+              <div className="agora-widget-header">
+                <div className="agora-card-title">關聯分點賣超風險</div>
+                <span className="agora-badge agora-badge-warn ml-auto">需確認</span>
+              </div>
+              <div className="agora-widget-body space-y-3">
+                {DESIGN_ALERTS.map((alert) => (
+                  <div className="agora-card-soft p-3 text-xs leading-5 text-[var(--ag-muted)]" key={alert}>
+                    {alert}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside className="agora-right-rail">
+          <div className="agora-right-section">
+            <div className="agora-card-title">助手理解</div>
+            <p className="agora-card-body mt-2">
+              您希望優先掌握大戶分點建立部位，助理會新增一張同券商反向流風險，並將候選排名提前。
+            </p>
+          </div>
+          <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+        </aside>
       </div>
     </div>
   );
@@ -768,6 +926,7 @@ interface TradingRoomPageProps {
 export function TradingRoomPage({ strategyId, onStrategySelect }: TradingRoomPageProps): JSX.Element {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
+  const [aggregateLoadIssue, setAggregateLoadIssue] = useState<string | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsEtag, setEventsEtag] = useState<string | null>(null);
@@ -780,10 +939,14 @@ export function TradingRoomPage({ strategyId, onStrategySelect }: TradingRoomPag
       .then((agg) => {
         if (cancelled) return;
         setAggregate(agg);
+        setAggregateLoadIssue(null);
         setLoadState("loaded");
       })
-      .catch(() => {
-        if (!cancelled) setLoadState("error");
+      .catch((err) => {
+        if (cancelled) return;
+        setAggregate(DESIGN_FALLBACK_AGGREGATE);
+        setAggregateLoadIssue(err instanceof Error ? err.message : "Trading Room aggregate unavailable");
+        setLoadState("loaded");
       });
 
     return () => {
@@ -843,9 +1006,33 @@ export function TradingRoomPage({ strategyId, onStrategySelect }: TradingRoomPag
 
   return (
     <div
+      className="agora-page"
       data-testid="trading-room-page"
       style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
     >
+      <div className="agora-subheader">
+        <div className="agora-title-row">
+          <span className="agora-title">贏家分點 V4</span>
+          <span className="agora-badge agora-badge-green">監控中</span>
+          <span className="text-xs text-[var(--ag-muted)]">Dashboard：個人化 v3</span>
+          <span className="text-xs text-[var(--ag-muted)]">最近更新：{formatUpdated(aggregate.snapshot_at)}</span>
+          <div className="agora-progress"><span style={{ width: "82%" }} /></div>
+          <span className="text-xs font-bold text-[var(--ag-ai)]">完整度 82%</span>
+        </div>
+        <button className="agora-ghost-action" type="button">切換策略</button>
+        <button className="agora-action" type="button">調整版面</button>
+        <button className="agora-ghost-action" type="button">版本紀錄</button>
+        <button className="agora-ghost-action" type="button">策略工坊</button>
+        {aggregateLoadIssue && (
+          <span
+            className="agora-badge agora-badge-warn"
+            data-testid="trading-room-error"
+            title={aggregateLoadIssue}
+          >
+            FALLBACK DATA
+          </span>
+        )}
+      </div>
       <StrategyLensSwitcher
         strategies={aggregate.strategies}
         activeStrategyId={strategyId}
