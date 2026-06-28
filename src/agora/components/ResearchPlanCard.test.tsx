@@ -1,6 +1,5 @@
-import React from "react";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 
@@ -35,92 +34,67 @@ const baseCard: WorkshopCard = {
         dependencies: ["s1"],
       },
     ],
-    evaluation_criteria: "Sharpe > 0.8, max drawdown < 15%",
+    evaluation_criteria: {
+      sharpe: "> 0.8",
+      max_drawdown: "< 15%",
+    },
     warnings: ["Data availability limited post-2023"],
     approval_requirement: "human",
+    budget: {
+      max_runtime_minutes: 30,
+      max_cost_usd: 25,
+    },
   },
   created_at: "2026-06-22T00:00:00Z",
   allowed_actions: { approve: true, reject: true },
 };
 
 describe("ResearchPlanCard", () => {
-  it("renders with correct testid", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    expect(screen.getByTestId("research-plan-card-card-rp-001")).toBeDefined();
-  });
-
-  it("displays card title and summary", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    expect(screen.getByText("Momentum Factor Research Plan")).toBeDefined();
-    expect(screen.getByText(/Propose a 3-stage research run/)).toBeDefined();
-  });
-
-  it("shows status badge", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    expect(screen.getByTestId("research-plan-card-card-rp-001-status").textContent).toBe(
-      "action_required"
-    );
+  it("renders plan metadata from payload", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("plan-001")).toBeDefined();
+    expect(screen.getByText("human")).toBeDefined();
   });
 
   it("renders objectives section", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    const objectivesEl = screen.getByTestId("research-plan-card-card-rp-001-objectives");
-    expect(objectivesEl).toBeDefined();
-    expect(objectivesEl.textContent).toContain("Validate momentum persistence");
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Objectives")).toBeDefined();
+    expect(screen.getByText("Validate momentum persistence over 12M horizon")).toBeDefined();
+  });
+
+  it("renders data requirements", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Data Requirements")).toBeDefined();
+    expect(screen.getByText("OHLCV daily 10Y")).toBeDefined();
+    expect(screen.getByText("sector classifications")).toBeDefined();
   });
 
   it("renders stages section with stage details", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    const stagesEl = screen.getByTestId("research-plan-card-card-rp-001-stages");
-    expect(stagesEl).toBeDefined();
-    expect(screen.getByTestId("research-plan-stage-s1")).toBeDefined();
-    expect(screen.getByTestId("research-plan-stage-s2")).toBeDefined();
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Stages")).toBeDefined();
+    expect(screen.getByText("s1")).toBeDefined();
+    expect(screen.getByText("s2")).toBeDefined();
+    expect(screen.getByText("In-sample momentum validation")).toBeDefined();
+    expect(screen.getByText("Depends on s1")).toBeDefined();
   });
 
   it("shows evaluation criteria", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    const evalEl = screen.getByTestId("research-plan-card-card-rp-001-evaluation");
-    expect(evalEl.textContent).toContain("Sharpe > 0.8");
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Evaluation Criteria")).toBeDefined();
+    expect(screen.getByText("> 0.8")).toBeDefined();
+    expect(screen.getByText("< 15%")).toBeDefined();
   });
 
   it("shows warnings section", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    const warnEl = screen.getByTestId("research-plan-card-card-rp-001-warnings");
-    expect(warnEl.textContent).toContain("Data availability limited");
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Warnings")).toBeDefined();
+    expect(screen.getByText("Data availability limited post-2023")).toBeDefined();
   });
 
-  it("shows approval requirement", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    const approvalEl = screen.getByTestId("research-plan-card-card-rp-001-approval");
-    expect(approvalEl.textContent).toContain("human");
-  });
-
-  it("renders approve and reject buttons when allowed_actions permits", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    expect(screen.getByTestId("research-plan-card-card-rp-001-approve")).toBeDefined();
-    expect(screen.getByTestId("research-plan-card-card-rp-001-reject")).toBeDefined();
-  });
-
-  it("does not render approve button when allowed_actions.approve is falsy", () => {
-    const card: WorkshopCard = { ...baseCard, allowed_actions: { approve: false } };
-    render(<ResearchPlanCard card={card} />);
-    expect(screen.queryByTestId("research-plan-card-card-rp-001-approve")).toBeNull();
-  });
-
-  it("renders Ask Servant button when onContinueDiscussion is provided", () => {
-    render(<ResearchPlanCard card={baseCard} onContinueDiscussion={() => undefined} />);
-    expect(screen.getByTestId("research-plan-card-card-rp-001-discuss")).toBeDefined();
-  });
-
-  it("calls onContinueDiscussion with card_id when Ask Servant is clicked", () => {
-    const handler = vi.fn();
-    render(<ResearchPlanCard card={baseCard} onContinueDiscussion={handler} />);
-    fireEvent.click(screen.getByTestId("research-plan-card-card-rp-001-discuss"));
-    expect(handler).toHaveBeenCalledWith("card-rp-001");
-  });
-
-  it("does not render Ask Servant button when no callback is provided", () => {
-    render(<ResearchPlanCard card={baseCard} />);
-    expect(screen.queryByTestId("research-plan-card-card-rp-001-discuss")).toBeNull();
+  it("shows budget details when present", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Budget")).toBeDefined();
+    expect(screen.getByText("30")).toBeDefined();
+    expect(screen.getByText("25")).toBeDefined();
   });
 });

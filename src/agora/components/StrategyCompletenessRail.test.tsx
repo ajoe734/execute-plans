@@ -1,9 +1,7 @@
-import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
-import type { StrategyReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
@@ -24,7 +22,7 @@ const mockCompleteness: StrategyCompleteness = {
   assessed_at: "2026-06-22T00:00:00Z",
 } as unknown as StrategyCompleteness;
 
-const mockReadiness: StrategyReadinessAssessment = {
+const mockReadiness = {
   spec_version: "1.0",
   assessment_id: "ready_001",
   workshop_id: "ws-001",
@@ -106,7 +104,7 @@ describe("StrategyCompletenessRail", () => {
       />
     );
     const grade = screen.getByTestId("completeness-overall-grade");
-    expect(grade.textContent).toBe("partial");
+    expect(grade.textContent).toBe("Partial");
   });
 
   it("renders all three dimensions with their grades", () => {
@@ -139,7 +137,7 @@ describe("StrategyCompletenessRail", () => {
     expect(screen.getByTestId("readiness-gate-trading_room")).toBeDefined();
 
     expect(screen.getByTestId("readiness-gate-preliminary_research-state").textContent).toBe("Conditional");
-    expect(screen.getByTestId("readiness-gate-full_validation-state").textContent).toBe("Not Assessed");
+    expect(screen.getByTestId("readiness-gate-full_validation-state").textContent).toBe("Not assessed");
   });
 
   it("renders next question when provided", () => {

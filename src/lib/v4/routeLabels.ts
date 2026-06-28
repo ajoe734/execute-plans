@@ -76,15 +76,9 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/overview", i18nKey: "nav.overview", parent: "/management" },
 
   // agora
-  { path: "/agora/daily", i18nKey: "nav.daily", parent: "/agora" },
-  { path: "/agora/markets", i18nKey: "nav.markets", parent: "/agora" },
-  { path: "/agora/watchlist", i18nKey: "nav.watchlist", parent: "/agora" },
-  { path: "/agora/signals", i18nKey: "nav.signals", parent: "/agora" },
-  { path: "/agora/notebook", i18nKey: "nav.notebook", parent: "/agora" },
-  { path: "/agora/ask", i18nKey: "nav.askPersonas", parent: "/agora" },
-  { path: "/agora/decisions", i18nKey: "nav.decisions", parent: "/agora" },
-  { path: "/agora/triage", i18nKey: "nav.triage", parent: "/agora" },
-  { path: "/agora/insights", i18nKey: "nav.insights", parent: "/agora" },
+  { path: "/agora/trading-room", i18nKey: "nav.tradingRoom", parent: "/agora" },
+  { path: "/agora/strategy-workshop", i18nKey: "nav.strategyWorkshop", parent: "/agora" },
+  { path: "/agora/strategy-performance", i18nKey: "nav.strategyPerformance", parent: "/agora" },
 ];
 
 const sorted = [...ROUTE_LABELS].sort((a, b) => b.path.length - a.path.length);

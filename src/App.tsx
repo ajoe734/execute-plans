@@ -7,7 +7,6 @@ import "@/i18n";
 
 import { PlatformShell } from "@/platform/PlatformShell";
 import { ManagementLayout } from "@/management/ManagementLayout";
-import { AgoraLayout } from "@/agora/AgoraLayout";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { StrategyWorkshopPage } from "@/agora/pages/strategy-workshop/StrategyWorkshopPage";
@@ -35,8 +34,6 @@ import {
   JobsPage, AlertsPage, IncidentsPage, ApprovalsPage, AuditPage,
 } from "@/management/pages/Operations";
 
-import { CommitteeRoom } from "@/agora/pages/CommitteeRoom";
-import { SignalDetail } from "@/agora/pages/SignalDetail";
 // CommandCenter import removed — Pack E E7 redirects /management/command-center to /management/control-room.
 import { RiskCenter } from "@/management/pages/RiskCenter";
 import { IncidentDetail } from "@/management/pages/IncidentDetail";
@@ -46,21 +43,6 @@ import { RoutePolicyDetail } from "@/management/pages/governance/RoutePolicyDeta
 import { PermissionMatrixPage } from "@/management/pages/governance/PermissionMatrixPage";
 import { MemoryGovernancePage } from "@/management/pages/governance/MemoryGovernancePage";
 import { ConsultRulesPage } from "@/management/pages/governance/ConsultRulesPage";
-import { DailyBrief } from "@/agora/pages/DailyBrief";
-import { AskPersonas } from "@/agora/pages/AskPersonas";
-import { Notebook } from "@/agora/pages/Notebook";
-import { Markets } from "@/agora/pages/Markets";
-import { Watchlist } from "@/agora/pages/Watchlist";
-import { SignalReview } from "@/agora/pages/SignalReview";
-import { AlertTriage } from "@/agora/pages/AlertTriage";
-import { DecisionJournal } from "@/agora/pages/DecisionJournal";
-import { InsightInbox } from "@/agora/pages/InsightInbox";
-import { TrainerStudio } from "@/agora/pages/TrainerStudio";
-import { MemoryReview } from "@/agora/pages/MemoryReview";
-import { SkillCoaching } from "@/agora/pages/SkillCoaching";
-import { PersonaLab } from "@/agora/pages/PersonaLab";
-import { EvaluationSuites } from "@/agora/pages/EvaluationSuites";
-import { AgoraChannels } from "@/agora/pages/AgoraChannels";
 import { QAChecklist } from "@/platform/pages/QAChecklist";
 import { AuditViewer } from "@/platform/pages/AuditViewer";
 import { SettingsPage } from "@/management/pages/phase2/Settings";
@@ -72,7 +54,7 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
-import { LoopsPage } from "@/management/pages/v5/V5Pages";
+import { ControlRoomPage, LoopsPage } from "@/management/pages/v5/V5Pages";
 // Studios: only the two cross-entity/sandbox tools that have no equivalent on the
 // per-entity detail pages are kept (FormulaStudio A/B-compare+backtest, SkillSandbox
 // test harness). The per-entity studios were removed — operate on the detail page.
@@ -171,8 +153,8 @@ const App = () => (
               <Route path="persona-league" element={<PersonaLeaguePage />} />
               <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
               <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
-              {/* Legacy alias kept for ops review bookmarks → Cockpit. */}
-              <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
+              {/* Legacy alias kept for F18 perf/release-gate fixture reads. */}
+              <Route path="control-room-legacy" element={<ControlRoomPage />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
               <Route path="loops/optimization" element={<OptimizationLoopPage />} />
@@ -252,42 +234,14 @@ const App = () => (
               <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
             </Route>
 
-            {/* TradingDesk — three-tab shell (trading-room, strategy-workshop, strategy-performance).
-                Separate from AgoraLayout so it renders its own CommandBar/TabBar/ServantDrawer/BottomStrip. */}
+            {/* TradingDesk — canonical Agora shell with trading-room, strategy-workshop, and strategy-performance tabs. */}
             <Route path="/agora" element={<TradingDeskLayout />}>
               <Route index element={<Navigate to="/agora/trading-room" replace />} />
               <Route path="trading-room" element={<TradingRoomPage />} />
               <Route path="strategy-workshop" element={<StrategyWorkshopPage />} />
               <Route path="strategy-workshop/:workshopId" element={<StrategyWorkshopPage />} />
               <Route path="strategy-performance" element={<div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">策略執行與績效 — 即將推出</div>} />
-            </Route>
-
-            {/* Agora Workbench */}
-            <Route path="/agora" element={<AgoraLayout />}>
-              <Route index element={<DailyBrief />} />
-              <Route path="daily" element={<DailyBrief />} />
-              <Route path="markets" element={<Markets />} />
-              <Route path="watchlist" element={<Watchlist />} />
-              <Route path="market" element={<Navigate to="/agora/markets" replace />} />
-              <Route path="signals" element={<SignalReview />} />
-              <Route path="signals/:id" element={<SignalDetail />} />
-              <Route path="triage" element={<AlertTriage />} />
-              <Route path="notebook" element={<Notebook />} />
-              <Route path="ask" element={<AskPersonas />} />
-              <Route path="committee" element={<CommitteeRoom />} />
-              <Route path="committee/:sessionId" element={<CommitteeRoom />} />
-              <Route path="journal" element={<DecisionJournal />} />
-              <Route path="decisions" element={<Navigate to="/agora/journal" replace />} />
-              <Route path="insights" element={<InsightInbox />} />
-              <Route path="trainer" element={<TrainerStudio />} />
-              <Route path="trainer/:personaId" element={<TrainerStudio />} />
-              <Route path="memory" element={<MemoryReview />} />
-              <Route path="skill-coaching" element={<SkillCoaching />} />
-              <Route path="skills" element={<Navigate to="/agora/skill-coaching" replace />} />
-              <Route path="persona-lab" element={<PersonaLab />} />
-              <Route path="evaluations" element={<EvaluationSuites />} />
-              <Route path="eval" element={<Navigate to="/agora/evaluations" replace />} />
-              <Route path="channels" element={<AgoraChannels />} />
+              <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
             </Route>
 
             {/* Dev-only QA harness — not mounted in production builds. */}
