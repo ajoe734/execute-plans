@@ -21,6 +21,10 @@ on:
         description: "Pantheon backend/BFF SHA"
         required: false
         default: ""
+      pantheon_contract_ref:
+        description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
+        required: false
+        default: "dev"
       soft_fail:
         description: "Emergency override to keep release gate in observation mode. Hard-gate is the default since 2026-05-14 (FE-INT-GATE early switch). Set true only if a transient external dependency is blocking valid merges."
         required: false
@@ -54,6 +58,7 @@ jobs:
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/fleet"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
+      PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
@@ -80,7 +85,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || 'dev' }}
+          ref: ${{ env.PANTHEON_AGORA_CONTRACT_REF }}
           path: pantheon-contract
           token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
 
