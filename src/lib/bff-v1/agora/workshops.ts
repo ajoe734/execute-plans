@@ -95,22 +95,51 @@ export interface WorkshopStreamEvent {
   occurred_at: string;
 }
 
+// ─── Response normalization ──────────────────────────────────────────────────
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function dataFrom(value: unknown): unknown {
+  const root = recordFrom(value);
+  return root.data ?? value;
+}
+
+function entityFrom<T>(value: unknown): T {
+  return recordFrom(dataFrom(value)) as T;
+}
+
+function itemsFrom<T>(value: unknown, aliases: string[] = []): T[] {
+  const data = dataFrom(value);
+  if (Array.isArray(data)) return data as T[];
+  const record = recordFrom(data);
+  for (const key of ["items", ...aliases]) {
+    const items = record[key];
+    if (Array.isArray(items)) return items as T[];
+  }
+  return [];
+}
+
 // ─── Workshop CRUD ─────────────────────────────────────────────────────────────
 
 export async function listWorkshops(params?: {
   status?: StrategyWorkshop["status"];
   limit?: number;
   cursor?: string;
-}): Promise<{ items: StrategyWorkshop[]; cursor?: string }> {
+}): Promise<StrategyWorkshop[]> {
   const query: Record<string, string | number | undefined> = {};
   if (params?.status) query.status = params.status;
   if (params?.limit) query.limit = params.limit;
   if (params?.cursor) query.cursor = params.cursor;
-  return bffFetch<{ items: StrategyWorkshop[]; cursor?: string }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: "/bff/agora/workshops",
     query,
   });
+  return itemsFrom<StrategyWorkshop>(body, ["workshops", "results"]);
 }
 
 export async function createWorkshop(body: {
@@ -118,18 +147,20 @@ export async function createWorkshop(body: {
   participant_persona_ids?: string[];
   metadata?: Record<string, unknown>;
 }): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: "/bff/agora/workshops",
     body,
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Workshop messages ─────────────────────────────────────────────────────────
@@ -167,10 +198,11 @@ export async function getWorkshopCompleteness(
   workshopId: string,
 ): Promise<StrategyCompleteness | null> {
   try {
-    return await bffFetch<StrategyCompleteness>({
+    const response = await bffFetch<unknown>({
       method: "GET",
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/completeness`,
     });
+    return entityFrom<StrategyCompleteness>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
       return null;
@@ -244,20 +276,34 @@ export async function concludeWorkshop(
   workshopId: string,
   body?: { notes?: string },
 ): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/conclude`,
     body: body ?? {},
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────
 
-export function openWorkshopStream(workshopId: string): EventSource {
-  return new EventSource(
+export function openWorkshopStream(
+  workshopId: string,
+  onEvent?: (event: WorkshopStreamEvent) => void,
+): () => void {
+  const source = new EventSource(
     `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
     { withCredentials: true },
   );
+  if (onEvent) {
+    source.onmessage = (message) => {
+      try {
+        onEvent(entityFrom<WorkshopStreamEvent>(JSON.parse(message.data)));
+      } catch {
+        // Ignore malformed keepalive or compatibility messages.
+      }
+    };
+  }
+  return () => source.close();
 }
 
 // ─── v1.3: Cards ──────────────────────────────────────────────────────────────
@@ -265,15 +311,16 @@ export function openWorkshopStream(workshopId: string): EventSource {
 export async function listWorkshopCards(
   workshopId: string,
   params?: { after_sequence?: number; limit?: number },
-): Promise<{ items: WorkshopCard[] }> {
+): Promise<WorkshopCard[]> {
   const query: Record<string, string | number | undefined> = {};
   if (params?.after_sequence !== undefined) query.after_sequence = params.after_sequence;
   if (params?.limit) query.limit = params.limit;
-  return bffFetch<{ items: WorkshopCard[] }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/cards`,
     query,
   });
+  return itemsFrom<WorkshopCard>(body, ["cards", "results"]);
 }
 
 // ─── v1.3: Readiness ──────────────────────────────────────────────────────────
@@ -285,11 +332,12 @@ export async function getWorkshopReadiness(
   const query: Record<string, string | undefined> = {};
   if (gate) query.gate = gate;
   try {
-    return await bffFetch<WorkshopReadinessAssessment>({
+    const response = await bffFetch<unknown>({
       method: "GET",
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/readiness`,
       query,
     });
+    return entityFrom<WorkshopReadinessAssessment>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
       return null;
@@ -302,9 +350,10 @@ export async function reassessWorkshopReadiness(
   workshopId: string,
   body: { gate: WorkshopReadinessGate },
 ): Promise<WorkshopReadinessAssessment> {
-  return bffFetch<WorkshopReadinessAssessment>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/readiness/reassess`,
     body,
   });
+  return entityFrom<WorkshopReadinessAssessment>(response);
 }
