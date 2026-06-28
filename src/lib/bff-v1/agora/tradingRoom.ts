@@ -193,6 +193,26 @@ function recordFrom(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function arrayFrom(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function numberFrom(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function optionalNumberFrom(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stringFrom(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function stringArrayFrom(value: unknown): string[] {
+  return arrayFrom(value).filter((item): item is string => typeof item === "string");
+}
+
 async function parseJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return {};
@@ -203,10 +223,75 @@ async function parseJson(res: Response): Promise<unknown> {
   }
 }
 
+function normalizeQueueSummary(value: unknown): TradingRoomQueueSummary {
+  const record = recordFrom(value);
+  return {
+    entry: numberFrom(record.entry),
+    add: numberFrom(record.add),
+    reduce: numberFrom(record.reduce),
+    exit: numberFrom(record.exit),
+    review: numberFrom(record.review),
+  };
+}
+
+const READINESS_STATES = new Set(["blocked", "conditional", "ready", "stale"]);
+const MONITORING_STATES = new Set(["inactive", "shadow", "paper_requested", "monitoring", "paused"]);
+const RISK_STATES = new Set(["normal", "watch", "warning", "critical"]);
+
+function normalizeStrategyEntry(value: unknown): TradingRoomStrategyEntry | null {
+  const record = recordFrom(value);
+  const strategyId = stringFrom(record.strategy_id ?? record.id);
+  if (!strategyId) return null;
+  const readiness = stringFrom(record.readiness_state);
+  const monitoring = stringFrom(record.monitoring_state);
+  return {
+    strategy_id: strategyId,
+    strategy_spec_registry_id: stringFrom(record.strategy_spec_registry_id ?? record.registry_id, strategyId),
+    title: stringFrom(record.title ?? record.name, strategyId),
+    readiness_state: READINESS_STATES.has(readiness)
+      ? (readiness as TradingRoomStrategyEntry["readiness_state"])
+      : "blocked",
+    dashboard_recipe_id: stringFrom(record.dashboard_recipe_id) || undefined,
+    monitoring_state: MONITORING_STATES.has(monitoring)
+      ? (monitoring as TradingRoomStrategyEntry["monitoring_state"])
+      : "inactive",
+    candidate_count: optionalNumberFrom(record.candidate_count),
+    position_count: optionalNumberFrom(record.position_count),
+    pending_event_counts: normalizeQueueSummary(record.pending_event_counts),
+    shadow_status: stringFrom(record.shadow_status) || undefined,
+    performance_summary: recordFrom(record.performance_summary),
+    staleness_reasons: stringArrayFrom(record.staleness_reasons),
+  };
+}
+
+function normalizeRiskSummary(value: unknown): TradingRoomRiskSummary {
+  const record = recordFrom(value);
+  const state = stringFrom(record.state);
+  return {
+    state: RISK_STATES.has(state) ? (state as TradingRoomRiskSummary["state"]) : "normal",
+    summary: stringFrom(record.summary) || undefined,
+    alerts: stringArrayFrom(record.alerts),
+  };
+}
+
 function extractAggregate(value: unknown): TradingRoomAggregate {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
-  return data as unknown as TradingRoomAggregate;
+  const strategies = arrayFrom(data.strategies)
+    .map(normalizeStrategyEntry)
+    .filter((entry): entry is TradingRoomStrategyEntry => entry !== null);
+  return {
+    ...(data as unknown as Partial<TradingRoomAggregate>),
+    spec_version: "1.0",
+    user_scope_ref: stringFrom(data.user_scope_ref, "unknown"),
+    strategies,
+    queue_summary: normalizeQueueSummary(data.queue_summary),
+    top_decision_events: arrayFrom(data.top_decision_events) as TradingDecisionEvent[],
+    position_summaries: arrayFrom(data.position_summaries),
+    risk_summary: normalizeRiskSummary(data.risk_summary),
+    snapshot_at: stringFrom(data.snapshot_at),
+    data_cutoff: stringFrom(data.data_cutoff),
+  };
 }
 
 function extractDecisionEvents(value: unknown): TradingDecisionEvent[] {
