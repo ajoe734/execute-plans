@@ -12,6 +12,7 @@ import {
   createWidgetRevisionProposal,
   type WidgetRevisionAcceptResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { BffError } from "@/lib/bff-v1/errors";
 import {
   getWidgetRegistryEntry,
   type ChartSpecKind,
@@ -34,11 +35,25 @@ const QUICK_INSTRUCTIONS = [
 
 type SubmitState = "idle" | "creating" | "ready" | "accepting" | "error";
 
+interface RevisionUiError {
+  code?: string;
+  message: string;
+  status?: number;
+}
+
 interface RevisionDraft {
   proposedSpec: TradingRoomWidgetSpec;
   rationale: string;
   warnings: string[];
   dataAvailability: DataAvailabilityStatus;
+}
+
+interface DiffRow {
+  after: string;
+  before: string;
+  changed: boolean;
+  id: string;
+  label: string;
 }
 
 export interface WorkspaceWidgetRevisionDrawerProps {
@@ -82,6 +97,90 @@ function relatedEvidence(widget: TradingRoomWidgetSpec, view?: TradingRoomViewSp
     view?.rationale,
   ].filter(Boolean);
   return parts.join(" · ") || "-";
+}
+
+function interactionSummary(widget: TradingRoomWidgetSpec): string {
+  return widget.interactions
+    .map((interaction) => {
+      const payload = interaction.payload ? ` ${stableText(interaction.payload)}` : "";
+      return `${interaction.kind}${payload}`;
+    })
+    .join(" · ") || "-";
+}
+
+function placementSummary(widget: TradingRoomWidgetSpec): string {
+  const placement = widget.placement;
+  const maxWidth = placement.maxWidth ?? widget.maxSize.width;
+  const maxHeight = placement.maxHeight ?? widget.maxSize.height;
+  return [
+    `x:${placement.x}`,
+    `y:${placement.y}`,
+    `w:${placement.width}`,
+    `h:${placement.height}`,
+    `min:${placement.minWidth}x${placement.minHeight}`,
+    `max:${maxWidth}x${maxHeight}`,
+  ].join(" · ");
+}
+
+function warningSummary(view?: TradingRoomViewSpec | null): string {
+  const warnings = (view?.warnings ?? []).map(safeWarningText).filter(Boolean);
+  return warnings.join(" · ") || "-";
+}
+
+function dataAvailabilitySummary(view?: TradingRoomViewSpec | null): string {
+  return view?.dataAvailability ?? "-";
+}
+
+function chartDiffSummary(widget: TradingRoomWidgetSpec): string {
+  return `${chartSpecSummary(widget.chartSpec)} · ${stableText(widget.chartSpec)}`;
+}
+
+function buildWidgetDiffRows(before: TradingRoomWidgetSpec, after: TradingRoomWidgetSpec | null): DiffRow[] {
+  if (!after) return [];
+  const rows: Array<Omit<DiffRow, "changed">> = [
+    { id: "title", label: "Title", before: before.title, after: after.title },
+    { id: "widget-type", label: "Widget type", before: before.widgetType, after: after.widgetType },
+    { id: "data-source", label: "Data source", before: before.dataSource, after: after.dataSource },
+    { id: "query-filters", label: "Query filters", before: stableText(before.query.filters), after: stableText(after.query.filters) },
+    { id: "query-window", label: "Query window", before: before.query.window ?? "-", after: after.query.window ?? "-" },
+    { id: "query-sort", label: "Query sort", before: stableText(before.query.sort), after: stableText(after.query.sort) },
+    { id: "query-limit", label: "Query limit", before: stableText(before.query.limit), after: stableText(after.query.limit) },
+    { id: "chart-spec", label: "Chart spec", before: chartDiffSummary(before), after: chartDiffSummary(after) },
+    { id: "interactions", label: "Interactions", before: interactionSummary(before), after: interactionSummary(after) },
+    { id: "sensitivity", label: "Sensitivity", before: before.sensitivity, after: after.sensitivity },
+    { id: "placement", label: "Placement", before: placementSummary(before), after: placementSummary(after) },
+  ];
+  return rows.map((row) => ({ ...row, changed: row.before !== row.after }));
+}
+
+function revisionErrorMessage(error: BffError, fallback: string): string {
+  switch (error.status) {
+    case 403:
+      return "目前權限或範圍無法建立這個 Widget revision proposal。";
+    case 404:
+      return "這個 Workspace、View 或 Widget 已不存在，請重新整理後再試。";
+    case 412:
+      return "Workspace 版本已過期，請重新整理後再套用。";
+    case 422:
+      return error.message || "Widget revision proposal 未通過驗證。";
+    case 502:
+      return "BFF 回傳的 Widget revision proposal 格式不完整。";
+    default:
+      return error.message || fallback;
+  }
+}
+
+function toRevisionUiError(error: unknown, fallback: string): RevisionUiError {
+  if (error instanceof BffError) {
+    return {
+      code: error.code,
+      message: revisionErrorMessage(error, fallback),
+      status: error.status,
+    };
+  }
+  return {
+    message: error instanceof Error ? error.message : fallback,
+  };
 }
 
 function requestedChartKind(instruction: string, allowedKinds: readonly ChartSpecKind[]): ChartSpecKind | null {
@@ -185,6 +284,61 @@ function ContextRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }) {
+  return (
+    <div
+      data-durable-snapshot={durable ? "backend-proposal" : "draft-preview"}
+      data-testid="workspace-widget-before-after-diff"
+      style={{
+        background: "#171b25",
+        border: "1px solid #343b4c",
+        borderRadius: 10,
+        display: "grid",
+        gap: 0,
+        marginTop: 10,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ color: "#8793a8", fontSize: 11, fontWeight: 900, padding: "9px 10px" }}>
+        {durable ? "Backend beforeSpec / proposedSpec field diff" : "Draft field diff before proposal"}
+      </div>
+      <div
+        style={{
+          background: "#202532",
+          borderTop: "1px solid #343b4c",
+          color: "#8793a8",
+          display: "grid",
+          fontSize: 11,
+          fontWeight: 900,
+          gridTemplateColumns: "112px minmax(0, 1fr) minmax(0, 1fr)",
+        }}
+      >
+        <span style={{ padding: "8px 10px" }}>Field</span>
+        <span style={{ padding: "8px 10px" }}>Before</span>
+        <span style={{ padding: "8px 10px" }}>After</span>
+      </div>
+      {rows.map((row) => (
+        <div
+          data-changed={row.changed ? "true" : "false"}
+          data-testid={`workspace-widget-diff-${row.id}`}
+          key={row.id}
+          style={{
+            borderTop: "1px solid #343b4c",
+            display: "grid",
+            gridTemplateColumns: "112px minmax(0, 1fr) minmax(0, 1fr)",
+          }}
+        >
+          <span style={{ color: row.changed ? "#f0b84d" : "#8793a8", fontSize: 11, fontWeight: 900, padding: "8px 10px" }}>
+            {row.label}
+          </span>
+          <span style={diffCellStyle}>{row.before}</span>
+          <span style={{ ...diffCellStyle, color: row.changed ? "#f6f8fc" : "#9aa5b8" }}>{row.after}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function WorkspaceWidgetRevisionDrawer({
   currentEtag,
   disabledReason,
@@ -199,7 +353,7 @@ export function WorkspaceWidgetRevisionDrawer({
   const [proposal, setProposal] = useState<WidgetRevisionProposal | null>(null);
   const [proposalEtag, setProposalEtag] = useState<string | null>(null);
   const [state, setState] = useState<SubmitState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RevisionUiError | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -225,8 +379,13 @@ export function WorkspaceWidgetRevisionDrawer({
   async function submitProposal(event: React.FormEvent) {
     event.preventDefault();
     if (!widget || !draft || !view) return;
+    if (disabledReason) {
+      setError({ message: disabledReason });
+      setState("error");
+      return;
+    }
     if (!validation?.ok) {
-      setError(validation?.messages.join(" ") || "Widget revision validation failed.");
+      setError({ message: validation?.messages.join(" ") || "Widget revision validation failed." });
       setState("error");
       return;
     }
@@ -252,14 +411,14 @@ export function WorkspaceWidgetRevisionDrawer({
       setProposalEtag(result.etag);
       setState("ready");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Widget revision proposal failed.");
+      setError(toRevisionUiError(err, "Widget revision proposal failed."));
       setState("error");
     }
   }
 
   async function acceptProposal(acceptanceAction: "apply" | "keep_original_add_modified_copy") {
     if (!proposal || !currentEtag) {
-      setError("Workspace ETag is required before applying a widget revision.");
+      setError({ message: "Workspace ETag is required before applying a widget revision." });
       setState("error");
       return;
     }
@@ -279,7 +438,7 @@ export function WorkspaceWidgetRevisionDrawer({
       await onRevisionAccepted(result);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Widget revision acceptance failed.");
+      setError(toRevisionUiError(err, "Widget revision acceptance failed."));
       setState("error");
     }
   }
@@ -293,6 +452,7 @@ export function WorkspaceWidgetRevisionDrawer({
 
   const beforeSpec = proposal?.beforeSpec ?? widget;
   const afterSpec = proposal?.proposedSpec ?? draft?.proposedSpec ?? null;
+  const diffRows = buildWidgetDiffRows(beforeSpec, afterSpec);
 
   return (
     <div
@@ -340,14 +500,26 @@ export function WorkspaceWidgetRevisionDrawer({
 
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px 18px" }}>
           <section data-testid="workspace-widget-revision-context" style={{ background: "#171b25", border: "1px solid #343b4c", borderRadius: 10, display: "grid", gap: 12, padding: 14 }}>
+            <ContextRow label="Workspace" value={`${workspace.id} / dashboard v${workspace.dashboardVersion}`} />
+            <ContextRow label="所屬策略" value={`${workspace.strategyId} / ${workspace.strategyVersion}`} />
+            <ContextRow label="所屬 View" value={view ? `${view.title} (${view.id})` : "-"} />
+            <ContextRow label="Widget ID" value={widget.id} />
+            <ContextRow label="Widget 標題" value={widget.title} />
+            <ContextRow label="Widget type" value={widget.widgetType} />
             <ContextRow label="Widget 目的" value={widget.purpose} />
+            <ContextRow label="為何納入" value={widget.whyIncluded} />
             <ContextRow label="資料來源" value={widget.dataSource} />
             <ContextRow label="目前欄位" value={fieldSummary(widget)} />
             <ContextRow label="目前篩選" value={stableText(widget.query.filters)} />
+            <ContextRow label="目前排序" value={stableText(widget.query.sort)} />
+            <ContextRow label="目前筆數上限" value={stableText(widget.query.limit)} />
             <ContextRow label="目前時間窗口" value={widget.query.window ?? "-"} />
             <ContextRow label="目前圖表型態" value={chartSpecSummary(widget.chartSpec)} />
-            <ContextRow label="所屬策略" value={`${workspace.strategyId} / ${workspace.strategyVersion}`} />
-            <ContextRow label="所屬 View" value={view ? `${view.title} (${view.id})` : "-"} />
+            <ContextRow label="可用互動" value={interactionSummary(widget)} />
+            <ContextRow label="資料敏感度" value={widget.sensitivity} />
+            <ContextRow label="目前 Placement" value={placementSummary(widget)} />
+            <ContextRow label="資料可用性" value={dataAvailabilitySummary(view)} />
+            <ContextRow label="Warnings" value={warningSummary(view)} />
             <ContextRow label="相關證據" value={relatedEvidence(widget, view)} />
           </section>
 
@@ -391,8 +563,14 @@ export function WorkspaceWidgetRevisionDrawer({
           </form>
 
           {error ? (
-            <div data-testid="workspace-widget-revision-error" role="alert" style={errorStyle}>
-              {error}
+            <div
+              data-error-code={error.code}
+              data-error-status={error.status}
+              data-testid="workspace-widget-revision-error"
+              role="alert"
+              style={errorStyle}
+            >
+              {error.message}
             </div>
           ) : null}
 
@@ -419,6 +597,9 @@ export function WorkspaceWidgetRevisionDrawer({
               <PreviewCard label="目前" widget={beforeSpec} />
               <PreviewCard label="僕人建議" widget={afterSpec} />
             </div>
+            {diffRows.length ? (
+              <FieldDiffTable durable={Boolean(proposal)} rows={diffRows} />
+            ) : null}
           </section>
         </div>
 
@@ -588,6 +769,16 @@ const previewCardStyle: React.CSSProperties = {
   minHeight: 188,
   minWidth: 0,
   padding: 11,
+};
+
+const diffCellStyle: React.CSSProperties = {
+  borderLeft: "1px solid #343b4c",
+  color: "#9aa5b8",
+  fontFamily: "'IBM Plex Mono', monospace",
+  fontSize: 10.5,
+  lineHeight: 1.4,
+  overflowWrap: "anywhere",
+  padding: "8px 10px",
 };
 
 export default WorkspaceWidgetRevisionDrawer;

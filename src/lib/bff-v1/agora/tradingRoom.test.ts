@@ -648,6 +648,131 @@ describe("Trading Room workspace proposal routes", () => {
     expect(result.etag).toBe('"workspace-etag-v2"');
   });
 
+  it("preserves typed 403 widget revision creation failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createWidgetRevisionProposal(
+        "workspace-001",
+        "widget-001",
+        {
+          dataAvailability: "complete",
+          instruction: "改成表格",
+          proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+          rationale: "Table is better for direct comparison.",
+          viewId: "overview",
+          warnings: [],
+        },
+        { idempotencyKey: "idem-widget-403" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "TENANT_SCOPE_MISMATCH",
+      status: 403,
+    });
+  });
+
+  it("preserves typed 404 widget revision creation failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "widget missing"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createWidgetRevisionProposal(
+        "workspace-001",
+        "widget-missing",
+        {
+          dataAvailability: "complete",
+          instruction: "改成表格",
+          proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+          rationale: "Table is better for direct comparison.",
+          viewId: "overview",
+          warnings: [],
+        },
+        { idempotencyKey: "idem-widget-404" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "RESOURCE_NOT_FOUND",
+      status: 404,
+    });
+  });
+
+  it("preserves typed 412 widget revision accept failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(412, "STATE_CONFLICT", "workspace etag stale"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      acceptWidgetRevisionProposal(
+        "wrp-001",
+        { acceptanceAction: "apply" },
+        { ifMatch: '"workspace-etag-old"', idempotencyKey: "idem-widget-412" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      status: 412,
+    });
+  });
+
+  it("preserves typed 422 widget revision validation failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(422, "VALIDATION_FAILED", "invalid widget spec"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createWidgetRevisionProposal(
+        "workspace-001",
+        "widget-001",
+        {
+          dataAvailability: "complete",
+          instruction: "改成表格",
+          proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+          rationale: "Table is better for direct comparison.",
+          viewId: "overview",
+          warnings: [],
+        },
+        { idempotencyKey: "idem-widget-422" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      status: 422,
+    });
+  });
+
+  it("fails closed on malformed widget revision proposal envelopes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { id: "wrp-001" } }, 201));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createWidgetRevisionProposal(
+        "workspace-001",
+        "widget-001",
+        {
+          dataAvailability: "complete",
+          instruction: "改成表格",
+          proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+          rationale: "Table is better for direct comparison.",
+          viewId: "overview",
+          warnings: [],
+        },
+        { idempotencyKey: "idem-widget-malformed" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "BACKEND_UNAVAILABLE",
+      status: 502,
+    });
+  });
+
   it("preserves typed 403 proposal creation failures", async () => {
     const fetchMock = vi
       .fn()

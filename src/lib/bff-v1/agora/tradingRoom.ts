@@ -510,9 +510,15 @@ function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoo
 }
 
 function extractWidgetRevisionProposal(value: unknown, etag: string | null): WidgetRevisionProposalResult {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  const proposal = recordFrom(data.proposal ?? data);
+  if (!proposal.id || !recordFrom(proposal.beforeSpec).id || !recordFrom(proposal.proposedSpec).id) {
+    throw makeMalformedBffEnvelope("Widget revision proposal response did not include before/after specs.");
+  }
   return {
     etag,
-    proposal: extractDetail<WidgetRevisionProposal>(value),
+    proposal: proposal as unknown as WidgetRevisionProposal,
   };
 }
 
