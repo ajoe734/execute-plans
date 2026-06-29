@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -6,6 +6,17 @@ import {
   OpenClawLlmAuthPanel,
   type OpenClawLlmAuthApi,
 } from "./OpenClawLlmAuthPanel";
+import type { AssistantProvidersResult } from "@/lib/bff-v1/managementAi";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
   return {
@@ -97,6 +108,79 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
 }
 
 describe("OpenClawLlmAuthPanel", () => {
+  it("does not report auth ready while provider auth status is still loading", async () => {
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel
+          api={api({
+            fetchProviders: vi.fn().mockReturnValue(new Promise(() => {})),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("checking auth")).toBeInTheDocument();
+    expect(screen.getByText("Checking assistant provider auth status.")).toBeInTheDocument();
+    expect(screen.queryByText("auth ready")).not.toBeInTheDocument();
+  });
+
+  it("shows a fast provider snapshot while the auth probe refreshes in the background", async () => {
+    const probe = deferred<AssistantProvidersResult>();
+    const fetchProviders = vi.fn(({ authProbe }: { authProbe?: boolean }) => {
+      if (authProbe) return probe.promise;
+      return Promise.resolve({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "codex",
+            providerName: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: true,
+            status: "ready",
+            authStatus: "not_checked",
+          },
+        ],
+        meta: { auth_probe: false },
+      } satisfies AssistantProvidersResult);
+    });
+
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel api={api({ fetchProviders })} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Codex CLI")).toBeInTheDocument();
+    expect(screen.getByText("checking auth")).toBeInTheDocument();
+    expect(screen.getByText("Updating auth probe results.")).toBeInTheDocument();
+
+    await act(async () => {
+      probe.resolve({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "codex",
+            providerName: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "refresh token expired",
+          },
+        ],
+        meta: { auth_probe: true },
+      });
+    });
+
+    expect(await screen.findByText("1 attention")).toBeInTheDocument();
+    expect(screen.getByText("refresh token expired")).toBeInTheDocument();
+    expect(screen.queryByText("Updating auth probe results.")).not.toBeInTheDocument();
+  });
+
   it("renders provider auth and quota status in summary mode with management link", async () => {
     render(
       <MemoryRouter>

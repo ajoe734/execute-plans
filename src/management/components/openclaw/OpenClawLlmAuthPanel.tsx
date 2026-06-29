@@ -51,6 +51,7 @@ interface PanelState {
   mode: AssistantModeStatusResult | null;
   orchestrator: AssistantOrchestratorStatusResult | null;
   providerResult: AssistantProvidersResult | null;
+  authProbePending: boolean;
 }
 
 function textFrom(...values: unknown[]): string {
@@ -163,6 +164,22 @@ function reauthHref(result: AssistantProviderReauthResult | null): string | null
   return result.reauth.verificationUriComplete ?? result.reauth.verificationUri;
 }
 
+function providersFromResults(
+  providerResult: AssistantProvidersResult,
+  orchestratorResult: AssistantOrchestratorStatusResult,
+  previousProviders: AssistantProviderReadinessStatus[] = [],
+): AssistantProviderReadinessStatus[] {
+  if (providerResult.ok && providerResult.providers.length > 0) {
+    return providerResult.providers;
+  }
+  if (previousProviders.length > 0) {
+    return previousProviders;
+  }
+  return orchestratorResult.ok && orchestratorResult.status.providerReadiness
+    ? [orchestratorResult.status.providerReadiness]
+    : [];
+}
+
 export function OpenClawLlmAuthPanel({
   mode = "full",
   api = defaultApi,
@@ -175,6 +192,7 @@ export function OpenClawLlmAuthPanel({
     mode: null,
     orchestrator: null,
     providerResult: null,
+    authProbePending: false,
   });
   const [loading, setLoading] = useState(false);
   const [reauthBusy, setReauthBusy] = useState<string | null>(null);
@@ -182,25 +200,36 @@ export function OpenClawLlmAuthPanel({
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
+    setState((current) => ({ ...current, authProbePending: true }));
     try {
       const [providerResult, modeResult, orchestratorResult] = await Promise.all([
-        api.fetchProviders({ authProbe: true, signal }),
+        api.fetchProviders({ authProbe: false, signal }),
         api.fetchMode({ signal }),
         api.fetchOrchestratorStatus({ signal }),
       ]);
-      const fallbackProvider = orchestratorResult.ok && orchestratorResult.status.providerReadiness
-        ? [orchestratorResult.status.providerReadiness]
-        : [];
+      if (signal?.aborted) return;
+      const providers = providersFromResults(providerResult, orchestratorResult);
       setState({
-        providers: providerResult.ok && providerResult.providers.length > 0
-          ? providerResult.providers
-          : fallbackProvider,
+        providers,
         mode: modeResult,
         orchestrator: orchestratorResult,
         providerResult,
+        authProbePending: true,
       });
+
+      const authProbeResult = await api.fetchProviders({ authProbe: true, signal });
+      if (signal?.aborted) return;
+      setState((current) => ({
+        ...current,
+        providers: providersFromResults(authProbeResult, orchestratorResult, current.providers),
+        providerResult: authProbeResult,
+        authProbePending: false,
+      }));
+    } catch {
+      if (signal?.aborted) return;
+      setState((current) => ({ ...current, authProbePending: false }));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [api]);
 
@@ -216,6 +245,24 @@ export function OpenClawLlmAuthPanel({
   const attentionCount = useMemo(() => state.providers.filter(needsAttention).length, [state.providers]);
   const error = firstError(state);
   const rows = mode === "summary" ? state.providers.slice(0, 3) : state.providers;
+  const checkingAuth = state.authProbePending || (loading && rows.length === 0);
+  const authProbeFailed = Boolean(state.providerResult && !state.providerResult.ok);
+  const authSummaryLabel = checkingAuth
+    ? "checking auth"
+    : authProbeFailed
+      ? "auth unknown"
+    : attentionCount > 0
+      ? `${attentionCount} attention`
+      : rows.length > 0
+        ? "auth ready"
+        : "auth unknown";
+  const authSummaryTone = checkingAuth
+    ? statusTone("pending")
+    : authProbeFailed
+      ? statusTone("unknown")
+    : attentionCount > 0
+      ? statusTone("degraded", false)
+      : statusTone(rows.length > 0 ? "ready" : "unknown", rows.length > 0);
   const href = reauthHref(reauthResult);
 
   const startReauth = useCallback(async (provider: AssistantProviderReadinessStatus) => {
@@ -264,8 +311,8 @@ export function OpenClawLlmAuthPanel({
           <Badge variant="outline" className={statusTone(activeControl ? controlMode?.mode ?? "active" : "inactive", activeControl)}>
             {activeControl ? controlMode?.mode ?? "active" : "control inactive"}
           </Badge>
-          <Badge variant="outline" className={attentionCount > 0 ? statusTone("degraded", false) : statusTone("ready", true)}>
-            {attentionCount > 0 ? `${attentionCount} attention` : "auth ready"}
+          <Badge variant="outline" className={authSummaryTone}>
+            {authSummaryLabel}
           </Badge>
           <Button size="icon-sm" variant="outline" onClick={() => void load()} disabled={loading} aria-label="Refresh OpenClaw LLM auth">
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -292,6 +339,20 @@ export function OpenClawLlmAuthPanel({
           />
         ))}
       </div>
+
+      {loading && rows.length === 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Checking assistant provider auth status.</span>
+        </div>
+      )}
+
+      {state.authProbePending && rows.length > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Updating auth probe results.</span>
+        </div>
+      )}
 
       {!loading && rows.length === 0 && (
         <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
