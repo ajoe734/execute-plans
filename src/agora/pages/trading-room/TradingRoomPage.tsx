@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  acceptTradingRoomWorkspaceProposal,
+  acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
   getTradingRoom,
   listDecisionEvents,
@@ -9,22 +9,14 @@ import {
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
   type DecisionChoice,
+  type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
-  ChartSpecV1,
-  TradingRoomViewSpec,
-  TradingRoomWidgetSpec,
-  TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
 } from "@/lib/bff-v1/agora/types";
-import ChartSpecRenderer from "@/agora/widgets/ChartSpecRenderer";
-import {
-  formatSensitivityLabel,
-  safeWarningText,
-  validateTradingRoomWidgetSpec,
-  WorkspaceProposalPreview,
-} from "@/agora/trading-room/WorkspaceProposalPreview";
+import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
+import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -756,168 +748,6 @@ function TradingRoomGenerationProgress({
   );
 }
 
-function chartSpecSummary(spec: ChartSpecV1): string {
-  const channels = Object.entries(spec.encodings ?? {})
-    .map(([channel, encoding]) => `${channel}:${encoding.field}`)
-    .join(" · ");
-  return channels ? `${spec.kind} · ${channels}` : spec.kind;
-}
-
-function WorkspaceWidgetCard({ widget }: { widget: TradingRoomWidgetSpec }) {
-  const validation = validateTradingRoomWidgetSpec(widget);
-  const placement = widget.placement;
-  const columnStart = Math.max(1, Math.min(12, (placement.x ?? 0) + 1));
-  const width = Math.max(1, Math.min(12, placement.width || 4));
-  const rowStart = Math.max(1, (placement.y ?? 0) + 1);
-  const height = Math.max(1, Math.min(6, placement.height || 3));
-
-  return (
-    <section
-      data-testid={`workspace-widget-${widget.id}`}
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 8,
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        gridColumn: `${columnStart} / span ${Math.min(width, 13 - columnStart)}`,
-        gridRow: `${rowStart} / span ${height}`,
-        minHeight: 220,
-        minWidth: 0,
-        padding: 12,
-      }}
-    >
-      <header style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
-        <div style={{ minWidth: 0 }}>
-          <h3 style={{ color: "#0f172a", fontSize: 14, fontWeight: 700, margin: 0 }}>{widget.title}</h3>
-          <p style={{ color: "#475569", fontSize: 12, lineHeight: 1.45, margin: "4px 0 0" }}>{widget.purpose}</p>
-        </div>
-        <span
-          style={{
-            background: validation.ok ? "#ecfdf5" : "#fef2f2",
-            border: `1px solid ${validation.ok ? "#a7f3d0" : "#fecaca"}`,
-            borderRadius: 999,
-            color: validation.ok ? "#047857" : "#b91c1c",
-            flex: "0 0 auto",
-            fontSize: 11,
-            fontWeight: 700,
-            padding: "4px 8px",
-          }}
-        >
-          {validation.ok ? "validated" : "review"}
-        </span>
-      </header>
-
-      <div style={{ color: "#64748b", display: "grid", fontSize: 12, gap: 4 }}>
-        <span>{validation.title}</span>
-        <span>{widget.dataSource}</span>
-        <span>{formatSensitivityLabel(widget.sensitivity)}</span>
-        <span>{chartSpecSummary(widget.chartSpec)}</span>
-      </div>
-
-      <p style={{ color: "#334155", fontSize: 12, lineHeight: 1.45, margin: 0 }}>{widget.whyIncluded}</p>
-
-      {validation.ok ? (
-        <ChartSpecRenderer data={[]} height={180} spec={widget.chartSpec} />
-      ) : (
-        <div data-testid={`workspace-widget-${widget.id}-validation`} style={{ color: "#b91c1c", fontSize: 12 }}>
-          {validation.messages.join(" ")}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TradingRoomWorkspaceShell({ workspace }: { workspace: TradingRoomWorkspace }) {
-  const sortedViews = [...workspace.views].sort((a, b) => a.order - b.order);
-  const initialViewId = workspace.activeViewId || sortedViews[0]?.id;
-  const [activeViewId, setActiveViewId] = useState(initialViewId);
-  const activeView = sortedViews.find((view) => view.id === activeViewId) ?? sortedViews[0];
-
-  useEffect(() => {
-    setActiveViewId(initialViewId);
-  }, [initialViewId, workspace.id]);
-
-  if (!activeView) {
-    return (
-      <div data-testid="trading-room-workspace-empty" style={{ color: "#94a3b8", fontSize: 13, padding: 16 }}>
-        Workspace contains no views.
-      </div>
-    );
-  }
-
-  return (
-    <section data-testid="trading-room-workspace-shell" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}>
-      <header style={{ borderBottom: "1px solid #e2e8f0", padding: "10px 16px" }}>
-        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-          <div>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Workspace Shell</div>
-            <h2 style={{ color: "#0f172a", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-              {workspace.strategyVersion}
-            </h2>
-          </div>
-          <div style={{ color: "#64748b", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
-            <span>Status: {workspace.status}</span>
-            <span>Dashboard v{workspace.dashboardVersion}</span>
-            <span>Updated {new Date(workspace.updatedAt).toLocaleString()}</span>
-          </div>
-        </div>
-        <nav data-testid="workspace-view-tabs" style={{ display: "flex", gap: 6, marginTop: 10, overflowX: "auto" }}>
-          {sortedViews.map((view) => (
-            <button
-              aria-selected={view.id === activeView.id}
-              data-testid={`workspace-view-tab-${view.id}`}
-              key={view.id}
-              onClick={() => setActiveViewId(view.id)}
-              style={{
-                background: view.id === activeView.id ? "#eff6ff" : "#ffffff",
-                border: "1px solid #cbd5e1",
-                borderBottomColor: view.id === activeView.id ? "#2563eb" : "#cbd5e1",
-                borderRadius: 6,
-                color: view.id === activeView.id ? "#1d4ed8" : "#334155",
-                cursor: "pointer",
-                flex: "0 0 auto",
-                fontSize: 12,
-                fontWeight: 700,
-                padding: "6px 10px",
-              }}
-              type="button"
-            >
-              {view.title}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <div data-testid={`workspace-active-view-${activeView.id}`} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 16 }}>
-        <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong style={{ color: "#0f172a" }}>{activeView.title}</strong> · {activeView.purpose}
-          {activeView.warnings?.length ? (
-            <div style={{ color: "#b45309", marginTop: 4 }}>
-              {activeView.warnings.map((warning, index) => (
-                <span key={`${activeView.id}-warning-${index}`}>{safeWarningText(warning)}</span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            gridAutoRows: "minmax(72px, auto)",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-          }}
-        >
-          {activeView.widgets.map((widget) => (
-            <WorkspaceWidgetCard key={widget.id} widget={widget} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 // ── Strategy Workspace View (specific strategy selected) ──────────────────────
 
 interface StrategyWorkspaceViewProps {
@@ -949,11 +779,11 @@ function StrategyWorkspaceView({
   const [proposalError, setProposalError] = useState<TradingRoomUiError | null>(null);
   const [proposalRevision, setProposalRevision] = useState(0);
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
-  const [workspace, setWorkspace] = useState<TradingRoomWorkspace | null>(null);
+  const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
-    setWorkspace(null);
+    setWorkspaceResult(null);
     setSelectedPreviewViewId(null);
   }, [strategyId, resolvedStrategyVersion]);
 
@@ -990,7 +820,7 @@ function StrategyWorkspaceView({
         const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
-          setWorkspace(null);
+          setWorkspaceResult(null);
           setSelectedPreviewViewId(null);
         }
         setProposalError(nextError);
@@ -1007,18 +837,18 @@ function StrategyWorkspaceView({
     setAccepting(true);
     setProposalError(null);
     try {
-      const nextWorkspace = await acceptTradingRoomWorkspaceProposal(
+      const nextWorkspace = await acceptTradingRoomWorkspaceProposalWithMeta(
         strategyId,
         proposal.proposalId,
         { expectedStatus: "preview" },
         { idempotencyKey: newUUID() },
       );
-      setWorkspace(nextWorkspace);
+      setWorkspaceResult(nextWorkspace);
     } catch (err) {
       const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
-        setWorkspace(null);
+        setWorkspaceResult(null);
         setSelectedPreviewViewId(null);
       }
       setProposalError(nextError);
@@ -1028,7 +858,7 @@ function StrategyWorkspaceView({
   }
 
   function regenerateProposal() {
-    setWorkspace(null);
+    setWorkspaceResult(null);
     setProposal(null);
     setSelectedPreviewViewId(null);
     setProposalRevision((prev) => prev + 1);
@@ -1062,8 +892,12 @@ function StrategyWorkspaceView({
             >
               Strategy version is required before Trading Room proposal generation.
             </div>
-          ) : workspace ? (
-            <TradingRoomWorkspaceShell workspace={workspace} />
+          ) : workspaceResult ? (
+            <WorkspaceGridEditor
+              initialEtag={workspaceResult.etag}
+              initialWorkspace={workspaceResult.workspace}
+              onWorkspaceChange={setWorkspaceResult}
+            />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
               strategyTitle={strategy?.title ?? strategyId}

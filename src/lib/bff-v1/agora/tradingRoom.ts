@@ -11,8 +11,10 @@
  */
 
 import type {
+  TradingRoomDashboardVersion,
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
+  WorkspaceLayoutOperation,
 } from "./types";
 import {
   BffError,
@@ -198,6 +200,26 @@ export interface CreateTradingRoomWorkspaceProposalRequest {
 
 export interface AcceptTradingRoomWorkspaceProposalRequest {
   expectedStatus?: "preview";
+}
+
+export interface TradingRoomWorkspaceMutationOptions {
+  ifMatch?: string | null;
+  idempotencyKey?: string;
+}
+
+export interface TradingRoomWorkspaceResult {
+  workspace: TradingRoomWorkspace;
+  etag: string | null;
+  version?: TradingRoomDashboardVersion;
+  versionId?: string;
+}
+
+export interface PatchTradingRoomWorkspaceLayoutRequest {
+  operations: WorkspaceLayoutOperation[];
+}
+
+export interface RollbackTradingRoomWorkspaceVersionRequest {
+  reason?: string;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -413,18 +435,68 @@ function isTradingRoomWorkspace(value: unknown): value is TradingRoomWorkspace {
 function extractAcceptedWorkspace(value: unknown): {
   workspace?: TradingRoomWorkspace;
   workspaceId?: string;
+  version?: TradingRoomDashboardVersion;
 } {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   if (isTradingRoomWorkspace(data.workspace)) {
-    return { workspace: data.workspace };
+    const version = recordFrom(data.version);
+    return {
+      workspace: data.workspace,
+      version: version.id ? (version as unknown as TradingRoomDashboardVersion) : undefined,
+    };
   }
   if (isTradingRoomWorkspace(data)) {
     return { workspace: data as unknown as TradingRoomWorkspace };
   }
   return {
     workspaceId: typeof data.workspaceId === "string" ? data.workspaceId : undefined,
+    version: recordFrom(data.version).id
+      ? (recordFrom(data.version) as unknown as TradingRoomDashboardVersion)
+      : undefined,
   };
+}
+
+function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoomWorkspaceResult {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  const meta = recordFrom(root.meta);
+  const accepted = extractAcceptedWorkspace(value);
+  if (accepted.workspace) {
+    return {
+      etag,
+      version: accepted.version,
+      versionId:
+        accepted.version?.id ??
+        (typeof meta.version_id === "string" ? meta.version_id : undefined),
+      workspace: accepted.workspace,
+    };
+  }
+  if (isTradingRoomWorkspace(data)) {
+    return {
+      etag,
+      versionId: typeof meta.version_id === "string" ? meta.version_id : undefined,
+      workspace: data as unknown as TradingRoomWorkspace,
+    };
+  }
+  throw makeMalformedBffEnvelope("Trading Room workspace response did not include a workspace.");
+}
+
+function extractWorkspaceVersions(value: unknown): TradingRoomDashboardVersion[] {
+  const root = recordFrom(value);
+  const data = root.data ?? root;
+  if (!Array.isArray(data)) return [];
+  return data as TradingRoomDashboardVersion[];
+}
+
+function mutationHeaders(options?: TradingRoomWorkspaceMutationOptions): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  return headers;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -586,6 +658,24 @@ export async function acceptTradingRoomWorkspaceProposal(
   options?: { idempotencyKey?: string },
   baseUrl?: string,
 ): Promise<TradingRoomWorkspace> {
+  const result = await acceptTradingRoomWorkspaceProposalWithMeta(
+    strategyId,
+    proposalId,
+    body,
+    options,
+    baseUrl,
+  );
+  return result.workspace;
+}
+
+/** Accept a preview proposal and keep its workspace ETag/version metadata. */
+export async function acceptTradingRoomWorkspaceProposalWithMeta(
+  strategyId: string,
+  proposalId: string,
+  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}/accept`;
   const headers: Record<string, string> = {
@@ -604,9 +694,15 @@ export async function acceptTradingRoomWorkspaceProposal(
   }
   const responseBody = await parseJson(res);
   const accepted = extractAcceptedWorkspace(responseBody);
-  if (accepted.workspace) return accepted.workspace;
+  if (accepted.workspace) {
+    return {
+      etag: res.headers.get("ETag"),
+      version: accepted.version,
+      workspace: accepted.workspace,
+    };
+  }
   if (accepted.workspaceId) {
-    return getTradingRoomWorkspace(accepted.workspaceId, baseUrl);
+    return getTradingRoomWorkspaceWithMeta(accepted.workspaceId, baseUrl);
   }
   throw makeMalformedBffEnvelope("Trading Room accept response did not include a workspace.");
 }
@@ -616,6 +712,15 @@ export async function getTradingRoomWorkspace(
   workspaceId: string,
   baseUrl?: string,
 ): Promise<TradingRoomWorkspace> {
+  const result = await getTradingRoomWorkspaceWithMeta(workspaceId, baseUrl);
+  return result.workspace;
+}
+
+/** Get an accepted Trading Room workspace by ID with the current ETag. */
+export async function getTradingRoomWorkspaceWithMeta(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
   const res = await fetch(url, {
@@ -627,7 +732,71 @@ export async function getTradingRoomWorkspace(
     await throwTypedBffError(res, "GET", url);
   }
   const responseBody = await parseJson(res);
-  return extractDetail<TradingRoomWorkspace>(responseBody);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
+/** Apply controlled layout operations, creating a new workspace dashboard version. */
+export async function patchTradingRoomWorkspaceLayout(
+  workspaceId: string,
+  body: PatchTradingRoomWorkspaceLayoutRequest,
+  options?: TradingRoomWorkspaceMutationOptions,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/layout`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "PATCH", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
+/** List append-only workspace dashboard versions/change-log records. */
+export async function listTradingRoomWorkspaceVersions(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomDashboardVersion[]> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceVersions(responseBody);
+}
+
+/** Roll back to a previous workspace dashboard version by appending a new version. */
+export async function rollbackTradingRoomWorkspaceVersion(
+  workspaceId: string,
+  versionId: string,
+  body: RollbackTradingRoomWorkspaceVersionRequest = {},
+  options?: TradingRoomWorkspaceMutationOptions,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions/${encodeURIComponent(versionId)}/rollback`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
 }
 
 /**

@@ -1,14 +1,64 @@
 import React from "react";
+import { act } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Layout } from "react-grid-layout";
+
+const gridCallbacks = vi.hoisted(() => ({
+  onLayoutChange: undefined as ((layout: Layout[]) => void) | undefined,
+}));
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
-  acceptTradingRoomWorkspaceProposal: vi.fn(),
+  acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
   createTradingRoomWorkspaceProposal: vi.fn(),
   getTradingRoom: vi.fn(),
   listDecisionEvents: vi.fn(),
+  listTradingRoomWorkspaceVersions: vi.fn(),
+  patchTradingRoomWorkspaceLayout: vi.fn(),
+  rollbackTradingRoomWorkspaceVersion: vi.fn(),
   decideOnEvent: vi.fn(),
 }));
+
+vi.mock("react-grid-layout", async () => {
+  const ReactModule = await import("react");
+  const MockGridLayout = ({
+    children,
+    cols: _cols,
+    draggableHandle: _draggableHandle,
+    isDraggable: _isDraggable,
+    isResizable: _isResizable,
+    onLayoutChange,
+    layout,
+    rowHeight: _rowHeight,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    cols?: number;
+    draggableHandle?: string;
+    isDraggable?: boolean;
+    isResizable?: boolean;
+    onLayoutChange?: (layout: Layout[]) => void;
+    layout?: Layout[];
+    rowHeight?: number;
+    [key: string]: unknown;
+  }) => {
+    gridCallbacks.onLayoutChange = onLayoutChange;
+    return ReactModule.createElement(
+      "div",
+      {
+        "data-layout": JSON.stringify(layout ?? []),
+        "data-testid": "mock-workspace-grid-layout",
+        ...rest,
+      },
+      children,
+    );
+  };
+  MockGridLayout.displayName = "MockGridLayout";
+  return { default: MockGridLayout };
+});
+
+vi.mock("react-grid-layout/css/styles.css", () => ({}));
+vi.mock("react-resizable/css/styles.css", () => ({}));
 
 vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
   default: ({ spec }: { spec: { kind: string } }) => (
@@ -21,6 +71,7 @@ import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
+  TradingRoomDashboardVersion,
   TradingRoomViewSpec,
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
@@ -354,10 +405,76 @@ const MOCK_WORKSPACE: TradingRoomWorkspace = {
   updatedAt: "2026-06-29T00:00:00Z",
 };
 
+const MOCK_WORKSPACE_V2: TradingRoomWorkspace = {
+  ...MOCK_WORKSPACE,
+  dashboardVersion: 2,
+  generatedBy: "user_modified",
+  updatedAt: "2026-06-29T01:00:00Z",
+  views: [
+    {
+      ...MOCK_WORKSPACE.views[0],
+      widgets: [
+        {
+          ...MOCK_WORKSPACE.views[0].widgets[0],
+          placement: {
+            ...MOCK_WORKSPACE.views[0].widgets[0].placement,
+            height: 4,
+            width: 5,
+            x: 1,
+            y: 2,
+          },
+        },
+      ],
+    },
+    ...MOCK_WORKSPACE.views.slice(1),
+  ],
+};
+
+const MOCK_VERSION_1: TradingRoomDashboardVersion = {
+  id: "version-001",
+  userId: "user-001",
+  strategyId: "strat-001",
+  strategyVersion: "winner-branch-v4",
+  dashboardVersion: 1,
+  generatedBy: "trading_servant",
+  previousVersionId: null,
+  changeSummary: "v1 - trading servant initial workspace proposal",
+  views: MOCK_WORKSPACE.views,
+  createdAt: "2026-06-29T00:00:00Z",
+  status: "active",
+  changeLog: {
+    affectedViews: ["strategy-overview"],
+    affectedWidgets: ["w-status"],
+    changedAt: "2026-06-29T00:00:00Z",
+    changedBy: "trading_servant",
+    effectEvaluation: "not evaluated",
+    reason: "initial proposal",
+    rollbackAvailable: true,
+  },
+};
+
+const MOCK_VERSION_2: TradingRoomDashboardVersion = {
+  ...MOCK_VERSION_1,
+  id: "version-002",
+  dashboardVersion: 2,
+  generatedBy: "user_modified",
+  previousVersionId: "version-001",
+  changeSummary: "trader adjusted widget layout",
+  views: MOCK_WORKSPACE_V2.views,
+  createdAt: "2026-06-29T01:00:00Z",
+  changeLog: {
+    ...MOCK_VERSION_1.changeLog,
+    changedAt: "2026-06-29T01:00:00Z",
+    changedBy: "user-001",
+    reason: "layout operations accepted by trader",
+  },
+};
+
 afterEach(cleanup);
 
 describe("TradingRoomPage", () => {
   beforeEach(() => {
+    gridCallbacks.onLayoutChange = undefined;
     vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue(MOCK_AGGREGATE);
     vi.mocked(tradingRoomModule.listDecisionEvents).mockResolvedValue({
       items: [MOCK_DECISION_EVENT],
@@ -365,7 +482,25 @@ describe("TradingRoomPage", () => {
     });
     vi.mocked(tradingRoomModule.decideOnEvent).mockResolvedValue({});
     vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockResolvedValue(MOCK_PROPOSAL);
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposal).mockResolvedValue(MOCK_WORKSPACE);
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValue({
+      etag: '"workspace-etag-v1"',
+      version: MOCK_VERSION_1,
+      workspace: MOCK_WORKSPACE,
+    });
+    vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mockResolvedValue({
+      etag: '"workspace-etag-v2"',
+      version: MOCK_VERSION_2,
+      workspace: MOCK_WORKSPACE_V2,
+    });
+    vi.mocked(tradingRoomModule.listTradingRoomWorkspaceVersions).mockResolvedValue([
+      MOCK_VERSION_1,
+      MOCK_VERSION_2,
+    ]);
+    vi.mocked(tradingRoomModule.rollbackTradingRoomWorkspaceVersion).mockResolvedValue({
+      etag: '"workspace-etag-v3"',
+      version: { ...MOCK_VERSION_2, id: "version-003", dashboardVersion: 3 },
+      workspace: { ...MOCK_WORKSPACE, dashboardVersion: 3, generatedBy: "user_modified" },
+    });
   });
 
   afterEach(() => {
@@ -563,7 +698,7 @@ describe("TradingRoomPage", () => {
     fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
     await screen.findByTestId("trading-room-workspace-shell");
 
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposal).toHaveBeenCalledWith(
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledWith(
       "strat-001",
       "proposal-001",
       { expectedStatus: "preview" },
@@ -572,6 +707,146 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-view-tabs")).toBeDefined();
     expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
+  });
+
+  it("saves drag and resize operations with workspace ETag and idempotency key", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    act(() => {
+      gridCallbacks.onLayoutChange?.([{ i: "w-status", x: 1, y: 2, w: 5, h: 4 }]);
+    });
+    expect(screen.getByTestId("workspace-unsaved-bar").textContent).toContain("2 unsaved layout operations");
+
+    fireEvent.click(screen.getByTestId("workspace-save-layout"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledWith(
+        "workspace-001",
+        {
+          operations: [
+            { kind: "move_widget", widgetId: "w-status", payload: { x: 1, y: 2 } },
+            { kind: "resize_widget", widgetId: "w-status", payload: { width: 5, height: 4 } },
+          ],
+        },
+        expect.objectContaining({
+          ifMatch: '"workspace-etag-v1"',
+          idempotencyKey: expect.any(String),
+        }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+  });
+
+  it("removes and restores widgets through layout operations without deleting the widget", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-widget-menu-w-status"));
+    fireEvent.click(screen.getByText("移除 Widget"));
+    expect(screen.getByTestId("workspace-restore-library")).toBeDefined();
+    expect(screen.queryByTestId("workspace-widget-w-status")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("workspace-restore-widget-w-status"));
+    expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
+    fireEvent.click(screen.getByTestId("workspace-save-layout"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledWith(
+        "workspace-001",
+        {
+          operations: [
+            { kind: "remove_widget", widgetId: "w-status", payload: {} },
+            { kind: "add_registered_widget", payload: { widgetId: "w-status" } },
+          ],
+        },
+        expect.objectContaining({ ifMatch: '"workspace-etag-v1"' }),
+      ),
+    );
+  });
+
+  it("duplicates an existing widget and changes chart kind via the widget menu", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-widget-menu-w-status"));
+    fireEvent.click(screen.getByText("複製 Widget"));
+    expect(screen.getAllByTestId(/workspace-widget-/).length).toBeGreaterThan(1);
+
+    fireEvent.click(screen.getByTestId("workspace-view-tab-candidate-entry"));
+    fireEvent.click(screen.getByTestId("workspace-widget-menu-w-candidates"));
+    fireEvent.click(screen.getByTestId("workspace-change-chart-w-candidates-sankey"));
+    fireEvent.click(screen.getByTestId("workspace-save-layout"));
+
+    await waitFor(() => {
+      const call = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[0];
+      expect(call[1].operations.some((op) => op.kind === "add_registered_widget" && "widgetSpec" in op.payload)).toBe(true);
+      expect(call[1].operations).toContainEqual({
+        kind: "replace_chart_spec",
+        widgetId: "w-candidates",
+        payload: { chartSpec: expect.objectContaining({ kind: "sankey" }) },
+      });
+    });
+  });
+
+  it("adds a registered widget from the controlled widget library", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-add-widget-button"));
+    fireEvent.click(screen.getByTestId("workspace-add-widget-strategy_status_summary"));
+    fireEvent.click(screen.getByTestId("workspace-save-layout"));
+
+    await waitFor(() => {
+      const call = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[0];
+      const addOp = call[1].operations.find((op) => op.kind === "add_registered_widget");
+      expect(addOp?.payload).toMatchObject({
+        viewId: "strategy-overview",
+        widgetSpec: expect.objectContaining({
+          dataSource: "agora.strategy.summary",
+          widgetType: "strategy_status_summary",
+        }),
+      });
+    });
+  });
+
+  it("rolls back a prior workspace version with the current workspace ETag", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValueOnce({
+      etag: '"workspace-etag-v2"',
+      version: MOCK_VERSION_2,
+      workspace: MOCK_WORKSPACE_V2,
+    });
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+    await screen.findByTestId("workspace-version-version-001");
+
+    fireEvent.click(screen.getByTestId("workspace-rollback-version-001"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.rollbackTradingRoomWorkspaceVersion).toHaveBeenCalledWith(
+        "workspace-001",
+        "version-001",
+        { reason: "rollback to dashboard version 1" },
+        expect.objectContaining({
+          ifMatch: '"workspace-etag-v2"',
+          idempotencyKey: expect.any(String),
+        }),
+      ),
+    );
   });
 
   it("clears stale proposal state on typed 403 during regeneration", async () => {
@@ -591,7 +866,7 @@ describe("TradingRoomPage", () => {
   });
 
   it("clears stale proposal state on typed 409 accept conflict", async () => {
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposal)
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta)
       .mockRejectedValueOnce(makeBffError(409, "STATE_CONFLICT", "proposal already accepted"));
 
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
@@ -606,7 +881,7 @@ describe("TradingRoomPage", () => {
   });
 
   it("keeps proposal preview visible on typed 422 accept validation failure", async () => {
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposal)
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta)
       .mockRejectedValueOnce(makeBffError(422, "VALIDATION_FAILED", "proposal invalid"));
 
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
