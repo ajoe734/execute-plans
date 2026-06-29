@@ -1,7 +1,7 @@
 /**
- * BFF client for the Trading Room surface (v1.3, live strict).
+ * BFF client for the Trading Room surface (v1.5, live strict).
  * All data reads go through these functions; pages must not call fetch() directly.
- * No order routing, no capital binding — read/observe/intent-request only.
+ * Read/observe/intent-request only; no execution-side mutation is performed here.
  *
  * Mutating method (decideOnEvent) requires:
  *   If-Match        — ETag from the preceding GET response
@@ -9,6 +9,11 @@
  *   X-Request-Id    — client-generated UUID per request
  * AG-BE-TR-002 rejects writes that omit these headers.
  */
+
+import type {
+  TradingRoomWorkspace,
+  TradingRoomWorkspaceProposal,
+} from "./types";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -177,6 +182,18 @@ export interface DecisionBody {
   modifications?: Record<string, unknown>;
 }
 
+export interface CreateTradingRoomWorkspaceProposalRequest {
+  strategyVersion: string;
+  personalizationHints?: Record<string, unknown>;
+  evidenceRefs?: Record<string, unknown>[];
+  dataFreshness?: Record<string, unknown>;
+  tradingRoomReady?: boolean;
+}
+
+export interface AcceptTradingRoomWorkspaceProposalRequest {
+  expectedStatus?: "preview";
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function resolvedBase(baseUrl?: string): string {
@@ -222,6 +239,12 @@ function extractDecisionEvent(value: unknown): TradingDecisionEvent {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   return data as unknown as TradingDecisionEvent;
+}
+
+function extractDetail<T>(value: unknown): T {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  return data as T;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -328,9 +351,121 @@ export async function getDecisionEvent(
   return extractDecisionEvent(body);
 }
 
+/** Generate a Trading Room workspace proposal for a strategy version. */
+export async function createTradingRoomWorkspaceProposal(
+  strategyId: string,
+  body: CreateTradingRoomWorkspaceProposalRequest,
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const responseBody = await parseJson(res);
+    const message =
+      recordFrom(recordFrom(responseBody).error).message ??
+      `POST ${url} failed ${res.status}`;
+    throw new Error(String(message));
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Get a previously generated Trading Room workspace proposal. */
+export async function getTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal | null> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const responseBody = await parseJson(res);
+    const message =
+      recordFrom(recordFrom(responseBody).error).message ??
+      `GET ${url} failed ${res.status}`;
+    throw new Error(String(message));
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Accept a preview proposal and materialize the generated workspace shell. */
+export async function acceptTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}/accept`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const responseBody = await parseJson(res);
+    const message =
+      recordFrom(recordFrom(responseBody).error).message ??
+      `POST ${url} failed ${res.status}`;
+    throw new Error(String(message));
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspace>(responseBody);
+}
+
+/** Get an accepted Trading Room workspace by ID. */
+export async function getTradingRoomWorkspace(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace | null> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const responseBody = await parseJson(res);
+    const message =
+      recordFrom(recordFrom(responseBody).error).message ??
+      `GET ${url} failed ${res.status}`;
+    throw new Error(String(message));
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspace>(responseBody);
+}
+
 /**
  * Record a trader decision on a decision event.
- * "approve" may create a TradingIntent (request-only; no order route; no capital binding).
+ * "approve" may create a TradingIntent request, without execution-side effects.
  *
  * options.ifMatch       — ETag from listDecisionEvents or getDecisionEvent; required by AG-BE-TR-002.
  * options.idempotencyKey — client-generated UUID per submission; required by AG-BE-TR-002.

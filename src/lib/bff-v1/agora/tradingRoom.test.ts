@@ -10,7 +10,11 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  acceptTradingRoomWorkspaceProposal,
+  createTradingRoomWorkspaceProposal,
   decideOnEvent,
+  getTradingRoomWorkspace,
+  getTradingRoomWorkspaceProposal,
   listDecisionEvents,
   getTradingRoom,
   getDecisionEvent,
@@ -216,6 +220,105 @@ describe("getDecisionEvent — returns null on 404", () => {
     const result = await getDecisionEvent("missing-evt", BASE);
 
     expect(result).toBeNull();
+  });
+});
+
+// ── v1.5 workspace proposal and workspace routes ────────────────────────────
+
+const mockProposal = {
+  strategyId: "strat-001",
+  strategyVersion: "winner-branch-v4",
+  proposalId: "proposal-001",
+  generatedAt: "2026-06-29T00:00:00Z",
+  status: "preview",
+  views: [],
+  rationale: "Generate a complete workspace.",
+  dataAvailability: { status: "complete", sources: [] },
+  warnings: [],
+  personalizationApplied: { status: "applied", items: [] },
+};
+
+const mockWorkspace = {
+  id: "workspace-001",
+  userId: "user-001",
+  strategyId: "strat-001",
+  strategyVersion: "winner-branch-v4",
+  dashboardVersion: 1,
+  activeViewId: "overview",
+  views: [],
+  status: "active",
+  generatedBy: "trading_servant",
+  createdAt: "2026-06-29T00:00:00Z",
+  updatedAt: "2026-06-29T00:00:00Z",
+};
+
+describe("Trading Room workspace proposal routes", () => {
+  it("creates a workspace proposal with strategyVersion and Idempotency-Key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
+    globalThis.fetch = fetchMock;
+
+    const result = await createTradingRoomWorkspaceProposal(
+      "strat/001",
+      { strategyVersion: "winner-branch-v4", tradingRoomReady: true },
+      { idempotencyKey: "idem-proposal-1" },
+      BASE,
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat%2F001/trading-room/proposals`);
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ strategyVersion: "winner-branch-v4", tradingRoomReady: true }));
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-proposal-1");
+    expect(result.proposalId).toBe("proposal-001");
+  });
+
+  it("gets a workspace proposal and sends no mutation headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
+    globalThis.fetch = fetchMock;
+
+    const result = await getTradingRoomWorkspaceProposal("strat-001", "proposal/001", BASE);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal%2F001`);
+    expect(fetchMock.mock.calls[0][1].method).toBe("GET");
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    expect(result?.proposalId).toBe("proposal-001");
+  });
+
+  it("returns null when a workspace proposal is missing", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+    globalThis.fetch = fetchMock;
+
+    await expect(getTradingRoomWorkspaceProposal("strat-001", "missing", BASE)).resolves.toBeNull();
+  });
+
+  it("accepts a workspace proposal with expected preview status and Idempotency-Key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockWorkspace }));
+    globalThis.fetch = fetchMock;
+
+    const result = await acceptTradingRoomWorkspaceProposal(
+      "strat-001",
+      "proposal-001",
+      { expectedStatus: "preview" },
+      { idempotencyKey: "idem-accept-1" },
+      BASE,
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal-001/accept`);
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ expectedStatus: "preview" }));
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-accept-1");
+    expect(result.id).toBe("workspace-001");
+  });
+
+  it("gets an accepted workspace and returns null on 404", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ data: mockWorkspace }))
+      .mockResolvedValueOnce(new Response("", { status: 404 }));
+    globalThis.fetch = fetchMock;
+
+    await expect(getTradingRoomWorkspace("workspace/001", BASE)).resolves.toMatchObject({ id: "workspace-001" });
+    await expect(getTradingRoomWorkspace("missing", BASE)).resolves.toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`);
   });
 });
 
