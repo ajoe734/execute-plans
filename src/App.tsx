@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -118,6 +118,11 @@ function TradingRoomRoute() {
   );
 }
 
+function ManagementFleetLegacyRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/management/persona-fleet${search}`} replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -148,6 +153,7 @@ const App = () => (
               <Route path="one-ring" element={<Navigate to="/management/cockpit" replace />} />
 
               <Route path="persona-fleet" element={<PersonaFleetPage />} />
+              <Route path="fleet" element={<ManagementFleetLegacyRedirect />} />
               <Route path="human-inbox" element={<HumanInboxPage />} />
               <Route path="human-inbox/:id" element={<HumanGateDetailPage />} />
               <Route path="trading-pulse" element={<TradingPulsePage />} />
