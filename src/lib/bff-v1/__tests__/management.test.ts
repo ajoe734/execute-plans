@@ -3,6 +3,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  adaptHumanInboxDetail,
+  adaptHumanInboxList,
   adaptManagementPersonaFleet,
   mgmt,
   type ManagementPersonaFleetRow,
@@ -39,6 +41,84 @@ describe("mgmt façade (PM-Live)", () => {
     const seed = { id: "abc-1", kind: "approval" } as never;
     const out = await mgmt.humanInbox.get("abc-1", () => seed);
     expect(out).toBe(seed);
+  });
+
+  it("adapts live Human Inbox list records to existing FE detail routes", () => {
+    const out = adaptHumanInboxList({
+      data: {
+        items: [
+          {
+            id: "readiness_blocker:persona:persona-us-equity",
+            inboxType: "readiness_blocker",
+            title: "Persona needs review: US Equity Persona",
+            summary: "paper observation and OOS cost review",
+            action_state: "pending",
+            can_proceed: false,
+            allowed_actions: { can_decide: false },
+            route: "/management/fleet?persona=persona-us-equity",
+            blocking_reasons: ["Missing validation packet"],
+          },
+          {
+            id: "governance-review:approval-1",
+            source_type: "governance_review",
+            title: "Governance review: ApprovalDecision",
+            route: "/governance-review-queue?item=approval-1",
+          },
+        ],
+      },
+    });
+
+    expect(out).toHaveLength(2);
+    expect(out?.[0]).toMatchObject({
+      id: "readiness_blocker:persona:persona-us-equity",
+      kind: "readiness_blocker",
+      canDecide: false,
+      canProceed: false,
+      detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
+      blockingReasons: ["Missing validation packet"],
+      links: {
+        manageHref: "/management/persona-fleet?persona=persona-us-equity",
+        recommendedActionHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
+      },
+    });
+    expect(out?.[1]).toMatchObject({
+      kind: "approval",
+      detailHref: "/management/human-inbox/governance-review%3Aapproval-1",
+      links: {
+        manageHref: "/management/governance?item=approval-1",
+      },
+    });
+  });
+
+  it("adapts live Human Inbox detail records with safe detail-page defaults", () => {
+    const out = adaptHumanInboxDetail({
+      data: {
+        item: {
+          id: "readiness_blocker:persona:persona-crypto",
+          source_type: "readiness_blocker",
+          title: "Persona needs review: Crypto Persona",
+          summary: "paper broker sandbox readback and funding-rate stress review",
+          canProceed: false,
+          allowedActions: { canDecide: false },
+          route: "/management/fleet?persona=persona-crypto",
+          evidence_refs: ["support/evidence/research/crypto.json"],
+        },
+      },
+    });
+
+    expect(out).toMatchObject({
+      id: "readiness_blocker:persona:persona-crypto",
+      kind: "readiness_blocker",
+      decisionType: "single",
+      signatures: [],
+      evidenceRefs: ["support/evidence/research/crypto.json"],
+      decisionHistory: [],
+      auditRefs: [],
+      detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-crypto",
+      links: {
+        manageHref: "/management/persona-fleet?persona=persona-crypto",
+      },
+    });
   });
 
   it("readiness helpers all pass seed through", async () => {
