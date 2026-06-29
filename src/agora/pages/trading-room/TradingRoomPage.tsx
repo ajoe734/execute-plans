@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
+  acceptTradingRoomWorkspaceProposalWithMeta,
+  createTradingRoomWorkspaceProposal,
   getTradingRoom,
   listDecisionEvents,
   decideOnEvent,
@@ -7,15 +9,76 @@ import {
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
   type DecisionChoice,
+  type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { BffError } from "@/lib/bff-v1/errors";
+import type {
+  TradingRoomWorkspaceProposal,
+} from "@/lib/bff-v1/agora/types";
+import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
+import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 
 function newUUID(): string {
   return crypto.randomUUID();
 }
-import { getDashboardRecipeById } from "@/lib/bff-v1/agora/dashboard";
-import type { DashboardRecipeV2, WidgetSpecV2 } from "@/lib/bff-v1/agora/types";
-import { DashboardGridEditor } from "@/agora/dashboard/DashboardGridEditor";
-import type { WidgetPlacement } from "@/agora/dashboard/DashboardGridEditor";
+
+interface TradingRoomUiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
+
+function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+  switch (err.status) {
+    case 403:
+      return "目前權限或範圍無法讀取這個操盤室提案。";
+    case 404:
+      return "這個操盤室提案或工作區已不存在，請重新產生。";
+    case 409:
+      return "操盤室提案狀態已變更，請重新產生後再套用。";
+    case 412:
+      return "操盤室狀態已過期，請重新整理後再繼續。";
+    case 501:
+      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+    default:
+      return err.message || fallback;
+  }
+}
+
+function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+  if (err instanceof BffError) {
+    return {
+      code: err.code,
+      message: tradingRoomErrorMessage(err, fallback),
+      status: err.status,
+    };
+  }
+  return {
+    message: err instanceof Error ? err.message : fallback,
+  };
+}
+
+function shouldClearStaleWorkspaceState(error: TradingRoomUiError): boolean {
+  if (
+    error.status === 403 ||
+    error.status === 404 ||
+    error.status === 409 ||
+    error.status === 412 ||
+    error.status === 501
+  ) {
+    return true;
+  }
+  return (
+    error.code === "PERMISSION_DENIED" ||
+    error.code === "TENANT_SCOPE_MISMATCH" ||
+    error.code === "RESOURCE_NOT_FOUND" ||
+    error.code === "STATE_CONFLICT" ||
+    error.code === "ILLEGAL_TRANSITION" ||
+    error.code === "IDEMPOTENCY_CONFLICT" ||
+    error.code === "CAPABILITY_MISSING" ||
+    error.code === "FEATURE_DISABLED"
+  );
+}
 
 // ── Strategy Lens Switcher ────────────────────────────────────────────────────
 
@@ -592,68 +655,96 @@ function AggregateView({
   );
 }
 
-// ── Strategy Recipe Section ───────────────────────────────────────────────────
+// ── V11 Proposal Generation And Workspace Shell ──────────────────────────────
 
-interface StrategyRecipeSectionProps {
-  recipe: DashboardRecipeV2;
-}
+const GENERATION_STEPS = [
+  "讀取 Winner Branch Score、confidence 與 trust",
+  "分析分點關係映射與資金遷移",
+  "整理分點群組、遷移與分布模型",
+  "建立事件領先研究與證據索引",
+  "轉譯候選、進場、加碼、減碼與出場規則",
+  "校準部位、槓桿、流動性與風險限制",
+  "串接回測、shadow 與監控規則",
+  "產生 Views 與 widgets",
+  "安排 layout 並套用個人化偏好",
+];
 
-function StrategyRecipeSection({ recipe }: StrategyRecipeSectionProps): JSX.Element {
-  const [activeViewIdx, setActiveViewIdx] = useState(0);
-  const [viewPlacements, setViewPlacements] = useState<Record<string, WidgetPlacement[]>>(
-    () => Object.fromEntries(recipe.views.map((v) => [v.view_id, v.placements as WidgetPlacement[]]))
-  );
-
-  const activeView = recipe.views[activeViewIdx];
-  const placements = (activeView ? viewPlacements[activeView.view_id] : undefined) ?? [];
-  const widgets: WidgetSpecV2[] = activeView?.widgets ?? [];
-
-  if (!activeView) return <></>;
-
+function TradingRoomGenerationProgress({
+  strategyTitle,
+  strategyVersion,
+}: {
+  strategyTitle: string;
+  strategyVersion: string;
+}) {
   return (
-    <div data-testid="strategy-recipe-workspace" style={{ flex: 1, overflow: "auto", padding: 8 }}>
-      {recipe.views.length > 1 && (
-        <div
-          data-testid="recipe-view-tabs"
-          style={{ display: "flex", gap: 4, marginBottom: 8, borderBottom: "1px solid #e2e8f0", paddingBottom: 4 }}
-        >
-          {recipe.views.map((v, idx) => (
-            <button
-              key={v.view_id}
-              data-testid={`recipe-view-tab-${v.view_id}`}
-              aria-selected={idx === activeViewIdx}
-              onClick={() => setActiveViewIdx(idx)}
+    <section
+      data-testid="trading-room-generation-progress"
+      style={{
+        background: "#ffffff",
+        borderBottom: "1px solid #e2e8f0",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: 16,
+      }}
+    >
+      <div>
+        <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Trading Servant</div>
+        <h2 style={{ color: "#0f172a", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
+          交易僕人正在建立「{strategyTitle || strategyVersion}」交易操盤室
+        </h2>
+        <p style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
+          我會先替您把完整操盤頁面準備好。您不需要從空白版面開始；完成後可自行拖曳、刪除、增加、縮放，或直接交代我修改任何圖表。
+        </p>
+      </div>
+      <ol
+        style={{
+          display: "grid",
+          gap: 8,
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+        }}
+      >
+        {GENERATION_STEPS.map((step, index) => (
+          <li
+            key={step}
+            style={{
+              alignItems: "center",
+              background: index < 2 ? "#eff6ff" : "#f8fafc",
+              border: `1px solid ${index < 2 ? "#bfdbfe" : "#e2e8f0"}`,
+              borderRadius: 8,
+              color: "#334155",
+              display: "flex",
+              fontSize: 12,
+              gap: 8,
+              minHeight: 42,
+              padding: "8px 10px",
+            }}
+          >
+            <span
               style={{
-                padding: "4px 12px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: idx === activeViewIdx ? 600 : 400,
-                borderBottom: idx === activeViewIdx ? "2px solid #2563eb" : "2px solid transparent",
+                alignItems: "center",
+                background: index < 2 ? "#2563eb" : "#cbd5e1",
+                borderRadius: 999,
+                color: "#ffffff",
+                display: "inline-flex",
+                flex: "0 0 20px",
+                fontSize: 11,
+                fontWeight: 700,
+                height: 20,
+                justifyContent: "center",
+                width: 20,
               }}
             >
-              {v.title}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <DashboardGridEditor
-        viewId={activeView.view_id}
-        recipeId={recipe.recipe_id}
-        placements={placements}
-        widgets={widgets}
-        operatorId="trading-room"
-        onPlacementsChange={(newPlacements) =>
-          setViewPlacements((prev) => ({ ...prev, [activeView.view_id]: newPlacements }))
-        }
-        onWidgetRemove={() => {}}
-        onWidgetAdd={() => {}}
-        onWidgetChartChange={() => {}}
-        onPersonalizationEvent={() => {}}
-      />
-    </div>
+              {index + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -666,6 +757,8 @@ interface StrategyWorkspaceViewProps {
   events: TradingDecisionEvent[];
   eventsLoading: boolean;
   eventsEtag: string | null;
+  strategyVersion?: string;
+  onBackToWorkshop?: () => void;
 }
 
 function StrategyWorkspaceView({
@@ -675,39 +768,101 @@ function StrategyWorkspaceView({
   events,
   eventsLoading,
   eventsEtag,
+  strategyVersion,
+  onBackToWorkshop,
 }: StrategyWorkspaceViewProps): JSX.Element {
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
 
-  const [recipe, setRecipe] = useState<DashboardRecipeV2 | null>(null);
-  const [recipeLoading, setRecipeLoading] = useState(true);
-
-  const recipeId = strategy?.dashboard_recipe_id;
+  const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
+  const [proposal, setProposal] = useState<TradingRoomWorkspaceProposal | null>(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalError, setProposalError] = useState<TradingRoomUiError | null>(null);
+  const [proposalRevision, setProposalRevision] = useState(0);
+  const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
+  const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
+  const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
-    if (!recipeId) {
-      setRecipe(null);
-      setRecipeLoading(false);
+    setWorkspaceResult(null);
+    setSelectedPreviewViewId(null);
+  }, [strategyId, resolvedStrategyVersion]);
+
+  useEffect(() => {
+    if (!resolvedStrategyVersion) {
+      setProposal(null);
+      setProposalLoading(false);
+      setProposalError(null);
       return;
     }
 
     let cancelled = false;
-    setRecipe(null);
-    setRecipeLoading(true);
+    setProposal(null);
+    setProposalError(null);
+    setProposalLoading(true);
 
-    getDashboardRecipeById(recipeId)
-      .then((r) => {
+    createTradingRoomWorkspaceProposal(
+      strategyId,
+      {
+        personalizationHints: { source: "trading_room_join", surface: "agora" },
+        strategyVersion: resolvedStrategyVersion,
+        tradingRoomReady: strategy?.readiness_state === "ready",
+      },
+      { idempotencyKey: newUUID() },
+    )
+      .then((nextProposal) => {
         if (cancelled) return;
-        setRecipe(r);
-        setRecipeLoading(false);
+        setProposal(nextProposal);
+        setSelectedPreviewViewId(nextProposal.views[0]?.id ?? null);
+        setProposalLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) setRecipeLoading(false);
+      .catch((err) => {
+        if (cancelled) return;
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        if (shouldClearStaleWorkspaceState(nextError)) {
+          setProposal(null);
+          setWorkspaceResult(null);
+          setSelectedPreviewViewId(null);
+        }
+        setProposalError(nextError);
+        setProposalLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [recipeId]);
+  }, [proposalRevision, resolvedStrategyVersion, strategy?.readiness_state, strategyId]);
+
+  async function handleAcceptProposal() {
+    if (!proposal) return;
+    setAccepting(true);
+    setProposalError(null);
+    try {
+      const nextWorkspace = await acceptTradingRoomWorkspaceProposalWithMeta(
+        strategyId,
+        proposal.proposalId,
+        { expectedStatus: "preview" },
+        { idempotencyKey: newUUID() },
+      );
+      setWorkspaceResult(nextWorkspace);
+    } catch (err) {
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      if (shouldClearStaleWorkspaceState(nextError)) {
+        setProposal(null);
+        setWorkspaceResult(null);
+        setSelectedPreviewViewId(null);
+      }
+      setProposalError(nextError);
+    } finally {
+      setAccepting(false);
+    }
+  }
+
+  function regenerateProposal() {
+    setWorkspaceResult(null);
+    setProposal(null);
+    setSelectedPreviewViewId(null);
+    setProposalRevision((prev) => prev + 1);
+  }
 
   return (
     <div
@@ -730,21 +885,66 @@ function StrategyWorkspaceView({
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {recipeLoading ? (
+          {!resolvedStrategyVersion ? (
             <div
-              data-testid="strategy-recipe-loading"
-              style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}
+              data-testid="trading-room-strategy-version-required"
+              style={{ padding: 16, fontSize: 13, color: "#b45309" }}
             >
-              Loading strategy workspace…
+              Strategy version is required before Trading Room proposal generation.
             </div>
-          ) : recipe ? (
-            <StrategyRecipeSection key={strategyId} recipe={recipe} />
+          ) : workspaceResult ? (
+            <WorkspaceGridEditor
+              initialEtag={workspaceResult.etag}
+              initialWorkspace={workspaceResult.workspace}
+              onWorkspaceChange={setWorkspaceResult}
+            />
+          ) : proposalLoading ? (
+            <TradingRoomGenerationProgress
+              strategyTitle={strategy?.title ?? strategyId}
+              strategyVersion={resolvedStrategyVersion}
+            />
+          ) : proposal ? (
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <WorkspaceProposalPreview
+                busy={accepting}
+                error={proposalError?.message ?? null}
+                onAccept={handleAcceptProposal}
+                onAdjustLayout={() => setSelectedPreviewViewId(proposal.views[0]?.id ?? null)}
+                onBackToWorkshop={onBackToWorkshop}
+                onPreviewView={(view) => setSelectedPreviewViewId(view.id)}
+                onRegenerate={regenerateProposal}
+                proposal={proposal}
+                selectedViewId={selectedPreviewViewId}
+              />
+            </div>
           ) : (
             <div
-              data-testid="strategy-recipe-unavailable"
-              style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}
+              data-testid="trading-room-proposal-error"
+              data-error-code={proposalError?.code ?? ""}
+              data-error-status={proposalError?.status ?? ""}
+              style={{ padding: 16, fontSize: 13, color: "#b91c1c" }}
             >
-              Dashboard recipe unavailable for this strategy.
+              {proposalError?.message ?? "Workspace proposal unavailable."}
+              <div>
+                <button
+                  data-testid="trading-room-proposal-retry"
+                  onClick={regenerateProposal}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 6,
+                    color: "#334155",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    marginTop: 8,
+                    padding: "6px 10px",
+                  }}
+                  type="button"
+                >
+                  重新產生
+                </button>
+              </div>
             </div>
           )}
 
@@ -762,10 +962,17 @@ type LoadState = "loading" | "loaded" | "error";
 
 interface TradingRoomPageProps {
   strategyId?: string;
+  strategyVersion?: string;
+  onBackToWorkshop?: () => void;
   onStrategySelect?: (strategyId: string | undefined) => void;
 }
 
-export function TradingRoomPage({ strategyId, onStrategySelect }: TradingRoomPageProps): JSX.Element {
+export function TradingRoomPage({
+  strategyId,
+  strategyVersion,
+  onBackToWorkshop,
+  onStrategySelect,
+}: TradingRoomPageProps): JSX.Element {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
@@ -860,6 +1067,8 @@ export function TradingRoomPage({ strategyId, onStrategySelect }: TradingRoomPag
           events={events}
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
+          onBackToWorkshop={onBackToWorkshop}
+          strategyVersion={strategyVersion}
         />
       ) : (
         <AggregateView

@@ -1,7 +1,7 @@
 /**
- * BFF client for the Trading Room surface (v1.3, live strict).
+ * BFF client for the Trading Room surface (v1.5, live strict).
  * All data reads go through these functions; pages must not call fetch() directly.
- * No order routing, no capital binding — read/observe/intent-request only.
+ * Read/observe/intent-request only; no execution-side mutation is performed here.
  *
  * Mutating method (decideOnEvent) requires:
  *   If-Match        — ETag from the preceding GET response
@@ -9,6 +9,19 @@
  *   X-Request-Id    — client-generated UUID per request
  * AG-BE-TR-002 rejects writes that omit these headers.
  */
+
+import type {
+  TradingRoomDashboardVersion,
+  TradingRoomWorkspace,
+  TradingRoomWorkspaceProposal,
+  WorkspaceLayoutOperation,
+} from "./types";
+import {
+  BffError,
+  normalizeBffErrorEnvelope,
+  type BffErrorEnvelope,
+  type ErrorCode,
+} from "../errors";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -177,6 +190,38 @@ export interface DecisionBody {
   modifications?: Record<string, unknown>;
 }
 
+export interface CreateTradingRoomWorkspaceProposalRequest {
+  strategyVersion: string;
+  personalizationHints?: Record<string, unknown>;
+  evidenceRefs?: Record<string, unknown>[];
+  dataFreshness?: Record<string, unknown>;
+  tradingRoomReady?: boolean;
+}
+
+export interface AcceptTradingRoomWorkspaceProposalRequest {
+  expectedStatus?: "preview";
+}
+
+export interface TradingRoomWorkspaceMutationOptions {
+  ifMatch?: string | null;
+  idempotencyKey?: string;
+}
+
+export interface TradingRoomWorkspaceResult {
+  workspace: TradingRoomWorkspace;
+  etag: string | null;
+  version?: TradingRoomDashboardVersion;
+  versionId?: string;
+}
+
+export interface PatchTradingRoomWorkspaceLayoutRequest {
+  operations: WorkspaceLayoutOperation[];
+}
+
+export interface RollbackTradingRoomWorkspaceVersionRequest {
+  reason?: string;
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function resolvedBase(baseUrl?: string): string {
@@ -309,6 +354,151 @@ function extractDecisionEvent(value: unknown): TradingDecisionEvent {
   return data as unknown as TradingDecisionEvent;
 }
 
+function extractDetail<T>(value: unknown): T {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  return data as T;
+}
+
+function fallbackErrorCode(status: number): ErrorCode {
+  if (status === 400 || status === 422) return "VALIDATION_FAILED";
+  if (status === 401) return "AUTH_REQUIRED";
+  if (status === 403) return "PERMISSION_DENIED";
+  if (status === 404) return "RESOURCE_NOT_FOUND";
+  if (status === 409 || status === 412) return "STATE_CONFLICT";
+  if (status === 429) return "RATE_LIMITED";
+  if (status === 501) return "CAPABILITY_MISSING";
+  if (status >= 500) return "BACKEND_UNAVAILABLE";
+  return "UNKNOWN_ERROR";
+}
+
+function errorMessageFrom(value: unknown, fallback: string): string {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  if (typeof error.message === "string" && error.message.trim()) return error.message;
+  if (typeof root.message === "string" && root.message.trim()) return root.message;
+  return fallback;
+}
+
+function errorDetailsFrom(value: unknown): Record<string, unknown> | undefined {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  const details = error.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : undefined;
+}
+
+function makeTypedBffError(res: Response, body: unknown, fallbackMessage: string): BffError {
+  const correlationId = res.headers.get("X-Correlation-Id") ?? undefined;
+  const normalized = normalizeBffErrorEnvelope(body, res.status, correlationId);
+  if (normalized) return new BffError(res.status, normalized);
+
+  const code = fallbackErrorCode(res.status);
+  const envelope: BffErrorEnvelope = {
+    error: {
+      code,
+      i18nKey: `errors.${code}`,
+      message: errorMessageFrom(body, fallbackMessage),
+      retryable: res.status === 0 || res.status === 429 || res.status >= 500,
+      userActionable: res.status >= 400 && res.status < 500,
+      correlationId: correlationId ?? `corr_${Math.random().toString(36).slice(2, 10)}`,
+      details: errorDetailsFrom(body),
+    },
+  };
+  return new BffError(res.status, envelope);
+}
+
+async function throwTypedBffError(res: Response, method: string, url: string): Promise<never> {
+  const body = await parseJson(res);
+  throw makeTypedBffError(res, body, `${method} ${url} failed ${res.status}`);
+}
+
+function makeMalformedBffEnvelope(message: string): BffError {
+  return new BffError(502, {
+    error: {
+      code: "BACKEND_UNAVAILABLE",
+      i18nKey: "errors.BACKEND_UNAVAILABLE",
+      message,
+      retryable: true,
+      userActionable: false,
+      correlationId: `corr_${Math.random().toString(36).slice(2, 10)}`,
+    },
+  });
+}
+
+function isTradingRoomWorkspace(value: unknown): value is TradingRoomWorkspace {
+  const candidate = recordFrom(value);
+  return typeof candidate.id === "string" && Array.isArray(candidate.views);
+}
+
+function extractAcceptedWorkspace(value: unknown): {
+  workspace?: TradingRoomWorkspace;
+  workspaceId?: string;
+  version?: TradingRoomDashboardVersion;
+} {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  if (isTradingRoomWorkspace(data.workspace)) {
+    const version = recordFrom(data.version);
+    return {
+      workspace: data.workspace,
+      version: version.id ? (version as unknown as TradingRoomDashboardVersion) : undefined,
+    };
+  }
+  if (isTradingRoomWorkspace(data)) {
+    return { workspace: data as unknown as TradingRoomWorkspace };
+  }
+  return {
+    workspaceId: typeof data.workspaceId === "string" ? data.workspaceId : undefined,
+    version: recordFrom(data.version).id
+      ? (recordFrom(data.version) as unknown as TradingRoomDashboardVersion)
+      : undefined,
+  };
+}
+
+function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoomWorkspaceResult {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  const meta = recordFrom(root.meta);
+  const accepted = extractAcceptedWorkspace(value);
+  if (accepted.workspace) {
+    return {
+      etag,
+      version: accepted.version,
+      versionId:
+        accepted.version?.id ??
+        (typeof meta.version_id === "string" ? meta.version_id : undefined),
+      workspace: accepted.workspace,
+    };
+  }
+  if (isTradingRoomWorkspace(data)) {
+    return {
+      etag,
+      versionId: typeof meta.version_id === "string" ? meta.version_id : undefined,
+      workspace: data as unknown as TradingRoomWorkspace,
+    };
+  }
+  throw makeMalformedBffEnvelope("Trading Room workspace response did not include a workspace.");
+}
+
+function extractWorkspaceVersions(value: unknown): TradingRoomDashboardVersion[] {
+  const root = recordFrom(value);
+  const data = root.data ?? root;
+  if (!Array.isArray(data)) return [];
+  return data as TradingRoomDashboardVersion[];
+}
+
+function mutationHeaders(options?: TradingRoomWorkspaceMutationOptions): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  return headers;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Get the user-scoped Trading Room aggregate (all strategies, queue summary, risk). */
@@ -413,9 +603,205 @@ export async function getDecisionEvent(
   return extractDecisionEvent(body);
 }
 
+/** Generate a Trading Room workspace proposal for a strategy version. */
+export async function createTradingRoomWorkspaceProposal(
+  strategyId: string,
+  body: CreateTradingRoomWorkspaceProposalRequest,
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Get a previously generated Trading Room workspace proposal. */
+export async function getTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Accept a preview proposal and materialize the generated workspace shell. */
+export async function acceptTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace> {
+  const result = await acceptTradingRoomWorkspaceProposalWithMeta(
+    strategyId,
+    proposalId,
+    body,
+    options,
+    baseUrl,
+  );
+  return result.workspace;
+}
+
+/** Accept a preview proposal and keep its workspace ETag/version metadata. */
+export async function acceptTradingRoomWorkspaceProposalWithMeta(
+  strategyId: string,
+  proposalId: string,
+  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}/accept`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  const accepted = extractAcceptedWorkspace(responseBody);
+  if (accepted.workspace) {
+    return {
+      etag: res.headers.get("ETag"),
+      version: accepted.version,
+      workspace: accepted.workspace,
+    };
+  }
+  if (accepted.workspaceId) {
+    return getTradingRoomWorkspaceWithMeta(accepted.workspaceId, baseUrl);
+  }
+  throw makeMalformedBffEnvelope("Trading Room accept response did not include a workspace.");
+}
+
+/** Get an accepted Trading Room workspace by ID. */
+export async function getTradingRoomWorkspace(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace> {
+  const result = await getTradingRoomWorkspaceWithMeta(workspaceId, baseUrl);
+  return result.workspace;
+}
+
+/** Get an accepted Trading Room workspace by ID with the current ETag. */
+export async function getTradingRoomWorkspaceWithMeta(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
+/** Apply controlled layout operations, creating a new workspace dashboard version. */
+export async function patchTradingRoomWorkspaceLayout(
+  workspaceId: string,
+  body: PatchTradingRoomWorkspaceLayoutRequest,
+  options?: TradingRoomWorkspaceMutationOptions,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/layout`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "PATCH", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
+/** List append-only workspace dashboard versions/change-log records. */
+export async function listTradingRoomWorkspaceVersions(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomDashboardVersion[]> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceVersions(responseBody);
+}
+
+/** Roll back to a previous workspace dashboard version by appending a new version. */
+export async function rollbackTradingRoomWorkspaceVersion(
+  workspaceId: string,
+  versionId: string,
+  body: RollbackTradingRoomWorkspaceVersionRequest = {},
+  options?: TradingRoomWorkspaceMutationOptions,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions/${encodeURIComponent(versionId)}/rollback`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
 /**
  * Record a trader decision on a decision event.
- * "approve" may create a TradingIntent (request-only; no order route; no capital binding).
+ * "approve" may create a TradingIntent request, without execution-side effects.
  *
  * options.ifMatch       — ETag from listDecisionEvents or getDecisionEvent; required by AG-BE-TR-002.
  * options.idempotencyKey — client-generated UUID per submission; required by AG-BE-TR-002.
