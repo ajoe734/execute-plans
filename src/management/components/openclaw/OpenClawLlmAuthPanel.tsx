@@ -17,6 +17,7 @@ import {
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
   fetchAssistantProviderReauthStatus,
+  fetchAssistantProviderUsageSummary,
   fetchAssistantProviders,
   startAssistantProviderReauth,
   type AssistantControlModeStatus,
@@ -25,6 +26,8 @@ import {
   type AssistantProviderReadinessStatus,
   type AssistantProviderReauthResult,
   type AssistantProvidersResult,
+  type AssistantProviderUsageSummaryResult,
+  type AssistantProviderUsageSummaryRow,
   type ProviderStatus,
 } from "@/lib/bff-v1/managementAi";
 
@@ -32,6 +35,7 @@ export interface OpenClawLlmAuthApi {
   fetchProviders: typeof fetchAssistantProviders;
   fetchMode: typeof fetchAssistantModeStatus;
   fetchOrchestratorStatus: typeof fetchAssistantOrchestratorStatus;
+  fetchUsageSummary: typeof fetchAssistantProviderUsageSummary;
   startReauth: typeof startAssistantProviderReauth;
   fetchReauthStatus: typeof fetchAssistantProviderReauthStatus;
 }
@@ -40,6 +44,7 @@ const defaultApi: OpenClawLlmAuthApi = {
   fetchProviders: fetchAssistantProviders,
   fetchMode: fetchAssistantModeStatus,
   fetchOrchestratorStatus: fetchAssistantOrchestratorStatus,
+  fetchUsageSummary: fetchAssistantProviderUsageSummary,
   startReauth: startAssistantProviderReauth,
   fetchReauthStatus: fetchAssistantProviderReauthStatus,
 };
@@ -51,6 +56,7 @@ interface PanelState {
   mode: AssistantModeStatusResult | null;
   orchestrator: AssistantOrchestratorStatusResult | null;
   providerResult: AssistantProvidersResult | null;
+  usageSummary: AssistantProviderUsageSummaryResult | null;
   authProbePending: boolean;
 }
 
@@ -94,6 +100,21 @@ function usageValue(usage: Record<string, unknown>, ...keys: string[]): string {
   return textFrom(...keys.map((key) => usage[key]));
 }
 
+function usageNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatNumber(value: unknown): string {
+  const numeric = usageNumber(value);
+  if (numeric === null) return "unknown";
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numeric);
+}
+
 function formatMetric(value: string, unit: string): string {
   if (!value) return "unknown";
   return unit ? `${value} ${unit}` : value;
@@ -108,6 +129,13 @@ function usageRemaining(usage: Record<string, unknown>): string {
 
 function usageReset(usage: Record<string, unknown>): string {
   return usageValue(usage, "resetAt", "reset_at", "updatedAt", "updated_at", "checkedAt", "checked_at") || "unknown";
+}
+
+function normalizeProviderId(value: unknown): string {
+  const id = textFrom(value).toLowerCase();
+  if (id === "codex") return "codex_cli";
+  if (id === "claude_cli") return "claude";
+  return id;
 }
 
 function statusTone(status: string, ready?: boolean): string {
@@ -154,6 +182,7 @@ function activeProviderLabel(providerStatus: ProviderStatus | null | undefined):
 
 function firstError(state: PanelState): string | null {
   if (state.providerResult && !state.providerResult.ok) return state.providerResult.message;
+  if (state.usageSummary && !state.usageSummary.ok) return state.usageSummary.message;
   if (state.mode && !state.mode.ok && state.mode.message !== "aborted") return state.mode.message;
   if (state.orchestrator && !state.orchestrator.ok && state.orchestrator.message !== "aborted") return state.orchestrator.message;
   return null;
@@ -192,6 +221,7 @@ export function OpenClawLlmAuthPanel({
     mode: null,
     orchestrator: null,
     providerResult: null,
+    usageSummary: null,
     authProbePending: false,
   });
   const [loading, setLoading] = useState(false);
@@ -202,10 +232,11 @@ export function OpenClawLlmAuthPanel({
     setLoading(true);
     setState((current) => ({ ...current, authProbePending: true }));
     try {
-      const [providerResult, modeResult, orchestratorResult] = await Promise.all([
+      const [providerResult, modeResult, orchestratorResult, usageSummary] = await Promise.all([
         api.fetchProviders({ authProbe: false, signal }),
         api.fetchMode({ signal }),
         api.fetchOrchestratorStatus({ signal }),
+        api.fetchUsageSummary({ authProbe: false, windowHours: 168, limit: 500, signal }),
       ]);
       if (signal?.aborted) return;
       const providers = providersFromResults(providerResult, orchestratorResult);
@@ -214,6 +245,7 @@ export function OpenClawLlmAuthPanel({
         mode: modeResult,
         orchestrator: orchestratorResult,
         providerResult,
+        usageSummary,
         authProbePending: true,
       });
 
@@ -245,6 +277,15 @@ export function OpenClawLlmAuthPanel({
   const attentionCount = useMemo(() => state.providers.filter(needsAttention).length, [state.providers]);
   const error = firstError(state);
   const rows = mode === "summary" ? state.providers.slice(0, 3) : state.providers;
+  const usageByProvider = useMemo(() => {
+    const byId = new Map<string, AssistantProviderUsageSummaryRow>();
+    const usageRows = state.usageSummary?.ok ? state.usageSummary.providers : [];
+    for (const row of usageRows) {
+      const key = normalizeProviderId(row.provider ?? row.providerName);
+      if (key) byId.set(key, row);
+    }
+    return byId;
+  }, [state.usageSummary]);
   const checkingAuth = state.authProbePending || (loading && rows.length === 0);
   const authProbeFailed = Boolean(state.providerResult && !state.providerResult.ok);
   const authSummaryLabel = checkingAuth
@@ -333,6 +374,7 @@ export function OpenClawLlmAuthPanel({
             key={providerId(provider)}
             mode={mode}
             provider={provider}
+            usageSummary={usageByProvider.get(normalizeProviderId(providerId(provider))) ?? null}
             reauthBusy={reauthBusy}
             controlActive={activeControl}
             onStartReauth={startReauth}
@@ -358,6 +400,10 @@ export function OpenClawLlmAuthPanel({
         <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           No assistant provider auth status returned.
         </div>
+      )}
+
+      {mode === "full" && (
+        <UsageHistoryPanel summary={state.usageSummary} />
       )}
 
       {reauthResult && (
@@ -403,19 +449,22 @@ export function OpenClawLlmAuthPanel({
 function ProviderCard({
   provider,
   mode,
+  usageSummary,
   controlActive,
   reauthBusy,
   onStartReauth,
 }: {
   provider: AssistantProviderReadinessStatus;
   mode: PanelMode;
+  usageSummary: AssistantProviderUsageSummaryRow | null;
   controlActive: boolean;
   reauthBusy: string | null;
   onStartReauth: (provider: AssistantProviderReadinessStatus) => void;
 }) {
   const id = providerId(provider);
   const authStatus = providerAuthStatus(provider);
-  const usage = providerUsage(provider);
+  const quota = recordFrom(usageSummary?.quota);
+  const usage = Object.keys(quota).length > 0 ? quota : providerUsage(provider);
   const unit = usageValue(usage, "unit");
   const busy = reauthBusy === id;
   const reauthable = supportsReauth(provider);
@@ -437,12 +486,14 @@ function ProviderCard({
         <Info label="status" value={provider.status ?? "unknown"} />
         <Info label="mount" value={provider.mountMode ?? "unknown"} />
         <Info label="remaining" value={usageRemaining(usage)} />
-        <Info label="limit" value={formatMetric(usageValue(usage, "limit"), unit)} />
+        <Info label="used" value={formatMetric(usageValue(usage, "used"), unit)} />
+        <Info label="history calls" value={formatNumber(usageSummary?.calls)} />
+        <Info label="tokens" value={formatNumber(usageSummary?.totalTokens)} />
         {mode === "full" && (
           <>
-            <Info label="used" value={formatMetric(usageValue(usage, "used"), unit)} />
+            <Info label="limit" value={formatMetric(usageValue(usage, "limit"), unit)} />
             <Info label="reset" value={usageReset(usage)} />
-            <Info className="col-span-2" label="usage" value={usageValue(usage, "status", "reason") || "unknown"} />
+            <Info className="col-span-2" label="quota source" value={usageValue(usage, "source", "status", "reason") || "unknown"} />
             <Info className="col-span-2" label="checked" value={provider.checkedAt ?? "unknown"} />
           </>
         )}
@@ -462,6 +513,97 @@ function ProviderCard({
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
           {reauthable ? "Start reauth" : "Reauth unavailable"}
         </Button>
+      )}
+    </article>
+  );
+}
+
+function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummaryResult | null }) {
+  if (!summary) {
+    return (
+      <section className="mt-5 border-t border-border pt-4">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Loading provider usage history.</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (!summary.ok) {
+    return (
+      <section className="mt-5 border-t border-border pt-4">
+        <div className="flex items-start gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-xs text-status-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{summary.message}</span>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-5 border-t border-border pt-4" aria-label="Provider usage history">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">Usage history</h3>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{formatNumber(summary.totals.liveAuthCount)} live auth</Badge>
+          <Badge variant="outline">{formatNumber(summary.totals.calls)} calls</Badge>
+          <Badge variant="outline">{formatNumber(summary.totals.totalTokens)} tokens</Badge>
+        </div>
+      </header>
+
+      <div className="mt-3 divide-y divide-border rounded-md border border-border">
+        {summary.providers.map((provider) => (
+          <UsageHistoryRow key={provider.provider ?? provider.providerName ?? "unknown"} provider={provider} />
+        ))}
+        {summary.providers.length === 0 && (
+          <div className="p-3 text-xs text-muted-foreground">No provider usage history returned.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummaryRow }) {
+  const quota = recordFrom(provider.quota);
+  const models = provider.models ?? [];
+  return (
+    <article className="p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm text-foreground">{provider.provider ?? "unknown"}</span>
+            <Badge variant="outline" className={statusTone(provider.authStatus ?? provider.status ?? "unknown", provider.liveAuth)}>
+              {provider.liveAuth ? "live auth" : provider.authStatus ?? provider.status ?? "unknown"}
+            </Badge>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</div>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+          <Info label="calls" value={formatNumber(provider.calls)} />
+          <Info label="fail" value={formatNumber(provider.failedCount)} />
+          <Info label="tokens" value={formatNumber(provider.totalTokens)} />
+          <Info label="last" value={provider.lastUsedAt ?? "unknown"} />
+        </dl>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+        <Info label="quota source" value={usageValue(quota, "source") || "unknown"} />
+        <Info label="remaining" value={usageRemaining(quota)} />
+        <Info label="quota used" value={formatMetric(usageValue(quota, "used"), usageValue(quota, "unit"))} />
+        <Info label="prompt bytes" value={formatNumber(provider.promptBytes)} />
+      </dl>
+      {models.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {models.slice(0, 4).map((model) => (
+            <span key={model.model ?? "default"} className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground">
+              <span className="font-mono text-foreground">{model.model ?? "default"}</span>
+              {" · "}
+              {formatNumber(model.calls)} calls
+              {" · "}
+              {formatNumber(model.totalTokens)} tokens
+            </span>
+          ))}
+        </div>
       )}
     </article>
   );

@@ -6,7 +6,10 @@ import {
   OpenClawLlmAuthPanel,
   type OpenClawLlmAuthApi,
 } from "./OpenClawLlmAuthPanel";
-import type { AssistantProvidersResult } from "@/lib/bff-v1/managementAi";
+import type {
+  AssistantProviderUsageSummaryResult,
+  AssistantProvidersResult,
+} from "@/lib/bff-v1/managementAi";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -73,6 +76,61 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
         },
       },
     }),
+    fetchUsageSummary: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      status: "ok",
+      providers: [
+        {
+          provider: "codex_cli",
+          providerName: "Codex CLI",
+          runtime: "openclaw_gateway_cli_mount",
+          ready: true,
+          authStatus: "ready",
+          liveAuth: true,
+          calls: 7,
+          successCount: 6,
+          failedCount: 1,
+          promptBytes: 1200,
+          inputTokens: 100,
+          outputTokens: 40,
+          totalTokens: 140,
+          quota: {
+            status: "captured",
+            source: "provider_snapshot",
+            remaining: 12,
+            remainingPercent: 24,
+            limit: 50,
+            used: 38,
+            unit: "requests",
+          },
+          observedUsage: {
+            source: "management_ai_audit",
+            calls: 7,
+            totalTokens: 140,
+          },
+          models: [
+            {
+              model: "gpt-5-codex",
+              calls: 7,
+              totalTokens: 140,
+            },
+          ],
+        },
+      ],
+      totals: {
+        providers: 1,
+        liveAuthCount: 1,
+        calls: 7,
+        successCount: 6,
+        failedCount: 1,
+        totalTokens: 140,
+      },
+      quota: {
+        truthPolicy: "provider_snapshot_only",
+      },
+      meta: { auth_probe: false },
+    } satisfies AssistantProviderUsageSummaryResult),
     startReauth: vi.fn().mockResolvedValue({
       ok: true,
       kind: "ok",
@@ -192,6 +250,8 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByText("Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("failed")).toBeInTheDocument();
     expect(screen.getByText("12 requests (24%)")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("140")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open management page" })).toHaveAttribute(
       "href",
       "/management/openclaw-llm-auth",
@@ -216,5 +276,20 @@ describe("OpenClawLlmAuthPanel", () => {
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /login/i })).toHaveAttribute("href", "https://example.test/device");
+  });
+
+  it("renders provider usage history and quota source on the full management page", async () => {
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={api()} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(screen.getByText("1 live auth")).toBeInTheDocument();
+    expect(screen.getByText("7 calls")).toBeInTheDocument();
+    expect(screen.getByText("140 tokens")).toBeInTheDocument();
+    expect(screen.getAllByText("provider_snapshot").length).toBeGreaterThan(0);
+    expect(screen.getByText("gpt-5-codex")).toBeInTheDocument();
   });
 });

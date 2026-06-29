@@ -143,6 +143,81 @@ export interface AssistantProviderReadinessStatus {
   repairWorkspace?: AssistantRepairWorkspaceStatus | null;
 }
 
+export interface AssistantProviderUsageSummaryModel {
+  model?: string;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  averageDurationMs?: number | null;
+  lastUsedAt?: string | null;
+  lastStatus?: string | null;
+}
+
+export interface AssistantProviderUsageObserved {
+  source?: string;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface AssistantProviderUsageSummaryRow {
+  provider?: string;
+  providerName?: string;
+  runtime?: string | null;
+  ready?: boolean;
+  authStatus?: string | null;
+  status?: string | null;
+  liveAuth?: boolean;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  startedCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  averageDurationMs?: number | null;
+  lastUsedAt?: string | null;
+  lastStatus?: string | null;
+  lastError?: string | null;
+  quota?: AssistantProviderUsage | Record<string, unknown> | null;
+  observedUsage?: AssistantProviderUsageObserved | Record<string, unknown> | null;
+  models?: AssistantProviderUsageSummaryModel[];
+}
+
+export interface AssistantProviderUsageTotals {
+  providers?: number;
+  liveAuthCount?: number;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export type AssistantProviderUsageSummaryResult =
+  | {
+      ok: true;
+      kind: "ok";
+      status: string | null;
+      providers: AssistantProviderUsageSummaryRow[];
+      totals: AssistantProviderUsageTotals;
+      quota: Record<string, unknown> | null;
+      meta: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
 export type AssistantProvidersResult =
   | {
       ok: true;
@@ -692,6 +767,88 @@ function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessS
   };
 }
 
+function adaptProviderUsageSummaryModel(raw: unknown): AssistantProviderUsageSummaryModel | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    model: asString(r.model),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    durationMs: asNumber(r.durationMs ?? r.duration_ms),
+    averageDurationMs: asNumber(r.averageDurationMs ?? r.average_duration_ms) ?? null,
+    lastUsedAt: asString(r.lastUsedAt ?? r.last_used_at) ?? null,
+    lastStatus: asString(r.lastStatus ?? r.last_status) ?? null,
+  };
+}
+
+function adaptProviderObservedUsage(raw: unknown): AssistantProviderUsageObserved | Record<string, unknown> | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    ...r,
+    source: asString(r.source),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+  };
+}
+
+function adaptProviderUsageSummaryRow(raw: unknown): AssistantProviderUsageSummaryRow | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    provider: asString(r.provider),
+    providerName: asString(r.providerName ?? r.provider_name),
+    runtime: asString(r.runtime) ?? null,
+    ready: asBoolean(r.ready),
+    authStatus: asString(r.authStatus ?? r.auth_status) ?? null,
+    status: asString(r.status) ?? null,
+    liveAuth: asBoolean(r.liveAuth ?? r.live_auth),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    startedCount: asNumber(r.startedCount ?? r.started_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    durationMs: asNumber(r.durationMs ?? r.duration_ms),
+    averageDurationMs: asNumber(r.averageDurationMs ?? r.average_duration_ms) ?? null,
+    lastUsedAt: asString(r.lastUsedAt ?? r.last_used_at) ?? null,
+    lastStatus: asString(r.lastStatus ?? r.last_status) ?? null,
+    lastError: asString(r.lastError ?? r.last_error) ?? null,
+    quota: adaptProviderUsage(r.quota),
+    observedUsage: adaptProviderObservedUsage(r.observedUsage ?? r.observed_usage),
+    models: asRecordArray(r.models)
+      .map(adaptProviderUsageSummaryModel)
+      .filter((item): item is AssistantProviderUsageSummaryModel => Boolean(item)),
+  };
+}
+
+function adaptProviderUsageTotals(raw: unknown): AssistantProviderUsageTotals {
+  const r = asRecord(raw);
+  if (!r) return {};
+  return {
+    providers: asNumber(r.providers),
+    liveAuthCount: asNumber(r.liveAuthCount ?? r.live_auth_count),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+  };
+}
+
 export async function fetchAssistantProviders(
   options?: { authProbe?: boolean; signal?: AbortSignal },
 ): Promise<AssistantProvidersResult> {
@@ -750,6 +907,78 @@ export async function fetchAssistantProviders(
     kind: "ok",
     status: asString(parsed?.status) ?? null,
     providers,
+    meta: asRecord(parsed?.meta) ?? null,
+  };
+}
+
+export async function fetchAssistantProviderUsageSummary(
+  options?: { authProbe?: boolean; windowHours?: number; limit?: number; signal?: AbortSignal },
+): Promise<AssistantProviderUsageSummaryResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(
+      `${base}${paths.assistantProviderUsageSummary(
+        options?.authProbe ?? false,
+        options?.windowHours ?? 168,
+        options?.limit ?? 500,
+      )}`,
+      {
+        method: "GET",
+        headers,
+        credentials: "include",
+        signal: options?.signal,
+      },
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = asRecord(parsed?.data);
+  const providers = asRecordArray(data?.providers)
+    .map(adaptProviderUsageSummaryRow)
+    .filter((item): item is AssistantProviderUsageSummaryRow => Boolean(item));
+  return {
+    ok: true,
+    kind: "ok",
+    status: asString(parsed?.status) ?? null,
+    providers,
+    totals: adaptProviderUsageTotals(data?.totals),
+    quota: asRecord(data?.quota) ?? null,
     meta: asRecord(parsed?.meta) ?? null,
   };
 }

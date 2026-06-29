@@ -5,6 +5,7 @@ import {
   streamManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
+  fetchAssistantProviderUsageSummary,
   fetchAssistantProviders,
   fetchAssistantProviderReauthStatus,
   fetchManagementAiConversationList,
@@ -202,6 +203,89 @@ describe("Management AI orchestrator status", () => {
       limit: 50,
       used: 38,
       resetAt: "2026-06-29T00:00:00Z",
+    });
+  });
+
+  it("reads assistant provider usage history and quota summary from the BFF", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      status: "ok",
+      data: {
+        providers: [
+          {
+            provider: "codex_cli",
+            provider_name: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: true,
+            auth_status: "ready",
+            live_auth: true,
+            calls: 7,
+            success_count: 6,
+            failed_count: 1,
+            prompt_bytes: 1200,
+            input_tokens: 100,
+            output_tokens: 40,
+            total_tokens: 140,
+            quota: {
+              status: "captured",
+              source: "provider_snapshot",
+              remaining: 12,
+              used: 38,
+              limit: 50,
+              unit: "requests",
+            },
+            observed_usage: {
+              source: "management_ai_audit",
+              calls: 7,
+              total_tokens: 140,
+            },
+            models: [
+              {
+                model: "gpt-5-codex",
+                calls: 7,
+                total_tokens: 140,
+              },
+            ],
+          },
+        ],
+        totals: {
+          providers: 1,
+          live_auth_count: 1,
+          calls: 7,
+          total_tokens: 140,
+        },
+        quota: {
+          truth_policy: "provider_snapshot_only",
+        },
+      },
+      meta: { auth_probe: false },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchAssistantProviderUsageSummary({ windowHours: 168, limit: 500 });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/providers/usage-summary?auth_probe=false&window_hours=168&limit=500",
+    );
+    expect(result.totals.liveAuthCount).toBe(1);
+    expect(result.totals.totalTokens).toBe(140);
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex_cli",
+      providerName: "Codex CLI",
+      liveAuth: true,
+      calls: 7,
+      totalTokens: 140,
+    });
+    expect(result.providers[0].quota).toMatchObject({
+      source: "provider_snapshot",
+      remaining: 12,
+      used: 38,
+    });
+    expect(result.providers[0].models?.[0]).toMatchObject({
+      model: "gpt-5-codex",
+      totalTokens: 140,
     });
   });
 });
