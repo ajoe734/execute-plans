@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -98,6 +98,25 @@ import NotFound from "./pages/NotFound";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
+
+function TradingRoomRoute() {
+  const navigate = useNavigate();
+  const { strategyId } = useParams<{ strategyId?: string }>();
+  const [searchParams] = useSearchParams();
+  const strategyVersion = searchParams.get("strategyVersion") ?? undefined;
+  const suffix = strategyVersion ? `?strategyVersion=${encodeURIComponent(strategyVersion)}` : "";
+
+  return (
+    <TradingRoomPage
+      onBackToWorkshop={() => navigate("/agora/strategy-workshop")}
+      onStrategySelect={(nextStrategyId) =>
+        navigate(nextStrategyId ? `/agora/trading-room/${encodeURIComponent(nextStrategyId)}${suffix}` : "/agora/trading-room")
+      }
+      strategyId={strategyId}
+      strategyVersion={strategyVersion}
+    />
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -239,7 +258,8 @@ const App = () => (
             {/* TradingDesk — canonical Agora shell with trading-room, strategy-workshop, and strategy-performance tabs. */}
             <Route path="/agora" element={<TradingDeskLayout />}>
               <Route index element={<Navigate to="/agora/trading-room" replace />} />
-              <Route path="trading-room" element={<TradingRoomPage />} />
+              <Route path="trading-room" element={<TradingRoomRoute />} />
+              <Route path="trading-room/:strategyId" element={<TradingRoomRoute />} />
               <Route path="strategy-workshop" element={<StrategyWorkshopPage />} />
               <Route path="strategy-workshop/:workshopId" element={<StrategyWorkshopPage />} />
               <Route path="strategy-performance" element={<div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">策略執行與績效 — 即將推出</div>} />
