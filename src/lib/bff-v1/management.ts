@@ -398,9 +398,6 @@ const inboxDetailHref = (id: string): string =>
 const normalizeInboxManageHref = (raw: unknown): string | undefined => {
   const href = asString(raw);
   if (!href) return undefined;
-  if (href.startsWith("/management/fleet")) {
-    return `/management/persona-fleet${href.slice("/management/fleet".length)}`;
-  }
   if (href.startsWith("/governance-review-queue")) {
     return `/management/governance${href.slice("/governance-review-queue".length)}`;
   }

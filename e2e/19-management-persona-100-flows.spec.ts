@@ -731,7 +731,7 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
       body: envelope(cockpitModel(), path),
     };
   }
-  if (pathname === "/bff/management/fleet" || pathname === "/bff/management/persona-fleet") {
+  if (pathname === "/bff/management/persona-fleet") {
     return { status: 200, body: managementFleetEnvelope(path) };
   }
   if (pathname === "/bff/management/human-inbox") {
@@ -1005,8 +1005,8 @@ async function installBffFixture(page: Page, hits: BffHit[]): Promise<void> {
 
 const uiFlows: UiFlow[] = [
   { id: "ui-001-cockpit", type: "ui", category: "display", path: "/management/cockpit", endpoint: "/bff/management/cockpit" },
-  { id: "ui-002-persona-fleet", type: "ui", category: "display", path: "/management/persona-fleet", endpoint: "/bff/management/fleet", text: PERSONA_NAME },
-  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/fleet", text: "IBKR" },
+  { id: "ui-002-persona-fleet", type: "ui", category: "display", path: "/management/persona-fleet", endpoint: "/bff/management/persona-fleet", text: PERSONA_NAME },
+  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/persona-fleet", text: "IBKR" },
   { id: "ui-004-human-inbox", type: "ui", category: "monitor", path: "/management/human-inbox", endpoint: "/bff/management/human-inbox", text: "MGMT100" },
   { id: "ui-005-trading-pulse", type: "ui", category: "monitor", path: "/management/trading-pulse", endpoint: "/bff/management/trading-pulse" },
   { id: "ui-006-evolution-journal", type: "ui", category: "monitor", path: "/management/evolution-journal", endpoint: "/bff/management/evolution-journal", text: "Restrict route tools" },
@@ -1033,8 +1033,7 @@ const uiFlows: UiFlow[] = [
 
 const fetchFlows: FetchFlow[] = [
   { id: "fetch-026-me", type: "fetch", category: "display", method: "GET", path: "/bff/me" },
-  { id: "fetch-027-fleet", type: "fetch", category: "display", method: "GET", path: "/bff/management/fleet" },
-  { id: "fetch-028-fleet-alias", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-fleet" },
+  { id: "fetch-027-persona-fleet", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-fleet" },
   { id: "fetch-029-league", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-league" },
   { id: "fetch-030-league-alias", type: "fetch", category: "display", method: "GET", path: "/bff/persona-league" },
   { id: "fetch-031-persona-intent", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-intent" },
@@ -1057,7 +1056,7 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-048-persona-detail", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}` },
   { id: "fetch-049-persona-memory", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}/memory` },
   { id: "fetch-050-persona-evaluations", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}/evaluations` },
-  { id: "fetch-051-fleet-filter", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/fleet?health=degraded&page_size=1" },
+  { id: "fetch-051-fleet-filter", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/persona-fleet?health=degraded&page_size=1" },
   { id: "fetch-052-intent-filter", type: "fetch", category: "monitor", method: "GET", path: `/bff/management/persona-intent?persona_id=${PERSONA_ID}&status=active` },
   { id: "fetch-053-rankings", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/trading-pulse/rankings" },
   { id: "fetch-054-league-rankings", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/persona-league/rankings" },

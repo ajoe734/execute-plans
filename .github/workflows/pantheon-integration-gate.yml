@@ -55,7 +55,7 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/fleet"
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/persona-fleet"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}

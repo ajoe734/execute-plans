@@ -55,7 +55,7 @@ describe("mgmt façade (PM-Live)", () => {
             action_state: "pending",
             can_proceed: false,
             allowed_actions: { can_decide: false },
-            route: "/management/fleet?persona=persona-us-equity",
+            route: "/management/persona-fleet?persona=persona-us-equity",
             blocking_reasons: ["Missing validation packet"],
           },
           {
@@ -100,7 +100,7 @@ describe("mgmt façade (PM-Live)", () => {
           summary: "paper broker sandbox readback and funding-rate stress review",
           canProceed: false,
           allowedActions: { canDecide: false },
-          route: "/management/fleet?persona=persona-crypto",
+          route: "/management/persona-fleet?persona=persona-crypto",
           evidence_refs: ["support/evidence/research/crypto.json"],
         },
       },
@@ -276,7 +276,7 @@ describe("mgmt façade (PM-Live)", () => {
 
   it("all 14 mgmt paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
-    expect(paths.mgmtPersonaFleet()).toMatch(/management\/fleet$/);
+    expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
     expect(paths.mgmtHumanInboxItem("xyz")).toMatch(/human-inbox\/xyz$/);
     expect(paths.mgmtTradingPulse()).toMatch(/trading-pulse$/);
