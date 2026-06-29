@@ -10,7 +10,9 @@ const gridCallbacks = vi.hoisted(() => ({
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
+  acceptWidgetRevisionProposal: vi.fn(),
   createTradingRoomWorkspaceProposal: vi.fn(),
+  createWidgetRevisionProposal: vi.fn(),
   getTradingRoom: vi.fn(),
   listDecisionEvents: vi.fn(),
   listTradingRoomWorkspaceVersions: vi.fn(),
@@ -76,7 +78,8 @@ import type {
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/types";
+  WidgetRevisionProposal,
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 function makeBffError(status: number, code: ErrorCode, message: string): BffError {
   return new BffError(status, {
@@ -430,6 +433,40 @@ const MOCK_WORKSPACE_V2: TradingRoomWorkspace = {
   ],
 };
 
+const MOCK_REVISION_WORKSPACE: TradingRoomWorkspace = {
+  ...MOCK_WORKSPACE,
+  dashboardVersion: 2,
+  generatedBy: "user_modified",
+  updatedAt: "2026-06-29T01:30:00Z",
+  views: [
+    {
+      ...MOCK_WORKSPACE.views[0],
+      widgets: [
+        {
+          ...MOCK_WORKSPACE.views[0].widgets[0],
+          title: "策略狀態摘要 Revised",
+          purpose: "策略狀態摘要 revised by widget proposal",
+        },
+      ],
+    },
+    ...MOCK_WORKSPACE.views.slice(1),
+  ],
+};
+
+const MOCK_WIDGET_REVISION_PROPOSAL: WidgetRevisionProposal = {
+  id: "wrp-001",
+  workspaceId: "workspace-001",
+  viewId: "strategy-overview",
+  widgetId: "w-status",
+  instruction: "改成表格",
+  beforeSpec: MOCK_WORKSPACE.views[0].widgets[0],
+  proposedSpec: MOCK_REVISION_WORKSPACE.views[0].widgets[0],
+  rationale: "保留原資料來源，改用更適合快速比較的呈現。",
+  warnings: ["cluster-adjusted flow uses inferred evidence"],
+  dataAvailability: "partial",
+  status: "preview",
+};
+
 const MOCK_VERSION_1: TradingRoomDashboardVersion = {
   id: "version-001",
   userId: "user-001",
@@ -486,6 +523,18 @@ describe("TradingRoomPage", () => {
       etag: '"workspace-etag-v1"',
       version: MOCK_VERSION_1,
       workspace: MOCK_WORKSPACE,
+    });
+    vi.mocked(tradingRoomModule.createWidgetRevisionProposal).mockResolvedValue({
+      etag: '"revision-etag-v1"',
+      proposal: MOCK_WIDGET_REVISION_PROPOSAL,
+    });
+    vi.mocked(tradingRoomModule.acceptWidgetRevisionProposal).mockResolvedValue({
+      appliedAction: "apply",
+      copiedWidgetId: null,
+      etag: '"workspace-etag-v2"',
+      proposal: { ...MOCK_WIDGET_REVISION_PROPOSAL, status: "accepted" },
+      version: MOCK_VERSION_2,
+      workspace: MOCK_REVISION_WORKSPACE,
     });
     vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mockResolvedValue({
       etag: '"workspace-etag-v2"',
@@ -843,6 +892,90 @@ describe("TradingRoomPage", () => {
         { reason: "rollback to dashboard version 1" },
         expect.objectContaining({
           ifMatch: '"workspace-etag-v2"',
+          idempotencyKey: expect.any(String),
+        }),
+      ),
+    );
+  });
+
+  it("opens widget adjustment drawer from widget click and applies a backend revision proposal", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-widget-w-status"));
+    await screen.findByTestId("workspace-widget-revision-drawer");
+    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("策略狀態摘要 purpose");
+    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("agora.strategy.summary");
+    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("strategy-overview");
+
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "改成表格" },
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-submit"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.createWidgetRevisionProposal).toHaveBeenCalledWith(
+        "workspace-001",
+        "w-status",
+        expect.objectContaining({
+          instruction: "改成表格",
+          proposedSpec: expect.objectContaining({
+            dataSource: "agora.strategy.summary",
+            id: "w-status",
+            widgetType: "strategy_status_summary",
+          }),
+          viewId: "strategy-overview",
+        }),
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    );
+    await screen.findByTestId("workspace-widget-revision-proposal");
+
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-apply"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.acceptWidgetRevisionProposal).toHaveBeenCalledWith(
+        "wrp-001",
+        expect.objectContaining({ acceptanceAction: "apply" }),
+        expect.objectContaining({
+          ifMatch: '"workspace-etag-v1"',
+          idempotencyKey: expect.any(String),
+        }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+    expect(screen.getByTestId("workspace-widget-w-status").textContent).toContain("策略狀態摘要 Revised");
+  });
+
+  it("opens widget adjustment from the widget menu and keeps original plus modified copy", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-widget-menu-w-status"));
+    fireEvent.click(screen.getByText("交代僕人修改"));
+    await screen.findByTestId("workspace-widget-revision-drawer");
+
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "保留原圖，再新增長條圖版本" },
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-submit"));
+    await screen.findByTestId("workspace-widget-revision-proposal");
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-keep-copy"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.acceptWidgetRevisionProposal).toHaveBeenCalledWith(
+        "wrp-001",
+        expect.objectContaining({
+          acceptanceAction: "keep_original_add_modified_copy",
+          copyWidgetId: expect.stringMatching(/^w-status_copy_/u),
+        }),
+        expect.objectContaining({
+          ifMatch: '"workspace-etag-v1"',
           idempotencyKey: expect.any(String),
         }),
       ),

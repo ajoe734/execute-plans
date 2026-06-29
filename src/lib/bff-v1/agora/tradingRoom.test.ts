@@ -12,7 +12,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   acceptTradingRoomWorkspaceProposal,
   acceptTradingRoomWorkspaceProposalWithMeta,
+  acceptWidgetRevisionProposal,
   createTradingRoomWorkspaceProposal,
+  createWidgetRevisionProposal,
   decideOnEvent,
   getTradingRoomWorkspace,
   getTradingRoomWorkspaceWithMeta,
@@ -299,6 +301,43 @@ const mockWorkspace = {
   updatedAt: "2026-06-29T00:00:00Z",
 };
 
+const mockWidget = {
+  id: "widget-001",
+  widgetType: "candidate_funnel",
+  title: "Candidate Funnel",
+  purpose: "Show candidate lifecycle distribution.",
+  whyIncluded: "Required by the strategy overview.",
+  dataSource: "agora.candidate.members",
+  query: { filters: { strategy_id: "strat-001" }, limit: 50, window: "20d" },
+  chartSpec: {
+    spec_version: "1.0",
+    kind: "bar",
+    encodings: {
+      x: { field: "status", type: "nominal" },
+      y: { field: "count", type: "quantitative" },
+    },
+  },
+  interactions: [{ kind: "request_widget_revision" }],
+  placement: { x: 0, y: 0, width: 4, height: 3, minWidth: 2, minHeight: 2 },
+  minSize: { width: 2, height: 2 },
+  maxSize: { width: 12, height: 6 },
+  sensitivity: "user_private",
+};
+
+const mockWidgetRevisionProposal = {
+  id: "wrp-001",
+  workspaceId: "workspace-001",
+  viewId: "overview",
+  widgetId: "widget-001",
+  instruction: "改成表格",
+  beforeSpec: mockWidget,
+  proposedSpec: { ...mockWidget, title: "Candidate Funnel Table" },
+  rationale: "Table is better for direct comparison.",
+  warnings: [],
+  dataAvailability: "complete",
+  status: "preview",
+};
+
 describe("Trading Room workspace proposal routes", () => {
   it("creates a workspace proposal with strategyVersion and Idempotency-Key", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
@@ -522,6 +561,91 @@ describe("Trading Room workspace proposal routes", () => {
     expect(result.workspace.dashboardVersion).toBe(3);
     expect(result.version?.id).toBe("version-003");
     expect(result.etag).toBe('"workspace-etag-v3"');
+  });
+
+  it("creates a widget revision proposal with proposedSpec and Idempotency-Key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({ data: mockWidgetRevisionProposal }, 201, { ETag: '"revision-etag-v1"' }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const result = await createWidgetRevisionProposal(
+      "workspace/001",
+      "widget/001",
+      {
+        dataAvailability: "complete",
+        instruction: "改成表格",
+        proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+        rationale: "Table is better for direct comparison.",
+        viewId: "overview",
+        warnings: [],
+      },
+      { idempotencyKey: "idem-revision-create-1" },
+      BASE,
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace%2F001/widgets/widget%2F001/revision-proposals`,
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
+      dataAvailability: "complete",
+      instruction: "改成表格",
+      proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+      rationale: "Table is better for direct comparison.",
+      viewId: "overview",
+      warnings: [],
+    }));
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-revision-create-1");
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["If-Match"]).toBeUndefined();
+    expect(result.proposal.id).toBe("wrp-001");
+    expect(result.etag).toBe('"revision-etag-v1"');
+  });
+
+  it("accepts a widget revision proposal with If-Match and keep-copy action", async () => {
+    const version = { id: "version-002", dashboardVersion: 2, changeLog: { sourceRevisionProposalId: "wrp-001" } };
+    const acceptedProposal = { ...mockWidgetRevisionProposal, status: "accepted" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok(
+        {
+          data: {
+            appliedAction: "keep_original_add_modified_copy",
+            copiedWidgetId: "widget-001-copy",
+            proposal: acceptedProposal,
+            version,
+            workspace: { ...mockWorkspace, dashboardVersion: 2 },
+          },
+          meta: { version_id: "version-002" },
+        },
+        200,
+        { ETag: '"workspace-etag-v2"' },
+      ),
+    );
+    globalThis.fetch = fetchMock;
+
+    const result = await acceptWidgetRevisionProposal(
+      "wrp/001",
+      { acceptanceAction: "keep_original_add_modified_copy", copyWidgetId: "widget-001-copy" },
+      { ifMatch: '"workspace-etag-v1"', idempotencyKey: "idem-revision-accept-1" },
+      BASE,
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/widget-revision-proposals/wrp%2F001/accept`,
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
+      acceptanceAction: "keep_original_add_modified_copy",
+      copyWidgetId: "widget-001-copy",
+    }));
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers["If-Match"]).toBe('"workspace-etag-v1"');
+    expect(headers["Idempotency-Key"]).toBe("idem-revision-accept-1");
+    expect(result.workspace.dashboardVersion).toBe(2);
+    expect(result.proposal.status).toBe("accepted");
+    expect(result.appliedAction).toBe("keep_original_add_modified_copy");
+    expect(result.copiedWidgetId).toBe("widget-001-copy");
+    expect(result.etag).toBe('"workspace-etag-v2"');
   });
 
   it("preserves typed 403 proposal creation failures", async () => {

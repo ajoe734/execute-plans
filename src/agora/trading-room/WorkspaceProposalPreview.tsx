@@ -3,7 +3,7 @@ import React from "react";
 import type {
   TradingRoomViewSpec,
   TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/types";
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 import {
   safeWarningText,
   validateTradingRoomWidgetSpec,

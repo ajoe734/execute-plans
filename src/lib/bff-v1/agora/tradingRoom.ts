@@ -12,10 +12,12 @@
 
 import type {
   TradingRoomDashboardVersion,
+  TradingRoomWidgetSpec,
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
+  WidgetRevisionProposal,
   WorkspaceLayoutOperation,
-} from "./types";
+} from "./tradingRoomTypes";
 import {
   BffError,
   normalizeBffErrorEnvelope,
@@ -220,6 +222,31 @@ export interface PatchTradingRoomWorkspaceLayoutRequest {
 
 export interface RollbackTradingRoomWorkspaceVersionRequest {
   reason?: string;
+}
+
+export interface CreateWidgetRevisionProposalRequest {
+  viewId?: string;
+  instruction: string;
+  proposedSpec: TradingRoomWidgetSpec;
+  rationale: string;
+  warnings?: string[];
+  dataAvailability: "complete" | "partial" | "unavailable";
+}
+
+export interface AcceptWidgetRevisionProposalRequest {
+  acceptanceAction?: "apply" | "keep_original_add_modified_copy";
+  copyWidgetId?: string;
+}
+
+export interface WidgetRevisionProposalResult {
+  proposal: WidgetRevisionProposal;
+  etag: string | null;
+}
+
+export interface WidgetRevisionAcceptResult extends TradingRoomWorkspaceResult {
+  proposal: WidgetRevisionProposal;
+  appliedAction?: "apply" | "keep_original_add_modified_copy";
+  copiedWidgetId?: string | null;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -480,6 +507,33 @@ function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoo
     };
   }
   throw makeMalformedBffEnvelope("Trading Room workspace response did not include a workspace.");
+}
+
+function extractWidgetRevisionProposal(value: unknown, etag: string | null): WidgetRevisionProposalResult {
+  return {
+    etag,
+    proposal: extractDetail<WidgetRevisionProposal>(value),
+  };
+}
+
+function extractWidgetRevisionAcceptResult(value: unknown, etag: string | null): WidgetRevisionAcceptResult {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  const workspaceResult = extractWorkspaceResult(value, etag);
+  const proposal = recordFrom(data.proposal);
+  if (!proposal.id) {
+    throw makeMalformedBffEnvelope("Widget revision accept response did not include a proposal.");
+  }
+  const appliedAction = typeof data.appliedAction === "string"
+    ? data.appliedAction as WidgetRevisionAcceptResult["appliedAction"]
+    : undefined;
+  const copiedWidgetId = typeof data.copiedWidgetId === "string" ? data.copiedWidgetId : null;
+  return {
+    ...workspaceResult,
+    appliedAction,
+    copiedWidgetId,
+    proposal: proposal as unknown as WidgetRevisionProposal,
+  };
 }
 
 function extractWorkspaceVersions(value: unknown): TradingRoomDashboardVersion[] {
@@ -797,6 +851,51 @@ export async function rollbackTradingRoomWorkspaceVersion(
   }
   const responseBody = await parseJson(res);
   return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
+/** Create a widget-scoped before/after revision proposal preview. */
+export async function createWidgetRevisionProposal(
+  workspaceId: string,
+  widgetId: string,
+  body: CreateWidgetRevisionProposalRequest,
+  options?: Pick<TradingRoomWorkspaceMutationOptions, "idempotencyKey">,
+  baseUrl?: string,
+): Promise<WidgetRevisionProposalResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(widgetId)}/revision-proposals`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWidgetRevisionProposal(responseBody, res.headers.get("ETag"));
+}
+
+/** Apply or keep-copy an accepted widget revision proposal, appending a workspace version. */
+export async function acceptWidgetRevisionProposal(
+  proposalId: string,
+  body: AcceptWidgetRevisionProposalRequest = { acceptanceAction: "apply" },
+  options?: TradingRoomWorkspaceMutationOptions,
+  baseUrl?: string,
+): Promise<WidgetRevisionAcceptResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/widget-revision-proposals/${encodeURIComponent(proposalId)}/accept`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: mutationHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWidgetRevisionAcceptResult(responseBody, res.headers.get("ETag"));
 }
 
 /**
