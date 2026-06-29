@@ -14,7 +14,7 @@ import {
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
   TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/types";
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 

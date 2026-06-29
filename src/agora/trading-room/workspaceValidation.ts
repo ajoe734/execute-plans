@@ -1,4 +1,4 @@
-import type { TradingRoomWidgetSpec } from "@/lib/bff-v1/agora/types";
+import type { TradingRoomWidgetSpec } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import {
   getWidgetRegistryEntry,
   isBlockedInteractionKind,

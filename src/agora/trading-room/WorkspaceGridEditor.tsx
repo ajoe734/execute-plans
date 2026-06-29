@@ -4,13 +4,14 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 import type {
-  ChartSpecV1,
   PersonalizationEvent,
+} from "@/lib/bff-v1/agora/types";
+import type {
   TradingRoomDashboardVersion,
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
   WorkspaceLayoutOperation,
-} from "@/lib/bff-v1/agora/types";
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 import {
   listTradingRoomWorkspaceVersions,
   patchTradingRoomWorkspaceLayout,
@@ -30,6 +31,8 @@ import {
   safeWarningText,
   validateTradingRoomWidgetSpec,
 } from "./workspaceValidation";
+import { chartSpecForKind, chartSpecSummary } from "./workspaceChartSpec";
+import WorkspaceWidgetRevisionDrawer from "./WorkspaceWidgetRevisionDrawer";
 
 const GRID_COLS = 12;
 const GRID_WIDTH = 1320;
@@ -56,69 +59,6 @@ function cloneWorkspace(workspace: TradingRoomWorkspace): TradingRoomWorkspace {
 
 function sortedViews(workspace: TradingRoomWorkspace) {
   return [...workspace.views].sort((a, b) => a.order - b.order);
-}
-
-function chartSpecForKind(kind: ChartSpecKind): ChartSpecV1 {
-  const encodingsByKind: Partial<Record<ChartSpecKind, ChartSpecV1["encodings"]>> = {
-    bar: {
-      x: { field: "label", type: "nominal" },
-      y: { field: "value", type: "quantitative" },
-    },
-    gauge: {
-      label: { field: "metric", type: "nominal" },
-      value: { field: "value", type: "quantitative" },
-    },
-    heatmap: {
-      row: { field: "branch_cluster", type: "nominal" },
-      column: { field: "trade_date", type: "temporal" },
-      value: { field: "net_flow", type: "quantitative" },
-    },
-    line: {
-      x: { field: "trade_date", type: "temporal" },
-      y: { field: "value", type: "quantitative" },
-    },
-    metric: {
-      label: { field: "metric", type: "nominal" },
-      value: { field: "value", type: "quantitative" },
-    },
-    network: {
-      source: { field: "source", type: "nominal" },
-      target: { field: "target", type: "nominal" },
-      value: { field: "weight", type: "quantitative" },
-    },
-    sankey: {
-      source: { field: "source", type: "nominal" },
-      target: { field: "target", type: "nominal" },
-      value: { field: "flow", type: "quantitative" },
-    },
-    scatter: {
-      x: { field: "probability", type: "quantitative" },
-      y: { field: "expected_value", type: "quantitative" },
-      size: { field: "liquidity", type: "quantitative" },
-      color: { field: "confidence", type: "quantitative" },
-    },
-    timeline: {
-      time: { field: "event_time", type: "temporal" },
-      label: { field: "event_label", type: "nominal" },
-    },
-  };
-  return {
-    spec_version: "1.0",
-    kind,
-    encodings: encodingsByKind[kind] ?? {},
-    transforms: [],
-    tooltip_fields: [],
-    thresholds: [],
-    click_action: { kind: "request_widget_revision" },
-    options: {},
-  };
-}
-
-function chartSpecSummary(spec: ChartSpecV1): string {
-  const channels = Object.entries(spec.encodings ?? {})
-    .map(([channel, encoding]) => `${channel}:${encoding.field}`)
-    .join(" · ");
-  return channels ? `${spec.kind} · ${channels}` : spec.kind;
 }
 
 function layoutFromWidgets(widgets: TradingRoomWidgetSpec[]): Layout[] {
@@ -277,6 +217,7 @@ function WorkspaceWidgetCard({
   onDuplicate,
   onMenuToggle,
   onRemove,
+  onRequestRevision,
   widget,
 }: {
   editMode: boolean;
@@ -285,6 +226,7 @@ function WorkspaceWidgetCard({
   onDuplicate: () => void;
   onMenuToggle: () => void;
   onRemove: () => void;
+  onRequestRevision: () => void;
   widget: TradingRoomWidgetSpec;
 }) {
   const validation = validateTradingRoomWidgetSpec(widget);
@@ -294,10 +236,25 @@ function WorkspaceWidgetCard({
   return (
     <section
       data-testid={`workspace-widget-${widget.id}`}
+      onClick={(event) => {
+        if (editMode) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest("button")) return;
+        onRequestRevision();
+      }}
+      onKeyDown={(event) => {
+        if (editMode) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onRequestRevision();
+        }
+      }}
+      role={editMode ? undefined : "button"}
       style={{
         background: "#ffffff",
         border: "1px solid #e2e8f0",
         borderRadius: 8,
+        cursor: editMode ? "default" : "pointer",
         display: "flex",
         flexDirection: "column",
         height: "100%",
@@ -305,6 +262,7 @@ function WorkspaceWidgetCard({
         minWidth: 0,
         overflow: "hidden",
       }}
+      tabIndex={editMode ? undefined : 0}
     >
       <header
         className="workspace-widget-drag-handle"
@@ -370,7 +328,7 @@ function WorkspaceWidgetCard({
                 zIndex: 15,
               }}
             >
-              <button disabled style={menuButtonStyle} type="button">交代僕人修改</button>
+              <button onClick={onRequestRevision} style={menuButtonStyle} type="button">交代僕人修改</button>
               <button onClick={onDuplicate} style={menuButtonStyle} type="button">複製 Widget</button>
               <button onClick={onRemove} style={dangerMenuButtonStyle} type="button">移除 Widget</button>
               <div style={{ borderTop: "1px solid #e2e8f0", marginTop: 4, paddingTop: 6 }}>
@@ -435,6 +393,7 @@ export function WorkspaceGridEditor({
   const [events, setEvents] = useState<PersonalizationEvent[]>([]);
   const [versions, setVersions] = useState<TradingRoomDashboardVersion[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
+  const [revisionTarget, setRevisionTarget] = useState<{ viewId: string; widgetId: string } | null>(null);
 
   useEffect(() => {
     setBaseWorkspace(cloneWorkspace(initialWorkspace));
@@ -446,6 +405,7 @@ export function WorkspaceGridEditor({
     setSaveState("idle");
     setError(null);
     setEvents([]);
+    setRevisionTarget(null);
   }, [initialEtag, initialWorkspace]);
 
   useEffect(() => {
@@ -470,6 +430,12 @@ export function WorkspaceGridEditor({
   const visibleWidgets = activeView?.widgets.filter((widget) => widget.visible !== false) ?? [];
   const removedWidgets = activeView?.widgets.filter((widget) => widget.visible === false) ?? [];
   const dirty = pendingOps.length > 0;
+  const revisionView = revisionTarget
+    ? draftWorkspace.views.find((view) => view.id === revisionTarget.viewId) ?? null
+    : null;
+  const revisionWidget = revisionTarget && revisionView
+    ? revisionView.widgets.find((widget) => widget.id === revisionTarget.widgetId) ?? null
+    : null;
 
   function recordEvent(event: PersonalizationEvent) {
     setEvents((prev) => [event, ...prev].slice(0, 8));
@@ -734,6 +700,19 @@ export function WorkspaceGridEditor({
     }
   }
 
+  async function handleRevisionAccepted(result: TradingRoomWorkspaceResult) {
+    setBaseWorkspace(cloneWorkspace(result.workspace));
+    setDraftWorkspace(cloneWorkspace(result.workspace));
+    setCurrentEtag(result.etag);
+    setPendingOps([]);
+    setEditMode(false);
+    setSaveState("idle");
+    setError(null);
+    setRevisionTarget(null);
+    onWorkspaceChange?.(result);
+    await refreshVersions(result.workspace.id);
+  }
+
   if (!activeView) {
     return (
       <div data-testid="trading-room-workspace-empty" style={{ color: "#94a3b8", fontSize: 13, padding: 16 }}>
@@ -894,6 +873,10 @@ export function WorkspaceGridEditor({
                   onDuplicate={() => handleDuplicate(widget)}
                   onMenuToggle={() => setMenuWidgetId((current) => current === widget.id ? null : widget.id)}
                   onRemove={() => handleRemove(widget)}
+                  onRequestRevision={() => {
+                    setMenuWidgetId(null);
+                    setRevisionTarget({ viewId: activeView.id, widgetId: widget.id });
+                  }}
                   widget={widget}
                 />
               </div>
@@ -956,6 +939,16 @@ export function WorkspaceGridEditor({
           </div>
         </section>
       </div>
+      <WorkspaceWidgetRevisionDrawer
+        currentEtag={currentEtag}
+        disabledReason={dirty ? "請先儲存或放棄未儲存的版面調整，再建立 Widget Revision Proposal。" : null}
+        onClose={() => setRevisionTarget(null)}
+        onRevisionAccepted={handleRevisionAccepted}
+        open={Boolean(revisionTarget)}
+        view={revisionView}
+        widget={revisionWidget}
+        workspace={draftWorkspace}
+      />
     </section>
   );
 }
