@@ -17,7 +17,14 @@ import {
 import {
   defaultPulseRankings, type TradingPulseRankBlock,
 } from "@/lib/v5/management/tradingRankings";
-import type { HumanInboxItem, HumanInboxDetail } from "@/lib/v5/management/humanInbox";
+import {
+  HUMAN_INBOX_KINDS,
+  type HumanInboxDecisionRecord,
+  type HumanInboxDetail,
+  type HumanInboxItem,
+  type HumanInboxKind,
+} from "@/lib/v5/management/humanInbox";
+import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
 import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
@@ -357,41 +364,182 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 export type InboxListSeedFn = () => HumanInboxItem[];
 export type InboxItemSeedFn = () => HumanInboxDetail;
 
-function adaptInboxList(raw: unknown): HumanInboxItem[] | null {
+const asOptionalString = (raw: unknown): string | undefined => {
+  const value = asString(raw);
+  return value ? value : undefined;
+};
+
+const asInboxStringList = (raw: unknown): string[] => {
+  const arr = asArray<unknown>(raw);
+  if (!arr) return [];
+  return arr
+    .map((it) => {
+      if (typeof it === "string") return it;
+      if (isObject(it)) return asString(it.id ?? it.ref ?? it.evidence_ref ?? it.href);
+      return asString(it);
+    })
+    .filter(Boolean);
+};
+
+const normalizeInboxKind = (raw: unknown): HumanInboxKind => {
+  const kind = asString(raw, "approval");
+  const aliases: Record<string, HumanInboxKind> = {
+    governance_review: "approval",
+    model_artifact_approval: "approval",
+    sentinel_finding: "sentinel",
+  };
+  if (kind in aliases) return aliases[kind];
+  return HUMAN_INBOX_KINDS.includes(kind as HumanInboxKind) ? (kind as HumanInboxKind) : "approval";
+};
+
+const inboxDetailHref = (id: string): string =>
+  `/management/human-inbox/${encodeURIComponent(id)}`;
+
+const normalizeInboxManageHref = (raw: unknown): string | undefined => {
+  const href = asString(raw);
+  if (!href) return undefined;
+  if (href.startsWith("/management/fleet")) {
+    return `/management/persona-fleet${href.slice("/management/fleet".length)}`;
+  }
+  if (href.startsWith("/governance-review-queue")) {
+    return `/management/governance${href.slice("/governance-review-queue".length)}`;
+  }
+  if (href.startsWith("/management/")) return href;
+  return undefined;
+};
+
+const inboxLinks = (
+  id: string,
+  rawLinks: unknown,
+  rawManageHref: unknown,
+): ManagementLinkSet => {
+  const existing = isObject(rawLinks) ? (rawLinks as Partial<ManagementLinkSet>) : {};
+  const detailHref = inboxDetailHref(id);
+  const manageHref =
+    normalizeInboxManageHref(rawManageHref) ??
+    normalizeInboxManageHref(existing.manageHref) ??
+    detailHref;
+  return {
+    ...existing,
+    manageHref,
+    primaryObjectHref: normalizeInboxManageHref(existing.primaryObjectHref) ?? manageHref,
+    recommendedActionHref: detailHref,
+  };
+};
+
+const actionStateBlocksProceed = (actionState: string): boolean =>
+  ["pending", "proposed", "blocked", "unable_to_continue", "cannot_proceed", "needs_human_approval"].includes(
+    actionState,
+  );
+
+const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
+  const allowed = isObject(raw) ? raw : null;
+  if (!allowed) return fallback;
+  if (typeof allowed.canDecide === "boolean") return allowed.canDecide;
+  if (typeof allowed.can_decide === "boolean") return allowed.can_decide;
+  if (typeof allowed.canApprove === "boolean" || typeof allowed.canReject === "boolean") {
+    return Boolean(allowed.canApprove || allowed.canReject);
+  }
+  if (typeof allowed.can_approve === "boolean" || typeof allowed.can_reject === "boolean") {
+    return Boolean(allowed.can_approve || allowed.can_reject);
+  }
+  return fallback;
+};
+
+const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
+  const id = asString(it.id ?? it.inbox_id ?? it.inboxId);
+  if (!id) return null;
+  const actionState = asString(it.action_state ?? it.actionState ?? it.status);
+  const canDecide = asBoolean(
+    it.canDecide ?? it.can_decide,
+    allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, true),
+  );
+  const canProceed = asBoolean(
+    it.canProceed ?? it.can_proceed,
+    actionState ? !actionStateBlocksProceed(actionState) : true,
+  );
+  const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
+  const route = it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+  return {
+    id,
+    kind: normalizeInboxKind(it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType),
+    title: asString(it.title ?? it.summary ?? id),
+    summary: asOptionalString(it.summary),
+    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by ?? ""),
+    consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
+    consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
+    consequenceIfIgnored: asString(it.consequenceIfIgnored ?? it.consequence_if_ignored ?? ""),
+    ttlSec: typeof it.ttlSec === "number" ? it.ttlSec : typeof it.ttl_sec === "number" ? it.ttl_sec : undefined,
+    canDecide,
+    canProceed,
+    blockingReasons: blockingReasons.length ? blockingReasons : undefined,
+    detailHref: inboxDetailHref(id),
+    links: inboxLinks(id, it.links, route),
+  };
+};
+
+const normalizeDecisionType = (raw: unknown): HumanInboxDetail["decisionType"] => {
+  const decisionType = asString(raw);
+  return decisionType === "two_man" || decisionType === "quorum" ? decisionType : "single";
+};
+
+const adaptSignatures = (
+  raw: unknown,
+): HumanInboxDetail["signatures"] => {
+  const arr = asArray<Record<string, unknown>>(raw);
+  if (!arr) return [];
+  return arr
+    .map((it) => ({
+      role: asString(it.role ?? it.required_role),
+      signedBy: asOptionalString(it.signedBy ?? it.signed_by),
+      signedAt: asOptionalString(it.signedAt ?? it.signed_at),
+    }))
+    .filter((it) => it.role);
+};
+
+const normalizeDecision = (raw: unknown): HumanInboxDecisionRecord["decision"] => {
+  const decision = asString(raw);
+  return decision === "approve" ||
+    decision === "reject" ||
+    decision === "request_more_evidence"
+    ? decision
+    : "defer";
+};
+
+const adaptDecisionHistory = (raw: unknown): HumanInboxDecisionRecord[] => {
+  const arr = asArray<Record<string, unknown>>(raw);
+  if (!arr) return [];
+  return arr.map((it) => ({
+    decidedAt: asString(it.decidedAt ?? it.decided_at ?? it.timestamp),
+    decidedBy: asString(it.decidedBy ?? it.decided_by ?? it.actor),
+    decision: normalizeDecision(it.decision),
+    note: asOptionalString(it.note ?? it.reason),
+  }));
+};
+
+export function adaptHumanInboxList(raw: unknown): HumanInboxItem[] | null {
   const data = unwrap(raw);
   const arr =
     asArray<Record<string, unknown>>(data) ??
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
-  return arr.map((it) => {
-    // Mock/older items already match the view-model → pass through.
-    if (typeof it.kind === "string" && typeof it.detailHref === "string") {
-      return it as unknown as HumanInboxItem;
-    }
-    // Live BFF item: inboxType / route / summary / target, no consequence triplet.
-    const detailHref = String(it.route ?? it.bff_detail_path ?? "");
-    const kind = String(it.kind ?? it.inboxType ?? it.source_type ?? "approval");
-    const actionState = String(it.action_state ?? it.status ?? "");
-    return {
-      id: String(it.id ?? it.inbox_id ?? ""),
-      kind: kind as HumanInboxItem["kind"],
-      title: String(it.title ?? it.summary ?? it.id ?? ""),
-      summary: typeof it.summary === "string" ? it.summary : undefined,
-      requiredRole: String(it.requiredRole ?? it.required_role ?? ""),
-      consequenceIfApproved: String(it.consequenceIfApproved ?? ""),
-      consequenceIfRejected: String(it.consequenceIfRejected ?? ""),
-      consequenceIfIgnored: String(it.consequenceIfIgnored ?? ""),
-      canDecide: typeof it.canDecide === "boolean" ? it.canDecide : true,
-      canProceed:
-        typeof it.canProceed === "boolean" ? it.canProceed : actionState !== "pending" && actionState !== "proposed",
-      detailHref,
-      links: (it.links as HumanInboxItem["links"]) ?? undefined,
-    } as unknown as HumanInboxItem;
-  });
+  const items = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
+  return items.length ? items : null;
 }
-function adaptInboxItem(raw: unknown): HumanInboxDetail | null {
+export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
-  return isObject(data) ? (data as unknown as HumanInboxDetail) : null;
+  const item = isObject(data) && isObject(data.item) ? data.item : data;
+  if (!isObject(item)) return null;
+  const base = adaptInboxRecord(item);
+  if (!base) return null;
+  return {
+    ...base,
+    decisionType: normalizeDecisionType(item.decisionType ?? item.decision_type),
+    signatures: adaptSignatures(item.signatures),
+    evidenceRefs: asInboxStringList(item.evidenceRefs ?? item.evidence_refs),
+    decisionHistory: adaptDecisionHistory(item.decisionHistory ?? item.decision_history),
+    auditRefs: asInboxStringList(item.auditRefs ?? item.audit_refs),
+  };
 }
 
 // ---------- PM-4 Trading Pulse ----------
@@ -497,13 +645,13 @@ export const mgmt = {
       withLiveOrMock<HumanInboxItem[]>(
         { method: "GET", path: paths.mgmtHumanInbox() },
         async () => seedFn(),
-        safeAdapt(adaptInboxList, seedFn),
+        safeAdapt(adaptHumanInboxList, seedFn),
       ),
     get: (id: string, seedFn: InboxItemSeedFn): Promise<HumanInboxDetail> =>
       withLiveOrMock<HumanInboxDetail>(
         { method: "GET", path: paths.mgmtHumanInboxItem(id) },
         async () => seedFn(),
-        safeAdapt(adaptInboxItem, seedFn),
+        safeAdapt(adaptHumanInboxDetail, seedFn),
       ),
   },
 
