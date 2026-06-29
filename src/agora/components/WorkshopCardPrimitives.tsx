@@ -240,9 +240,11 @@ export function NoOrderRouteBadge({ value }: { value?: unknown }) {
 export function CardShell({
   card,
   children,
+  onContinueDiscussion,
 }: {
   card: WorkshopCard;
   children: ReactNode;
+  onContinueDiscussion?: (cardId: string) => void;
 }) {
   const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description";
   const status = card.status ?? "informational";
@@ -254,6 +256,7 @@ export function CardShell({
         isUser ? "ml-auto max-w-[78%] border-blue-200 bg-blue-50" : "mr-auto max-w-[92%] bg-white",
         !isUser && CARD_ACCENT[status],
       )}
+      data-testid={`workshop-card-${card.card_id}`}
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -270,6 +273,19 @@ export function CardShell({
       </header>
       {children}
       <EvidenceRefs refs={card.evidence_refs} />
+      {onContinueDiscussion ? (
+        <div className="flex border-t border-slate-100 pt-3">
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700"
+            data-testid={`workshop-card-${card.card_id}-discuss`}
+            onClick={() => onContinueDiscussion(card.card_id)}
+            type="button"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>Ask Servant</span>
+          </button>
+        </div>
+      ) : null}
       <ActionBar actions={card.allowed_actions} />
     </article>
   );

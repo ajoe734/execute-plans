@@ -13,6 +13,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
 
 afterEach(cleanup);
 
@@ -45,12 +46,18 @@ describe("StrategyWorkshopPage", () => {
   it("shows workshop list items when workshops are returned", async () => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([
       {
+        spec_version: "1.0",
         workshop_id: "ws-001",
+        operator_id: "operator-001",
         status: "open",
+        subject: {
+          kind: "free_form",
+          ref: "strategy-draft-001",
+          title: "Winner Branch draft",
+        },
         created_at: "2026-06-01T00:00:00Z",
-        updated_at: "2026-06-01T00:00:00Z",
-        lock_version: 1,
-      } as any,
+        metadata: { updated_at: "2026-06-01T00:00:00Z", lock_version: 1 },
+      } as StrategyWorkshop,
     ]);
     render(<StrategyWorkshopPage />);
     await screen.findByTestId("workshop-list");
@@ -60,8 +67,8 @@ describe("StrategyWorkshopPage", () => {
   it("renders the session view when workshopId is provided", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
-    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null as any);
-    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null as any);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
@@ -70,8 +77,8 @@ describe("StrategyWorkshopPage", () => {
   it("renders the conversation and completeness rail in session view", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
-    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null as any);
-    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null as any);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     expect(screen.getByTestId("workshop-conversation")).toBeDefined();
@@ -81,8 +88,8 @@ describe("StrategyWorkshopPage", () => {
   it("renders the servant composer in session view", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
-    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null as any);
-    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null as any);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     expect(screen.getByTestId("servant-composer")).toBeDefined();
