@@ -22,6 +22,7 @@
 import React, { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import "./agoraDesign.css";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -78,28 +79,28 @@ function CommandBar({
 }) {
   return (
     <header
-      className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4"
+      className="agora-topbar shrink-0"
       data-testid="trading-desk-command-bar"
     >
-      <span className="text-sm font-semibold text-slate-900">Trading Desk</span>
-      <span className="flex-1" />
+      <div className="flex items-center gap-3">
+        <span className="agora-logo-mark">A</span>
+        <span className="agora-logo-text">AGORA</span>
+      </div>
+      <span className="agora-market-pill">陳柏宇 · 籌碼派</span>
+      <div className="agora-command">
+        <span className="text-[13px] text-[var(--ag-ai)]">✦</span>
+        <span className="truncate">交代助理：描述您的交易策略想法，例如「我想找有大戶建立部位的落後股」</span>
+      </div>
       <button
         aria-label={drawerOpen ? "Close servant drawer" : "Open servant drawer"}
         aria-pressed={drawerOpen}
-        className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-          drawerOpen
-            ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-        )}
+        className="agora-action"
         onClick={onToggleDrawer}
         type="button"
       >
-        <span aria-hidden="true" className="h-3.5 w-3.5 select-none">
-          {drawerOpen ? "✕" : "⚡"}
-        </span>
-        Servant
+        {drawerOpen ? "關閉助理" : "交代助理"}
       </button>
+      <span className="agora-status-pill">監控中</span>
     </header>
   );
 }
@@ -116,7 +117,7 @@ function TabBar({
   return (
     <nav
       aria-label="Trading desk sections"
-      className="flex h-10 shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-4"
+      className="agora-section-tabs shrink-0"
       data-testid="trading-desk-tab-bar"
     >
       {TABS.map((tab) => {
@@ -125,17 +126,16 @@ function TabBar({
           <button
             aria-current={isActive ? "page" : undefined}
             aria-label={`${tab.label} (${tab.labelZh})`}
-            className={cn(
-              "relative -mb-px flex h-9 items-center px-4 text-sm font-medium transition-colors",
-              isActive
-                ? "border-b-2 border-blue-600 text-blue-700"
-                : "text-slate-600 hover:text-slate-900",
-            )}
+            className="agora-tab"
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
             type="button"
           >
-            {tab.label}
+            {tab.id === "trading-room"
+              ? "Trading Room · 交易操盤室"
+              : tab.id === "strategy-workshop"
+                ? "Strategy Workshop · 策略工坊"
+                : "Performance · 策略執行與績效"}
           </button>
         );
       })}
@@ -150,21 +150,32 @@ function ServantDrawer({ open, workshopId }: { open: boolean; workshopId?: strin
   return (
     <aside
       aria-label="Servant drawer"
-      className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white"
+      className="agora-drawer flex shrink-0 flex-col"
       data-testid="trading-desk-servant-drawer"
     >
-      <div className="flex h-10 shrink-0 items-center border-b border-slate-100 px-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Servant
-        </span>
+      <div className="agora-drawer-header shrink-0">
+        <span className="text-xs font-bold uppercase text-[var(--ag-ai)]">✦ Trading Servant</span>
         {workshopId && (
-          <span className="ml-auto font-mono text-xs text-slate-400">
+          <span className="ml-auto font-mono text-xs text-[var(--ag-faint)]">
             {workshopId.slice(0, 8)}…
           </span>
         )}
       </div>
-      <div className="flex-1 p-3">
-        <p className="text-xs text-slate-400">Servant panel — workshop context loads here.</p>
+      <div className="flex-1 space-y-3 p-4">
+        <div className="agora-card-soft p-3">
+          <div className="agora-card-title">助手理解</div>
+          <p className="agora-card-body mt-2">
+            目前工作區以「贏家分點 V4」為中心，追蹤候選、進場、加碼、減碼、出場與分點遷移風險。
+          </p>
+        </div>
+        <div className="agora-card-soft p-3">
+          <div className="agora-card-title">可交代事項</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {["先看風險", "重排候選", "新增比較圖", "回到策略工坊"].map((item) => (
+              <span className="agora-chip" key={item}>{item}</span>
+            ))}
+          </div>
+        </div>
       </div>
     </aside>
   );
@@ -187,7 +198,7 @@ function BottomStrip({
 }) {
   return (
     <footer
-      className="flex h-10 shrink-0 items-center gap-0 border-t border-slate-200 bg-slate-50 px-4"
+      className="agora-bottom shrink-0"
       data-testid="trading-desk-bottom-strip"
     >
       {BOTTOM_SECTIONS.map((section) => {
@@ -195,12 +206,6 @@ function BottomStrip({
         return (
           <button
             aria-pressed={isActive}
-            className={cn(
-              "h-full px-3 text-xs font-medium transition-colors",
-              isActive
-                ? "border-t-2 border-blue-600 bg-white text-blue-700"
-                : "text-slate-500 hover:text-slate-800",
-            )}
             key={section.id}
             onClick={() => onSectionChange(isActive ? null : section.id)}
             type="button"
@@ -239,7 +244,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
   return (
     <div
-      className={cn("flex flex-1 flex-col overflow-hidden min-h-0", className)}
+      className={cn("agora-shell flex flex-1 flex-col overflow-hidden min-h-0", className)}
       data-testid="trading-desk-shell"
     >
       <CommandBar
@@ -251,7 +256,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main
-          className="flex-1 overflow-auto"
+          className="agora-main flex-1 overflow-auto"
           data-testid="trading-desk-main"
           id="trading-desk-content"
         >

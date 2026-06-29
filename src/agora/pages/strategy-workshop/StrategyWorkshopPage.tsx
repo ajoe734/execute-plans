@@ -13,6 +13,7 @@ import {
 import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
+import "@/agora/agoraDesign.css";
 
 // ---------------------------------------------------------------------------
 // Card list reducer
@@ -75,22 +76,94 @@ function WorkshopListView(): JSX.Element {
   }, []);
 
   return (
-    <div data-testid="strategy-workshop-page-list">
-      {state === "loading" && (
-        <div data-testid="workshop-list-loading">Loading workshops…</div>
-      )}
-      {state === "empty" && (
-        <div data-testid="workshop-list-empty">No workshops found.</div>
-      )}
-      {state === "loaded" && (
-        <ul data-testid="workshop-list">
-          {workshops.map((ws) => (
-            <li key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
-              {ws.workshop_id}
-            </li>
+    <div className="agora-page flex h-full flex-col" data-testid="strategy-workshop-page-list">
+      <div className="agora-subheader">
+        <div className="agora-title-row">
+          <span className="agora-title">贏家分點策略討論</span>
+          <span className="agora-badge agora-badge-ai">V4</span>
+          <span className="text-xs text-[var(--ag-muted)]">研究狀態：回測完成 · 待裁示</span>
+          <div className="agora-progress"><span style={{ width: "82%" }} /></div>
+          <span className="text-xs font-bold text-[var(--ag-ai)]">完整度 82%</span>
+        </div>
+        <button className="agora-action" type="button">加入交易操盤室</button>
+      </div>
+      <div className="agora-workshop-layout min-h-0 flex-1">
+        <main className="agora-conversation">
+          <div className="agora-hypothesis">
+            <div className="mb-3 text-[11px] font-bold uppercase text-[var(--ag-ai)]">交易員原始假說</div>
+            從每一檔股票的關係人持股開始，找出可能對應的交易分點，計算分點過去進出場是否賺錢、
+            穩定性如何，建立贏家分點分數。若分點買進後由另一分點賣出，要掃描可能的關聯分點與資金遷移，
+            並對照未來三到六個月重大訊息、併購或財報變化，建立信賴值、上漲機率與部位方式。
+          </div>
+          <div className="mx-auto mt-4 grid max-w-[760px] gap-3">
+            {[
+              ["僕人理解的策略核心", "識別具有持續獲利能力或資訊領先特徵的券商分點／分點群組，再以其最新異常交易作為股票候選與進出場信號。"],
+              ["推導出的研究子問題", "關係人與分點如何映射、分點是否具重複獲利能力、資金遷移如何辨識、異常交易是否領先事件。"],
+              ["不可直接斷言事項", "公開資料只能建立資訊領先關聯或可能對應的統計證據，不能直接斷言違法或內線。"],
+            ].map(([title, body]) => (
+              <section className="agora-card p-4" key={title}>
+                <div className="agora-card-title">✦ {title}</div>
+                <p className="agora-card-body mt-2">{body}</p>
+              </section>
+            ))}
+          </div>
+          <div className="mx-auto mt-4 max-w-[760px]">
+            {state === "loading" && (
+              <div className="agora-card p-4 text-xs text-[var(--ag-muted)]" data-testid="workshop-list-loading">Loading workshops…</div>
+            )}
+            {(state === "empty" || state === "error") && (
+              <div className="agora-card p-4" data-testid="workshop-list-empty">
+                <div className="agora-card-title">目前沒有 live workshop session</div>
+                <p className="agora-card-body mt-2">已顯示設計稿指定的策略工坊工作區骨架，等待 BFF 回補實際 session。</p>
+              </div>
+            )}
+            {state === "loaded" && (
+              <ul className="grid gap-2" data-testid="workshop-list">
+                {workshops.map((ws) => (
+                  <li className="agora-card p-3" key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
+                    <div className="agora-card-title">{ws.subject.title ?? ws.workshop_id}</div>
+                    <div className="agora-card-body mt-1">{ws.workshop_id}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="mx-auto mt-4 flex max-w-[760px] flex-wrap gap-2">
+            {["完整 V4 評斷", "把 V4 改更保守", "合併 V2 與 V4", "只重跑 V1/V4/V5", "要求事件領先細節"].map((item) => (
+              <span className="agora-chip" key={item}>{item}</span>
+            ))}
+          </div>
+          <div className="mx-auto mt-4 max-w-[760px]">
+            <div className="agora-composer">
+              <span className="text-xs font-bold text-[var(--ag-muted)]">交代策略 · 修改規則 · 要求研究 · 實驗結果 · 指定版本或要求重跑</span>
+              <button className="agora-action" type="button">交代</button>
+            </div>
+          </div>
+        </main>
+        <aside className="agora-right-rail">
+          <div className="agora-right-section">
+            <div className="agora-card-title">事前完整度 · 12 圖等</div>
+            <p className="agora-card-body mt-2">研究項目會被標成已確認、僕人推定、尚缺或薄弱，交易操盤室只接收已通過門檻的版本。</p>
+          </div>
+          {[
+            ["已確認", "研究對象與市場範圍", "agora-badge-green"],
+            ["僕人推定", "關係人與分點映射", "agora-badge-warn"],
+            ["已確認", "贏家分點評分", "agora-badge-green"],
+            ["僕人推定", "分點遷移與反向流", "agora-badge-warn"],
+            ["已確認", "事件領先關聯", "agora-badge-green"],
+            ["尚缺", "進場與持有週期", "agora-badge-warn"],
+            ["尚缺", "加碼 / 減碼 / 出場", "agora-badge-warn"],
+            ["薄弱 / 衝突", "部位與槓桿", "agora-badge-red"],
+          ].map(([stateLabel, body, tone]) => (
+            <div className="agora-right-section" key={body}>
+              <div className="agora-card-title">
+                <span className={`agora-badge ${tone} mr-2`}>{stateLabel}</span>
+              </div>
+              <p className="agora-card-body mt-2">{body}</p>
+            </div>
           ))}
-        </ul>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }
