@@ -10,6 +10,7 @@ import {
   type TradingDecisionEvent,
   type DecisionChoice,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { BffError } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
   TradingRoomViewSpec,
@@ -27,6 +28,64 @@ import {
 
 function newUUID(): string {
   return crypto.randomUUID();
+}
+
+interface TradingRoomUiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
+
+function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+  switch (err.status) {
+    case 403:
+      return "目前權限或範圍無法讀取這個操盤室提案。";
+    case 404:
+      return "這個操盤室提案或工作區已不存在，請重新產生。";
+    case 409:
+      return "操盤室提案狀態已變更，請重新產生後再套用。";
+    case 412:
+      return "操盤室狀態已過期，請重新整理後再繼續。";
+    case 501:
+      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+    default:
+      return err.message || fallback;
+  }
+}
+
+function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+  if (err instanceof BffError) {
+    return {
+      code: err.code,
+      message: tradingRoomErrorMessage(err, fallback),
+      status: err.status,
+    };
+  }
+  return {
+    message: err instanceof Error ? err.message : fallback,
+  };
+}
+
+function shouldClearStaleWorkspaceState(error: TradingRoomUiError): boolean {
+  if (
+    error.status === 403 ||
+    error.status === 404 ||
+    error.status === 409 ||
+    error.status === 412 ||
+    error.status === 501
+  ) {
+    return true;
+  }
+  return (
+    error.code === "PERMISSION_DENIED" ||
+    error.code === "TENANT_SCOPE_MISMATCH" ||
+    error.code === "RESOURCE_NOT_FOUND" ||
+    error.code === "STATE_CONFLICT" ||
+    error.code === "ILLEGAL_TRANSITION" ||
+    error.code === "IDEMPOTENCY_CONFLICT" ||
+    error.code === "CAPABILITY_MISSING" ||
+    error.code === "FEATURE_DISABLED"
+  );
 }
 
 // ── Strategy Lens Switcher ────────────────────────────────────────────────────
@@ -887,7 +946,7 @@ function StrategyWorkspaceView({
   const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
   const [proposal, setProposal] = useState<TradingRoomWorkspaceProposal | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
-  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [proposalError, setProposalError] = useState<TradingRoomUiError | null>(null);
   const [proposalRevision, setProposalRevision] = useState(0);
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<TradingRoomWorkspace | null>(null);
@@ -928,7 +987,13 @@ function StrategyWorkspaceView({
       })
       .catch((err) => {
         if (cancelled) return;
-        setProposalError(err instanceof Error ? err.message : "Workspace proposal generation failed.");
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        if (shouldClearStaleWorkspaceState(nextError)) {
+          setProposal(null);
+          setWorkspace(null);
+          setSelectedPreviewViewId(null);
+        }
+        setProposalError(nextError);
         setProposalLoading(false);
       });
 
@@ -950,7 +1015,13 @@ function StrategyWorkspaceView({
       );
       setWorkspace(nextWorkspace);
     } catch (err) {
-      setProposalError(err instanceof Error ? err.message : "Workspace proposal acceptance failed.");
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      if (shouldClearStaleWorkspaceState(nextError)) {
+        setProposal(null);
+        setWorkspace(null);
+        setSelectedPreviewViewId(null);
+      }
+      setProposalError(nextError);
     } finally {
       setAccepting(false);
     }
@@ -1002,7 +1073,7 @@ function StrategyWorkspaceView({
             <div style={{ flex: 1, overflow: "auto" }}>
               <WorkspaceProposalPreview
                 busy={accepting}
-                error={proposalError}
+                error={proposalError?.message ?? null}
                 onAccept={handleAcceptProposal}
                 onAdjustLayout={() => setSelectedPreviewViewId(proposal.views[0]?.id ?? null)}
                 onBackToWorkshop={onBackToWorkshop}
@@ -1015,9 +1086,11 @@ function StrategyWorkspaceView({
           ) : (
             <div
               data-testid="trading-room-proposal-error"
+              data-error-code={proposalError?.code ?? ""}
+              data-error-status={proposalError?.status ?? ""}
               style={{ padding: 16, fontSize: 13, color: "#b91c1c" }}
             >
-              {proposalError ?? "Workspace proposal unavailable."}
+              {proposalError?.message ?? "Workspace proposal unavailable."}
               <div>
                 <button
                   data-testid="trading-room-proposal-retry"

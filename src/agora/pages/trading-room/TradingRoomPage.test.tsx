@@ -18,6 +18,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 
 import { TradingRoomPage } from "./TradingRoomPage";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
+import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
   TradingRoomViewSpec,
@@ -25,6 +26,19 @@ import type {
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
 } from "@/lib/bff-v1/agora/types";
+
+function makeBffError(status: number, code: ErrorCode, message: string): BffError {
+  return new BffError(status, {
+    error: {
+      code,
+      correlationId: "corr-test",
+      i18nKey: `errors.${code}`,
+      message,
+      retryable: status >= 500,
+      userActionable: status >= 400 && status < 500,
+    },
+  });
+}
 
 const MOCK_AGGREGATE = {
   spec_version: "1.0" as const,
@@ -558,6 +572,66 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-view-tabs")).toBeDefined();
     expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
+  });
+
+  it("clears stale proposal state on typed 403 during regeneration", async () => {
+    vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal)
+      .mockResolvedValueOnce(MOCK_PROPOSAL)
+      .mockRejectedValueOnce(makeBffError(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"));
+
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-regenerate"));
+
+    const error = await screen.findByTestId("trading-room-proposal-error");
+    expect(error.getAttribute("data-error-status")).toBe("403");
+    expect(error.getAttribute("data-error-code")).toBe("TENANT_SCOPE_MISMATCH");
+    expect(screen.queryByTestId("workspace-proposal-preview")).toBeNull();
+    expect(screen.queryByTestId("strategy-recipe-workspace")).toBeNull();
+  });
+
+  it("clears stale proposal state on typed 409 accept conflict", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposal)
+      .mockRejectedValueOnce(makeBffError(409, "STATE_CONFLICT", "proposal already accepted"));
+
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+
+    const error = await screen.findByTestId("trading-room-proposal-error");
+    expect(error.getAttribute("data-error-status")).toBe("409");
+    expect(error.textContent).toContain("狀態已變更");
+    expect(screen.queryByTestId("workspace-proposal-preview")).toBeNull();
+    expect(screen.queryByTestId("trading-room-workspace-shell")).toBeNull();
+  });
+
+  it("keeps proposal preview visible on typed 422 accept validation failure", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposal)
+      .mockRejectedValueOnce(makeBffError(422, "VALIDATION_FAILED", "proposal invalid"));
+
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+
+    const error = await screen.findByTestId("workspace-proposal-error");
+    expect(error.textContent).toContain("proposal invalid");
+    expect(screen.getByTestId("workspace-proposal-preview")).toBeDefined();
+    expect(screen.queryByTestId("trading-room-workspace-shell")).toBeNull();
+  });
+
+  it("surfaces typed 501 proposal generation failure without falling back", async () => {
+    vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal)
+      .mockRejectedValueOnce(makeBffError(501, "CAPABILITY_MISSING", "not implemented"));
+
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+
+    const error = await screen.findByTestId("trading-room-proposal-error");
+    expect(error.getAttribute("data-error-status")).toBe("501");
+    expect(error.getAttribute("data-error-code")).toBe("CAPABILITY_MISSING");
+    expect(error.textContent).toContain("尚未在目前 BFF 啟用");
+    expect(screen.queryByTestId("workspace-proposal-preview")).toBeNull();
+    expect(screen.queryByTestId("strategy-recipe-unavailable")).toBeNull();
+    expect(screen.queryByTestId("strategy-recipe-workspace")).toBeNull();
   });
 
   it("does not jump to the old recipe placeholder for selected strategies", async () => {
