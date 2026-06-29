@@ -906,9 +906,22 @@ describe("TradingRoomPage", () => {
 
     fireEvent.click(screen.getByTestId("workspace-widget-w-status"));
     await screen.findByTestId("workspace-widget-revision-drawer");
-    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("策略狀態摘要 purpose");
-    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("agora.strategy.summary");
-    expect(screen.getByTestId("workspace-widget-revision-context").textContent).toContain("strategy-overview");
+    const context = screen.getByTestId("workspace-widget-revision-context").textContent ?? "";
+    expect(context).toContain("workspace-001 / dashboard v1");
+    expect(context).toContain("strat-001 / winner-branch-v4");
+    expect(context).toContain("strategy-overview");
+    expect(context).toContain("w-status");
+    expect(context).toContain("策略狀態摘要");
+    expect(context).toContain("strategy_status_summary");
+    expect(context).toContain("策略狀態摘要 purpose");
+    expect(context).toContain("策略狀態摘要 is required for the V11 proposal.");
+    expect(context).toContain("agora.strategy.summary");
+    expect(context).toContain("\"strategy_id\":\"strat-001\"");
+    expect(context).toContain("50");
+    expect(context).toContain("open_strategy");
+    expect(context).toContain("user_private");
+    expect(context).toContain("x:0");
+    expect(context).toContain("complete");
 
     fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
       target: { value: "改成表格" },
@@ -924,6 +937,20 @@ describe("TradingRoomPage", () => {
           proposedSpec: expect.objectContaining({
             dataSource: "agora.strategy.summary",
             id: "w-status",
+            interactions: expect.arrayContaining([
+              expect.objectContaining({ kind: "request_widget_revision" }),
+            ]),
+            placement: expect.objectContaining({
+              height: 3,
+              width: 4,
+              x: 0,
+              y: 0,
+            }),
+            query: expect.objectContaining({
+              filters: { strategy_id: "strat-001" },
+              limit: 50,
+            }),
+            sensitivity: "user_private",
             widgetType: "strategy_status_summary",
           }),
           viewId: "strategy-overview",
@@ -932,6 +959,18 @@ describe("TradingRoomPage", () => {
       ),
     );
     await screen.findByTestId("workspace-widget-revision-proposal");
+    const diff = screen.getByTestId("workspace-widget-before-after-diff");
+    expect(diff.getAttribute("data-durable-snapshot")).toBe("backend-proposal");
+    expect(screen.getByTestId("workspace-widget-diff-title").textContent).toContain("策略狀態摘要");
+    expect(screen.getByTestId("workspace-widget-diff-title").textContent).toContain("策略狀態摘要 Revised");
+    expect(screen.getByTestId("workspace-widget-diff-widget-type").textContent).toContain("strategy_status_summary");
+    expect(screen.getByTestId("workspace-widget-diff-data-source").textContent).toContain("agora.strategy.summary");
+    expect(screen.getByTestId("workspace-widget-diff-query-filters").textContent).toContain("\"strategy_id\":\"strat-001\"");
+    expect(screen.getByTestId("workspace-widget-diff-query-window")).toBeDefined();
+    expect(screen.getByTestId("workspace-widget-diff-chart-spec").textContent).toContain("metric");
+    expect(screen.getByTestId("workspace-widget-diff-interactions").textContent).toContain("open_strategy");
+    expect(screen.getByTestId("workspace-widget-diff-sensitivity").textContent).toContain("user_private");
+    expect(screen.getByTestId("workspace-widget-diff-placement").textContent).toContain("x:0");
 
     fireEvent.click(screen.getByTestId("workspace-widget-revision-apply"));
 
@@ -980,6 +1019,132 @@ describe("TradingRoomPage", () => {
         }),
       ),
     );
+  });
+
+  it("cancels a widget revision proposal without applying or mutating the workspace", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-widget-w-status"));
+    await screen.findByTestId("workspace-widget-revision-drawer");
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "改成表格" },
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-submit"));
+    await screen.findByTestId("workspace-widget-revision-proposal");
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-cancel"));
+
+    await waitFor(() => expect(screen.queryByTestId("workspace-widget-revision-drawer")).toBeNull());
+    expect(tradingRoomModule.acceptWidgetRevisionProposal).not.toHaveBeenCalled();
+    expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v1");
+    expect(screen.getByTestId("workspace-widget-w-status").textContent).not.toContain("Revised");
+  });
+
+  it("adjusts again with a fresh proposal and never applies the stale proposal", async () => {
+    const staleProposal: WidgetRevisionProposal = {
+      ...MOCK_WIDGET_REVISION_PROPOSAL,
+      id: "wrp-stale",
+      proposedSpec: {
+        ...MOCK_WIDGET_REVISION_PROPOSAL.proposedSpec,
+        title: "策略狀態摘要 stale",
+      },
+    };
+    const freshProposal: WidgetRevisionProposal = {
+      ...MOCK_WIDGET_REVISION_PROPOSAL,
+      id: "wrp-fresh",
+      instruction: "改成熱圖",
+      proposedSpec: {
+        ...MOCK_WIDGET_REVISION_PROPOSAL.proposedSpec,
+        title: "策略狀態摘要 Heatmap",
+      },
+    };
+    vi.mocked(tradingRoomModule.createWidgetRevisionProposal)
+      .mockResolvedValueOnce({ etag: '"revision-etag-stale"', proposal: staleProposal })
+      .mockResolvedValueOnce({ etag: '"revision-etag-fresh"', proposal: freshProposal });
+    vi.mocked(tradingRoomModule.acceptWidgetRevisionProposal).mockResolvedValueOnce({
+      appliedAction: "apply",
+      copiedWidgetId: null,
+      etag: '"workspace-etag-v2"',
+      proposal: { ...freshProposal, status: "accepted" },
+      version: MOCK_VERSION_2,
+      workspace: {
+        ...MOCK_REVISION_WORKSPACE,
+        views: [
+          {
+            ...MOCK_REVISION_WORKSPACE.views[0],
+            widgets: [freshProposal.proposedSpec],
+          },
+          ...MOCK_REVISION_WORKSPACE.views.slice(1),
+        ],
+      },
+    });
+
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-widget-w-status"));
+    await screen.findByTestId("workspace-widget-revision-drawer");
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "改成表格" },
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-submit"));
+    await waitFor(() => expect(tradingRoomModule.createWidgetRevisionProposal).toHaveBeenCalledTimes(1));
+    expect(await screen.findAllByText("策略狀態摘要 stale")).not.toHaveLength(0);
+
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-adjust-again"));
+    await waitFor(() => expect(screen.queryByTestId("workspace-widget-revision-apply")).toBeNull());
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "改成熱圖" },
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-submit"));
+    await waitFor(() => expect(tradingRoomModule.createWidgetRevisionProposal).toHaveBeenCalledTimes(2));
+    expect(await screen.findAllByText("策略狀態摘要 Heatmap")).not.toHaveLength(0);
+    fireEvent.click(screen.getByTestId("workspace-widget-revision-apply"));
+
+    await waitFor(() =>
+      expect(tradingRoomModule.acceptWidgetRevisionProposal).toHaveBeenCalledWith(
+        "wrp-fresh",
+        expect.objectContaining({ acceptanceAction: "apply" }),
+        expect.objectContaining({
+          ifMatch: '"workspace-etag-v1"',
+          idempotencyKey: expect.any(String),
+        }),
+      ),
+    );
+    expect(tradingRoomModule.acceptWidgetRevisionProposal).not.toHaveBeenCalledWith(
+      "wrp-stale",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("disables widget revision proposal submit while layout changes are unsaved", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    act(() => {
+      gridCallbacks.onLayoutChange?.([{ i: "w-status", x: 1, y: 2, w: 5, h: 4 }]);
+    });
+    fireEvent.click(screen.getByTestId("workspace-widget-menu-w-status"));
+    fireEvent.click(screen.getByText("交代僕人修改"));
+    await screen.findByTestId("workspace-widget-revision-drawer");
+    expect(screen.getByTestId("workspace-widget-revision-disabled").textContent).toContain("未儲存");
+
+    fireEvent.change(screen.getByTestId("workspace-widget-revision-input"), {
+      target: { value: "改成表格" },
+    });
+    const submit = screen.getByTestId("workspace-widget-revision-submit") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+
+    expect(tradingRoomModule.createWidgetRevisionProposal).not.toHaveBeenCalled();
   });
 
   it("clears stale proposal state on typed 403 during regeneration", async () => {
