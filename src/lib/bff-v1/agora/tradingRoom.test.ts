@@ -19,6 +19,7 @@ import {
   getTradingRoom,
   getDecisionEvent,
 } from "./tradingRoom";
+import { BffError } from "../errors";
 
 const BASE = "https://test.example";
 
@@ -27,6 +28,18 @@ function ok(body: unknown, status = 200, extraHeaders?: Record<string, string>):
     status,
     headers: { "Content-Type": "application/json", ...extraHeaders },
   });
+}
+
+function bffErrorResponse(status: number, code: string, message: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code,
+        message,
+      },
+    }),
+    { status, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 afterEach(() => {
@@ -283,15 +296,22 @@ describe("Trading Room workspace proposal routes", () => {
     expect(result?.proposalId).toBe("proposal-001");
   });
 
-  it("returns null when a workspace proposal is missing", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+  it("throws typed BffError when a workspace proposal is missing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "proposal missing"));
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspaceProposal("strat-001", "missing", BASE)).resolves.toBeNull();
+    await expect(getTradingRoomWorkspaceProposal("strat-001", "missing", BASE)).rejects.toMatchObject({
+      code: "RESOURCE_NOT_FOUND",
+      status: 404,
+    });
   });
 
-  it("accepts a workspace proposal with expected preview status and Idempotency-Key", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockWorkspace }));
+  it("accepts a workspace proposal real BFF envelope and returns data.workspace", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({ data: { workspaceId: "workspace-001", workspace: mockWorkspace, version: { version: 1 } } }),
+    );
     globalThis.fetch = fetchMock;
 
     const result = await acceptTradingRoomWorkspaceProposal(
@@ -307,18 +327,137 @@ describe("Trading Room workspace proposal routes", () => {
     expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ expectedStatus: "preview" }));
     expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-accept-1");
     expect(result.id).toBe("workspace-001");
+    expect(result.views).toEqual([]);
   });
 
-  it("gets an accepted workspace and returns null on 404", async () => {
+  it("fetches the accepted workspace by workspaceId when accept omits embedded workspace", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ data: { workspaceId: "workspace-001", version: { version: 1 } } }))
+      .mockResolvedValueOnce(ok({ data: mockWorkspace }));
+    globalThis.fetch = fetchMock;
+
+    const result = await acceptTradingRoomWorkspaceProposal(
+      "strat-001",
+      "proposal-001",
+      { expectedStatus: "preview" },
+      { idempotencyKey: "idem-accept-2" },
+      BASE,
+    );
+
+    expect(result.id).toBe("workspace-001");
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace-001`);
+  });
+
+  it("gets an accepted workspace and throws typed BffError on 404", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(ok({ data: mockWorkspace }))
-      .mockResolvedValueOnce(new Response("", { status: 404 }));
+      .mockResolvedValueOnce(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "workspace missing"));
     globalThis.fetch = fetchMock;
 
     await expect(getTradingRoomWorkspace("workspace/001", BASE)).resolves.toMatchObject({ id: "workspace-001" });
-    await expect(getTradingRoomWorkspace("missing", BASE)).resolves.toBeNull();
+    await expect(getTradingRoomWorkspace("missing", BASE)).rejects.toMatchObject({
+      code: "RESOURCE_NOT_FOUND",
+      status: 404,
+    });
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`);
+  });
+
+  it("preserves typed 403 proposal creation failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createTradingRoomWorkspaceProposal(
+        "strat-001",
+        { strategyVersion: "winner-branch-v4" },
+        { idempotencyKey: "idem-proposal-403" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "TENANT_SCOPE_MISMATCH",
+      status: 403,
+    });
+  });
+
+  it("preserves typed 409 proposal read failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(409, "STATE_CONFLICT", "proposal state changed"));
+    globalThis.fetch = fetchMock;
+
+    await expect(getTradingRoomWorkspaceProposal("strat-001", "proposal-001", BASE)).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      status: 409,
+    });
+  });
+
+  it("preserves typed 412 accept failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(412, "STATE_CONFLICT", "proposal stale"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      acceptTradingRoomWorkspaceProposal(
+        "strat-001",
+        "proposal-001",
+        { expectedStatus: "preview" },
+        { idempotencyKey: "idem-accept-412" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      status: 412,
+    });
+  });
+
+  it("preserves typed 422 accept validation failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(422, "VALIDATION_FAILED", "proposal invalid"));
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      acceptTradingRoomWorkspaceProposal(
+        "strat-001",
+        "proposal-001",
+        { expectedStatus: "preview" },
+        { idempotencyKey: "idem-accept-422" },
+        BASE,
+      ),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      status: 422,
+    });
+  });
+
+  it("preserves typed 501 workspace load capability failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(501, "CAPABILITY_MISSING", "workspace route not ready"));
+    globalThis.fetch = fetchMock;
+
+    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toMatchObject({
+      code: "CAPABILITY_MISSING",
+      status: 501,
+    });
+  });
+
+  it("creates a typed fallback BffError when BFF omits an error envelope", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("capability route not implemented", { status: 501 })));
+    globalThis.fetch = fetchMock;
+
+    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toBeInstanceOf(BffError);
+    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toMatchObject({
+      code: "CAPABILITY_MISSING",
+      status: 501,
+    });
   });
 });
 

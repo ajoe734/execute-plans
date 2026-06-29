@@ -14,6 +14,12 @@ import type {
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
 } from "./types";
+import {
+  BffError,
+  normalizeBffErrorEnvelope,
+  type BffErrorEnvelope,
+  type ErrorCode,
+} from "../errors";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -247,6 +253,95 @@ function extractDetail<T>(value: unknown): T {
   return data as T;
 }
 
+function fallbackErrorCode(status: number): ErrorCode {
+  if (status === 400 || status === 422) return "VALIDATION_FAILED";
+  if (status === 401) return "AUTH_REQUIRED";
+  if (status === 403) return "PERMISSION_DENIED";
+  if (status === 404) return "RESOURCE_NOT_FOUND";
+  if (status === 409 || status === 412) return "STATE_CONFLICT";
+  if (status === 429) return "RATE_LIMITED";
+  if (status === 501) return "CAPABILITY_MISSING";
+  if (status >= 500) return "BACKEND_UNAVAILABLE";
+  return "UNKNOWN_ERROR";
+}
+
+function errorMessageFrom(value: unknown, fallback: string): string {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  if (typeof error.message === "string" && error.message.trim()) return error.message;
+  if (typeof root.message === "string" && root.message.trim()) return root.message;
+  return fallback;
+}
+
+function errorDetailsFrom(value: unknown): Record<string, unknown> | undefined {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  const details = error.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : undefined;
+}
+
+function makeTypedBffError(res: Response, body: unknown, fallbackMessage: string): BffError {
+  const correlationId = res.headers.get("X-Correlation-Id") ?? undefined;
+  const normalized = normalizeBffErrorEnvelope(body, res.status, correlationId);
+  if (normalized) return new BffError(res.status, normalized);
+
+  const code = fallbackErrorCode(res.status);
+  const envelope: BffErrorEnvelope = {
+    error: {
+      code,
+      i18nKey: `errors.${code}`,
+      message: errorMessageFrom(body, fallbackMessage),
+      retryable: res.status === 0 || res.status === 429 || res.status >= 500,
+      userActionable: res.status >= 400 && res.status < 500,
+      correlationId: correlationId ?? `corr_${Math.random().toString(36).slice(2, 10)}`,
+      details: errorDetailsFrom(body),
+    },
+  };
+  return new BffError(res.status, envelope);
+}
+
+async function throwTypedBffError(res: Response, method: string, url: string): Promise<never> {
+  const body = await parseJson(res);
+  throw makeTypedBffError(res, body, `${method} ${url} failed ${res.status}`);
+}
+
+function makeMalformedBffEnvelope(message: string): BffError {
+  return new BffError(502, {
+    error: {
+      code: "BACKEND_UNAVAILABLE",
+      i18nKey: "errors.BACKEND_UNAVAILABLE",
+      message,
+      retryable: true,
+      userActionable: false,
+      correlationId: `corr_${Math.random().toString(36).slice(2, 10)}`,
+    },
+  });
+}
+
+function isTradingRoomWorkspace(value: unknown): value is TradingRoomWorkspace {
+  const candidate = recordFrom(value);
+  return typeof candidate.id === "string" && Array.isArray(candidate.views);
+}
+
+function extractAcceptedWorkspace(value: unknown): {
+  workspace?: TradingRoomWorkspace;
+  workspaceId?: string;
+} {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  if (isTradingRoomWorkspace(data.workspace)) {
+    return { workspace: data.workspace };
+  }
+  if (isTradingRoomWorkspace(data)) {
+    return { workspace: data as unknown as TradingRoomWorkspace };
+  }
+  return {
+    workspaceId: typeof data.workspaceId === "string" ? data.workspaceId : undefined,
+  };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Get the user-scoped Trading Room aggregate (all strategies, queue summary, risk). */
@@ -372,11 +467,7 @@ export async function createTradingRoomWorkspaceProposal(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const responseBody = await parseJson(res);
-    const message =
-      recordFrom(recordFrom(responseBody).error).message ??
-      `POST ${url} failed ${res.status}`;
-    throw new Error(String(message));
+    await throwTypedBffError(res, "POST", url);
   }
   const responseBody = await parseJson(res);
   return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
@@ -387,7 +478,7 @@ export async function getTradingRoomWorkspaceProposal(
   strategyId: string,
   proposalId: string,
   baseUrl?: string,
-): Promise<TradingRoomWorkspaceProposal | null> {
+): Promise<TradingRoomWorkspaceProposal> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`;
   const res = await fetch(url, {
@@ -395,13 +486,8 @@ export async function getTradingRoomWorkspaceProposal(
     credentials: "include",
     headers: { Accept: "application/json" },
   });
-  if (res.status === 404) return null;
   if (!res.ok) {
-    const responseBody = await parseJson(res);
-    const message =
-      recordFrom(recordFrom(responseBody).error).message ??
-      `GET ${url} failed ${res.status}`;
-    throw new Error(String(message));
+    await throwTypedBffError(res, "GET", url);
   }
   const responseBody = await parseJson(res);
   return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
@@ -429,21 +515,22 @@ export async function acceptTradingRoomWorkspaceProposal(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const responseBody = await parseJson(res);
-    const message =
-      recordFrom(recordFrom(responseBody).error).message ??
-      `POST ${url} failed ${res.status}`;
-    throw new Error(String(message));
+    await throwTypedBffError(res, "POST", url);
   }
   const responseBody = await parseJson(res);
-  return extractDetail<TradingRoomWorkspace>(responseBody);
+  const accepted = extractAcceptedWorkspace(responseBody);
+  if (accepted.workspace) return accepted.workspace;
+  if (accepted.workspaceId) {
+    return getTradingRoomWorkspace(accepted.workspaceId, baseUrl);
+  }
+  throw makeMalformedBffEnvelope("Trading Room accept response did not include a workspace.");
 }
 
 /** Get an accepted Trading Room workspace by ID. */
 export async function getTradingRoomWorkspace(
   workspaceId: string,
   baseUrl?: string,
-): Promise<TradingRoomWorkspace | null> {
+): Promise<TradingRoomWorkspace> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
   const res = await fetch(url, {
@@ -451,13 +538,8 @@ export async function getTradingRoomWorkspace(
     credentials: "include",
     headers: { Accept: "application/json" },
   });
-  if (res.status === 404) return null;
   if (!res.ok) {
-    const responseBody = await parseJson(res);
-    const message =
-      recordFrom(recordFrom(responseBody).error).message ??
-      `GET ${url} failed ${res.status}`;
-    throw new Error(String(message));
+    await throwTypedBffError(res, "GET", url);
   }
   const responseBody = await parseJson(res);
   return extractDetail<TradingRoomWorkspace>(responseBody);
