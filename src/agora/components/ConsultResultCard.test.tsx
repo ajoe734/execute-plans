@@ -1,7 +1,7 @@
 import React from "react";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConsultResultCard } from "./ConsultResultCard";
+import { WorkshopCardRenderer } from "./WorkshopCardRenderer";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
@@ -29,49 +29,50 @@ const baseCard: WorkshopCard = {
   created_at: "2026-06-22T00:00:00Z",
 };
 
+function renderCard(card: WorkshopCard = baseCard, onContinueDiscussion?: (cardId: string) => void) {
+  render(<WorkshopCardRenderer card={card} onContinueDiscussion={onContinueDiscussion} />);
+}
+
 describe("ConsultResultCard", () => {
   it("renders with correct testid", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    expect(screen.getByTestId("consult-result-card-card-cr-001")).toBeDefined();
+    renderCard();
+    expect(screen.getByTestId("workshop-card-card-cr-001")).toBeDefined();
   });
 
   it("displays card title", () => {
-    render(<ConsultResultCard card={baseCard} />);
+    renderCard();
     expect(screen.getByText("Risk Committee Consultation")).toBeDefined();
   });
 
   it("shows status badge from payload.status", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    expect(screen.getByTestId("consult-result-card-card-cr-001-status").textContent).toBe("completed");
+    renderCard();
+    expect(screen.getByText("Completed")).toBeDefined();
   });
 
   it("shows freshness badge", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    expect(screen.getByTestId("consult-result-card-card-cr-001-freshness").textContent).toBe("Fresh");
+    renderCard();
+    expect(screen.getByText("Freshness")).toBeDefined();
+    expect(screen.getByText("fresh")).toBeDefined();
   });
 
   it("renders consensus summary", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    const consensusEl = screen.getByTestId("consult-result-card-card-cr-001-consensus");
-    expect(consensusEl.textContent).toContain("position size cap at 2%");
+    renderCard();
+    expect(screen.getByText(/position size cap at 2%/)).toBeDefined();
   });
 
   it("renders disagreements list", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    const disagreementsEl = screen.getByTestId("consult-result-card-card-cr-001-disagreements");
-    expect(disagreementsEl.textContent).toContain("1.5% cap");
+    renderCard();
+    expect(screen.getByText(/1.5% cap/)).toBeDefined();
   });
 
   it("renders risk notes section", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    const riskNotesEl = screen.getByTestId("consult-result-card-card-cr-001-risk-notes");
-    expect(riskNotesEl.textContent).toContain("Liquidity deteriorates");
+    renderCard();
+    expect(screen.getByText(/Liquidity deteriorates/)).toBeDefined();
   });
 
   it("renders conditions list", () => {
-    render(<ConsultResultCard card={baseCard} />);
-    const conditionsEl = screen.getByTestId("consult-result-card-card-cr-001-conditions");
-    expect(conditionsEl.textContent).toContain("hard stop at -8%");
+    renderCard();
+    expect(screen.getByText(/hard stop at -8%/)).toBeDefined();
   });
 
   it("does not show disagreements section when empty", () => {
@@ -79,8 +80,8 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, disagreements: [] },
     };
-    render(<ConsultResultCard card={card} />);
-    expect(screen.queryByTestId("consult-result-card-card-cr-001-disagreements")).toBeNull();
+    renderCard(card);
+    expect(screen.queryByText("Disagreements")).toBeNull();
   });
 
   it("does not show risk notes section when missing", () => {
@@ -88,19 +89,19 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, risk_notes: undefined },
     };
-    render(<ConsultResultCard card={card} />);
-    expect(screen.queryByTestId("consult-result-card-card-cr-001-risk-notes")).toBeNull();
+    renderCard(card);
+    expect(screen.queryByText("Risk Notes")).toBeNull();
   });
 
   it("renders Ask Servant button when onContinueDiscussion provided", () => {
-    render(<ConsultResultCard card={baseCard} onContinueDiscussion={() => undefined} />);
-    expect(screen.getByTestId("consult-result-card-card-cr-001-discuss")).toBeDefined();
+    renderCard(baseCard, () => undefined);
+    expect(screen.getByTestId("workshop-card-card-cr-001-discuss")).toBeDefined();
   });
 
   it("calls onContinueDiscussion with card_id on click", () => {
     const handler = vi.fn();
-    render(<ConsultResultCard card={baseCard} onContinueDiscussion={handler} />);
-    fireEvent.click(screen.getByTestId("consult-result-card-card-cr-001-discuss"));
+    renderCard(baseCard, handler);
+    fireEvent.click(screen.getByTestId("workshop-card-card-cr-001-discuss"));
     expect(handler).toHaveBeenCalledWith("card-cr-001");
   });
 
@@ -109,7 +110,7 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, status: "in_progress" },
     };
-    render(<ConsultResultCard card={card} />);
-    expect(screen.getByTestId("consult-result-card-card-cr-001-status").textContent).toBe("in_progress");
+    renderCard(card);
+    expect(screen.getByText("in_progress")).toBeDefined();
   });
 });

@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || 'dev' }}
+          ref: ${{ vars.PANTHEON_CONTRACT_REF || inputs.bff_sha || 'dev' }}
           path: pantheon-contract
           token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
 

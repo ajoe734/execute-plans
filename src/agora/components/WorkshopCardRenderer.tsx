@@ -531,9 +531,15 @@ function CardBody({ card }: { card: WorkshopCard }) {
   }
 }
 
-export function WorkshopCardRenderer({ card }: { card: WorkshopCard }) {
+export function WorkshopCardRenderer({
+  card,
+  onContinueDiscussion,
+}: {
+  card: WorkshopCard;
+  onContinueDiscussion?: (cardId: string) => void;
+}) {
   return (
-    <CardShell card={card}>
+    <CardShell card={card} onContinueDiscussion={onContinueDiscussion}>
       <CardBody card={card} />
     </CardShell>
   );

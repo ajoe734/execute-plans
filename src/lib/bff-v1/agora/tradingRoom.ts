@@ -1,7 +1,7 @@
 /**
- * BFF client for the Trading Room surface (v1.3, live strict).
+ * BFF client for the Trading Room surface (v1.5, live strict).
  * All data reads go through these functions; pages must not call fetch() directly.
- * No order routing, no capital binding — read/observe/intent-request only.
+ * Read/observe/intent-request only; no execution-side mutation is performed here.
  *
  * Mutating method (decideOnEvent) requires:
  *   If-Match        — ETag from the preceding GET response
@@ -9,6 +9,17 @@
  *   X-Request-Id    — client-generated UUID per request
  * AG-BE-TR-002 rejects writes that omit these headers.
  */
+
+import type {
+  TradingRoomWorkspace,
+  TradingRoomWorkspaceProposal,
+} from "./types";
+import {
+  BffError,
+  normalizeBffErrorEnvelope,
+  type BffErrorEnvelope,
+  type ErrorCode,
+} from "../errors";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -177,6 +188,18 @@ export interface DecisionBody {
   modifications?: Record<string, unknown>;
 }
 
+export interface CreateTradingRoomWorkspaceProposalRequest {
+  strategyVersion: string;
+  personalizationHints?: Record<string, unknown>;
+  evidenceRefs?: Record<string, unknown>[];
+  dataFreshness?: Record<string, unknown>;
+  tradingRoomReady?: boolean;
+}
+
+export interface AcceptTradingRoomWorkspaceProposalRequest {
+  expectedStatus?: "preview";
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function resolvedBase(baseUrl?: string): string {
@@ -222,6 +245,101 @@ function extractDecisionEvent(value: unknown): TradingDecisionEvent {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   return data as unknown as TradingDecisionEvent;
+}
+
+function extractDetail<T>(value: unknown): T {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  return data as T;
+}
+
+function fallbackErrorCode(status: number): ErrorCode {
+  if (status === 400 || status === 422) return "VALIDATION_FAILED";
+  if (status === 401) return "AUTH_REQUIRED";
+  if (status === 403) return "PERMISSION_DENIED";
+  if (status === 404) return "RESOURCE_NOT_FOUND";
+  if (status === 409 || status === 412) return "STATE_CONFLICT";
+  if (status === 429) return "RATE_LIMITED";
+  if (status === 501) return "CAPABILITY_MISSING";
+  if (status >= 500) return "BACKEND_UNAVAILABLE";
+  return "UNKNOWN_ERROR";
+}
+
+function errorMessageFrom(value: unknown, fallback: string): string {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  if (typeof error.message === "string" && error.message.trim()) return error.message;
+  if (typeof root.message === "string" && root.message.trim()) return root.message;
+  return fallback;
+}
+
+function errorDetailsFrom(value: unknown): Record<string, unknown> | undefined {
+  const root = recordFrom(value);
+  const error = recordFrom(root.error);
+  const details = error.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : undefined;
+}
+
+function makeTypedBffError(res: Response, body: unknown, fallbackMessage: string): BffError {
+  const correlationId = res.headers.get("X-Correlation-Id") ?? undefined;
+  const normalized = normalizeBffErrorEnvelope(body, res.status, correlationId);
+  if (normalized) return new BffError(res.status, normalized);
+
+  const code = fallbackErrorCode(res.status);
+  const envelope: BffErrorEnvelope = {
+    error: {
+      code,
+      i18nKey: `errors.${code}`,
+      message: errorMessageFrom(body, fallbackMessage),
+      retryable: res.status === 0 || res.status === 429 || res.status >= 500,
+      userActionable: res.status >= 400 && res.status < 500,
+      correlationId: correlationId ?? `corr_${Math.random().toString(36).slice(2, 10)}`,
+      details: errorDetailsFrom(body),
+    },
+  };
+  return new BffError(res.status, envelope);
+}
+
+async function throwTypedBffError(res: Response, method: string, url: string): Promise<never> {
+  const body = await parseJson(res);
+  throw makeTypedBffError(res, body, `${method} ${url} failed ${res.status}`);
+}
+
+function makeMalformedBffEnvelope(message: string): BffError {
+  return new BffError(502, {
+    error: {
+      code: "BACKEND_UNAVAILABLE",
+      i18nKey: "errors.BACKEND_UNAVAILABLE",
+      message,
+      retryable: true,
+      userActionable: false,
+      correlationId: `corr_${Math.random().toString(36).slice(2, 10)}`,
+    },
+  });
+}
+
+function isTradingRoomWorkspace(value: unknown): value is TradingRoomWorkspace {
+  const candidate = recordFrom(value);
+  return typeof candidate.id === "string" && Array.isArray(candidate.views);
+}
+
+function extractAcceptedWorkspace(value: unknown): {
+  workspace?: TradingRoomWorkspace;
+  workspaceId?: string;
+} {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  if (isTradingRoomWorkspace(data.workspace)) {
+    return { workspace: data.workspace };
+  }
+  if (isTradingRoomWorkspace(data)) {
+    return { workspace: data as unknown as TradingRoomWorkspace };
+  }
+  return {
+    workspaceId: typeof data.workspaceId === "string" ? data.workspaceId : undefined,
+  };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -328,9 +446,108 @@ export async function getDecisionEvent(
   return extractDecisionEvent(body);
 }
 
+/** Generate a Trading Room workspace proposal for a strategy version. */
+export async function createTradingRoomWorkspaceProposal(
+  strategyId: string,
+  body: CreateTradingRoomWorkspaceProposalRequest,
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Get a previously generated Trading Room workspace proposal. */
+export async function getTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceProposal> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+}
+
+/** Accept a preview proposal and materialize the generated workspace shell. */
+export async function acceptTradingRoomWorkspaceProposal(
+  strategyId: string,
+  proposalId: string,
+  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  options?: { idempotencyKey?: string },
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}/accept`;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "POST", url);
+  }
+  const responseBody = await parseJson(res);
+  const accepted = extractAcceptedWorkspace(responseBody);
+  if (accepted.workspace) return accepted.workspace;
+  if (accepted.workspaceId) {
+    return getTradingRoomWorkspace(accepted.workspaceId, baseUrl);
+  }
+  throw makeMalformedBffEnvelope("Trading Room accept response did not include a workspace.");
+}
+
+/** Get an accepted Trading Room workspace by ID. */
+export async function getTradingRoomWorkspace(
+  workspaceId: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspace> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractDetail<TradingRoomWorkspace>(responseBody);
+}
+
 /**
  * Record a trader decision on a decision event.
- * "approve" may create a TradingIntent (request-only; no order route; no capital binding).
+ * "approve" may create a TradingIntent request, without execution-side effects.
  *
  * options.ifMatch       — ETag from listDecisionEvents or getDecisionEvent; required by AG-BE-TR-002.
  * options.idempotencyKey — client-generated UUID per submission; required by AG-BE-TR-002.
