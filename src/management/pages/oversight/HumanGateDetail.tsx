@@ -44,6 +44,11 @@ export const HumanGateDetailPage = () => {
   const seed = useMemo(() => seedDetail(id), [id]);
   const { data } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
   const item = data ?? seed;
+  const hasConsequences = Boolean(
+    item.consequenceIfApproved || item.consequenceIfRejected || item.consequenceIfIgnored,
+  );
+  const hasSignatures = item.signatures.length > 0;
+  const hasEvidence = item.evidenceRefs.length > 0;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -67,41 +72,58 @@ export const HumanGateDetailPage = () => {
         </Card>
       )}
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.consequences")}</h2>
-        <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
-        </dl>
-      </Card>
+      {hasConsequences && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.consequences")}</h2>
+          <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
+          </dl>
+        </Card>
+      )}
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.signatures")}</h2>
-        <ul className="mt-2 space-y-1 text-xs">
-          {item.signatures.map((s) => (
-            <li key={s.role} className="flex items-center gap-2">
-              <Badge variant="outline">{s.role}</Badge>
-              <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      {hasSignatures && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.signatures")}</h2>
+          <ul className="mt-2 space-y-1 text-xs">
+            {item.signatures.map((s) => (
+              <li key={s.role} className="flex items-center gap-2">
+                <Badge variant="outline">{s.role}</Badge>
+                <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card className="p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.evidence")}</h2>
-        <ul className="mt-2 text-xs">
-          {item.evidenceRefs.map((e) => (
-            <li key={e}>
-              <Link to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono text-primary underline-offset-4 hover:underline">{e}</Link>
-            </li>
-          ))}
-        </ul>
+        {hasEvidence ? (
+          <ul className="mt-2 space-y-1 text-xs">
+            {item.evidenceRefs.map((e) => (
+              <li key={e}>
+                <Link to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono text-primary underline-offset-4 hover:underline">{e}</Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.actions.evidenceMissing")}</p>
+        )}
       </Card>
 
-      <div className="flex gap-2">
-        <Button size="sm" disabled={!item.canDecide || !item.canProceed}>{t("mgmt.actions.approve")}</Button>
-        <Button size="sm" variant="outline" disabled={!item.canDecide}>{t("mgmt.actions.reject")}</Button>
+      <div className="flex flex-wrap gap-2">
+        {item.links?.manageHref && (
+          <Button asChild size="sm" variant="outline">
+            <Link to={item.links.manageHref}>{t("mgmt.actions.manage")}</Link>
+          </Button>
+        )}
+        {item.canDecide && (
+          <>
+            <Button size="sm" disabled={!item.canProceed}>{t("mgmt.actions.approve")}</Button>
+            <Button size="sm" variant="outline">{t("mgmt.actions.reject")}</Button>
+          </>
+        )}
         <Button size="sm" variant="outline">{t("mgmt.actions.requestMoreEvidence")}</Button>
       </div>
     </section>

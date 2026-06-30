@@ -101,7 +101,25 @@ describe("mgmt façade (PM-Live)", () => {
           canProceed: false,
           allowedActions: { canDecide: false },
           route: "/management/persona-fleet?persona=persona-crypto",
-          evidence_refs: ["support/evidence/research/crypto.json"],
+          research_context: {
+            recommendation: "hold_for_risk_owner_review",
+            current_research_projects: [
+              {
+                evidence_refs: [
+                  {
+                    ref_type: "management_linkage_packet",
+                    ref_id: "mgmt-crypto-linkage-v1",
+                    ref: "support/evidence/research/crypto.json",
+                  },
+                ],
+              },
+            ],
+            data_source_status: {
+              readback_refs: ["support/evidence/readback/kraken.json"],
+              unavailable_refs: ["support/evidence/unavailable/coingecko.json"],
+              research_dataset_manifest_ref: "support/evidence/datasets/crypto-manifest.json",
+            },
+          },
         },
       },
     });
@@ -109,9 +127,16 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out).toMatchObject({
       id: "readiness_blocker:persona:persona-crypto",
       kind: "readiness_blocker",
+      requiredRole: "risk-owner",
+      canDecide: false,
       decisionType: "single",
       signatures: [],
-      evidenceRefs: ["support/evidence/research/crypto.json"],
+      evidenceRefs: [
+        "support/evidence/research/crypto.json",
+        "support/evidence/readback/kraken.json",
+        "support/evidence/unavailable/coingecko.json",
+        "support/evidence/datasets/crypto-manifest.json",
+      ],
       decisionHistory: [],
       auditRefs: [],
       detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-crypto",
