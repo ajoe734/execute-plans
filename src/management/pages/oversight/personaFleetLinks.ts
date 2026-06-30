@@ -12,14 +12,14 @@ export function personaFleetPersonaHref(r: ManagementPersonaFleetRow): string {
   return `/management/personas/${encoded(r.personaId)}`;
 }
 
-export function personaFleetResearchHref(r: ManagementPersonaFleetRow): string | null {
+export function personaFleetResearchHref(r: ManagementPersonaFleetRow): string {
   const project = firstResearchProject(r);
   const experimentId = project?.experimentId || r.researchStatus?.experimentId;
   if (experimentId) return `/management/experiments/${encoded(experimentId)}`;
   if (project?.projectId) {
     return `/management/loops/research?persona=${encoded(r.personaId)}&project=${encoded(project.projectId)}`;
   }
-  return null;
+  return `/management/loops/research?persona=${encoded(r.personaId)}`;
 }
 
 export function personaFleetArtifactHref(r: ManagementPersonaFleetRow): string | null {
