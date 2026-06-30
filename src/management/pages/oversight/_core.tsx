@@ -38,6 +38,7 @@ import { mgmt } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { visibleDataSources } from "./personaFleetDataSources";
+import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import {
   personaFleetArtifactHref,
   personaFleetDataSourcesHref,
@@ -385,19 +386,33 @@ function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: num
 
 function FleetLinkButton({
   to,
-  children,
+  label,
+  value,
   ariaLabel,
   className,
 }: {
   to: string;
-  children: ReactNode;
+  label: ReactNode;
+  value?: ReactNode;
   ariaLabel?: string;
   className?: string;
 }) {
   return (
-    <Button asChild size="sm" variant="outline" className={"h-7 px-2 text-xs " + (className ?? "")}>
+    <Button
+      asChild
+      size="sm"
+      variant="outline"
+      className={
+        "h-8 min-w-max border-primary/45 bg-primary/5 px-2.5 text-xs font-semibold text-primary shadow-sm " +
+        "hover:bg-primary/10 hover:text-primary " +
+        (className ?? "")
+      }
+    >
       <Link to={to} aria-label={ariaLabel}>
-        <span className="truncate">{children}</span>
+        <span className="truncate">{label}</span>
+        {value !== undefined && (
+          <span className="max-w-[9rem] truncate text-muted-foreground">{value}</span>
+        )}
         <ArrowUpRight className="size-3" aria-hidden="true" />
       </Link>
     </Button>
@@ -504,9 +519,9 @@ export const PersonaFleetPage = () => {
                         to={personaFleetDataSourcesHref(r)}
                         ariaLabel={`${r.personaId} data sources`}
                         className={dataSourceTone(r.dataSourceStatus?.state)}
-                      >
-                        {formatToken(r.dataSourceStatus?.state)}
-                      </FleetLinkButton>
+                        label={PERSONA_FLEET_ACTION_LABELS.dataSources}
+                        value={formatToken(r.dataSourceStatus?.state)}
+                      />
                       {sourceCount.total > 0 && (
                         <span className="text-xs text-muted-foreground">
                           {t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}
@@ -533,9 +548,12 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2 min-w-[260px]">
                     <div className="flex flex-wrap items-center gap-1">
                       {researchHref ? (
-                        <FleetLinkButton to={researchHref} ariaLabel={`${r.personaId} research detail`}>
-                          {formatToken(r.researchStatus?.stage ?? project?.stage)}
-                        </FleetLinkButton>
+                        <FleetLinkButton
+                          to={researchHref}
+                          ariaLabel={`${r.personaId} research detail`}
+                          label={PERSONA_FLEET_ACTION_LABELS.research}
+                          value={formatToken(r.researchStatus?.stage ?? project?.stage)}
+                        />
                       ) : (
                         <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
                       )}
@@ -560,8 +578,11 @@ export const PersonaFleetPage = () => {
                         <>
                           {" · "}
                           {artifactHref ? (
-                            <Link to={artifactHref} className="font-mono text-primary underline underline-offset-4 hover:text-primary/80">
-                              {artifactLabel}
+                            <Link
+                              to={artifactHref}
+                              className="font-mono font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                            >
+                              Artifact: {artifactLabel}
                             </Link>
                           ) : (
                             artifactLabel
@@ -575,14 +596,17 @@ export const PersonaFleetPage = () => {
                       to={personaFleetPerformanceHref(r)}
                       ariaLabel={`${r.personaId} performance attribution`}
                       className={Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed"}
-                    >
-                      {formatPerfDelta(r.perfDelta)}
-                    </FleetLinkButton>
+                      label={PERSONA_FLEET_ACTION_LABELS.performance}
+                      value={formatPerfDelta(r.perfDelta)}
+                    />
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    <FleetLinkButton to={personaFleetMutationHref(r)} ariaLabel={`${r.personaId} mutation history`}>
-                      {r.lastMutation}
-                    </FleetLinkButton>
+                    <FleetLinkButton
+                      to={personaFleetMutationHref(r)}
+                      ariaLabel={`${r.personaId} mutation history`}
+                      label={PERSONA_FLEET_ACTION_LABELS.mutation}
+                      value={r.lastMutation}
+                    />
                   </td>
                   <td className="px-3 py-2">
                     {r.humanNeeded
@@ -591,9 +615,9 @@ export const PersonaFleetPage = () => {
                           to={personaFleetHumanGateHref(r)}
                           ariaLabel={`${r.personaId} human gate`}
                           className="bg-status-warning/15 text-status-warning border-status-warning/30"
-                        >
-                          {t("mgmt.fleet.yes")}
-                        </FleetLinkButton>
+                          label={PERSONA_FLEET_ACTION_LABELS.humanGate}
+                          value={t("mgmt.fleet.yes")}
+                        />
                       )
                       : <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>}
                   </td>
@@ -603,9 +627,9 @@ export const PersonaFleetPage = () => {
                         to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}
                         ariaLabel={`${r.personaId} status detail`}
                         className={retired ? "bg-muted text-muted-foreground" : ""}
-                      >
-                        {r.state}
-                      </FleetLinkButton>
+                        label={PERSONA_FLEET_ACTION_LABELS.status}
+                        value={r.state}
+                      />
                     )}
                     {probe && (
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
