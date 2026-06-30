@@ -47,6 +47,9 @@ const modeCls: Record<string, string> = {
   emergency_override: "bg-status-failed/15 text-status-failed border-status-failed/30",
 };
 
+const statusLabel = (t: (key: string, opts?: Record<string, unknown>) => string, status: SentinelFinding["status"]) =>
+  t(`v5.sentinel.statuses.${status}`, { defaultValue: status });
+
 export const SentinelPage = () => {
   const t = useT();
   const findings = useV5Live(() => v5.sentinel.list());
@@ -147,7 +150,7 @@ export const SentinelPage = () => {
                       <div className="font-medium text-sm truncate">{f.title}</div>
                       <div className="flex gap-2 shrink-0">
                         <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
-                        <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                        <Badge variant="outline" className={statusCls[f.status]}>{statusLabel(t, f.status)}</Badge>
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
@@ -188,6 +191,7 @@ const FindingDrawer = ({
   const t = useT();
   const [pendingEmergency, setPendingEmergency] = useState<RemediationAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<SentinelFinding["status"] | null>(null);
 
   if (!finding) return null;
 
@@ -225,19 +229,31 @@ const FindingDrawer = ({
     }
   };
 
-  const acknowledge = async () => {
-    await v5.sentinel.setStatus(finding.id, "acknowledged");
-    toast({ title: t("v5.sentinel.acknowledged") });
-    onActed();
-    onClose();
+  const setFindingStatus = async (status: SentinelFinding["status"]) => {
+    setActionError(null);
+    setPendingStatus(status);
+    try {
+      const result = await v5.sentinel.setStatus(finding.id, status);
+      toast({
+        title: status === "dismissed" ? t("v5.sentinel.dismissed") : t("v5.sentinel.acknowledged"),
+        description: result.persisted ? undefined : t("v5.sentinel.localOnly"),
+      });
+      onActed();
+      onClose();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("errors.UNKNOWN_ERROR", { defaultValue: "Action failed" });
+      setActionError(message);
+      toast({ title: t("v5.sentinel.statusUpdateFailed"), description: message });
+    } finally {
+      setPendingStatus(null);
+    }
   };
 
-  const dismiss = async () => {
-    await v5.sentinel.setStatus(finding.id, "dismissed");
-    toast({ title: t("v5.sentinel.dismissed") });
-    onActed();
-    onClose();
-  };
+  const acknowledge = () => setFindingStatus("acknowledged");
+  const dismiss = () => setFindingStatus("dismissed");
 
   return (
     <>
@@ -260,7 +276,7 @@ const FindingDrawer = ({
 
           <div className="mt-4 space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-3">
-              <Field label={t("v5.sentinel.status")} value={<Badge variant="outline" className={statusCls[finding.status]}>{finding.status}</Badge>} />
+              <Field label={t("v5.sentinel.status")} value={<Badge variant="outline" className={statusCls[finding.status]}>{statusLabel(t, finding.status)}</Badge>} />
               <Field label={t("v5.sentinel.confidence")} value={`${(finding.confidence * 100).toFixed(0)}%`} />
               <Field label={t("v5.sentinel.source")} value={finding.source} />
               <Field label={t("v5.sentinel.detectedAt")} value={safeDateTime(finding.detectedAt)} />
@@ -330,9 +346,13 @@ const FindingDrawer = ({
 
             <div className="flex gap-2 pt-2 border-t border-border">
               {finding.status === "open" && (
-                <Button variant="outline" size="sm" onClick={acknowledge}>{t("v5.sentinel.acknowledge")}</Button>
+                <Button variant="outline" size="sm" onClick={acknowledge} disabled={pendingStatus !== null}>
+                  {pendingStatus === "acknowledged" ? t("v5.sentinel.acknowledging") : t("v5.sentinel.acknowledge")}
+                </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={dismiss}>{t("v5.sentinel.dismiss")}</Button>
+              <Button variant="ghost" size="sm" onClick={dismiss} disabled={pendingStatus !== null}>
+                {pendingStatus === "dismissed" ? t("v5.sentinel.dismissing") : t("v5.sentinel.dismiss")}
+              </Button>
             </div>
           </div>
         </SheetContent>
@@ -449,7 +469,7 @@ const SentinelTimelineView = ({
                   </span>
                   <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
                   <span className="text-sm truncate flex-1">{f.title}</span>
-                  <Badge variant="outline" className={statusCls[f.status]}>{f.status}</Badge>
+                  <Badge variant="outline" className={statusCls[f.status]}>{statusLabel(t, f.status)}</Badge>
                 </button>
               </li>
             ))}
