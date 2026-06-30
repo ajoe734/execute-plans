@@ -201,7 +201,7 @@ describe("OpenClawLlmAuthPanel", () => {
     );
 
     expect(await screen.findByText("checking auth")).toBeInTheDocument();
-    expect(screen.getByText("Checking assistant provider auth status.")).toBeInTheDocument();
+    expect(screen.getByText("Checking LLM provider auth status.")).toBeInTheDocument();
     expect(screen.queryByText("auth ready")).not.toBeInTheDocument();
   });
 
@@ -235,7 +235,7 @@ describe("OpenClawLlmAuthPanel", () => {
 
     expect(await screen.findByText("Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("checking auth")).toBeInTheDocument();
-    expect(screen.getByText("Updating auth probe results.")).toBeInTheDocument();
+    expect(screen.getByText("Updating LLM provider auth probe results.")).toBeInTheDocument();
 
     await act(async () => {
       probe.resolve({
@@ -259,7 +259,7 @@ describe("OpenClawLlmAuthPanel", () => {
 
     expect(await screen.findByText("1 attention")).toBeInTheDocument();
     expect(screen.getByText("refresh token expired")).toBeInTheDocument();
-    expect(screen.queryByText("Updating auth probe results.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updating LLM provider auth probe results.")).not.toBeInTheDocument();
   });
 
   it("renders provider auth and quota status in summary mode with management link", async () => {
@@ -269,16 +269,64 @@ describe("OpenClawLlmAuthPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("OpenClaw LLM Auth")).toBeInTheDocument();
+    expect(await screen.findByText("LLM Provider Auth")).toBeInTheDocument();
     expect(screen.getByText("Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("failed")).toBeInTheDocument();
     expect(screen.getByText("12 requests (24%)")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("140")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open management page" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open provider auth" })).toHaveAttribute(
       "href",
-      "/management/openclaw-llm-auth",
+      "/management/llm-provider-auth",
     );
+  });
+
+  it("renders OpenClaw readiness as adapter status instead of an auth provider", async () => {
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel
+          mode="full"
+          api={api({
+            fetchProviders: vi.fn().mockResolvedValue({
+              ok: true,
+              kind: "ok",
+              status: "ok",
+              providers: [
+                {
+                  provider: "openclaw",
+                  providerName: "OpenClaw",
+                  runtime: "openclaw_gateway_agent_cli",
+                  ready: true,
+                  status: "ready",
+                  authStatus: "ready",
+                  mountMode: "agent_cli",
+                  source: "adapter_probe",
+                  checkedAt: "2026-06-30T01:00:00Z",
+                },
+                {
+                  provider: "claude",
+                  providerName: "Claude CLI",
+                  runtime: "openclaw_gateway_cli_mount",
+                  ready: false,
+                  status: "degraded",
+                  authStatus: "failed",
+                  degradedReason: "claude_auth_probe_non_zero_exit",
+                  reauthSupported: false,
+                },
+              ],
+              meta: { auth_probe: true },
+            } satisfies AssistantProvidersResult),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText("OpenClaw adapter status")).toBeInTheDocument();
+    expect(screen.getByText("OpenClaw adapter")).toBeInTheDocument();
+    expect(screen.getByText("openclaw_gateway_agent_cli")).toBeInTheDocument();
+    expect(screen.getByText("Claude CLI")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /adapter reauth missing/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /OpenClaw/i })).not.toBeInTheDocument();
   });
 
   it("starts provider reauth from the full management page", async () => {
@@ -294,7 +342,7 @@ describe("OpenClawLlmAuthPanel", () => {
     await waitFor(() => {
       expect(fakeApi.startReauth).toHaveBeenCalledWith({
         provider: "codex",
-        reason: "OpenClaw LLM Auth management",
+        reason: "LLM Provider Auth management",
       });
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
@@ -348,7 +396,7 @@ describe("OpenClawLlmAuthPanel", () => {
     await waitFor(() => {
       expect(fakeApi.startReauth).toHaveBeenCalledWith({
         provider: "claude",
-        reason: "OpenClaw LLM Auth management",
+        reason: "LLM Provider Auth management",
       });
     });
     expect(await screen.findByText("claude reauth pending")).toBeInTheDocument();
@@ -386,13 +434,13 @@ describe("OpenClawLlmAuthPanel", () => {
       expect(fakeApi.activateControlMode).toHaveBeenCalledWith({
         passphrase: "control phrase ok",
         mode: "kernel_debug",
-        reason: "OpenClaw LLM Auth reauth: codex",
+        reason: "LLM Provider Auth reauth: codex",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
       });
       expect(fakeApi.startReauth).toHaveBeenCalledWith({
         provider: "codex",
-        reason: "OpenClaw LLM Auth management",
+        reason: "LLM Provider Auth management",
       });
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
@@ -419,7 +467,7 @@ describe("OpenClawLlmAuthPanel", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /add llm/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /add provider/i }));
     fireEvent.change(screen.getByLabelText("Provider id"), { target: { value: "gemini-cli" } });
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Gemini CLI" } });
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gemini-2.5-pro" } });
@@ -430,7 +478,7 @@ describe("OpenClawLlmAuthPanel", () => {
       expect(fakeApi.activateControlMode).toHaveBeenCalledWith({
         passphrase: "control phrase ok",
         mode: "kernel_debug",
-        reason: "OpenClaw LLM Auth register provider: gemini_cli",
+        reason: "LLM Provider Auth register provider: gemini_cli",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
       });
@@ -461,5 +509,77 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByText("140 tokens")).toBeInTheDocument();
     expect(screen.getAllByText("provider_snapshot").length).toBeGreaterThan(0);
     expect(screen.getByText("gpt-5-codex")).toBeInTheDocument();
+  });
+
+  it("excludes OpenClaw adapter rows from LLM usage history totals", async () => {
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel
+          mode="full"
+          api={api({
+            fetchUsageSummary: vi.fn().mockResolvedValue({
+              ok: true,
+              kind: "ok",
+              status: "ok",
+              providers: [
+                {
+                  provider: "openclaw",
+                  providerName: "OpenClaw Runtime",
+                  runtime: "openclaw_gateway_agent_cli",
+                  ready: true,
+                  authStatus: "ready",
+                  liveAuth: true,
+                  calls: 100,
+                  successCount: 100,
+                  failedCount: 0,
+                  promptBytes: 0,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 999,
+                  quota: { source: "adapter_probe" },
+                  observedUsage: null,
+                  models: [],
+                },
+                {
+                  provider: "codex_cli",
+                  providerName: "Codex CLI",
+                  runtime: "openclaw_gateway_cli_mount",
+                  ready: true,
+                  authStatus: "ready",
+                  liveAuth: true,
+                  calls: 7,
+                  successCount: 7,
+                  failedCount: 0,
+                  promptBytes: 1200,
+                  inputTokens: 100,
+                  outputTokens: 40,
+                  totalTokens: 140,
+                  quota: { source: "provider_snapshot" },
+                  observedUsage: null,
+                  models: [],
+                },
+              ],
+              totals: {
+                providers: 2,
+                liveAuthCount: 2,
+                calls: 107,
+                successCount: 107,
+                failedCount: 0,
+                totalTokens: 1139,
+              },
+              quota: { truthPolicy: "provider_snapshot_only" },
+              meta: { auth_probe: false },
+            } satisfies AssistantProviderUsageSummaryResult),
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(screen.getByText("1 live auth")).toBeInTheDocument();
+    expect(screen.getByText("7 calls")).toBeInTheDocument();
+    expect(screen.getByText("140 tokens")).toBeInTheDocument();
+    expect(screen.queryByText("OpenClaw Runtime")).not.toBeInTheDocument();
+    expect(screen.queryByText("107 calls")).not.toBeInTheDocument();
   });
 });

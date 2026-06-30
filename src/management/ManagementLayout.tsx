@@ -94,7 +94,7 @@ export const ManagementLayout = () => {
       { to: "/management/channels", label: t("nav.channels"), icon: Radio },
     ]},
     { label: t("groups.system"), items: [
-      { to: "/management/openclaw-llm-auth", label: "OpenClaw LLM Auth", icon: KeyRound },
+      { to: "/management/llm-provider-auth", label: "LLM Provider Auth", icon: KeyRound },
       { to: "/management/data-sources", label: t("nav.dataSourcesManagement"), icon: Database },
       { to: "/management/audit", label: t("nav.audit"), icon: ScrollText },
       { to: "/management/settings", label: t("nav.settings"), icon: Settings },

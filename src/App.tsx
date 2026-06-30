@@ -164,7 +164,8 @@ const App = () => (
               <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
               <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
               <Route path="data-sources" element={<DataSourceManagementPage />} />
-              <Route path="openclaw-llm-auth" element={<OpenClawLlmAuthPage />} />
+              <Route path="llm-provider-auth" element={<OpenClawLlmAuthPage />} />
+              <Route path="openclaw-llm-auth" element={<Navigate to="/management/llm-provider-auth" replace />} />
               <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
               <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
               {/* ask page retired — redundant with the floating agent panel */}
