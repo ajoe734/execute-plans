@@ -102,4 +102,18 @@ describe("HumanInboxPage", () => {
       "/management/human-inbox",
     );
   });
+
+  it("does not report a focused persona as missing before live inbox data loads", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: true,
+      refresh: vi.fn(),
+    });
+
+    renderInbox("/management/human-inbox?persona=persona-tw-equity");
+
+    expect(screen.getByText("Loading inbox items for persona-tw-equity…")).toBeInTheDocument();
+    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
+  });
 });

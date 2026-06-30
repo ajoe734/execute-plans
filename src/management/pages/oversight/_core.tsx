@@ -425,9 +425,9 @@ function FleetLinkButton({
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const { data } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
-  const rows = data ?? PERSONA_FLEET_SEED;
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const { data, loading } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
+  const rows = useMemo(() => data ?? (personaFocus ? [] : PERSONA_FLEET_SEED), [data, personaFocus]);
 
   const [showRetired, setShowRetired] = useState(false);
   const [showDevProbe, setShowDevProbe] = useState(false);
@@ -442,6 +442,7 @@ export const PersonaFleetPage = () => {
     if (!personaFocus) return filtered;
     return rows.filter((r) => r.personaId === personaFocus);
   }, [filtered, personaFocus, rows]);
+  const isPersonaFocusLoading = Boolean(personaFocus && loading && data === undefined);
   const hasPersonaFocusMatch = !personaFocus || visibleRows.length > 0;
 
   const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
@@ -478,13 +479,15 @@ export const PersonaFleetPage = () => {
         </div>
       </header>
       {personaFocus && (
-        <Card className={"p-3 text-sm " + (hasPersonaFocusMatch
+        <Card className={"p-3 text-sm " + (isPersonaFocusLoading || hasPersonaFocusMatch
           ? "border-primary/30 bg-primary/5"
           : "border-status-warning/30 bg-status-warning/10")}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {hasPersonaFocusMatch
+              {isPersonaFocusLoading
+                ? t("mgmt.fleet.focusLoadingPersonaFmt", { persona: personaFocus })
+                : hasPersonaFocusMatch
                 ? t("mgmt.fleet.focusedPersonaFmt", { persona: personaFocus })
                 : t("mgmt.fleet.focusMissingPersonaFmt", { persona: personaFocus })}
             </span>
@@ -738,8 +741,8 @@ export const HumanInboxPage = () => {
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const seed = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
-  const { data } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
-  const sorted = data ?? seed;
+  const { data, loading } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
+  const sorted = useMemo(() => data ?? (personaFocus ? [] : seed), [data, personaFocus, seed]);
   const visibleItems = useMemo(() => {
     if (!personaFocus) return sorted;
     const encodedFocus = encodeURIComponent(personaFocus);
@@ -753,6 +756,7 @@ export const HumanInboxPage = () => {
       it.links?.evidenceHref,
     ].some((value) => value?.includes(personaFocus) || value?.includes(encodedFocus)));
   }, [personaFocus, sorted]);
+  const isPersonaFocusLoading = Boolean(personaFocus && loading && data === undefined);
   const hasPersonaFocusMatch = !personaFocus || visibleItems.length > 0;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
@@ -763,13 +767,15 @@ export const HumanInboxPage = () => {
         </p>
       </header>
       {personaFocus && (
-        <Card className={"p-3 text-sm " + (hasPersonaFocusMatch
+        <Card className={"p-3 text-sm " + (isPersonaFocusLoading || hasPersonaFocusMatch
           ? "border-primary/30 bg-primary/5"
           : "border-status-warning/30 bg-status-warning/10")}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {hasPersonaFocusMatch
+              {isPersonaFocusLoading
+                ? t("mgmt.inbox.focusLoadingPersonaFmt", { persona: personaFocus })
+                : hasPersonaFocusMatch
                 ? t("mgmt.inbox.focusedPersonaFmt", { persona: personaFocus, count: visibleItems.length })
                 : t("mgmt.inbox.focusMissingPersonaFmt", { persona: personaFocus })}
             </span>
