@@ -40,6 +40,10 @@ import {
 } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { visibleDataSources } from "./personaFleetDataSources";
+import {
+  isNonProductionPersonaFleetRow,
+  productionPersonaFleetRows,
+} from "./personaFleetFilters";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import {
   personaFleetArtifactHref,
@@ -69,6 +73,7 @@ export const OneRingCockpitPage = () => {
   const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
   const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
   const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
+  const productionFleetRows = useMemo(() => productionPersonaFleetRows(fleetRows ?? []), [fleetRows]);
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
@@ -87,7 +92,7 @@ export const OneRingCockpitPage = () => {
         <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
         <PersonaLeagueSnapshot rows={league ?? lSeed} />
         <QuarterlyRankingCountdown snap={qSnap} />
-        <DataSourceHealthSnapshot rows={fleetRows ?? []} />
+        <DataSourceHealthSnapshot rows={productionFleetRows} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LoopFlowMap model={model.loopFlow} />
@@ -105,11 +110,6 @@ export const OneRingCockpitPage = () => {
 // =====================================================================
 
 const HIDDEN_STATES = new Set(["retired", "deprecated", "archived"]);
-
-function isDevProbe(r: ManagementPersonaFleetRow): boolean {
-  if (r.tags?.some((t) => t === "dev-probe" || t === "test")) return true;
-  return /^dev-probe/i.test(r.personaId);
-}
 
 function formatPerfDelta(value: number): string {
   return Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : "—";
@@ -181,23 +181,23 @@ export const PersonaFleetPage = () => {
   const rows = useMemo(() => data ?? [], [data]);
 
   const [showRetired, setShowRetired] = useState(false);
-  const [showDevProbe, setShowDevProbe] = useState(false);
+  const [showNonProduction, setShowNonProduction] = useState(false);
 
   const filtered = useMemo(() => rows.filter((r) => {
     if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
-    if (!showDevProbe && isDevProbe(r)) return false;
+    if (!showNonProduction && isNonProductionPersonaFleetRow(r)) return false;
     return true;
-  }), [rows, showRetired, showDevProbe]);
+  }), [rows, showRetired, showNonProduction]);
 
   const visibleRows = useMemo(() => {
     if (!personaFocus) return filtered;
-    return rows.filter((r) => r.personaId === personaFocus);
-  }, [filtered, personaFocus, rows]);
+    return filtered.filter((r) => r.personaId === personaFocus);
+  }, [filtered, personaFocus]);
   const isPersonaFocusLoading = Boolean(personaFocus && loading && data === undefined);
   const hasPersonaFocusMatch = !personaFocus || visibleRows.length > 0;
 
   const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
-  const hiddenProbe = rows.filter(isDevProbe).length;
+  const hiddenNonProduction = rows.filter(isNonProductionPersonaFleetRow).length;
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.fleet.title")}>
@@ -219,13 +219,13 @@ export const PersonaFleetPage = () => {
           </Button>
           <Button
             size="sm"
-            variant={showDevProbe ? "default" : "outline"}
-            onClick={() => setShowDevProbe((v) => !v)}
-            aria-pressed={showDevProbe}
+            variant={showNonProduction ? "default" : "outline"}
+            onClick={() => setShowNonProduction((v) => !v)}
+            aria-pressed={showNonProduction}
           >
-            {showDevProbe
-              ? t("mgmt.fleet.filter.hideDevProbe")
-              : t("mgmt.fleet.filter.showDevProbeFmt", { count: hiddenProbe })}
+            {showNonProduction
+              ? t("mgmt.fleet.filter.hideNonProduction")
+              : t("mgmt.fleet.filter.showNonProductionFmt", { count: hiddenNonProduction })}
           </Button>
         </div>
       </header>
@@ -267,7 +267,7 @@ export const PersonaFleetPage = () => {
           </Button>
         </Card>
       )}
-      {rows.length > 0 && (
+      {visibleRows.length > 0 && (
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -285,7 +285,7 @@ export const PersonaFleetPage = () => {
           <tbody>
             {visibleRows.map((r) => {
               const retired = r.state && HIDDEN_STATES.has(r.state);
-              const probe = isDevProbe(r);
+              const nonProduction = isNonProductionPersonaFleetRow(r);
               const sourceCount = providerOkCount(r);
               const project = r.currentResearchProjects?.[0];
               const sourceBadges = visibleDataSources(r);
@@ -432,8 +432,10 @@ export const PersonaFleetPage = () => {
                         value={r.state}
                       />
                     )}
-                    {probe && (
-                      <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
+                    {nonProduction && (
+                      <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">
+                        {t("mgmt.fleet.nonProduction")}
+                      </Badge>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">

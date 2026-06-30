@@ -13,6 +13,7 @@ import {
   type SystemDataSourceRecord,
 } from "@/lib/v5/management/systemDataSources";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { productionPersonaFleetRows } from "./personaFleetFilters";
 
 const toneClass: Record<DataSourceHealthTone, string> = {
   ok: "bg-status-success/10 text-status-success border-status-success/30",
@@ -32,7 +33,7 @@ function joinOrDash(values: string[]): string {
 export function DataSourceManagementPage() {
   const { t } = useTranslation();
   const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = useMemo(() => productionPersonaFleetRows(data ?? []), [data]);
   const records = useMemo(() => buildSystemDataSourceRegistry(rows), [rows]);
   const summary = useMemo(() => summarizeSystemDataSources(records), [records]);
 
