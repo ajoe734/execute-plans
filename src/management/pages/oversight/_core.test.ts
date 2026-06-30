@@ -9,6 +9,7 @@ import {
   personaFleetPersonaHref,
   personaFleetResearchHref,
 } from "./personaFleetLinks";
+import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
 
 describe("PersonaFleetPage data source badges", () => {
@@ -33,6 +34,17 @@ describe("PersonaFleetPage data source badges", () => {
 });
 
 describe("PersonaFleetPage deep links", () => {
+  it("uses explicit action labels for linked fleet cells", () => {
+    expect(Object.values(PERSONA_FLEET_ACTION_LABELS)).toEqual([
+      "查看資料來源",
+      "查看研究",
+      "查看績效",
+      "Mutation 日誌",
+      "人類收件匣",
+      "狀態詳情",
+    ]);
+  });
+
   it("links a row to represented management surfaces", () => {
     const row = {
       personaId: "persona/tw equity",
