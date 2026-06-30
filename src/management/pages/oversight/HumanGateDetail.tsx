@@ -1,45 +1,17 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
-// Mock mode seed: neutral placeholder only. Live detail data must provide any decision UI.
 
-import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { HUMAN_INBOX_KINDS, type HumanInboxDetail, type HumanInboxKind } from "@/lib/v5/management/humanInbox";
-import { buildLinkSet } from "@/lib/v5/management/links";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
-
-function seedDetail(id: string): HumanInboxDetail {
-  const kind: HumanInboxKind = (HUMAN_INBOX_KINDS.find((k) => id.startsWith(k.slice(0, 3))) ?? "approval");
-  return {
-    id, kind,
-    title: `${kind} detail unavailable`,
-    requiredRole: kind === "capital_breach" ? "capital-owner" : kind === "policy_violation" ? "compliance" : "research-owner",
-    consequenceIfApproved: "",
-    consequenceIfRejected: "",
-    consequenceIfIgnored: "",
-    ttlSec: 12 * 3600,
-    canDecide: false,
-    canProceed: false,
-    blockingReasons: ["Live detail payload unavailable."],
-    detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
-    links: buildLinkSet({ primary: { kind: "human_gate", id } }),
-    decisionType: "single",
-    signatures: [],
-    evidenceRefs: [],
-    decisionHistory: [],
-    auditRefs: ["audit:human-inbox:" + id],
-  };
-}
 
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  const seed = useMemo(() => seedDetail(id), [id]);
-  const { data, loading } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
+  const { data, loading } = useV5Live(() => mgmt.humanInbox.get(id), [id]);
   const item = data;
 
   if (loading && !item) {

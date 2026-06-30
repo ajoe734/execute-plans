@@ -114,16 +114,14 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out?.meta.surfaces.management_trading_pulse.source).toBe("local_snapshot");
   });
 
-  it("humanInbox.list uses provided seed", async () => {
-    const seed = [{ id: "x", kind: "approval" as const }] as never;
-    const out = await mgmt.humanInbox.list(() => seed);
-    expect(out).toBe(seed);
+  it("humanInbox.list returns no mock rows outside live mode", async () => {
+    const out = await mgmt.humanInbox.list();
+    expect(out).toEqual([]);
   });
 
-  it("humanInbox.get uses provided seed for given id", async () => {
-    const seed = { id: "abc-1", kind: "approval" } as never;
-    const out = await mgmt.humanInbox.get("abc-1", () => seed);
-    expect(out).toBe(seed);
+  it("humanInbox.get returns no mock detail outside live mode", async () => {
+    const out = await mgmt.humanInbox.get("abc-1");
+    expect(out).toBeUndefined();
   });
 
   it("adapts live Human Inbox list records to existing FE detail routes", () => {

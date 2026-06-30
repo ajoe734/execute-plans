@@ -2040,6 +2040,8 @@ export default {
       focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching inbox item(s)",
       focusMissingPersonaFmt: "No inbox item found for {{persona}}.",
       showAllItems: "Show all inbox items",
+      emptyBody: "No live inbox items are available.",
+      focusEmptyBodyFmt: "No live inbox items are available for {{persona}}.",
     },
     pulse: {
       title: "Trading Pulse",

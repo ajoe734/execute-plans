@@ -27,9 +27,8 @@ import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
 import {
-  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxKind,
+  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
 } from "@/lib/v5/management/humanInbox";
-import { buildLinkSet } from "@/lib/v5/management/links";
 import { mgmt } from "@/lib/bff-v1";
 import {
   defaultTradingPulseModel,
@@ -693,56 +692,15 @@ export const PersonaFleetPage = () => {
 // Human Inbox — 9 kinds (PM-6)
 // =====================================================================
 
-const INBOX: HumanInboxItem[] = [
-  buildInbox("appr-001", "approval", "Approve mutation v3 for alpha-trader", "research-owner",
-    "Mutation enters paper run", "Mutation discarded", "Times out in 12h"),
-  buildInbox("sent-019", "sentinel", "Beta drift critical on momentum sleeve", "risk-owner",
-    "Acknowledged + remediation", "Auto-paused", "Auto-paused in 30m"),
-  buildInbox("ask-007", "ask", "Persona asks: extend live-paper overlap?", "operator",
-    "Overlap +2d", "Continue as planned", "Default: continue"),
-  buildInbox("inter-031", "intervention", "Pause persona capital-steward live trading", "ops-owner",
-    "Persona paused", "Persona continues", "Continues until next gate"),
-  buildInbox("rdy-002", "readiness_blocker", "EP5 canary blocker: missing paper-14d evidence", "research-owner",
-    "Unblocks canary promote", "Blocker remains", "Blocker remains"),
-  buildInbox("pol-014", "policy_violation", "Trace-003 flagged confidentiality violation", "compliance",
-    "Acknowledged + remediation logged", "Escalated to legal", "Auto-escalates in 2h"),
-  buildInbox("rbk-009", "rollback_request", "Rollback dep-042 vol-target weekly", "ops-owner",
-    "Rollback executes", "Rollback denied", "Awaits next window"),
-  buildInbox("cap-022", "capital_breach", "cp-eu-mid-cap VaR utilisation at 0.91", "capital-owner",
-    "Risk budget extended", "Reduce exposure", "Auto-reduces in 1h"),
-  buildInbox("brk-005", "broker_disconnect", "Broker IB EU lost binding", "ops-owner",
-    "Re-bind broker", "Switch venue", "Live trading halts"),
-];
-
-function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRole: string,
-                    a: string, r: string, ign: string): HumanInboxItem {
-  const links = kind === "approval"          ? buildLinkSet({ primary: { kind: "approval", id } }) :
-                kind === "sentinel"          ? buildLinkSet({ primary: { kind: "sentinel", id } }) :
-                kind === "rollback_request"  ? buildLinkSet({ primary: { kind: "deployment", id: "dep-042" } }) :
-                kind === "capital_breach"    ? buildLinkSet({ primary: { kind: "capital_pool", id: "cp-eu-mid-cap" } }) :
-                kind === "broker_disconnect" ? buildLinkSet({ primary: { kind: "broker_live" } }) :
-                kind === "policy_violation"  ? buildLinkSet({ primary: { kind: "evidence", id: "ev:legal-hold-1" } }) :
-                kind === "readiness_blocker" ? buildLinkSet({ primary: { kind: "strict_publish" } }) :
-                                                buildLinkSet({ primary: { kind: "human_gate", id } });
-  return {
-    id, kind, title, requiredRole,
-    consequenceIfApproved: a, consequenceIfRejected: r, consequenceIfIgnored: ign,
-    canDecide: kind !== "policy_violation",
-    canProceed: kind !== "capital_breach",
-    blockingReasons: kind === "capital_breach" ? ["Capital pool VaR breach"] : undefined,
-    detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
-    ttlSec: 12 * 3600,
-    links,
-  };
-}
-
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const seed = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
-  const { data, loading } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
-  const sorted = useMemo(() => data ?? (personaFocus ? [] : seed), [data, personaFocus, seed]);
+  const { data, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const sorted = useMemo(
+    () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
+    [data],
+  );
   const visibleItems = useMemo(() => {
     if (!personaFocus) return sorted;
     const encodedFocus = encodeURIComponent(personaFocus);
@@ -785,6 +743,13 @@ export const HumanInboxPage = () => {
           </div>
         </Card>
       )}
+      {!loading && visibleItems.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {personaFocus
+            ? t("mgmt.inbox.focusEmptyBodyFmt", { persona: personaFocus })
+            : t("mgmt.inbox.emptyBody")}
+        </Card>
+      )}
       {visibleItems.map((it) => {
         const evidenceRefs = it.evidenceRefs ?? [];
         const evidenceHref = evidenceRefs.length > 0 && it.detailHref
@@ -807,9 +772,8 @@ export const HumanInboxPage = () => {
             )}
           </div>
           {it.summary && <p className="mt-2 text-sm text-muted-foreground">{it.summary}</p>}
-          {/* The consequence triplet only exists on the mock/legacy shape; live
-              governance items carry a summary instead — show the grid only when
-              populated so real payloads don't render three blank cells. */}
+          {/* The consequence triplet only exists on the legacy shape; live
+              governance items carry a summary instead. */}
           {(it.consequenceIfApproved || it.consequenceIfRejected || it.consequenceIfIgnored) && (
             <dl className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
               <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{it.consequenceIfApproved}</dd></div>

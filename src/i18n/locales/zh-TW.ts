@@ -2022,6 +2022,8 @@ export default {
       focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆待處理項目",
       focusMissingPersonaFmt: "找不到 {{persona}} 的收件匣項目。",
       showAllItems: "顯示全部收件匣項目",
+      emptyBody: "目前沒有 live 收件匣項目。",
+      focusEmptyBodyFmt: "{{persona}} 目前沒有 live 收件匣項目。",
     },
     pulse: {
       title: "交易脈動",
