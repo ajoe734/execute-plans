@@ -83,28 +83,47 @@ describe("PersonaFleetPage", () => {
   it("honors the persona query by showing only the actionable persona row", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
-        fleetRow("persona-crypto", "Crypto Macro Persona"),
-        fleetRow("persona-us-equity", "US Equity Persona"),
-        fleetRow("persona-tw-equity", "Taiwan Equity Persona"),
+        fleetRow("persona-live-crypto", "Live Crypto Persona"),
+        fleetRow("persona-live-us-equity", "Live US Equity Persona"),
+        fleetRow("persona-live-tw-equity", "Live Taiwan Equity Persona"),
       ],
       loading: false,
       refresh: vi.fn(),
     });
 
-    renderFleet("/management/persona-fleet?persona=persona-tw-equity");
+    renderFleet("/management/persona-fleet?persona=persona-live-tw-equity");
 
-    expect(screen.getByText("Focused persona: persona-tw-equity")).toBeInTheDocument();
-    expect(screen.getByText("Taiwan Equity Persona")).toBeInTheDocument();
-    expect(screen.queryByText("Crypto Macro Persona")).not.toBeInTheDocument();
-    expect(screen.queryByText("US Equity Persona")).not.toBeInTheDocument();
+    expect(screen.getByText("Focused persona: persona-live-tw-equity")).toBeInTheDocument();
+    expect(screen.getByText("Live Taiwan Equity Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Live Crypto Persona")).not.toBeInTheDocument();
+    expect(screen.queryByText("Live US Equity Persona")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute(
       "href",
       "/management/persona-fleet",
     );
-    expect(screen.getByRole("link", { name: "persona-tw-equity human gate" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity human gate" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-tw-equity",
+      "/management/human-inbox?persona=persona-live-tw-equity",
     );
+  });
+
+  it("hides non-production live rows by default", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-crypto", "Crypto Persona"),
+        fleetRow("dry-run-write-probe-persona", "Dry Run Probe Persona"),
+        fleetRow("persona-live-gold", "Gold Futures Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("Gold Futures Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
   it("does not report a focused persona as missing before live fleet data loads", () => {
@@ -131,7 +150,7 @@ describe("PersonaFleetPage", () => {
     renderFleet("/management/persona-fleet");
 
     expect(screen.getByText("Live Persona Fleet data unavailable")).toBeInTheDocument();
-    expect(screen.getByText("This page does not render demo or seed Persona Fleet rows.")).toBeInTheDocument();
+    expect(screen.getByText("This page does not render demo, seed, or non-production Persona Fleet rows.")).toBeInTheDocument();
     expect(screen.queryByText("Crypto Macro Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("US Equity Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("Taiwan Equity Persona")).not.toBeInTheDocument();
