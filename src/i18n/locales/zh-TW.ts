@@ -2009,6 +2009,9 @@ export default {
       evidence: "證據",
       backToInbox: "← 收件匣",
       headerSubtitleFmt: "需要角色：{{role}} · 決策類型：{{decision}}",
+      loadingDetail: "載入收件匣項目…",
+      detailUnavailableTitle: "無法載入收件匣項目",
+      detailUnavailableBody: "目前無法取得此項目的 live 詳情；請回到收件匣重新開啟。",
     },
     pulse: {
       title: "交易脈動",

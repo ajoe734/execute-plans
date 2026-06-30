@@ -2027,6 +2027,9 @@ export default {
       evidence: "Evidence",
       backToInbox: "← Inbox",
       headerSubtitleFmt: "Required role: {{role}} · Decision type: {{decision}}",
+      loadingDetail: "Loading inbox item…",
+      detailUnavailableTitle: "Inbox item unavailable",
+      detailUnavailableBody: "Live details for this item are unavailable right now. Return to the inbox and open it again.",
     },
     pulse: {
       title: "Trading Pulse",
