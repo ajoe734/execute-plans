@@ -6,8 +6,10 @@
 import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
 import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { liveWriteGated } from "@/lib/bff-v1/writeGate";
 import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
+import { idempotencyKey as mintIdempotencyKey } from "@/lib/bff-v1/headers";
 import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import {
   v5List,
@@ -48,8 +50,8 @@ type UnknownRecord = Record<string, unknown>;
 const livePaths = {
   v5ControlRoom: () => "/bff/v5/control-room",
   v5StrategyHealth: () => "/bff/v5/execution/strategy-health",
-  v5SentinelFinding: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}`,
-  v5SentinelStatus: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}/status`,
+  v5SentinelFinding: paths.v5SentinelFinding,
+  v5SentinelStatus: paths.v5SentinelFindingStatus,
 };
 
 const asRecord = (value: unknown): UnknownRecord =>
@@ -77,6 +79,22 @@ const asManagementHref = (value: unknown): string | undefined => {
   if (href.startsWith("management/")) return `/${href}`;
   return undefined;
 };
+
+const sentinelStatusOverlay = new Map<string, SentinelFinding["status"]>();
+
+function applySentinelStatusOverlay(finding: SentinelFinding): SentinelFinding {
+  const status = sentinelStatusOverlay.get(finding.id);
+  return status ? { ...finding, status } : finding;
+}
+
+function setSentinelStatusOverlay(id: string, status: SentinelFinding["status"]) {
+  sentinelStatusOverlay.set(id, status);
+  emitV5Event({
+    channel: "v5.sentinel.finding.status",
+    type: "sentinel.finding.status_changed",
+    payload: { findingId: id, status },
+  });
+}
 
 const firstManagementHref = (...values: unknown[]): string | undefined => {
   for (const value of values) {
@@ -510,7 +528,7 @@ function allFindings(): SentinelFinding[] {
     incidents: seed.incidents,
     runtimes: seed.runtimes,
     jobs: seed.jobs,
-  });
+  }).map(applySentinelStatusOverlay);
 }
 
 function allLoopRuns(): LoopRun[] {
@@ -675,7 +693,7 @@ export const bffV5 = {
       withStrictLiveOrMock<V5ListResponse<SentinelFinding>>(
         { method: "GET", path: paths.v5SentinelFindings() },
         async () => delay(v5List(allFindings())),
-        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding)),
+        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding).map(applySentinelStatusOverlay)),
       ),
     get: (id: string): Promise<SentinelFinding | undefined> =>
       withStrictLiveOrMock<SentinelFinding | undefined>(
@@ -683,18 +701,25 @@ export const bffV5 = {
         async () => delay(allFindings().find((f) => f.id === id)),
         (data) => {
           const record = strictDataFrom(data);
-          return record ? adaptBffSentinelFinding(record, 0) : undefined;
+          return record ? applySentinelStatusOverlay(adaptBffSentinelFinding(record, 0)) : undefined;
         },
         strictNotFoundAsUndefined,
       ),
-    /** Q24 — mock state transition; emits typed event; does NOT touch seed. */
-    setStatus: (id: string, status: SentinelFinding["status"]): Promise<{ ok: true }> => {
-      emitV5Event({
-        channel: "v5.sentinel.finding.status",
-        type: "sentinel.finding.status_changed",
-        payload: { findingId: id, status },
-      });
-      return delay({ ok: true });
+    setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
+      const persisted = await liveWriteGated();
+      if (persisted) {
+        await bffFetch<unknown>({
+          method: "POST",
+          path: livePaths.v5SentinelStatus(id),
+          body: { status },
+          idempotencyKey: mintIdempotencyKey(),
+          mode: "live",
+        });
+      } else {
+        await delay(undefined);
+      }
+      setSentinelStatusOverlay(id, status);
+      return { ok: true, persisted };
     },
   },
 
