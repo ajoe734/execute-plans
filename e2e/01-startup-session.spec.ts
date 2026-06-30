@@ -16,6 +16,9 @@
  *   PANTHEON_BROWSER_BFF_BASE_URL
  *     optional browser-observed BFF base, usually the frontend origin when
  *     the repo dev server proxies /bff to the upstream BFF.
+ *   PANTHEON_SSE_BROWSER_BFF_BASE_URL
+ *     optional browser-observed SSE BFF base. Defaults to the direct BFF URL so
+ *     this probe is not coupled to dev-server event-stream buffering.
  *   BFF_AUTH_TOKEN
  *     optional; when omitted the dev stub token is used.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
@@ -70,6 +73,11 @@ function browserBffUrl(path: string): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+function browserSseBffUrl(path: string): string {
+  const base = process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL || bffBaseUrl() || process.env.PANTHEON_BROWSER_BFF_BASE_URL || "";
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
 function bffBaseUrl(): string {
   const base =
     process.env.PANTHEON_BFF_BASE_URL ||
@@ -111,6 +119,18 @@ async function installRuntimeFallbackOverride(
       // Storage can be unavailable; runtime globals still cover bootstrap.
     }
   }, fallback);
+}
+
+async function openSseProbeDocument(page: Page): Promise<void> {
+  const probeUrl = sseOriginUrl("/__pantheon-sse-probe");
+  await page.route("**/__pantheon-sse-probe", async (route) => {
+    await route.fulfill({
+      body: "<!doctype html><meta charset=\"utf-8\"><title>Pantheon SSE probe</title>",
+      contentType: "text/html",
+      status: 200,
+    });
+  });
+  await page.goto(probeUrl, { waitUntil: "domcontentloaded" });
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -260,10 +280,10 @@ test.describe("F01 startup session", () => {
   });
 
   test("opens the browser-native SSE EventSource stream", async ({ page }) => {
-    const streamUrl = browserBffUrl("/bff/events/stream?channel=system");
+    const streamUrl = browserSseBffUrl("/bff/events/stream?channel=system");
     const openTimeoutMs = sseOpenTimeoutMs();
 
-    await page.goto(sseOriginUrl("/"), { waitUntil: "domcontentloaded" });
+    await openSseProbeDocument(page);
 
     const opened = await page.evaluate(
       ({ url, timeoutMs }) =>
