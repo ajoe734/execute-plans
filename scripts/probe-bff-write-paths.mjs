@@ -29,6 +29,8 @@ const ROOT = process.cwd();
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 const PROBE_MARKER = `dry-run-write-probe-${RUN_ID}-${Math.random().toString(36).slice(2, 8)}`;
 const INCLUDE_CREATE_DRY_RUNS = truthy(process.env.PANTHEON_WRITE_PROBE_INCLUDE_CREATES || "false");
+const READBACK_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_ATTEMPTS, 3, 1);
+const READBACK_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_TIMEOUT_MS, 15_000, 5_000);
 
 const ENDPOINTS = [
   // P0-D - Entity create
@@ -100,6 +102,11 @@ function isObject(value) {
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
 }
 
 function isBffErrorEnvelope(value) {
@@ -185,6 +192,10 @@ function headersFor(requestId) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function probe(ep) {
   const url = new URL(ep.route, BFF_BASE_URL).toString();
   const requestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -234,37 +245,57 @@ function containsMarker(value) {
 }
 
 async function readback(route) {
-  const requestId = `write-probe-readback-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const url = new URL(route, BFF_BASE_URL).toString();
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${BEARER_TOKEN}`,
-        Accept: "application/json",
-        "X-Request-Id": requestId,
-        "X-BFF-Api-Version": "2026-05-07",
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    const bodyText = await res.text().catch(() => "");
-    const json = safeJsonParse(bodyText);
-    return {
-      route,
-      status: res.status,
-      ok: res.status === 200,
-      markerFound: containsMarker(json ?? bodyText),
-      note: res.status === 200 ? "readback ok" : `readback status ${res.status}`,
-    };
-  } catch (err) {
-    return {
-      route,
-      status: 0,
-      ok: false,
-      markerFound: false,
-      note: String(err).slice(0, 120),
-    };
+  let last = {
+    route,
+    status: 0,
+    ok: false,
+    markerFound: false,
+    note: "not attempted",
+  };
+
+  for (let attempt = 0; attempt < READBACK_ATTEMPTS; attempt += 1) {
+    const requestId = `write-probe-readback-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-a${attempt + 1}`;
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${BEARER_TOKEN}`,
+          Accept: "application/json",
+          "X-Request-Id": requestId,
+          "X-BFF-Api-Version": "2026-05-07",
+        },
+        signal: AbortSignal.timeout(READBACK_TIMEOUT_MS),
+      });
+      const bodyText = await res.text().catch(() => "");
+      const json = safeJsonParse(bodyText);
+      last = {
+        route,
+        status: res.status,
+        ok: res.status === 200,
+        markerFound: containsMarker(json ?? bodyText),
+        note: res.status === 200 ? "readback ok" : `readback status ${res.status}`,
+      };
+      if (![502, 503, 504].includes(res.status)) return last;
+    } catch (err) {
+      last = {
+        route,
+        status: 0,
+        ok: false,
+        markerFound: false,
+        note: String(err).slice(0, 120),
+      };
+    }
+
+    if (attempt < READBACK_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
   }
+
+  return {
+    ...last,
+    note: `${last.note} after ${READBACK_ATTEMPTS} attempt(s)`,
+  };
 }
 
 function countBy(items, key) {

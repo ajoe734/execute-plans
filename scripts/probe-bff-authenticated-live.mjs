@@ -24,8 +24,10 @@ const BFF_BASE_URL = (process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_
 const BEARER_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const ROOT = process.cwd();
-const READ_RETRY_ATTEMPTS = Number(process.env.PANTHEON_BFF_SMOKE_READ_RETRIES || "3");
-const READ_RETRY_DELAY_MS = Number(process.env.PANTHEON_BFF_SMOKE_RETRY_DELAY_MS || "750");
+const READ_RETRY_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_SMOKE_READ_RETRIES, 5, 1);
+const WRITE_RETRY_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_SMOKE_WRITE_RETRIES, 3, 1);
+const RETRY_DELAY_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_RETRY_DELAY_MS, 1_000, 100);
+const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_TIMEOUT_MS, 20_000, 5_000);
 
 if (!BFF_BASE_URL) {
   console.error("[auth-smoke] PANTHEON_BFF_BASE_URL is not set; cannot probe.");
@@ -138,12 +140,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function maxAttemptsFor(method) {
-  if (method !== "GET") return 1;
-  return Number.isFinite(READ_RETRY_ATTEMPTS) && READ_RETRY_ATTEMPTS > 0 ? Math.floor(READ_RETRY_ATTEMPTS) : 1;
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
 }
 
-function isRetryableReadFailure(result) {
+function maxAttemptsFor(method) {
+  return method === "GET" ? READ_RETRY_ATTEMPTS : WRITE_RETRY_ATTEMPTS;
+}
+
+function isRetryableFailure(result) {
   return Boolean(result.error) || [429, 500, 502, 503, 504].includes(result.status);
 }
 
@@ -151,9 +157,10 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
   const url = new URL(route, BFF_BASE_URL).toString();
   const maxAttempts = maxAttemptsFor(method);
   let lastResult = { status: 0, json: null, ok: false, error: "not attempted", attempts: 0 };
+  const idempotencyBase = `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const requestId = `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${attempt}`;
+    const requestId = `${idempotencyBase}-${attempt}`;
     const headers = {
       Authorization: `Bearer ${BEARER_TOKEN}`,
       Accept: "application/json",
@@ -161,8 +168,8 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
     };
     if (method !== "GET") {
       headers["X-Dry-Run"] = "1";
-      headers["Idempotency-Key"] = `idk-${requestId}`;
-      headers["X-Idempotency-Key"] = `idk-${requestId}`;
+      headers["Idempotency-Key"] = `idk-${idempotencyBase}`;
+      headers["X-Idempotency-Key"] = `idk-${idempotencyBase}`;
     }
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -172,7 +179,7 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
       const res = await fetch(url, {
         method,
         headers,
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
       let json = null;
@@ -186,11 +193,11 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
       lastResult = { status: 0, json: null, ok: false, error: String(err), attempts: attempt };
     }
 
-    if (attempt >= maxAttempts || !isRetryableReadFailure(lastResult)) {
+    if (attempt >= maxAttempts || !isRetryableFailure(lastResult)) {
       return lastResult;
     }
 
-    await sleep(READ_RETRY_DELAY_MS * attempt);
+    await sleep(RETRY_DELAY_MS * attempt);
   }
 
   return lastResult;

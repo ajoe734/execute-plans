@@ -34,6 +34,8 @@ const DEFAULT_BFF_BASE_URL =
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
+const ME_REQUEST_ATTEMPTS = 4;
+const ME_REQUEST_TIMEOUT_MS = 10_000;
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -168,17 +170,27 @@ async function bodyText(page: import("@playwright/test").Page): Promise<string> 
   return page.locator("body").innerText({ timeout: 10_000 });
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function requestMeWithTransientRetry(
   request: APIRequestContext,
   url: string,
   headers: Record<string, string>,
 ): Promise<{ status: number; body: string }> {
   let last = { status: 0, body: "" };
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const response = await request.get(url, { headers, timeout: 10_000 });
-    last = { status: response.status(), body: await response.text() };
-    if (![502, 503, 504].includes(last.status)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+  for (let attempt = 0; attempt < ME_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await request.get(url, { headers, timeout: ME_REQUEST_TIMEOUT_MS });
+      last = { status: response.status(), body: await response.text() };
+      if (![502, 503, 504].includes(last.status)) return last;
+    } catch (err) {
+      last = { status: 0, body: String(err) };
+    }
+    if (attempt < ME_REQUEST_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
   }
   return last;
 }
@@ -279,65 +291,86 @@ test.describe("F01 startup session", () => {
       .not.toMatch(SERVING_MOCK_BANNER);
   });
 
-  test("opens the browser-native SSE EventSource stream", async ({ page }) => {
+  test("opens the browser-native SSE EventSource stream", async ({ page }, testInfo) => {
     const streamUrl = browserSseBffUrl("/bff/events/stream?channel=system");
     const openTimeoutMs = sseOpenTimeoutMs();
+    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * 2 + 15_000));
 
     await openSseProbeDocument(page);
 
-    const opened = await page.evaluate(
-      ({ url, timeoutMs }) =>
-        new Promise<{
+    let opened:
+      | {
           readyState: number;
           openState: number;
           firstMessageType?: string;
-        }>(
-          (resolve, reject) => {
-            const eventSource = new EventSource(url);
-            const timeout = window.setTimeout(() => {
-              const state = eventSource.readyState;
-              eventSource.close();
-              reject(new Error(`EventSource did not open; readyState=${state}`));
-            }, timeoutMs);
+        }
+      | undefined;
+    let lastError = "";
+    for (let attempt = 0; attempt < 2 && !opened; attempt += 1) {
+      try {
+        opened = await page.evaluate(
+          ({ url, timeoutMs }) =>
+            new Promise<{
+              readyState: number;
+              openState: number;
+              firstMessageType?: string;
+            }>(
+              (resolve, reject) => {
+                const eventSource = new EventSource(url);
+                const timeout = window.setTimeout(() => {
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  reject(new Error(`EventSource did not open; readyState=${state}`));
+                }, timeoutMs);
 
-            eventSource.onopen = () => {
-              window.clearTimeout(timeout);
-              const state = eventSource.readyState;
-              eventSource.close();
-              resolve({ readyState: state, openState: EventSource.OPEN });
-            };
+                eventSource.onopen = () => {
+                  window.clearTimeout(timeout);
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  resolve({ readyState: state, openState: EventSource.OPEN });
+                };
 
-            eventSource.onmessage = (event) => {
-              window.clearTimeout(timeout);
-              const state = eventSource.readyState;
-              eventSource.close();
-              try {
-                const payload = JSON.parse(event.data);
-                resolve({
-                  readyState: state,
-                  openState: EventSource.OPEN,
-                  firstMessageType:
-                    typeof payload.type === "string" ? payload.type : undefined,
-                });
-              } catch {
-                resolve({ readyState: state, openState: EventSource.OPEN });
-              }
-            };
+                eventSource.onmessage = (event) => {
+                  window.clearTimeout(timeout);
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  try {
+                    const payload = JSON.parse(event.data);
+                    resolve({
+                      readyState: state,
+                      openState: EventSource.OPEN,
+                      firstMessageType:
+                        typeof payload.type === "string" ? payload.type : undefined,
+                    });
+                  } catch {
+                    resolve({ readyState: state, openState: EventSource.OPEN });
+                  }
+                };
 
-            eventSource.onerror = () => {
-              if (eventSource.readyState === EventSource.CLOSED) {
-                window.clearTimeout(timeout);
-                reject(new Error("EventSource closed before opening"));
-              }
-            };
-          },
-        ),
-      { url: streamUrl, timeoutMs: openTimeoutMs },
-    );
+                eventSource.onerror = () => {
+                  if (eventSource.readyState === EventSource.CLOSED) {
+                    window.clearTimeout(timeout);
+                    reject(new Error("EventSource closed before opening"));
+                  }
+                };
+              },
+            ),
+          { url: streamUrl, timeoutMs: openTimeoutMs },
+        );
+      } catch (err) {
+        lastError = String(err);
+        if (attempt === 0) {
+          await sleep(1_000);
+          await openSseProbeDocument(page);
+        }
+      }
+    }
 
-    expect(opened.readyState).toBe(opened.openState);
-    if (opened.firstMessageType) {
-      expect(opened.firstMessageType).toMatch(/^system\./);
+    expect(opened, lastError).toBeTruthy();
+    const openedResult = opened!;
+    expect(openedResult.readyState).toBe(openedResult.openState);
+    if (openedResult.firstMessageType) {
+      expect(openedResult.firstMessageType).toMatch(/^system\./);
     }
   });
 

@@ -25,6 +25,8 @@ const SMOKE_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.B
 const OPERATOR_A_TOKEN = process.env.PANTHEON_BFF_OPERATOR_A_TOKEN || "";
 const OPERATOR_B_TOKEN = process.env.PANTHEON_BFF_OPERATOR_B_TOKEN || "";
 const SSE_MS = Math.max(10_000, Number(process.env.PANTHEON_LIVE_DEEP_SSE_MS || "65000"));
+const LIVE_FETCH_ATTEMPTS = positiveInt(process.env.PANTHEON_LIVE_DEEP_FETCH_ATTEMPTS, 3, 1);
+const LIVE_FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_LIVE_DEEP_FETCH_TIMEOUT_MS, 20_000, 5_000);
 const REQUIRE_FULL = truthy(process.env.PANTHEON_LIVE_DEEP_REQUIRE_FULL || "false");
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 const PROBE_MARKER = `management-live-deep-${RUN_ID}-${Math.random().toString(36).slice(2, 8)}`;
@@ -81,6 +83,11 @@ const RBAC_MATRIX = [
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
 }
 
 function normalizeRole(role) {
@@ -188,29 +195,66 @@ function requestHeaders(token, method, requestId, extra = {}) {
   return headers;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchJson(route, { method = "GET", token = "", body, requestPrefix = "live-deep", extraHeaders = {} } = {}) {
   const requestId = `${requestPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const url = new URL(route, BFF_BASE_URL).toString();
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: requestHeaders(token, method, requestId, extraHeaders),
-      body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(20000),
-    });
-    const text = await res.text().catch(() => "");
-    return {
-      route,
-      method,
-      status: res.status,
-      json: safeJson(text),
-      text,
-      error: "",
-      typedEnvelope: isBffErrorEnvelope(safeJson(text)),
-    };
-  } catch (err) {
-    return { route, method, status: 0, json: null, text: "", error: String(err), typedEnvelope: false };
+  let last = {
+    route,
+    method,
+    status: 0,
+    json: null,
+    text: "",
+    error: "not attempted",
+    typedEnvelope: false,
+  };
+
+  for (let attempt = 0; attempt < LIVE_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: requestHeaders(token, method, requestId, extraHeaders),
+        body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(LIVE_FETCH_TIMEOUT_MS),
+      });
+      const text = await res.text().catch(() => "");
+      const json = safeJson(text);
+      last = {
+        route,
+        method,
+        status: res.status,
+        json,
+        text,
+        error: "",
+        typedEnvelope: isBffErrorEnvelope(json),
+      };
+      if (![502, 503, 504].includes(res.status)) return last;
+    } catch (err) {
+      last = {
+        route,
+        method,
+        status: 0,
+        json: null,
+        text: "",
+        error: String(err),
+        typedEnvelope: false,
+      };
+    }
+
+    if (attempt < LIVE_FETCH_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
   }
+
+  return {
+    ...last,
+    error: last.error
+      ? `${last.error} after ${LIVE_FETCH_ATTEMPTS} attempt(s)`
+      : `transient HTTP ${last.status} after ${LIVE_FETCH_ATTEMPTS} attempt(s)`,
+  };
 }
 
 function classifyAllowed(response, check = {}) {
