@@ -33,6 +33,7 @@ import {
   findCatalogueEntry,
   type LoopRun,
   type SentinelFinding,
+  type EvidenceRef,
   type InterventionItem,
   type PersonaExecutionHealth,
   type StrategyExecutionHealth,
@@ -70,6 +71,60 @@ const asNumber = (value: unknown, fallback = 0): number => {
 const asStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   return value.map((item) => asString(item)).filter(Boolean);
+};
+
+const EVIDENCE_KINDS = new Set<EvidenceRef["kind"]>([
+  "alert",
+  "incident",
+  "job",
+  "audit",
+  "metric",
+  "strategy",
+  "persona",
+  "deployment",
+  "runtime",
+  "policy",
+  "approval",
+]);
+
+const asEvidenceKind = (value: unknown, fallback: EvidenceRef["kind"] = "audit"): EvidenceRef["kind"] => {
+  const kind = asString(value).toLowerCase();
+  return EVIDENCE_KINDS.has(kind as EvidenceRef["kind"]) ? kind as EvidenceRef["kind"] : fallback;
+};
+
+const asEvidenceRef = (value: unknown): EvidenceRef | undefined => {
+  if (typeof value === "string") {
+    const [kindMaybe, ...rest] = value.split(":");
+    if (rest.length > 0 && EVIDENCE_KINDS.has(kindMaybe as EvidenceRef["kind"])) {
+      const id = rest.join(":").trim();
+      return id ? { kind: kindMaybe as EvidenceRef["kind"], id } : undefined;
+    }
+    const id = value.trim();
+    return id ? { kind: "audit", id } : undefined;
+  }
+
+  const item = asRecord(value);
+  const id = asString(item.id ?? item.ref ?? item.path ?? item.evidence_id ?? item.evidenceId);
+  if (!id) return undefined;
+  const snapshotRecord = asRecord(item.snapshot);
+  const snapshot =
+    Object.keys(snapshotRecord).length > 0
+      ? {
+          value: snapshotRecord.value as number | string | undefined,
+          ts: asString(snapshotRecord.ts ?? snapshotRecord.timestamp),
+          label: asString(snapshotRecord.label ?? snapshotRecord.name),
+        }
+      : undefined;
+  return {
+    kind: asEvidenceKind(item.kind ?? item.type ?? item.source),
+    id,
+    ...(snapshot ? { snapshot } : {}),
+  };
+};
+
+const asEvidenceRefs = (value: unknown): EvidenceRef[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map(asEvidenceRef).filter((ref): ref is EvidenceRef => !!ref);
 };
 
 const asManagementHref = (value: unknown): string | undefined => {
@@ -454,6 +509,10 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
   const id = asString(item.finding_id ?? item.findingId ?? item.id, `sentinel-finding-${index + 1}`);
   const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
   const severity = adaptSentinelSeverity(item.severity);
+  const evidence = asEvidenceRefs(item.evidence ?? item.evidence_refs ?? item.evidenceRefs);
+  if (incidentId && !evidence.some((ref) => ref.kind === "incident" && ref.id === incidentId)) {
+    evidence.unshift({ kind: "incident", id: incidentId });
+  }
   const confidence = Number.isFinite(Number(item.confidence))
     ? Math.max(0, Math.min(1, Number(item.confidence)))
     : severity === "critical" ? 0.88 : severity === "warning" ? 0.76 : severity === "watch" ? 0.62 : 0.35;
@@ -475,7 +534,7 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
       pools: asStringArray(item.pool_ids ?? item.poolIds),
       deployments: asStringArray(item.deployment_ids ?? item.deploymentIds),
     },
-    evidence: incidentId ? [{ kind: "incident", id: incidentId }] : [],
+    evidence,
     recommendedActionIds: asStringArray(item.recommendedActionIds ?? item.recommended_action_ids),
   };
 }

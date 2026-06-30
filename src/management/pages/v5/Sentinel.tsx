@@ -1,9 +1,9 @@
 // Pack E E5 — /management/sentinel
-// High-fidelity findings list + remediation drawer with Q24 advisory /
-// guarded_automation / emergency_override flow. Emergency wraps HighRiskConfirm.
+// Findings list + investigation workspace. Sentinel summarizes evidence and
+// governance handoff, but does not expose local-only status/action mutations.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
@@ -13,16 +13,14 @@ import { Input } from "@/components/ui/input";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { BffError, v5 } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
 import type { SentinelFinding, RemediationAction } from "@/lib/v5";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldCheck } from "lucide-react";
+import { ExternalLink, ShieldCheck } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
@@ -82,7 +80,7 @@ export const SentinelPage = () => {
     }
   };
 
-  const all = findings.data?.items ?? [];
+  const all = useMemo(() => findings.data?.items ?? [], [findings.data]);
   const visible = useMemo(() => all.filter((f) => {
     if (sevFilter !== "all" && f.severity !== sevFilter) return false;
     if (filter && !`${f.title} ${f.summary}`.toLowerCase().includes(filter.toLowerCase())) return false;
@@ -178,20 +176,17 @@ export const SentinelPage = () => {
         </SkeletonThreshold>
       </PageBody>
 
-      <FindingDrawer finding={active} onClose={closeActive} onActed={findings.refresh} triggerRef={activeFindingTriggerRef} />
+      <FindingDrawer finding={active} onClose={closeActive} triggerRef={activeFindingTriggerRef} />
     </>
   );
 };
 
-// ---------- Finding drawer with remediation flow ----------
+// ---------- Finding drawer: investigation + governance handoff ----------
 
 const FindingDrawer = ({
-  finding, onClose, onActed, triggerRef,
-}: { finding: SentinelFinding | null; onClose: () => void; onActed: () => void; triggerRef?: { current: HTMLElement | null } }) => {
+  finding, onClose, triggerRef,
+}: { finding: SentinelFinding | null; onClose: () => void; triggerRef?: { current: HTMLElement | null } }) => {
   const t = useT();
-  const [pendingEmergency, setPendingEmergency] = useState<RemediationAction | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingStatus, setPendingStatus] = useState<SentinelFinding["status"] | null>(null);
 
   if (!finding) return null;
 
@@ -202,225 +197,214 @@ const FindingDrawer = ({
     }))
     .filter((a): a is RemediationAction => !!a);
 
-  const grouped = {
-    advisory: actions.filter((a) => a.mode === "advisory"),
-    guarded_automation: actions.filter((a) => a.mode === "guarded_automation"),
-    emergency_override: actions.filter((a) => a.mode === "emergency_override"),
-  };
-
-  const execute = async (a: RemediationAction) => {
-    setActionError(null);
-    try {
-      const r = await v5.remediation.execute(a);
-      toast({
-        title: t("v5.sentinel.actionExecuted"),
-        description: `${a.label} · overlay=${r.overlayUpdated ? "updated" : "noop"}`,
-      });
-      onActed();
-    } catch (error) {
-      const message =
-        error instanceof BffError && error.requiresConfirmToken()
-          ? t("errors.CONFIRM_TOKEN_REQUIRED", { defaultValue: "Confirmation token required" })
-          : error instanceof Error
-            ? error.message
-            : t("errors.UNKNOWN_ERROR", { defaultValue: "Action failed" });
-      setActionError(message);
-      toast({ title: message });
-    }
-  };
-
-  const setFindingStatus = async (status: SentinelFinding["status"]) => {
-    setActionError(null);
-    setPendingStatus(status);
-    try {
-      const result = await v5.sentinel.setStatus(finding.id, status);
-      toast({
-        title: status === "dismissed" ? t("v5.sentinel.dismissed") : t("v5.sentinel.acknowledged"),
-        description: result.persisted ? undefined : t("v5.sentinel.localOnly"),
-      });
-      onActed();
-      onClose();
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : t("errors.UNKNOWN_ERROR", { defaultValue: "Action failed" });
-      setActionError(message);
-      toast({ title: t("v5.sentinel.statusUpdateFailed"), description: message });
-    } finally {
-      setPendingStatus(null);
-    }
-  };
-
-  const acknowledge = () => setFindingStatus("acknowledged");
-  const dismiss = () => setFindingStatus("dismissed");
+  const targets = investigationTargets(finding);
+  const thinEvidence = finding.evidence.length === 0 || finding.evidence.every((e) => !e.snapshot);
 
   return (
-    <>
-      <Sheet open={!!finding} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-xl overflow-y-auto"
-          onCloseAutoFocus={(e) => {
-            const el = triggerRef?.current;
-            if (el?.isConnected) { e.preventDefault(); el.focus(); }
-          }}
-        >
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Badge variant="outline" className={sevCls[finding.severity]}>{finding.severity}</Badge>
-              <span className="text-base">{finding.title}</span>
-            </SheetTitle>
-            <SheetDescription>{finding.summary}</SheetDescription>
-          </SheetHeader>
+    <Sheet open={!!finding} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl lg:max-w-3xl overflow-y-auto"
+        onCloseAutoFocus={(e) => {
+          const el = triggerRef?.current;
+          if (el?.isConnected) { e.preventDefault(); el.focus(); }
+        }}
+      >
+        <SheetHeader>
+          <SheetTitle className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={sevCls[finding.severity]}>{finding.severity}</Badge>
+            <Badge variant="outline" className={statusCls[finding.status]}>{statusLabel(t, finding.status)}</Badge>
+            <span className="text-base">{finding.title}</span>
+          </SheetTitle>
+          <SheetDescription>{finding.summary}</SheetDescription>
+        </SheetHeader>
 
-          <div className="mt-4 space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-3">
+        <div className="mt-5 space-y-4 text-sm">
+          <Card className="p-4">
+            <div className="mb-3 text-xs uppercase tracking-wide text-muted-foreground">
+              {t("v5.sentinel.investigationSummary")}
+            </div>
+            <p className="text-sm leading-6 text-foreground">{finding.summary}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label={t("v5.sentinel.status")} value={<Badge variant="outline" className={statusCls[finding.status]}>{statusLabel(t, finding.status)}</Badge>} />
               <Field label={t("v5.sentinel.confidence")} value={`${(finding.confidence * 100).toFixed(0)}%`} />
               <Field label={t("v5.sentinel.source")} value={finding.source} />
               <Field label={t("v5.sentinel.detectedAt")} value={safeDateTime(finding.detectedAt)} />
             </div>
+          </Card>
 
-            {(finding.blastRadius.strategies?.length || finding.blastRadius.personas?.length) ? (
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{t("v5.sentinel.blastRadius")}</div>
-                <div className="flex flex-wrap gap-1">
-                  {finding.blastRadius.strategies?.map((id) => <Badge key={id} variant="outline" className="text-mono text-[10px]">strategy:{id}</Badge>)}
-                  {finding.blastRadius.personas?.map((id) => <Badge key={id} variant="outline" className="text-mono text-[10px]">persona:{id}</Badge>)}
-                </div>
+          <Card className="p-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              {t("v5.sentinel.severityRationale")}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label={t("v5.sentinel.severity")} value={<Badge variant="outline" className={sevCls[finding.severity]}>{finding.severity}</Badge>} />
+              <Field label={t("v5.sentinel.updatedAt")} value={safeDateTime(finding.updatedAt)} />
+              <Field label={t("v5.sentinel.recommendedCount")} value={actions.length} />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              {t("v5.sentinel.severityRationaleDesc")}
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              {t("v5.sentinel.blastRadius")}
+            </div>
+            {targets.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {targets.map((target) => (
+                  target.href ? (
+                    <Link
+                      key={`${target.kind}:${target.id}`}
+                      to={target.href}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40"
+                    >
+                      <span className="font-mono">{target.kind}:{target.id}</span>
+                      <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    </Link>
+                  ) : (
+                    <Badge key={`${target.kind}:${target.id}`} variant="outline" className="font-mono text-[10px]">
+                      {target.kind}:{target.id}
+                    </Badge>
+                  )
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("v5.sentinel.noBlastRadius")}</p>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              {t("v5.sentinel.evidencePacket")}
+            </div>
+            {thinEvidence ? (
+              <div className="mb-3 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+                {t("v5.sentinel.thinEvidenceWarning")}
               </div>
             ) : null}
-
-            {finding.evidence.length > 0 && (
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{t("v5.sentinel.evidence")}</div>
-                <ul className="space-y-1">
-                  {finding.evidence.map((e, i) => (
-                    <li key={i} className="text-xs text-mono text-muted-foreground">
-                      {e.kind}:{e.id}
-                      {e.snapshot?.label && <span className="ml-2">({e.snapshot.label}={String(e.snapshot.value)})</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {finding.evidence.length > 0 ? (
+              <ul className="space-y-2">
+                {finding.evidence.map((e, i) => (
+                  <li key={`${e.kind}:${e.id}:${i}`} className="rounded-md border border-border px-3 py-2">
+                    <div className="font-mono text-xs text-foreground">{e.kind}:{e.id}</div>
+                    {e.snapshot ? (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {e.snapshot.label ?? t("v5.sentinel.snapshot")}: {String(e.snapshot.value ?? "—")}
+                        {e.snapshot.ts ? <span className="ml-2">{safeDateTime(e.snapshot.ts)}</span> : null}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs text-muted-foreground">{t("v5.sentinel.noSnapshot")}</div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("v5.sentinel.noEvidenceRefs")}</p>
             )}
+          </Card>
 
-            {/* Remediation actions */}
-            <div className="space-y-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">{t("v5.sentinel.remediation")}</div>
-              {actionError ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {actionError}
-                </div>
-              ) : null}
-
-              <ActionGroup
-                title={t("v5.remediation.advisory")}
-                hint={t("v5.remediation.advisoryHint")}
-                actions={grouped.advisory}
-                modeCls={modeCls.advisory}
-                onRun={execute}
-                t={t}
-              />
-              <ActionGroup
-                title={t("v5.remediation.guarded")}
-                hint={t("v5.remediation.guardedHint")}
-                actions={grouped.guarded_automation}
-                modeCls={modeCls.guarded_automation}
-                onRun={async (a) => {
-                  if (!confirm(`${a.label}\n\n${t("v5.remediation.guardedConfirm")}`)) return;
-                  await execute(a);
-                }}
-                t={t}
-              />
-              <ActionGroup
-                title={t("v5.remediation.emergency")}
-                hint={t("v5.remediation.emergencyHint")}
-                actions={grouped.emergency_override}
-                modeCls={modeCls.emergency_override}
-                onRun={(a) => setPendingEmergency(a)}
-                t={t}
-              />
+          <Card className="p-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              {t("v5.sentinel.recommendedNextSteps")}
             </div>
+            {actions.length > 0 ? (
+              <RecommendationList actions={actions} t={t} />
+            ) : (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>{t("v5.sentinel.defaultStepVerifyEvidence")}</li>
+                <li>{t("v5.sentinel.defaultStepRouteGovernance")}</li>
+                <li>{t("v5.sentinel.defaultStepDocumentDecision")}</li>
+              </ul>
+            )}
+          </Card>
 
-            <div className="flex gap-2 pt-2 border-t border-border">
-              {finding.status === "open" && (
-                <Button variant="outline" size="sm" onClick={acknowledge} disabled={pendingStatus !== null}>
-                  {pendingStatus === "acknowledged" ? t("v5.sentinel.acknowledging") : t("v5.sentinel.acknowledge")}
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={dismiss} disabled={pendingStatus !== null}>
-                {pendingStatus === "dismissed" ? t("v5.sentinel.dismissing") : t("v5.sentinel.dismiss")}
+          <Card className="border-status-warning/30 bg-status-warning/5 p-4">
+            <div className="text-sm font-semibold text-foreground">{t("v5.sentinel.governanceHandling")}</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("v5.sentinel.noDirectMutationDesc")}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link to="/management/interventions">{t("v5.sentinel.openInterventions")}</Link>
               </Button>
+              {targets.find((target) => target.kind === "persona" && target.href) ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link to={targets.find((target) => target.kind === "persona" && target.href)?.href ?? "/management/persona-fleet"}>
+                    {t("v5.sentinel.openPersonaFleet")}
+                  </Link>
+                </Button>
+              ) : null}
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {pendingEmergency && (
-        <HighRiskConfirm
-          open={!!pendingEmergency}
-          onOpenChange={(o) => !o && setPendingEmergency(null)}
-          operation={pendingEmergency.kind}
-          target={{ type: pendingEmergency.targetKind ?? "v5", id: pendingEmergency.targetId ?? "—", name: pendingEmergency.label }}
-          risk="critical"
-          riskImpact={pendingEmergency.description}
-          requiredApproval={pendingEmergency.requiredRoles}
-          onConfirm={async () => {
-            await execute(pendingEmergency);
-            setPendingEmergency(null);
-          }}
-          destructive
-        />
-      )}
-    </>
+          </Card>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 };
 
 const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div>
     <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-    <div className="mt-0.5">{value}</div>
+    <div className="mt-0.5 break-words">{value}</div>
   </div>
 );
 
-const ActionGroup = ({
-  title, hint, actions, modeCls, onRun, t,
+type InvestigationTarget = {
+  kind: "strategy" | "persona" | "pool" | "deployment";
+  id: string;
+  href?: string;
+};
+
+const investigationTargets = (finding: SentinelFinding): InvestigationTarget[] => {
+  const targets: InvestigationTarget[] = [];
+  const push = (kind: InvestigationTarget["kind"], ids: string[] | undefined, hrefFor: (id: string) => string | undefined) => {
+    ids?.forEach((id) => targets.push({ kind, id, href: hrefFor(id) }));
+  };
+  push("strategy", finding.blastRadius.strategies, (id) => `/management/strategies/${encodeURIComponent(id)}`);
+  push("persona", finding.blastRadius.personas, (id) => `/management/persona-fleet?persona=${encodeURIComponent(id)}`);
+  push("pool", finding.blastRadius.pools, (id) => `/management/capital/${encodeURIComponent(id)}`);
+  push("deployment", finding.blastRadius.deployments, () => undefined);
+  return targets;
+};
+
+const recommendationModeLabel = (mode: RemediationAction["mode"], t: (key: string) => string) => {
+  if (mode === "guarded_automation") return t("v5.remediation.guarded");
+  if (mode === "emergency_override") return t("v5.remediation.emergency");
+  return t("v5.remediation.advisory");
+};
+
+const RecommendationList = ({
+  actions, t,
 }: {
-  title: string;
-  hint: string;
   actions: RemediationAction[];
-  modeCls: string;
-  onRun: (a: RemediationAction) => void;
   t: (k: string) => string;
 }) => {
-  if (actions.length === 0) return null;
   return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between mb-1">
-        <div className="text-sm font-semibold">{title}</div>
-        <Badge variant="outline" className={modeCls}>{actions.length}</Badge>
-      </div>
-      <div className="text-xs text-muted-foreground mb-2">{hint}</div>
+    <div className="space-y-3">
+      <p className="text-xs leading-5 text-muted-foreground">{t("v5.sentinel.recommendationsAreAdvisory")}</p>
       <ul className="space-y-2">
         {actions.map((a) => (
-          <li key={a.id} className="flex items-start justify-between gap-2 border-t border-border pt-2 first:border-0 first:pt-0">
+          <li key={a.id} className="rounded-md border border-border px-3 py-2">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className={modeCls[a.mode]}>{recommendationModeLabel(a.mode, t)}</Badge>
+              {a.requiresHumanApproval ? (
+                <Badge variant="outline" className="border-status-warning/30 bg-status-warning/10 text-status-warning">
+                  {t("v5.remediation.needsApproval")}
+                </Badge>
+              ) : null}
+            </div>
             <div className="min-w-0">
               <div className="text-sm font-medium">{a.label}</div>
               {a.description && <div className="text-xs text-muted-foreground">{a.description}</div>}
               <div className="text-xs text-muted-foreground mt-0.5">
-                {t("v5.remediation.roles")}: {a.requiredRoles.join(", ")}
-                {a.requiresHumanApproval && <span className="ml-2">· {t("v5.remediation.needsApproval")}</span>}
+                {t("v5.remediation.roles")}: {a.requiredRoles.join(", ") || "—"}
+                {a.targetKind && a.targetId ? <span className="ml-2">· {a.targetKind}:{a.targetId}</span> : null}
               </div>
             </div>
-            <Button size="sm" variant={a.mode === "emergency_override" ? "destructive" : a.mode === "guarded_automation" ? "default" : "outline"} onClick={() => onRun(a)}>
-              {t("v5.remediation.run")}
-            </Button>
           </li>
         ))}
       </ul>
-    </Card>
+    </div>
   );
 };
 
