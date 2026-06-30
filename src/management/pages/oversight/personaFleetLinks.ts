@@ -43,3 +43,11 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string {
 export function personaFleetHumanGateHref(r: ManagementPersonaFleetRow): string {
   return `/management/human-inbox?persona=${encoded(r.personaId)}`;
 }
+
+export function personaFleetOnboardingHref(r: ManagementPersonaFleetRow): string {
+  return `/management/personas/${encoded(r.personaId)}/onboarding`;
+}
+
+export function personaFleetRuntimeHref(r: ManagementPersonaFleetRow): string {
+  return `/management/runtimes?persona=${encoded(r.personaId)}`;
+}

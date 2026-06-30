@@ -17,8 +17,12 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
 
 void i18n.changeLanguage("en-US");
 
-function fleetRow(personaId: string, personaName: string): ManagementPersonaFleetRow {
-  return {
+function fleetRow(
+  personaId: string,
+  personaName: string,
+  overrides: Partial<ManagementPersonaFleetRow> = {},
+): ManagementPersonaFleetRow {
+  const row: ManagementPersonaFleetRow = {
     personaId,
     personaName,
     owner: "pathreon-management",
@@ -61,6 +65,7 @@ function fleetRow(personaId: string, personaName: string): ManagementPersonaFlee
       canDeploy: false,
     }],
   };
+  return { ...row, ...overrides };
 }
 
 function renderFleet(initialEntry: string) {
@@ -154,5 +159,68 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("Crypto Macro Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("US Equity Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("Taiwan Equity Persona")).not.toBeInTheDocument();
+  });
+
+  it("routes paper-running personas to runtime management instead of onboarding", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-paper", "Paper Persona", {
+          humanNeeded: true,
+          state: "paper_running",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "View runtime for persona-paper" })).toHaveAttribute(
+      "href",
+      "/management/runtimes?persona=persona-paper",
+    );
+    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-paper" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Start onboarding for persona-paper" })).not.toBeInTheDocument();
+  });
+
+  it("routes personas waiting on humans to the human gate", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-approval", "Approval Persona", {
+          humanNeeded: true,
+          state: "needs_human_approval",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "Review human gate for persona-approval" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox?persona=persona-approval",
+    );
+    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-approval" })).not.toBeInTheDocument();
+  });
+
+  it("keeps onboarding as the primary action only for draft personas", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-draft", "Draft Persona", {
+          humanNeeded: false,
+          state: "draft",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "Start onboarding for persona-draft" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-draft/onboarding",
+    );
   });
 });
