@@ -120,4 +120,20 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("No persona fleet row found for persona-tw-equity.")).not.toBeInTheDocument();
     expect(screen.queryByText("Taiwan Equity Persona")).not.toBeInTheDocument();
   });
+
+  it("shows a live-only empty state instead of demo fleet rows", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("Live Persona Fleet data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("This page does not render demo or seed Persona Fleet rows.")).toBeInTheDocument();
+    expect(screen.queryByText("Crypto Macro Persona")).not.toBeInTheDocument();
+    expect(screen.queryByText("US Equity Persona")).not.toBeInTheDocument();
+    expect(screen.queryByText("Taiwan Equity Persona")).not.toBeInTheDocument();
+  });
 });

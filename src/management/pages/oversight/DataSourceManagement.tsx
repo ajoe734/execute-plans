@@ -13,7 +13,6 @@ import {
   type SystemDataSourceRecord,
 } from "@/lib/v5/management/systemDataSources";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
-import { PERSONA_FLEET_SEED } from "./_core";
 
 const toneClass: Record<DataSourceHealthTone, string> = {
   ok: "bg-status-success/10 text-status-success border-status-success/30",
@@ -32,8 +31,8 @@ function joinOrDash(values: string[]): string {
 
 export function DataSourceManagementPage() {
   const { t } = useTranslation();
-  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
-  const rows = data ?? PERSONA_FLEET_SEED;
+  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
+  const rows = useMemo(() => data ?? [], [data]);
   const records = useMemo(() => buildSystemDataSourceRegistry(rows), [rows]);
   const summary = useMemo(() => summarizeSystemDataSources(records), [records]);
 
@@ -62,25 +61,40 @@ export function DataSourceManagementPage() {
         <Metric label={t("mgmt.dataSources.markets")} value={joinOrDash(summary.markets)} />
       </div>
 
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">{t("mgmt.dataSources.source")}</th>
-              <th className="px-3 py-2">{t("mgmt.dataSources.health")}</th>
-              <th className="px-3 py-2">{t("mgmt.dataSources.connection")}</th>
-              <th className="px-3 py-2">{t("mgmt.dataSources.consumers")}</th>
-              <th className="px-3 py-2">{t("mgmt.dataSources.evidence")}</th>
-              <th className="px-3 py-2">{t("mgmt.dataSources.controls")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => (
-              <DataSourceRow key={record.providerKey} record={record} />
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      {loading && records.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("mgmt.dataSources.loadingLive")}
+        </Card>
+      )}
+
+      {!loading && records.length === 0 && (
+        <Card className="p-4 text-sm">
+          <div className="font-medium text-foreground">{t("mgmt.dataSources.liveDataUnavailableTitle")}</div>
+          <p className="mt-1 text-muted-foreground">{t("mgmt.dataSources.liveDataUnavailableBody")}</p>
+        </Card>
+      )}
+
+      {records.length > 0 && (
+        <Card className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">{t("mgmt.dataSources.source")}</th>
+                <th className="px-3 py-2">{t("mgmt.dataSources.health")}</th>
+                <th className="px-3 py-2">{t("mgmt.dataSources.connection")}</th>
+                <th className="px-3 py-2">{t("mgmt.dataSources.consumers")}</th>
+                <th className="px-3 py-2">{t("mgmt.dataSources.evidence")}</th>
+                <th className="px-3 py-2">{t("mgmt.dataSources.controls")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <DataSourceRow key={record.providerKey} record={record} />
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </section>
   );
 }
