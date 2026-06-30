@@ -4,9 +4,10 @@
 //
 // PersonaIntent + readiness pages live in their own files.
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -382,6 +383,27 @@ function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: num
   return { ok, total };
 }
 
+function FleetLinkButton({
+  to,
+  children,
+  ariaLabel,
+  className,
+}: {
+  to: string;
+  children: ReactNode;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <Button asChild size="sm" variant="outline" className={"h-7 px-2 text-xs " + (className ?? "")}>
+      <Link to={to} aria-label={ariaLabel}>
+        <span className="truncate">{children}</span>
+        <ArrowUpRight className="size-3" aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+}
+
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const { data } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
@@ -467,7 +489,7 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2">
                     <Link
                       to={personaHref}
-                      className="font-medium text-primary underline-offset-4 hover:underline"
+                      className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
                     >
                       {r.personaName || r.personaId}
                     </Link>
@@ -478,11 +500,13 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
                   <td className="px-3 py-2 min-w-[240px]">
                     <div className="flex flex-wrap items-center gap-1">
-                      <Link to={personaFleetDataSourcesHref(r)} aria-label={`${r.personaId} data sources`}>
-                        <Badge variant="outline" className={dataSourceTone(r.dataSourceStatus?.state)}>
-                          {formatToken(r.dataSourceStatus?.state)}
-                        </Badge>
-                      </Link>
+                      <FleetLinkButton
+                        to={personaFleetDataSourcesHref(r)}
+                        ariaLabel={`${r.personaId} data sources`}
+                        className={dataSourceTone(r.dataSourceStatus?.state)}
+                      >
+                        {formatToken(r.dataSourceStatus?.state)}
+                      </FleetLinkButton>
                       {sourceCount.total > 0 && (
                         <span className="text-xs text-muted-foreground">
                           {t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}
@@ -509,9 +533,9 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2 min-w-[260px]">
                     <div className="flex flex-wrap items-center gap-1">
                       {researchHref ? (
-                        <Link to={researchHref} aria-label={`${r.personaId} research detail`}>
-                          <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
-                        </Link>
+                        <FleetLinkButton to={researchHref} ariaLabel={`${r.personaId} research detail`}>
+                          {formatToken(r.researchStatus?.stage ?? project?.stage)}
+                        </FleetLinkButton>
                       ) : (
                         <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
                       )}
@@ -523,7 +547,7 @@ export const PersonaFleetPage = () => {
                     </div>
                     <div className="mt-1 max-w-[320px] truncate font-medium text-foreground">
                       {researchHref ? (
-                        <Link to={researchHref} className="text-primary underline-offset-4 hover:underline">
+                        <Link to={researchHref} className="text-primary underline underline-offset-4 hover:text-primary/80">
                           {project?.title || r.currentWork || r.researchStatus?.summary || "—"}
                         </Link>
                       ) : (
@@ -536,7 +560,7 @@ export const PersonaFleetPage = () => {
                         <>
                           {" · "}
                           {artifactHref ? (
-                            <Link to={artifactHref} className="font-mono text-primary underline-offset-4 hover:underline">
+                            <Link to={artifactHref} className="font-mono text-primary underline underline-offset-4 hover:text-primary/80">
                               {artifactLabel}
                             </Link>
                           ) : (
@@ -547,31 +571,41 @@ export const PersonaFleetPage = () => {
                     </div>
                   </td>
                   <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
-                    <Link to={personaFleetPerformanceHref(r)} className="underline-offset-4 hover:underline">
+                    <FleetLinkButton
+                      to={personaFleetPerformanceHref(r)}
+                      ariaLabel={`${r.personaId} performance attribution`}
+                      className={Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed"}
+                    >
                       {formatPerfDelta(r.perfDelta)}
-                    </Link>
+                    </FleetLinkButton>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    <Link to={personaFleetMutationHref(r)} className="underline-offset-4 hover:underline">
+                    <FleetLinkButton to={personaFleetMutationHref(r)} ariaLabel={`${r.personaId} mutation history`}>
                       {r.lastMutation}
-                    </Link>
+                    </FleetLinkButton>
                   </td>
                   <td className="px-3 py-2">
                     {r.humanNeeded
                       ? (
-                        <Link to={personaFleetHumanGateHref(r)} aria-label={`${r.personaId} human gate`}>
-                          <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">{t("mgmt.fleet.yes")}</Badge>
-                        </Link>
+                        <FleetLinkButton
+                          to={personaFleetHumanGateHref(r)}
+                          ariaLabel={`${r.personaId} human gate`}
+                          className="bg-status-warning/15 text-status-warning border-status-warning/30"
+                        >
+                          {t("mgmt.fleet.yes")}
+                        </FleetLinkButton>
                       )
                       : <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>}
                   </td>
                   <td className="px-3 py-2">
                     {r.state && (
-                      <Link to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}>
-                        <Badge variant="outline" className={retired ? "bg-muted text-muted-foreground" : ""}>
-                          {r.state}
-                        </Badge>
-                      </Link>
+                      <FleetLinkButton
+                        to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}
+                        ariaLabel={`${r.personaId} status detail`}
+                        className={retired ? "bg-muted text-muted-foreground" : ""}
+                      >
+                        {r.state}
+                      </FleetLinkButton>
                     )}
                     {probe && (
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">dev-probe</Badge>
