@@ -119,6 +119,20 @@ function formatToken(value?: string): string {
   return value ? value.replace(/_/g, " ") : "—";
 }
 
+function fieldLinkClass(className?: string): string {
+  return [
+    "font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80",
+    className,
+  ].filter(Boolean).join(" ");
+}
+
+function badgeLinkClass(className?: string): string {
+  return [
+    "cursor-pointer transition-colors",
+    className,
+  ].filter(Boolean).join(" ");
+}
+
 function dataSourceTone(state?: string): string {
   const token = String(state ?? "").toLowerCase();
   if (token.includes("read_ok") || token.includes("readback_ok") || token.includes("smoke_ok")) {
@@ -349,12 +363,18 @@ export const PersonaFleetPage = () => {
                   <td className="px-3 py-2 min-w-[260px]">
                     <div className="flex flex-wrap items-center gap-1">
                       {researchHref ? (
-                        <FleetLinkButton
+                        <Link
                           to={researchHref}
-                          ariaLabel={`${r.personaId} research detail`}
-                          label={PERSONA_FLEET_ACTION_LABELS.research}
-                          value={formatToken(r.researchStatus?.stage ?? project?.stage)}
-                        />
+                          aria-label={`${r.personaId} research detail`}
+                          className="inline-flex"
+                        >
+                          <Badge
+                            variant="outline"
+                            className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+                          >
+                            {formatToken(r.researchStatus?.stage ?? project?.stage)}
+                          </Badge>
+                        </Link>
                       ) : (
                         <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
                       )}
@@ -393,44 +413,65 @@ export const PersonaFleetPage = () => {
                     </div>
                   </td>
                   <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
-                    <FleetLinkButton
+                    <Link
                       to={personaFleetPerformanceHref(r)}
-                      ariaLabel={`${r.personaId} performance attribution`}
-                      className={Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed"}
-                      label={PERSONA_FLEET_ACTION_LABELS.performance}
-                      value={formatPerfDelta(r.perfDelta)}
-                    />
+                      aria-label={`${r.personaId} performance attribution`}
+                      className={fieldLinkClass(Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success hover:text-status-success" : "text-status-failed hover:text-status-failed")}
+                    >
+                      {formatPerfDelta(r.perfDelta)}
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    <FleetLinkButton
+                    <Link
                       to={personaFleetMutationHref(r)}
-                      ariaLabel={`${r.personaId} mutation history`}
-                      label={PERSONA_FLEET_ACTION_LABELS.mutation}
-                      value={r.lastMutation}
-                    />
+                      aria-label={`${r.personaId} mutation history`}
+                      className={fieldLinkClass("text-muted-foreground hover:text-primary")}
+                    >
+                      {r.lastMutation || "—"}
+                    </Link>
                   </td>
                   <td className="px-3 py-2">
                     {r.humanNeeded
                       ? (
-                        <FleetLinkButton
+                        <Link
                           to={personaFleetHumanGateHref(r)}
-                          ariaLabel={`${r.personaId} human gate`}
-                          className="bg-status-warning/15 text-status-warning border-status-warning/30"
-                          label={PERSONA_FLEET_ACTION_LABELS.humanGate}
-                          value={t("mgmt.fleet.yes")}
-                        />
+                          aria-label={`${r.personaId} human gate`}
+                          className="inline-flex"
+                        >
+                          <Badge
+                            variant="outline"
+                            className={badgeLinkClass("bg-status-warning/15 text-status-warning border-status-warning/30 hover:border-status-warning/60 hover:bg-status-warning/20")}
+                          >
+                            {t("mgmt.fleet.yes")}
+                          </Badge>
+                        </Link>
                       )
-                      : <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>}
+                      : (
+                        <Link
+                          to={personaFleetHumanGateHref(r)}
+                          aria-label={`${r.personaId} human gate`}
+                          className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
+                        >
+                          {t("mgmt.fleet.no")}
+                        </Link>
+                      )}
                   </td>
                   <td className="px-3 py-2">
                     {r.state && (
-                      <FleetLinkButton
+                      <Link
                         to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}
-                        ariaLabel={`${r.personaId} status detail`}
-                        className={retired ? "bg-muted text-muted-foreground" : ""}
-                        label={PERSONA_FLEET_ACTION_LABELS.status}
-                        value={r.state}
-                      />
+                        aria-label={`${r.personaId} status detail`}
+                        className="inline-flex"
+                      >
+                        <Badge
+                          variant="outline"
+                          className={retired
+                            ? badgeLinkClass("bg-muted text-muted-foreground hover:border-primary/60")
+                            : badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+                        >
+                          {r.state}
+                        </Badge>
+                      </Link>
                     )}
                     {nonProduction && (
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">
