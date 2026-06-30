@@ -50,9 +50,11 @@ import {
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
+  personaFleetOnboardingHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
   personaFleetResearchHref,
+  personaFleetRuntimeHref,
 } from "./personaFleetLinks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -136,6 +138,107 @@ function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: num
   const total = values.length || r.dataSources?.length || 0;
   const ok = values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length;
   return { ok, total };
+}
+
+type PersonaFleetPrimaryAction = {
+  href: string;
+  labelKey: string;
+  ariaLabelKey: string;
+  className?: string;
+};
+
+const RUNTIME_ACTION_STATES = new Set([
+  "paper_running",
+  "live_running",
+  "canary_running",
+  "running",
+  "runtime_active",
+  "active_runtime",
+  "stopped",
+  "paused",
+  "rollback_required",
+  "failed",
+]);
+
+const ONBOARDING_ACTION_STATES = new Set([
+  "draft",
+  "none",
+  "not_deployed",
+  "not_started",
+  "pending_onboarding",
+  "onboarding",
+  "no_runtime_binding",
+  "missing_runtime_binding",
+  "ready_for_paper",
+  "ready_for_deployment",
+]);
+
+function normalizedFleetState(r: ManagementPersonaFleetRow): string {
+  return String(r.state ?? "").trim().toLowerCase();
+}
+
+function hasDeployableArtifact(r: ManagementPersonaFleetRow): boolean {
+  const project = r.currentResearchProjects?.[0];
+  const artifactId = project?.artifactId || r.researchStatus?.artifactId;
+  return Boolean(artifactId && r.researchStatus?.canDeploy !== false && project?.canDeploy !== false);
+}
+
+function personaFleetPrimaryAction(
+  r: ManagementPersonaFleetRow,
+  links: { personaHref: string; researchHref: string | null },
+): PersonaFleetPrimaryAction {
+  const state = normalizedFleetState(r);
+
+  if (RUNTIME_ACTION_STATES.has(state) || state.endsWith("_running")) {
+    return {
+      href: personaFleetRuntimeHref(r),
+      labelKey: "mgmt.fleet.primaryAction.viewRuntime",
+      ariaLabelKey: "mgmt.fleet.primaryAction.viewRuntimeAriaFmt",
+      className: "border-status-success/40 text-status-success hover:text-status-success",
+    };
+  }
+
+  if (state === "needs_human_approval" || r.humanNeeded) {
+    return {
+      href: personaFleetHumanGateHref(r),
+      labelKey: "mgmt.fleet.primaryAction.reviewHumanGate",
+      ariaLabelKey: "mgmt.fleet.primaryAction.reviewHumanGateAriaFmt",
+      className: "border-status-warning/40 text-status-warning hover:text-status-warning",
+    };
+  }
+
+  if (ONBOARDING_ACTION_STATES.has(state)) {
+    const isDraft = state === "draft";
+    return {
+      href: personaFleetOnboardingHref(r),
+      labelKey: isDraft ? "mgmt.fleet.primaryAction.startOnboarding" : "mgmt.fleet.primaryAction.continueOnboarding",
+      ariaLabelKey: isDraft
+        ? "mgmt.fleet.primaryAction.startOnboardingAriaFmt"
+        : "mgmt.fleet.primaryAction.continueOnboardingAriaFmt",
+    };
+  }
+
+  if (hasDeployableArtifact(r)) {
+    return {
+      href: personaFleetOnboardingHref(r),
+      labelKey: "mgmt.fleet.primaryAction.continueOnboarding",
+      ariaLabelKey: "mgmt.fleet.primaryAction.continueOnboardingAriaFmt",
+    };
+  }
+
+  if (state === "researching" && links.researchHref) {
+    return {
+      href: links.researchHref,
+      labelKey: "mgmt.fleet.primaryAction.viewResearch",
+      ariaLabelKey: "mgmt.fleet.primaryAction.viewResearchAriaFmt",
+    };
+  }
+
+  return {
+    href: links.personaHref,
+    labelKey: "mgmt.fleet.primaryAction.viewPersona",
+    ariaLabelKey: "mgmt.fleet.primaryAction.viewPersonaAriaFmt",
+  };
 }
 
 function FleetLinkButton({
@@ -294,6 +397,7 @@ export const PersonaFleetPage = () => {
                 : r.researchStatus?.frameworks?.join(" / ");
               const personaHref = personaFleetPersonaHref(r);
               const researchHref = personaFleetResearchHref(r);
+              const primaryAction = personaFleetPrimaryAction(r, { personaHref, researchHref });
               const artifactHref = personaFleetArtifactHref(r);
               const artifactLabel = project?.artifactId || r.researchStatus?.artifactId;
               const focused = personaFocus === r.personaId;
@@ -440,9 +544,17 @@ export const PersonaFleetPage = () => {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {!retired && (
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/management/personas/${encodeURIComponent(r.personaId)}/onboarding`}>
-                          {t("mgmt.fleet.onboard")}
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className={primaryAction.className}
+                      >
+                        <Link
+                          to={primaryAction.href}
+                          aria-label={t(primaryAction.ariaLabelKey, { persona: r.personaId })}
+                        >
+                          {t(primaryAction.labelKey)}
                         </Link>
                       </Button>
                     )}
