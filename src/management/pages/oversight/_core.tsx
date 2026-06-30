@@ -5,7 +5,7 @@
 // PersonaIntent + readiness pages live in their own files.
 
 import { type ReactNode, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -421,8 +421,10 @@ function FleetLinkButton({
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const { data } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
   const rows = data ?? PERSONA_FLEET_SEED;
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
 
   const [showRetired, setShowRetired] = useState(false);
   const [showDevProbe, setShowDevProbe] = useState(false);
@@ -432,6 +434,12 @@ export const PersonaFleetPage = () => {
     if (!showDevProbe && isDevProbe(r)) return false;
     return true;
   }), [rows, showRetired, showDevProbe]);
+
+  const visibleRows = useMemo(() => {
+    if (!personaFocus) return filtered;
+    return rows.filter((r) => r.personaId === personaFocus);
+  }, [filtered, personaFocus, rows]);
+  const hasPersonaFocusMatch = !personaFocus || visibleRows.length > 0;
 
   const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
   const hiddenProbe = rows.filter(isDevProbe).length;
@@ -466,7 +474,24 @@ export const PersonaFleetPage = () => {
           </Button>
         </div>
       </header>
-      {filtered.length === 0 && rows.length > 0 && (
+      {personaFocus && (
+        <Card className={"p-3 text-sm " + (hasPersonaFocusMatch
+          ? "border-primary/30 bg-primary/5"
+          : "border-status-warning/30 bg-status-warning/10")}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              {hasPersonaFocusMatch
+                ? t("mgmt.fleet.focusedPersonaFmt", { persona: personaFocus })
+                : t("mgmt.fleet.focusMissingPersonaFmt", { persona: personaFocus })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/persona-fleet">{t("mgmt.fleet.showAllPersonas")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+      {visibleRows.length === 0 && rows.length > 0 && !personaFocus && (
         <Card className="p-4 text-sm text-muted-foreground">
           {t("mgmt.fleet.filter.allFilteredHint")}
         </Card>
@@ -486,7 +511,7 @@ export const PersonaFleetPage = () => {
           </thead>
 
           <tbody>
-            {filtered.map((r) => {
+            {visibleRows.map((r) => {
               const retired = r.state && HIDDEN_STATES.has(r.state);
               const probe = isDevProbe(r);
               const sourceCount = providerOkCount(r);
@@ -499,8 +524,12 @@ export const PersonaFleetPage = () => {
               const researchHref = personaFleetResearchHref(r);
               const artifactHref = personaFleetArtifactHref(r);
               const artifactLabel = project?.artifactId || r.researchStatus?.artifactId;
+              const focused = personaFocus === r.personaId;
               return (
-                <tr key={r.personaId} className={"border-b border-border/50 " + (retired ? "opacity-60" : "")}>
+                <tr
+                  key={r.personaId}
+                  className={"border-b border-border/50 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
+                >
                   <td className="px-3 py-2">
                     <Link
                       to={personaHref}
@@ -703,9 +732,25 @@ function buildInbox(id: string, kind: HumanInboxKind, title: string, requiredRol
 
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const seed = useMemo(() => [...INBOX].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)), []);
   const { data } = useV5Live(() => mgmt.humanInbox.list(() => seed), []);
   const sorted = data ?? seed;
+  const visibleItems = useMemo(() => {
+    if (!personaFocus) return sorted;
+    const encodedFocus = encodeURIComponent(personaFocus);
+    return sorted.filter((it) => [
+      it.id,
+      it.title,
+      it.summary,
+      it.detailHref,
+      it.links?.manageHref,
+      it.links?.recommendedActionHref,
+      it.links?.evidenceHref,
+    ].some((value) => value?.includes(personaFocus) || value?.includes(encodedFocus)));
+  }, [personaFocus, sorted]);
+  const hasPersonaFocusMatch = !personaFocus || visibleItems.length > 0;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header>
@@ -714,7 +759,24 @@ export const HumanInboxPage = () => {
           {t("mgmt.inbox.subtitleFmt", { count: HUMAN_INBOX_KINDS.length })}
         </p>
       </header>
-      {sorted.map((it) => {
+      {personaFocus && (
+        <Card className={"p-3 text-sm " + (hasPersonaFocusMatch
+          ? "border-primary/30 bg-primary/5"
+          : "border-status-warning/30 bg-status-warning/10")}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              {hasPersonaFocusMatch
+                ? t("mgmt.inbox.focusedPersonaFmt", { persona: personaFocus, count: visibleItems.length })
+                : t("mgmt.inbox.focusMissingPersonaFmt", { persona: personaFocus })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+      {visibleItems.map((it) => {
         const evidenceRefs = it.evidenceRefs ?? [];
         const evidenceHref = evidenceRefs.length > 0 && it.detailHref
           ? `${it.detailHref}#evidence`
