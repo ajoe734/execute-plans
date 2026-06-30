@@ -1034,6 +1034,7 @@ const uiFlows: UiFlow[] = [
 const fetchFlows: FetchFlow[] = [
   { id: "fetch-026-me", type: "fetch", category: "display", method: "GET", path: "/bff/me" },
   { id: "fetch-027-persona-fleet", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-fleet" },
+  { id: "fetch-028-cockpit", type: "fetch", category: "display", method: "GET", path: "/bff/management/cockpit" },
   { id: "fetch-029-league", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-league" },
   { id: "fetch-030-league-alias", type: "fetch", category: "display", method: "GET", path: "/bff/persona-league" },
   { id: "fetch-031-persona-intent", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-intent" },

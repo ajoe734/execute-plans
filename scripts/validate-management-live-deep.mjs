@@ -36,34 +36,34 @@ const RBAC_MATRIX = [
     id: "read-strategies",
     method: "GET",
     route: "/bff/strategies",
-    allowed: ["viewer", "operator", "approver", "risk_owner", "admin"],
+    allowed: ["viewer", "operator", "approver", "admin"],
   },
   {
     id: "read-approvals",
     method: "GET",
     route: "/bff/approvals",
-    allowed: ["viewer", "operator", "approver", "risk_owner", "admin"],
+    allowed: ["viewer", "operator", "approver", "admin"],
   },
   {
     id: "approval-decide-dry-run",
     method: "POST",
     route: "/bff/approvals/approval-dev/decide",
     allowTyped404: true,
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    allowed: ["approver", "admin"],
     body: { decision: "approve", reason: PROBE_MARKER },
   },
   {
     id: "intervention-decide-dry-run",
     method: "POST",
-    route: "/bff/v5/interventions/intervention-dev/decide",
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/decide`,
+    allowed: ["operator", "approver", "admin"],
     body: { decision: "approve", memo: PROBE_MARKER },
   },
   {
     id: "two-man-sign-dry-run",
     method: "POST",
-    route: "/bff/v5/interventions/intervention-dev/two-man-sign",
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/two-man-sign`,
+    allowed: ["operator", "approver", "admin"],
     body: { memo: PROBE_MARKER },
   },
   {
@@ -125,6 +125,23 @@ function statusWeight(status) {
 
 function worstStatus(statuses) {
   return statuses.reduce((worst, status) => (statusWeight(status) > statusWeight(worst) ? status : worst), "pass");
+}
+
+function slug(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72) || "probe";
+}
+
+function probeTargetId(role, checkId) {
+  return ["rbac", slug(PROBE_MARKER), slug(role), slug(checkId)].join("-");
+}
+
+function routeForCheck(check, role) {
+  return typeof check.routeForRole === "function" ? check.routeForRole(role, check) : check.route;
 }
 
 function loadRoleTokens() {
@@ -198,6 +215,9 @@ async function fetchJson(route, { method = "GET", token = "", body, requestPrefi
 
 function classifyAllowed(response, check = {}) {
   if (response.error) return { pass: false, note: response.error.slice(0, 120) };
+  if ([401, 403].includes(response.status)) {
+    return { pass: false, note: `expected allowed but got auth denial ${response.status}; typed=${response.typedEnvelope}` };
+  }
   if (check.allowTyped404 && response.status === 404 && response.typedEnvelope) {
     return { pass: true, note: "allowed route reached typed dev-id not-found envelope" };
   }
@@ -227,7 +247,8 @@ async function runRbacMatrix() {
   for (const role of presentRoles) {
     for (const check of RBAC_MATRIX) {
       const allowed = check.allowed.includes(role);
-      const response = await fetchJson(check.route, {
+      const route = routeForCheck(check, role);
+      const response = await fetchJson(route, {
         method: check.method,
         token: roleTokens[role],
         body: check.body,
@@ -238,7 +259,7 @@ async function runRbacMatrix() {
         role,
         check: check.id,
         method: check.method,
-        route: check.route,
+        route,
         expected: allowed ? "allowed" : "denied",
         status: response.status,
         typedEnvelope: response.typedEnvelope,
@@ -251,7 +272,8 @@ async function runRbacMatrix() {
   const smokeRows = [];
   if (!presentRoles.length && SMOKE_TOKEN) {
     for (const check of RBAC_MATRIX) {
-      const response = await fetchJson(check.route, {
+      const route = routeForCheck(check, "smoke");
+      const response = await fetchJson(route, {
         method: check.method,
         token: SMOKE_TOKEN,
         body: check.body,
@@ -262,7 +284,7 @@ async function runRbacMatrix() {
         role: "smoke",
         check: check.id,
         method: check.method,
-        route: check.route,
+        route,
         status: response.status,
         typedEnvelope: response.typedEnvelope,
         pass: verdict.pass,
