@@ -746,7 +746,7 @@ function buildGate4(hosted) {
       evidence,
       note: noteForHosted(`uses intended BFF URL: ${hosted.containsBff ?? "missing"}`),
     }),
-    makeCheck("Frontend Persona Fleet renders US/TW/Crypto rows without NaN.", statusForHosted(hosted.personaFleetRowsValid), {
+    makeCheck("Frontend Persona Fleet renders production rows or live empty state without demo/NaN.", statusForHosted(hosted.personaFleetRowsValid), {
       owner: hostedOwner(statusForHosted(hosted.personaFleetRowsValid)),
       evidence,
       note: noteForHosted(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}`),

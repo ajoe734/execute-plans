@@ -200,37 +200,37 @@ try {
       const rows = Array.from(document.querySelectorAll("tbody tr"))
         .map((tr) => (tr.textContent || "").trim())
         .filter(Boolean);
-      const hasUS = /US Equity Persona|US.*Equity/i.test(text);
-      const hasTW = /Taiwan Equity Persona|Taiwan.*Equity|TW Equity/i.test(text);
-      const hasCrypto = /Crypto Persona|Crypto/i.test(text);
-      const hasShioaji = /shioaji/i.test(text);
-      const hasQlib = /qlib/i.test(text);
       const hasNaN = /NaN/.test(text);
       const hasSeedFallbackArmed = /seed fallback armed/i.test(text);
       const hasFallbackStandby = /fallback standby/i.test(text);
+      const hasLiveEmptyState = /Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料/i.test(text);
+      const hasNonProductionRows = [
+        /persona-crypto/i,
+        /persona-us-equity/i,
+        /persona-tw-equity/i,
+        /Crypto Persona/i,
+        /US Equity Persona/i,
+        /Taiwan Equity Persona/i,
+        /Deploy Smoke Persona/i,
+        /dry-run-write-probe/i,
+      ].some((pattern) => pattern.test(text));
       return {
         rowCount: rows.length,
-        hasUS,
-        hasTW,
-        hasCrypto,
-        hasShioaji,
-        hasQlib,
         hasNaN,
         hasSeedFallbackArmed,
         hasFallbackStandby,
-        rowsValid: rows.length > 0 && hasUS && hasTW && hasCrypto && hasShioaji && hasQlib && !hasNaN,
+        hasLiveEmptyState,
+        hasNonProductionRows,
+        rowsValid: (rows.length > 0 || hasLiveEmptyState) && !hasNaN && !hasNonProductionRows,
         liveBannerValid: !hasSeedFallbackArmed,
       };
     }).catch(() => ({
       rowCount: 0,
-      hasUS: false,
-      hasTW: false,
-      hasCrypto: false,
-      hasShioaji: false,
-      hasQlib: false,
       hasNaN: false,
       hasSeedFallbackArmed: false,
       hasFallbackStandby: false,
+      hasLiveEmptyState: false,
+      hasNonProductionRows: false,
       rowsValid: false,
       liveBannerValid: false,
     }));
@@ -300,9 +300,9 @@ const md = [
   `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
   ...(personaFleetChecks ? [
     `- persona fleet row count: ${personaFleetChecks.rowCount}`,
-    `- persona fleet has US/TW/Crypto: ${personaFleetChecks.hasUS && personaFleetChecks.hasTW && personaFleetChecks.hasCrypto}`,
-    `- persona fleet has shioaji/qlib: ${personaFleetChecks.hasShioaji && personaFleetChecks.hasQlib}`,
     `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
+    `- persona fleet has live empty state: ${personaFleetChecks.hasLiveEmptyState}`,
+    `- persona fleet has non-production rows: ${personaFleetChecks.hasNonProductionRows}`,
     `- persona fleet seed fallback armed: ${personaFleetChecks.hasSeedFallbackArmed}`,
     `- persona fleet fallback standby: ${personaFleetChecks.hasFallbackStandby}`,
     `- persona fleet rows valid: ${personaFleetChecks.rowsValid}`,
