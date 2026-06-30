@@ -5,7 +5,7 @@
 // PersonaIntent + readiness pages live in their own files.
 
 import { type ReactNode, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -690,7 +690,12 @@ export const HumanInboxPage = () => {
           {t("mgmt.inbox.subtitleFmt", { count: HUMAN_INBOX_KINDS.length })}
         </p>
       </header>
-      {sorted.map((it) => (
+      {sorted.map((it) => {
+        const evidenceRefs = it.evidenceRefs ?? [];
+        const evidenceHref = evidenceRefs.length > 0 && it.detailHref
+          ? `${it.detailHref}#evidence`
+          : it.links?.evidenceHref;
+        return (
         <Card key={it.id} className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -724,16 +729,23 @@ export const HumanInboxPage = () => {
               <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
             )}
             {it.links?.manageHref && (
-              <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.manage")}</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.openActionPage")}</Link></Button>
             )}
-            {it.links?.evidenceHref ? (
-              <Button asChild size="sm" variant="outline"><Link to={it.links.evidenceHref}>{t("mgmt.actions.evidence")}</Link></Button>
+            {evidenceHref ? (
+              <Button asChild size="sm" variant="outline">
+                <Link to={evidenceHref}>
+                  {evidenceRefs.length > 0
+                    ? t("mgmt.inbox.evidenceCountFmt", { count: evidenceRefs.length })
+                    : t("mgmt.actions.viewEvidence")}
+                </Link>
+              </Button>
             ) : (
               <span className="text-xs text-muted-foreground self-center">{t("mgmt.actions.evidenceMissing")}</span>
             )}
           </div>
         </Card>
-      ))}
+        );
+      })}
     </section>
   );
 };
@@ -1011,6 +1023,7 @@ export const EvidenceExplorerPage = () => {
 
 export const EvidencePacketDetailPage = () => {
   const { t } = useTranslation();
+  const { id = "" } = useParams<{ id: string }>();
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
       <header>
@@ -1018,7 +1031,24 @@ export const EvidencePacketDetailPage = () => {
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.packetSubtitle")}</p>
       </header>
       <Card className="p-4">
-        <p className="text-sm">{t("mgmt.evidence.seeListAt")} <Link to="/management/evidence" className="text-primary underline-offset-4 hover:underline">{t("mgmt.evidence.backToList")}</Link>.</p>
+        {id ? (
+          <div className="space-y-3 text-sm">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("mgmt.evidence.ref")}
+              </div>
+              <code className="mt-1 block break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                {id}
+              </code>
+            </div>
+            <p className="text-muted-foreground">{t("mgmt.evidence.refOnlyHint")}</p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/evidence">{t("mgmt.evidence.backToList")}</Link>
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm">{t("mgmt.evidence.seeListAt")} <Link to="/management/evidence" className="text-primary underline-offset-4 hover:underline">{t("mgmt.evidence.backToList")}</Link>.</p>
+        )}
       </Card>
     </section>
   );

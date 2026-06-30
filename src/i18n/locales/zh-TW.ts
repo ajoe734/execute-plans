@@ -1906,6 +1906,7 @@ export default {
   mgmt: {
     actions: {
       manage: "管理",
+      openActionPage: "前往處理頁",
       evidence: "證據",
       nextAction: "下一步",
       evidenceMissing: "缺少證據",
@@ -2009,6 +2010,10 @@ export default {
       evidence: "證據",
       backToInbox: "← 收件匣",
       headerSubtitleFmt: "需要角色：{{role}} · 決策類型：{{decision}}",
+      loadingDetail: "載入收件匣項目…",
+      detailUnavailableTitle: "無法載入收件匣項目",
+      detailUnavailableBody: "目前無法取得此項目的 live 詳情；請回到收件匣重新開啟。",
+      evidenceCountFmt: "查看 {{count}} 項證據",
     },
     pulse: {
       title: "交易脈動",
@@ -2039,6 +2044,8 @@ export default {
       created: "建立時間",
       packetTitle: "Evidence Packet",
       packetSubtitle: "詳情頁（Phase 1 最小欄位）。",
+      ref: "證據參照",
+      refOnlyHint: "此項目是證據參照，不是可在管理台直接展開的 packet；請從原始任務或證據庫交叉查詢。",
       seeListAt: "完整清單請看",
       backToList: "證據庫",
     },

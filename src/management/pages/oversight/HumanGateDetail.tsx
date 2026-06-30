@@ -1,5 +1,5 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
-// Phase 1: deterministic mock detail derived from id; live wired via mgmt.humanInbox.get.
+// Mock mode seed: neutral placeholder only. Live detail data must provide any decision UI.
 
 import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -16,23 +16,20 @@ function seedDetail(id: string): HumanInboxDetail {
   const kind: HumanInboxKind = (HUMAN_INBOX_KINDS.find((k) => id.startsWith(k.slice(0, 3))) ?? "approval");
   return {
     id, kind,
-    title: `${kind} item ${id}`,
+    title: `${kind} detail unavailable`,
     requiredRole: kind === "capital_breach" ? "capital-owner" : kind === "policy_violation" ? "compliance" : "research-owner",
-    consequenceIfApproved: "Action proceeds and is recorded in audit log.",
-    consequenceIfRejected: "Action discarded; persona notified.",
-    consequenceIfIgnored: "Times out per TTL; default-deny applies.",
+    consequenceIfApproved: "",
+    consequenceIfRejected: "",
+    consequenceIfIgnored: "",
     ttlSec: 12 * 3600,
-    canDecide: kind !== "policy_violation",
-    canProceed: kind !== "capital_breach",
-    blockingReasons: kind === "capital_breach" ? ["Capital pool VaR breach", "Awaiting risk-owner sign-off"] : undefined,
+    canDecide: false,
+    canProceed: false,
+    blockingReasons: ["Live detail payload unavailable."],
     detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
     links: buildLinkSet({ primary: { kind: "human_gate", id } }),
-    decisionType: kind === "policy_violation" ? "two_man" : "single",
-    signatures: [
-      { role: "primary-reviewer" },
-      ...(kind === "policy_violation" ? [{ role: "compliance-officer" }] : []),
-    ],
-    evidenceRefs: ["ev:proposal-v3"],
+    decisionType: "single",
+    signatures: [],
+    evidenceRefs: [],
     decisionHistory: [],
     auditRefs: ["audit:human-inbox:" + id],
   };
@@ -42,8 +39,49 @@ export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
   const seed = useMemo(() => seedDetail(id), [id]);
-  const { data } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
-  const item = data ?? seed;
+  const { data, loading } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
+  const item = data;
+
+  if (loading && !item) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.loadingDetail")}</h1>
+            <p className="text-sm text-muted-foreground">{id}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+          </Button>
+        </header>
+      </section>
+    );
+  }
+
+  if (!item) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.detailUnavailableTitle")}</h1>
+            <p className="text-sm text-muted-foreground">{id}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+          </Button>
+        </header>
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("mgmt.inbox.detailUnavailableBody")}
+        </Card>
+      </section>
+    );
+  }
+
+  const hasConsequences = Boolean(
+    item.consequenceIfApproved || item.consequenceIfRejected || item.consequenceIfIgnored,
+  );
+  const hasSignatures = item.signatures.length > 0;
+  const hasEvidence = item.evidenceRefs.length > 0;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -67,42 +105,52 @@ export const HumanGateDetailPage = () => {
         </Card>
       )}
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.consequences")}</h2>
-        <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
-          <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
-        </dl>
-      </Card>
+      {hasConsequences && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.consequences")}</h2>
+          <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifApproved")}</dt><dd className="text-foreground">{item.consequenceIfApproved}</dd></div>
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifRejected")}</dt><dd className="text-foreground">{item.consequenceIfRejected}</dd></div>
+            <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{item.consequenceIfIgnored}</dd></div>
+          </dl>
+        </Card>
+      )}
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.signatures")}</h2>
-        <ul className="mt-2 space-y-1 text-xs">
-          {item.signatures.map((s) => (
-            <li key={s.role} className="flex items-center gap-2">
-              <Badge variant="outline">{s.role}</Badge>
-              <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      {hasSignatures && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.signatures")}</h2>
+          <ul className="mt-2 space-y-1 text-xs">
+            {item.signatures.map((s) => (
+              <li key={s.role} className="flex items-center gap-2">
+                <Badge variant="outline">{s.role}</Badge>
+                <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
-      <Card className="p-4">
+      <Card id="evidence" className="p-4 scroll-mt-24">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.evidence")}</h2>
-        <ul className="mt-2 text-xs">
-          {item.evidenceRefs.map((e) => (
-            <li key={e}>
-              <Link to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono text-primary underline-offset-4 hover:underline">{e}</Link>
-            </li>
-          ))}
-        </ul>
+        {hasEvidence ? (
+          <ul className="mt-2 space-y-1 text-xs">
+            {item.evidenceRefs.map((e) => (
+              <li key={e}>
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">{e}</code>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.actions.evidenceMissing")}</p>
+        )}
       </Card>
 
-      <div className="flex gap-2">
-        <Button size="sm" disabled={!item.canDecide || !item.canProceed}>{t("mgmt.actions.approve")}</Button>
-        <Button size="sm" variant="outline" disabled={!item.canDecide}>{t("mgmt.actions.reject")}</Button>
-        <Button size="sm" variant="outline">{t("mgmt.actions.requestMoreEvidence")}</Button>
+      <div className="flex flex-wrap gap-2">
+        {item.links?.manageHref && (
+          <Button asChild size="sm" variant="outline">
+            <Link to={item.links.manageHref}>{t("mgmt.actions.openActionPage")}</Link>
+          </Button>
+        )}
       </div>
     </section>
   );

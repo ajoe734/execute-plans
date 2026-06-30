@@ -13,7 +13,7 @@ const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
 const REQUIRED_CORE_BFF_PATHS = parsePathList(process.env.PANTHEON_HOSTED_REQUIRED_BFF_PATHS, [
-  "/bff/management/fleet",
+  "/bff/management/persona-fleet",
 ]);
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];

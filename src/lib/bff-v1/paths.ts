@@ -147,7 +147,7 @@ export const paths = {
   knowledgeInbox: () => `${BASE}/knowledge`,
   workflowTemplates: () => `${BASE}/workflows`,
   hookRegistry: () => `${BASE}/hooks`,
-  mgmtPersonaFleet: () => `${BASE}/management/fleet`,
+  mgmtPersonaFleet: () => `${BASE}/management/persona-fleet`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
   mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
@@ -174,6 +174,8 @@ export const paths = {
   assistantMode: () => `${BASE}/assistant/mode`,
   assistantProviders: (authProbe = false) =>
     `${BASE}/assistant/providers${authProbe ? "?auth_probe=true" : ""}`,
+  assistantProviderUsageSummary: (authProbe = false, windowHours = 168, limit = 500) =>
+    `${BASE}/assistant/providers/usage-summary?auth_probe=${authProbe ? "true" : "false"}&window_hours=${enc(String(windowHours))}&limit=${enc(String(limit))}`,
   assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
   assistantProviderReauthStatus: (sessionId: string, provider?: string) =>
     `${BASE}/assistant/provider/reauth/${enc(sessionId)}${provider ? `?provider=${enc(provider)}` : ""}`,

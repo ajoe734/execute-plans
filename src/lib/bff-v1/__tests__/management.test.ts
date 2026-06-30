@@ -55,8 +55,16 @@ describe("mgmt façade (PM-Live)", () => {
             action_state: "pending",
             can_proceed: false,
             allowed_actions: { can_decide: false },
-            route: "/management/fleet?persona=persona-us-equity",
+            route: "/management/persona-fleet?persona=persona-us-equity",
             blocking_reasons: ["Missing validation packet"],
+            research_context: {
+              current_research_projects: [
+                { evidence_refs: ["support/evidence/MGMT-QLIB-001/dataset_manifest.json"] },
+              ],
+              data_source_status: {
+                readback_refs: ["support/evidence/readback/ibkr.json"],
+              },
+            },
           },
           {
             id: "governance-review:approval-1",
@@ -76,6 +84,10 @@ describe("mgmt façade (PM-Live)", () => {
       canProceed: false,
       detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
       blockingReasons: ["Missing validation packet"],
+      evidenceRefs: [
+        "support/evidence/MGMT-QLIB-001/dataset_manifest.json",
+        "support/evidence/readback/ibkr.json",
+      ],
       links: {
         manageHref: "/management/persona-fleet?persona=persona-us-equity",
         recommendedActionHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
@@ -100,8 +112,26 @@ describe("mgmt façade (PM-Live)", () => {
           summary: "paper broker sandbox readback and funding-rate stress review",
           canProceed: false,
           allowedActions: { canDecide: false },
-          route: "/management/fleet?persona=persona-crypto",
-          evidence_refs: ["support/evidence/research/crypto.json"],
+          route: "/management/persona-fleet?persona=persona-crypto",
+          research_context: {
+            recommendation: "hold_for_risk_owner_review",
+            current_research_projects: [
+              {
+                evidence_refs: [
+                  {
+                    ref_type: "management_linkage_packet",
+                    ref_id: "mgmt-crypto-linkage-v1",
+                    ref: "support/evidence/research/crypto.json",
+                  },
+                ],
+              },
+            ],
+            data_source_status: {
+              readback_refs: ["support/evidence/readback/kraken.json"],
+              unavailable_refs: ["support/evidence/unavailable/coingecko.json"],
+              research_dataset_manifest_ref: "support/evidence/datasets/crypto-manifest.json",
+            },
+          },
         },
       },
     });
@@ -109,9 +139,16 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out).toMatchObject({
       id: "readiness_blocker:persona:persona-crypto",
       kind: "readiness_blocker",
+      requiredRole: "risk-owner",
+      canDecide: false,
       decisionType: "single",
       signatures: [],
-      evidenceRefs: ["support/evidence/research/crypto.json"],
+      evidenceRefs: [
+        "support/evidence/research/crypto.json",
+        "support/evidence/readback/kraken.json",
+        "support/evidence/unavailable/coingecko.json",
+        "support/evidence/datasets/crypto-manifest.json",
+      ],
       decisionHistory: [],
       auditRefs: [],
       detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-crypto",
@@ -276,7 +313,7 @@ describe("mgmt façade (PM-Live)", () => {
 
   it("all 14 mgmt paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
-    expect(paths.mgmtPersonaFleet()).toMatch(/management\/fleet$/);
+    expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
     expect(paths.mgmtHumanInboxItem("xyz")).toMatch(/human-inbox\/xyz$/);
     expect(paths.mgmtTradingPulse()).toMatch(/trading-pulse$/);
