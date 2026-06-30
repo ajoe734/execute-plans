@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -346,7 +346,7 @@ describe("OpenClawLlmAuthPanel", () => {
       });
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /login/i })).toHaveAttribute("href", "https://example.test/device");
+    expect(screen.getByRole("link", { name: /open login/i })).toHaveAttribute("href", "https://example.test/device");
   });
 
   it("starts Claude provider reauth from a failed auth card", async () => {
@@ -401,6 +401,65 @@ describe("OpenClawLlmAuthPanel", () => {
     });
     expect(await screen.findByText("claude reauth pending")).toBeInTheDocument();
     expect(screen.getByText("code=WXYZ-1234")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open login/i })).toHaveAttribute("href", "https://console.anthropic.com/login");
+  });
+
+  it("keeps provider reauth state inside the provider card that started it", async () => {
+    const fakeApi = api({
+      fetchProviders: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "codex",
+            providerName: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: true,
+            status: "ready",
+            authStatus: "ready",
+            reauthSupported: true,
+          },
+          {
+            provider: "claude",
+            providerName: "Claude CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "claude_auth_probe_non_zero_exit",
+            reauthSupported: true,
+          },
+        ],
+        meta: { auth_probe: true },
+      } satisfies AssistantProvidersResult),
+      startReauth: vi.fn().mockResolvedValue({
+        ok: false,
+        kind: "failure",
+        statusCode: 404,
+        message: "BFF route unavailable: /bff/assistant/provider/reauth",
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    const claudeCard = (await screen.findByText("Claude CLI")).closest("article");
+    const codexCard = screen.getByText("Codex CLI").closest("article");
+    if (!claudeCard || !codexCard) throw new Error("provider card missing");
+    fireEvent.click(within(claudeCard).getByRole("button", { name: /start reauth/i }));
+
+    await waitFor(() => {
+      expect(fakeApi.startReauth).toHaveBeenCalledWith({
+        provider: "claude",
+        reason: "LLM Provider Auth management",
+      });
+    });
+    expect(await within(claudeCard).findByText("BFF route unavailable")).toBeInTheDocument();
+    expect(within(claudeCard).getByText("BFF route unavailable: /bff/assistant/provider/reauth")).toBeInTheDocument();
+    expect(within(codexCard).queryByText("BFF route unavailable")).not.toBeInTheDocument();
   });
 
   it("starts provider reauth without activating kernel control mode", async () => {

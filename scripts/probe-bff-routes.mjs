@@ -51,6 +51,7 @@ const routes = [
   // /bff/agora/ask/sessions intentionally removed (2026-06-03): Management AI
   // no longer uses Agora Ask. Agora-only probe lives in scripts/check-agora-boundary.ts.
   ["POST", "/bff/management/nl/ask"],
+  { method: "POST", route: "/bff/assistant/provider/reauth", anonymousOnly: true },
 
   ["GET", "/bff/v5/loop-runs"],
   ["GET", "/bff/v5/sentinel/findings"],
@@ -61,6 +62,9 @@ const routes = [
 
 function bodyFor(method, route) {
   if (method === "GET") return undefined;
+  if (route === "/bff/assistant/provider/reauth") {
+    return JSON.stringify({ provider: "codex", reason: "anonymous route probe" });
+  }
   if (route === "/bff/management/nl/ask") {
     return JSON.stringify({ question: "probe", focus: "all", context: "probe-script" });
   }
@@ -103,7 +107,12 @@ async function probe(method, route) {
 }
 
 const results = [];
-for (const [method, route] of routes) {
+for (const routeSpec of routes) {
+  const normalized = Array.isArray(routeSpec)
+    ? { method: routeSpec[0], route: routeSpec[1], anonymousOnly: false }
+    : routeSpec;
+  if (mode !== "anonymous" && normalized.anonymousOnly) continue;
+  const { method, route } = normalized;
   results.push(await probe(method, route));
 }
 

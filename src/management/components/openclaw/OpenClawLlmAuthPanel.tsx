@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   ExternalLink,
   KeyRound,
   Loader2,
@@ -38,6 +39,7 @@ import {
   type AssistantOrchestratorStatusResult,
   type AssistantProviderReadinessStatus,
   type AssistantProviderReauthResult,
+  type AssistantProviderReauthSession,
   type AssistantProvidersResult,
   type AssistantProviderUsageSummaryResult,
   type AssistantProviderUsageSummaryRow,
@@ -98,6 +100,11 @@ interface PanelState {
   providerResult: AssistantProvidersResult | null;
   usageSummary: AssistantProviderUsageSummaryResult | null;
   authProbePending: boolean;
+}
+
+interface ProviderReauthUiState {
+  busy: boolean;
+  result: AssistantProviderReauthResult | null;
 }
 
 function textFrom(...values: unknown[]): string {
@@ -247,6 +254,42 @@ function reauthHref(result: AssistantProviderReauthResult | null): string | null
   return result.reauth.verificationUriComplete ?? result.reauth.verificationUri;
 }
 
+function reauthStateKeyForValue(value: unknown): string {
+  return normalizeProviderId(value) || textFrom(value).toLowerCase() || "unknown";
+}
+
+function reauthStateKey(provider: AssistantProviderReadinessStatus): string {
+  return reauthStateKeyForValue(providerId(provider));
+}
+
+function isTerminalReauthStatus(status: string | null | undefined): boolean {
+  return ["completed", "failed", "error", "expired", "timeout", "cancelled", "canceled"].includes(
+    String(status ?? "").trim().toLowerCase(),
+  );
+}
+
+function shouldPollReauthStatus(status: string | null | undefined): boolean {
+  return !isTerminalReauthStatus(status);
+}
+
+function reauthPollDelayMs(session: AssistantProviderReauthSession): number {
+  const seconds = session.intervalSeconds ?? 5;
+  return Math.max(2_000, Math.min(15_000, seconds * 1_000));
+}
+
+function reauthFailureTitle(result: AssistantProviderReauthResult): string {
+  if (result.ok) return "";
+  return result.statusCode === 404 ? "BFF route unavailable" : "Reauth failed";
+}
+
+function reauthFailureMessage(result: AssistantProviderReauthResult): string {
+  if (result.ok) return "";
+  if (result.statusCode === 404 && /^BFF 404\b/i.test(result.message)) {
+    return "BFF route unavailable: /bff/assistant/provider/reauth";
+  }
+  return result.message;
+}
+
 function providersFromResults(
   providerResult: AssistantProvidersResult,
   orchestratorResult: AssistantOrchestratorStatusResult,
@@ -279,8 +322,7 @@ export function OpenClawLlmAuthPanel({
     authProbePending: false,
   });
   const [loading, setLoading] = useState(false);
-  const [reauthBusy, setReauthBusy] = useState<string | null>(null);
-  const [reauthResult, setReauthResult] = useState<AssistantProviderReauthResult | null>(null);
+  const [reauthByProvider, setReauthByProvider] = useState<Record<string, ProviderReauthUiState>>({});
   const [addProviderOpen, setAddProviderOpen] = useState(false);
   const [addProviderForm, setAddProviderForm] = useState<AddProviderForm>(defaultAddProviderForm);
   const [addProviderBusy, setAddProviderBusy] = useState(false);
@@ -365,35 +407,50 @@ export function OpenClawLlmAuthPanel({
     : attentionCount > 0
       ? statusTone("degraded", false)
       : statusTone(rows.length > 0 ? "ready" : "unknown", rows.length > 0);
-  const href = reauthHref(reauthResult);
+  const setProviderReauth = useCallback((key: string, patch: Partial<ProviderReauthUiState>) => {
+    setReauthByProvider((current) => ({
+      ...current,
+      [key]: {
+        busy: current[key]?.busy ?? false,
+        result: current[key]?.result ?? null,
+        ...patch,
+      },
+    }));
+  }, []);
 
   const runReauth = useCallback(async (provider: AssistantProviderReadinessStatus) => {
     const id = providerId(provider);
-    setReauthBusy(id);
-    setReauthResult(null);
+    const key = reauthStateKey(provider);
+    setProviderReauth(key, { busy: true, result: null });
     try {
       const result = await api.startReauth({
         provider: id,
         reason: "LLM Provider Auth management",
       });
-      setReauthResult(result);
+      const resultKey = result.ok && result.reauth.provider ? reauthStateKeyForValue(result.reauth.provider) : key;
+      setProviderReauth(resultKey, { busy: false, result });
+      if (resultKey !== key) setProviderReauth(key, { busy: false, result });
     } finally {
-      setReauthBusy(null);
+      setProviderReauth(key, { busy: false });
     }
-  }, [api]);
+  }, [api, setProviderReauth]);
 
   const startReauth = useCallback(async (provider: AssistantProviderReadinessStatus) => {
+    const key = reauthStateKey(provider);
     if (!supportsReauth(provider)) {
-      setReauthResult({
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: `${providerLabel(provider)} reauth is not supported by the provider adapter yet.`,
+      setProviderReauth(key, {
+        busy: false,
+        result: {
+          ok: false,
+          kind: "failure",
+          statusCode: null,
+          message: `${providerLabel(provider)} reauth is not supported by the provider adapter yet.`,
+        },
       });
       return;
     }
     await runReauth(provider);
-  }, [runReauth]);
+  }, [runReauth, setProviderReauth]);
 
   const applyControlMode = useCallback((nextControlMode: AssistantControlModeStatus) => {
     setState((current) => ({
@@ -477,20 +534,33 @@ export function OpenClawLlmAuthPanel({
     }
   }, [activeControl, addProviderForm, api, applyControlMode]);
 
-  const refreshReauth = useCallback(async () => {
-    if (!reauthResult?.ok) return;
-    setReauthBusy(reauthResult.reauth.provider ?? "codex");
+  const refreshReauth = useCallback(async (key: string, session: AssistantProviderReauthSession) => {
+    setProviderReauth(key, { busy: true });
     try {
       const refreshed = await api.fetchReauthStatus(
-        reauthResult.reauth.reauthSessionId,
-        reauthResult.reauth.provider ?? "codex",
+        session.reauthSessionId,
+        session.provider ?? key,
       );
-      setReauthResult(refreshed);
+      setProviderReauth(key, { busy: false, result: refreshed });
       if (refreshed.ok && refreshed.reauth.status === "completed") void load();
     } finally {
-      setReauthBusy(null);
+      setProviderReauth(key, { busy: false });
     }
-  }, [api, load, reauthResult]);
+  }, [api, load, setProviderReauth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const pollable = Object.entries(reauthByProvider)
+      .filter(([, item]) => item.result?.ok && !item.busy && shouldPollReauthStatus(item.result.reauth.status))
+      .map(([key, item]) => ({ key, session: (item.result as { ok: true; reauth: AssistantProviderReauthSession }).reauth }));
+    if (pollable.length === 0) return undefined;
+
+    const delay = Math.min(...pollable.map((item) => reauthPollDelayMs(item.session)));
+    const timer = window.setTimeout(() => {
+      for (const item of pollable) void refreshReauth(item.key, item.session);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [reauthByProvider, refreshReauth]);
 
   return (
     <Card className={cn("p-4", mode === "full" && "p-5")}>
@@ -552,8 +622,9 @@ export function OpenClawLlmAuthPanel({
             mode={mode}
             provider={provider}
             usageSummary={usageByProvider.get(normalizeProviderId(providerId(provider))) ?? null}
-            reauthBusy={reauthBusy}
+            reauthState={reauthByProvider[reauthStateKey(provider)] ?? { busy: false, result: null }}
             onStartReauth={startReauth}
+            onRefreshReauth={refreshReauth}
           />
         ))}
       </div>
@@ -580,35 +651,6 @@ export function OpenClawLlmAuthPanel({
 
       {mode === "full" && (
         <UsageHistoryPanel summary={state.usageSummary} />
-      )}
-
-      {reauthResult && (
-        <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs">
-          {!reauthResult.ok ? (
-            <div className="text-status-failed">Reauth failed: {reauthResult.message}</div>
-          ) : (
-            <div className="space-y-1.5">
-              <div className="font-medium text-foreground">
-                {reauthResult.reauth.provider ?? "codex"} reauth {reauthResult.reauth.status ?? "pending"}
-              </div>
-              <div className="flex flex-wrap gap-2 text-muted-foreground">
-                {reauthResult.reauth.userCode && (
-                  <span className="font-mono text-foreground">code={reauthResult.reauth.userCode}</span>
-                )}
-                <span className="font-mono">session={reauthResult.reauth.reauthSessionId}</span>
-                {href && (
-                  <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                    login <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </div>
-              <Button size="sm" variant="outline" onClick={() => void refreshReauth()} disabled={Boolean(reauthBusy)}>
-                {reauthBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
-                Refresh reauth
-              </Button>
-            </div>
-          )}
-        </div>
       )}
 
       {mode === "summary" && (
@@ -756,21 +798,24 @@ function ProviderCard({
   provider,
   mode,
   usageSummary,
-  reauthBusy,
+  reauthState,
   onStartReauth,
+  onRefreshReauth,
 }: {
   provider: AssistantProviderReadinessStatus;
   mode: PanelMode;
   usageSummary: AssistantProviderUsageSummaryRow | null;
-  reauthBusy: string | null;
+  reauthState: ProviderReauthUiState;
   onStartReauth: (provider: AssistantProviderReadinessStatus) => void;
+  onRefreshReauth: (key: string, session: AssistantProviderReauthSession) => void;
 }) {
   const id = providerId(provider);
+  const key = reauthStateKey(provider);
   const authStatus = providerAuthStatus(provider);
   const quota = recordFrom(usageSummary?.quota);
   const usage = Object.keys(quota).length > 0 ? quota : providerUsage(provider);
   const unit = usageValue(usage, "unit");
-  const busy = reauthBusy === id;
+  const busy = reauthState.busy;
   const reauthable = supportsReauth(provider);
 
   return (
@@ -824,7 +869,117 @@ function ProviderCard({
           {reauthButtonLabel(provider)}
         </Button>
       )}
+
+      {mode === "full" && (reauthState.busy || reauthState.result) && (
+        <ProviderReauthPanel
+          provider={provider}
+          providerKey={key}
+          state={reauthState}
+          onRefresh={onRefreshReauth}
+          onRetry={() => onStartReauth(provider)}
+        />
+      )}
     </article>
+  );
+}
+
+function ProviderReauthPanel({
+  provider,
+  providerKey,
+  state,
+  onRefresh,
+  onRetry,
+}: {
+  provider: AssistantProviderReadinessStatus;
+  providerKey: string;
+  state: ProviderReauthUiState;
+  onRefresh: (key: string, session: AssistantProviderReauthSession) => void;
+  onRetry: () => void;
+}) {
+  const result = state.result;
+
+  if (!result) {
+    return (
+      <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary" aria-live="polite">
+        <div className="flex items-center gap-2 font-medium">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Starting {providerLabel(provider)} reauth</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result.ok) {
+    return (
+      <div className="mt-3 rounded-md border border-status-failed/30 bg-status-failed/10 p-3 text-xs" role="alert">
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-medium text-status-failed">{reauthFailureTitle(result)}</div>
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={state.busy}>
+            {state.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+            Retry
+          </Button>
+        </div>
+        <div className="mt-1 break-words text-status-failed">{reauthFailureMessage(result)}</div>
+      </div>
+    );
+  }
+
+  const href = reauthHref(result);
+  const status = result.reauth.status ?? "pending";
+  const terminal = isTerminalReauthStatus(status);
+  const reauthProvider = result.reauth.provider ?? providerId(provider);
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-foreground">
+          {reauthProvider} reauth {status}
+        </div>
+        <Badge variant="outline" className={statusTone(status)}>
+          {status}
+        </Badge>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-muted-foreground">
+        {result.reauth.userCode && (
+          <span className="rounded-md border border-border bg-background px-2 py-1 font-mono text-foreground">
+            code={result.reauth.userCode}
+          </span>
+        )}
+        <span className="rounded-md border border-border bg-background px-2 py-1 font-mono">
+          session={result.reauth.reauthSessionId}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {href && (
+          <Button asChild size="sm" variant="outline">
+            <a href={href} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3 w-3" />
+              Open login
+            </a>
+          </Button>
+        )}
+        {result.reauth.userCode && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void navigator.clipboard?.writeText(result.reauth.userCode ?? "")}
+          >
+            <Copy className="h-3 w-3" />
+            Copy code
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={() => onRefresh(providerKey, result.reauth)} disabled={state.busy}>
+          {state.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+          Refresh
+        </Button>
+        {terminal && (
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={state.busy}>
+            <KeyRound className="h-3 w-3" />
+            Retry
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

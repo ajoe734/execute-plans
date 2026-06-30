@@ -481,6 +481,22 @@ describe("Management AI provider reauth", () => {
     expect(result.statusCode).toBe(403);
     expect(result.message).toContain("requires MFA");
   });
+
+  it("labels missing provider reauth routes as route unavailable", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("not found", {
+      status: 404,
+      statusText: "Not Found",
+      headers: { "content-type": "text/plain" },
+    }));
+
+    const result = await startAssistantProviderReauth({ provider: "claude" });
+
+    expect(result.kind).toBe("failure");
+    if (result.kind !== "failure") throw new Error("expected failure");
+    expect(result.statusCode).toBe(404);
+    expect(result.message).toBe("BFF route unavailable: /bff/assistant/provider/reauth");
+  });
 });
 
 describe("Management AI provider registry", () => {

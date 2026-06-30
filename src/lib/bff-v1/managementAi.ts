@@ -1243,6 +1243,13 @@ function extractBffFailureMessage(raw: unknown): string | null {
   );
 }
 
+function bffRouteFailureMessage(raw: unknown, res: Response, route: string): string {
+  const message = extractBffFailureMessage(raw);
+  if (message) return message;
+  if (res.status === 404) return `BFF route unavailable: ${route}`;
+  return `BFF ${res.status} ${res.statusText || ""}`.trim();
+}
+
 function isDegraded(s: ProviderStatus | null): boolean {
   if (!s) return true;
   if (!s.used) return true;
@@ -1714,6 +1721,7 @@ export async function startAssistantProviderReauth(
     };
   }
 
+  const route = paths.assistantProviderReauth();
   const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
   const body = JSON.stringify({
     provider: input.provider ?? "codex",
@@ -1723,7 +1731,7 @@ export async function startAssistantProviderReauth(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviderReauth()}`, {
+    res = await fetch(`${base}${route}`, {
       method: "POST",
       headers,
       body,
@@ -1755,7 +1763,7 @@ export async function startAssistantProviderReauth(
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+      message: bffRouteFailureMessage(parsed, res, route),
     };
   }
 
@@ -1786,10 +1794,11 @@ export async function fetchAssistantProviderReauthStatus(
     };
   }
 
+  const route = paths.assistantProviderReauthStatus(sessionId, provider);
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviderReauthStatus(sessionId, provider)}`, {
+    res = await fetch(`${base}${route}`, {
       method: "GET",
       headers,
       credentials: "include",
@@ -1820,7 +1829,7 @@ export async function fetchAssistantProviderReauthStatus(
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+      message: bffRouteFailureMessage(parsed, res, route),
     };
   }
 
