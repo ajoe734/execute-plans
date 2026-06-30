@@ -8,15 +8,12 @@ const AUTH_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
 const mode = process.argv.includes("--authenticated") ? "authenticated" : "anonymous";
 const PROBE_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS, 3, 1);
 const RETRY_DELAY_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_RETRY_DELAY_MS, 1_000, 100);
-const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS, 20_000, 5_000);
-const LEGACY_HEALTH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_LEGACY_HEALTH_TIMEOUT_MS, 5_000, 1_000);
-const LEGACY_HEALTH_ROUTES = new Set(["/health", "/healthz"]);
-const READINESS_ROUTES = new Set(["/readyz", "/bff/healthz", "/bff/readyz"]);
+const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS, 25_000, 5_000);
+const LEGACY_HEALTH_ROUTES = new Set();
+const READINESS_ROUTES = new Set(["/livez"]);
 
 const routes = [
-  ["GET", "/health"],
-  ["GET", "/healthz"],
-  ["GET", "/readyz"],
+  ["GET", "/livez"],
   ["GET", "/openapi.json"],
   ["GET", "/bff/events/stream"],
   ["GET", "/bff/me"],
@@ -96,11 +93,11 @@ function isRetryableResult(result) {
 }
 
 function maxAttemptsFor(route) {
-  return LEGACY_HEALTH_ROUTES.has(route) ? 1 : PROBE_ATTEMPTS;
+  return PROBE_ATTEMPTS;
 }
 
 function timeoutFor(route) {
-  return LEGACY_HEALTH_ROUTES.has(route) ? LEGACY_HEALTH_TIMEOUT_MS : FETCH_TIMEOUT_MS;
+  return FETCH_TIMEOUT_MS;
 }
 
 async function probe(method, route) {

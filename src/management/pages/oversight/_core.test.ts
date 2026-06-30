@@ -8,6 +8,7 @@ import {
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
   personaFleetResearchHref,
+  personaFleetResearchItems,
 } from "./personaFleetLinks";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
@@ -29,6 +30,24 @@ describe("PersonaFleetPage data source badges", () => {
       "twse",
       "tpex",
       "mops",
+    ]);
+  });
+
+  it("builds visible providers from live snake_case status payloads", () => {
+    const row = {
+      dataSourceStatus: {
+        provider_statuses: {
+          kraken: "datasource_smoke_ok",
+          coingecko: "read_ok",
+        },
+        live_source_connector_ids: ["crypto-coingecko-spot"],
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(visibleDataSources(row).map((source) => `${source.providerKey}:${source.status}`)).toEqual([
+      "kraken:datasource_smoke_ok",
+      "coingecko:read_ok",
+      "crypto-coingecko-spot:declared",
     ]);
   });
 });
@@ -103,6 +122,33 @@ describe("PersonaFleetPage deep links", () => {
       "/management/loops/research?persona=persona-crypto&project=research-crypto-paper-001",
     );
     expect(personaFleetArtifactHref(row)).toBeNull();
+  });
+
+  it("uses snake_case live research project fields for detail links and labels", () => {
+    const row = {
+      personaId: "persona-tw-live",
+      current_research_projects: [
+        {
+          project_id: "MGMT-QLIB-006",
+          title: "Qlib TW cross-sectional equity alpha admission linkage",
+          stage: "management_review_linked",
+          frameworks: ["qlib", "vectorbt"],
+          artifact_id: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+          experiment_id: "exp-mgmt-qlib-006",
+          blocked_by_task_ids: ["MGMT-QLIB-003"],
+          can_deploy: false,
+        },
+      ],
+    } as unknown as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(item.title).toBe("Qlib TW cross-sectional equity alpha admission linkage");
+    expect(item.canDeploy).toBe(false);
+    expect(personaFleetResearchHref(row, item)).toBe("/management/experiments/exp-mgmt-qlib-006");
+    expect(personaFleetArtifactHref(row, item)).toBe(
+      "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
+    );
   });
 
   it("links to the persona-scoped research loop when there is no active research project", () => {

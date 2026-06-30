@@ -46,12 +46,17 @@ import {
   type ManagementTradingPulseSurface,
 } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
-import { visibleDataSources } from "./personaFleetDataSources";
+import {
+  dataSourceLiveEnabled,
+  dataSourceOrderSideEffectsAllowed,
+  dataSourceProviderStatuses,
+  dataSourceState,
+  visibleDataSources,
+} from "./personaFleetDataSources";
 import {
   isNonProductionPersonaFleetRow,
   productionPersonaFleetRows,
 } from "./personaFleetFilters";
-import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import {
   personaFleetArtifactHref,
   personaFleetDataSourcesHref,
@@ -61,6 +66,7 @@ import {
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
   personaFleetResearchHref,
+  personaFleetResearchItems,
   personaFleetRuntimeHref,
 } from "./personaFleetLinks";
 import { safeDateTime } from "@/lib/utils";
@@ -154,9 +160,9 @@ function dataSourceTone(state?: string): string {
 }
 
 function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: number } {
-  const statuses = r.dataSourceStatus?.providerStatuses ?? {};
+  const statuses = dataSourceProviderStatuses(r);
   const values = Object.values(statuses);
-  const total = values.length || r.dataSources?.length || 0;
+  const total = values.length || visibleDataSources(r).length || 0;
   const ok = values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length;
   return { ok, total };
 }
@@ -200,9 +206,8 @@ function normalizedFleetState(r: ManagementPersonaFleetRow): string {
 }
 
 function hasDeployableArtifact(r: ManagementPersonaFleetRow): boolean {
-  const project = r.currentResearchProjects?.[0];
-  const artifactId = project?.artifactId || r.researchStatus?.artifactId;
-  return Boolean(artifactId && r.researchStatus?.canDeploy !== false && project?.canDeploy !== false);
+  const item = personaFleetResearchItems(r)[0];
+  return Boolean(item?.artifactId && item.canDeploy !== false);
 }
 
 function personaFleetPrimaryAction(
@@ -261,41 +266,6 @@ function personaFleetPrimaryAction(
     labelKey: "mgmt.fleet.primaryAction.viewPersona",
     ariaLabelKey: "mgmt.fleet.primaryAction.viewPersonaAriaFmt",
   };
-}
-
-function FleetLinkButton({
-  to,
-  label,
-  value,
-  ariaLabel,
-  className,
-}: {
-  to: string;
-  label: ReactNode;
-  value?: ReactNode;
-  ariaLabel?: string;
-  className?: string;
-}) {
-  return (
-    <Button
-      asChild
-      size="sm"
-      variant="outline"
-      className={
-        "h-8 min-w-max border-primary/45 bg-primary/5 px-2.5 text-xs font-semibold text-primary shadow-sm " +
-        "hover:bg-primary/10 hover:text-primary " +
-        (className ?? "")
-      }
-    >
-      <Link to={to} aria-label={ariaLabel}>
-        <span className="truncate">{label}</span>
-        {value !== undefined && (
-          <span className="max-w-[9rem] truncate text-muted-foreground">{value}</span>
-        )}
-        <ArrowUpRight className="size-3" aria-hidden="true" />
-      </Link>
-    </Button>
-  );
 }
 
 export const PersonaFleetPage = () => {
@@ -412,16 +382,18 @@ export const PersonaFleetPage = () => {
               const retired = r.state && HIDDEN_STATES.has(r.state);
               const nonProduction = isNonProductionPersonaFleetRow(r);
               const sourceCount = providerOkCount(r);
-              const project = r.currentResearchProjects?.[0];
               const sourceBadges = visibleDataSources(r);
-              const frameworkText = project?.frameworks?.length
-                ? project.frameworks.join(" / ")
-                : r.researchStatus?.frameworks?.join(" / ");
+              const sourceStatus = dataSourceState(r);
+              const researchItems = personaFleetResearchItems(r);
+              const primaryResearch = researchItems[0];
+              const frameworkText = primaryResearch?.frameworks.length
+                ? primaryResearch.frameworks.join(" / ")
+                : "";
               const personaHref = personaFleetPersonaHref(r);
-              const researchHref = personaFleetResearchHref(r);
+              const researchHref = personaFleetResearchHref(r, primaryResearch);
               const primaryAction = personaFleetPrimaryAction(r, { personaHref, researchHref });
-              const artifactHref = personaFleetArtifactHref(r);
-              const artifactLabel = project?.artifactId || r.researchStatus?.artifactId;
+              const artifactHref = personaFleetArtifactHref(r, primaryResearch);
+              const artifactLabel = primaryResearch?.artifactId;
               const focused = personaFocus === r.personaId;
               return (
                 <tr
@@ -438,92 +410,121 @@ export const PersonaFleetPage = () => {
                     <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.personaId}</div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
-                  <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
-                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
-                  <td className="px-3 py-2 min-w-[240px]">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <FleetLinkButton
-                        to={personaFleetDataSourcesHref(r)}
-                        ariaLabel={`${r.personaId} data sources`}
-                        className={dataSourceTone(r.dataSourceStatus?.state)}
-                        label={PERSONA_FLEET_ACTION_LABELS.dataSources}
-                        value={formatToken(r.dataSourceStatus?.state)}
-                      />
-                      {sourceCount.total > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {sourceBadges.map((source) => (
-                        <Badge key={source.providerKey} variant="outline" className="text-[10px]">
-                          {source.providerKey}: {formatToken(source.status)}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {r.dataSourceStatus?.liveIngestionEnabled
-                        ? t("mgmt.fleet.liveOn")
-                        : t("mgmt.fleet.liveOff")}
-                      {" · "}
-                      {r.dataSourceStatus?.orderSideEffectsAllowed
-                        ? t("mgmt.fleet.sideEffectsOn")
-                        : t("mgmt.fleet.sideEffectsOff")}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 min-w-[260px]">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {researchHref ? (
-                        <Link
-                          to={researchHref}
-                          aria-label={`${r.personaId} research detail`}
-                          className="inline-flex"
-                        >
-                          <Badge
-                            variant="outline"
-                            className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
-                          >
-                            {formatToken(r.researchStatus?.stage ?? project?.stage)}
-                          </Badge>
-                        </Link>
-                      ) : (
-                        <Badge variant="outline">{formatToken(r.researchStatus?.stage ?? project?.stage)}</Badge>
-                      )}
-                      {r.researchStatus?.canDeploy === false && (
-                        <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">
-                          {t("mgmt.fleet.governed")}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="mt-1 max-w-[320px] truncate font-medium text-foreground">
-                      {researchHref ? (
-                        <Link to={researchHref} className="text-primary underline underline-offset-4 hover:text-primary/80">
-                          {project?.title || r.currentWork || r.researchStatus?.summary || "—"}
-                        </Link>
-                      ) : (
-                        project?.title || r.currentWork || r.researchStatus?.summary || "—"
-                      )}
-                    </div>
-                    <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
-                      {frameworkText || "—"}
-                      {artifactLabel && (
-                        <>
-                          {" · "}
-                          {artifactHref ? (
-                            <Link
-                              to={artifactHref}
+	                  <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
+	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
+	                  <td className="px-3 py-2 min-w-[240px]">
+	                    <div className="flex max-w-[360px] flex-wrap gap-1">
+	                      {sourceBadges.length > 0
+	                        ? sourceBadges.map((source) => (
+	                          <Link
+	                            key={source.providerKey}
+	                            to={`${personaFleetDataSourcesHref(r)}&source=${encodeURIComponent(source.providerKey)}`}
+	                            aria-label={`${r.personaId} data source ${source.providerKey}`}
+	                            className="inline-flex"
+	                          >
+	                            <Badge
+	                              variant="outline"
+	                              className={badgeLinkClass(`${dataSourceTone(source.status)} hover:border-primary/60`)}
+	                            >
+	                              {source.providerKey}: {formatToken(source.status)}
+	                            </Badge>
+	                          </Link>
+	                        ))
+	                        : (
+	                          <Link
+	                            to={personaFleetDataSourcesHref(r)}
+	                            aria-label={`${r.personaId} data sources`}
+	                            className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
+	                          >
+	                            nan
+	                          </Link>
+	                        )}
+	                    </div>
+	                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+	                      {sourceCount.total > 0 && (
+	                        <span>{t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}</span>
+	                      )}
+	                      {sourceStatus && (
+	                        <Link
+	                          to={personaFleetDataSourcesHref(r)}
+	                          aria-label={`${r.personaId} data source status`}
+	                          className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
+	                        >
+	                          {formatToken(sourceStatus)}
+	                        </Link>
+	                      )}
+	                    </div>
+	                    <div className="mt-1 text-xs text-muted-foreground">
+	                      {dataSourceLiveEnabled(r)
+	                        ? t("mgmt.fleet.liveOn")
+	                        : t("mgmt.fleet.liveOff")}
+	                      {" · "}
+	                      {dataSourceOrderSideEffectsAllowed(r)
+	                        ? t("mgmt.fleet.sideEffectsOn")
+	                        : t("mgmt.fleet.sideEffectsOff")}
+	                    </div>
+	                  </td>
+	                  <td className="px-3 py-2 min-w-[260px]">
+	                    <div className="flex flex-wrap items-center gap-1">
+	                      <Link
+	                        to={researchHref}
+	                        aria-label={`${r.personaId} research detail`}
+	                        className="inline-flex"
+	                      >
+	                        <Badge
+	                          variant="outline"
+	                          className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+	                        >
+	                          {primaryResearch?.stage ? formatToken(primaryResearch.stage) : "nan"}
+	                        </Badge>
+	                      </Link>
+	                      {primaryResearch?.canDeploy === false && (
+	                        <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">
+	                          {t("mgmt.fleet.governed")}
+	                        </Badge>
+	                      )}
+	                    </div>
+	                    <div className="mt-1 max-w-[360px] space-y-0.5">
+	                      {researchItems.length > 0
+	                        ? researchItems.slice(0, 3).map((item) => (
+	                          <Link
+	                            key={item.key}
+	                            to={personaFleetResearchHref(r, item)}
+	                            className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+	                          >
+	                            {item.title || "nan"}
+	                          </Link>
+	                        ))
+	                        : (
+	                          <Link
+	                            to={researchHref}
+	                            className={fieldLinkClass("block text-muted-foreground hover:text-primary")}
+	                          >
+	                            nan
+	                          </Link>
+	                        )}
+	                    </div>
+	                    {(frameworkText || artifactLabel) && (
+	                    <div className="mt-0.5 max-w-[360px] truncate text-xs text-muted-foreground">
+	                      {frameworkText}
+	                      {artifactLabel && (
+	                        <>
+	                          {frameworkText ? " · " : ""}
+	                          {artifactHref ? (
+	                            <Link
+	                              to={artifactHref}
                               className="font-mono font-medium text-primary underline underline-offset-4 hover:text-primary/80"
                             >
                               Artifact: {artifactLabel}
                             </Link>
                           ) : (
                             artifactLabel
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </td>
+	                          )}
+	                        </>
+	                      )}
+	                    </div>
+	                    )}
+	                  </td>
                   <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
                     <Link
                       to={personaFleetPerformanceHref(r)}

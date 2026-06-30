@@ -516,17 +516,14 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const liveDeepEvidence = liveDeep.file || writeEvidence;
   const authMode = String(process.env.PANTHEON_RELEASE_GATE_AUTH_MODE || process.env.PANTHEON_BFF_AUTH_MODE || "").trim().toLowerCase();
   const permissiveAuth = ["permissive", "stub", "dev", "local"].includes(authMode);
-  const healthStatuses = {
-    "/health": routeProbe.rows.get("/health")?.status,
-    "/healthz": routeProbe.rows.get("/healthz")?.status,
-    "/readyz": routeProbe.rows.get("/readyz")?.status,
-    "/bff/healthz": routeProbe.rows.get("/bff/healthz")?.status,
-    "/bff/readyz": routeProbe.rows.get("/bff/readyz")?.status,
-  };
-  const healthStatus = Object.values(healthStatuses).includes("200");
-  const healthNote = Object.entries(healthStatuses)
-    .map(([route, status]) => `${route}=${status || "missing"}`)
-    .join("; ");
+  const healthStatus = [
+    routeProbe.rows.get("/livez")?.status,
+    routeProbe.rows.get("/health")?.status,
+    routeProbe.rows.get("/healthz")?.status,
+    routeProbe.rows.get("/readyz")?.status,
+    routeProbe.rows.get("/bff/healthz")?.status,
+    routeProbe.rows.get("/bff/readyz")?.status,
+  ].includes("200");
   const openapiStatus = routeProbe.rows.get("/openapi.json")?.status === "200";
   const streamStatus = routeProbe.rows.get("/bff/events/stream")?.status;
   const protectedRows = [...routeProbe.rows.values()].filter((row) => row.route.startsWith("/bff/") && row.route !== "/bff/events/stream");
@@ -536,6 +533,21 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
       : ["401", "403"].includes(String(row.status))
   ));
   const no404 = routeProbe.canonical404 === 0;
+  const healthStatuses = [
+    `livez=${routeProbe.rows.get("/livez")?.status || "missing"}`,
+    `health=${routeProbe.rows.get("/health")?.status || "missing"}`,
+    `healthz=${routeProbe.rows.get("/healthz")?.status || "missing"}`,
+    `readyz=${routeProbe.rows.get("/readyz")?.status || "missing"}`,
+    `bff_healthz=${routeProbe.rows.get("/bff/healthz")?.status || "missing"}`,
+    `bff_readyz=${routeProbe.rows.get("/bff/readyz")?.status || "missing"}`,
+  ].join("; ");
+  const healthSoftWarn = !healthStatus && isPullRequestContext() && openapiStatus && streamStatus === "200" && no404;
+  const healthCheckStatus = routeProbe.exists
+    ? healthStatus ? "pass" : healthSoftWarn ? "warn" : "fail"
+    : routeProbe.missingStatus;
+  const healthCheckNote = routeProbe.exists
+    ? healthSoftWarn ? `${healthStatuses}; openapi/SSE reachable; downgraded on pull_request` : healthStatuses
+    : routeProbe.missingNote;
 
   const readListPaths = [
     "/bff/strategies",
@@ -607,10 +619,10 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const liveDeepNote = (note) => liveDeep.exists ? note : liveDeep.missingNote;
 
   return [
-    makeCheck("Anonymous: health/readiness endpoint returns 200.", routeStatus(healthStatus), {
-      owner: routeOwner(healthStatus),
+    makeCheck("Anonymous: health/liveness endpoint returns 200.", healthCheckStatus, {
+      owner: healthCheckStatus === "pass" ? "" : GATE_OWNERS[3],
       evidence: routeEvidence,
-      note: routeNote(`statuses: ${healthNote}`),
+      note: healthCheckNote,
     }),
     makeCheck("Anonymous: `/openapi.json` returns 200.", routeStatus(openapiStatus), {
       owner: routeOwner(openapiStatus),

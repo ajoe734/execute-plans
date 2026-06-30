@@ -147,6 +147,65 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
+  it("renders snake_case live data source and research lists inline", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [{
+        personaId: "persona-20260528-aabbccdd",
+        personaName: "TW Live Persona",
+        owner: "pathreon-management",
+        ooda: "Orient",
+        autonomy: "supervised",
+        perfDelta: 0.095,
+        humanNeeded: false,
+        lastMutation: "2026-06-07",
+        state: "deployed",
+        dataSourceStatus: {
+          provider_statuses: {
+            shioaji: "read_ok",
+            finmind: "read_ok",
+          },
+          live_source_connector_ids: ["tw-finmind-datasets"],
+          live_ingestion_enabled: true,
+          order_side_effects_allowed: false,
+        },
+        researchStatus: {
+          stage: "management_review_linked",
+          frameworks: ["qlib", "vectorbt"],
+          experiment_id: "exp-mgmt-qlib-006",
+          artifact_id: "qlib-model-v1",
+          can_deploy: false,
+        },
+        current_research_projects: [{
+          project_id: "MGMT-QLIB-006",
+          title: "Qlib TW cross-sectional equity alpha admission linkage",
+          stage: "management_review_linked",
+          frameworks: ["qlib", "vectorbt"],
+          experiment_id: "exp-mgmt-qlib-006",
+          artifact_id: "qlib-model-v1",
+          can_deploy: false,
+          blocked_by_task_ids: ["MGMT-QLIB-003"],
+        }],
+      } as unknown as ManagementPersonaFleetRow],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.queryByText("View data sources")).not.toBeInTheDocument();
+    expect(screen.getByText("shioaji: read ok")).toBeInTheDocument();
+    expect(screen.getByText("finmind: read ok")).toBeInTheDocument();
+    expect(screen.getByText("Qlib TW cross-sectional equity alpha admission linkage")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-20260528-aabbccdd data source shioaji" })).toHaveAttribute(
+      "href",
+      "/management/data-sources?persona=persona-20260528-aabbccdd&source=shioaji",
+    );
+    expect(screen.getByRole("link", { name: "persona-20260528-aabbccdd research detail" })).toHaveAttribute(
+      "href",
+      "/management/experiments/exp-mgmt-qlib-006",
+    );
+  });
+
   it("does not report a focused persona as missing before live fleet data loads", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,
