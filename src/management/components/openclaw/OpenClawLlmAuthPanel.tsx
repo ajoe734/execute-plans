@@ -178,6 +178,14 @@ function normalizeProviderId(value: unknown): string {
   return id;
 }
 
+function isOpenClawProviderValue(value: unknown): boolean {
+  return normalizeProviderId(value) === "openclaw";
+}
+
+function isOpenClawAdapter(provider: AssistantProviderReadinessStatus): boolean {
+  return isOpenClawProviderValue(providerId(provider));
+}
+
 function statusTone(status: string, ready?: boolean): string {
   const normalized = status.toLowerCase();
   if (ready === true || ["ready", "ok", "completed", "authorized"].includes(normalized)) {
@@ -207,7 +215,7 @@ function supportsReauth(provider: AssistantProviderReadinessStatus): boolean {
 }
 
 function reauthButtonLabel(provider: AssistantProviderReadinessStatus, controlActive: boolean): string {
-  if (!supportsReauth(provider)) return "Reauth unsupported";
+  if (!supportsReauth(provider)) return "Adapter reauth missing";
   return controlActive ? "Start reauth" : "Enable control + reauth";
 }
 
@@ -330,9 +338,11 @@ export function OpenClawLlmAuthPanel({
   const controlMode = controlModeFrom(state.mode);
   const activeControl = Boolean(controlMode?.active);
   const activeProvider = state.orchestrator?.ok ? state.orchestrator.status.providerStatus : null;
-  const attentionCount = useMemo(() => state.providers.filter(needsAttention).length, [state.providers]);
+  const llmProviders = useMemo(() => state.providers.filter((provider) => !isOpenClawAdapter(provider)), [state.providers]);
+  const adapterProviders = useMemo(() => state.providers.filter(isOpenClawAdapter), [state.providers]);
+  const attentionCount = useMemo(() => llmProviders.filter(needsAttention).length, [llmProviders]);
   const error = firstError(state);
-  const rows = mode === "summary" ? state.providers.slice(0, 3) : state.providers;
+  const rows = mode === "summary" ? llmProviders.slice(0, 3) : llmProviders;
   const usageByProvider = useMemo(() => {
     const byId = new Map<string, AssistantProviderUsageSummaryRow>();
     const usageRows = state.usageSummary?.ok ? state.usageSummary.providers : [];
@@ -369,7 +379,7 @@ export function OpenClawLlmAuthPanel({
     try {
       const result = await api.startReauth({
         provider: id,
-        reason: "OpenClaw LLM Auth management",
+        reason: "LLM Provider Auth management",
       });
       setReauthResult(result);
     } finally {
@@ -383,7 +393,7 @@ export function OpenClawLlmAuthPanel({
         ok: false,
         kind: "failure",
         statusCode: null,
-        message: `${providerLabel(provider)} reauth is not supported by the OpenClaw adapter yet.`,
+        message: `${providerLabel(provider)} reauth is not supported by the provider adapter yet.`,
       });
       return;
     }
@@ -424,7 +434,7 @@ export function OpenClawLlmAuthPanel({
       const result = await api.activateControlMode({
         passphrase,
         mode: "kernel_debug",
-        reason: provider ? `OpenClaw LLM Auth reauth: ${providerId(provider)}` : "OpenClaw LLM Auth reauth",
+        reason: provider ? `LLM Provider Auth reauth: ${providerId(provider)}` : "LLM Provider Auth reauth",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
       });
@@ -469,7 +479,7 @@ export function OpenClawLlmAuthPanel({
         const control = await api.activateControlMode({
           passphrase: addProviderForm.passphrase.trim(),
           mode: "kernel_debug",
-          reason: `OpenClaw LLM Auth register provider: ${provider}`,
+          reason: `LLM Provider Auth register provider: ${provider}`,
           ttlSeconds: 900,
           idleTtlSeconds: 300,
         });
@@ -530,7 +540,7 @@ export function OpenClawLlmAuthPanel({
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
             <KeyRound className="h-4 w-4 text-muted-foreground" />
-            OpenClaw LLM Auth
+            LLM Provider Auth
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             active={activeProviderLabel(activeProvider)} · {kernelLabel(state.mode)}
@@ -540,7 +550,7 @@ export function OpenClawLlmAuthPanel({
           {mode === "full" && (
             <Button size="sm" variant="outline" onClick={() => setAddProviderOpen(true)}>
               <Plus className="h-3.5 w-3.5" />
-              Add LLM
+              Add Provider
             </Button>
           )}
           <Badge variant="outline" className={statusTone(activeControl ? controlMode?.mode ?? "active" : "inactive", activeControl)}>
@@ -549,7 +559,7 @@ export function OpenClawLlmAuthPanel({
           <Badge variant="outline" className={authSummaryTone}>
             {authSummaryLabel}
           </Badge>
-          <Button size="icon-sm" variant="outline" onClick={() => void load()} disabled={loading} aria-label="Refresh OpenClaw LLM auth">
+          <Button size="icon-sm" variant="outline" onClick={() => void load()} disabled={loading} aria-label="Refresh LLM provider auth">
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
         </div>
@@ -566,6 +576,14 @@ export function OpenClawLlmAuthPanel({
         <div className="mt-3 flex items-center gap-2 rounded-md border border-status-success/30 bg-status-success/10 p-3 text-xs text-status-success">
           <CheckCircle2 className="h-4 w-4" />
           <span>{addProviderResult}</span>
+        </div>
+      )}
+
+      {adapterProviders.length > 0 && (
+        <div className="mt-4 grid gap-3">
+          {adapterProviders.map((provider) => (
+            <AdapterStatusCard key={providerId(provider)} provider={provider} />
+          ))}
         </div>
       )}
 
@@ -587,20 +605,20 @@ export function OpenClawLlmAuthPanel({
       {loading && rows.length === 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Checking assistant provider auth status.</span>
+          <span>Checking LLM provider auth status.</span>
         </div>
       )}
 
       {state.authProbePending && rows.length > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Updating auth probe results.</span>
+          <span>Updating LLM provider auth probe results.</span>
         </div>
       )}
 
       {!loading && rows.length === 0 && (
         <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          No assistant provider auth status returned.
+          No LLM provider auth status returned.
         </div>
       )}
 
@@ -640,7 +658,7 @@ export function OpenClawLlmAuthPanel({
       {mode === "summary" && (
         <div className="mt-4 flex justify-end">
           <Button asChild size="sm" variant="outline">
-            <Link to="/management/openclaw-llm-auth">Open management page</Link>
+            <Link to="/management/llm-provider-auth">Open provider auth</Link>
           </Button>
         </div>
       )}
@@ -718,7 +736,7 @@ export function OpenClawLlmAuthPanel({
         >
           <DialogContent className="max-w-lg gap-3">
             <DialogHeader>
-              <DialogTitle className="text-base">Add LLM</DialogTitle>
+              <DialogTitle className="text-base">Add Provider</DialogTitle>
               <DialogDescription className="text-xs">
                 Provider registry
               </DialogDescription>
@@ -918,6 +936,33 @@ function ProviderCard({
   );
 }
 
+function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessStatus }) {
+  const status = providerAuthStatus(provider);
+  return (
+    <article className="rounded-md border border-border bg-muted/20 p-3" aria-label="OpenClaw adapter status">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-foreground">OpenClaw adapter</h3>
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</p>
+        </div>
+        <Badge variant="outline" className={statusTone(status, provider.ready)}>
+          {provider.ready ? <CheckCircle2 className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
+          {status}
+        </Badge>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4">
+        <Info label="status" value={provider.status ?? "unknown"} />
+        <Info label="mount" value={provider.mountMode ?? "unknown"} />
+        <Info label="checked" value={provider.checkedAt ?? "unknown"} />
+        <Info label="source" value={provider.source ?? "unknown"} />
+        {providerReason(provider) && (
+          <Info className="col-span-2 sm:col-span-4" label="reason" value={providerReason(provider)} />
+        )}
+      </dl>
+    </article>
+  );
+}
+
 function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummaryResult | null }) {
   if (!summary) {
     return (
@@ -941,23 +986,33 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
     );
   }
 
+  const providers = summary.providers.filter((provider) => !isOpenClawProviderValue(provider.provider ?? provider.providerName));
+  const totals = providers.reduce(
+    (acc, provider) => ({
+      liveAuthCount: acc.liveAuthCount + (provider.liveAuth ? 1 : 0),
+      calls: acc.calls + (usageNumber(provider.calls) ?? 0),
+      totalTokens: acc.totalTokens + (usageNumber(provider.totalTokens) ?? 0),
+    }),
+    { liveAuthCount: 0, calls: 0, totalTokens: 0 },
+  );
+
   return (
     <section className="mt-5 border-t border-border pt-4" aria-label="Provider usage history">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Usage history</h3>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{formatNumber(summary.totals.liveAuthCount)} live auth</Badge>
-          <Badge variant="outline">{formatNumber(summary.totals.calls)} calls</Badge>
-          <Badge variant="outline">{formatNumber(summary.totals.totalTokens)} tokens</Badge>
+          <Badge variant="outline">{formatNumber(totals.liveAuthCount)} live auth</Badge>
+          <Badge variant="outline">{formatNumber(totals.calls)} calls</Badge>
+          <Badge variant="outline">{formatNumber(totals.totalTokens)} tokens</Badge>
         </div>
       </header>
 
       <div className="mt-3 divide-y divide-border rounded-md border border-border">
-        {summary.providers.map((provider) => (
+        {providers.map((provider) => (
           <UsageHistoryRow key={provider.provider ?? provider.providerName ?? "unknown"} provider={provider} />
         ))}
-        {summary.providers.length === 0 && (
-          <div className="p-3 text-xs text-muted-foreground">No provider usage history returned.</div>
+        {providers.length === 0 && (
+          <div className="p-3 text-xs text-muted-foreground">No LLM provider usage history returned.</div>
         )}
       </div>
     </section>
