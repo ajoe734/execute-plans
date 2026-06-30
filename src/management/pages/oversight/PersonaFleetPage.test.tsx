@@ -106,4 +106,18 @@ describe("PersonaFleetPage", () => {
       "/management/human-inbox?persona=persona-tw-equity",
     );
   });
+
+  it("does not report a focused persona as missing before live fleet data loads", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: true,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?persona=persona-tw-equity");
+
+    expect(screen.getByText("Loading persona row for persona-tw-equity…")).toBeInTheDocument();
+    expect(screen.queryByText("No persona fleet row found for persona-tw-equity.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Taiwan Equity Persona")).not.toBeInTheDocument();
+  });
 });
