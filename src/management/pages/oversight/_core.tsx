@@ -68,7 +68,7 @@ export const OneRingCockpitPage = () => {
   const qSnap = useMemo(() => defaultQuarterlySnapshot(), []);
   const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
   const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
-  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
@@ -87,7 +87,7 @@ export const OneRingCockpitPage = () => {
         <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
         <PersonaLeagueSnapshot rows={league ?? lSeed} />
         <QuarterlyRankingCountdown snap={qSnap} />
-        <DataSourceHealthSnapshot rows={fleetRows ?? PERSONA_FLEET_SEED} />
+        <DataSourceHealthSnapshot rows={fleetRows ?? []} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LoopFlowMap model={model.loopFlow} />
@@ -103,254 +103,6 @@ export const OneRingCockpitPage = () => {
 // =====================================================================
 // Persona Fleet
 // =====================================================================
-
-// Shared seed for management surfaces that currently derive system-level state
-// from the live persona fleet contract.
-// eslint-disable-next-line react-refresh/only-export-components
-export const PERSONA_FLEET_SEED: ManagementPersonaFleetRow[] = [
-  {
-    personaId: "persona-crypto",
-    personaName: "Crypto Macro Persona",
-    owner: "pathreon-management",
-    ooda: "Act",
-    autonomy: "supervised",
-    perfDelta: 0.182,
-    humanNeeded: true,
-    lastMutation: "2026-06-07",
-    state: "paper_running",
-    marketScope: ["CRYPTO"],
-    currentWork: "paper broker sandbox readback and funding-rate stress review",
-    dataSourceStatus: {
-      state: "datasource_smoke_ok",
-      summary: "Kraken datasource smoke has a normalized quote projection; repo-local network readback remains disabled.",
-      providerStatuses: { kraken: "datasource_smoke_ok", coingecko: "read_unavailable" },
-      readbackRefs: ["support/evidence/MGMT-BROKER-006/datasource-smoke/datasource-smoke.json"],
-      unavailableRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/coingecko.json"],
-      readOnly: true,
-      orderSideEffectsAllowed: false,
-      capitalSideEffectsAllowed: false,
-      liveIngestionEnabled: false,
-    },
-    dataSources: [
-      {
-        providerKey: "kraken",
-        provider: "Kraken market data",
-        status: "datasource_smoke_ok",
-        sourceClass: "broker_execution",
-        orderPath: "validate_only",
-        orderCapableProvider: true,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-      {
-        providerKey: "coingecko",
-        provider: "CoinGecko",
-        status: "read_unavailable",
-        sourceClass: "research_grade",
-        orderCapableProvider: false,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-    ],
-    researchStatus: {
-      stage: "act",
-      frameworks: ["vectorbt", "statsmodels", "finrl-rllib"],
-      strategyId: "strategy-crypto-trend-carry",
-      artifactId: "artifact-crypto-trend-carry-v1",
-      deploymentStage: "paper",
-      registryAdmissionStatus: "not_requested",
-      pendingTaskIds: [],
-      canDeploy: false,
-      summary: "paper broker sandbox readback and funding-rate stress review",
-    },
-    currentResearchProjects: [
-      {
-        projectId: "research-crypto-paper-001",
-        title: "paper broker sandbox readback and funding-rate stress review",
-        stage: "act",
-        status: "paper_running",
-        frameworks: ["vectorbt", "statsmodels", "finrl-rllib"],
-        artifactId: "artifact-crypto-trend-carry-v1",
-        blockedByTaskIds: [],
-        canDeploy: false,
-      },
-    ],
-  },
-  {
-    personaId: "persona-us-equity",
-    personaName: "US Equity Persona",
-    owner: "pathreon-management",
-    ooda: "Orient",
-    autonomy: "supervised",
-    perfDelta: 0.14,
-    humanNeeded: true,
-    lastMutation: "2026-06-07",
-    state: "researching",
-    marketScope: ["US"],
-    currentWork: "paper observation and OOS cost review",
-    dataSourceStatus: {
-      state: "quote_readback_ok",
-      summary: "IBKR quote readback is present; order path is disabled for marketdata smoke.",
-      providerStatuses: { ibkr: "read_ok" },
-      readbackRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/ibkr.json"],
-      unavailableRefs: [],
-      readbackCapturedAt: "2026-05-01T17:20:00Z",
-      readOnly: true,
-      orderSideEffectsAllowed: false,
-      capitalSideEffectsAllowed: false,
-      liveIngestionEnabled: false,
-    },
-    dataSources: [
-      {
-        providerKey: "ibkr",
-        provider: "IBKR market data",
-        status: "read_ok",
-        sourceClass: "broker_execution",
-        orderPath: "disabled_for_marketdata_smoke",
-        orderCapableProvider: true,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-    ],
-    researchStatus: {
-      stage: "orient",
-      frameworks: ["vectorbt", "statsmodels", "quantlib"],
-      strategyId: "strategy-us-equity-momentum",
-      artifactId: "artifact-us-equity-momentum-v1",
-      deploymentStage: "paper",
-      registryAdmissionStatus: "not_requested",
-      pendingTaskIds: [],
-      canDeploy: false,
-      summary: "paper observation and OOS cost review",
-    },
-    currentResearchProjects: [
-      {
-        projectId: "research-us-paper-001",
-        title: "paper observation and OOS cost review",
-        stage: "orient",
-        status: "researching",
-        frameworks: ["vectorbt", "statsmodels", "quantlib"],
-        artifactId: "artifact-us-equity-momentum-v1",
-        blockedByTaskIds: [],
-        canDeploy: false,
-      },
-    ],
-  },
-  {
-    personaId: "persona-tw-equity",
-    personaName: "Taiwan Equity Persona",
-    owner: "pathreon-management",
-    ooda: "Decide",
-    autonomy: "supervised",
-    perfDelta: 0.095,
-    humanNeeded: true,
-    lastMutation: "2026-06-07",
-    state: "needs_human_approval",
-    marketScope: ["TW"],
-    currentWork: "TW corporate-action and session-boundary evidence review",
-    dataSourceStatus: {
-      state: "partial_readback",
-      summary: "Shioaji quote readback is present; TWSE, TPEx, MOPS, and TEJ are explicit unavailable/credential-unavailable repo-local smoke evidence.",
-      providerStatuses: {
-        twse: "read_unavailable",
-        tpex: "read_unavailable",
-        mops: "public_reference_unavailable",
-        tej: "credential_unavailable",
-        shioaji: "read_ok",
-      },
-      readbackRefs: ["support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-quote-readback/shioaji.json"],
-      unavailableRefs: [
-        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/twse.json",
-        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/tpex.json",
-        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/mops.json",
-        "support/evidence/P2-MARKETDATA-CREDENTIAL-SMOKE-001/repo-local-uncredentialed/tej.json",
-      ],
-      researchDatasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
-      researchDatasetAsOf: "2026-01-05T00:00:00Z",
-      readbackCapturedAt: "2026-05-01T17:20:00Z",
-      readOnly: true,
-      orderSideEffectsAllowed: false,
-      capitalSideEffectsAllowed: false,
-      liveIngestionEnabled: false,
-    },
-    dataSources: [
-      {
-        providerKey: "shioaji",
-        provider: "Shioaji quote",
-        status: "read_ok",
-        sourceClass: "broker_execution",
-        orderPath: "disabled_for_marketdata_smoke",
-        orderCapableProvider: true,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-      {
-        providerKey: "twse",
-        provider: "TWSE OpenAPI",
-        status: "read_unavailable",
-        sourceClass: "official_reference",
-        orderCapableProvider: false,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-      {
-        providerKey: "tpex",
-        provider: "TPEx E-Data",
-        status: "read_unavailable",
-        sourceClass: "official_reference",
-        orderCapableProvider: false,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-      {
-        providerKey: "tej",
-        provider: "TEJ API",
-        status: "credential_unavailable",
-        sourceClass: "research_grade",
-        orderCapableProvider: false,
-        readOnly: true,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      },
-    ],
-    researchStatus: {
-      stage: "management_review_linked",
-      framework: "qlib",
-      frameworks: ["qlib", "vectorbt", "statsmodels"],
-      experimentId: "exp-mgmt-qlib-006",
-      strategyId: "tw-cross-sectional-equity-alpha",
-      strategySpecId: "qlib-tw-cross-sectional-alpha-spec-v1",
-      artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
-      artifactState: "draft",
-      deploymentStage: "none",
-      datasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
-      registryAdmissionStatus: "pending_upstream_task",
-      pendingTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
-      canDeploy: false,
-      summary: "Qlib TW cross-sectional alpha draft is linked for Management review.",
-    },
-    currentResearchProjects: [
-      {
-        projectId: "MGMT-QLIB-006",
-        title: "Qlib TW cross-sectional equity alpha admission linkage",
-        stage: "management_review_linked",
-        status: "needs_human_approval",
-        frameworks: ["qlib", "vectorbt", "statsmodels"],
-        datasetRef: "dataset:tw-equity-ohlcv-top50-2024-daily",
-        artifactId: "qlib-tw-cross-sectional-alpha-model-draft-v1",
-        experimentId: "exp-mgmt-qlib-006",
-        blockedByTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
-        canDeploy: false,
-      },
-    ],
-  },
-];
 
 const HIDDEN_STATES = new Set(["retired", "deprecated", "archived"]);
 
@@ -425,8 +177,8 @@ export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const { data, loading } = useV5Live(() => mgmt.personaFleet.get(() => PERSONA_FLEET_SEED), []);
-  const rows = useMemo(() => data ?? (personaFocus ? [] : PERSONA_FLEET_SEED), [data, personaFocus]);
+  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
+  const rows = useMemo(() => data ?? [], [data]);
 
   const [showRetired, setShowRetired] = useState(false);
   const [showDevProbe, setShowDevProbe] = useState(false);
@@ -501,6 +253,21 @@ export const PersonaFleetPage = () => {
           {t("mgmt.fleet.filter.allFilteredHint")}
         </Card>
       )}
+      {loading && rows.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("mgmt.fleet.loadingLive")}
+        </Card>
+      )}
+      {!loading && rows.length === 0 && (
+        <Card className="p-4 text-sm">
+          <div className="font-medium text-foreground">{t("mgmt.fleet.liveDataUnavailableTitle")}</div>
+          <p className="mt-1 text-muted-foreground">{t("mgmt.fleet.liveDataUnavailableBody")}</p>
+          <Button size="sm" variant="outline" className="mt-3" onClick={refresh}>
+            {t("mgmt.actions.refresh")}
+          </Button>
+        </Card>
+      )}
+      {rows.length > 0 && (
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -684,6 +451,7 @@ export const PersonaFleetPage = () => {
           </tbody>
         </table>
       </Card>
+      )}
     </section>
   );
 };

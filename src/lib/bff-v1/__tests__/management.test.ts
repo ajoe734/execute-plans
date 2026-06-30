@@ -9,7 +9,6 @@ import {
   adaptManagementPersonaFleet,
   defaultTradingPulseModel,
   mgmt,
-  type ManagementPersonaFleetRow,
 } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
@@ -258,18 +257,8 @@ describe("mgmt façade (PM-Live)", () => {
     expect(await mgmt.personaIntent.list(() => seed as never)).toBe(seed);
   });
 
-  it("personaFleet.get passes canonical seed through in mock mode", async () => {
-    const seed: ManagementPersonaFleetRow[] = [{
-      personaId: "persona-tw-equity",
-      owner: "pathreon-management",
-      ooda: "Decide",
-      autonomy: "supervised",
-      perfDelta: 0.095,
-      humanNeeded: true,
-      lastMutation: "2026-06-07",
-      state: "needs_human_approval",
-    }];
-    expect(await mgmt.personaFleet.get(() => seed)).toBe(seed);
+  it("personaFleet.get does not serve demo rows in mock mode", async () => {
+    await expect(mgmt.personaFleet.get()).rejects.toThrow("demo fallback is disabled");
   });
 
   it("adapts Pathreon management fleet envelopes into UI-safe rows", () => {

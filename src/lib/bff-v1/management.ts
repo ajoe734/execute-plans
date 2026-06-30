@@ -461,6 +461,14 @@ export function adaptManagementPersonaFleet(raw: unknown): ManagementPersonaFlee
   return rows.length > 0 ? rows : null;
 }
 
+function adaptManagementPersonaFleetLiveOnly(raw: unknown): ManagementPersonaFleetRow[] {
+  return adaptManagementPersonaFleet(raw) ?? [];
+}
+
+async function personaFleetDemoFallbackDisabled(): Promise<ManagementPersonaFleetRow[]> {
+  throw new Error("Persona Fleet requires live BFF data; demo fallback is disabled.");
+}
+
 // ---------- PM-3 Cockpit ----------
 
 export type CockpitSeedFn = () => CockpitModel;
@@ -1094,13 +1102,11 @@ export const mgmt = {
   },
 
   personaFleet: {
-    get: (
-      seedFn: () => ManagementPersonaFleetRow[],
-    ): Promise<ManagementPersonaFleetRow[]> =>
+    get: (): Promise<ManagementPersonaFleetRow[]> =>
       withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
         { method: "GET", path: paths.mgmtPersonaFleet() },
-        async () => seedFn(),
-        safeAdapt(adaptManagementPersonaFleet, seedFn),
+        personaFleetDemoFallbackDisabled,
+        adaptManagementPersonaFleetLiveOnly,
       ),
   },
 
