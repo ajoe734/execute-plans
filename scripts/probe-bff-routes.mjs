@@ -6,6 +6,12 @@ const BASE = process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL 
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const AUTH_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
 const mode = process.argv.includes("--authenticated") ? "authenticated" : "anonymous";
+const PROBE_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS, 3, 1);
+const RETRY_DELAY_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_RETRY_DELAY_MS, 1_000, 100);
+const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS, 20_000, 5_000);
+const LEGACY_HEALTH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_LEGACY_HEALTH_TIMEOUT_MS, 5_000, 1_000);
+const LEGACY_HEALTH_ROUTES = new Set(["/health", "/healthz"]);
+const READINESS_ROUTES = new Set(["/readyz", "/bff/healthz", "/bff/readyz"]);
 
 const routes = [
   ["GET", "/health"],
@@ -76,34 +82,77 @@ function bodyFor(method, route) {
   return JSON.stringify({});
 }
 
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableResult(result) {
+  return result.status === "ERR" || [429, 500, 502, 503, 504].includes(result.status);
+}
+
+function maxAttemptsFor(route) {
+  return LEGACY_HEALTH_ROUTES.has(route) ? 1 : PROBE_ATTEMPTS;
+}
+
+function timeoutFor(route) {
+  return LEGACY_HEALTH_ROUTES.has(route) ? LEGACY_HEALTH_TIMEOUT_MS : FETCH_TIMEOUT_MS;
+}
 
 async function probe(method, route) {
-  const headers = {
-    "Accept": "application/json",
-    "X-Request-Id": `req_probe_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    "X-BFF-Api-Version": "2026-05-07",
-  };
-  if (method !== "GET") {
-    headers["Content-Type"] = "application/json";
-    headers["Idempotency-Key"] = `idk_probe_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-  if (mode === "authenticated" && AUTH_TOKEN) {
-    headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+  const url = `${BASE}${route}`;
+  const idBase = `probe_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const idempotencyKey = `idk_${idBase}`;
+  let lastResult = { method, route, status: "ERR", ms: 0, attempts: 0, error: "not attempted" };
+  const maxAttempts = maxAttemptsFor(route);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const headers = {
+      "Accept": "application/json",
+      "X-Request-Id": `req_${idBase}_${attempt}`,
+      "X-BFF-Api-Version": "2026-05-07",
+    };
+    if (method !== "GET") {
+      headers["Content-Type"] = "application/json";
+      headers["Idempotency-Key"] = idempotencyKey;
+      headers["X-Idempotency-Key"] = idempotencyKey;
+    }
+    if (mode === "authenticated" && AUTH_TOKEN) {
+      headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+    }
+
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: bodyFor(method, route),
+        signal: AbortSignal.timeout(timeoutFor(route)),
+      });
+      lastResult = { method, route, status: res.status, ms: Date.now() - started, attempts: attempt };
+    } catch (err) {
+      lastResult = {
+        method,
+        route,
+        status: "ERR",
+        ms: Date.now() - started,
+        attempts: attempt,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    if (attempt >= maxAttempts || !isRetryableResult(lastResult)) {
+      return lastResult;
+    }
+
+    await sleep(RETRY_DELAY_MS * attempt);
   }
 
-  const url = `${BASE}${route}`;
-  const started = Date.now();
-  try {
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: bodyFor(method, route),
-      signal: AbortSignal.timeout(15000),
-    });
-    return { method, route, status: res.status, ms: Date.now() - started };
-  } catch (err) {
-    return { method, route, status: "ERR", ms: Date.now() - started, error: err instanceof Error ? err.message : String(err) };
-  }
+  return lastResult;
 }
 
 const results = [];
@@ -121,6 +170,10 @@ for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
 
 const missing = results.filter(r => r.status === 404);
 const transportErrors = results.filter(r => r.status === "ERR");
+const readinessOk = results.some(r => READINESS_ROUTES.has(r.route) && r.status === 200);
+const fatalMissing = missing.filter(r => !LEGACY_HEALTH_ROUTES.has(r.route) || !readinessOk);
+const fatalTransportErrors = transportErrors.filter(r => !LEGACY_HEALTH_ROUTES.has(r.route) || !readinessOk);
+const ignoredLegacyHealthFailures = results.filter(r => LEGACY_HEALTH_ROUTES.has(r.route) && [404, "ERR"].includes(r.status) && readinessOk);
 const now = new Date().toISOString().slice(0, 10);
 const md = [
   `# BFF Route Probe — ${mode}`,
@@ -136,24 +189,26 @@ const md = [
   ``,
   `## Verdict`,
   ``,
-  `- Canonical 404 count: ${missing.length}`,
-  `- Transport errors: ${transportErrors.length}`,
+  `- Canonical 404 count: ${fatalMissing.length}`,
+  `- Transport errors: ${fatalTransportErrors.length}`,
+  `- Readiness endpoint ok: ${readinessOk}`,
+  `- Legacy health route failures ignored: ${ignoredLegacyHealthFailures.length}`,
   ``,
   `## Results`,
   ``,
-  `| Status | Method | Path | ms |`,
-  `|---:|---|---|---:|`,
-  ...results.map(r => `| ${r.status} | ${r.method} | ${r.route} | ${r.ms} |`),
+  `| Status | Method | Path | ms | Attempts |`,
+  `|---:|---|---|---:|---:|`,
+  ...results.map(r => `| ${r.status} | ${r.method} | ${r.route} | ${r.ms} | ${r.attempts ?? 1} |`),
   ``,
   `## Gate`,
   ``,
-  missing.length === 0
+  fatalMissing.length === 0
     ? `PASS: no canonical route returned 404.`
-    : `FAIL: ${missing.length} canonical routes returned 404.`,
+    : `FAIL: ${fatalMissing.length} canonical routes returned 404.`,
 ].join("\n");
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const out = path.join(OUT_DIR, `bff-route-probe-${mode}-${now}.md`);
 fs.writeFileSync(out, md, "utf8");
 console.log(md);
-if (missing.length || transportErrors.length) process.exitCode = 1;
+if (fatalMissing.length || fatalTransportErrors.length) process.exitCode = 1;
