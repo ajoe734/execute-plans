@@ -193,8 +193,15 @@ try {
   coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
   coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
 
-  await page.locator("body").innerText({ timeout: Math.min(5_000, remainingTimeoutMs()) }).catch(() => "");
   if (FE_PATH.includes("persona-fleet")) {
+    await page.waitForFunction(() => {
+      const text = document.body.innerText || "";
+      const rowCount = Array.from(document.querySelectorAll("tbody tr"))
+        .map((tr) => (tr.textContent || "").trim())
+        .filter(Boolean).length;
+      return rowCount > 0 || /Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料|seed fallback armed|fallback standby|NaN/i.test(text);
+    }, undefined, { timeout: Math.min(15_000, remainingTimeoutMs()) }).catch(() => {});
+
     personaFleetChecks = await page.evaluate(() => {
       const text = document.body.innerText || "";
       const rows = Array.from(document.querySelectorAll("tbody tr"))
