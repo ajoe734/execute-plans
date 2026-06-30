@@ -42,8 +42,44 @@ export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
   const seed = useMemo(() => seedDetail(id), [id]);
-  const { data } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
-  const item = data ?? seed;
+  const { data, loading } = useV5Live(() => mgmt.humanInbox.get(id, () => seed), [id]);
+  const item = data;
+
+  if (loading && !item) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.loadingDetail")}</h1>
+            <p className="text-sm text-muted-foreground">{id}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+          </Button>
+        </header>
+      </section>
+    );
+  }
+
+  if (!item) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.detailUnavailableTitle")}</h1>
+            <p className="text-sm text-muted-foreground">{id}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+          </Button>
+        </header>
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("mgmt.inbox.detailUnavailableBody")}
+        </Card>
+      </section>
+    );
+  }
+
   const hasConsequences = Boolean(
     item.consequenceIfApproved || item.consequenceIfRejected || item.consequenceIfIgnored,
   );
