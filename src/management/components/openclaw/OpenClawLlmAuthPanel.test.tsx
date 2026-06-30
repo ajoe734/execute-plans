@@ -131,6 +131,15 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
       },
       meta: { auth_probe: false },
     } satisfies AssistantProviderUsageSummaryResult),
+    activateControlMode: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      controlMode: {
+        active: true,
+        mode: "kernel_debug",
+        state: "active",
+      },
+    }),
     startReauth: vi.fn().mockResolvedValue({
       ok: true,
       kind: "ok",
@@ -276,6 +285,49 @@ describe("OpenClawLlmAuthPanel", () => {
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /login/i })).toHaveAttribute("href", "https://example.test/device");
+  });
+
+  it("activates kernel_debug control mode before starting provider reauth", async () => {
+    const fakeApi = api({
+      fetchMode: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: {
+          kernelEnabled: true,
+          controlMode: {
+            active: false,
+            mode: "inactive",
+            state: "inactive",
+          },
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /enable control \+ reauth/i }));
+    fireEvent.change(await screen.findByLabelText("Control passphrase"), {
+      target: { value: "control phrase ok" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enable and start reauth/i }));
+
+    await waitFor(() => {
+      expect(fakeApi.activateControlMode).toHaveBeenCalledWith({
+        passphrase: "control phrase ok",
+        mode: "kernel_debug",
+        reason: "OpenClaw LLM Auth reauth: codex",
+        ttlSeconds: 900,
+        idleTtlSeconds: 300,
+      });
+      expect(fakeApi.startReauth).toHaveBeenCalledWith({
+        provider: "codex",
+        reason: "OpenClaw LLM Auth management",
+      });
+    });
+    expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
   });
 
   it("renders provider usage history and quota source on the full management page", async () => {
