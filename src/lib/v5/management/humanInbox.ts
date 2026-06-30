@@ -35,6 +35,8 @@ export interface HumanInboxItem {
   canProceed: boolean;
   /** Optional blocking reason when canProceed=false. */
   blockingReasons?: string[];
+  /** Evidence refs available from the list/detail payload. */
+  evidenceRefs?: string[];
   detailHref: string;
   links: ManagementLinkSet;
 }

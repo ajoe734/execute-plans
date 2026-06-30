@@ -1923,6 +1923,7 @@ export default {
   mgmt: {
     actions: {
       manage: "Manage",
+      openActionPage: "Open action page",
       evidence: "Evidence",
       nextAction: "Next action",
       evidenceMissing: "Evidence missing",
@@ -2030,6 +2031,7 @@ export default {
       loadingDetail: "Loading inbox item…",
       detailUnavailableTitle: "Inbox item unavailable",
       detailUnavailableBody: "Live details for this item are unavailable right now. Return to the inbox and open it again.",
+      evidenceCountFmt: "View {{count}} evidence refs",
     },
     pulse: {
       title: "Trading Pulse",
@@ -2060,6 +2062,8 @@ export default {
       created: "Created",
       packetTitle: "Evidence Packet",
       packetSubtitle: "Detail view (Phase 1 minimum).",
+      ref: "Evidence ref",
+      refOnlyHint: "This item is an evidence reference, not a packet that can be expanded directly in the console. Cross-check it from the source task or Evidence Explorer.",
       seeListAt: "See list at",
       backToList: "Evidence Explorer",
     },

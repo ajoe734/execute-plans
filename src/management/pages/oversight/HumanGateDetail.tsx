@@ -130,13 +130,13 @@ export const HumanGateDetailPage = () => {
         </Card>
       )}
 
-      <Card className="p-4">
+      <Card id="evidence" className="p-4 scroll-mt-24">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.evidence")}</h2>
         {hasEvidence ? (
           <ul className="mt-2 space-y-1 text-xs">
             {item.evidenceRefs.map((e) => (
               <li key={e}>
-                <Link to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono text-primary underline-offset-4 hover:underline">{e}</Link>
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">{e}</code>
               </li>
             ))}
           </ul>
@@ -148,16 +148,9 @@ export const HumanGateDetailPage = () => {
       <div className="flex flex-wrap gap-2">
         {item.links?.manageHref && (
           <Button asChild size="sm" variant="outline">
-            <Link to={item.links.manageHref}>{t("mgmt.actions.manage")}</Link>
+            <Link to={item.links.manageHref}>{t("mgmt.actions.openActionPage")}</Link>
           </Button>
         )}
-        {item.canDecide && (
-          <>
-            <Button size="sm" disabled={!item.canProceed}>{t("mgmt.actions.approve")}</Button>
-            <Button size="sm" variant="outline">{t("mgmt.actions.reject")}</Button>
-          </>
-        )}
-        <Button size="sm" variant="outline">{t("mgmt.actions.requestMoreEvidence")}</Button>
       </div>
     </section>
   );
