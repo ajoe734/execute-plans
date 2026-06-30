@@ -110,6 +110,22 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox?persona=persona-live-tw-equity",
     );
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity research detail" })).toHaveAttribute(
+      "href",
+      "/management/experiments/exp-mgmt-qlib-006",
+    );
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity performance attribution" })).toHaveAttribute(
+      "href",
+      "/management/performance-attribution?dimension=persona&persona=persona-live-tw-equity",
+    );
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity mutation history" })).toHaveAttribute(
+      "href",
+      "/management/evolution-journal?persona=persona-live-tw-equity",
+    );
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity status detail" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox?persona=persona-live-tw-equity",
+    );
   });
 
   it("hides non-production live rows by default", () => {
