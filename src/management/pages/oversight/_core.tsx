@@ -152,6 +152,7 @@ const RUNTIME_ACTION_STATES = new Set([
   "live_running",
   "canary_running",
   "running",
+  "deployed",
   "runtime_active",
   "active_runtime",
   "stopped",

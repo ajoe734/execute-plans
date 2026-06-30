@@ -183,6 +183,27 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByRole("link", { name: "Start onboarding for persona-paper" })).not.toBeInTheDocument();
   });
 
+  it("routes deployed personas to runtime management instead of persona onboarding", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-deployed", "Deployed Persona", {
+          humanNeeded: false,
+          state: "deployed",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "View runtime for persona-deployed" })).toHaveAttribute(
+      "href",
+      "/management/runtimes?persona=persona-deployed",
+    );
+    expect(screen.queryByRole("link", { name: "Start onboarding for persona-deployed" })).not.toBeInTheDocument();
+  });
+
   it("routes personas waiting on humans to the human gate", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
