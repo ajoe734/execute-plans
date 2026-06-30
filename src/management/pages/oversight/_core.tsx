@@ -12,10 +12,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
-import {
-  TRADING_BASELINE_DEFAULTS, TRADING_BASELINE_KINDS,
-  baselineLabel, type TradingBaselineKind,
-} from "@/lib/v5/management/tradingBaseline";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
 import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
@@ -35,7 +31,14 @@ import {
 } from "@/lib/v5/management/humanInbox";
 import { buildLinkSet } from "@/lib/v5/management/links";
 import { mgmt } from "@/lib/bff-v1";
-import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import {
+  defaultTradingPulseModel,
+  type ManagementPersonaFleetRow,
+  type ManagementTradingPulseCard,
+  type ManagementTradingPulseModel,
+  type ManagementTradingPulseRuntimeRow,
+  type ManagementTradingPulseSurface,
+} from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { visibleDataSources } from "./personaFleetDataSources";
 import {
@@ -751,76 +754,198 @@ export const HumanInboxPage = () => {
 };
 
 // =====================================================================
-// Trading Pulse — baselineKind enum + baselineLabel display.
+// Trading Pulse
 // =====================================================================
 
-interface PulseRow {
-  surface: "paper" | "canary" | "live";
-  current: number; baselineKind: TradingBaselineKind; baselineLabel?: string;
-  baselineValue: number; rollbackReady: boolean; killSwitchReady: boolean;
-}
+const CARD_ORDER = ["runtime-status", "pnl", "drawdown", "execution-quality", "baseline-comparison"];
 
-const PULSE: PulseRow[] = [
-  { surface: "paper",  current: 1.42, baselineKind: "previous_artifact", baselineValue: 1.31, rollbackReady: true,  killSwitchReady: true },
-  { surface: "canary", current: 1.28, baselineKind: "7d_rolling",        baselineValue: 1.20, rollbackReady: true,  killSwitchReady: true },
-  { surface: "live",   current: 1.05, baselineKind: "last_review",       baselineValue: 1.10, rollbackReady: true,  killSwitchReady: true },
-];
+const orderedCards = (cards: ManagementTradingPulseCard[]): ManagementTradingPulseCard[] =>
+  [...cards].sort((a, b) => {
+    const ai = CARD_ORDER.indexOf(a.cardId);
+    const bi = CARD_ORDER.indexOf(b.cardId);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+const fallbackCardsFromSummary = (model: ManagementTradingPulseModel): ManagementTradingPulseCard[] => ([
+  { cardId: "runtime-status", label: "Runtime Status", value: model.summary.runtimeCount, details: { byStatus: model.summary.byStatus, byStage: model.summary.byStage } },
+  { cardId: "pnl", label: "P&L", value: model.summary.totalPnl, details: { telemetryCoverageCount: model.summary.telemetryCoverageCount } },
+  { cardId: "drawdown", label: "Worst Drawdown", value: model.summary.worstDrawdown, details: {} },
+  { cardId: "execution-quality", label: "Execution Quality", value: model.summary.averageFillRate, details: { worstSlippageBps: model.summary.worstSlippageBps } },
+  { cardId: "baseline-comparison", label: "Baseline Comparison", value: model.summary.baselineBreachedCount, details: { baselineComparisonCount: model.summary.baselineComparisonCount, byBaselineStatus: model.summary.byBaselineStatus } },
+]);
+
+const formatPulseValue = (value: unknown, cardId?: string): string => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "string") return value;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  if (["runtime-status", "baseline-comparison", "total-trades"].includes(cardId ?? "")) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+  if (cardId === "execution-quality") {
+    return n.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+  return n.toLocaleString(undefined, { maximumFractionDigits: 3 });
+};
+
+const statusTone = (status: unknown): string => {
+  const normalized = String(status ?? "").toLowerCase();
+  if (["ok", "live", "fresh", "active"].includes(normalized)) return "bg-status-success/15 text-status-success border-status-success/30";
+  if (["watch", "degraded", "missing", "unavailable", "unverifiable"].includes(normalized)) return "bg-status-warning/15 text-status-warning border-status-warning/30";
+  if (["breached", "failed", "error"].includes(normalized)) return "bg-status-failed/15 text-status-failed border-status-failed/30";
+  return "bg-muted text-muted-foreground border-border";
+};
+
+const compactCounts = (value: unknown): string => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "—";
+  return entries.map(([key, item]) => `${key}: ${formatPulseValue(item, "runtime-status")}`).join(" · ");
+};
 
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
-  const [selectedKind, setSelectedKind] = useState<TradingBaselineKind | "default">("default");
-  const { data: pulseRows } = useV5Live(() => mgmt.tradingPulse.get<PulseRow>(() => PULSE), []);
-  const rows = pulseRows ?? PULSE;
-  const visible = useMemo(() => {
-    if (selectedKind === "default") {
-      return rows.filter((p) => TRADING_BASELINE_DEFAULTS.includes(p.baselineKind));
-    }
-    return rows.filter((p) => p.baselineKind === selectedKind);
-  }, [selectedKind, rows]);
+  const seed = useMemo(() => defaultTradingPulseModel(), []);
+  const { data } = useV5Live(() => mgmt.tradingPulse.get(() => seed), []);
+  const model = data ?? seed;
+  const cards = orderedCards(model.cards.length > 0 ? model.cards : fallbackCardsFromSummary(model));
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.pulse.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.pulse.subtitle")}</p>
       </header>
-      <Card className="p-4">
-        <label className="text-xs text-muted-foreground" htmlFor="baseline-kind">{t("mgmt.pulse.baseline")}</label>
-        <select
-          id="baseline-kind"
-          value={selectedKind}
-          onChange={(e) => setSelectedKind(e.target.value as TradingBaselineKind | "default")}
-          className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-sm"
-        >
-          <option value="default">{t("mgmt.pulse.defaultThree")}</option>
-          {TRADING_BASELINE_KINDS.map((k) => (
-            <option key={k} value={k}>{baselineLabel(k)}</option>
-          ))}
-        </select>
-      </Card>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {visible.map((p) => {
-          const delta = (p.current ?? 0) - (p.baselineValue ?? 0);
-          return (
-            <Card key={`${p.surface}-${p.baselineKind}`} className="p-4">
-              <div className="flex items-center justify-between">
-                <Badge variant="outline">{p.surface}</Badge>
-                <Badge variant="outline">{baselineLabel(p.baselineKind, p.baselineLabel)}</Badge>
-              </div>
-              <div className="mt-2 text-2xl font-semibold">{(p.current ?? 0).toFixed(2)}</div>
-              <div className={"text-xs " + (delta >= 0 ? "text-status-success" : "text-status-failed")}>
-                {delta >= 0 ? "+" : ""}{delta.toFixed(2)} {t("mgmt.pulse.vsFmt", { baseline: baselineLabel(p.baselineKind) })}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {p.rollbackReady && <Badge variant="outline" className="bg-status-success/15 text-status-success border-status-success/30">{t("mgmt.pulse.rollbackReady")}</Badge>}
-                {p.killSwitchReady && <Badge variant="outline" className="bg-status-success/15 text-status-success border-status-success/30">{t("mgmt.pulse.killSwitchReady")}</Badge>}
-              </div>
-            </Card>
-          );
-        })}
+
+      <TradingPulseSurfaceHealth model={model} />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {cards.map((card) => (
+          <Card key={card.cardId} className="p-4">
+            <div className="flex items-center justify-between gap-2">
+              <Badge variant="outline">{card.label}</Badge>
+              <Badge variant="outline">{card.cardId}</Badge>
+            </div>
+            <div className="mt-3 text-2xl font-semibold">{formatPulseValue(card.value, card.cardId)}</div>
+            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {card.cardId === "runtime-status" && (
+                <>
+                  <div>{t("mgmt.pulse.byStatus")}: {compactCounts(card.details?.byStatus)}</div>
+                  <div>{t("mgmt.pulse.byStage")}: {compactCounts(card.details?.byStage)}</div>
+                </>
+              )}
+              {card.cardId === "pnl" && (
+                <div>{t("mgmt.pulse.telemetryCoverage")}: {formatPulseValue(card.details?.telemetryCoverageCount, "runtime-status")}</div>
+              )}
+              {card.cardId === "execution-quality" && (
+                <div>{t("mgmt.pulse.worstSlippage")}: {formatPulseValue(card.details?.worstSlippageBps)}</div>
+              )}
+              {card.cardId === "baseline-comparison" && (
+                <>
+                  <div>{t("mgmt.pulse.baselineCoverage")}: {formatPulseValue(card.details?.baselineComparisonCount, "runtime-status")}</div>
+                  <div>{t("mgmt.pulse.byBaseline")}: {compactCounts(card.details?.byBaselineStatus)}</div>
+                </>
+              )}
+            </div>
+          </Card>
+        ))}
       </div>
+
+      <RuntimeRowsPanel rows={model.runtimeRows} />
 
       <RankingBlocks />
     </section>
+  );
+};
+
+const TradingPulseSurfaceHealth = ({ model }: { model: ManagementTradingPulseModel }) => {
+  const { t } = useTranslation();
+  const surfaces = Object.entries(model.meta.surfaces ?? {});
+  const degraded = surfaces.filter(([, surface]) => !["ok", "live", "fresh"].includes(String(surface.status ?? "").toLowerCase()));
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.coverageTitle")}</h2>
+          <p className="text-xs text-muted-foreground">
+            {t("mgmt.pulse.snapshotAt")}: {safeDateTime(model.meta.snapshotAt ?? model.meta.snapshot_at)}
+          </p>
+        </div>
+        <Badge variant="outline" className={statusTone(degraded.length > 0 ? "degraded" : "ok")}>
+          {degraded.length > 0 ? t("mgmt.pulse.degraded") : t("mgmt.pulse.live")}
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        {surfaces.map(([key, surface]) => (
+          <SurfaceBadge key={key} name={key} surface={surface} />
+        ))}
+      </div>
+    </Card>
+  );
+};
+
+const SurfaceBadge = ({ name, surface }: { name: string; surface: ManagementTradingPulseSurface }) => (
+  <div className="rounded-md border border-border bg-background p-3 text-xs">
+    <div className="flex min-w-0 items-center justify-between gap-2">
+      <span className="min-w-0 truncate font-mono text-foreground" title={name}>{name}</span>
+      <Badge variant="outline" className={`shrink-0 ${statusTone(surface.status)}`}>{surface.status}</Badge>
+    </div>
+    <div className="mt-1 text-muted-foreground">{surface.source || "—"}</div>
+    {surface.message && <div className="mt-2 text-muted-foreground">{surface.message}</div>}
+  </div>
+);
+
+const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }) => {
+  const { t } = useTranslation();
+  const visible = rows.slice(0, 10);
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.runtimeRows")}</h2>
+        <Badge variant="outline">{rows.length}</Badge>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-xs">
+          <thead className="text-muted-foreground">
+            <tr className="border-b border-border">
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.stage")}</th>
+              <th className="py-2 pr-3 font-medium">P&L</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.fillRate")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.trades")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.baselineStatus")}</th>
+              <th className="py-2 font-medium">{t("mgmt.pulse.updated")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
+              <tr>
+                <td className="py-3 text-muted-foreground" colSpan={7}>{t("mgmt.pulse.noRows")}</td>
+              </tr>
+            ) : visible.map((row) => (
+              <tr key={row.runtimeId || row.runtime_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-3 font-mono text-foreground">{row.runtimeId || row.runtime_id || "—"}</td>
+                <td className="py-2 pr-3">
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant="outline">{row.deploymentStage || row.deployment_stage || "—"}</Badge>
+                    <Badge variant="outline" className={statusTone(row.status)}>{row.status || "—"}</Badge>
+                  </div>
+                </td>
+                <td className="py-2 pr-3">{formatPulseValue(row.metrics.pnl)}</td>
+                <td className="py-2 pr-3">{formatPulseValue(row.metrics.fill_rate ?? row.metrics.fillRate, "execution-quality")}</td>
+                <td className="py-2 pr-3">{formatPulseValue(row.metrics.total_trades ?? row.metrics.totalTrades, "runtime-status")}</td>
+                <td className="py-2 pr-3">
+                  <Badge variant="outline" className={statusTone(row.baselineComparison?.status ?? row.baseline_comparison?.status)}>
+                    {row.baselineComparison?.status ?? row.baseline_comparison?.status ?? "—"}
+                  </Badge>
+                </td>
+                <td className="py-2 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 };
 
@@ -843,7 +968,7 @@ const RankingBlocks = () => {
                     {r.subjectLabel}
                   </Link>
                   <span className="text-muted-foreground">
-                    {r.metric}: <span className="text-foreground">{r.metricValue}{r.metricUnit ?? ""}</span>
+                    {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
                   </span>
                 </li>
               ))}

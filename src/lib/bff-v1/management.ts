@@ -133,6 +133,98 @@ export interface ManagementPersonaFleetRow {
   currentResearchProjects?: ManagementResearchProject[];
 }
 
+export interface ManagementTradingPulseSurface {
+  status: string;
+  source?: string;
+  message?: string;
+  staleness?: unknown;
+  degradation?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseSummary {
+  runtimeCount: number;
+  telemetryCoverageCount: number;
+  baselineComparisonCount: number;
+  baselineBreachedCount: number;
+  baselineWatchCount: number;
+  totalPnl: number | null;
+  worstDrawdown: number | null;
+  averageFillRate: number | null;
+  worstSlippageBps: number | null;
+  totalTrades: number;
+  byStatus: Record<string, number>;
+  byStage: Record<string, number>;
+  byBaselineStatus: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseCard {
+  cardId: string;
+  card_id?: string;
+  label: string;
+  value: number | string | null;
+  details?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseBaselineComparison {
+  runtimeId: string;
+  runtime_id?: string;
+  runtimeBindingId?: string;
+  runtime_binding_id?: string;
+  deploymentStage?: string;
+  deployment_stage?: string;
+  status: string;
+  metricCount: number;
+  breachedMetricCount: number;
+  watchMetricCount: number;
+  paperLiveDrift?: Record<string, unknown>;
+  paper_live_drift?: Record<string, unknown>;
+  thresholdEvaluation?: Record<string, unknown>;
+  threshold_evaluation?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseRuntimeRow {
+  runtimeId: string;
+  runtime_id?: string;
+  runtimeBindingId?: string;
+  runtime_binding_id?: string;
+  deploymentStage?: string;
+  deployment_stage?: string;
+  status?: string;
+  metrics: Record<string, unknown>;
+  telemetrySummary?: Record<string, unknown>;
+  telemetry_summary?: Record<string, unknown>;
+  baselineComparison?: ManagementTradingPulseBaselineComparison | null;
+  baseline_comparison?: ManagementTradingPulseBaselineComparison | null;
+  rowHealth?: Record<string, unknown>;
+  row_health?: Record<string, unknown>;
+  lastUpdatedAt?: string;
+  last_updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseMeta {
+  snapshotAt?: string;
+  snapshot_at?: string;
+  surfaces: Record<string, ManagementTradingPulseSurface>;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseModel {
+  id?: string;
+  summary: ManagementTradingPulseSummary;
+  cards: ManagementTradingPulseCard[];
+  rankings: unknown[];
+  runtimeRows: ManagementTradingPulseRuntimeRow[];
+  runtime_rows?: ManagementTradingPulseRuntimeRow[];
+  baselineComparisons: ManagementTradingPulseBaselineComparison[];
+  baseline_comparisons?: ManagementTradingPulseBaselineComparison[];
+  meta: ManagementTradingPulseMeta;
+}
+
 /** Wraps `body` so adapter errors degrade to seedFn output. */
 function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
   return (raw: unknown): T => {
@@ -175,6 +267,27 @@ const asStringRecord = (value: unknown): Record<string, string> => {
       .map(([key, item]) => [key, asString(item)] as const)
       .filter(([, item]) => item.length > 0),
   );
+};
+
+const asNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const asCountRecord = (value: unknown): Record<string, number> => {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, asFiniteNumber(item, 0)] as const),
+  );
+};
+
+const firstArray = <T>(...values: unknown[]): T[] => {
+  for (const value of values) {
+    if (Array.isArray(value)) return value as T[];
+  }
+  return [];
 };
 
 const normalizeOoda = (value: unknown): ManagementOodaStage => {
@@ -579,7 +692,7 @@ export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
 
 // Pull a numeric metric off a live ranking item, tolerating camel/snake names
 // and a few metric aliases the BFF uses (sharpe→sharpeRatio, execution→fillRate).
-function rankingMetricValue(it: Record<string, unknown>, metric: string): number {
+function rankingMetricValue(it: Record<string, unknown>, metric: string): number | null {
   const aliases: Record<string, string[]> = {
     pnl: ["pnl"],
     drawdown: ["drawdown", "maxDrawdown", "max_drawdown"],
@@ -594,7 +707,7 @@ function rankingMetricValue(it: Record<string, unknown>, metric: string): number
     const v = it[k];
     if (typeof v === "number") return v;
   }
-  return 0;
+  return null;
 }
 
 function adaptRankings(raw: unknown): TradingPulseRankBlock[] | null {
@@ -635,6 +748,274 @@ function adaptRankings(raw: unknown): TradingPulseRankBlock[] | null {
       rows,
     } as unknown as TradingPulseRankBlock;
   });
+}
+
+function normalizeTradingPulseSurface(value: unknown): ManagementTradingPulseSurface {
+  if (typeof value === "string") {
+    return { status: value, source: value };
+  }
+  const record = isObject(value) ? value : {};
+  return {
+    ...record,
+    status: asString(record.status ?? record.state, "unavailable"),
+    source: asString(record.source),
+    message: asString(record.message),
+  };
+}
+
+function normalizeTradingPulseMeta(value: unknown): ManagementTradingPulseMeta {
+  const record = isObject(value) ? value : {};
+  const snapshotAt = asString(record.snapshotAt ?? record.snapshot_at);
+  const surfacesRecord = isObject(record.surfaces) ? record.surfaces : {};
+  const surfaces = Object.fromEntries(
+    Object.entries(surfacesRecord).map(([key, surface]) => [
+      key,
+      normalizeTradingPulseSurface(surface),
+    ]),
+  );
+  return {
+    ...record,
+    snapshotAt,
+    snapshot_at: snapshotAt,
+    surfaces,
+  };
+}
+
+function normalizeTradingPulseSummary(value: unknown): ManagementTradingPulseSummary {
+  const record = isObject(value) ? value : {};
+  return {
+    ...record,
+    runtimeCount: asFiniteNumber(record.runtimeCount ?? record.runtime_count, 0),
+    telemetryCoverageCount: asFiniteNumber(record.telemetryCoverageCount ?? record.telemetry_coverage_count, 0),
+    baselineComparisonCount: asFiniteNumber(record.baselineComparisonCount ?? record.baseline_comparison_count, 0),
+    baselineBreachedCount: asFiniteNumber(record.baselineBreachedCount ?? record.baseline_breached_count, 0),
+    baselineWatchCount: asFiniteNumber(record.baselineWatchCount ?? record.baseline_watch_count, 0),
+    totalPnl: asNullableNumber(record.totalPnl ?? record.total_pnl),
+    worstDrawdown: asNullableNumber(record.worstDrawdown ?? record.worst_drawdown),
+    averageFillRate: asNullableNumber(record.averageFillRate ?? record.average_fill_rate),
+    worstSlippageBps: asNullableNumber(record.worstSlippageBps ?? record.worst_slippage_bps),
+    totalTrades: asFiniteNumber(record.totalTrades ?? record.total_trades, 0),
+    byStatus: asCountRecord(record.byStatus ?? record.by_status),
+    byStage: asCountRecord(record.byStage ?? record.by_stage),
+    byBaselineStatus: asCountRecord(record.byBaselineStatus ?? record.by_baseline_status),
+  };
+}
+
+function normalizeTradingPulseCard(value: unknown): ManagementTradingPulseCard | null {
+  if (!isObject(value)) return null;
+  const cardId = asString(value.cardId ?? value.card_id ?? value.id);
+  const label = asString(value.label, cardId || "Metric");
+  const details = isObject(value.details) ? value.details : {};
+  return {
+    ...value,
+    cardId: cardId || label.toLowerCase().replace(/\s+/g, "-"),
+    card_id: asString(value.card_id ?? cardId),
+    label,
+    value: typeof value.value === "string" ? value.value : asNullableNumber(value.value),
+    details,
+  };
+}
+
+function normalizeBaselineComparison(value: unknown): ManagementTradingPulseBaselineComparison | null {
+  if (!isObject(value)) return null;
+  const runtimeId = asString(value.runtimeId ?? value.runtime_id);
+  const runtimeBindingId = asString(value.runtimeBindingId ?? value.runtime_binding_id);
+  const deploymentStage = asString(value.deploymentStage ?? value.deployment_stage);
+  const paperLiveDrift = isObject(value.paperLiveDrift ?? value.paper_live_drift)
+    ? (value.paperLiveDrift ?? value.paper_live_drift) as Record<string, unknown>
+    : undefined;
+  const thresholdEvaluation = isObject(value.thresholdEvaluation ?? value.threshold_evaluation)
+    ? (value.thresholdEvaluation ?? value.threshold_evaluation) as Record<string, unknown>
+    : undefined;
+  return {
+    ...value,
+    runtimeId,
+    runtime_id: runtimeId,
+    runtimeBindingId,
+    runtime_binding_id: runtimeBindingId,
+    deploymentStage,
+    deployment_stage: deploymentStage,
+    status: asString(value.status, "unavailable"),
+    metricCount: asFiniteNumber(value.metricCount ?? value.metric_count, 0),
+    breachedMetricCount: asFiniteNumber(value.breachedMetricCount ?? value.breached_metric_count, 0),
+    watchMetricCount: asFiniteNumber(value.watchMetricCount ?? value.watch_metric_count, 0),
+    paperLiveDrift,
+    paper_live_drift: paperLiveDrift,
+    thresholdEvaluation,
+    threshold_evaluation: thresholdEvaluation,
+  };
+}
+
+function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow | null {
+  if (!isObject(value)) return null;
+  const runtimeId = asString(value.runtimeId ?? value.runtime_id);
+  const runtimeBindingId = asString(value.runtimeBindingId ?? value.runtime_binding_id);
+  const deploymentStage = asString(value.deploymentStage ?? value.deployment_stage);
+  const telemetrySummary = isObject(value.telemetrySummary ?? value.telemetry_summary)
+    ? (value.telemetrySummary ?? value.telemetry_summary) as Record<string, unknown>
+    : undefined;
+  const metrics = isObject(telemetrySummary?.metrics)
+    ? telemetrySummary.metrics as Record<string, unknown>
+    : (isObject(value.metrics) ? value.metrics : {});
+  const baselineComparison = normalizeBaselineComparison(value.baselineComparison ?? value.baseline_comparison);
+  const rowHealth = isObject(value.rowHealth ?? value.row_health)
+    ? (value.rowHealth ?? value.row_health) as Record<string, unknown>
+    : undefined;
+  return {
+    ...value,
+    runtimeId,
+    runtime_id: runtimeId,
+    runtimeBindingId,
+    runtime_binding_id: runtimeBindingId,
+    deploymentStage,
+    deployment_stage: deploymentStage,
+    status: asString(value.status),
+    metrics,
+    telemetrySummary,
+    telemetry_summary: telemetrySummary,
+    baselineComparison,
+    baseline_comparison: baselineComparison,
+    rowHealth,
+    row_health: rowHealth,
+    lastUpdatedAt: asString(value.lastUpdatedAt ?? value.last_updated_at),
+    last_updated_at: asString(value.last_updated_at ?? value.lastUpdatedAt),
+  };
+}
+
+function legacyPulseRowsToModel(
+  rows: Record<string, unknown>[],
+  meta: ManagementTradingPulseMeta,
+): ManagementTradingPulseModel {
+  const cards = rows
+    .map((row) => normalizeTradingPulseCard({
+      cardId: asString(row.surface),
+      label: asString(row.surface, "surface"),
+      value: row.current,
+      details: {
+        baselineKind: row.baselineKind,
+        baselineValue: row.baselineValue,
+        rollbackReady: row.rollbackReady,
+        killSwitchReady: row.killSwitchReady,
+      },
+    }))
+    .filter((card): card is ManagementTradingPulseCard => card !== null);
+  const nextMeta = {
+    ...meta,
+    surfaces: Object.keys(meta.surfaces).length > 0
+      ? meta.surfaces
+      : {
+          management_trading_pulse: {
+            status: "degraded",
+            source: "local_snapshot",
+            message: "Legacy Trading Pulse rows are a local snapshot, not the live BFF aggregate.",
+          },
+        },
+  };
+  return {
+    id: "management-trading-pulse",
+    summary: normalizeTradingPulseSummary({
+      runtimeCount: rows.length,
+      telemetryCoverageCount: 0,
+      baselineComparisonCount: 0,
+      byStatus: {},
+      byStage: Object.fromEntries(rows.map((row) => [asString(row.surface, "unknown"), 1])),
+    }),
+    cards,
+    rankings: [],
+    runtimeRows: [],
+    runtime_rows: [],
+    baselineComparisons: [],
+    baseline_comparisons: [],
+    meta: nextMeta,
+  };
+}
+
+export function defaultTradingPulseModel(): ManagementTradingPulseModel {
+  return {
+    id: "management-trading-pulse",
+    summary: normalizeTradingPulseSummary({}),
+    cards: [],
+    rankings: [],
+    runtimeRows: [],
+    runtime_rows: [],
+    baselineComparisons: [],
+    baseline_comparisons: [],
+    meta: {
+      snapshotAt: "",
+      snapshot_at: "",
+      surfaces: {
+        management_trading_pulse: {
+          status: "unavailable",
+          source: "local_snapshot",
+          message: "Live Trading Pulse data is unavailable.",
+        },
+      },
+    },
+  };
+}
+
+export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseModel | null {
+  const root = isObject(raw) ? raw : null;
+  const data = root && "data" in root ? root.data : raw;
+  const dataRecord = isObject(data) ? data : null;
+  const meta = normalizeTradingPulseMeta(root?.meta ?? dataRecord?.meta);
+
+  const legacyRows = asArray<Record<string, unknown>>(data);
+  if (legacyRows && legacyRows.some((row) => "surface" in row && "current" in row)) {
+    return legacyPulseRowsToModel(legacyRows, meta);
+  }
+  if (!dataRecord) return null;
+
+  const cards = firstArray<Record<string, unknown>>(
+    dataRecord.cards,
+    root?.cards,
+    root?.items,
+  )
+    .map(normalizeTradingPulseCard)
+    .filter((card): card is ManagementTradingPulseCard => card !== null);
+  const runtimeRows = firstArray<Record<string, unknown>>(
+    dataRecord.runtimeRows,
+    dataRecord.runtime_rows,
+    root?.runtimeRows,
+    root?.runtime_rows,
+  )
+    .map(normalizeRuntimeRow)
+    .filter((row): row is ManagementTradingPulseRuntimeRow => row !== null);
+  const baselineComparisons = firstArray<Record<string, unknown>>(
+    dataRecord.baselineComparisons,
+    dataRecord.baseline_comparisons,
+    root?.baselineComparisons,
+    root?.baseline_comparisons,
+  )
+    .map(normalizeBaselineComparison)
+    .filter((comparison): comparison is ManagementTradingPulseBaselineComparison => comparison !== null);
+  const rankings = firstArray<unknown>(
+    dataRecord.rankings,
+    root?.rankings,
+  );
+  const summary = normalizeTradingPulseSummary(dataRecord.summary ?? root?.summary);
+
+  if (
+    cards.length === 0
+    && runtimeRows.length === 0
+    && baselineComparisons.length === 0
+    && Object.keys(summary.byStatus).length === 0
+    && summary.runtimeCount === 0
+  ) {
+    return null;
+  }
+
+  return {
+    id: asString(dataRecord.id ?? root?.id),
+    summary,
+    cards,
+    rankings,
+    runtimeRows,
+    runtime_rows: runtimeRows,
+    baselineComparisons,
+    baseline_comparisons: baselineComparisons,
+    meta,
+  };
 }
 
 // ---------- PM-7 Persona Fleet / PM-11 Evolution / PM-1 Evidence ----------
@@ -696,12 +1077,14 @@ export const mgmt = {
         async () => seedFn(),
         safeAdapt(adaptRankings, seedFn),
       ),
-    /** PM-4 main pulse rows — passthrough array. */
-    get: <T>(seedFn: () => T[]): Promise<T[]> =>
-      withLiveOrMock<T[]>(
+    /** PM-4 main pulse overview — live BFF aggregate, not the legacy seed rows. */
+    get: (
+      seedFn: () => ManagementTradingPulseModel = defaultTradingPulseModel,
+    ): Promise<ManagementTradingPulseModel> =>
+      withLiveOrMock<ManagementTradingPulseModel>(
         { method: "GET", path: paths.mgmtTradingPulse() },
         async () => seedFn(),
-        safeAdapt(adaptArrayPassthrough<T>, seedFn),
+        safeAdapt(adaptTradingPulseOverview, seedFn),
       ),
   },
 
