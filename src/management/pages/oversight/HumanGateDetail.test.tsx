@@ -95,7 +95,8 @@ describe("HumanGateDetailPage", () => {
     expect(screen.getByRole("heading", { name: "Persona needs review: Taiwan Equity Persona" })).toBeInTheDocument();
     expect(screen.getByText("Required role: risk-owner · Decision type: single")).toBeInTheDocument();
     expect(screen.getByText("support/evidence/MGMT-QLIB-006/management_linkage_packet.json")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage" })).toHaveAttribute(
+    expect(screen.queryByRole("link", { name: "support/evidence/MGMT-QLIB-006/management_linkage_packet.json" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
       "href",
       "/management/persona-fleet?persona=persona-tw-equity",
     );
@@ -103,6 +104,6 @@ describe("HumanGateDetailPage", () => {
     expect(screen.queryByText("Signatures")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Request more evidence" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request more evidence" })).not.toBeInTheDocument();
   });
 });

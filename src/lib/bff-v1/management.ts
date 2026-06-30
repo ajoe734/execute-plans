@@ -505,6 +505,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     canDecide,
     canProceed,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,
+    evidenceRefs: nestedInboxEvidenceRefs(it),
     detailHref: inboxDetailHref(id),
     links: inboxLinks(id, it.links, route),
   };

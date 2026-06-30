@@ -57,6 +57,14 @@ describe("mgmt façade (PM-Live)", () => {
             allowed_actions: { can_decide: false },
             route: "/management/persona-fleet?persona=persona-us-equity",
             blocking_reasons: ["Missing validation packet"],
+            research_context: {
+              current_research_projects: [
+                { evidence_refs: ["support/evidence/MGMT-QLIB-001/dataset_manifest.json"] },
+              ],
+              data_source_status: {
+                readback_refs: ["support/evidence/readback/ibkr.json"],
+              },
+            },
           },
           {
             id: "governance-review:approval-1",
@@ -76,6 +84,10 @@ describe("mgmt façade (PM-Live)", () => {
       canProceed: false,
       detailHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
       blockingReasons: ["Missing validation packet"],
+      evidenceRefs: [
+        "support/evidence/MGMT-QLIB-001/dataset_manifest.json",
+        "support/evidence/readback/ibkr.json",
+      ],
       links: {
         manageHref: "/management/persona-fleet?persona=persona-us-equity",
         recommendedActionHref: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-us-equity",
