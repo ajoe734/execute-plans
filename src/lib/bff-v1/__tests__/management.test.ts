@@ -3,9 +3,11 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  adaptTradingPulseOverview,
   adaptHumanInboxDetail,
   adaptHumanInboxList,
   adaptManagementPersonaFleet,
+  defaultTradingPulseModel,
   mgmt,
   type ManagementPersonaFleetRow,
 } from "@/lib/bff-v1/management";
@@ -29,6 +31,87 @@ describe("mgmt façade (PM-Live)", () => {
   it("tradingPulse.rankings returns default 8 blocks", async () => {
     const out = await mgmt.tradingPulse.rankings();
     expect(out).toEqual(defaultPulseRankings());
+  });
+
+  it("tradingPulse.get returns an explicit non-metric seed in mock/test mode", async () => {
+    const seed = defaultTradingPulseModel();
+    const out = await mgmt.tradingPulse.get(() => seed);
+    expect(out).toBe(seed);
+    expect(out.cards).toEqual([]);
+    expect(out.meta.surfaces.management_trading_pulse.source).toBe("local_snapshot");
+  });
+
+  it("adapts live Trading Pulse aggregate without falling back to legacy rows", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 2,
+          telemetry_coverage_count: 2,
+          total_pnl: -12.5,
+          average_fill_rate: 0.71234,
+          baseline_comparison_count: 1,
+          baseline_breached_count: 0,
+          by_status: { active: 2 },
+          by_stage: { paper: 2 },
+          by_baseline_status: { ok: 1, unavailable: 1 },
+        },
+        cards: [
+          { card_id: "pnl", label: "P&L", value: -12.5 },
+          { card_id: "execution-quality", label: "Execution Quality", value: 0.71234 },
+        ],
+        runtime_rows: [
+          {
+            runtime_id: "rt-live-1",
+            runtime_binding_id: "rb-live-1",
+            deployment_stage: "paper",
+            status: "active",
+            telemetry_summary: {
+              metrics: { pnl: -12.5, fill_rate: 0.71234, total_trades: 4 },
+            },
+            baseline_comparison: {
+              runtime_id: "rt-live-1",
+              status: "ok",
+              metric_count: 3,
+              breached_metric_count: 0,
+            },
+          },
+        ],
+        baseline_comparisons: [
+          { runtime_id: "rt-live-1", status: "ok", metric_count: 3 },
+        ],
+      },
+      meta: {
+        snapshot_at: "2026-06-30T01:38:44Z",
+        surfaces: {
+          management_trading_pulse: { status: "degraded", source: "bff_composed", message: "partial coverage" },
+          paper_live_drift: { status: "degraded", source: "service_store" },
+        },
+      },
+    });
+
+    expect(out?.summary.runtimeCount).toBe(2);
+    expect(out?.summary.totalPnl).toBe(-12.5);
+    expect(out?.cards.map((card) => card.cardId)).toEqual(["pnl", "execution-quality"]);
+    expect(out?.runtimeRows[0]).toMatchObject({
+      runtimeId: "rt-live-1",
+      runtimeBindingId: "rb-live-1",
+      deploymentStage: "paper",
+      metrics: { pnl: -12.5, fill_rate: 0.71234, total_trades: 4 },
+      baselineComparison: { status: "ok", metricCount: 3 },
+    });
+    expect(out?.meta.surfaces.paper_live_drift.status).toBe("degraded");
+  });
+
+  it("adapts legacy Trading Pulse rows as degraded local snapshots", () => {
+    const out = adaptTradingPulseOverview({
+      data: [
+        { surface: "paper", current: 1.42, baselineKind: "previous_artifact", baselineValue: 1.31 },
+      ],
+    });
+
+    expect(out?.cards[0]).toMatchObject({ cardId: "paper", value: 1.42 });
+    expect(out?.meta.surfaces.management_trading_pulse.source).toBe("local_snapshot");
   });
 
   it("humanInbox.list uses provided seed", async () => {
@@ -174,7 +257,6 @@ describe("mgmt façade (PM-Live)", () => {
     const seed = [{ id: 1 }, { id: 2 }] as never[];
     expect(await mgmt.evolutionJournal.list(() => seed)).toBe(seed);
     expect(await mgmt.evidence.list(() => seed)).toBe(seed);
-    expect(await mgmt.tradingPulse.get(() => seed)).toBe(seed);
     expect(await mgmt.personaIntent.list(() => seed as never)).toBe(seed);
   });
 
