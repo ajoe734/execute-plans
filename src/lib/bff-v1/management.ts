@@ -29,7 +29,7 @@ import {
   type HumanInboxKind,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
-import type { PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
+import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
 import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
 import type {
@@ -1722,8 +1722,144 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
 
 // ---------- Persona Intent ----------
 
-function adaptIntent(raw: unknown): PersonaIntentTrace[] | null {
-  return adaptArrayPassthrough<PersonaIntentTrace>(raw);
+const PERSONA_INTENT_VISIBILITIES = new Set(["summary", "redacted", "restricted"]);
+
+const normalizePersonaIntentVisibility = (record: Record<string, unknown>): PersonaIntentVisibility => {
+  const explicit = asString(record.visibility).toLowerCase();
+  if (PERSONA_INTENT_VISIBILITIES.has(explicit)) return explicit as PersonaIntentVisibility;
+
+  const redaction = isObject(record.redaction) ? record.redaction : {};
+  const status = asString(record.status ?? record.source_status).toLowerCase();
+  const redactionStatus = asString(
+    redaction.status ??
+    record.redaction_status ??
+    record.redactionStatus,
+  ).toLowerCase();
+
+  if (status === "restricted" || redactionStatus === "restricted") return "restricted";
+  if (
+    redactionStatus === "redacted" ||
+    asBoolean(record.redacted) ||
+    asBoolean(redaction.redacted ?? redaction.is_redacted)
+  ) {
+    return "redacted";
+  }
+  return "summary";
+};
+
+const normalizePersonaIntentRedactedBy = (raw: unknown): "bff" | "policy_engine" | "system" | undefined => {
+  const value = asString(raw).toLowerCase();
+  return value === "bff" || value === "policy_engine" || value === "system" ? value : undefined;
+};
+
+const normalizePersonaIntentSourceType = (record: Record<string, unknown>): string =>
+  asString(record.sourceType ?? record.source_type ?? record.type, "unknown");
+
+const normalizePersonaIntentStringList = (...values: unknown[]): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : [];
+    for (const rawItem of items) {
+      const item = isObject(rawItem)
+        ? asString(rawItem.id ?? rawItem.ref ?? rawItem.evidence_ref ?? rawItem.ref_id ?? rawItem.href ?? rawItem.route)
+        : asString(rawItem);
+      if (!item) continue;
+      if (!seen.has(item)) {
+        seen.add(item);
+        out.push(item);
+      }
+    }
+  }
+  return out;
+};
+
+function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaIntentTrace | null {
+  const id = asString(record.id ?? record.intent_id ?? record.intentId);
+  if (!id) return null;
+
+  const sourceType = normalizePersonaIntentSourceType(record);
+  const sourceId = asString(record.source_id ?? record.sourceId ?? id);
+  const personaIds = normalizePersonaIntentStringList(record.persona_ids, record.personaIds);
+  const ringPersonaId = asString(
+    record.ringPersonaId ??
+    record.ring_persona_id ??
+    record.personaId ??
+    record.persona_id ??
+    personaIds[0],
+    "unassigned",
+  );
+  const ringBearerId = asString(
+    record.ringBearerId ??
+    record.ring_bearer_id ??
+    record.ringBearer ??
+    record.bearer_id ??
+    sourceId,
+    "unknown",
+  );
+
+  const visibility = normalizePersonaIntentVisibility(record);
+  const redaction = isObject(record.redaction) ? record.redaction : {};
+  const redactionPolicy = asString(
+    redaction.policyRef ??
+    redaction.policy_ref ??
+    redaction.policy ??
+    record.policyRef ??
+    record.policy_ref,
+  );
+  const rawSummary = asString(
+    record.userIntentSummary ??
+    record.user_intent_summary ??
+    record.summary ??
+    record.title ??
+    record.intent,
+  );
+  const title = asString(record.title ?? record.intent, id);
+  const redactedBy = normalizePersonaIntentRedactedBy(
+    redaction.redactedBy ??
+    redaction.redacted_by ??
+    record.redactedBy ??
+    record.redacted_by,
+  );
+
+  return {
+    id,
+    title,
+    sourceType,
+    sourceId,
+    sourceStatus: asString(record.status ?? record.source_status),
+    detailHref: asString(record.route ?? record.bff_detail_path ?? record.detailHref ?? record.detail_href),
+    ringPersonaId,
+    ringBearerId,
+    userIntentSummary: rawSummary || (visibility === "summary" ? title : "[redacted by policy]"),
+    personaInterpretation: asString(record.personaInterpretation ?? record.persona_interpretation),
+    proposedAction: asString(record.proposedAction ?? record.proposed_action),
+    toolsUsed: normalizePersonaIntentStringList(record.toolsUsed, record.tools_used),
+    consultedPersonas: normalizePersonaIntentStringList(record.consultedPersonas, record.consulted_personas, personaIds),
+    visibility,
+    redaction: {
+      status: visibility === "summary" ? "not_required" : visibility,
+      ...(redactionPolicy ? { policyRef: redactionPolicy } : {}),
+      ...(redactedBy ? { redactedBy } : {}),
+    },
+    evidenceRefs: normalizePersonaIntentStringList(record.evidenceRefs, record.evidence_refs),
+    riskFlags: normalizePersonaIntentStringList(record.riskFlags, record.risk_flags),
+    policyViolations: normalizePersonaIntentStringList(record.policyViolations, record.policy_violations),
+    createdAt: asString(record.createdAt ?? record.created_at ?? record.occurredAt ?? record.occurred_at ?? record.updatedAt ?? record.updated_at),
+  };
+}
+
+export function adaptPersonaIntent(raw: unknown): PersonaIntentTrace[] | null {
+  const root = isObject(raw) ? raw : {};
+  const data = unwrap(raw);
+  const rows = asArray<unknown>(data) ??
+    (isObject(data) ? asArray<unknown>(data.items ?? data.data) : null) ??
+    asArray<unknown>(root.items ?? root.data);
+  if (!rows) return null;
+  return rows
+    .filter(isObject)
+    .map(normalizePersonaIntentRecord)
+    .filter((row): row is PersonaIntentTrace => row !== null);
 }
 
 // ---------- Readiness ----------
@@ -1831,7 +1967,7 @@ export const mgmt = {
       withLiveOrMock<PersonaIntentTrace[]>(
         { method: "GET", path: paths.mgmtPersonaIntent() },
         async () => seedFn(),
-        safeAdapt(adaptIntent, seedFn),
+        safeAdapt(adaptPersonaIntent, seedFn),
       ),
   },
 

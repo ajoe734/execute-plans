@@ -9,6 +9,7 @@ import {
   adaptHumanInboxDetail,
   adaptHumanInboxList,
   adaptManagementPersonaFleet,
+  adaptPersonaIntent,
   defaultTradingPulseModel,
   mgmt,
 } from "@/lib/bff-v1/management";
@@ -419,6 +420,48 @@ describe("mgmt façade (PM-Live)", () => {
     });
     expect(out?.sourceDocument as Record<string, unknown>).not.toHaveProperty("sourceRef");
     expect(out?.sourceDocument.storagePreview as Record<string, unknown>).not.toHaveProperty("previewToken");
+  });
+
+  it("adapts live Persona Intent aggregates into safe UI rows", () => {
+    const rows = adaptPersonaIntent({
+      items: [
+        {
+          id: "persona_trace:sess-001",
+          source_type: "persona_trace",
+          source_id: "sess-001",
+          persona_id: "persona-alpha",
+          title: "Persona trace sess-001",
+          summary: "Interactive session intent summary.",
+          status: "active",
+          occurred_at: "2026-04-11T11:55:00Z",
+          redacted: true,
+          redaction: {
+            policy: "management_persona_intent_public_summary",
+            redacted_by: "bff",
+          },
+          risk_flags: ["policy-flag"],
+          evidence_refs: ["ev-001"],
+        },
+      ],
+    });
+
+    expect(rows?.[0]).toMatchObject({
+      id: "persona_trace:sess-001",
+      sourceType: "persona_trace",
+      sourceId: "sess-001",
+      sourceStatus: "active",
+      ringPersonaId: "persona-alpha",
+      visibility: "redacted",
+      userIntentSummary: "Interactive session intent summary.",
+      redaction: {
+        status: "redacted",
+        policyRef: "management_persona_intent_public_summary",
+        redactedBy: "bff",
+      },
+      riskFlags: ["policy-flag"],
+      evidenceRefs: ["ev-001"],
+      createdAt: "2026-04-11T11:55:00Z",
+    });
   });
 
   it("personaFleet.get does not serve demo rows in mock mode", async () => {

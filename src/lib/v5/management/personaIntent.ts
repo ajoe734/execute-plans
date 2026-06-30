@@ -7,6 +7,11 @@ export type PersonaIntentVisibility = "summary" | "redacted" | "restricted";
 
 export interface PersonaIntentTrace {
   id: string;
+  title?: string;
+  sourceType?: string;
+  sourceId?: string;
+  sourceStatus?: string;
+  detailHref?: string;
   ringPersonaId: string;
   ringBearerId: string;
 
