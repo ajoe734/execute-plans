@@ -375,10 +375,34 @@ const asInboxStringList = (raw: unknown): string[] => {
   return arr
     .map((it) => {
       if (typeof it === "string") return it;
-      if (isObject(it)) return asString(it.id ?? it.ref ?? it.evidence_ref ?? it.href);
+      if (isObject(it)) return asString(it.ref ?? it.evidence_ref ?? it.ref_id ?? it.id ?? it.href ?? it.route);
       return asString(it);
     })
     .filter(Boolean);
+};
+
+const uniqueInboxStrings = (items: string[]): string[] =>
+  Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+
+const nestedInboxEvidenceRefs = (item: Record<string, unknown>): string[] => {
+  const refs: string[] = [
+    ...asInboxStringList(item.evidenceRefs ?? item.evidence_refs),
+  ];
+  const researchContext = isObject(item.research_context) ? item.research_context : {};
+  const researchProjects = asArray<Record<string, unknown>>(researchContext.current_research_projects) ?? [];
+  for (const project of researchProjects) {
+    refs.push(...asInboxStringList(project.evidenceRefs ?? project.evidence_refs));
+  }
+
+  const dataSourceStatus = isObject(researchContext.data_source_status)
+    ? researchContext.data_source_status
+    : {};
+  refs.push(...asInboxStringList(dataSourceStatus.readbackRefs ?? dataSourceStatus.readback_refs));
+  refs.push(...asInboxStringList(dataSourceStatus.unavailableRefs ?? dataSourceStatus.unavailable_refs));
+  const manifestRef = asString(dataSourceStatus.researchDatasetManifestRef ?? dataSourceStatus.research_dataset_manifest_ref);
+  if (manifestRef) refs.push(manifestRef);
+
+  return uniqueInboxStrings(refs);
 };
 
 const normalizeInboxKind = (raw: unknown): HumanInboxKind => {
@@ -443,9 +467,20 @@ const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
+const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKind): string => {
+  const researchContext = isObject(it.research_context) ? it.research_context : {};
+  const recommendation = asString(researchContext.recommendation).toLowerCase();
+  if (recommendation.includes("risk_owner")) return "risk-owner";
+  if (recommendation.includes("operator")) return "operator";
+  if (recommendation.includes("research")) return "research-owner";
+  if (kind === "readiness_blocker") return "research-owner";
+  return "";
+};
+
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
   const id = asString(it.id ?? it.inbox_id ?? it.inboxId);
   if (!id) return null;
+  const kind = normalizeInboxKind(it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType);
   const actionState = asString(it.action_state ?? it.actionState ?? it.status);
   const canDecide = asBoolean(
     it.canDecide ?? it.can_decide,
@@ -459,10 +494,10 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
   const route = it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
   return {
     id,
-    kind: normalizeInboxKind(it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType),
+    kind,
     title: asString(it.title ?? it.summary ?? id),
     summary: asOptionalString(it.summary),
-    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by ?? ""),
+    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
     consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
     consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
     consequenceIfIgnored: asString(it.consequenceIfIgnored ?? it.consequence_if_ignored ?? ""),
@@ -533,7 +568,7 @@ export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
     ...base,
     decisionType: normalizeDecisionType(item.decisionType ?? item.decision_type),
     signatures: adaptSignatures(item.signatures),
-    evidenceRefs: asInboxStringList(item.evidenceRefs ?? item.evidence_refs),
+    evidenceRefs: nestedInboxEvidenceRefs(item),
     decisionHistory: adaptDecisionHistory(item.decisionHistory ?? item.decision_history),
     auditRefs: asInboxStringList(item.auditRefs ?? item.audit_refs),
   };
