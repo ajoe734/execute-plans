@@ -464,22 +464,22 @@ describe("Management AI provider reauth", () => {
     expect(result.reauth.verificationUriComplete).toContain("user_code=ABCD-EFGH");
   });
 
-  it("surfaces provider reauth control-mode precondition failures", async () => {
+  it("surfaces provider reauth failures", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
       detail: {
         error: {
-          message: "Assistant dev workflow requires active control mode",
+          message: "Assistant provider reauth requires MFA",
         },
       },
-    }, 409));
+    }, 403));
 
     const result = await startAssistantProviderReauth({ provider: "codex" });
 
     expect(result.kind).toBe("failure");
     if (result.kind !== "failure") throw new Error("expected failure");
-    expect(result.statusCode).toBe(409);
-    expect(result.message).toContain("active control mode");
+    expect(result.statusCode).toBe(403);
+    expect(result.message).toContain("requires MFA");
   });
 });
 

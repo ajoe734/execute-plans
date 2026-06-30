@@ -214,9 +214,9 @@ function supportsReauth(provider: AssistantProviderReadinessStatus): boolean {
   return ["codex", "codex_cli", "claude", "claude_cli"].includes(providerId(provider).toLowerCase());
 }
 
-function reauthButtonLabel(provider: AssistantProviderReadinessStatus, controlActive: boolean): string {
+function reauthButtonLabel(provider: AssistantProviderReadinessStatus): string {
   if (!supportsReauth(provider)) return "Adapter reauth missing";
-  return controlActive ? "Start reauth" : "Enable control + reauth";
+  return "Start reauth";
 }
 
 function controlModeFrom(mode: AssistantModeStatusResult | null): AssistantControlModeStatus | null {
@@ -281,11 +281,6 @@ export function OpenClawLlmAuthPanel({
   const [loading, setLoading] = useState(false);
   const [reauthBusy, setReauthBusy] = useState<string | null>(null);
   const [reauthResult, setReauthResult] = useState<AssistantProviderReauthResult | null>(null);
-  const [controlDialogOpen, setControlDialogOpen] = useState(false);
-  const [controlPassphrase, setControlPassphrase] = useState("");
-  const [controlError, setControlError] = useState<string | null>(null);
-  const [controlBusy, setControlBusy] = useState(false);
-  const [pendingReauthProvider, setPendingReauthProvider] = useState<AssistantProviderReadinessStatus | null>(null);
   const [addProviderOpen, setAddProviderOpen] = useState(false);
   const [addProviderForm, setAddProviderForm] = useState<AddProviderForm>(defaultAddProviderForm);
   const [addProviderBusy, setAddProviderBusy] = useState(false);
@@ -397,14 +392,8 @@ export function OpenClawLlmAuthPanel({
       });
       return;
     }
-    if (!activeControl) {
-      setPendingReauthProvider(provider);
-      setControlError(null);
-      setControlDialogOpen(true);
-      return;
-    }
     await runReauth(provider);
-  }, [activeControl, runReauth]);
+  }, [runReauth]);
 
   const applyControlMode = useCallback((nextControlMode: AssistantControlModeStatus) => {
     setState((current) => ({
@@ -420,37 +409,6 @@ export function OpenClawLlmAuthPanel({
         : current.mode,
     }));
   }, []);
-
-  const activateControlAndStartReauth = useCallback(async () => {
-    const passphrase = controlPassphrase.trim();
-    if (!passphrase) {
-      setControlError("Passphrase is required.");
-      return;
-    }
-    const provider = pendingReauthProvider;
-    setControlBusy(true);
-    setControlError(null);
-    try {
-      const result = await api.activateControlMode({
-        passphrase,
-        mode: "kernel_debug",
-        reason: provider ? `LLM Provider Auth reauth: ${providerId(provider)}` : "LLM Provider Auth reauth",
-        ttlSeconds: 900,
-        idleTtlSeconds: 300,
-      });
-      if (!result.ok) {
-        setControlError(result.message);
-        return;
-      }
-      setControlPassphrase("");
-      setControlDialogOpen(false);
-      setPendingReauthProvider(null);
-      applyControlMode(result.controlMode);
-      if (provider) await runReauth(provider);
-    } finally {
-      setControlBusy(false);
-    }
-  }, [api, applyControlMode, controlPassphrase, pendingReauthProvider, runReauth]);
 
   const updateAddProviderForm = useCallback((patch: Partial<AddProviderForm>) => {
     setAddProviderForm((current) => ({ ...current, ...patch }));
@@ -595,8 +553,6 @@ export function OpenClawLlmAuthPanel({
             provider={provider}
             usageSummary={usageByProvider.get(normalizeProviderId(providerId(provider))) ?? null}
             reauthBusy={reauthBusy}
-            controlActive={activeControl}
-            controlBusy={controlBusy}
             onStartReauth={startReauth}
           />
         ))}
@@ -661,66 +617,6 @@ export function OpenClawLlmAuthPanel({
             <Link to="/management/llm-provider-auth">Open provider auth</Link>
           </Button>
         </div>
-      )}
-
-      {mode === "full" && (
-        <Dialog
-          open={controlDialogOpen}
-          onOpenChange={(open) => {
-            setControlDialogOpen(open);
-            if (!open) {
-              setControlPassphrase("");
-              setControlError(null);
-              setPendingReauthProvider(null);
-            }
-          }}
-        >
-          <DialogContent className="max-w-md gap-3">
-            <DialogHeader>
-              <DialogTitle className="text-base">Enable provider reauth</DialogTitle>
-              <DialogDescription className="text-xs">
-                kernel_debug · 15 minute TTL · {pendingReauthProvider ? providerLabel(pendingReauthProvider) : "provider"} reauth
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="openclaw-llm-auth-control-passphrase" className="text-xs">
-                  Control passphrase
-                </Label>
-                <Input
-                  id="openclaw-llm-auth-control-passphrase"
-                  type="password"
-                  autoComplete="off"
-                  value={controlPassphrase}
-                  onChange={(event) => setControlPassphrase(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void activateControlAndStartReauth();
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">
-                <div>kernel={state.mode?.ok && state.mode.status.kernelEnabled ? "on" : "off"}</div>
-                <div>state={controlMode?.state ?? "unknown"}</div>
-                {controlMode?.mode && <div>mode={controlMode.mode}</div>}
-              </div>
-              {controlError && (
-                <div className="rounded-md border border-status-warning/30 bg-status-warning/10 px-2 py-1.5 text-xs text-status-warning">
-                  {controlError}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" size="sm" variant="outline" onClick={() => setControlDialogOpen(false)} disabled={controlBusy}>
-                Cancel
-              </Button>
-              <Button type="button" size="sm" onClick={() => void activateControlAndStartReauth()} disabled={controlBusy}>
-                {controlBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-                Enable and start reauth
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       )}
 
       {mode === "full" && (
@@ -860,16 +756,12 @@ function ProviderCard({
   provider,
   mode,
   usageSummary,
-  controlActive,
-  controlBusy,
   reauthBusy,
   onStartReauth,
 }: {
   provider: AssistantProviderReadinessStatus;
   mode: PanelMode;
   usageSummary: AssistantProviderUsageSummaryRow | null;
-  controlActive: boolean;
-  controlBusy: boolean;
   reauthBusy: string | null;
   onStartReauth: (provider: AssistantProviderReadinessStatus) => void;
 }) {
@@ -925,11 +817,11 @@ function ProviderCard({
           className="mt-3 w-full"
           size="sm"
           variant="outline"
-          disabled={!reauthable || busy || controlBusy}
+          disabled={!reauthable || busy}
           onClick={() => onStartReauth(provider)}
         >
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-          {reauthButtonLabel(provider, controlActive)}
+          {reauthButtonLabel(provider)}
         </Button>
       )}
     </article>

@@ -403,7 +403,7 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByText("code=WXYZ-1234")).toBeInTheDocument();
   });
 
-  it("activates kernel_debug control mode before starting provider reauth", async () => {
+  it("starts provider reauth without activating kernel control mode", async () => {
     const fakeApi = api({
       fetchMode: vi.fn().mockResolvedValue({
         ok: true,
@@ -424,20 +424,10 @@ describe("OpenClawLlmAuthPanel", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /enable control \+ reauth/i }));
-    fireEvent.change(await screen.findByLabelText("Control passphrase"), {
-      target: { value: "control phrase ok" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /enable and start reauth/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /start reauth/i }));
 
     await waitFor(() => {
-      expect(fakeApi.activateControlMode).toHaveBeenCalledWith({
-        passphrase: "control phrase ok",
-        mode: "kernel_debug",
-        reason: "LLM Provider Auth reauth: codex",
-        ttlSeconds: 900,
-        idleTtlSeconds: 300,
-      });
+      expect(fakeApi.activateControlMode).not.toHaveBeenCalled();
       expect(fakeApi.startReauth).toHaveBeenCalledWith({
         provider: "codex",
         reason: "LLM Provider Auth management",
