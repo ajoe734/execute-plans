@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -54,7 +54,7 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
-import { ControlRoomPage, LoopsPage } from "@/management/pages/v5/V5Pages";
+import { LoopsPage } from "@/management/pages/v5/V5Pages";
 // Studios: only the two cross-entity/sandbox tools that have no equivalent on the
 // per-entity detail pages are kept (FormulaStudio A/B-compare+backtest, SkillSandbox
 // test harness). The per-entity studios were removed — operate on the detail page.
@@ -118,6 +118,15 @@ function TradingRoomRoute() {
   );
 }
 
+function DeploymentAliasRedirect() {
+  const { id } = useParams<{ id?: string }>();
+  const { search, hash } = useLocation();
+  const target = id
+    ? `/management/deployments/${encodeURIComponent(id)}`
+    : "/management/deployments";
+  return <Navigate to={`${target}${search}${hash}`} replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -175,8 +184,9 @@ const App = () => (
               <Route path="persona-league" element={<PersonaLeaguePage />} />
               <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
               <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
-              {/* Legacy alias kept for F18 perf/release-gate fixture reads. */}
-              <Route path="control-room-legacy" element={<ControlRoomPage />} />
+              {/* Hidden legacy route removed from runtime surface: old ControlRoomPage
+                  must not render behind an unadvertised URL. */}
+              <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
               <Route path="loops/optimization" element={<OptimizationLoopPage />} />
@@ -233,8 +243,8 @@ const App = () => (
               <Route path="hooks" element={<HookCronManagerPage />} />
               <Route path="deployments" element={<DeploymentsList />} />
               <Route path="deployments/:id" element={<DeploymentDetail />} />
-              <Route path="deployment" element={<DeploymentsList />} />
-              <Route path="deployment/:id" element={<DeploymentDetail />} />
+              <Route path="deployment" element={<DeploymentAliasRedirect />} />
+              <Route path="deployment/:id" element={<DeploymentAliasRedirect />} />
               <Route path="runtimes" element={<RuntimesPage />} />
               <Route path="jobs" element={<JobsPage />} />
               <Route path="alerts" element={<AlertsPage />} />

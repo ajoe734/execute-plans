@@ -2,7 +2,7 @@
  * FE-INT-GATE-D05 / F18 - Perf and stability soft-fail budgets.
  *
  * Coverage:
- *   1. Control Room load budget plus 30s SSE-driven DOM rerender proxy.
+ *   1. Cockpit load budget plus 30s SSE-driven DOM rerender proxy.
  *   2. Entity registry first-page load budget and DataTable density stability.
  *   3. Sentinel list load budget.
  *   4. LineageGraph warns when the graph exceeds 500 nodes.
@@ -18,7 +18,7 @@ import type { AddressInfo } from "node:net";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
-const CONTROL_ROOM_PATH = "/management/control-room-legacy";
+const COCKPIT_PATH = "/management/cockpit";
 const ENTITY_LIST_PATH = "/management/strategies";
 const SENTINEL_PATH = "/management/sentinel";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
@@ -28,7 +28,7 @@ const SSE_WINDOW_MS = Number(process.env.FE_INT_GATE_SSE_WINDOW_MS ?? "30000");
 const SSE_EVENT_INTERVAL_MS = Number(process.env.FE_INT_GATE_SSE_EVENT_INTERVAL_MS ?? "1000");
 
 const BUDGETS = {
-  controlRoomLoadMs: 4_000,
+  cockpitLoadMs: 4_000,
   entityFirstPageLoadMs: 4_000,
   sentinelListLoadMs: 4_000,
   sseMutationBatchesPer30s: 180,
@@ -42,6 +42,7 @@ const SERVING_MOCK_BANNER =
 type JsonRecord = Record<string, unknown>;
 
 type RouteCounters = {
+  cockpit: number;
   controlRoom: number;
   loopRuns: number;
   me: number;
@@ -228,6 +229,7 @@ async function fulfillJson(
 
 function routeCounters(): RouteCounters {
   return {
+    cockpit: 0,
     controlRoom: 0,
     loopRuns: 0,
     me: 0,
@@ -369,6 +371,103 @@ const CONTROL_ROOM_RESPONSE = {
   },
 };
 
+const COCKPIT_RESPONSE = {
+  strip: {
+    fields: [
+      { key: "autonomy", label: "Autonomy", value: "guarded", tone: "ok" },
+      { key: "humanPending", label: "Human pending", value: 2, tone: "warn" },
+      { key: "critical", label: "Critical findings", value: 1, tone: "bad", href: "/management/sentinel" },
+      { key: "bffHa", label: "BFF HA", value: "ok", tone: "ok" },
+    ],
+  },
+  loopFlow: {
+    nodes: [
+      { id: "f18-research", label: "F18 research loop", loop: "research", severity: "ok", href: "/management/loops/research" },
+      { id: "f18-execution", label: "F18 execution loop", loop: "execution", severity: "bad", href: "/management/loops/execution" },
+      { id: "f18-optimization", label: "F18 optimization loop", loop: "optimization", severity: "warn", href: "/management/loops/optimization" },
+    ],
+    edges: [
+      { from: "f18-research", to: "f18-execution", severity: "warn" },
+      { from: "f18-execution", to: "f18-optimization", severity: "bad" },
+    ],
+  },
+  matrix: {
+    personas: ["persona-f18-1"],
+    phases: ["Observe", "Orient", "Decide", "Act", "Learn"],
+    cells: ["Observe", "Orient", "Decide", "Act", "Learn"].map((phase) => ({
+      personaId: "persona-f18-1",
+      phase,
+      state: phase === "Act" ? "alerting" : "active",
+      href: "/management/persona-fleet",
+    })),
+  },
+  anomalies: [
+    {
+      id: "finding-f18-001",
+      severity: "critical",
+      domain: "runtime",
+      title: "F18 Sentinel Finding 001",
+      why: "Synthetic F18 cockpit anomaly.",
+      recommendedAction: "Inspect sentinel finding.",
+      detectedAt: nowIso(),
+      links: { manageHref: "/management/sentinel", evidenceHref: "/management/evidence" },
+    },
+  ],
+};
+
+const PORTFOLIO_SUMMARY_RESPONSE = {
+  totalNav: 1_250_000,
+  totalCash: 120_000,
+  grossExposure: 870_000,
+  leverage: 1.18,
+  unrealizedPnl: 42_000,
+  pnlToday: 7_500,
+  activeCapitalPools: 3,
+  highestRiskPoolId: "pool-f18-ops",
+};
+
+const PERSONA_LEAGUE_RESPONSE = [
+  {
+    personaId: "persona-f18-1",
+    personaName: "F18 Persona 1",
+    currentRank: 1,
+    previousRank: 2,
+    rankDelta: 1,
+    tier: "S",
+    score: 97,
+    links: { manageHref: "/management/personas/persona-f18-1" },
+  },
+  {
+    personaId: "persona-f18-2",
+    personaName: "F18 Persona 2",
+    currentRank: 2,
+    previousRank: 1,
+    rankDelta: -1,
+    tier: "A",
+    score: 91,
+    links: { manageHref: "/management/personas/persona-f18-2" },
+  },
+];
+
+const PERSONA_FLEET_RESPONSE = [
+  {
+    personaId: "persona-f18-1",
+    personaName: "F18 Persona 1",
+    lifecycleState: "active",
+    productionReadiness: "production",
+    dataProviderKeys: ["ibkr"],
+    dataSources: [
+      {
+        providerKey: "ibkr",
+        readStatus: "healthy",
+        credentialStatus: "present",
+        ingestionMode: "live",
+        orderSideEffects: false,
+      },
+    ],
+  },
+];
+
 const PERSONA_HEALTH_RESPONSE = {
   items: Array.from({ length: 10 }, (_, index) => ({
     id: `persona-f18-${index + 1}`,
@@ -476,6 +575,19 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   await page.route(/\/bff\/v5\/control-room(?:\?.*)?$/, async (route) => {
     counters.controlRoom += 1;
     await fulfillJson(route, CONTROL_ROOM_RESPONSE);
+  });
+  await page.route(/\/bff\/management\/cockpit(?:\?.*)?$/, async (route) => {
+    counters.cockpit += 1;
+    await fulfillJson(route, { data: COCKPIT_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/portfolio-book(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PORTFOLIO_SUMMARY_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/persona-league(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PERSONA_LEAGUE_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/persona-fleet(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PERSONA_FLEET_RESPONSE, meta: { snapshot_at: nowIso() } });
   });
   await page.route(/\/bff\/v5\/loop-runs(?:\?.*)?$/, async (route) => {
     counters.loopRuns += 1;
@@ -664,7 +776,7 @@ function annotateSoftGap(testInfo: TestInfo, description: string): void {
 test.describe("F18 perf and stability soft-fail budgets", () => {
   test.describe.configure({ timeout: Math.max(75_000, SSE_WINDOW_MS + 45_000) });
 
-  test("keeps Control Room load and SSE rerender proxy within soft budgets", async ({
+  test("keeps Cockpit load and SSE rerender proxy within soft budgets", async ({
     page,
   }, testInfo) => {
     const harness = new SsePerfHarness();
@@ -678,20 +790,20 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
 
       const loadMs = await gotoAndWaitForText(
         page,
-        CONTROL_ROOM_PATH,
-        [/control room/i, /F18 Sentinel Finding 001/i, /F18 .* loop/i],
-        "Control Room",
+        COCKPIT_PATH,
+        [/cockpit/i, /F18 Sentinel Finding 001/i, /F18 .* loop/i],
+        "Cockpit",
       );
       recordBudget(testInfo, {
-        id: "control_room_load",
-        label: "Control Room load",
+        id: "cockpit_load",
+        label: "Cockpit load",
         actual: loadMs,
-        max: BUDGETS.controlRoomLoadMs,
+        max: BUDGETS.cockpitLoadMs,
         unit: "ms",
       });
 
       expect(await bodyText(page)).not.toMatch(SERVING_MOCK_BANNER);
-      expect(failures, "Control Room should not emit console/page errors").toEqual([]);
+      expect(failures, "Cockpit should not emit console/page errors").toEqual([]);
 
       await startMutationCounter(page);
       await page.waitForTimeout(SSE_WINDOW_MS);
@@ -707,7 +819,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       });
       testInfo.annotations.push({
         type: "sse-mutation-records",
-        description: `records=${mutations.records}; requests=${harness.requests.length}; control_room_reads=${counters.controlRoom}; sentinel_reads=${counters.sentinelFindings}`,
+        description: `records=${mutations.records}; requests=${harness.requests.length}; cockpit_reads=${counters.cockpit}; sentinel_reads=${counters.sentinelFindings}`,
       });
       if (harness.requests.length === 0) {
         annotateSoftGap(

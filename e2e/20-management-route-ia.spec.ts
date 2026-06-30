@@ -1,0 +1,109 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+
+const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
+
+function frontendUrl(path = "/"): string {
+  const base =
+    process.env.PANTHEON_FE_BASE_URL ||
+    process.env.FRONTEND_BASE_URL ||
+    process.env.PLAYWRIGHT_BASE_URL ||
+    DEFAULT_FRONTEND_BASE_URL;
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  const origin = route.request().headers()["origin"] ?? "*";
+  await route.fulfill({
+    status,
+    contentType: "application/json",
+    headers: {
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "authorization,content-type,x-bff-api-version,x-correlation-id,x-locale,x-request-id,x-tenant-id",
+      "Access-Control-Allow-Origin": origin,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function installQuietBffRoutes(page: Page) {
+  await page.route(/^https?:\/\/[^/]+\/bff\//, async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await fulfillJson(route, {
+      data: {},
+      items: [],
+      meta: {
+        status: "degraded",
+        source: "mgmt-gap-001-route-ia-fixture",
+      },
+    });
+  });
+}
+
+test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
+  test("redirects hidden legacy management aliases to canonical routes", async ({ page }) => {
+    await installQuietBffRoutes(page);
+
+    const cases = [
+      {
+        from: "/management/control-room-legacy",
+        pathname: "/management/cockpit",
+        search: "",
+      },
+      {
+        from: "/management/deployment",
+        pathname: "/management/deployments",
+        search: "",
+      },
+      {
+        from: "/management/deployment/dep-9?tab=events",
+        pathname: "/management/deployments/dep-9",
+        search: "?tab=events",
+      },
+    ];
+
+    for (const item of cases) {
+      await page.goto(frontendUrl(item.from), {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect
+        .poll(
+          () => {
+            const url = new URL(page.url());
+            return { pathname: url.pathname, search: url.search };
+          },
+          { message: `${item.from} should redirect to ${item.pathname}`, timeout: 10_000 },
+        )
+        .toEqual({ pathname: item.pathname, search: item.search });
+    }
+  });
+
+  test("keeps downgraded studios and loop subpages out of primary management nav", async ({ page }) => {
+    await installQuietBffRoutes(page);
+
+    await page.goto(frontendUrl("/management/cockpit"), {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await page.locator("nav").waitFor({ state: "visible", timeout: 15_000 });
+
+    const navHrefs = await page.locator("nav a").evaluateAll((links) =>
+      links.map((link) => new URL((link as HTMLAnchorElement).href).pathname),
+    );
+
+    expect(navHrefs).toContain("/management/loops");
+    for (const demotedPath of [
+      "/management/studios/formula",
+      "/management/studios/skill-sandbox",
+      "/management/loops/research",
+      "/management/loops/execution",
+      "/management/loops/optimization",
+    ]) {
+      expect(navHrefs, `${demotedPath} should not be a first-level nav item`).not.toContain(demotedPath);
+    }
+  });
+});

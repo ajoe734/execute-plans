@@ -1021,7 +1021,7 @@ const uiFlows: UiFlow[] = [
   { id: "ui-015-readiness-capital", type: "ui", category: "monitor", path: "/management/readiness/capital-binding-live", endpoint: "/bff/management/readiness/capital-binding-live" },
   { id: "ui-016-readiness-bff-ha", type: "ui", category: "monitor", path: "/management/readiness/bff-ha", endpoint: "/bff/management/readiness/bff-ha" },
   { id: "ui-017-readiness-strict", type: "ui", category: "monitor", path: "/management/readiness/strict-publish", endpoint: "/bff/management/readiness/strict-publish" },
-  { id: "ui-018-control-room", type: "ui", category: "monitor", path: "/management/control-room-legacy", endpoint: "/bff/v5/control-room" },
+  { id: "ui-018-deployment-alias", type: "ui", category: "monitor", path: "/management/deployment", endpoint: "/bff/deployments" },
   { id: "ui-019-execution-loop", type: "ui", category: "monitor", path: "/management/loops/execution", endpoint: "/bff/v5/loop-runs" },
   { id: "ui-020-sentinel", type: "ui", category: "monitor", path: "/management/sentinel", endpoint: "/bff/v5/sentinel/findings" },
   { id: "ui-021-interventions", type: "ui", category: "monitor", path: "/management/interventions", endpoint: "/bff/v5/interventions" },
