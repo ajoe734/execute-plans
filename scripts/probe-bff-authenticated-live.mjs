@@ -28,6 +28,8 @@ const READ_RETRY_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_SMOKE_READ_RETR
 const WRITE_RETRY_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_SMOKE_WRITE_RETRIES, 3, 1);
 const RETRY_DELAY_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_RETRY_DELAY_MS, 1_000, 100);
 const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_TIMEOUT_MS, 20_000, 5_000);
+const READINESS_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_READINESS_TIMEOUT_MS, 120_000, 1_000);
+const READINESS_INTERVAL_MS = positiveInt(process.env.PANTHEON_BFF_SMOKE_READINESS_INTERVAL_MS, 5_000, 250);
 
 if (!BFF_BASE_URL) {
   console.error("[auth-smoke] PANTHEON_BFF_BASE_URL is not set; cannot probe.");
@@ -153,6 +155,40 @@ function isRetryableFailure(result) {
   return Boolean(result.error) || [429, 500, 502, 503, 504].includes(result.status);
 }
 
+async function readinessFetch(route) {
+  const url = new URL(route, BFF_BASE_URL).toString();
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "X-Request-Id": `smoke-ready-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      },
+      signal: AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS, 15000)),
+    });
+    return { route, status: res.status, error: "" };
+  } catch (err) {
+    return { route, status: 0, error: String(err).slice(0, 120) };
+  }
+}
+
+async function waitForBffReadiness() {
+  const deadline = Date.now() + Math.max(0, READINESS_TIMEOUT_MS);
+  let last = { route: "", status: 0, error: "not attempted" };
+
+  while (Date.now() <= deadline) {
+    for (const route of ["/livez", "/openapi.json"]) {
+      last = await readinessFetch(route);
+      if (last.status === 200) {
+        return { ready: true, note: `${route} returned 200` };
+      }
+    }
+    await sleep(Math.max(250, READINESS_INTERVAL_MS));
+  }
+
+  return { ready: false, note: `${last.route || "readiness"} status=${last.status || "ERR"} ${last.error || ""}`.trim() };
+}
+
 async function fetchEndpoint(route, { method = "GET", body } = {}) {
   const url = new URL(route, BFF_BASE_URL).toString();
   const maxAttempts = maxAttemptsFor(method);
@@ -246,6 +282,8 @@ const WRITE_ENDPOINTS = [
 async function main() {
   console.log(`[auth-smoke] BFF base: ${BFF_BASE_URL}`);
   console.log(`[auth-smoke] Probing /bff/me + ${LIST_ENDPOINTS.length} list endpoints + ${WRITE_ENDPOINTS.length} write endpoints`);
+  const readiness = await waitForBffReadiness();
+  console.log(`[auth-smoke] Readiness: ${readiness.ready ? "ready" : "not ready"} — ${readiness.note}`);
 
   const results = [];
   let passed = 0;
@@ -334,6 +372,7 @@ async function main() {
     "",
     `Generated: ${now.toISOString()}`,
     `BFF base: ${BFF_BASE_URL}`,
+    `Readiness: ${readiness.ready ? "ready" : "not ready"} — ${readiness.note}`,
     `${summary}`,
     "",
     "## Envelope note (FE-INT-GATE-A11)",
