@@ -1,5 +1,5 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
-// Phase 1: deterministic mock detail derived from id; live wired via mgmt.humanInbox.get.
+// Mock mode seed: neutral placeholder only. Live detail data must provide any decision UI.
 
 import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -16,23 +16,20 @@ function seedDetail(id: string): HumanInboxDetail {
   const kind: HumanInboxKind = (HUMAN_INBOX_KINDS.find((k) => id.startsWith(k.slice(0, 3))) ?? "approval");
   return {
     id, kind,
-    title: `${kind} item ${id}`,
+    title: `${kind} detail unavailable`,
     requiredRole: kind === "capital_breach" ? "capital-owner" : kind === "policy_violation" ? "compliance" : "research-owner",
-    consequenceIfApproved: "Action proceeds and is recorded in audit log.",
-    consequenceIfRejected: "Action discarded; persona notified.",
-    consequenceIfIgnored: "Times out per TTL; default-deny applies.",
+    consequenceIfApproved: "",
+    consequenceIfRejected: "",
+    consequenceIfIgnored: "",
     ttlSec: 12 * 3600,
-    canDecide: kind !== "policy_violation",
-    canProceed: kind !== "capital_breach",
-    blockingReasons: kind === "capital_breach" ? ["Capital pool VaR breach", "Awaiting risk-owner sign-off"] : undefined,
+    canDecide: false,
+    canProceed: false,
+    blockingReasons: ["Live detail payload unavailable."],
     detailHref: `/management/human-inbox/${encodeURIComponent(id)}`,
     links: buildLinkSet({ primary: { kind: "human_gate", id } }),
-    decisionType: kind === "policy_violation" ? "two_man" : "single",
-    signatures: [
-      { role: "primary-reviewer" },
-      ...(kind === "policy_violation" ? [{ role: "compliance-officer" }] : []),
-    ],
-    evidenceRefs: ["ev:proposal-v3"],
+    decisionType: "single",
+    signatures: [],
+    evidenceRefs: [],
     decisionHistory: [],
     auditRefs: ["audit:human-inbox:" + id],
   };
