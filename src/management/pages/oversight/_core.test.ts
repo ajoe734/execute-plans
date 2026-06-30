@@ -104,4 +104,14 @@ describe("PersonaFleetPage deep links", () => {
     );
     expect(personaFleetArtifactHref(row)).toBeNull();
   });
+
+  it("links to the persona-scoped research loop when there is no active research project", () => {
+    const row = {
+      personaId: "persona-live-without-project",
+    } as ManagementPersonaFleetRow;
+
+    expect(personaFleetResearchHref(row)).toBe(
+      "/management/loops/research?persona=persona-live-without-project",
+    );
+  });
 });
