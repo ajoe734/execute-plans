@@ -229,6 +229,212 @@ export interface ManagementTradingPulseModel {
   meta: ManagementTradingPulseMeta;
 }
 
+export interface ManagementEvidenceSurface {
+  status: string;
+  source?: string;
+  message?: string;
+}
+
+export interface ManagementEvidenceMeta {
+  snapshotAt?: string;
+  snapshot_at?: string;
+  surfaces: Record<string, ManagementEvidenceSurface>;
+  redactedEvidenceCount: number;
+  redacted_evidence_count: number;
+  [key: string]: unknown;
+}
+
+export interface ManagementEvidenceCredibility {
+  tier: string;
+  verified: boolean;
+  lastVerifiedAt?: string | null;
+  last_verified_at?: string | null;
+  verificationMethod?: string | null;
+  verification_method?: string | null;
+}
+
+export interface ManagementEvidenceResolvedLink {
+  availability: string;
+  routeHref?: string | null;
+  route_href?: string | null;
+  displayLabel: string;
+  display_label: string;
+  openInNewTab: boolean;
+  open_in_new_tab: boolean;
+}
+
+export interface ManagementEvidenceLinkedObjectSummary {
+  entityType: string;
+  entity_type: string;
+  entityRef: string;
+  entity_ref: string;
+  displayLabel?: string | null;
+  display_label?: string | null;
+}
+
+export interface ManagementEvidenceListItem {
+  id: string;
+  refId: string;
+  ref_id: string;
+  title: string;
+  displayLabel: string;
+  display_label: string;
+  sourceType: string;
+  source_type: string;
+  capturedAt?: string;
+  captured_at?: string;
+  linkType: string;
+  link_type: string;
+  credibility: ManagementEvidenceCredibility;
+  linkedObjectSummary?: ManagementEvidenceLinkedObjectSummary;
+  linked_object_summary?: ManagementEvidenceLinkedObjectSummary;
+  resolvedLink: ManagementEvidenceResolvedLink;
+  resolved_link: ManagementEvidenceResolvedLink;
+  routeHref?: string;
+  route_href?: string;
+  managementHref?: string;
+  management_href?: string;
+  redacted: boolean;
+  requiredCapability?: string;
+  required_capability?: string;
+  reason?: string;
+}
+
+export interface ManagementEvidenceSummary {
+  totalEvidence: number;
+  total_evidence: number;
+  returnedEvidence: number;
+  returned_evidence: number;
+  visibleEvidence: number;
+  visible_evidence: number;
+  redactedEvidence: number;
+  redacted_evidence: number;
+  verifiedEvidence: number;
+  verified_evidence: number;
+  bySourceType: Record<string, number>;
+  by_source_type: Record<string, number>;
+  byLinkType: Record<string, number>;
+  by_link_type: Record<string, number>;
+  byCredibilityTier: Record<string, number>;
+  by_credibility_tier: Record<string, number>;
+}
+
+export interface ManagementEvidenceFacets {
+  sourceTypes: Record<string, number>;
+  source_types: Record<string, number>;
+  linkTypes: Record<string, number>;
+  link_types: Record<string, number>;
+  credibilityTiers: Record<string, number>;
+  credibility_tiers: Record<string, number>;
+}
+
+export interface ManagementEvidencePageInfo {
+  nextPageToken?: string | null;
+  next_page_token?: string | null;
+  hasMore: boolean;
+  has_more: boolean;
+  total: number;
+  pageSize: number;
+  page_size: number;
+}
+
+export interface ManagementEvidenceOverview {
+  items: ManagementEvidenceListItem[];
+  data: ManagementEvidenceListItem[];
+  summary: ManagementEvidenceSummary;
+  facets: ManagementEvidenceFacets;
+  pageInfo: ManagementEvidencePageInfo;
+  page_info: ManagementEvidencePageInfo;
+  pagination: ManagementEvidencePageInfo;
+  meta: ManagementEvidenceMeta;
+}
+
+export interface ManagementEvidenceStoragePreview {
+  available: boolean;
+  previewType: string;
+  preview_type: string;
+}
+
+export interface ManagementEvidenceSourceDocument {
+  title: string;
+  sourceType: string;
+  source_type: string;
+  excerpt?: string | null;
+  storagePreview: ManagementEvidenceStoragePreview;
+  storage_preview: ManagementEvidenceStoragePreview;
+  capturedAt?: string | null;
+  captured_at?: string | null;
+  capturedBy?: string | null;
+  captured_by?: string | null;
+}
+
+export interface ManagementEvidenceLinkedDecision {
+  entityType: string;
+  entity_type: string;
+  entityRef: string;
+  entity_ref: string;
+  displayLabel?: string | null;
+  display_label?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+  linkType?: string | null;
+  link_type?: string | null;
+  relationshipNote?: string | null;
+  relationship_note?: string | null;
+  redacted?: boolean;
+  reason?: string;
+  requiredCapability?: string;
+  required_capability?: string;
+}
+
+export interface ManagementEvidenceSourceNoteContext {
+  noteId?: string | null;
+  note_id?: string | null;
+  title?: string | null;
+  excerpt?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+}
+
+export interface ManagementEvidenceSourceMemoryContext {
+  entryId?: string | null;
+  entry_id?: string | null;
+  headline?: string | null;
+  knowledgeType?: string | null;
+  knowledge_type?: string | null;
+  lifecycleStatus?: string | null;
+  lifecycle_status?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+}
+
+export interface ManagementEvidenceDetail {
+  refId: string;
+  ref_id: string;
+  title: string;
+  sourceDocument: ManagementEvidenceSourceDocument;
+  source_document: ManagementEvidenceSourceDocument;
+  linkType: string;
+  link_type: string;
+  credibility: ManagementEvidenceCredibility;
+  resolvedLink: ManagementEvidenceResolvedLink;
+  resolved_link: ManagementEvidenceResolvedLink;
+  linkedObjectSummary?: ManagementEvidenceLinkedObjectSummary;
+  linked_object_summary?: ManagementEvidenceLinkedObjectSummary;
+  linkedDecisions: ManagementEvidenceLinkedDecision[];
+  linked_decisions: ManagementEvidenceLinkedDecision[];
+  sourceNoteContext?: ManagementEvidenceSourceNoteContext | null;
+  source_note_context?: ManagementEvidenceSourceNoteContext | null;
+  sourceMemoryContext?: ManagementEvidenceSourceMemoryContext | null;
+  source_memory_context?: ManagementEvidenceSourceMemoryContext | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+  redacted: boolean;
+  requiredCapability?: string;
+  reason?: string;
+  meta: ManagementEvidenceMeta;
+}
+
 /** Wraps `body` so adapter errors degrade to seedFn output. */
 function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
   return (raw: unknown): T => {
@@ -293,6 +499,481 @@ const firstArray = <T>(...values: unknown[]): T[] => {
   }
   return [];
 };
+
+const optionalString = (value: unknown): string | undefined => {
+  const text = asString(value);
+  return text || undefined;
+};
+
+const nullableString = (value: unknown): string | null => {
+  const text = asString(value);
+  return text || null;
+};
+
+function adaptEvidenceSurface(value: unknown): ManagementEvidenceSurface {
+  if (isObject(value)) {
+    return {
+      status: asString(value.status ?? value.state, "unknown"),
+      source: optionalString(value.source),
+      message: optionalString(value.message ?? value.summary),
+    };
+  }
+  return { status: asString(value, "unknown") };
+}
+
+function adaptEvidenceMeta(value: unknown): ManagementEvidenceMeta {
+  const record = isObject(value) ? value : {};
+  const rawSurfaces = isObject(record.surfaces) ? record.surfaces : {};
+  const surfaces = Object.fromEntries(
+    Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
+  );
+  return {
+    snapshotAt: optionalString(record.snapshotAt ?? record.snapshot_at),
+    snapshot_at: optionalString(record.snapshot_at ?? record.snapshotAt),
+    surfaces,
+    redactedEvidenceCount: asFiniteNumber(record.redactedEvidenceCount ?? record.redacted_evidence_count, 0),
+    redacted_evidence_count: asFiniteNumber(record.redacted_evidence_count ?? record.redactedEvidenceCount, 0),
+  };
+}
+
+function adaptEvidenceCredibility(value: unknown): ManagementEvidenceCredibility {
+  const record = isObject(value) ? value : {};
+  return {
+    tier: asString(record.tier, "unverified"),
+    verified: asBoolean(record.verified, false),
+    lastVerifiedAt: nullableString(record.lastVerifiedAt ?? record.last_verified_at),
+    last_verified_at: nullableString(record.last_verified_at ?? record.lastVerifiedAt),
+    verificationMethod: nullableString(record.verificationMethod ?? record.verification_method),
+    verification_method: nullableString(record.verification_method ?? record.verificationMethod),
+  };
+}
+
+function adaptEvidenceResolvedLink(value: unknown): ManagementEvidenceResolvedLink {
+  const record = isObject(value) ? value : {};
+  const availability = asString(record.availability, "unavailable");
+  const routeHref = nullableString(record.routeHref ?? record.route_href);
+  const displayLabel = asString(
+    record.displayLabel ?? record.display_label,
+    availability === "unavailable" ? "Source unavailable" : "Open source",
+  );
+  const openInNewTab = asBoolean(record.openInNewTab ?? record.open_in_new_tab, availability === "external");
+  return {
+    availability,
+    routeHref,
+    route_href: routeHref,
+    displayLabel,
+    display_label: displayLabel,
+    openInNewTab,
+    open_in_new_tab: openInNewTab,
+  };
+}
+
+function adaptEvidenceLinkedObjectSummary(value: unknown): ManagementEvidenceLinkedObjectSummary | undefined {
+  if (!isObject(value)) return undefined;
+  const entityType = asString(value.entityType ?? value.entity_type);
+  const entityRef = asString(value.entityRef ?? value.entity_ref);
+  const displayLabel = nullableString(value.displayLabel ?? value.display_label);
+  if (!entityType && !entityRef && !displayLabel) return undefined;
+  return {
+    entityType,
+    entity_type: entityType,
+    entityRef,
+    entity_ref: entityRef,
+    displayLabel,
+    display_label: displayLabel,
+  };
+}
+
+function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | null {
+  if (!isObject(value)) return null;
+  const sourceDocument = isObject(value.sourceDocument)
+    ? value.sourceDocument
+    : isObject(value.source_document)
+      ? value.source_document
+      : {};
+  const refId = asString(value.refId ?? value.ref_id ?? value.id);
+  if (!refId) return null;
+  const title = asString(
+    value.title ?? value.displayLabel ?? value.display_label ?? sourceDocument.title,
+    refId,
+  );
+  const sourceType = asString(value.sourceType ?? value.source_type ?? sourceDocument.sourceType ?? sourceDocument.source_type, "unknown");
+  const capturedAt = optionalString(value.capturedAt ?? value.captured_at ?? sourceDocument.capturedAt ?? sourceDocument.captured_at);
+  const linkType = asString(value.linkType ?? value.link_type, "unknown");
+  const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
+  const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
+  const routeHref = optionalString(value.routeHref ?? value.route_href);
+  const managementHref = optionalString(value.managementHref ?? value.management_href);
+  return {
+    id: refId,
+    refId,
+    ref_id: refId,
+    title,
+    displayLabel: asString(value.displayLabel ?? value.display_label, title),
+    display_label: asString(value.display_label ?? value.displayLabel, title),
+    sourceType,
+    source_type: sourceType,
+    capturedAt,
+    captured_at: capturedAt,
+    linkType,
+    link_type: linkType,
+    credibility: adaptEvidenceCredibility(value.credibility),
+    linkedObjectSummary,
+    linked_object_summary: linkedObjectSummary,
+    resolvedLink,
+    resolved_link: resolvedLink,
+    routeHref,
+    route_href: routeHref,
+    managementHref,
+    management_href: managementHref,
+    redacted: asBoolean(value.redacted, false),
+    requiredCapability: optionalString(value.requiredCapability ?? value.required_capability),
+    required_capability: optionalString(value.required_capability ?? value.requiredCapability),
+    reason: optionalString(value.reason),
+  };
+}
+
+function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEvidenceSummary {
+  const bySourceType: Record<string, number> = {};
+  const byLinkType: Record<string, number> = {};
+  const byCredibilityTier: Record<string, number> = {};
+  let verifiedEvidence = 0;
+  let redactedEvidence = 0;
+  for (const item of items) {
+    const sourceType = item.sourceType || "unknown";
+    const linkType = item.linkType || "unknown";
+    const tier = item.credibility.tier || "unverified";
+    bySourceType[sourceType] = (bySourceType[sourceType] ?? 0) + 1;
+    byLinkType[linkType] = (byLinkType[linkType] ?? 0) + 1;
+    byCredibilityTier[tier] = (byCredibilityTier[tier] ?? 0) + 1;
+    if (item.credibility.verified) verifiedEvidence += 1;
+    if (item.redacted) redactedEvidence += 1;
+  }
+  const visibleEvidence = Math.max(items.length - redactedEvidence, 0);
+  return {
+    totalEvidence: items.length,
+    total_evidence: items.length,
+    returnedEvidence: items.length,
+    returned_evidence: items.length,
+    visibleEvidence,
+    visible_evidence: visibleEvidence,
+    redactedEvidence,
+    redacted_evidence: redactedEvidence,
+    verifiedEvidence,
+    verified_evidence: verifiedEvidence,
+    bySourceType,
+    by_source_type: bySourceType,
+    byLinkType,
+    by_link_type: byLinkType,
+    byCredibilityTier,
+    by_credibility_tier: byCredibilityTier,
+  };
+}
+
+function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidenceSummary {
+  if (!isObject(value)) return buildEvidenceSummary(items);
+  const computed = buildEvidenceSummary(items);
+  const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
+  const byLinkType = asCountRecord(value.byLinkType ?? value.by_link_type);
+  const byCredibilityTier = asCountRecord(value.byCredibilityTier ?? value.by_credibility_tier);
+  return {
+    totalEvidence: asFiniteNumber(value.totalEvidence ?? value.total_evidence, computed.totalEvidence),
+    total_evidence: asFiniteNumber(value.total_evidence ?? value.totalEvidence, computed.totalEvidence),
+    returnedEvidence: asFiniteNumber(value.returnedEvidence ?? value.returned_evidence, computed.returnedEvidence),
+    returned_evidence: asFiniteNumber(value.returned_evidence ?? value.returnedEvidence, computed.returnedEvidence),
+    visibleEvidence: asFiniteNumber(value.visibleEvidence ?? value.visible_evidence, computed.visibleEvidence),
+    visible_evidence: asFiniteNumber(value.visible_evidence ?? value.visibleEvidence, computed.visibleEvidence),
+    redactedEvidence: asFiniteNumber(value.redactedEvidence ?? value.redacted_evidence, computed.redactedEvidence),
+    redacted_evidence: asFiniteNumber(value.redacted_evidence ?? value.redactedEvidence, computed.redactedEvidence),
+    verifiedEvidence: asFiniteNumber(value.verifiedEvidence ?? value.verified_evidence, computed.verifiedEvidence),
+    verified_evidence: asFiniteNumber(value.verified_evidence ?? value.verifiedEvidence, computed.verifiedEvidence),
+    bySourceType: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
+    by_source_type: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
+    byLinkType: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
+    by_link_type: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
+    byCredibilityTier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
+    by_credibility_tier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
+  };
+}
+
+function adaptEvidenceFacets(value: unknown, summary: ManagementEvidenceSummary): ManagementEvidenceFacets {
+  const record = isObject(value) ? value : {};
+  const sourceTypes = asCountRecord(record.sourceTypes ?? record.source_types);
+  const linkTypes = asCountRecord(record.linkTypes ?? record.link_types);
+  const credibilityTiers = asCountRecord(record.credibilityTiers ?? record.credibility_tiers);
+  return {
+    sourceTypes: Object.keys(sourceTypes).length ? sourceTypes : summary.bySourceType,
+    source_types: Object.keys(sourceTypes).length ? sourceTypes : summary.bySourceType,
+    linkTypes: Object.keys(linkTypes).length ? linkTypes : summary.byLinkType,
+    link_types: Object.keys(linkTypes).length ? linkTypes : summary.byLinkType,
+    credibilityTiers: Object.keys(credibilityTiers).length ? credibilityTiers : summary.byCredibilityTier,
+    credibility_tiers: Object.keys(credibilityTiers).length ? credibilityTiers : summary.byCredibilityTier,
+  };
+}
+
+function adaptEvidencePageInfo(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidencePageInfo {
+  const record = isObject(value) ? value : {};
+  const nextPageToken = nullableString(record.nextPageToken ?? record.next_page_token);
+  const pageSize = asFiniteNumber(record.pageSize ?? record.page_size, items.length);
+  const total = asFiniteNumber(record.total, items.length);
+  const hasMore = asBoolean(record.hasMore ?? record.has_more, Boolean(nextPageToken));
+  return {
+    nextPageToken,
+    next_page_token: nextPageToken,
+    hasMore,
+    has_more: hasMore,
+    total,
+    pageSize,
+    page_size: pageSize,
+  };
+}
+
+function evidenceEnvelope(raw: unknown): Record<string, unknown> | unknown[] | null {
+  if (Array.isArray(raw)) return raw;
+  if (!isObject(raw)) return null;
+  const data = raw.data;
+  if (Array.isArray(data) && ("items" in raw || "summary" in raw || "facets" in raw || "page_info" in raw)) {
+    return raw;
+  }
+  if (isObject(data) && ("items" in data || "evidence_refs" in data || "summary" in data)) {
+    return data;
+  }
+  return raw;
+}
+
+export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenceOverview | null {
+  const container = evidenceEnvelope(raw);
+  if (!container) return null;
+  const record = isObject(container) ? container : {};
+  const rawItems = firstArray<unknown>(
+    isObject(record) ? record.items : undefined,
+    isObject(record) ? record.evidence_refs : undefined,
+    isObject(record) ? record.data : undefined,
+    container,
+  );
+  const items = rawItems.map(adaptEvidenceListItem).filter((item): item is ManagementEvidenceListItem => Boolean(item));
+  const summary = adaptEvidenceSummary(isObject(record) ? record.summary : undefined, items);
+  const facets = adaptEvidenceFacets(isObject(record) ? record.facets : undefined, summary);
+  const pageInfo = adaptEvidencePageInfo(isObject(record) ? (record.page_info ?? record.pagination) : undefined, items);
+  const meta = adaptEvidenceMeta(isObject(record) ? record.meta : undefined);
+  return {
+    items,
+    data: items,
+    summary,
+    facets,
+    pageInfo,
+    page_info: pageInfo,
+    pagination: pageInfo,
+    meta,
+  };
+}
+
+function adaptEvidenceStoragePreview(value: unknown): ManagementEvidenceStoragePreview {
+  const record = isObject(value) ? value : {};
+  const previewType = asString(record.previewType ?? record.preview_type, "unavailable");
+  return {
+    available: asBoolean(record.available, false),
+    previewType,
+    preview_type: previewType,
+  };
+}
+
+function adaptEvidenceSourceDocument(value: unknown, fallbackTitle: string): ManagementEvidenceSourceDocument {
+  const record = isObject(value) ? value : {};
+  const sourceType = asString(record.sourceType ?? record.source_type, "unknown");
+  const storagePreview = adaptEvidenceStoragePreview(record.storagePreview ?? record.storage_preview);
+  return {
+    title: asString(record.title, fallbackTitle),
+    sourceType,
+    source_type: sourceType,
+    excerpt: nullableString(record.excerpt),
+    storagePreview,
+    storage_preview: storagePreview,
+    capturedAt: nullableString(record.capturedAt ?? record.captured_at),
+    captured_at: nullableString(record.captured_at ?? record.capturedAt),
+    capturedBy: nullableString(record.capturedBy ?? record.captured_by),
+    captured_by: nullableString(record.captured_by ?? record.capturedBy),
+  };
+}
+
+function adaptEvidenceLinkedDecision(value: unknown): ManagementEvidenceLinkedDecision | null {
+  if (!isObject(value)) return null;
+  const entityType = asString(value.entityType ?? value.entity_type);
+  const entityRef = asString(value.entityRef ?? value.entity_ref ?? value.refId ?? value.ref_id ?? value.id);
+  const displayLabel = nullableString(value.displayLabel ?? value.display_label);
+  if (!entityType && !entityRef && !displayLabel && !value.redacted) return null;
+  const routeHref = nullableString(value.routeHref ?? value.route_href);
+  const linkType = nullableString(value.linkType ?? value.link_type);
+  const relationshipNote = nullableString(value.relationshipNote ?? value.relationship_note);
+  return {
+    entityType,
+    entity_type: entityType,
+    entityRef,
+    entity_ref: entityRef,
+    displayLabel,
+    display_label: displayLabel,
+    routeHref,
+    route_href: routeHref,
+    linkType,
+    link_type: linkType,
+    relationshipNote,
+    relationship_note: relationshipNote,
+    redacted: asBoolean(value.redacted, false),
+    reason: optionalString(value.reason),
+    requiredCapability: optionalString(value.requiredCapability ?? value.required_capability),
+    required_capability: optionalString(value.required_capability ?? value.requiredCapability),
+  };
+}
+
+function adaptEvidenceSourceNoteContext(value: unknown): ManagementEvidenceSourceNoteContext | null {
+  if (!isObject(value)) return null;
+  const noteId = nullableString(value.noteId ?? value.note_id);
+  const title = nullableString(value.title);
+  const excerpt = nullableString(value.excerpt);
+  const routeHref = nullableString(value.routeHref ?? value.route_href);
+  if (!noteId && !title && !excerpt && !routeHref) return null;
+  return { noteId, note_id: noteId, title, excerpt, routeHref, route_href: routeHref };
+}
+
+function adaptEvidenceSourceMemoryContext(value: unknown): ManagementEvidenceSourceMemoryContext | null {
+  if (!isObject(value)) return null;
+  const entryId = nullableString(value.entryId ?? value.entry_id);
+  const headline = nullableString(value.headline);
+  const knowledgeType = nullableString(value.knowledgeType ?? value.knowledge_type);
+  const lifecycleStatus = nullableString(value.lifecycleStatus ?? value.lifecycle_status);
+  const routeHref = nullableString(value.routeHref ?? value.route_href);
+  if (!entryId && !headline && !knowledgeType && !lifecycleStatus && !routeHref) return null;
+  return {
+    entryId,
+    entry_id: entryId,
+    headline,
+    knowledgeType,
+    knowledge_type: knowledgeType,
+    lifecycleStatus,
+    lifecycle_status: lifecycleStatus,
+    routeHref,
+    route_href: routeHref,
+  };
+}
+
+export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceDetail | null {
+  const data = unwrap(raw);
+  if (!isObject(data)) return null;
+  const refId = asString(data.refId ?? data.ref_id ?? data.id);
+  if (!refId) return null;
+  const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
+  const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(data.linkedObjectSummary ?? data.linked_object_summary);
+  const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
+    .map(adaptEvidenceLinkedDecision)
+    .filter((item): item is ManagementEvidenceLinkedDecision => Boolean(item));
+  const linkType = asString(data.linkType ?? data.link_type, "unknown");
+  return {
+    refId,
+    ref_id: refId,
+    title: asString(data.title ?? data.displayLabel ?? data.display_label ?? sourceDocument.title, refId),
+    sourceDocument,
+    source_document: sourceDocument,
+    linkType,
+    link_type: linkType,
+    credibility: adaptEvidenceCredibility(data.credibility),
+    resolvedLink: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
+    resolved_link: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
+    linkedObjectSummary,
+    linked_object_summary: linkedObjectSummary,
+    linkedDecisions,
+    linked_decisions: linkedDecisions,
+    sourceNoteContext: adaptEvidenceSourceNoteContext(data.sourceNoteContext ?? data.source_note_context),
+    source_note_context: adaptEvidenceSourceNoteContext(data.sourceNoteContext ?? data.source_note_context),
+    sourceMemoryContext: adaptEvidenceSourceMemoryContext(data.sourceMemoryContext ?? data.source_memory_context),
+    source_memory_context: adaptEvidenceSourceMemoryContext(data.sourceMemoryContext ?? data.source_memory_context),
+    createdAt: nullableString(data.createdAt ?? data.created_at),
+    created_at: nullableString(data.created_at ?? data.createdAt),
+    redacted: asBoolean(data.redacted, false),
+    requiredCapability: optionalString(data.requiredCapability ?? data.required_capability),
+    reason: optionalString(data.reason),
+    meta: adaptEvidenceMeta(data.meta),
+  };
+}
+
+export function defaultManagementEvidenceOverview(): ManagementEvidenceOverview {
+  return adaptManagementEvidenceOverview({
+    items: [
+      {
+        id: "evref-demo-readiness-001",
+        title: "Readiness evidence unavailable in mock mode",
+        sourceType: "unknown",
+        linkType: "supporting_evidence",
+        capturedAt: "2026-06-15T13:02:00Z",
+        credibility: { tier: "unverified", verified: false },
+        linkedObjectSummary: {
+          entity_type: "readiness",
+          entity_ref: "mock-readiness",
+          display_label: "Mock readiness gate",
+        },
+        resolvedLink: {
+          availability: "unavailable",
+          route_href: null,
+          display_label: "Source unavailable",
+          open_in_new_tab: false,
+        },
+        managementHref: "/management/evidence?ref_id=evref-demo-readiness-001",
+      },
+    ],
+    meta: {
+      snapshot_at: "mock",
+      surfaces: {
+        management_evidence: { status: "mock", source: "local_snapshot" },
+        evidence_refs: { status: "mock", source: "local_snapshot" },
+      },
+      redacted_evidence_count: 0,
+    },
+  }) as ManagementEvidenceOverview;
+}
+
+export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-001"): ManagementEvidenceDetail {
+  return adaptManagementEvidenceDetail({
+    ref_id: refId,
+    source_document: {
+      title: "Readiness evidence unavailable in mock mode",
+      source_type: "unknown",
+      excerpt: null,
+      storage_preview: { available: false, preview_type: "unavailable" },
+      captured_at: "2026-06-15T13:02:00Z",
+      captured_by: null,
+    },
+    link_type: "supporting_evidence",
+    credibility: {
+      tier: "unverified",
+      verified: false,
+      last_verified_at: null,
+      verification_method: null,
+    },
+    resolved_link: {
+      availability: "unavailable",
+      route_href: null,
+      display_label: "Source unavailable",
+      open_in_new_tab: false,
+    },
+    linked_object_summary: {
+      entity_type: "readiness",
+      entity_ref: "mock-readiness",
+      display_label: "Mock readiness gate",
+    },
+    linked_decisions: [],
+    source_note_context: null,
+    source_memory_context: null,
+    created_at: "2026-06-15T13:02:00Z",
+    meta: {
+      snapshot_at: "mock",
+      surfaces: {
+        evidence_ref_detail: "mock",
+        resolved_link: "mock",
+        linked_decisions: "mock",
+      },
+      redacted_evidence_count: 0,
+    },
+  }) as ManagementEvidenceDetail;
+}
 
 const normalizeOoda = (value: unknown): ManagementOodaStage => {
   const stage = asString(value).toLowerCase();
@@ -1125,6 +1806,23 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtEvidenceExplorer() },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<T>, seedFn),
+      ),
+    overview: (
+      seedFn: () => ManagementEvidenceOverview = defaultManagementEvidenceOverview,
+    ): Promise<ManagementEvidenceOverview> =>
+      withLiveOrMock<ManagementEvidenceOverview, unknown>(
+        { method: "GET", path: paths.mgmtEvidenceExplorer() },
+        async () => seedFn(),
+        safeAdapt(adaptManagementEvidenceOverview, seedFn),
+      ),
+    detail: (
+      refId: string,
+      seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
+    ): Promise<ManagementEvidenceDetail> =>
+      withLiveOrMock<ManagementEvidenceDetail, unknown>(
+        { method: "GET", path: paths.knowledgeEvidenceRef(refId) },
+        async () => seedFn(),
+        safeAdapt(adaptManagementEvidenceDetail, seedFn),
       ),
   },
 

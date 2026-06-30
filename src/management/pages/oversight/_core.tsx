@@ -31,7 +31,14 @@ import {
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
 import {
+  defaultManagementEvidenceDetail,
+  defaultManagementEvidenceOverview,
   defaultTradingPulseModel,
+  type ManagementEvidenceDetail,
+  type ManagementEvidenceLinkedDecision,
+  type ManagementEvidenceListItem,
+  type ManagementEvidenceMeta,
+  type ManagementEvidenceResolvedLink,
   type ManagementPersonaFleetRow,
   type ManagementTradingPulseCard,
   type ManagementTradingPulseModel,
@@ -1055,70 +1062,211 @@ export const EvolutionJournalPage = () => {
 // Evidence Explorer
 // =====================================================================
 
-interface EvidenceRow {
-  id: string; kind: string; status: string;
-  hash: string; linkedObject: string; createdAt: string;
-  // Live BFF evidence shape uses different field names; some are objects.
-  refId?: string; sourceType?: string; linkType?: string; capturedAt?: string;
-  sourceRef?: unknown; credibility?: unknown; linkedObjectSummary?: unknown;
+function evidenceLabel(value?: string | null): string {
+  return value ? value.replace(/_/g, " ") : "—";
 }
 
-// Coerce a possibly-object evidence field to a display string.
-function evidenceText(v: unknown): string | undefined {
-  if (typeof v === "string") return v || undefined;
-  if (v && typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    const s = o.display_label ?? o.displayLabel ?? o.tier ?? o.entity_ref ?? o.entityRef ?? o.label;
-    return typeof s === "string" && s ? s : undefined;
-  }
-  return undefined;
+function evidenceTimestamp(value?: string | null): string {
+  return value ? safeDateTime(value) : "—";
 }
 
-const EVIDENCE: EvidenceRow[] = [
-  { id: "ev:proposal-v3", kind: "MutationProposal", status: "verified", hash: "0xprop3", linkedObject: "persona:alpha-trader", createdAt: "2026-05-19" },
-  { id: "ev:paper-14d",  kind: "Paper14dEvidence", status: "verified", hash: "0xpap14", linkedObject: "strategy:alpha-momentum", createdAt: "2026-05-19" },
-  { id: "ev:legal-hold-1", kind: "PolicyEvidence", status: "verified", hash: "0xlegal1", linkedObject: "trace-003", createdAt: "2026-05-20" },
-];
+function linkedObjectLabel(item?: ManagementEvidenceListItem["linkedObjectSummary"]): string {
+  if (!item) return "—";
+  return item.displayLabel || item.display_label || item.entityRef || item.entity_ref || "—";
+}
 
-export const EvidenceExplorerPage = () => {
+function linkedObjectRef(item?: ManagementEvidenceListItem["linkedObjectSummary"]): string {
+  if (!item) return "—";
+  const entityType = item.entityType || item.entity_type;
+  const entityRef = item.entityRef || item.entity_ref;
+  return [entityType, entityRef].filter(Boolean).join(":") || "—";
+}
+
+function evidenceSurfaceStatus(meta?: ManagementEvidenceMeta, key = "management_evidence"): string {
+  return meta?.surfaces?.[key]?.status ?? "unknown";
+}
+
+function isEvidenceSurfaceDegraded(status: string): boolean {
+  return !["ok", "fresh", "mock"].includes(status.toLowerCase());
+}
+
+const EvidenceSurfaceBanner = ({ meta, primaryKey }: { meta?: ManagementEvidenceMeta; primaryKey: string }) => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.evidence.list<EvidenceRow>(() => EVIDENCE), []);
-  const rows = data ?? EVIDENCE;
+  const entries = Object.entries(meta?.surfaces ?? {});
+  const degraded = entries.filter(([, surface]) => isEvidenceSurfaceDegraded(surface.status));
+  if (degraded.length === 0) return null;
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+      <div className="font-medium">{t("mgmt.evidence.surfaceDegraded")}</div>
+      <div className="mt-1 text-xs">
+        {degraded.map(([key, surface]) => `${key}: ${surface.status}`).join(" · ")}
+        {meta?.snapshotAt || meta?.snapshot_at ? ` · ${t("mgmt.evidence.snapshotAt")}: ${meta.snapshotAt ?? meta.snapshot_at}` : ""}
+      </div>
+      {!degraded.some(([key]) => key === primaryKey) && (
+        <div className="mt-1 text-xs">{primaryKey}: {evidenceSurfaceStatus(meta, primaryKey)}</div>
+      )}
+    </div>
+  );
+};
+
+const EvidenceResolvedLinkAction = ({ link }: { link: ManagementEvidenceResolvedLink }) => {
+  const { t } = useTranslation();
+  const href = link.routeHref ?? link.route_href;
+  const label = link.displayLabel || link.display_label || t("mgmt.evidence.openResolvedSource");
+  if (!href) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Badge variant="outline" className="w-fit">{evidenceLabel(link.availability)}</Badge>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+    );
+  }
+  if (link.openInNewTab || link.open_in_new_tab || link.availability === "external") {
+    return (
+      <Button asChild size="sm" variant="outline">
+        <a href={href} target="_blank" rel="noreferrer">
+          {label}
+          <ArrowUpRight aria-hidden="true" />
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <Button asChild size="sm" variant="outline">
+      <Link to={href}>
+        {label}
+        <ArrowUpRight aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+};
+
+const EvidenceMetric = ({ label, value }: { label: string; value: ReactNode }) => (
+  <div className="rounded-md border border-border bg-background px-4 py-3">
+    <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+    <dd className="mt-1 text-2xl font-semibold text-foreground">{value}</dd>
+  </div>
+);
+
+const EvidenceField = ({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) => (
+  <div>
+    <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+    <dd className={["mt-1 text-sm text-foreground", mono ? "break-all font-mono text-xs" : ""].filter(Boolean).join(" ")}>
+      {value}
+    </dd>
+  </div>
+);
+
+const EvidenceExplorerList = () => {
+  const { t } = useTranslation();
+  const seed = useMemo(() => defaultManagementEvidenceOverview(), []);
+  const { data, loading } = useV5Live(() => mgmt.evidence.overview(() => seed), []);
+  if (!data && loading) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+        <header>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
+        </header>
+        <Card className="p-4 text-sm text-muted-foreground">{t("mgmt.evidence.loading")}</Card>
+      </section>
+    );
+  }
+  if (!data) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+        <header>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.evidence.unavailableTitle")}</p>
+        </header>
+      </section>
+    );
+  }
+  const model = data;
+  const rows = model.items;
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
       </header>
+      <EvidenceSurfaceBanner meta={model.meta} primaryKey="management_evidence" />
+      <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <EvidenceMetric label={t("mgmt.evidence.total")} value={model.summary.totalEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.visible")} value={model.summary.visibleEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.redacted")} value={model.summary.redactedEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.surface")} value={evidenceLabel(evidenceSurfaceStatus(model.meta))} />
+      </dl>
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">{t("mgmt.evidence.id")}</th><th className="px-3 py-2">{t("mgmt.evidence.kind")}</th>
-              <th className="px-3 py-2">{t("mgmt.evidence.status")}</th><th className="px-3 py-2">{t("mgmt.evidence.hash")}</th>
-              <th className="px-3 py-2">{t("mgmt.evidence.linkedObject")}</th><th className="px-3 py-2">{t("mgmt.evidence.created")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.source")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.credibility")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.resolution")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.linkedObject")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.captured")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((e) => {
-              // Fall back to live BFF field names when the mock fields are absent.
-              // credibility / linkedObjectSummary / sourceRef arrive as objects.
-              const kind = e.kind ?? e.sourceType ?? e.linkType ?? "—";
-              const status = e.status ?? evidenceText(e.credibility) ?? "—";
-              const hash = e.hash ?? e.refId ?? evidenceText(e.sourceRef) ?? "—";
-              const linkedObject = e.linkedObject ?? evidenceText(e.linkedObjectSummary) ?? "—";
-              const createdAt = e.createdAt ?? e.capturedAt ?? "—";
+              const detailHref = e.managementHref ?? e.management_href;
               return (
-                <tr key={e.id} className="border-b border-border/50">
-                  <td className="px-3 py-2 font-mono"><Link to={`/management/evidence/${encodeURIComponent(e.id)}`} className="text-primary underline-offset-4 hover:underline">{e.id}</Link></td>
-                  <td className="px-3 py-2">{kind}</td>
-                  <td className="px-3 py-2"><Badge variant="outline">{status}</Badge></td>
-                  <td className="px-3 py-2 font-mono text-xs">{hash}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{linkedObject}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{createdAt}</td>
+                <tr key={e.refId} className="border-b border-border/50 align-top">
+                  <td className="px-3 py-3">
+                    {detailHref ? (
+                      <Link to={detailHref} className="font-medium text-primary underline-offset-4 hover:underline">
+                        {e.title}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-foreground">{e.title}</span>
+                    )}
+                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{e.refId}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {evidenceLabel(e.sourceType)} · {evidenceLabel(e.linkType)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={e.credibility.verified ? "default" : "outline"}>
+                        {e.credibility.verified ? t("mgmt.evidence.verified") : t("mgmt.evidence.unverified")}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{evidenceLabel(e.credibility.tier)}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <EvidenceResolvedLinkAction link={e.resolvedLink} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-foreground">{linkedObjectLabel(e.linkedObjectSummary)}</div>
+                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                      {linkedObjectRef(e.linkedObjectSummary)}
+                    </div>
+                    {e.redacted && (
+                      <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground">{evidenceTimestamp(e.capturedAt ?? e.captured_at)}</td>
                 </tr>
               );
             })}
+            {rows.length === 0 && !loading && (
+              <tr>
+                <td className="px-3 py-6 text-center text-muted-foreground" colSpan={5}>
+                  {t("mgmt.evidence.noRows")}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -1126,35 +1274,232 @@ export const EvidenceExplorerPage = () => {
   );
 };
 
-export const EvidencePacketDetailPage = () => {
+export const EvidenceExplorerPage = () => {
+  const [searchParams] = useSearchParams();
+  const focusedRefId = searchParams.get("ref_id");
+  if (focusedRefId) return <EvidenceDetailView refId={focusedRefId} />;
+  return <EvidenceExplorerList />;
+};
+
+const EvidenceLinkedDecisions = ({ decisions }: { decisions: ManagementEvidenceLinkedDecision[] }) => {
   const { t } = useTranslation();
-  const { id = "" } = useParams<{ id: string }>();
+  if (decisions.length === 0) {
+    return <p className="text-sm text-muted-foreground">{t("mgmt.evidence.noLinkedDecisions")}</p>;
+  }
+  return (
+    <ul className="divide-y divide-border">
+      {decisions.map((decision, index) => {
+        const label = (
+          decision.displayLabel ?? decision.display_label ?? decision.entityRef ?? decision.entity_ref
+        ) || t("mgmt.evidence.redactedDecision");
+        const href = decision.routeHref ?? decision.route_href;
+        return (
+          <li key={`${decision.entityType}-${decision.entityRef}-${index}`} className="py-3 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {href ? (
+                <Link to={href} className="font-medium text-primary underline-offset-4 hover:underline">{label}</Link>
+              ) : (
+                <span className="font-medium text-foreground">{label}</span>
+              )}
+              {decision.redacted && <Badge variant="outline">{t("mgmt.evidence.redacted")}</Badge>}
+            </div>
+            <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+              {[decision.entityType ?? decision.entity_type, decision.entityRef ?? decision.entity_ref].filter(Boolean).join(":") || "—"}
+            </div>
+            {decision.linkType || decision.link_type ? (
+              <div className="mt-1 text-xs text-muted-foreground">{evidenceLabel(decision.linkType ?? decision.link_type)}</div>
+            ) : null}
+            {decision.relationshipNote || decision.relationship_note ? (
+              <p className="mt-1 text-sm text-muted-foreground">{decision.relationshipNote ?? decision.relationship_note}</p>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
+const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }) => {
+  const { t } = useTranslation();
+  const note = detail.sourceNoteContext ?? detail.source_note_context;
+  const memory = detail.sourceMemoryContext ?? detail.source_memory_context;
+  if (!note && !memory) return null;
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {note && (
+        <Card className="p-4">
+          <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.sourceNote")}</h2>
+          <dl className="mt-3 space-y-3">
+            <EvidenceField label={t("mgmt.evidence.titleLabel")} value={note.title || "—"} />
+            <EvidenceField label={t("mgmt.evidence.id")} value={note.noteId ?? note.note_id ?? "—"} mono />
+            {note.excerpt && <EvidenceField label={t("mgmt.evidence.excerpt")} value={note.excerpt} />}
+            {(note.routeHref ?? note.route_href) && (
+              <dd>
+                <Button asChild size="sm" variant="outline">
+                  <Link to={(note.routeHref ?? note.route_href) as string}>
+                    {t("mgmt.evidence.openContext")}
+                    <ArrowUpRight aria-hidden="true" />
+                  </Link>
+                </Button>
+              </dd>
+            )}
+          </dl>
+        </Card>
+      )}
+      {memory && (
+        <Card className="p-4">
+          <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.sourceMemory")}</h2>
+          <dl className="mt-3 space-y-3">
+            <EvidenceField label={t("mgmt.evidence.titleLabel")} value={memory.headline || "—"} />
+            <EvidenceField label={t("mgmt.evidence.id")} value={memory.entryId ?? memory.entry_id ?? "—"} mono />
+            <EvidenceField label={t("mgmt.evidence.kind")} value={evidenceLabel(memory.knowledgeType ?? memory.knowledge_type)} />
+            <EvidenceField label={t("mgmt.evidence.status")} value={evidenceLabel(memory.lifecycleStatus ?? memory.lifecycle_status)} />
+            {(memory.routeHref ?? memory.route_href) && (
+              <dd>
+                <Button asChild size="sm" variant="outline">
+                  <Link to={(memory.routeHref ?? memory.route_href) as string}>
+                    {t("mgmt.evidence.openContext")}
+                    <ArrowUpRight aria-hidden="true" />
+                  </Link>
+                </Button>
+              </dd>
+            )}
+          </dl>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+const EvidenceDetailView = ({ refId }: { refId: string }) => {
+  const { t } = useTranslation();
+  const seed = useMemo(() => defaultManagementEvidenceDetail(refId), [refId]);
+  const { data, loading } = useV5Live(
+    () => refId ? mgmt.evidence.detail(refId, () => seed) : Promise.resolve(seed),
+    [refId],
+  );
+
+  if (!refId) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
+        <Card className="p-4">
+          <p className="text-sm">{t("mgmt.evidence.seeListAt")} <Link to="/management/evidence" className="text-primary underline-offset-4 hover:underline">{t("mgmt.evidence.backToList")}</Link>.</p>
+        </Card>
+      </section>
+    );
+  }
+
+  if (!data && loading) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
+        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.packetTitle")}</h1>
+        <Card className="p-4 text-sm text-muted-foreground">{t("mgmt.evidence.loading")}</Card>
+      </section>
+    );
+  }
+
+  if (!data) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
+        <header>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.unavailableTitle")}</h1>
+          <p className="text-sm text-muted-foreground">{refId}</p>
+        </header>
+        <Card className="p-4">
+          <Button asChild size="sm" variant="outline">
+            <Link to="/management/evidence">{t("mgmt.evidence.backToList")}</Link>
+          </Button>
+        </Card>
+      </section>
+    );
+  }
+
+  const detail = data;
+  const linkedObject = detail.linkedObjectSummary ?? detail.linked_object_summary;
+  const storagePreview = detail.sourceDocument.storagePreview ?? detail.sourceDocument.storage_preview;
+  const sourceTitle = detail.sourceDocument.title || detail.title;
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.packetTitle")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mgmt.evidence.packetSubtitle")}</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{sourceTitle}</h1>
+          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.refId}</p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/management/evidence">{t("mgmt.evidence.backToList")}</Link>
+        </Button>
       </header>
-      <Card className="p-4">
-        {id ? (
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("mgmt.evidence.ref")}
-              </div>
-              <code className="mt-1 block break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-                {id}
-              </code>
-            </div>
-            <p className="text-muted-foreground">{t("mgmt.evidence.refOnlyHint")}</p>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/management/evidence">{t("mgmt.evidence.backToList")}</Link>
-            </Button>
+      <EvidenceSurfaceBanner meta={detail.meta} primaryKey="evidence_ref_detail" />
+      {detail.redacted && (
+        <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
+          <Badge variant="outline">{t("mgmt.evidence.redacted")}</Badge>
+          <span className="ml-2 text-muted-foreground">{detail.requiredCapability ?? detail.reason ?? "—"}</span>
+        </div>
+      )}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <Card className="p-4">
+          <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.packetContent")}</h2>
+          <dl className="mt-4 grid gap-4 md:grid-cols-2">
+            <EvidenceField label={t("mgmt.evidence.sourceType")} value={evidenceLabel(detail.sourceDocument.sourceType ?? detail.sourceDocument.source_type)} />
+            <EvidenceField label={t("mgmt.evidence.linkType")} value={evidenceLabel(detail.linkType)} />
+            <EvidenceField label={t("mgmt.evidence.captured")} value={evidenceTimestamp(detail.sourceDocument.capturedAt ?? detail.sourceDocument.captured_at)} />
+            <EvidenceField label={t("mgmt.evidence.capturedBy")} value={detail.sourceDocument.capturedBy ?? detail.sourceDocument.captured_by ?? "—"} />
+            <EvidenceField label={t("mgmt.evidence.preview")} value={storagePreview.available ? evidenceLabel(storagePreview.previewType ?? storagePreview.preview_type) : t("mgmt.evidence.previewUnavailable")} />
+            <EvidenceField label={t("mgmt.evidence.created")} value={evidenceTimestamp(detail.createdAt ?? detail.created_at)} />
+          </dl>
+          <div className="mt-4">
+            <div className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.evidence.excerpt")}</div>
+            <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm text-foreground">
+              {detail.sourceDocument.excerpt || t("mgmt.evidence.noExcerpt")}
+            </pre>
           </div>
-        ) : (
-          <p className="text-sm">{t("mgmt.evidence.seeListAt")} <Link to="/management/evidence" className="text-primary underline-offset-4 hover:underline">{t("mgmt.evidence.backToList")}</Link>.</p>
+        </Card>
+        <div className="space-y-4">
+          <Card className="p-4">
+            <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.credibility")}</h2>
+            <dl className="mt-3 space-y-3">
+              <EvidenceField label={t("mgmt.evidence.tier")} value={evidenceLabel(detail.credibility.tier)} />
+              <EvidenceField
+                label={t("mgmt.evidence.verified")}
+                value={detail.credibility.verified ? t("mgmt.evidence.yes") : t("mgmt.evidence.no")}
+              />
+              <EvidenceField label={t("mgmt.evidence.lastVerified")} value={evidenceTimestamp(detail.credibility.lastVerifiedAt ?? detail.credibility.last_verified_at)} />
+              <EvidenceField label={t("mgmt.evidence.verificationMethod")} value={evidenceLabel(detail.credibility.verificationMethod ?? detail.credibility.verification_method)} />
+            </dl>
+          </Card>
+          <Card className="p-4">
+            <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.resolution")}</h2>
+            <dl className="mt-3 space-y-3">
+              <EvidenceField label={t("mgmt.evidence.availability")} value={evidenceLabel(detail.resolvedLink.availability)} />
+              <dd><EvidenceResolvedLinkAction link={detail.resolvedLink} /></dd>
+            </dl>
+          </Card>
+          <Card className="p-4">
+            <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.linkedObject")}</h2>
+            <dl className="mt-3 space-y-3">
+              <EvidenceField label={t("mgmt.evidence.titleLabel")} value={linkedObjectLabel(linkedObject)} />
+              <EvidenceField label={t("mgmt.evidence.entity")} value={linkedObjectRef(linkedObject)} mono />
+            </dl>
+          </Card>
+        </div>
+      </div>
+      <Card className="p-4">
+        <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.linkedDecisions")}</h2>
+        {isEvidenceSurfaceDegraded(evidenceSurfaceStatus(detail.meta, "linked_decisions")) && (
+          <p className="mt-1 text-xs text-amber-700">{t("mgmt.evidence.linkedDecisionsDegraded")}</p>
         )}
+        <div className="mt-3">
+          <EvidenceLinkedDecisions decisions={detail.linkedDecisions} />
+        </div>
       </Card>
+      <EvidenceSourceContexts detail={detail} />
     </section>
   );
+};
+
+export const EvidencePacketDetailPage = () => {
+  const { id = "" } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  return <EvidenceDetailView refId={id || searchParams.get("ref_id") || ""} />;
 };

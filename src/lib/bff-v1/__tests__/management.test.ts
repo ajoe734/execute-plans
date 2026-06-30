@@ -3,6 +3,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  adaptManagementEvidenceDetail,
+  adaptManagementEvidenceOverview,
   adaptTradingPulseOverview,
   adaptHumanInboxDetail,
   adaptHumanInboxList,
@@ -257,6 +259,168 @@ describe("mgmt façade (PM-Live)", () => {
     expect(await mgmt.personaIntent.list(() => seed as never)).toBe(seed);
   });
 
+  it("adapts management Evidence Explorer envelopes into production evidence rows", () => {
+    const out = adaptManagementEvidenceOverview({
+      data: [
+        {
+          id: "evref-rart-20260615-002",
+          refId: "evref-rart-20260615-002",
+          title: "TW momentum candidate",
+          sourceType: null,
+          sourceRef: "object://opaque/not-for-ui",
+          capturedAt: "2026-06-15T13:06:00Z",
+          linkType: "provenance",
+          credibility: { tier: "producer_record", verified: true },
+          linkedObjectSummary: {
+            entity_type: "artifact",
+            entity_ref: "rart-20260615-002",
+            display_label: "TW momentum candidate",
+          },
+          resolvedLink: {
+            availability: "unavailable",
+            route_href: null,
+            display_label: "Source unavailable",
+            open_in_new_tab: false,
+          },
+          managementHref: "/management/evidence?ref_id=evref-rart-20260615-002",
+        },
+      ],
+      summary: {
+        totalEvidence: 1,
+        visibleEvidence: 1,
+        verifiedEvidence: 1,
+        redactedEvidence: 0,
+        byCredibilityTier: { producer_record: 1 },
+      },
+      meta: {
+        snapshot_at: "2026-06-30T12:23:04Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "bff_composed" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+      },
+    });
+
+    expect(out?.summary.verifiedEvidence).toBe(1);
+    expect(out?.items[0]).toMatchObject({
+      refId: "evref-rart-20260615-002",
+      title: "TW momentum candidate",
+      linkType: "provenance",
+      credibility: { tier: "producer_record", verified: true },
+      linkedObjectSummary: {
+        entityType: "artifact",
+        entityRef: "rart-20260615-002",
+        displayLabel: "TW momentum candidate",
+      },
+      resolvedLink: {
+        availability: "unavailable",
+        routeHref: null,
+        displayLabel: "Source unavailable",
+      },
+      managementHref: "/management/evidence?ref_id=evref-rart-20260615-002",
+    });
+    expect(out?.items[0] as Record<string, unknown>).not.toHaveProperty("sourceRef");
+  });
+
+  it("adapts knowledge evidence detail without exposing opaque storage refs", () => {
+    const out = adaptManagementEvidenceDetail({
+      ref_id: "evref-note-001",
+      source_document: {
+        title: "Admission readiness packet",
+        source_type: "research_note",
+        excerpt: "Plain text excerpt",
+        source_ref: "storage://opaque/not-for-ui",
+        storage_preview: {
+          available: true,
+          preview_type: "pdf",
+          preview_token: "short-lived-token",
+        },
+        captured_at: "2026-06-15T13:02:00Z",
+        captured_by: "Research Orchestrator",
+      },
+      link_type: "supporting_evidence",
+      credibility: {
+        tier: "primary",
+        verified: true,
+        last_verified_at: "2026-06-15T13:04:00Z",
+        verification_method: "readiness_review",
+      },
+      resolved_link: {
+        availability: "available",
+        route_href: "/knowledge/notes/note-001",
+        display_label: "Open source note",
+        open_in_new_tab: false,
+      },
+      linked_object_summary: {
+        entity_type: "artifact",
+        entity_ref: "rart-20260615-001",
+        display_label: "TW momentum factor candidate model",
+      },
+      linked_decisions: [
+        {
+          entity_type: "decision",
+          entity_ref: "decision-001",
+          display_label: "Approve artifact admission",
+          route_href: "/management/human-inbox/decision-001",
+          link_type: "supporting_evidence",
+          relationship_note: "Supports admission",
+        },
+      ],
+      source_note_context: {
+        note_id: "note-001",
+        title: "Admission note",
+        excerpt: "Note context",
+        route_href: "/knowledge/notes/note-001",
+      },
+      source_memory_context: null,
+      created_at: "2026-06-15T13:02:00Z",
+      meta: {
+        snapshot_at: "2026-06-30T12:23:04Z",
+        surfaces: {
+          evidence_ref_detail: "ok",
+          resolved_link: "ok",
+          linked_decisions: "ok",
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+
+    expect(out).toMatchObject({
+      refId: "evref-note-001",
+      sourceDocument: {
+        title: "Admission readiness packet",
+        sourceType: "research_note",
+        excerpt: "Plain text excerpt",
+        storagePreview: { available: true, previewType: "pdf" },
+      },
+      credibility: {
+        tier: "primary",
+        verified: true,
+        lastVerifiedAt: "2026-06-15T13:04:00Z",
+        verificationMethod: "readiness_review",
+      },
+      resolvedLink: {
+        availability: "available",
+        routeHref: "/knowledge/notes/note-001",
+        displayLabel: "Open source note",
+      },
+      linkedObjectSummary: {
+        entityType: "artifact",
+        entityRef: "rart-20260615-001",
+        displayLabel: "TW momentum factor candidate model",
+      },
+      linkedDecisions: [
+        {
+          entityType: "decision",
+          entityRef: "decision-001",
+          routeHref: "/management/human-inbox/decision-001",
+        },
+      ],
+    });
+    expect(out?.sourceDocument as Record<string, unknown>).not.toHaveProperty("sourceRef");
+    expect(out?.sourceDocument.storagePreview as Record<string, unknown>).not.toHaveProperty("previewToken");
+  });
+
   it("personaFleet.get does not serve demo rows in mock mode", async () => {
     await expect(mgmt.personaFleet.get()).rejects.toThrow("demo fallback is disabled");
   });
@@ -389,6 +553,7 @@ describe("mgmt façade (PM-Live)", () => {
     expect(paths.mgmtTradingRankings()).toMatch(/trading-pulse\/rankings$/);
     expect(paths.mgmtEvolutionJournal()).toMatch(/evolution-journal$/);
     expect(paths.mgmtEvidenceExplorer()).toMatch(/management\/evidence$/);
+    expect(paths.knowledgeEvidenceRef("evref-1")).toBe("/api/v1/knowledge/evidence/evref-1");
     expect(paths.mgmtPersonaIntent()).toMatch(/persona-intent$/);
     expect(paths.mgmtReadinessEp5()).toMatch(/readiness\/ep5$/);
     expect(paths.mgmtReadinessBrokerLive()).toMatch(/readiness\/broker-live$/);
