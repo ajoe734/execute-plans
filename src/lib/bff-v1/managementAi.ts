@@ -126,12 +126,15 @@ export interface AssistantProviderReadinessStatus {
   provider?: string;
   providerName?: string;
   runtime?: string;
+  model?: string | null;
   ready?: boolean;
   status?: string;
   reason?: string | null;
   degradedReason?: string | null;
   auth?: string;
   authStatus?: string;
+  authStrategy?: string | null;
+  reauthSupported?: boolean;
   version?: string;
   mountMode?: string;
   checkedAt?: string;
@@ -226,6 +229,22 @@ export type AssistantProvidersResult =
       providers: AssistantProviderReadinessStatus[];
       meta: Record<string, unknown> | null;
     }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export interface AssistantProviderRegisterInput {
+  provider: string;
+  providerName?: string;
+  runtime?: string;
+  model?: string;
+  authStrategy?: string;
+  binary?: string;
+  binaryEnv?: string;
+  note?: string;
+  traceId?: string;
+}
+
+export type AssistantProviderRegisterResult =
+  | { ok: true; kind: "ok"; provider: AssistantProviderReadinessStatus; meta: Record<string, unknown> | null }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface AssistantDevBridgeInboxStatus {
@@ -746,12 +765,15 @@ function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessS
     provider: asString(r.provider),
     providerName: asString(r.providerName ?? r.provider_name),
     runtime: asString(r.runtime),
+    model: asString(r.model) ?? null,
     ready: asBoolean(r.ready),
     status: asString(r.status),
     reason: asString(r.reason) ?? null,
     degradedReason: asString(r.degradedReason ?? r.degraded_reason) ?? null,
     auth: asString(r.auth),
     authStatus: asString(r.authStatus ?? r.auth_status),
+    authStrategy: asString(r.authStrategy ?? r.auth_strategy) ?? null,
+    reauthSupported: asBoolean(r.reauthSupported ?? r.reauth_supported),
     version: asString(r.version),
     mountMode: asString(r.mountMode ?? r.mount_mode),
     checkedAt: asString(r.checkedAt ?? r.checked_at),
@@ -909,6 +931,83 @@ export async function fetchAssistantProviders(
     providers,
     meta: asRecord(parsed?.meta) ?? null,
   };
+}
+
+export async function registerAssistantProvider(
+  input: AssistantProviderRegisterInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantProviderRegisterResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    provider: input.provider,
+    providerName: input.providerName,
+    runtime: input.runtime,
+    model: input.model,
+    authStrategy: input.authStrategy,
+    binary: input.binary,
+    binaryEnv: input.binaryEnv,
+    note: input.note,
+    traceId: input.traceId,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviderRegister()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const provider = adaptProviderReadinessStatus(parsed?.data);
+  if (!provider) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no provider registration.",
+    };
+  }
+  return { ok: true, kind: "ok", provider, meta: asRecord(parsed?.meta) ?? null };
 }
 
 export async function fetchAssistantProviderUsageSummary(

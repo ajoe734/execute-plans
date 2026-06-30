@@ -170,6 +170,20 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
         credentialExchange: { bffHandlesCredentials: true },
       },
     }),
+    registerProvider: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      provider: {
+        provider: "gemini_cli",
+        providerName: "Gemini CLI",
+        runtime: "external_llm",
+        ready: false,
+        status: "registered",
+        authStatus: "not_configured",
+        reauthSupported: false,
+      },
+      meta: null,
+    }),
     ...overrides,
   };
 }
@@ -287,6 +301,60 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByRole("link", { name: /login/i })).toHaveAttribute("href", "https://example.test/device");
   });
 
+  it("starts Claude provider reauth from a failed auth card", async () => {
+    const fakeApi = api({
+      fetchProviders: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "claude",
+            providerName: "Claude CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "claude_auth_probe_non_zero_exit",
+            reauthSupported: true,
+          },
+        ],
+        meta: { auth_probe: true },
+      } satisfies AssistantProvidersResult),
+      startReauth: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        reauth: {
+          provider: "claude",
+          status: "pending",
+          reauthSessionId: "claude_reauth_1",
+          verificationUri: "https://console.anthropic.com/login",
+          verificationUriComplete: null,
+          userCode: "WXYZ-1234",
+          expiresAt: null,
+          intervalSeconds: 5,
+          credentialExchange: { bffHandlesCredentials: false },
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /start reauth/i }));
+
+    await waitFor(() => {
+      expect(fakeApi.startReauth).toHaveBeenCalledWith({
+        provider: "claude",
+        reason: "OpenClaw LLM Auth management",
+      });
+    });
+    expect(await screen.findByText("claude reauth pending")).toBeInTheDocument();
+    expect(screen.getByText("code=WXYZ-1234")).toBeInTheDocument();
+  });
+
   it("activates kernel_debug control mode before starting provider reauth", async () => {
     const fakeApi = api({
       fetchMode: vi.fn().mockResolvedValue({
@@ -328,6 +396,56 @@ describe("OpenClawLlmAuthPanel", () => {
       });
     });
     expect(await screen.findByText("code=ABCD-EFGH")).toBeInTheDocument();
+  });
+
+  it("activates control mode before registering a new LLM provider", async () => {
+    const fakeApi = api({
+      fetchMode: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: {
+          kernelEnabled: true,
+          controlMode: {
+            active: false,
+            mode: "inactive",
+            state: "inactive",
+          },
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /add llm/i }));
+    fireEvent.change(screen.getByLabelText("Provider id"), { target: { value: "gemini-cli" } });
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Gemini CLI" } });
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gemini-2.5-pro" } });
+    fireEvent.change(screen.getByLabelText("Control passphrase"), { target: { value: "control phrase ok" } });
+    fireEvent.click(screen.getByRole("button", { name: /register/i }));
+
+    await waitFor(() => {
+      expect(fakeApi.activateControlMode).toHaveBeenCalledWith({
+        passphrase: "control phrase ok",
+        mode: "kernel_debug",
+        reason: "OpenClaw LLM Auth register provider: gemini_cli",
+        ttlSeconds: 900,
+        idleTtlSeconds: 300,
+      });
+      expect(fakeApi.registerProvider).toHaveBeenCalledWith({
+        provider: "gemini_cli",
+        providerName: "Gemini CLI",
+        runtime: "external_llm",
+        model: "gemini-2.5-pro",
+        authStrategy: "manual",
+        binary: undefined,
+        binaryEnv: undefined,
+        note: undefined,
+      });
+    });
+    expect(await screen.findByText("Registered Gemini CLI")).toBeInTheDocument();
   });
 
   it("renders provider usage history and quota source on the full management page", async () => {
