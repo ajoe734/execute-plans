@@ -11,6 +11,7 @@ import {
   fetchManagementAiConversationList,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
+  registerAssistantProvider,
   startAssistantProviderReauth,
 } from "@/lib/bff-v1/managementAi";
 
@@ -479,6 +480,54 @@ describe("Management AI provider reauth", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(409);
     expect(result.message).toContain("active control mode");
+  });
+});
+
+describe("Management AI provider registry", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("registers a new provider through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "gemini_cli",
+        provider_name: "Gemini CLI",
+        runtime: "external_llm",
+        status: "registered",
+        ready: false,
+        auth_status: "not_configured",
+        reauth_supported: false,
+      },
+      meta: { openclawAdapterStatus: "ok" },
+    }, 201));
+    globalThis.fetch = fetchMock;
+
+    const result = await registerAssistantProvider({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
+    });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(result.provider.provider).toBe("gemini_cli");
+    expect(result.provider.reauthSupported).toBe(false);
   });
 });
 

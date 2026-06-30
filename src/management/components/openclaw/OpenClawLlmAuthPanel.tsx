@@ -6,6 +6,7 @@ import {
   ExternalLink,
   KeyRound,
   Loader2,
+  Plus,
   RefreshCcw,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ import {
   fetchAssistantProviderReauthStatus,
   fetchAssistantProviderUsageSummary,
   fetchAssistantProviders,
+  registerAssistantProvider,
   startAssistantProviderReauth,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
@@ -50,6 +52,7 @@ export interface OpenClawLlmAuthApi {
   activateControlMode: typeof activateAssistantControlMode;
   startReauth: typeof startAssistantProviderReauth;
   fetchReauthStatus: typeof fetchAssistantProviderReauthStatus;
+  registerProvider: typeof registerAssistantProvider;
 }
 
 const defaultApi: OpenClawLlmAuthApi = {
@@ -60,9 +63,33 @@ const defaultApi: OpenClawLlmAuthApi = {
   activateControlMode: activateAssistantControlMode,
   startReauth: startAssistantProviderReauth,
   fetchReauthStatus: fetchAssistantProviderReauthStatus,
+  registerProvider: registerAssistantProvider,
 };
 
 type PanelMode = "summary" | "full";
+type AddProviderForm = {
+  provider: string;
+  providerName: string;
+  runtime: string;
+  model: string;
+  authStrategy: string;
+  binary: string;
+  binaryEnv: string;
+  note: string;
+  passphrase: string;
+};
+
+const defaultAddProviderForm: AddProviderForm = {
+  provider: "",
+  providerName: "",
+  runtime: "external_llm",
+  model: "",
+  authStrategy: "manual",
+  binary: "",
+  binaryEnv: "",
+  note: "",
+  passphrase: "",
+};
 
 interface PanelState {
   providers: AssistantProviderReadinessStatus[];
@@ -175,7 +202,8 @@ function needsAttention(provider: AssistantProviderReadinessStatus): boolean {
 }
 
 function supportsReauth(provider: AssistantProviderReadinessStatus): boolean {
-  return ["codex", "codex_cli"].includes(providerId(provider).toLowerCase());
+  if (typeof provider.reauthSupported === "boolean") return provider.reauthSupported;
+  return ["codex", "codex_cli", "claude", "claude_cli"].includes(providerId(provider).toLowerCase());
 }
 
 function reauthButtonLabel(provider: AssistantProviderReadinessStatus, controlActive: boolean): string {
@@ -250,6 +278,11 @@ export function OpenClawLlmAuthPanel({
   const [controlError, setControlError] = useState<string | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [pendingReauthProvider, setPendingReauthProvider] = useState<AssistantProviderReadinessStatus | null>(null);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
+  const [addProviderForm, setAddProviderForm] = useState<AddProviderForm>(defaultAddProviderForm);
+  const [addProviderBusy, setAddProviderBusy] = useState(false);
+  const [addProviderError, setAddProviderError] = useState<string | null>(null);
+  const [addProviderResult, setAddProviderResult] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -363,6 +396,21 @@ export function OpenClawLlmAuthPanel({
     await runReauth(provider);
   }, [activeControl, runReauth]);
 
+  const applyControlMode = useCallback((nextControlMode: AssistantControlModeStatus) => {
+    setState((current) => ({
+      ...current,
+      mode: current.mode?.ok
+        ? {
+            ...current.mode,
+            status: {
+              ...current.mode.status,
+              controlMode: nextControlMode,
+            },
+          }
+        : current.mode,
+    }));
+  }, []);
+
   const activateControlAndStartReauth = useCallback(async () => {
     const passphrase = controlPassphrase.trim();
     if (!passphrase) {
@@ -387,23 +435,79 @@ export function OpenClawLlmAuthPanel({
       setControlPassphrase("");
       setControlDialogOpen(false);
       setPendingReauthProvider(null);
-      setState((current) => ({
-        ...current,
-        mode: current.mode?.ok
-          ? {
-              ...current.mode,
-              status: {
-                ...current.mode.status,
-                controlMode: result.controlMode,
-              },
-            }
-          : current.mode,
-      }));
+      applyControlMode(result.controlMode);
       if (provider) await runReauth(provider);
     } finally {
       setControlBusy(false);
     }
-  }, [api, controlPassphrase, pendingReauthProvider, runReauth]);
+  }, [api, applyControlMode, controlPassphrase, pendingReauthProvider, runReauth]);
+
+  const updateAddProviderForm = useCallback((patch: Partial<AddProviderForm>) => {
+    setAddProviderForm((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const registerProvider = useCallback(async () => {
+    const provider = addProviderForm.provider.trim().toLowerCase().replace(/[-\s]+/g, "_");
+    if (!provider) {
+      setAddProviderError("Provider id is required.");
+      return;
+    }
+    if (!/^[a-z][a-z0-9_]{1,63}$/.test(provider)) {
+      setAddProviderError("Provider id must use lowercase letters, numbers, and underscores.");
+      return;
+    }
+    if (!activeControl && !addProviderForm.passphrase.trim()) {
+      setAddProviderError("Control passphrase is required.");
+      return;
+    }
+
+    setAddProviderBusy(true);
+    setAddProviderError(null);
+    setAddProviderResult(null);
+    try {
+      if (!activeControl) {
+        const control = await api.activateControlMode({
+          passphrase: addProviderForm.passphrase.trim(),
+          mode: "kernel_debug",
+          reason: `OpenClaw LLM Auth register provider: ${provider}`,
+          ttlSeconds: 900,
+          idleTtlSeconds: 300,
+        });
+        if (!control.ok) {
+          setAddProviderError(control.message);
+          return;
+        }
+        applyControlMode(control.controlMode);
+      }
+
+      const result = await api.registerProvider({
+        provider,
+        providerName: addProviderForm.providerName.trim() || provider,
+        runtime: addProviderForm.runtime.trim() || "external_llm",
+        model: addProviderForm.model.trim() || undefined,
+        authStrategy: addProviderForm.authStrategy.trim() || "manual",
+        binary: addProviderForm.binary.trim() || undefined,
+        binaryEnv: addProviderForm.binaryEnv.trim() || undefined,
+        note: addProviderForm.note.trim() || undefined,
+      });
+      if (!result.ok) {
+        setAddProviderError(result.message);
+        return;
+      }
+      setState((current) => ({
+        ...current,
+        providers: [
+          ...current.providers.filter((item) => normalizeProviderId(providerId(item)) !== normalizeProviderId(provider)),
+          result.provider,
+        ],
+      }));
+      setAddProviderResult(`Registered ${result.provider.providerName ?? result.provider.provider ?? provider}`);
+      setAddProviderForm(defaultAddProviderForm);
+      setAddProviderOpen(false);
+    } finally {
+      setAddProviderBusy(false);
+    }
+  }, [activeControl, addProviderForm, api, applyControlMode]);
 
   const refreshReauth = useCallback(async () => {
     if (!reauthResult?.ok) return;
@@ -433,6 +537,12 @@ export function OpenClawLlmAuthPanel({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mode === "full" && (
+            <Button size="sm" variant="outline" onClick={() => setAddProviderOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add LLM
+            </Button>
+          )}
           <Badge variant="outline" className={statusTone(activeControl ? controlMode?.mode ?? "active" : "inactive", activeControl)}>
             {activeControl ? controlMode?.mode ?? "active" : "control inactive"}
           </Badge>
@@ -449,6 +559,13 @@ export function OpenClawLlmAuthPanel({
         <div className="mt-3 flex items-start gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-xs text-status-warning" role="alert">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {addProviderResult && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-status-success/30 bg-status-success/10 p-3 text-xs text-status-success">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>{addProviderResult}</span>
         </div>
       )}
 
@@ -587,7 +704,137 @@ export function OpenClawLlmAuthPanel({
           </DialogContent>
         </Dialog>
       )}
+
+      {mode === "full" && (
+        <Dialog
+          open={addProviderOpen}
+          onOpenChange={(open) => {
+            setAddProviderOpen(open);
+            if (!open) {
+              setAddProviderForm(defaultAddProviderForm);
+              setAddProviderError(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-lg gap-3">
+            <DialogHeader>
+              <DialogTitle className="text-base">Add LLM</DialogTitle>
+              <DialogDescription className="text-xs">
+                Provider registry
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledInput
+                id="openclaw-llm-add-provider"
+                label="Provider id"
+                value={addProviderForm.provider}
+                onChange={(value) => updateAddProviderForm({ provider: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-provider-name"
+                label="Display name"
+                value={addProviderForm.providerName}
+                onChange={(value) => updateAddProviderForm({ providerName: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-runtime"
+                label="Runtime"
+                value={addProviderForm.runtime}
+                onChange={(value) => updateAddProviderForm({ runtime: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-model"
+                label="Model"
+                value={addProviderForm.model}
+                onChange={(value) => updateAddProviderForm({ model: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-auth-strategy"
+                label="Auth strategy"
+                value={addProviderForm.authStrategy}
+                onChange={(value) => updateAddProviderForm({ authStrategy: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-binary"
+                label="Binary"
+                value={addProviderForm.binary}
+                onChange={(value) => updateAddProviderForm({ binary: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-binary-env"
+                label="Binary env"
+                value={addProviderForm.binaryEnv}
+                onChange={(value) => updateAddProviderForm({ binaryEnv: value })}
+              />
+              {!activeControl && (
+                <LabeledInput
+                  id="openclaw-llm-add-passphrase"
+                  label="Control passphrase"
+                  type="password"
+                  value={addProviderForm.passphrase}
+                  onChange={(value) => updateAddProviderForm({ passphrase: value })}
+                />
+              )}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="openclaw-llm-add-note" className="text-xs">
+                  Note
+                </Label>
+                <Input
+                  id="openclaw-llm-add-note"
+                  value={addProviderForm.note}
+                  onChange={(event) => updateAddProviderForm({ note: event.target.value })}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+            {addProviderError && (
+              <div className="rounded-md border border-status-warning/30 bg-status-warning/10 px-2 py-1.5 text-xs text-status-warning">
+                {addProviderError}
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" size="sm" variant="outline" onClick={() => setAddProviderOpen(false)} disabled={addProviderBusy}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={() => void registerProvider()} disabled={addProviderBusy}>
+                {addProviderBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Register
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
+  );
+}
+
+function LabeledInput({
+  id,
+  label,
+  value,
+  type = "text",
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  type?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type={type}
+        autoComplete="off"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 text-xs"
+      />
+    </div>
   );
 }
 
@@ -638,6 +885,12 @@ function ProviderCard({
         <Info label="tokens" value={formatNumber(usageSummary?.totalTokens)} />
         {mode === "full" && (
           <>
+            {(provider.model || provider.authStrategy) && (
+              <Info className="col-span-2" label="model" value={provider.model ?? provider.authStrategy ?? "unknown"} />
+            )}
+            {provider.authStrategy && (
+              <Info className="col-span-2" label="auth strategy" value={provider.authStrategy} />
+            )}
             <Info label="limit" value={formatMetric(usageValue(usage, "limit"), unit)} />
             <Info label="reset" value={usageReset(usage)} />
             <Info className="col-span-2" label="quota source" value={usageValue(usage, "source", "status", "reason") || "unknown"} />

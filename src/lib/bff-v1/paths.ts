@@ -174,6 +174,7 @@ export const paths = {
   assistantMode: () => `${BASE}/assistant/mode`,
   assistantProviders: (authProbe = false) =>
     `${BASE}/assistant/providers${authProbe ? "?auth_probe=true" : ""}`,
+  assistantProviderRegister: () => `${BASE}/assistant/providers`,
   assistantProviderUsageSummary: (authProbe = false, windowHours = 168, limit = 500) =>
     `${BASE}/assistant/providers/usage-summary?auth_probe=${authProbe ? "true" : "false"}&window_hours=${enc(String(windowHours))}&limit=${enc(String(limit))}`,
   assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
