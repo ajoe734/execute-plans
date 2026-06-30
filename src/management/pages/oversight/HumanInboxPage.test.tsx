@@ -116,4 +116,18 @@ describe("HumanInboxPage", () => {
     expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
     expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
   });
+
+  it("does not fall back to the legacy mock inbox when live data is unavailable", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    expect(screen.getByText("No live inbox items are available.")).toBeInTheDocument();
+    expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beta drift critical on momentum sleeve")).not.toBeInTheDocument();
+  });
 });

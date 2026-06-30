@@ -83,6 +83,20 @@ describe("HumanGateDetailPage", () => {
     expect(screen.queryByText("ev:proposal-v3")).not.toBeInTheDocument();
   });
 
+  it("shows unavailable instead of synthetic detail when live detail is absent", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderDetail("abc-1");
+
+    expect(screen.getByRole("heading", { name: "Inbox item unavailable" })).toBeInTheDocument();
+    expect(screen.queryByText("approval detail unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Live detail payload unavailable.")).not.toBeInTheDocument();
+  });
+
   it("renders readiness blockers as non-decidable blockers with evidence and a management link", () => {
     mocks.useV5Live.mockReturnValue({
       data: readinessBlockerDetail(),

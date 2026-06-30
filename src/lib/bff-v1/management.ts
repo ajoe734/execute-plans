@@ -7,8 +7,12 @@
 // live transport fails under `VITE_BFF_FALLBACK=auto`.
 //
 // Adapters are defensive: any shape mismatch falls back to the seed.
+//
+// Exception: Human Inbox is strict-live/no-seed. It must never synthesize
+// pending human work from FE mock rows.
 
 import { withLiveOrMock } from "./liveTransport";
+import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import { paths } from "./paths";
 
 import {
@@ -474,8 +478,8 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 
 // ---------- PM-6 Human Inbox ----------
 
-export type InboxListSeedFn = () => HumanInboxItem[];
-export type InboxItemSeedFn = () => HumanInboxDetail;
+const emptyHumanInbox = (): HumanInboxItem[] => [];
+const missingHumanInboxDetail = (): HumanInboxDetail | undefined => undefined;
 
 const asOptionalString = (raw: unknown): string | undefined => {
   const value = asString(raw);
@@ -1055,17 +1059,18 @@ export const mgmt = {
   },
 
   humanInbox: {
-    list: (seedFn: InboxListSeedFn): Promise<HumanInboxItem[]> =>
-      withLiveOrMock<HumanInboxItem[]>(
+    list: (): Promise<HumanInboxItem[]> =>
+      withStrictLiveOrMock<HumanInboxItem[], unknown>(
         { method: "GET", path: paths.mgmtHumanInbox() },
-        async () => seedFn(),
-        safeAdapt(adaptHumanInboxList, seedFn),
+        async () => emptyHumanInbox(),
+        (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
       ),
-    get: (id: string, seedFn: InboxItemSeedFn): Promise<HumanInboxDetail> =>
-      withLiveOrMock<HumanInboxDetail>(
+    get: (id: string): Promise<HumanInboxDetail | undefined> =>
+      withStrictLiveOrMock<HumanInboxDetail | undefined, unknown>(
         { method: "GET", path: paths.mgmtHumanInboxItem(id) },
-        async () => seedFn(),
-        safeAdapt(adaptHumanInboxDetail, seedFn),
+        async () => missingHumanInboxDetail(),
+        (raw) => adaptHumanInboxDetail(raw) ?? missingHumanInboxDetail(),
+        strictNotFoundAsUndefined,
       ),
   },
 
