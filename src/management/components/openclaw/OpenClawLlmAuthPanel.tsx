@@ -34,6 +34,7 @@ import {
   fetchAssistantProviders,
   registerAssistantProvider,
   startAssistantProviderReauth,
+  submitAssistantProviderReauthCode,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
   type AssistantOrchestratorStatusResult,
@@ -54,6 +55,7 @@ export interface OpenClawLlmAuthApi {
   activateControlMode: typeof activateAssistantControlMode;
   startReauth: typeof startAssistantProviderReauth;
   fetchReauthStatus: typeof fetchAssistantProviderReauthStatus;
+  submitReauthCode: typeof submitAssistantProviderReauthCode;
   registerProvider: typeof registerAssistantProvider;
 }
 
@@ -65,6 +67,7 @@ const defaultApi: OpenClawLlmAuthApi = {
   activateControlMode: activateAssistantControlMode,
   startReauth: startAssistantProviderReauth,
   fetchReauthStatus: fetchAssistantProviderReauthStatus,
+  submitReauthCode: submitAssistantProviderReauthCode,
   registerProvider: registerAssistantProvider,
 };
 
@@ -104,6 +107,8 @@ interface PanelState {
 
 interface ProviderReauthUiState {
   busy: boolean;
+  codeBusy?: boolean;
+  codeError?: string | null;
   result: AssistantProviderReauthResult | null;
 }
 
@@ -198,7 +203,7 @@ function statusTone(status: string, ready?: boolean): string {
   if (ready === true || ["ready", "ok", "completed", "authorized"].includes(normalized)) {
     return "border-status-success/30 bg-status-success/10 text-status-success";
   }
-  if (["pending", "capturing", "processing", "not_checked"].includes(normalized)) {
+  if (["pending", "capturing", "processing", "code_submitted", "not_checked"].includes(normalized)) {
     return "border-primary/30 bg-primary/10 text-primary";
   }
   if (["degraded", "timeout", "unavailable", "unknown"].includes(normalized)) {
@@ -252,6 +257,37 @@ function firstError(state: PanelState): string | null {
 function reauthHref(result: AssistantProviderReauthResult | null): string | null {
   if (!result?.ok) return null;
   return result.reauth.verificationUriComplete ?? result.reauth.verificationUri;
+}
+
+function reauthUserCode(result: AssistantProviderReauthResult): string | null {
+  if (!result.ok) return null;
+  const code = result.reauth.userCode?.trim();
+  if (!code || /^(true|false)$/i.test(code)) return null;
+  return code;
+}
+
+function credentialFlag(result: AssistantProviderReauthResult, ...keys: string[]): boolean {
+  if (!result.ok) return false;
+  const exchange = result.reauth.credentialExchange;
+  if (!exchange) return false;
+  return keys.some((key) => exchange[key] === true || exchange[key] === "true");
+}
+
+function canSubmitReauthAuthorizationCode(
+  result: AssistantProviderReauthResult,
+  providerValue: unknown,
+): boolean {
+  if (!result.ok) return false;
+  const normalized = reauthStateKeyForValue(result.reauth.provider ?? providerValue);
+  if (normalized !== "claude") return false;
+  if (isTerminalReauthStatus(result.reauth.status)) return false;
+  return Boolean(reauthHref(result)) || credentialFlag(
+    result,
+    "requiresAuthorizationCode",
+    "requires_authorization_code",
+    "codeSubmitToBff",
+    "code_submit_to_bff",
+  );
 }
 
 function reauthStateKeyForValue(value: unknown): string {
@@ -548,6 +584,27 @@ export function OpenClawLlmAuthPanel({
     }
   }, [api, load, setProviderReauth]);
 
+  const submitReauthCode = useCallback(async (key: string, session: AssistantProviderReauthSession, code: string) => {
+    setProviderReauth(key, { codeBusy: true, codeError: null });
+    try {
+      const submitted = await api.submitReauthCode({
+        provider: session.provider ?? key,
+        sessionId: session.reauthSessionId,
+        code,
+      });
+      if (!submitted.ok) {
+        setProviderReauth(key, { codeBusy: false, codeError: submitted.message });
+        return;
+      }
+      const resultKey = submitted.reauth.provider ? reauthStateKeyForValue(submitted.reauth.provider) : key;
+      setProviderReauth(resultKey, { codeBusy: false, codeError: null, result: submitted });
+      if (resultKey !== key) setProviderReauth(key, { codeBusy: false, codeError: null, result: submitted });
+      if (submitted.reauth.status === "completed") void load();
+    } finally {
+      setProviderReauth(key, { codeBusy: false });
+    }
+  }, [api, load, setProviderReauth]);
+
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const pollable = Object.entries(reauthByProvider)
@@ -625,6 +682,7 @@ export function OpenClawLlmAuthPanel({
             reauthState={reauthByProvider[reauthStateKey(provider)] ?? { busy: false, result: null }}
             onStartReauth={startReauth}
             onRefreshReauth={refreshReauth}
+            onSubmitReauthCode={submitReauthCode}
           />
         ))}
       </div>
@@ -801,6 +859,7 @@ function ProviderCard({
   reauthState,
   onStartReauth,
   onRefreshReauth,
+  onSubmitReauthCode,
 }: {
   provider: AssistantProviderReadinessStatus;
   mode: PanelMode;
@@ -808,6 +867,7 @@ function ProviderCard({
   reauthState: ProviderReauthUiState;
   onStartReauth: (provider: AssistantProviderReadinessStatus) => void;
   onRefreshReauth: (key: string, session: AssistantProviderReauthSession) => void;
+  onSubmitReauthCode: (key: string, session: AssistantProviderReauthSession, code: string) => Promise<void>;
 }) {
   const id = providerId(provider);
   const key = reauthStateKey(provider);
@@ -876,6 +936,7 @@ function ProviderCard({
           providerKey={key}
           state={reauthState}
           onRefresh={onRefreshReauth}
+          onSubmitCode={onSubmitReauthCode}
           onRetry={() => onStartReauth(provider)}
         />
       )}
@@ -888,15 +949,18 @@ function ProviderReauthPanel({
   providerKey,
   state,
   onRefresh,
+  onSubmitCode,
   onRetry,
 }: {
   provider: AssistantProviderReadinessStatus;
   providerKey: string;
   state: ProviderReauthUiState;
   onRefresh: (key: string, session: AssistantProviderReauthSession) => void;
+  onSubmitCode: (key: string, session: AssistantProviderReauthSession, code: string) => Promise<void>;
   onRetry: () => void;
 }) {
   const result = state.result;
+  const [authorizationCode, setAuthorizationCode] = useState("");
 
   if (!result) {
     return (
@@ -928,6 +992,9 @@ function ProviderReauthPanel({
   const status = result.reauth.status ?? "pending";
   const terminal = isTerminalReauthStatus(status);
   const reauthProvider = result.reauth.provider ?? providerId(provider);
+  const userCode = reauthUserCode(result);
+  const canSubmitCode = canSubmitReauthAuthorizationCode(result, reauthProvider);
+  const authCodeInputId = `reauth-code-${providerKey}`;
 
   return (
     <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs" aria-live="polite">
@@ -940,9 +1007,9 @@ function ProviderReauthPanel({
         </Badge>
       </div>
       <div className="mt-2 flex flex-wrap gap-2 text-muted-foreground">
-        {result.reauth.userCode && (
+        {userCode && (
           <span className="rounded-md border border-border bg-background px-2 py-1 font-mono text-foreground">
-            code={result.reauth.userCode}
+            code={userCode}
           </span>
         )}
         <span className="rounded-md border border-border bg-background px-2 py-1 font-mono">
@@ -958,11 +1025,11 @@ function ProviderReauthPanel({
             </a>
           </Button>
         )}
-        {result.reauth.userCode && (
+        {userCode && (
           <Button
             size="sm"
             variant="outline"
-            onClick={() => void navigator.clipboard?.writeText(result.reauth.userCode ?? "")}
+            onClick={() => void navigator.clipboard?.writeText(userCode)}
           >
             <Copy className="h-3 w-3" />
             Copy code
@@ -979,6 +1046,40 @@ function ProviderReauthPanel({
           </Button>
         )}
       </div>
+      {canSubmitCode && (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const code = authorizationCode.trim();
+            if (!code || state.codeBusy) return;
+            void onSubmitCode(providerKey, result.reauth, code);
+          }}
+        >
+          <Label htmlFor={authCodeInputId} className="text-xs">
+            Authorization code
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id={authCodeInputId}
+              value={authorizationCode}
+              onChange={(event) => setAuthorizationCode(event.target.value)}
+              autoComplete="one-time-code"
+              placeholder="Paste Claude code"
+              className="h-8 min-w-0 flex-1 text-xs"
+            />
+            <Button size="sm" type="submit" variant="outline" disabled={!authorizationCode.trim() || state.codeBusy}>
+              {state.codeBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+              Submit code
+            </Button>
+          </div>
+          {state.codeError && (
+            <div className="rounded-md border border-status-failed/30 bg-status-failed/10 px-2 py-1.5 text-status-failed" role="alert">
+              {state.codeError}
+            </div>
+          )}
+        </form>
+      )}
     </div>
   );
 }
