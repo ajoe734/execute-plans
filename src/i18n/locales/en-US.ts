@@ -466,6 +466,10 @@ export default {
     noUpstreamExperiment: "No upstream experiment recorded.",
     noArtifactsYet: "No artifacts produced yet.",
     noDetailRoute: "No detail route registered for this id.",
+    unknown: "Unknown",
+    unassigned: "Unassigned",
+    liveRegistryEmpty: "Live registry empty",
+    liveRegistryEmptyDesc: "This capability registry has no live record for this id yet. This is an empty-registry state, not a broken page.",
   },
   detail: {
     section: {

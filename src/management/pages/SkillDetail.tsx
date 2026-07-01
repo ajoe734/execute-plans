@@ -5,7 +5,7 @@ import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field, DetailNotFound } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -25,14 +25,15 @@ export const SkillDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [skill, setSkill] = useState<Skill | undefined>();
+  const [skill, setSkill] = useState<Skill | null | undefined>(undefined);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [pubOpen, setPubOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   useEffect(() => {
     if (!id) return;
-    bff.skills.get(id).then(setSkill);
+    setSkill(undefined);
+    bff.skills.get(id).then((v) => setSkill(v ?? null)).catch(() => setSkill(null));
     bff.personas.list().then(setPersonas);
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
   }, [id]);
@@ -43,7 +44,10 @@ export const SkillDetail = () => {
     return skill.publishedAt ? "active" : "approved";
   }, [skill]);
 
-  if (!skill) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (skill === undefined) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (skill === null) {
+    return <DetailNotFound title={t("common.liveRegistryEmpty")} description={t("common.liveRegistryEmptyDesc")} />;
+  }
 
   return (
     <>

@@ -4,7 +4,7 @@ import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import type { AuditEvent, Strategy, Tool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field, DetailNotFound } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
@@ -27,21 +27,25 @@ export const ToolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [tool, setTool] = useState<Tool | undefined>();
+  const [tool, setTool] = useState<Tool | null | undefined>(undefined);
   const [consumers, setConsumers] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [restrictOpen, setRestrictOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
 
-  const refresh = () => { if (id) bff.tools.get(id).then(setTool); };
+  const refresh = () => { if (id) bff.tools.get(id).then((v) => setTool(v ?? null)).catch(() => setTool(null)); };
   useEffect(() => {
     if (!id) return;
-    bff.tools.get(id).then(setTool);
+    setTool(undefined);
+    bff.tools.get(id).then((v) => setTool(v ?? null)).catch(() => setTool(null));
     bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
-  if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (tool === undefined) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (tool === null) {
+    return <DetailNotFound title={t("common.liveRegistryEmpty")} description={t("common.liveRegistryEmptyDesc")} />;
+  }
 
   const machineState: ToolState = STATE_MAP[tool.state ?? ""] ?? "draft";
 

@@ -11,7 +11,12 @@ const map: Record<RiskLevel, string> = {
   critical: "bg-risk-critical/15 text-risk-critical border-risk-critical/40",
 };
 
-export const RiskBadge = ({ level }: { level: RiskLevel }) => {
+export const RiskBadge = ({ level }: { level?: RiskLevel | string | null }) => {
   const t = useT();
-  return <Badge variant="outline" className={cn("font-medium", map[level])}>{t(`risk.${level}`)}</Badge>;
+  const safeLevel = level && (level as string).trim() ? (level as string) : "unknown";
+  return (
+    <Badge variant="outline" className={cn("font-medium", map[safeLevel as RiskLevel] ?? "bg-muted text-muted-foreground")}>
+      {t(`risk.${safeLevel}`, { defaultValue: safeLevel })}
+    </Badge>
+  );
 };

@@ -94,10 +94,13 @@ const liveItemsFrom = <T>(body: unknown): T[] => {
 const liveDetailFrom = <T>(body: unknown): T | undefined => {
   const record = asRecord(body);
   if (!record) return undefined;
-  if (!Object.prototype.hasOwnProperty.call(record, "data")) return body as T;
+  if (!Object.prototype.hasOwnProperty.call(record, "data")) {
+    return normalizeBaseObjectFields(record) as T;
+  }
   const data = record.data;
   if (data === null || data === undefined) return undefined;
-  return (asRecord(data) ?? data) as T;
+  const detailRecord = asRecord(data);
+  return (detailRecord ? normalizeBaseObjectFields(detailRecord) : data) as T;
 };
 
 const detailPath = (basePath: string, id: string) => `${basePath}/${encodeURIComponent(id)}`;
@@ -159,6 +162,35 @@ const recordString = (record: UnknownRecord | undefined, ...keys: string[]): str
   }
   return undefined;
 };
+
+// MGMT-GAP-008 — live detail responses across entities use inconsistent
+// field-name conventions for the shared BaseObject surface (id/name/state/
+// risk/owner/updatedAt). Capital pools return `status`+`owner_id` with no
+// `risk`/`updatedAt` at all; research experiments return `experiment_id`+
+// `experiment_name`+`status` with no `state`/`risk`/`owner`. Resolve the
+// common aliases once here instead of teaching every detail page to defend
+// against every backend alias. Fields with no equivalent in the raw payload
+// stay `undefined` — StatusBadge/RiskBadge/EntityHeader render an explicit
+// "unknown"/"unassigned" placeholder instead of a fabricated value.
+const BASE_OBJECT_ID_KEYS = ["id", "pool_id", "experiment_id", "artifact_id", "plan_id", "channel_id", "formula_id", "rebalance_id", "program_id"];
+const BASE_OBJECT_NAME_KEYS = ["name", "pool_name", "experiment_name", "plan_name", "channel_name", "artifact_name", "formula_name", "title"];
+const BASE_OBJECT_STATE_KEYS = ["state", "status", "lifecycle_state", "lifecycleState"];
+const BASE_OBJECT_RISK_KEYS = ["risk", "risk_level", "riskLevel"];
+const BASE_OBJECT_OWNER_KEYS = ["owner", "owner_id", "ownerId", "created_by", "createdBy", "updated_by", "updatedBy"];
+const BASE_OBJECT_UPDATED_AT_KEYS = [
+  "updatedAt", "updated_at", "completed_at", "completedAt",
+  "started_at", "startedAt", "queued_at", "queuedAt", "created_at", "createdAt",
+];
+
+export const normalizeBaseObjectFields = (record: UnknownRecord): UnknownRecord => ({
+  ...record,
+  id: record.id ?? recordString(record, ...BASE_OBJECT_ID_KEYS),
+  name: record.name ?? recordString(record, ...BASE_OBJECT_NAME_KEYS),
+  state: recordString(record, ...BASE_OBJECT_STATE_KEYS),
+  risk: recordString(record, ...BASE_OBJECT_RISK_KEYS),
+  owner: recordString(record, ...BASE_OBJECT_OWNER_KEYS),
+  updatedAt: recordString(record, ...BASE_OBJECT_UPDATED_AT_KEYS),
+});
 
 const normalizedKind = (kind: string) => kind.replace(/[^a-z0-9]/gi, "").toLowerCase();
 const isPersonaKind = (kind: string) => normalizedKind(kind) === "persona";

@@ -458,6 +458,10 @@ export default {
     noUpstreamExperiment: "未紀錄上游實驗。",
     noArtifactsYet: "尚未產出 artifact。",
     noDetailRoute: "此 id 尚未註冊明細路由。",
+    unknown: "未知",
+    unassigned: "尚未指派",
+    liveRegistryEmpty: "即時登錄尚無資料",
+    liveRegistryEmptyDesc: "此能力登錄目前沒有這個 id 的即時資料。這是空登錄狀態，不是頁面異常。",
   },
   detail: {
     section: {

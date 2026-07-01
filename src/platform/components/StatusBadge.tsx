@@ -16,12 +16,13 @@ const map: Record<string, string> = {
   failed: "bg-status-failed/15 text-status-failed border-status-failed/30",
 };
 
-export const StatusBadge = ({ state }: { state: string }) => {
+export const StatusBadge = ({ state }: { state?: string | null }) => {
   const t = useT();
-  const key = `status.${state}`;
+  const safeState = state && state.trim() ? state : "unknown";
+  const key = `status.${safeState}`;
   return (
-    <Badge variant="outline" className={cn("font-medium", map[state] ?? "bg-muted text-muted-foreground")}>
-      {t(key, { defaultValue: state })}
+    <Badge variant="outline" className={cn("font-medium", map[safeState] ?? "bg-muted text-muted-foreground")}>
+      {t(key, { defaultValue: safeState })}
     </Badge>
   );
 };

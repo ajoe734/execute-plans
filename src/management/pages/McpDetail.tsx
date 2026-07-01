@@ -4,7 +4,7 @@ import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import type { McpServer, McpTool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { ObjectDetailLayout, Section, Field, DetailNotFound } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
@@ -30,17 +30,21 @@ export const McpServerDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [s, setS] = useState<McpServer | undefined>();
+  const [s, setS] = useState<McpServer | null | undefined>(undefined);
   const [tools, setTools] = useState<McpTool[]>([]);
   const [disableOpen, setDisableOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
-  const refresh = () => { if (id) bff.mcpServers.get(id).then(setS); };
+  const refresh = () => { if (id) bff.mcpServers.get(id).then((v) => setS(v ?? null)).catch(() => setS(null)); };
   useEffect(() => {
     if (!id) return;
-    bff.mcpServers.get(id).then(setS);
+    setS(undefined);
+    bff.mcpServers.get(id).then((v) => setS(v ?? null)).catch(() => setS(null));
     bff.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
   }, [id]);
-  if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (s === undefined) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (s === null) {
+    return <DetailNotFound title={t("common.liveRegistryEmpty")} description={t("common.liveRegistryEmptyDesc")} />;
+  }
 
   const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
 
@@ -196,10 +200,17 @@ export const McpToolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [tool, setTool] = useState<McpTool | undefined>();
+  const [tool, setTool] = useState<McpTool | null | undefined>(undefined);
   const [grantOpen, setGrantOpen] = useState(false);
-  useEffect(() => { if (id) bff.mcpTools.get(id).then(setTool); }, [id]);
-  if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  useEffect(() => {
+    if (!id) return;
+    setTool(undefined);
+    bff.mcpTools.get(id).then((v) => setTool(v ?? null)).catch(() => setTool(null));
+  }, [id]);
+  if (tool === undefined) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (tool === null) {
+    return <DetailNotFound title={t("common.liveRegistryEmpty")} description={t("common.liveRegistryEmptyDesc")} />;
+  }
 
   const liveGranted = tool.envGrants.includes("live");
 

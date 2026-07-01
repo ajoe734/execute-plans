@@ -48,7 +48,10 @@ export const CapitalPoolDetail = () => {
   }, [id]);
 
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  const utilizationPct = (c.utilized / c.allocated) * 100;
+  // Backends that don't track live utilization omit `utilized`/`allocated`;
+  // divide-by-undefined would render a literal "NaN%" (2026-07-01 re-audit).
+  const utilizationTracked = Number.isFinite(c.utilized) && Number.isFinite(c.allocated) && c.allocated > 0;
+  const utilizationPct = utilizationTracked ? (c.utilized / c.allocated) * 100 : undefined;
   const firstRebalance = rebalances[0];
 
   // Lineage: pool ↔ rebalance ↔ strategy
@@ -102,7 +105,7 @@ export const CapitalPoolDetail = () => {
                       value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
                       hint={`${c.currency} ${(c.utilized ?? 0).toLocaleString()}`}
                     />
-                    <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
+                    <StatCard label={t("section.limits")} value={Number.isFinite(c.riskBudget) ? `${(c.riskBudget * 100).toFixed(2)}%` : undefined} tone="warning" />
                   </div>
                   <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -197,8 +200,8 @@ export const CapitalPoolDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
-                  <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
-                  <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
+                  <Field label={t("section.limits")} value={Number.isFinite(c.riskBudget) ? `${(c.riskBudget * 100).toFixed(2)}%` : undefined} mono />
+                  <Field label={t("table.capacity")} value={utilizationPct !== undefined ? `${(100 - utilizationPct).toFixed(1)}%` : undefined} mono />
                   <Field label={t("table.value")} value={c.currency} mono />
                 </div>
               </Section>

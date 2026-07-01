@@ -11,7 +11,7 @@ export const StatCard = ({ label, value, hint, tone = "default" }: { label: stri
   return (
     <Card className="p-4">
       <div className="text-xs font-semibold tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold text-mono ${toneCls}`}>{value}</div>
+      <div className={`mt-1 text-2xl font-semibold text-mono ${toneCls}`}>{value === undefined || value === null || value === "" ? "—" : value}</div>
       {hint && <div className="text-xs text-muted-foreground mt-1">{hint}</div>}
     </Card>
   );
