@@ -4,8 +4,8 @@
 //
 // PersonaIntent + readiness pages live in their own files.
 
-import { type ReactNode, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -71,6 +71,7 @@ import {
   personaFleetRuntimeHref,
 } from "./personaFleetLinks";
 import { safeDateTime } from "@/lib/utils";
+import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
 // =====================================================================
 // Pathreon Management Cockpit (PM-3)
@@ -1170,8 +1171,13 @@ const EvidenceField = ({
 
 const EvidenceExplorerList = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const seed = useMemo(() => defaultManagementEvidenceOverview(), []);
   const { data, loading } = useV5Live(() => mgmt.evidence.overview(() => seed), []);
+  useEffect(() => {
+    if (!loading) markRoutePrimaryReady(location.pathname);
+  }, [loading, location.pathname]);
+
   if (!data && loading) {
     return (
       <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>

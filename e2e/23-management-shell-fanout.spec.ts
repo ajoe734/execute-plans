@@ -6,9 +6,9 @@
  *
  * - TopBar consumes /bff/management/shell-summary for badge counts instead
  *   of fetching full approvals/alerts/jobs lists on every route mount.
- * - When shell-summary is unavailable, the full-list fallback is deferred
- *   past first row/empty state (via src/lib/idleTask.ts), not raced
- *   against it.
+ * - When shell-summary is unavailable, the full-list fallback waits for the
+ *   route-primary-ready/first-row milestone, then idles; it is not raced
+ *   against Evidence primary content.
  * - JobProgressDrawer does not duplicate /bff/jobs before first row.
  */
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -18,6 +18,8 @@ const EVIDENCE_PATH = "/management/evidence";
 const PRIMARY_API_PATTERN = /\/bff\/management\/evidence(?:\?.*)?$/;
 const SHELL_SUMMARY_PATTERN = /\/bff\/management\/shell-summary(?:\?.*)?$/;
 const SSE_STREAM_PATTERN = /\/bff\/events\/stream(?:\?.*)?$/;
+const ROUTE_PRIMARY_READY_EVENT = "pantheon:route-primary-ready";
+const FULL_LIST_PATHS = new Set(["/bff/approvals", "/bff/alerts", "/bff/jobs"]);
 const FANOUT_PATTERNS: Array<[string, RegExp]> = [
   ["me", /\/bff\/me(?:\?.*)?$/],
   ["approvals", /\/bff\/approvals(?:\?.*)?$/],
@@ -75,10 +77,32 @@ function nowIso(): string {
   return "2026-07-01T00:00:00Z";
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const EVIDENCE_RESPONSE = {
   data: {
-    items: [],
-    summary: { totalEvidence: 0, visibleEvidence: 0, verifiedEvidence: 0, redactedEvidence: 0 },
+    items: [
+      {
+        refId: "evref-load-003",
+        ref_id: "evref-load-003",
+        title: "Shell fanout evidence packet",
+        sourceType: "unknown",
+        source_type: "unknown",
+        linkType: "provenance",
+        link_type: "provenance",
+        capturedAt: nowIso(),
+        captured_at: nowIso(),
+        credibility: { tier: "producer_record", verified: true },
+        linkedObjectSummary: { entityType: "artifact", entity_type: "artifact", entityRef: "art-load-003", entity_ref: "art-load-003" },
+        linked_object_summary: { entityType: "artifact", entity_type: "artifact", entityRef: "art-load-003", entity_ref: "art-load-003" },
+        resolvedLink: { availability: "unavailable", displayLabel: "Source unavailable", display_label: "Source unavailable" },
+        resolved_link: { availability: "unavailable", displayLabel: "Source unavailable", display_label: "Source unavailable" },
+        redacted: false,
+      },
+    ],
+    summary: { totalEvidence: 1, visibleEvidence: 1, verifiedEvidence: 1, redactedEvidence: 0 },
     meta: { snapshot_at: nowIso(), surfaces: { management_evidence: { status: "ok" } } },
   },
   meta: { snapshot_at: nowIso(), surfaces: { management_evidence: { status: "ok" } } },
@@ -116,10 +140,11 @@ function shellSummaryResponse(status: "ok" | "degraded"): unknown {
   };
 }
 
-async function installBaseFixtures(page: Page): Promise<Record<string, number>> {
+async function installBaseFixtures(page: Page, options: { evidenceDelayMs?: number } = {}): Promise<Record<string, number>> {
   const counters: Record<string, number> = { evidence: 0, shellSummary: 0, me: 0, approvals: 0, alerts: 0, jobs: 0, health: 0 };
   await onRoute(page, PRIMARY_API_PATTERN, async (route) => {
     counters.evidence += 1;
+    if (options.evidenceDelayMs) await delay(options.evidenceDelayMs);
     await fulfillJson(route, EVIDENCE_RESPONSE);
   });
   // PlatformShell/useRealtimeStatus open a live SSE connection
@@ -146,6 +171,43 @@ async function installBaseFixtures(page: Page): Promise<Record<string, number>> 
     });
   }
   return counters;
+}
+
+async function installRoutePrimaryReadyProbe(page: Page): Promise<void> {
+  await page.addInitScript((eventName) => {
+    const target = window as Window & { __mgmtLoad003RoutePrimaryReadyAt?: number | null };
+    target.__mgmtLoad003RoutePrimaryReadyAt = null;
+    window.addEventListener(eventName, () => {
+      target.__mgmtLoad003RoutePrimaryReadyAt = Date.now();
+    });
+  }, ROUTE_PRIMARY_READY_EVENT);
+}
+
+function captureBffRequestStarts(page: Page): Array<{ path: string; at: number }> {
+  const requestLog: Array<{ path: string; at: number }> = [];
+  page.on("request", (req) => {
+    if (req.method() !== "GET") return;
+    const path = new URL(req.url()).pathname;
+    if (path.includes("/bff/")) requestLog.push({ path, at: Date.now() });
+  });
+  return requestLog;
+}
+
+async function routePrimaryReadyAt(page: Page): Promise<number> {
+  const readyAt = await page.evaluate(() => {
+    const target = window as Window & { __mgmtLoad003RoutePrimaryReadyAt?: number | null };
+    return target.__mgmtLoad003RoutePrimaryReadyAt ?? null;
+  });
+  expect(readyAt).not.toBeNull();
+  return readyAt as number;
+}
+
+function isBudgetedNonPrimaryBff(path: string): boolean {
+  // SSE startup is owned by the separate Phase 4 policy and is excluded from
+  // this shell fanout budget. Health is not a /bff request.
+  return path.startsWith("/bff/")
+    && path !== "/bff/management/evidence"
+    && path !== "/bff/events/stream";
 }
 
 // Scoped to `<main>` (the route Outlet — see ManagementLayout.tsx), not
@@ -189,7 +251,9 @@ test.describe("MGMT-LOAD-003 shell fanout reduction", () => {
   });
 
   test("shell-summary unavailable: full-list fallback is deferred past first row, not raced against it", async ({ page }) => {
-    const counters = await installBaseFixtures(page);
+    await installRoutePrimaryReadyProbe(page);
+    const requestLog = captureBffRequestStarts(page);
+    const counters = await installBaseFixtures(page, { evidenceDelayMs: 700 });
     await onRoute(page, SHELL_SUMMARY_PATTERN, async (route) => {
       counters.shellSummary += 1;
       await route.abort("connectionrefused");
@@ -198,15 +262,22 @@ test.describe("MGMT-LOAD-003 shell fanout reduction", () => {
     await page.goto(frontendUrl(EVIDENCE_PATH), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("main h1").first()).toBeVisible({ timeout: 10_000 });
     await waitForFirstRowOrEmpty(page);
+    const primaryReadyAt = await routePrimaryReadyAt(page);
 
-    // The deferred fallback runs on an idle callback (src/lib/idleTask.ts),
-    // which fires during main-thread idle time — including while the
-    // Evidence route's own primary fetch is still in flight — so it is not
-    // guaranteed to land strictly after the Evidence row/empty-state paint;
-    // measured locally, it commonly resolves first against fixture-mocked
-    // (near-zero-latency) routes. What the implementation does guarantee is
-    // that each list is read at most once — no duplicate fallback fetch —
-    // once it settles.
+    const fullListBeforePrimaryReady = requestLog
+      .filter((entry) => entry.at < primaryReadyAt && FULL_LIST_PATHS.has(entry.path))
+      .map((entry) => entry.path);
+    expect(fullListBeforePrimaryReady).toEqual([]);
+
+    const nonPrimaryBeforePrimaryReady = requestLog.filter(
+      (entry) => entry.at < primaryReadyAt && isBudgetedNonPrimaryBff(entry.path),
+    );
+    expect(nonPrimaryBeforePrimaryReady.map((entry) => entry.path).sort()).toEqual([
+      "/bff/management/shell-summary",
+      "/bff/me",
+    ]);
+    expect(nonPrimaryBeforePrimaryReady).toHaveLength(2);
+
     await expect.poll(() => counters.approvals, { timeout: 5_000 }).toBe(1);
     expect(counters.alerts).toBeLessThanOrEqual(1);
     expect(counters.jobs).toBeLessThanOrEqual(1);

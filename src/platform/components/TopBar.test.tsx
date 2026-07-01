@@ -6,6 +6,7 @@ import { lists } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { mockMe } from "@/lib/v4/session/me";
 import i18n from "@/i18n";
+import { markRoutePrimaryReady, resetRoutePrimaryReadyForTests } from "@/platform/routePrimaryReady";
 
 const realFetch = globalThis.fetch;
 
@@ -54,6 +55,7 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     vi.useFakeTimers();
     vi.stubGlobal("requestIdleCallback", undefined);
     vi.stubGlobal("cancelIdleCallback", undefined);
+    resetRoutePrimaryReadyForTests();
     liveStatus._reset({ mode: "live", effective: "live" });
   });
 
@@ -62,6 +64,7 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     globalThis.fetch = realFetch;
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    resetRoutePrimaryReadyForTests();
     liveStatus._reset();
     await i18n.changeLanguage("zh-TW");
   });
@@ -127,8 +130,17 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     expect(alertsSpy).not.toHaveBeenCalled();
     expect(jobsSpy).not.toHaveBeenCalled();
 
-    // Idle callback fallback fires after the route's primary content would
-    // already have had a chance to render.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(approvalsSpy).not.toHaveBeenCalled();
+    expect(alertsSpy).not.toHaveBeenCalled();
+
+    // Route-primary-ready releases the fallback; only then does the idle
+    // callback perform the heavier full-list reads.
+    act(() => {
+      markRoutePrimaryReady("/management");
+    });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });

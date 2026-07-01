@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JobProgressDrawer, useJobDrawer } from "./JobProgressDrawer";
 import { lists } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { markRoutePrimaryReady, resetRoutePrimaryReadyForTests } from "@/platform/routePrimaryReady";
 
 function resetJobDrawerStore() {
   useJobDrawer.setState({ expanded: false, jobs: [], hydrated: false });
@@ -14,6 +15,7 @@ describe("JobProgressDrawer — lazy job list hydration (MGMT-LOAD-003)", () => 
     vi.stubGlobal("requestIdleCallback", undefined);
     vi.stubGlobal("cancelIdleCallback", undefined);
     liveStatus._reset({ mode: "mock", effective: "mock" });
+    resetRoutePrimaryReadyForTests();
     resetJobDrawerStore();
   });
 
@@ -21,6 +23,7 @@ describe("JobProgressDrawer — lazy job list hydration (MGMT-LOAD-003)", () => 
     cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    resetRoutePrimaryReadyForTests();
     liveStatus._reset();
     resetJobDrawerStore();
   });
@@ -31,7 +34,7 @@ describe("JobProgressDrawer — lazy job list hydration (MGMT-LOAD-003)", () => 
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("hydrates the job list on an idle callback after mount when never opened", async () => {
+  it("hydrates the job list after route-primary-ready and an idle callback when never opened", async () => {
     const spy = vi.spyOn(lists, "jobs");
     render(<JobProgressDrawer />);
     expect(spy).not.toHaveBeenCalled();
@@ -39,7 +42,14 @@ describe("JobProgressDrawer — lazy job list hydration (MGMT-LOAD-003)", () => 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
+    expect(spy).not.toHaveBeenCalled();
 
+    act(() => {
+      markRoutePrimaryReady("/");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
     expect(spy).toHaveBeenCalledTimes(1);
     // Seed mock jobs total 30, 13 of which count as running/queued/pending —
     // asserting on hydrated content (not just the fetch count) proves the
@@ -58,8 +68,12 @@ describe("JobProgressDrawer — lazy job list hydration (MGMT-LOAD-003)", () => 
     });
     expect(spy).toHaveBeenCalledTimes(1);
 
-    // The pending idle-callback fallback must have been cancelled; advancing
-    // past its fallback window must not trigger a second /bff/jobs request.
+    // The pending route-ready fallback must have been cancelled; marking the
+    // route ready and advancing past the idle window must not trigger a second
+    // /bff/jobs request.
+    act(() => {
+      markRoutePrimaryReady("/");
+    });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });

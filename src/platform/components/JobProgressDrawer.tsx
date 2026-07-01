@@ -2,7 +2,7 @@
 // Shows a compact strip when collapsed; expand to see all running jobs with progress.
 // MGMT-LOAD-003: the full job list is not fetched at mount. It hydrates once,
 // either when the operator expands the drawer or on an idle callback after
-// primary route content has had a chance to render — never both, and never
+// primary route content has rendered — never both, and never
 // racing TopBar's shell-summary badge count for the same /bff/jobs request.
 import { useEffect, useState } from "react";
 import { create } from "zustand";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronUp, ChevronDown, Loader2, X } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "./StatusBadge";
-import { scheduleIdleTask, cancelIdleTask } from "@/lib/idleTask";
+import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
 interface RunningJob {
   id: string;
@@ -80,8 +80,8 @@ export const JobProgressDrawer = () => {
       hydrate();
       return;
     }
-    const idleHandle = scheduleIdleTask(hydrate);
-    return () => cancelIdleTask(idleHandle);
+    const cancelDeferredHydration = scheduleAfterRoutePrimaryReady(hydrate);
+    return () => cancelDeferredHydration();
   }, [expanded, hydrated, markHydrated, setAll]);
 
   // Subscribe to realtime job events
