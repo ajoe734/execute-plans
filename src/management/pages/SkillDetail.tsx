@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -11,15 +10,14 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { skillMachine, type SkillState } from "@/lib/stateMachines";
 import { Send, Archive } from "lucide-react";
 import { ExternalLink } from "lucide-react";
-import { toast } from "sonner";
 import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
 import { Card } from "@/components/ui/card";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const SkillDetail = () => {
   const { id } = useParams();
@@ -28,8 +26,6 @@ export const SkillDetail = () => {
   const [skill, setSkill] = useState<Skill | undefined>();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [pubOpen, setPubOpen] = useState(false);
-  const [retireOpen, setRetireOpen] = useState(false);
   useEffect(() => {
     if (!id) return;
     bff.skills.get(id).then(setSkill);
@@ -53,13 +49,13 @@ export const SkillDetail = () => {
         actions={
           <>
             {skill.draft ? (
-              <Button size="sm" onClick={() => setPubOpen(true)}>
+              <NonProductionActionButton size="sm">
                 <Send className="h-4 w-4 mr-1" />{t("skill.publish")}
-              </Button>
+              </NonProductionActionButton>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => setRetireOpen(true)}>
+              <NonProductionActionButton size="sm" variant="outline">
                 <Archive className="h-4 w-4 mr-1" />{t("actions.retire")}
-              </Button>
+              </NonProductionActionButton>
             )}
           </>
         }
@@ -94,7 +90,7 @@ export const SkillDetail = () => {
               <div>
                 <div className="text-sm font-semibold">{t("phase13.skill.tabs.sandbox")}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Run this skill against mock inputs in the dedicated Skill Sandbox studio. Mock trace + token cost are produced inline; no live calls.
+                  Open the dedicated Skill Sandbox input surface. Execution stays disabled until a governed skill-runner trace/readback endpoint exists.
                 </p>
               </div>
               <Button size="sm" variant="outline" onClick={() => nav(`/management/studios/skill-sandbox?id=${skill.id}`)}>
@@ -161,24 +157,6 @@ export const SkillDetail = () => {
           ) },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
-      />
-
-      <HighRiskConfirm
-        open={pubOpen}
-        onOpenChange={setPubOpen}
-        title={t("skill.publishTitle", { name: skill.name })}
-        description={t("skill.publishDesc")}
-        confirmToken="PUBLISH"
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Skill", id: skill!.id, action: "publish", newState: "deployed", memo }); toast.success(t("skill.publishSubmitted")); }}
-      />
-      <HighRiskConfirm
-        open={retireOpen}
-        onOpenChange={setRetireOpen}
-        title={t("skill.retireTitle", { name: skill.name })}
-        description={t("skill.retireDesc")}
-        confirmToken="RETIRE"
-        destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Skill", id: skill!.id, action: "retire", newState: "retired", memo }); toast.success(t("skill.retireSubmitted")); }}
       />
     </>
   );

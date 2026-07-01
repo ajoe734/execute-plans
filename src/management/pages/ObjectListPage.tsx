@@ -1,6 +1,7 @@
 // Generic object list page generator for the Management Console
 // VI-1 — migrated to bffV1: loader returns ListEnvelope<T>; refresh via useLiveListV1.
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable, type Column } from "@/platform/components/DataTable";
@@ -28,10 +29,15 @@ interface Props<T extends BaseObject> {
   liveKinds?: string[];
   /** Pack F F01 — describes the Create button behavior. */
   createBehavior?: CreateBehavior;
+  emptyState?: {
+    title: string;
+    description: string;
+    icon?: ReactNode;
+  };
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior,
+  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior, emptyState,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -127,12 +133,17 @@ export function ObjectListPage<T extends BaseObject>({
             {t("realtime.newUpdates", { count: pending, defaultValue: `${pending} new update(s) — click to refresh` })}
           </button>
         )}
-        {rows.length === 0 && degradation.degraded ? (
+        {rows.length === 0 && (degradation.degraded || emptyState) ? (
           <EmptyState
-            icon={<Inbox className="h-8 w-8" />}
-            title={t("common.awaitingData", { defaultValue: "No data yet" })}
+            icon={emptyState?.icon ?? <Inbox className="h-8 w-8" />}
+            title={
+              degradation.degraded
+                ? t("common.awaitingData", { defaultValue: "No data yet" })
+                : emptyState?.title ?? t("common.noResults")
+            }
             description={
               degradation.reason ||
+              emptyState?.description ||
               t("common.awaitingDataDesc", {
                 defaultValue:
                   "This surface has no data yet — the backend is reachable but upstream is not producing for it.",

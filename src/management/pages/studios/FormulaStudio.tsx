@@ -1,6 +1,6 @@
 // Phase 12.1 — Ranking Formula Studio.
 // Dropdown to pick a formula, edit expression with metric library + validate,
-// compare formula previews, and gate backtest execution until a governed runner exists.
+// compare formula expressions, and gate backtest execution until a governed runner exists.
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
@@ -12,10 +12,10 @@ import { bff } from "@/lib/bff-v1";
 import type { RankingFormula } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { FormulaEditor } from "@/management/components/studios/FormulaEditor";
-import { FormulaBacktestChart } from "@/management/components/studios/FormulaBacktestChart";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, FlaskConical } from "lucide-react";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export const FormulaStudio = () => {
   const t = useT();
@@ -57,6 +57,17 @@ export const FormulaStudio = () => {
     setActiveId(id);
     setParams({ id });
   };
+
+  const runnerUnavailable = (
+    <EmptyState
+      icon={<FlaskConical className="h-8 w-8" />}
+      title={t("studios.runnerUnavailableTitle", { defaultValue: "Backtest runner unavailable" })}
+      description={t("studios.runnerUnavailableDescription", {
+        defaultValue:
+          "No governed backtest job/readback endpoint is available for this studio. The UI does not render generated performance metrics or mark preview data as a live run.",
+      })}
+    />
+  );
 
   return (
     <>
@@ -101,7 +112,7 @@ export const FormulaStudio = () => {
               <div className="flex justify-end">
                 <NonProductionActionButton size="sm">{t("studios.runBacktest")}</NonProductionActionButton>
               </div>
-              <FormulaBacktestChart expression={expr || active.expression} label={active.name} />
+              {runnerUnavailable}
             </TabsContent>
             <TabsContent value="compare" className="mt-4 space-y-3">
               <Card className="p-4 flex flex-wrap items-center gap-3">
@@ -116,9 +127,21 @@ export const FormulaStudio = () => {
                 </Select>
               </Card>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <FormulaBacktestChart expression={expr || active.expression} label={`${t("studios.aSide")} · ${active.name}`} />
+                <Card className="p-4 space-y-2">
+                  <div className="text-sm font-semibold">{t("studios.aSide")} · {active.name}</div>
+                  <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/30 p-3 text-mono text-xs">
+                    {expr || active.expression}
+                  </pre>
+                </Card>
                 {compare
-                  ? <FormulaBacktestChart expression={compare.expression} label={`${t("studios.bSide")} · ${compare.name}`} />
+                  ? (
+                    <Card className="p-4 space-y-2">
+                      <div className="text-sm font-semibold">{t("studios.bSide")} · {compare.name}</div>
+                      <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/30 p-3 text-mono text-xs">
+                        {compare.expression}
+                      </pre>
+                    </Card>
+                  )
                   : <Card className="p-6 text-sm text-muted-foreground text-center">{t("studios.pickFormula")}</Card>}
               </div>
             </TabsContent>

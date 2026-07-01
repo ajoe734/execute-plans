@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
 import type { McpServer, McpTool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -10,17 +9,15 @@ import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { mcpServerMachine, type McpServerState } from "@/lib/stateMachines";
-import { toast } from "sonner";
 import { ShieldCheck, PlugZap, Activity, ShieldOff, RotateCcw, ArchiveX } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
 import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 import { McpSecretsPanel } from "@/management/components/detail/McpSecretsPanel";
 import { McpServerSchemaPanel } from "@/management/components/detail/McpServerSchemaPanel";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const HEALTH_TO_STATE: Record<string, McpServerState> = {
   healthy: "healthy", warning: "degraded", failed: "disabled",
@@ -32,9 +29,6 @@ export const McpServerDetail = () => {
   const navigate = useNavigate();
   const [s, setS] = useState<McpServer | undefined>();
   const [tools, setTools] = useState<McpTool[]>([]);
-  const [disableOpen, setDisableOpen] = useState(false);
-  const [retireOpen, setRetireOpen] = useState(false);
-  const refresh = () => { if (id) bff.mcpServers.get(id).then(setS); };
   useEffect(() => {
     if (!id) return;
     bff.mcpServers.get(id).then(setS);
@@ -44,32 +38,26 @@ export const McpServerDetail = () => {
 
   const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
 
-  const run = async (action: string, label: string) => {
-    const r = await runActionSafe({ kind: "McpServer", id: s.id, action });
-    if (r.ok) { toast.success(label); refresh(); }
-    else toast.error(r.message ?? "Rejected");
-  };
-
   const actionBar = (
     <div className="flex flex-wrap gap-2">
-      <Button size="sm" variant="outline" onClick={() => run("test_connection", t("mcp.actions.connectionOk"))}>
+      <NonProductionActionButton size="sm" variant="outline">
         <PlugZap className="h-4 w-4 mr-1" />{t("mcp.actions.testConnection")}
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => run("health_check", t("mcp.actions.healthChecked"))}>
+      </NonProductionActionButton>
+      <NonProductionActionButton size="sm" variant="outline">
         <Activity className="h-4 w-4 mr-1" />{t("mcp.actions.healthCheck")}
-      </Button>
+      </NonProductionActionButton>
       {machineState !== "disabled" ? (
-        <Button size="sm" variant="outline" onClick={() => setDisableOpen(true)}>
+        <NonProductionActionButton size="sm" variant="outline">
           <ShieldOff className="h-4 w-4 mr-1" />{t("mcp.actions.disable")}
-        </Button>
+        </NonProductionActionButton>
       ) : (
-        <Button size="sm" onClick={() => run("reenable", t("mcp.actions.reenabled"))}>
+        <NonProductionActionButton size="sm">
           <RotateCcw className="h-4 w-4 mr-1" />{t("mcp.actions.reenable")}
-        </Button>
+        </NonProductionActionButton>
       )}
-      <Button size="sm" variant="destructive" onClick={() => setRetireOpen(true)}>
+      <NonProductionActionButton size="sm" variant="destructive">
         <ArchiveX className="h-4 w-4 mr-1" />{t("mcp.actions.retire")}
-      </Button>
+      </NonProductionActionButton>
     </div>
   );
 
@@ -171,23 +159,6 @@ export const McpServerDetail = () => {
         ]} /> },
       ]}
     />
-    <HighRiskConfirm
-      open={disableOpen}
-      onOpenChange={setDisableOpen}
-      title={t("mcp.actions.disableTitle", { name: s.name })}
-      description={t("mcp.actions.disableDesc")}
-      confirmToken="DISABLE"
-      onConfirm={async (memo) => { await runActionSafe({ kind: "McpServer", id: s.id, action: "disable", memo }); toast.success(t("mcp.actions.disabled")); refresh(); }}
-    />
-    <HighRiskConfirm
-      open={retireOpen}
-      onOpenChange={setRetireOpen}
-      title={t("mcp.actions.retireTitle", { name: s.name })}
-      description={t("mcp.actions.retireDesc")}
-      confirmToken="RETIRE"
-      destructive
-      onConfirm={async (memo) => { await runActionSafe({ kind: "McpServer", id: s.id, action: "retire", memo }); toast.success(t("mcp.actions.retired")); refresh(); }}
-    />
     </>
   );
 };
@@ -197,7 +168,6 @@ export const McpToolDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const [tool, setTool] = useState<McpTool | undefined>();
-  const [grantOpen, setGrantOpen] = useState(false);
   useEffect(() => { if (id) bff.mcpTools.get(id).then(setTool); }, [id]);
   if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
@@ -210,9 +180,9 @@ export const McpToolDetail = () => {
         subtitle={`MCP tool · ${tool.scope}`}
         actions={
           !liveGranted && tool.scope === "destructive" ? (
-            <Button size="sm" variant="destructive" onClick={() => setGrantOpen(true)}>
+            <NonProductionActionButton size="sm" variant="destructive">
               <ShieldCheck className="h-4 w-4 mr-1" />Grant Live access
-            </Button>
+            </NonProductionActionButton>
           ) : null
         }
         tabs={[
@@ -249,16 +219,6 @@ export const McpToolDetail = () => {
             { id: "au_mt_2", actor: "ops", action: "mcp_tool.grant_env", target: tool.id, ts: new Date(Date.now() - 86400_000).toISOString(), memo: `Granted: ${tool.envGrants.join(", ")}` },
           ]} /> },
         ]}
-      />
-
-      <HighRiskConfirm
-        open={grantOpen}
-        onOpenChange={setGrantOpen}
-        title={`Grant LIVE access — ${tool.name}`}
-        description={t("detail.confirm.authorizeLive")}
-        confirmToken="GRANT-LIVE"
-        destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "McpTool", id: tool!.id, action: "grant_env", memo }); toast.success(t("toast.actionQueued")); }}
       />
     </>
   );
