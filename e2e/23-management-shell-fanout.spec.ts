@@ -17,6 +17,7 @@ const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const EVIDENCE_PATH = "/management/evidence";
 const PRIMARY_API_PATTERN = /\/bff\/management\/evidence(?:\?.*)?$/;
 const SHELL_SUMMARY_PATTERN = /\/bff\/management\/shell-summary(?:\?.*)?$/;
+const SSE_STREAM_PATTERN = /\/bff\/events\/stream(?:\?.*)?$/;
 const FANOUT_PATTERNS: Array<[string, RegExp]> = [
   ["me", /\/bff\/me(?:\?.*)?$/],
   ["approvals", /\/bff\/approvals(?:\?.*)?$/],
@@ -121,6 +122,21 @@ async function installBaseFixtures(page: Page): Promise<Record<string, number>> 
     counters.evidence += 1;
     await fulfillJson(route, EVIDENCE_RESPONSE);
   });
+  // PlatformShell/useRealtimeStatus open a live SSE connection
+  // (connectLiveSse()) on every management route mount. Left unmocked, the
+  // EventSource never opens against this fixture-only page, so liveSse.ts's
+  // "error" handler fires before "open" and reports `sse_open_failed`
+  // through the shared `liveStatus` signal. That flips TopBar's
+  // `transportSource` and re-runs its live effect mid-test, causing a
+  // second, spurious shell-summary/full-list read that this task's own
+  // fanout counters are not supposed to see. Fulfilling with a
+  // `text/event-stream` response lets the EventSource "open" event fire
+  // (matching the pattern already used by
+  // e2e/21-management-canonical-reads.spec.ts) so `liveStatus` stays "live"
+  // for the duration of each assertion.
+  await onRoute(page, SSE_STREAM_PATTERN, async (route) => {
+    await route.fulfill({ status: 200, contentType: "text/event-stream", headers: corsHeaders(route), body: ": connected\n\n" });
+  });
   for (const [key, pattern] of FANOUT_PATTERNS) {
     await onRoute(page, pattern, async (route) => {
       counters[key] += 1;
@@ -132,13 +148,20 @@ async function installBaseFixtures(page: Page): Promise<Record<string, number>> 
   return counters;
 }
 
+// Scoped to `<main>` (the route Outlet — see ManagementLayout.tsx), not
+// `<body>`: the shell TopBar renders its own "COUNTS UNAVAILABLE" badge
+// (topbar.dataSource.unavailable) outside `<main>` when shell-summary is
+// unavailable. Matching against the whole body let that badge text satisfy
+// this readiness check before the Evidence route itself had rendered its
+// first row/empty state, which is exactly the race this task must prevent.
 async function waitForFirstRowOrEmpty(page: Page): Promise<void> {
+  const main = page.locator("main");
   await expect
     .poll(
       async () => {
-        const rowCount = await page.locator("tbody tr").count();
-        const bodyText = await page.locator("body").innerText();
-        return rowCount > 0 || /no evidence|unavailable/i.test(bodyText);
+        const rowCount = await main.locator("tbody tr").count();
+        const mainText = await main.innerText();
+        return rowCount > 0 || /no evidence|unavailable/i.test(mainText);
       },
       { message: "Evidence route should reach a row or empty state", timeout: 10_000 },
     )
@@ -174,17 +197,19 @@ test.describe("MGMT-LOAD-003 shell fanout reduction", () => {
 
     await page.goto(frontendUrl(EVIDENCE_PATH), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("main h1").first()).toBeVisible({ timeout: 10_000 });
-
-    const approvalsAtFirstRowCheckpoint = { value: 0 };
     await waitForFirstRowOrEmpty(page);
-    approvalsAtFirstRowCheckpoint.value = counters.approvals;
 
-    // The deferred fallback should not have raced first row — it may still
-    // be pending or may have already resolved via a fast idle callback, but
-    // it must not have required more than one read per list once it settles.
-    await expect.poll(() => counters.approvals, { timeout: 5_000 }).toBeGreaterThanOrEqual(approvalsAtFirstRowCheckpoint.value);
-    await expect.poll(() => counters.approvals, { timeout: 5_000 }).toBeLessThanOrEqual(1);
+    // The deferred fallback runs on an idle callback (src/lib/idleTask.ts),
+    // which fires during main-thread idle time — including while the
+    // Evidence route's own primary fetch is still in flight — so it is not
+    // guaranteed to land strictly after the Evidence row/empty-state paint;
+    // measured locally, it commonly resolves first against fixture-mocked
+    // (near-zero-latency) routes. What the implementation does guarantee is
+    // that each list is read at most once — no duplicate fallback fetch —
+    // once it settles.
+    await expect.poll(() => counters.approvals, { timeout: 5_000 }).toBe(1);
     expect(counters.alerts).toBeLessThanOrEqual(1);
+    expect(counters.jobs).toBeLessThanOrEqual(1);
   });
 
   test("shell-summary degraded: reaches first row without extra full-list fanout", async ({ page }) => {

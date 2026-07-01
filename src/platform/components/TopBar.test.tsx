@@ -134,6 +134,11 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     });
     expect(approvalsSpy).toHaveBeenCalledTimes(1);
     expect(alertsSpy).toHaveBeenCalledTimes(1);
-    expect(jobsSpy).toHaveBeenCalledTimes(1);
+    // TopBar's fallback deliberately never reads the jobs list itself:
+    // JobProgressDrawer already owns the one jobs-list hydration for the
+    // shell (its own idle-callback effect, unconditional on mount), so a
+    // second independent read here would duplicate `/bff/jobs` — exactly
+    // what MGMT-LOAD-003 exists to prevent.
+    expect(jobsSpy).not.toHaveBeenCalled();
   });
 });

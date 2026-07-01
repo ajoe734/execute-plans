@@ -56,30 +56,39 @@ export const TopBar = () => {
     // Deferred fallback: only used when shell-summary itself is unavailable.
     // Runs on an idle callback so it never competes with the route's primary
     // content request — see MGMT-LOAD-003.
+    //
+    // Deliberately does NOT read `lists.jobs()`: JobProgressDrawer already
+    // owns the one jobs-list hydration for the shell (its own idle-callback
+    // effect, unconditional on mount — see JobProgressDrawer.tsx), so a
+    // second independent read here would be a genuine duplicate `/bff/jobs`
+    // request, not just a redundant one. This is also dead weight even
+    // without that: `counts.jobs` (like approvals/alerts here) only renders
+    // once `dataSource === "live"`, and this fallback path only ever lands
+    // on "degraded" or a non-live source, so a jobs count fetched here was
+    // never shown.
     const hydrateFromFullLists = () => {
       if (disposed) return;
-      Promise.all([lists.approvals(), lists.alerts(), lists.jobs()]).then(([a, al, j]) => {
+      Promise.all([lists.approvals(), lists.alerts()]).then(([a, al]) => {
         const source = liveStatus.get();
         if (disposed || source.mode !== "live" || source.effective !== "live") {
           clearCounts("fallback");
           return;
         }
-        const listSource = classifyListSource([a, al, j]);
+        const listSource = classifyListSource([a, al]);
         if (listSource !== "live") {
           clearCounts(listSource);
           return;
         }
         const approvals = a.items as Array<{ state?: string }>;
         const alerts = al.items as Array<{ acknowledged?: boolean }>;
-        const jobs = j.items as Array<{ status?: string }>;
         // Recovered via the heavier full-list path, not the cheap summary —
         // label as degraded so the operator knows counts came from a fallback.
         setSource("degraded");
-        setCounts({
+        setCounts((c) => ({
+          ...c,
           approvals: approvals.filter((x) => x.state === "pending").length,
           alerts: alerts.filter((x) => !x.acknowledged).length,
-          jobs: jobs.filter((x) => x.status === "running").length,
-        });
+        }));
       }).catch(() => clearCounts("fallback"));
     };
 
