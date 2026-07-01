@@ -5,6 +5,7 @@ import {
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
+  personaFleetOodaHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
   personaFleetResearchHref,
@@ -67,6 +68,7 @@ describe("PersonaFleetPage deep links", () => {
   it("links a row to represented management surfaces", () => {
     const row = {
       personaId: "persona/tw equity",
+      ooda: "Decide",
       perfDelta: 0.095,
       humanNeeded: true,
       lastMutation: "2026-06-07",
@@ -100,6 +102,42 @@ describe("PersonaFleetPage deep links", () => {
     );
     expect(personaFleetHumanGateHref(row)).toBe(
       "/management/human-inbox?persona=persona%2Ftw%20equity",
+    );
+    expect(personaFleetOodaHref(row)).toBe(
+      "/management/human-inbox?persona=persona%2Ftw%20equity",
+    );
+  });
+
+  it("routes OODA stages to the existing stage-specific management pages", () => {
+    const baseRow = {
+      personaId: "persona-tw-live",
+      currentResearchProjects: [
+        {
+          projectId: "MGMT-QLIB-006",
+          title: "Qlib TW cross-sectional equity alpha admission linkage",
+          stage: "management_review_linked",
+          frameworks: ["qlib"],
+          experimentId: "exp-mgmt-qlib-006",
+          blockedByTaskIds: [],
+          canDeploy: false,
+        },
+      ],
+    } as ManagementPersonaFleetRow;
+
+    expect(personaFleetOodaHref({ ...baseRow, ooda: "Observe" })).toBe(
+      "/management/data-sources?persona=persona-tw-live",
+    );
+    expect(personaFleetOodaHref({ ...baseRow, ooda: "Orient" })).toBe(
+      "/management/experiments/exp-mgmt-qlib-006",
+    );
+    expect(personaFleetOodaHref({ ...baseRow, ooda: "Decide" })).toBe(
+      "/management/human-inbox?persona=persona-tw-live",
+    );
+    expect(personaFleetOodaHref({ ...baseRow, ooda: "Act" })).toBe(
+      "/management/runtimes?persona=persona-tw-live",
+    );
+    expect(personaFleetOodaHref({ ...baseRow, ooda: "Learn" })).toBe(
+      "/management/evolution-journal?persona=persona-tw-live",
     );
   });
 

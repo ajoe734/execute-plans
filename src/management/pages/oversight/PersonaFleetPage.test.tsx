@@ -110,6 +110,10 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox?persona=persona-live-tw-equity",
     );
+    expect(screen.getByRole("link", { name: "persona-live-tw-equity OODA Orient stage" })).toHaveAttribute(
+      "href",
+      "/management/experiments/exp-mgmt-qlib-006",
+    );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity research detail" })).toHaveAttribute(
       "href",
       "/management/experiments/exp-mgmt-qlib-006",
@@ -283,6 +287,7 @@ describe("PersonaFleetPage", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-approval", "Approval Persona", {
+          ooda: "Decide",
           humanNeeded: true,
           state: "needs_human_approval",
         }),
@@ -294,6 +299,10 @@ describe("PersonaFleetPage", () => {
     renderFleet("/management/persona-fleet");
 
     expect(screen.getByRole("link", { name: "Review human gate for persona-approval" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox?persona=persona-approval",
+    );
+    expect(screen.getByRole("link", { name: "persona-approval OODA Decide stage" })).toHaveAttribute(
       "href",
       "/management/human-inbox?persona=persona-approval",
     );

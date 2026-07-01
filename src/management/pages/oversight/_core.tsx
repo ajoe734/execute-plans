@@ -62,6 +62,7 @@ import {
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
+  personaFleetOodaHref,
   personaFleetOnboardingHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
@@ -381,6 +382,7 @@ export const PersonaFleetPage = () => {
               const primaryAction = personaFleetPrimaryAction(r, { personaHref, researchHref });
               const artifactHref = personaFleetArtifactHref(r, primaryResearch);
               const artifactLabel = primaryResearch?.artifactId;
+              const oodaHref = personaFleetOodaHref(r, primaryResearch);
               const focused = personaFocus === r.personaId;
               return (
                 <tr
@@ -397,7 +399,20 @@ export const PersonaFleetPage = () => {
                     <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.personaId}</div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
-	                  <td className="px-3 py-2"><Badge variant="outline">{r.ooda}</Badge></td>
+                  <td className="px-3 py-2">
+                    <Link
+                      to={oodaHref}
+                      aria-label={`${r.personaId} OODA ${r.ooda} stage`}
+                      className="inline-flex"
+                    >
+                      <Badge
+                        variant="outline"
+                        className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+                      >
+                        {r.ooda}
+                      </Badge>
+                    </Link>
+                  </td>
 	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
 	                  <td className="px-3 py-2 min-w-[240px]">
 	                    <div className="flex max-w-[360px] flex-wrap gap-1">

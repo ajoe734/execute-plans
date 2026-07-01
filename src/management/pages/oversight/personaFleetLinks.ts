@@ -179,3 +179,23 @@ export function personaFleetOnboardingHref(r: ManagementPersonaFleetRow): string
 export function personaFleetRuntimeHref(r: ManagementPersonaFleetRow): string {
   return `/management/runtimes?persona=${encoded(r.personaId)}`;
 }
+
+export function personaFleetOodaHref(
+  r: ManagementPersonaFleetRow,
+  item?: PersonaFleetResearchItem,
+): string {
+  switch (String(r.ooda ?? "").toLowerCase()) {
+    case "observe":
+      return personaFleetDataSourcesHref(r);
+    case "orient":
+      return personaFleetResearchHref(r, item);
+    case "decide":
+      return personaFleetHumanGateHref(r);
+    case "act":
+      return personaFleetRuntimeHref(r);
+    case "learn":
+      return personaFleetMutationHref(r);
+    default:
+      return personaFleetPersonaHref(r);
+  }
+}
