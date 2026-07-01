@@ -36,7 +36,7 @@ export function DataGridScrollArea({
     <div
       aria-label={ariaLabel}
       className={cn(
-        "relative max-h-[var(--data-grid-max-height)] overflow-auto overscroll-contain",
+        "relative max-h-[var(--data-grid-max-height)] overflow-auto overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         "[&_table]:w-full [&_table]:min-w-[var(--data-grid-min-width)]",
         stickyHeader && [
           "[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20",
@@ -60,7 +60,9 @@ export function DataGridScrollArea({
         className,
       )}
       data-testid="data-grid-scroll-area"
+      role={ariaLabel ? "region" : undefined}
       style={style}
+      tabIndex={0}
     >
       {children}
     </div>

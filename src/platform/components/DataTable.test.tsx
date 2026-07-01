@@ -37,6 +37,8 @@ describe("DataTable", () => {
     expect(frame.className).toContain("[&_thead]:sticky");
     expect(frame.className).toContain("[&_td:first-child]:sticky");
     expect(frame.className).toContain("[&_td:last-child]:sticky");
+    expect(frame).toHaveAttribute("role", "region");
+    expect(frame).toHaveAttribute("tabindex", "0");
     expect(container.querySelectorAll("tbody tr")).toHaveLength(24);
   });
 });
