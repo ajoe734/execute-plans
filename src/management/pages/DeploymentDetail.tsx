@@ -6,8 +6,6 @@ import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rocket, Undo2, TrendingDown, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { mutations } from "@/lib/bff/mutations";
-import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -157,7 +155,9 @@ export const DeploymentDetail = () => {
         description={`Rolls back to version ${d.previousVersion ?? "previous"}. Live orders will continue to flow through the previous artifact.`}
         confirmToken="ROLLBACK"
         destructive
-        onConfirm={async (memo) => { await mutations.rollback("Deployment", d.id, memo); toast.success("Rollback executed"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Deployment", id: d.id, action: "rollback", memo }, { successTitle: "Rollback executed" });
+        }}
       />
 
       <Dialog open={reduceOpen} onOpenChange={setReduceOpen}>
@@ -182,8 +182,15 @@ export const DeploymentDetail = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReduceOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
-              await mutations.reduceAllocation(d.id, newPct, `manual reduce → ${newPct}%`);
-              toast.success(t("deployment.reduceAllocation.queued", { pct: newPct }));
+              const receipt = await runActionSafe({
+                kind: "Deployment",
+                id: d.id,
+                action: "reduce_allocation",
+                memo: `manual reduce -> ${newPct}%`,
+              }, {
+                successTitle: t("deployment.reduceAllocation.queued", { pct: newPct }),
+              });
+              if (!receipt.ok) return;
               setReduceOpen(false);
               const fresh = await bff.deployments.get(d.id);
               if (fresh) setD(fresh);
@@ -205,8 +212,16 @@ export const DeploymentDetail = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setScheduleOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
-              await mutations.scheduleDeployment(d.id, new Date(scheduleAt).toISOString(), `scheduled by user`);
-              toast.success(t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }));
+              const when = new Date(scheduleAt).toISOString();
+              const receipt = await runActionSafe({
+                kind: "Deployment",
+                id: d.id,
+                action: "schedule",
+                memo: `scheduled for ${when}`,
+              }, {
+                successTitle: t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }),
+              });
+              if (!receipt.ok) return;
               setScheduleOpen(false);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>
