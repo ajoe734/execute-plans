@@ -8,6 +8,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ControlRoomSummary, LoopRun } from "@/lib/v5";
@@ -83,8 +84,9 @@ export const LoopsPage = () => {
         {!data ? (
           <div className="text-sm text-muted-foreground">…</div>
         ) : (
-          <Card className="p-0">
-            <table className="w-full text-sm">
+          <Card className="p-0 overflow-hidden">
+            <DataGridScrollArea minWidth={900} ariaLabel={kind ? t(`v5.loops.${kind}.title`) : t("nav.loops")}>
+            <table className="text-sm">
               <thead className="text-xs text-muted-foreground bg-muted/40">
                 <tr>
                   <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -107,6 +109,7 @@ export const LoopsPage = () => {
                 )}
               </tbody>
             </table>
+            </DataGridScrollArea>
             <div className="px-3 py-2 text-xs text-muted-foreground">
               {t("v5.col.total")}: {data.totalCount} · exact={String(data.totalCountExact)}
             </div>

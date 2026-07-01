@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
@@ -258,7 +259,8 @@ export const StrategyDetail = () => {
               <>
                 <StrategyPaperLiveTab strategyId={s.id} />
                 <Card className="overflow-hidden mt-4">
-                  <table className="w-full text-sm">
+                  <DataGridScrollArea minWidth={760} maxHeight="min(420px, calc(100vh - 22rem))">
+                  <table className="text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
                         <th className="text-left p-3">{t("table.metric")}</th>
@@ -278,6 +280,7 @@ export const StrategyDetail = () => {
                       ))}
                     </tbody>
                   </table>
+                  </DataGridScrollArea>
                 </Card>
               </>
             ),

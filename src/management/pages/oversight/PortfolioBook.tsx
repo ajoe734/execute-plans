@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -71,11 +72,12 @@ export const PortfolioBookPage = () => {
       </div>
 
       {/* Section B: Capital Pool Summary */}
-      <Card className="overflow-x-auto">
+      <Card className="overflow-hidden">
         <header className="px-4 py-2 border-b border-border">
           <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.poolsTitle")}</h2>
         </header>
-        <table className="w-full text-sm">
+        <DataGridScrollArea minWidth={1180} stickyLastColumn ariaLabel={t("mgmt.portfolio.poolsTitle")}>
+        <table className="text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.portfolio.pool")}</th>
@@ -107,10 +109,11 @@ export const PortfolioBookPage = () => {
             ))}
           </tbody>
         </table>
+        </DataGridScrollArea>
       </Card>
 
       {/* Section C: Holdings */}
-      <Card className="overflow-x-auto">
+      <Card className="overflow-hidden">
         <header className="px-4 py-2 border-b border-border flex items-center gap-3">
           <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
           <Input
@@ -121,7 +124,8 @@ export const PortfolioBookPage = () => {
             aria-label={t("mgmt.portfolio.filterSymbol")}
           />
         </header>
-        <table className="w-full text-sm">
+        <DataGridScrollArea minWidth={1320} stickyLastColumn ariaLabel={t("mgmt.portfolio.holdingsTitle")}>
+        <table className="text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.portfolio.symbol")}</th>
@@ -159,6 +163,7 @@ export const PortfolioBookPage = () => {
             )}
           </tbody>
         </table>
+        </DataGridScrollArea>
       </Card>
     </section>
   );

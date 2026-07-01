@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
@@ -83,8 +84,13 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
           </div>
         )}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
+      <DataGridScrollArea
+        ariaLabel={t(`governance.permission.instance.${matrix.instance}`)}
+        maxHeight="min(620px, calc(100vh - 18rem))"
+        minWidth={Math.max(760, 160 + matrix.cols.length * 112)}
+        stickyFirstColumn={false}
+      >
+        <table className="border-collapse text-xs">
           <thead>
             <tr className="bg-muted/40">
               <th className="text-left px-3 py-2 sticky left-0 bg-muted/60 z-10 min-w-[160px] uppercase tracking-wider text-[10px] text-muted-foreground">
@@ -126,7 +132,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
             ))}
           </tbody>
         </table>
-      </div>
+      </DataGridScrollArea>
       {matrix.cols.some((c) => c.risk === "critical") && (
         <div className="p-3 border-t border-border bg-status-warning/5 text-xs text-status-warning flex items-center gap-2">
           <ShieldAlert className="h-3.5 w-3.5" />

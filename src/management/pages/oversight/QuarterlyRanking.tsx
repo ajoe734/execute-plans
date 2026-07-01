@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataGridCard } from "@/platform/components/DataGridFrame";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -102,8 +103,8 @@ export const QuarterlyRankingPage = () => {
       </Card>
 
       {/* Ranking table */}
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <DataGridCard minWidth={1400} stickyLastColumn ariaLabel={t("mgmt.quarterly.title")}>
+        <table className="text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.league.rank")}</th>
@@ -155,7 +156,7 @@ export const QuarterlyRankingPage = () => {
             ))}
           </tbody>
         </table>
-      </Card>
+      </DataGridCard>
 
       {/* Disqualified */}
       {disqualified.length > 0 && (

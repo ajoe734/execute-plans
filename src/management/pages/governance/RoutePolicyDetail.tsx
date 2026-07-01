@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, GitCompare } from "lucide-react";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { bff } from "@/lib/bff-v1";
 import type { Persona, PolicyVersion, RoutePolicy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
@@ -100,7 +101,8 @@ export const RoutePolicyDetail = () => {
 
           <TabsContent value="versions" className="mt-4">
             <Card className="p-0 overflow-hidden">
-              <table className="w-full text-sm">
+              <DataGridScrollArea minWidth={980} ariaLabel={t("governance.policy.versions")}>
+              <table className="text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
                     <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.version")}</th>
@@ -125,6 +127,7 @@ export const RoutePolicyDetail = () => {
                   )}
                 </tbody>
               </table>
+              </DataGridScrollArea>
             </Card>
           </TabsContent>
 
