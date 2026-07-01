@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
@@ -15,7 +16,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
-import { EntityCreateDrawer } from "../components/write/EntityCreateDrawer";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
 import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
 import { ActivityMonitor } from "../components/detail/ActivityMonitor";
@@ -32,13 +33,6 @@ import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
-const commandDescription = (payload: Record<string, unknown>): string | undefined => {
-  const data = payload.data as Record<string, unknown> | undefined;
-  const receipt = data?.receipt as Record<string, unknown> | undefined;
-  const commandId = data?.commandId ?? data?.command_id ?? receipt?.command_id ?? receipt?.id;
-  return commandId ? String(commandId) : undefined;
-};
-
 export const PersonaDetail = () => {
   const { id } = useParams();
   const t = useT();
@@ -49,9 +43,7 @@ export const PersonaDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const { can } = usePermissions();
-  const canEdit = can("edit");
   const canRetire = can("archive");
 
   useEffect(() => {
@@ -109,6 +101,9 @@ export const PersonaDetail = () => {
     );
   }
 
+  const personaReceipt = (receipt: Record<string, unknown>, action: string) =>
+    commandReceiptDescription(receipt, { fallback: `Persona ${p.id} · ${action}` });
+
   return (
     <>
       <ObjectDetailLayout
@@ -116,16 +111,31 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
-            <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => setEditOpen(true)} title={canEdit ? undefined : t("permission.requireAction", { action: "edit" })}>
+            <NonProductionActionButton size="sm" variant="outline">
               <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
-            </Button>
-            <Button size="sm" variant="outline" onClick={async () => { await testPersonaPrompt(p.id, "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
+            </NonProductionActionButton>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const receipt = await testPersonaPrompt(p.id, "manual test");
+              toast.success(t("persona.ops.testToast", { name: p.name }), {
+                description: personaReceipt(receipt, "test_prompt"),
+              });
+            }}>
               <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { const r = await runPersonaAction(p.id, "run_eval", { memo: "manual eval" }); toast.success(t("persona.ops.evalToast"), { description: commandDescription(r) }); }}>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const receipt = await runPersonaAction(p.id, "run_eval", { memo: "manual eval" });
+              toast.success(t("persona.ops.evalToast"), {
+                description: personaReceipt(receipt, "run_eval"),
+              });
+            }}>
               <Play className="h-4 w-4 mr-1" />{t("persona.ops.runEval")}
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { await runPersonaAction(p.id, "restrict_tools", { memo: "temporary restriction" }); toast.success(t("persona.ops.restrictToast")); }}>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const receipt = await runPersonaAction(p.id, "restrict_tools", { memo: "temporary restriction" });
+              toast.success(t("persona.ops.restrictToast"), {
+                description: personaReceipt(receipt, "restrict_tools"),
+              });
+            }}>
               <Lock className="h-4 w-4 mr-1" />{t("persona.ops.restrictTools")}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
@@ -228,19 +238,11 @@ export const PersonaDetail = () => {
         confirmEntity={{ type: "persona", id: p.id }}
         target={{ type: "Persona", id: p.id, name: p.name }}
         risk="high"
-        onConfirm={async (memo, token) => { await runPersonaAction(p.id, "suspend", { memo, confirmToken: token }); toast.success(t("toast.saved")); }}
-      />
-
-      <EntityCreateDrawer
-        entity="persona"
-        mode="edit"
-        editingId={p.id}
-        initialData={p as unknown as Record<string, unknown>}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onCreated={(updated) => {
-          setP((prev) => prev ? { ...prev, ...(updated as Partial<Persona>) } : prev);
-          toast.success(t("toast.saved"));
+        onConfirm={async (memo, token) => {
+          const receipt = await runPersonaAction(p.id, "suspend", { memo, confirmToken: token });
+          toast.success(t("toast.saved"), {
+            description: personaReceipt(receipt, "suspend"),
+          });
         }}
       />
 
@@ -254,8 +256,10 @@ export const PersonaDetail = () => {
         target={{ type: "Persona", id: p.id, name: p.name }}
         risk="high"
         onConfirm={async (memo, token) => {
-          await runPersonaAction(p.id, "retire", { memo, confirmToken: token });
-          toast.success(t("toast.saved"));
+          const receipt = await runPersonaAction(p.id, "retire", { memo, confirmToken: token });
+          toast.success(t("toast.saved"), {
+            description: personaReceipt(receipt, "retire"),
+          });
           navigate("/management/personas");
         }}
       />
