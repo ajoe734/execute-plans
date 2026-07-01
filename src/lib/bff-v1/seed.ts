@@ -169,7 +169,13 @@ const recordString = (record: UnknownRecord | undefined, ...keys: string[]): str
 // This recovers the real value from a known alias without ever overwriting a
 // field that's already present — it never fabricates data.
 const BASE_OBJECT_FIELD_ALIASES: Record<string, string[]> = {
-  name: ["name", "title", "label"],
+  // Several live detail families key their record on a domain-specific id
+  // (`experiment_id`, `artifact_id`, ...) instead of a generic `id`. Without
+  // this, `object.id` is undefined, which cascades into a blank EntityHeader
+  // badge and (when `name` is also missing) a blank h1, since the h1 fallback
+  // is `label || object.id`.
+  id: ["id", "experiment_id", "artifact_id", "pool_id", "plan_id", "channel_id", "incident_id"],
+  name: ["name", "title", "label", "experiment_name", "plan_name", "pool_name"],
   owner: ["owner", "owner_id", "ownerId", "owned_by"],
   updatedAt: ["updatedAt", "updated_at", "last_updated_at", "lastUpdatedAt"],
   state: ["state", "status", "lifecycle_state", "lifecycleState"],
@@ -188,6 +194,50 @@ export function normalizeBaseObjectFields<T>(raw: T | undefined): T | undefined 
   }
   return patched as T;
 }
+
+// `Artifact.kind`/`sourceExperimentId` are domain-specific (not BaseObject),
+// so they're not covered by `normalizeBaseObjectFields`. The live artifact
+// detail exposes `artifact_type`/`produced_by_experiment_id`; without this,
+// `ArtifactDetail`'s `${a.kind} · v${a.version}` subtitle renders the literal
+// string "undefined".
+const ARTIFACT_FIELD_ALIASES: Record<string, string[]> = {
+  kind: ["kind", "artifact_type", "type"],
+  sourceExperimentId: ["sourceExperimentId", "produced_by_experiment_id"],
+};
+
+export function normalizeArtifactFields<T>(raw: T | undefined): T | undefined {
+  const base = normalizeBaseObjectFields(raw);
+  const record = asRecord(base);
+  if (!record) return base;
+  const patched: UnknownRecord = { ...record };
+  for (const [canonical, aliases] of Object.entries(ARTIFACT_FIELD_ALIASES)) {
+    const current = patched[canonical];
+    if (typeof current === "string" && current.trim()) continue;
+    const value = recordString(record, ...aliases);
+    if (value !== undefined) patched[canonical] = value;
+  }
+  return patched as T;
+}
+
+function normalizeArtifactList<T>(rows: T[]): T[] {
+  return rows.map((row) => normalizeArtifactFields(row) as T);
+}
+
+/** `liveDetailOrSeed` + BaseObject/Artifact field-alias normalization. */
+const liveDetailOrSeedArtifact = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T | undefined,
+): Promise<T | undefined> =>
+  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeArtifactFields);
+
+/** `liveListOrSeed` + BaseObject/Artifact field-alias normalization. */
+const liveListOrSeedArtifact = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T[],
+): Promise<T[]> =>
+  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeArtifactList);
 
 function normalizeBaseObjectList<T>(rows: T[]): T[] {
   return rows.map((row) => normalizeBaseObjectFields(row) as T);
@@ -492,8 +542,8 @@ export const bff = {
     get: (id: string) => liveDetailOrSeedNormalized("bff.research.get", detailPath(paths.researchExperiments(), id), seed.researchExperiments.find((s) => s.id === id)),
   },
   artifacts: {
-    list: () => liveListOrSeedNormalized("bff.artifacts.list", paths.artifacts(), seed.artifacts),
-    get: (id: string) => liveDetailOrSeedNormalized("bff.artifacts.get", paths.artifact(id), seed.artifacts.find((s) => s.id === id)),
+    list: () => liveListOrSeedArtifact("bff.artifacts.list", paths.artifacts(), seed.artifacts),
+    get: (id: string) => liveDetailOrSeedArtifact("bff.artifacts.get", paths.artifact(id), seed.artifacts.find((s) => s.id === id)),
   },
   jobs: { list: () => liveListOrSeed("bff.jobs.list", paths.jobs(), seed.jobs) },
   runtimes: {

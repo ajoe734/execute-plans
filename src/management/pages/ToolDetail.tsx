@@ -33,7 +33,7 @@ export const ToolDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.tools.get(id).then((row) => { setTool(row); setLoaded(true); });
+    bff.tools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
     bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
