@@ -12,6 +12,8 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bff } from "@/lib/bff-v1";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
+import { bffWrites } from "@/lib/bff/runAction";
 import { mutations } from "@/lib/bff/mutations";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -124,7 +126,9 @@ export const StrategyDetail = () => {
             </Button>
             <Button size="sm" variant="outline" onClick={async () => {
               const res = await mutations.runParameterSweep(s.id, { memo: `manual sweep from ${s.id}` });
-              toast.success(t("strategy.sweep.queued"), { description: res.job.id });
+              toast.success(t("strategy.sweep.queued"), {
+                description: commandReceiptDescription(res, { fallback: `Strategy ${s.id} · parameter_sweep` }),
+              });
             }}>
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </Button>
@@ -309,8 +313,10 @@ export const StrategyDetail = () => {
                           {!r.acknowledged && (
                             <Button size="sm" variant="ghost" onClick={async (e) => {
                               e.stopPropagation();
-                              await mutations.acknowledgeAlert(r.id, `from ${s.id}`);
-                              toast.success(t("toast.alertAcknowledged", { id: r.id }));
+                              const receipt = await bffWrites.acknowledgeAlert(r.id, `from ${s.id}`);
+                              toast.success(t("toast.alertAcknowledged", { id: r.id }), {
+                                description: commandReceiptDescription(receipt, { fallback: `Alert ${r.id} · acknowledge` }),
+                              });
                               const al = await bff.alerts.list();
                               setAlerts(al.filter((x) => x.relatedTarget === s.id || x.source.includes(s.id) || x.title.includes(s.id)));
                             }}><CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}</Button>
@@ -318,7 +324,12 @@ export const StrategyDetail = () => {
                           <Button size="sm" variant="outline" onClick={async (e) => {
                             e.stopPropagation();
                             const res = await mutations.escalateAlertToIncident(r.id, `from ${s.id}`);
-                            toast.success(t("table_actions.incidentEscalateQueued"), { description: res.incidentId });
+                            toast.success(t("table_actions.incidentEscalateQueued"), {
+                              description: commandReceiptDescription(res, {
+                                fallback: `Alert ${r.id} · escalate_incident`,
+                                extra: `incident ${res.incidentId}`,
+                              }),
+                            });
                             const inc = await bff.incidents.list();
                             setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
                           }}><AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}</Button>
@@ -350,8 +361,11 @@ export const StrategyDetail = () => {
                       {r.status !== "resolved" && (
                         <Button size="sm" variant="ghost" onClick={async (e) => {
                           e.stopPropagation();
-                          await mutations.setIncidentStatus(r.id, r.status === "open" ? "mitigating" : "resolved");
-                          toast.success(t("toast.incidentAdvanced", { id: r.id, status: r.status === "open" ? "mitigating" : "resolved" }));
+                          const status = r.status === "open" ? "mitigating" : "resolved";
+                          const receipt = await mutations.setIncidentStatus(r.id, status);
+                          toast.success(t("toast.incidentAdvanced", { id: r.id, status }), {
+                            description: commandReceiptDescription(receipt, { fallback: `Incident ${r.id} · ${status}` }),
+                          });
                           const inc = await bff.incidents.list();
                           setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
                         }}>
@@ -360,8 +374,10 @@ export const StrategyDetail = () => {
                       )}
                       <Button size="sm" variant="outline" onClick={async (e) => {
                         e.stopPropagation();
-                        await mutations.appendPostmortem(r.id, `Initial postmortem draft for ${r.id}`);
-                        toast.success(t("incident.postmortem.appended"));
+                        const receipt = await mutations.appendPostmortem(r.id, `Initial postmortem draft for ${r.id}`);
+                        toast.success(t("incident.postmortem.appended"), {
+                          description: commandReceiptDescription(receipt, { fallback: `Incident ${r.id} · postmortem` }),
+                        });
                       }}><FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}</Button>
                     </div>
                   ) },
@@ -493,17 +509,20 @@ export const StrategyDetail = () => {
             actionId={v3ActionId}
             confirmEntity={v3ActionId ? { type: "strategy", id: s.id } : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({
+              const receipt = await runActionSafe({
                 kind: "Strategy", id: s.id, action: activeTr.action,
                 newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
                   ? activeTr.to : undefined,
                 memo,
-              }, { confirmToken: token });
+              }, {
+                confirmToken: token,
+                successTitle: `${activeTr.action} requested`,
+              });
+              if (!receipt.ok) return;
               const fresh = await bff.strategies.get(s.id);
               if (fresh) setS(fresh);
               const a = await bff.audit.list();
               setAudit(a.filter((x) => x.target === s.id));
-              toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
             }}
           />
         );

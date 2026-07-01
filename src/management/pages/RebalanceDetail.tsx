@@ -6,7 +6,6 @@ import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
 import { Download, Send } from "lucide-react";
-import { mutations } from "@/lib/bff/mutations";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -18,7 +17,6 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { rebalanceMachine, type RebalanceState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { usePermissions } from "@/lib/usePermissions";
-import { toast } from "sonner";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
 
@@ -81,7 +79,15 @@ export const RebalanceDetail = () => {
             <Button size="sm" variant="outline">
               <Download className="h-4 w-4 mr-1" />Export
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { await mutations.publishRebalanceReport(r.id, "manual publish"); toast.success(t("rebalance.publishReport.toast")); }}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                await runActionSafe({ kind: "Rebalance", id: r.id, action: "publish_report", memo: "manual publish" }, {
+                  successTitle: t("rebalance.publishReport.toast"),
+                });
+              }}
+            >
               <Send className="h-4 w-4 mr-1" />{t("rebalance.publishReport.action")}
             </Button>
             {transitions.length === 0 && (
@@ -200,9 +206,12 @@ export const RebalanceDetail = () => {
             confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
             confirmToken={!v3ActionId && activeTr.risk === "critical" ? (activeTr.action ?? "").toUpperCase() : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, { confirmToken: token });
+              const receipt = await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, {
+                confirmToken: token,
+                successTitle: `${activeTr.action} requested`,
+              });
+              if (!receipt.ok) return;
               setMachineState(activeTr.to);
-              toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
             }}
           />
         );

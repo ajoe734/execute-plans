@@ -5,8 +5,9 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { lists } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { lists, runActionSafe } from "@/lib/bff-v1";
+import { bffWrites } from "@/lib/bff/runAction";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";
@@ -67,10 +68,23 @@ export const AlertsPage = () => {
   }, []);
 
   const ack = async (id: string) => {
-    await mutations.acknowledgeAlert(id);
+    const receipt = await bffWrites.acknowledgeAlert(id);
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
     setActive((a) => a && a.id === id ? { ...a, acknowledged: true } : a);
-    toast.success(t("toast.alertAcknowledged", { id }));
+    toast.success(t("toast.alertAcknowledged", { id }), {
+      description: commandReceiptDescription(receipt),
+    });
+  };
+
+  const escalate = async (id: string) => {
+    await runActionSafe({
+      kind: "Alert",
+      id,
+      action: "create_incident",
+      memo: "manual incident escalation",
+    }, {
+      successTitle: t("table_actions.incidentEscalateQueued"),
+    });
   };
 
   return (
@@ -115,7 +129,7 @@ export const AlertsPage = () => {
                 )}
                 <div className="flex gap-2">
                   {!active.acknowledged && <Button onClick={() => ack(active.id)}>{t("table_actions.acknowledge")}</Button>}
-                  <Button variant="outline" onClick={() => toast(t("table_actions.incidentEscalateQueued"))}>{t("table_actions.escalateIncident")}</Button>
+                  <Button variant="outline" onClick={() => escalate(active.id)}>{t("table_actions.escalateIncident")}</Button>
                 </div>
               </div>
             </>
@@ -134,10 +148,20 @@ export const IncidentsPage = () => {
   useEffect(() => { loadListItems<Incident>(lists.incidents).then(setRows); }, []);
 
   const advance = async (id: string, status: Incident["status"], memo?: string) => {
-    await mutations.setIncidentStatus(id, status, memo);
+    const receipt = await runActionSafe({
+      kind: "Incident",
+      id,
+      action: status === "resolved" ? "resolve" : "start_mitigation",
+      memo: memo ?? `status ${status}`,
+    }, {
+      silent: true,
+    });
+    if (!receipt.ok) return;
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
     setActive((a) => a && a.id === id ? { ...a, status } : a);
-    toast.success(t("toast.incidentAdvanced", { id, status }));
+    toast.success(t("toast.incidentAdvanced", { id, status }), {
+      description: commandReceiptDescription(receipt),
+    });
   };
 
   return (
@@ -217,11 +241,14 @@ export const ApprovalsPage = () => {
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
   const decide = async (id: string, state: ApprovalRequest["state"], memo?: string) => {
-    if (state === "approved") await mutations.approve(id, memo);
-    else if (state === "rejected") await mutations.reject(id, memo);
+    const decision = state === "approved" ? "approve" : state === "rejected" ? "reject" : null;
+    if (!decision) return;
+    const receipt = await bffWrites.decideApproval(id, decision, memo ?? "");
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
     setActive((a) => a && a.id === id ? { ...a, state } : a);
-    toast.success(t("toast.approvalDecided", { id, state }));
+    toast.success(t("toast.approvalDecided", { id, state }), {
+      description: commandReceiptDescription(receipt),
+    });
   };
 
   return (

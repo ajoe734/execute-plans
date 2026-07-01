@@ -15,7 +15,6 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
-import { toast } from "sonner";
 import { MandatePanel } from "../components/detail/MandatePanel";
 import { RiskBudgetPanel } from "../components/detail/RiskBudgetPanel";
 import { BindingsMatrix } from "../components/detail/BindingsMatrix";
@@ -237,7 +236,12 @@ export const CapitalPoolDetail = () => {
         target={{ type: "CapitalPool", id: c.id, name: c.name }}
         risk="high"
         destructive
-        onConfirm={async (memo, token) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }, { confirmToken: token }); toast.success(t("toast.actionQueued")); }}
+        onConfirm={async (memo, token) => {
+          await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }, {
+            confirmToken: token,
+            successTitle: t("toast.actionQueued"),
+          });
+        }}
       />
     </>
   );

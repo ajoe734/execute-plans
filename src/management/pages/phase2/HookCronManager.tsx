@@ -7,10 +7,10 @@ import { Card } from "@/components/ui/card";
 import { DataTable } from "@/platform/components/DataTable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const HookCronManagerPage = () => {
   const t = useT();
@@ -22,7 +22,7 @@ export const HookCronManagerPage = () => {
   const hooks = data?.hooks ?? [];
   return (
     <>
-      <PageHeader title={t("nav.hooks")} subtitle={t("hooks.subtitle")} actions={<Button size="sm">{t("hooks.create")}</Button>} />
+      <PageHeader title={t("nav.hooks")} subtitle={t("hooks.subtitle")} actions={<NonProductionActionButton size="sm">{t("hooks.create")}</NonProductionActionButton>} />
       <PageBody>
         <Tabs defaultValue="cron">
           <TabsList>
@@ -39,7 +39,7 @@ export const HookCronManagerPage = () => {
                 { key: "tgt", header: t("hooks.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
                 { key: "last", header: t("workflows.lastRun"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.lastRun)}</span> },
                 { key: "next", header: t("hooks.nextRun"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.nextRun)}</span> },
-                { key: "en", header: t("hooks.enabled"), cell: (r) => <Switch defaultChecked={r.enabled} /> },
+                { key: "en", header: t("hooks.enabled"), cell: (r) => <Switch checked={r.enabled} disabled /> },
               ]} />
             </Card>
           </TabsContent>
@@ -53,7 +53,7 @@ export const HookCronManagerPage = () => {
                 { key: "f", header: t("table.filters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.filters}</code> },
                 { key: "tgt", header: t("hooks.target"), cell: (r) => <span className="text-mono text-xs">{r.target}</span> },
                 { key: "fired", header: t("hooks.firedToday"), cell: (r) => <span className="text-mono text-xs">{r.firedToday}</span> },
-                { key: "en", header: t("hooks.enabled"), cell: (r) => <Switch defaultChecked={r.enabled} /> },
+                { key: "en", header: t("hooks.enabled"), cell: (r) => <Switch checked={r.enabled} disabled /> },
               ]} />
             </Card>
           </TabsContent>

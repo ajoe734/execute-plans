@@ -11,11 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, runActionSafe } from "@/lib/bff-v1";
 import type { Strategy, RankingFormula, Persona, CapitalPool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { toast } from "sonner";
 import { RefreshCw, Snowflake, Send, GitCompare, Sliders } from "lucide-react";
 import { isLive, isPaper } from "@/lib/v4/strategyTripleDerive";
 
@@ -102,9 +100,13 @@ export const RankingDashboardPage = () => {
   }, [strategies, personas, pools, scope]);
 
   const runScopeAction = async (action: "recalculate" | "freeze" | "publish" | "override" | "compare", memo = "") => {
-    const r = await mutations.rankingAction(scope, action, memo || `${scope}/${formulaId}`);
-    toast.success(t(`rankingDashboard.toast.${action === "freeze" ? "frozen" : action === "publish" ? "published" : action === "compare" ? "compareQueued" : action === "recalculate" ? "recalculated" : "override"}`, { scope }), {
-      description: r.job?.id,
+    await runActionSafe({
+      kind: "Ranking",
+      id: `ranking:${scope}`,
+      action,
+      memo: memo || `${scope}/${formulaId}`,
+    }, {
+      successTitle: t(`rankingDashboard.toast.${action === "freeze" ? "frozen" : action === "publish" ? "published" : action === "compare" ? "compareQueued" : action === "recalculate" ? "recalculated" : "override"}`, { scope }),
     });
   };
 
@@ -197,7 +199,16 @@ export const RankingDashboardPage = () => {
         riskImpact={t("rankingDashboard.confirm.switchFormulaImpact")}
         title={t("rankingDashboard.confirm.switchFormula")}
         confirmToken="ACTIVATE"
-        onConfirm={async (memo) => { await mutations.setActiveRankingFormula(formulaId, memo); toast.success(t("rankingDashboard.toast.formulaSwitched", { name: activeFormulaName })); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({
+            kind: "RankingFormula",
+            id: formulaId,
+            action: "set_active",
+            memo,
+          }, {
+            successTitle: t("rankingDashboard.toast.formulaSwitched", { name: activeFormulaName }),
+          });
+        }}
       />
       <HighRiskConfirm
         open={freezeOpen} onOpenChange={setFreezeOpen}

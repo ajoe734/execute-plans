@@ -9,7 +9,6 @@ import { Beaker, Package } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
@@ -115,7 +114,9 @@ export const ResearchDetail = () => {
         description={t("detail.confirm.promoteResearch")}
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Research", id: x.id, action: "promote_artifact", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Research", id: x.id, action: "promote_artifact", memo }, { successTitle: "Promotion request submitted" });
+        }}
       />
     </>
   );
