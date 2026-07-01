@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { bff } from "@/lib/bff-v1";
 import type { Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { Play } from "lucide-react";
+import { Play, TerminalSquare } from "lucide-react";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const sampleInput = (skill: Skill | undefined) =>
   skill ? JSON.stringify({ skill: skill.id, input: { query: "Summarize macro outlook for Q3 2026", env: "research" } }, null, 2) : "{}";
@@ -58,7 +59,14 @@ export const SkillSandboxStudio = () => {
           </Card>
           <Card className="p-4 space-y-3">
             <div className="text-sm font-semibold">{t("studios.sandbox.trace")}</div>
-            <div className="text-xs text-muted-foreground py-6 text-center">{t("studios.sandbox.emptyTrace")}</div>
+            <EmptyState
+              icon={<TerminalSquare className="h-8 w-8" />}
+              title={t("studios.sandbox.runnerUnavailableTitle", { defaultValue: "Skill runner unavailable" })}
+              description={t("studios.sandbox.runnerUnavailableDescription", {
+                defaultValue:
+                  "No governed skill-runner trace/readback endpoint is available. This page keeps execution disabled and does not render generated traces, token costs, or live-success output.",
+              })}
+            />
           </Card>
         </div>
       </PageBody>
