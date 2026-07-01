@@ -18,6 +18,8 @@
     "probe:bff:auth": "node scripts/probe-bff-authenticated-live.mjs",
     "probe:bff:writes": "node scripts/probe-bff-write-paths.mjs",
     "probe:browser": "node scripts/probe-hosted-browser-bff.mjs",
+    "probe:route-load": "node scripts/probe-route-load-baseline.mjs",
+    "probe:bff:fanout": "node scripts/probe-bff-fanout-concurrency.mjs",
     "audit:render": "node scripts/audit-console-render.mjs",
     "validate:mgmt-persona:3000": "node scripts/validate-management-persona-3000.mjs",
     "validate:mgmt-live:deep": "node scripts/validate-management-live-deep.mjs",
