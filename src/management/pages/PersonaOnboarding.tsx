@@ -21,6 +21,7 @@ import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
 import { withWriteFallback } from "@/lib/bff-v1/writeFallback";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { lists } from "@/lib/bff-v1/lists";
 import { useT } from "@/platform/hooks";
 import type { Persona } from "@/lib/bff/types";
@@ -85,7 +86,9 @@ export default function PersonaOnboarding() {
         toast.warning(t("persona.onboarding.banner.degraded"));
       } else {
         update(n, { status: "done", payload: r.data as Record<string, unknown> });
-        toast.success(`Step ${n} ${t("persona.onboarding.stageStatus.done")}`);
+        toast.success(`Step ${n} ${t("persona.onboarding.stageStatus.done")}`, {
+          description: commandReceiptDescription(r.data, { fallback: `Persona onboarding step ${n} · ${endpoint}` }),
+        });
         if (n < 5) setStep((n + 1) as StepNum);
       }
     } catch (err) {
