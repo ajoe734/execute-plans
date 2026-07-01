@@ -11,12 +11,16 @@ import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
 import { CommandPalette } from "./CommandPalette";
-import { lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
+import {
+  lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
+  fetchShellSummary, shellSummaryStatus,
+} from "@/lib/bff-v1";
 import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
+import { scheduleIdleTask, cancelIdleTask } from "@/lib/idleTask";
 
-type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified";
+type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified" | "unavailable";
 
 export const TopBar = () => {
   const t = useT();
@@ -36,6 +40,7 @@ export const TopBar = () => {
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
+    let idleHandle: ReturnType<typeof scheduleIdleTask> | undefined;
     const setSource = (next: TopbarDataSource) => {
       dataSourceRef.current = next;
       setDataSource(next);
@@ -45,10 +50,11 @@ export const TopBar = () => {
       setCounts({ approvals: 0, alerts: 0, jobs: 0 });
     };
 
-    if (transportSource !== "live") {
-      clearCounts(transportSource);
-    } else {
-      setSource("checking");
+    // Deferred fallback: only used when shell-summary itself is unavailable.
+    // Runs on an idle callback so it never competes with the route's primary
+    // content request — see MGMT-LOAD-003.
+    const hydrateFromFullLists = () => {
+      if (disposed) return;
       Promise.all([lists.approvals(), lists.alerts(), lists.jobs()]).then(([a, al, j]) => {
         const source = liveStatus.get();
         if (disposed || source.mode !== "live" || source.effective !== "live") {
@@ -63,13 +69,45 @@ export const TopBar = () => {
         const approvals = a.items as Array<{ state?: string }>;
         const alerts = al.items as Array<{ acknowledged?: boolean }>;
         const jobs = j.items as Array<{ status?: string }>;
-        setSource("live");
+        // Recovered via the heavier full-list path, not the cheap summary —
+        // label as degraded so the operator knows counts came from a fallback.
+        setSource("degraded");
         setCounts({
           approvals: approvals.filter((x) => x.state === "pending").length,
           alerts: alerts.filter((x) => !x.acknowledged).length,
           jobs: jobs.filter((x) => x.status === "running").length,
         });
       }).catch(() => clearCounts("fallback"));
+    };
+
+    if (transportSource !== "live") {
+      clearCounts(transportSource);
+    } else {
+      setSource("checking");
+      fetchShellSummary().then((summary) => {
+        if (disposed) return;
+        const source = liveStatus.get();
+        if (source.mode !== "live" || source.effective !== "live") {
+          clearCounts("fallback");
+          return;
+        }
+        const status = shellSummaryStatus(summary);
+        if (status === "unavailable" || status === "unknown") {
+          clearCounts("unavailable");
+          idleHandle = scheduleIdleTask(hydrateFromFullLists);
+          return;
+        }
+        setSource(status === "degraded" ? "degraded" : "live");
+        setCounts({
+          approvals: summary.counts.pendingApprovals,
+          alerts: summary.counts.openAlerts,
+          jobs: summary.counts.runningJobs,
+        });
+      }).catch(() => {
+        if (disposed) return;
+        clearCounts("unavailable");
+        idleHandle = scheduleIdleTask(hydrateFromFullLists);
+      });
 
       import("@/lib/bff/realtime").then(({ realtime }) => {
         if (disposed) return;
@@ -99,6 +137,7 @@ export const TopBar = () => {
     }, 30_000);
     return () => {
       disposed = true;
+      cancelIdleTask(idleHandle);
       cleanup?.();
       window.clearInterval(healthTimer);
     };
