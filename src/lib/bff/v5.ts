@@ -183,6 +183,7 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
   const kind = asString(item.kind, "hiq_sentinel");
   const targetType = asString(item.target_type ?? item.targetType, "target");
   const targetId = asString(item.target_id ?? item.targetId, id);
+  const linkedFindingId = asString(item.linked_finding_id ?? item.linkedFindingId ?? item.finding_id ?? item.findingId, id);
   const triggeredAt = asString(item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt, new Date().toISOString());
   const updatedAt = asString(item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt, triggeredAt);
   return {
@@ -194,7 +195,7 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
     createdAt: triggeredAt,
     updatedAt,
     requiredRoles: ["risk_officer", "system_operator"],
-    linkedFindingId: id,
+    linkedFindingId,
     recommendedDecision: "escalate",
     allowedDecisions: ["escalate", "defer"],
     evidenceRefs: [{ kind: "approval", id }],
