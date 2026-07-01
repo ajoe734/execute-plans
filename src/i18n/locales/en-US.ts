@@ -54,7 +54,7 @@ export default {
     bffOnline: "Online",
     bffOffline: "Offline",
     realtime: "Realtime",
-    dataSource: { live: "LIVE BFF", mock: "MOCK DATA", fallback: "FALLBACK DATA", checking: "CHECKING BFF", degraded: "SNAPSHOT DATA", unverified: "UNVERIFIED BFF" },
+    dataSource: { live: "LIVE BFF", mock: "MOCK DATA", fallback: "FALLBACK DATA", checking: "CHECKING BFF", degraded: "SNAPSHOT DATA", unverified: "UNVERIFIED BFF", unavailable: "COUNTS UNAVAILABLE" },
     productSwitcher: "Switch product",
     role: "Role",
     locale: "Language",

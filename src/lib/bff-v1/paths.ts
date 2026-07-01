@@ -162,6 +162,8 @@ export const paths = {
   mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
   mgmtEvolutionJournal: () => `${BASE}/management/evolution-journal`,
   mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
+  /** MGMT-LOAD-003 — cheap shell badge counts + session/transport, no full lists. */
+  mgmtShellSummary: () => `${BASE}/management/shell-summary`,
   knowledgeEvidenceRefs: () => `/api/v1/knowledge/evidence`,
   knowledgeEvidenceRef: (id: string) => `/api/v1/knowledge/evidence/${enc(id)}`,
   mgmtPersonaIntent: () => `${BASE}/management/persona-intent`,
