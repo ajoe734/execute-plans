@@ -17,7 +17,7 @@ import {
 import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
-import { scheduleIdleTask, cancelIdleTask } from "@/lib/idleTask";
+import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
 type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified" | "unavailable";
 
@@ -38,12 +38,17 @@ export const TopBar = () => {
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
   const [dataSource, setDataSource] = useState<TopbarDataSource>(transportSource === "live" ? "checking" : transportSource);
   const dataSourceRef = useRef<TopbarDataSource>(dataSource);
+  const pathnameRef = useRef(loc.pathname);
   const countsAreLive = dataSource === "live";
+
+  useEffect(() => {
+    pathnameRef.current = loc.pathname;
+  }, [loc.pathname]);
 
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
-    let idleHandle: ReturnType<typeof scheduleIdleTask> | undefined;
+    let cancelDeferredFallback: (() => void) | undefined;
     const setSource = (next: TopbarDataSource) => {
       dataSourceRef.current = next;
       setDataSource(next);
@@ -54,8 +59,8 @@ export const TopBar = () => {
     };
 
     // Deferred fallback: only used when shell-summary itself is unavailable.
-    // Runs on an idle callback so it never competes with the route's primary
-    // content request — see MGMT-LOAD-003.
+    // Waits for the route-primary-ready milestone, then runs on an idle
+    // callback so it cannot compete with the route's first row/empty state.
     //
     // Deliberately does NOT read `lists.jobs()`: JobProgressDrawer already
     // owns the one jobs-list hydration for the shell (its own idle-callback
@@ -91,6 +96,13 @@ export const TopBar = () => {
         }));
       }).catch(() => clearCounts("fallback"));
     };
+    const deferHydrateFromFullLists = () => {
+      const pathname = pathnameRef.current;
+      cancelDeferredFallback = scheduleAfterRoutePrimaryReady(hydrateFromFullLists, {
+        pathname,
+        isStillCurrent: () => pathnameRef.current === pathname,
+      });
+    };
 
     if (transportSource !== "live") {
       clearCounts(transportSource);
@@ -106,7 +118,7 @@ export const TopBar = () => {
         const status = shellSummaryStatus(summary);
         if (status === "unavailable" || status === "unknown") {
           clearCounts("unavailable");
-          idleHandle = scheduleIdleTask(hydrateFromFullLists);
+          deferHydrateFromFullLists();
           return;
         }
         setSource(status === "degraded" ? "degraded" : "live");
@@ -118,7 +130,7 @@ export const TopBar = () => {
       }).catch(() => {
         if (disposed) return;
         clearCounts("unavailable");
-        idleHandle = scheduleIdleTask(hydrateFromFullLists);
+        deferHydrateFromFullLists();
       });
 
       import("@/lib/bff/realtime").then(({ realtime }) => {
@@ -149,7 +161,7 @@ export const TopBar = () => {
     }, 30_000);
     return () => {
       disposed = true;
-      cancelIdleTask(idleHandle);
+      cancelDeferredFallback?.();
       cleanup?.();
       window.clearInterval(healthTimer);
     };

@@ -1,7 +1,6 @@
 // Shared requestIdleCallback wrapper with a setTimeout fallback for jsdom /
 // Safari, where requestIdleCallback is unavailable. Used to defer non-primary
-// shell hydration (e.g. TopBar full-list fallback, JobProgressDrawer job
-// list) until after primary route content has had a chance to render.
+// shell hydration after a route-primary-ready gate has fired.
 export const IDLE_TASK_FALLBACK_MS = 1_200;
 
 export type IdleTaskHandle = number;
