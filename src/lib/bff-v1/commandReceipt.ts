@@ -96,7 +96,7 @@ export function commandBatchReceiptDescription(
   options: CommandReceiptDescriptionOptions = {},
 ): string {
   const count = values.length;
-  const last = values.at(-1);
+  const last = values[values.length - 1];
   const suffix = last ? commandReceiptDescription(last, options) : options.fallback ?? "no receipt";
   return `${count} command receipt${count === 1 ? "" : "s"} · ${suffix}`;
 }
