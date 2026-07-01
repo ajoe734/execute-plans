@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
@@ -47,7 +48,7 @@ export const CapitalPoolDetail = () => {
   }, [id]);
 
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  const utilizationPct = (c.utilized / c.allocated) * 100;
+  const utilizationPct = safeRatio(c.utilized, c.allocated) * 100;
   const firstRebalance = rebalances[0];
 
   // Lineage: pool ↔ rebalance ↔ strategy
@@ -79,8 +80,8 @@ export const CapitalPoolDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (() => {
               const breach = assessBreach({
-                utilized: c.utilized,
-                allocated: c.allocated,
+                utilized: c.utilized ?? 0,
+                allocated: c.allocated ?? 0,
                 currentDrawdownPct: strats.length ? Math.min(...strats.map((s) => s.drawdown)) : undefined,
                 riskBudgetPct: c.riskBudget,
               });
@@ -101,7 +102,7 @@ export const CapitalPoolDetail = () => {
                       value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
                       hint={`${c.currency} ${(c.utilized ?? 0).toLocaleString()}`}
                     />
-                    <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
+                    <StatCard label={t("section.limits")} value={safePercent(c.riskBudget, 2)} tone="warning" />
                   </div>
                   <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -196,7 +197,7 @@ export const CapitalPoolDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
-                  <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
+                  <Field label={t("section.limits")} value={safePercent(c.riskBudget, 2)} mono />
                   <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
                   <Field label={t("table.value")} value={c.currency} mono />
                 </div>

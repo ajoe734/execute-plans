@@ -18,6 +18,7 @@ import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor"
 import { McpSecretsPanel } from "@/management/components/detail/McpSecretsPanel";
 import { McpServerSchemaPanel } from "@/management/components/detail/McpServerSchemaPanel";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 const HEALTH_TO_STATE: Record<string, McpServerState> = {
   healthy: "healthy", warning: "degraded", failed: "disabled",
@@ -28,13 +29,19 @@ export const McpServerDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const [s, setS] = useState<McpServer | undefined>();
+  const [loaded, setLoaded] = useState(false);
   const [tools, setTools] = useState<McpTool[]>([]);
   useEffect(() => {
     if (!id) return;
-    bff.mcpServers.get(id).then(setS);
+    setLoaded(false);
+    bff.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); });
     bff.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
   }, [id]);
-  if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!s) {
+    return loaded
+      ? <CapabilityDetailEmptyState kind="MCP server" id={id} />
+      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
 
   const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
 
@@ -168,8 +175,17 @@ export const McpToolDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const [tool, setTool] = useState<McpTool | undefined>();
-  useEffect(() => { if (id) bff.mcpTools.get(id).then(setTool); }, [id]);
-  if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!id) return;
+    setLoaded(false);
+    bff.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); });
+  }, [id]);
+  if (!tool) {
+    return loaded
+      ? <CapabilityDetailEmptyState kind="MCP tool" id={id} />
+      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
 
   const liveGranted = tool.envGrants.includes("live");
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { safeDateTime } from "@/lib/utils";
+import { safeDateTime, safePercent } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -111,10 +111,10 @@ export const DeploymentDetail = () => {
               <DataTable rows={filtered} columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium text-mono text-xs">{r.name}</div> },
                 { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{(r.cpu * 100).toFixed(0)}%</span> },
-                { key: "mem", header: "MEM", cell: (r) => <span className="text-mono text-xs">{(r.memory * 100).toFixed(0)}%</span> },
-                { key: "p95", header: "p95", cell: (r) => <span className="text-mono text-xs">{r.latencyP95Ms}ms</span> },
-                { key: "uptime", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{r.uptimePct}%</span> },
+                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{safePercent(r.cpu, 0)}</span> },
+                { key: "mem", header: "MEM", cell: (r) => <span className="text-mono text-xs">{safePercent(r.memory, 0)}</span> },
+                { key: "p95", header: "p95", cell: (r) => <span className="text-mono text-xs">{typeof r.latencyP95Ms === "number" ? `${r.latencyP95Ms}ms` : "—"}</span> },
+                { key: "uptime", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{typeof r.uptimePct === "number" ? `${r.uptimePct}%` : "—"}</span> },
               ]} empty={t("empty.noResults")} />
             );
           })() },
