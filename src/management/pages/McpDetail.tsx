@@ -34,7 +34,7 @@ export const McpServerDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); });
+    bff.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); }).catch(() => setLoaded(true));
     bff.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
   }, [id]);
   if (!s) {
@@ -179,7 +179,7 @@ export const McpToolDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); });
+    bff.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
   }, [id]);
   if (!tool) {
     return loaded

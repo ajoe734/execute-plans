@@ -31,7 +31,7 @@ export const SkillDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.skills.get(id).then((row) => { setSkill(row); setLoaded(true); });
+    bff.skills.get(id).then((row) => { setSkill(row); setLoaded(true); }).catch(() => setLoaded(true));
     bff.personas.list().then(setPersonas);
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
   }, [id]);
