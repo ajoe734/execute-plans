@@ -384,6 +384,7 @@ function buildGate1(stepOutcomes) {
     stepCheck(stepOutcomes, "lint", "`npm run lint` passes.", ".lovable/audits/npm-run-lint.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "test", "`npm run test` passes.", ".lovable/audits/npm-run-test.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "build", "`npm run build` passes.", ".lovable/audits/npm-run-build.log", GATE_OWNERS[1]),
+    stepCheck(stepOutcomes, "bundle_budget", "`npm run probe:bundle-budget` passes (bundle-size budget).", ".lovable/audits/bundle-budget-check.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "contract", "`npm run test:contract` passes.", ".lovable/audits/contract-drift.log", GATE_OWNERS[2]),
     stepCheck(stepOutcomes, "mgmt_persona_3000", "`npm run validate:mgmt-persona:3000` passes.", ".lovable/audits/mgmt-persona-3000-validation.log", GATE_OWNERS[1]),
   ];
