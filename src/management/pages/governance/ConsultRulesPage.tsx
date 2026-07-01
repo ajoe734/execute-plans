@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff-v1";
+import { bff, managementConsoleReads } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { ConsultRule, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
@@ -30,7 +30,7 @@ export const ConsultRulesPage = () => {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    bff.consultRules.list().then(setRules);
+    managementConsoleReads.consultRules().then((envelope) => setRules(envelope.items));
     bff.personas.list().then(setPersonas);
   }, []);
 

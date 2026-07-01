@@ -661,6 +661,38 @@ function managementFleetEnvelope(path: string): JsonRecord {
   };
 }
 
+function managementDataSourcesEnvelope(path: string): JsonRecord {
+  const rows = [
+    {
+      connector_id: "ibkr",
+      provider: "IBKR market data",
+      kind: "broker_execution",
+      health: "read_ok",
+      universe: ["US", "TW"],
+      last_heartbeat_at: SNAPSHOT_AT,
+      credential_state: "configured",
+      read_only: true,
+      live_ingestion_enabled: false,
+      order_capable_provider: true,
+      order_side_effects_allowed: false,
+      capital_side_effects_allowed: false,
+      consumer_persona_ids: [PERSONA_ID],
+      consumer_persona_names: [PERSONA_NAME],
+      evidence_refs: ["support/evidence/mgmt100/readback.json"],
+    },
+  ];
+  return {
+    data: { items: rows },
+    items: rows,
+    meta: envelope(rows, path, {
+      surfaces: {
+        data_sources: { source: "playwright_bff_fixture", status: "ok" },
+      },
+    }).meta,
+    page_info: { page_size: rows.length, total: rows.length, totalCountExact: true },
+  };
+}
+
 function cockpitModel(): JsonRecord {
   return {
     anomalies: [],
@@ -733,6 +765,9 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
   }
   if (pathname === "/bff/management/persona-fleet") {
     return { status: 200, body: managementFleetEnvelope(path) };
+  }
+  if (pathname === "/bff/management/data-sources") {
+    return { status: 200, body: managementDataSourcesEnvelope(path) };
   }
   if (pathname === "/bff/management/human-inbox") {
     return { status: 200, body: envelope(humanInbox, path) };
@@ -1006,7 +1041,7 @@ async function installBffFixture(page: Page, hits: BffHit[]): Promise<void> {
 const uiFlows: UiFlow[] = [
   { id: "ui-001-cockpit", type: "ui", category: "display", path: "/management/cockpit", endpoint: "/bff/management/cockpit" },
   { id: "ui-002-persona-fleet", type: "ui", category: "display", path: "/management/persona-fleet", endpoint: "/bff/management/persona-fleet", text: PERSONA_NAME },
-  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/persona-fleet", text: "IBKR" },
+  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/data-sources", text: "IBKR" },
   { id: "ui-004-human-inbox", type: "ui", category: "monitor", path: "/management/human-inbox", endpoint: "/bff/management/human-inbox", text: "MGMT100" },
   { id: "ui-005-trading-pulse", type: "ui", category: "monitor", path: "/management/trading-pulse", endpoint: "/bff/management/trading-pulse" },
   { id: "ui-006-evolution-journal", type: "ui", category: "monitor", path: "/management/evolution-journal", endpoint: "/bff/management/evolution-journal", text: "Restrict route tools" },

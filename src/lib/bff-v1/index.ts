@@ -27,5 +27,6 @@ export * from "./legacy";
 export * from "./v5";
 // 2026-05-22 PM-Live — Management Oversight live wiring (PM-1..PM-11).
 export * from "./management";
+export * from "./managementConsoleReads";
 // AG-XR-002 — generated Agora v1 schema/OpenAPI contract types.
 export * from "./agora/types";
