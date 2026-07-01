@@ -3,12 +3,16 @@
 //
 // Concurrently requests the same routes the management console shell
 // fires on first mount (`/health`, `/bff/management/evidence`,
-// `/bff/alerts`, `/bff/approvals`, `/bff/jobs`) and records per-route
-// timing so a future fix (shell-summary endpoint, read isolation) has a
-// before/after baseline. `/bff/events/stream` is a long-lived realtime
-// stream and is intentionally NOT included in this fanout probe — see
+// `/bff/management/shell-summary`, `/bff/alerts`, `/bff/approvals`,
+// `/bff/jobs`) and records per-route timing so a future fix (shell-summary
+// endpoint, read isolation) has a before/after baseline. `/bff/events/stream`
+// is a long-lived realtime stream and is intentionally NOT included in this
+// fanout probe — see
 // docs/04/pantheon_management_console_load_gap_2026-07-01/MANAGEMENT_CONSOLE_LOAD_GAP_SPEC.md
-// section 2.6.
+// section 2.6. `/bff/management/shell-summary` is included because
+// `scripts/aggregate-release-gate.mjs` (pantheon repo) gates its fanout p95
+// budget and previously reported it as `missing` evidence with no probe
+// exercising the route.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -21,6 +25,7 @@ const CONCURRENT_ROUNDS = Number(process.env.PANTHEON_BFF_FANOUT_ROUNDS || "1");
 const FANOUT_ROUTES = [
   "/health",
   "/bff/management/evidence",
+  "/bff/management/shell-summary",
   "/bff/alerts",
   "/bff/approvals",
   "/bff/jobs",
