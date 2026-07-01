@@ -9,6 +9,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
@@ -81,7 +82,8 @@ export const OptimizationLoopPage = () => {
             <h2 className="text-sm font-semibold">{t("v5.optimization.runs")}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.optimization.runsHint")}</p>
           </div>
-          <table className="w-full text-sm">
+          <DataGridScrollArea minWidth={1240} ariaLabel={t("v5.optimization.runs")}>
+          <table className="text-sm">
             <thead ref={approvalRef} className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -141,6 +143,7 @@ export const OptimizationLoopPage = () => {
               )}
             </tbody>
           </table>
+          </DataGridScrollArea>
         </Card>
       </PageBody>
     </>

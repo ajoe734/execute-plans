@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -183,7 +184,8 @@ export const InterventionsPage = () => {
         )}
 
         <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
+          <DataGridScrollArea minWidth={1280} ariaLabel={t("nav.interventions")}>
+          <table className="text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="px-3 py-2 w-8">
@@ -249,6 +251,7 @@ export const InterventionsPage = () => {
               )}
             </tbody>
           </table>
+          </DataGridScrollArea>
         </Card>
       </PageBody>
 

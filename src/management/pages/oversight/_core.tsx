@@ -11,6 +11,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataGridCard, DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
@@ -363,8 +364,8 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length > 0 && (
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <DataGridCard minWidth={1720} stickyLastColumn ariaLabel={t("mgmt.fleet.title")}>
+        <table className="text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
@@ -614,7 +615,7 @@ export const PersonaFleetPage = () => {
             })}
           </tbody>
         </table>
-      </Card>
+      </DataGridCard>
       )}
     </section>
   );
@@ -892,8 +893,13 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
         <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.runtimeRows")}</h2>
         <Badge variant="outline">{rows.length}</Badge>
       </div>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-xs">
+      <DataGridScrollArea
+        ariaLabel={t("mgmt.pulse.runtimeRows")}
+        className="mt-3"
+        maxHeight="min(520px, calc(100vh - 20rem))"
+        minWidth={920}
+      >
+        <table className="text-left text-xs">
           <thead className="text-muted-foreground">
             <tr className="border-b border-border">
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
@@ -932,7 +938,7 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
             ))}
           </tbody>
         </table>
-      </div>
+      </DataGridScrollArea>
     </Card>
   );
 };
@@ -1208,8 +1214,8 @@ const EvidenceExplorerList = () => {
         <EvidenceMetric label={t("mgmt.evidence.redacted")} value={model.summary.redactedEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.surface")} value={evidenceLabel(evidenceSurfaceStatus(model.meta))} />
       </dl>
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <DataGridCard minWidth={1120} ariaLabel={t("mgmt.evidence.title")}>
+        <table className="text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.evidence.source")}</th>
@@ -1270,7 +1276,7 @@ const EvidenceExplorerList = () => {
             )}
           </tbody>
         </table>
-      </Card>
+      </DataGridCard>
     </section>
   );
 };

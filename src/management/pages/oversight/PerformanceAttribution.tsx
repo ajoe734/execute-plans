@@ -2,8 +2,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DataGridCard } from "@/platform/components/DataGridFrame";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -89,8 +89,8 @@ export const PerformanceAttributionPage = () => {
         </div>
       </header>
 
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <DataGridCard minWidth={1080} stickyLastColumn ariaLabel={t("mgmt.attribution.title")}>
+        <table className="text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.attribution.dimension")}</th>
@@ -121,7 +121,7 @@ export const PerformanceAttributionPage = () => {
             )}
           </tbody>
         </table>
-      </Card>
+      </DataGridCard>
     </section>
   );
 };

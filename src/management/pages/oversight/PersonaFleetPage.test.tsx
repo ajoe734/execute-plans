@@ -319,4 +319,29 @@ describe("PersonaFleetPage", () => {
       "/management/personas/persona-draft/onboarding",
     );
   });
+
+  it("renders the wide fleet table inside a bounded sticky data-grid frame", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-live-tw-equity", "Live Taiwan Equity Persona"),
+        fleetRow("persona-live-us-equity", "Live US Equity Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    const frame = screen.getByTestId("data-grid-scroll-area");
+    expect(frame).toHaveStyle({
+      "--data-grid-min-width": "1720px",
+      "--data-grid-max-height": "min(680px, calc(100vh - 16rem))",
+    });
+    expect(frame.className).toContain("[&_thead]:sticky");
+    expect(frame.className).toContain("[&_td:first-child]:sticky");
+    expect(frame.className).toContain("[&_td:last-child]:sticky");
+    expect(frame).toHaveAttribute("role", "region");
+    expect(frame).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Live Taiwan Equity Persona")).toBeInTheDocument();
+  });
 });

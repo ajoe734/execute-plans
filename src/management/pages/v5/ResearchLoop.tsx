@@ -8,6 +8,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
@@ -102,7 +103,8 @@ export const ResearchLoopPage = () => {
             <h2 className="text-sm font-semibold">{t("v5.loops.research.runs", { defaultValue: "Research runs" })}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.loops.research.runsHint", { defaultValue: "One run per active experiment. Click to inspect stages and act on the loop." })}</p>
           </div>
-          <table className="w-full text-sm">
+          <DataGridScrollArea minWidth={1120} ariaLabel={t("v5.loops.research.runs", { defaultValue: "Research runs" })}>
+          <table className="text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -159,6 +161,7 @@ export const ResearchLoopPage = () => {
               )}
             </tbody>
           </table>
+          </DataGridScrollArea>
         </Card>
       </PageBody>
       <LoopRunDrawer run={activeRun} onClose={closeRun} />

@@ -5,6 +5,7 @@ import { Database, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataGridCard } from "@/platform/components/DataGridFrame";
 import { mgmt } from "@/lib/bff-v1";
 import {
   buildSystemDataSourceRegistry,
@@ -76,8 +77,8 @@ export function DataSourceManagementPage() {
       )}
 
       {records.length > 0 && (
-        <Card className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <DataGridCard minWidth={1280} stickyLastColumn ariaLabel={t("mgmt.dataSources.title")}>
+          <table className="text-sm">
             <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">{t("mgmt.dataSources.source")}</th>
@@ -94,7 +95,7 @@ export function DataSourceManagementPage() {
               ))}
             </tbody>
           </table>
-        </Card>
+        </DataGridCard>
       )}
     </section>
   );

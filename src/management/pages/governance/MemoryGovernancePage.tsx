@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { bff } from "@/lib/bff-v1";
 import type { MemoryUpdate, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
@@ -141,7 +142,8 @@ export const MemoryGovernancePage = () => {
 
           <TabsContent value="history" className="mt-4">
             <Card className="p-0 overflow-hidden">
-              <table className="w-full text-sm">
+              <DataGridScrollArea minWidth={980} ariaLabel={t("governance.memory.history", { defaultValue: "Memory history" })}>
+              <table className="text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
                     <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.persona")}</th>
@@ -164,6 +166,7 @@ export const MemoryGovernancePage = () => {
                   {decided.length === 0 && <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-6">{t("empty.none")}</td></tr>}
                 </tbody>
               </table>
+              </DataGridScrollArea>
             </Card>
           </TabsContent>
         </Tabs>

@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DataGridScrollArea } from "@/platform/components/DataGridFrame";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 
 import reportMd from "../../../.lovable/audits/spec-gap-2026-05-06-D.md?raw";
@@ -35,8 +36,13 @@ const CsvTable = ({ text }: { text: string }) => {
   });
   const [head, ...body] = rows;
   return (
-    <div className="overflow-auto max-h-[calc(100vh-220px)] border border-border rounded-md">
-      <table className="w-full text-sm">
+    <DataGridScrollArea
+      ariaLabel="Spec gap summary CSV"
+      className="rounded-md border border-border"
+      maxHeight="calc(100vh - 220px)"
+      minWidth={980}
+    >
+      <table className="text-sm">
         <thead className="bg-muted sticky top-0">
           <tr>{head.map((h, i) => <th key={i} className="text-left px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
@@ -48,7 +54,7 @@ const CsvTable = ({ text }: { text: string }) => {
           ))}
         </tbody>
       </table>
-    </div>
+    </DataGridScrollArea>
   );
 };
 
