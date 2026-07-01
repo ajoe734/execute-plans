@@ -76,7 +76,11 @@ function browserBffUrl(path: string): string {
 }
 
 function browserSseBffUrl(path: string): string {
-  const base = process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL || bffBaseUrl() || process.env.PANTHEON_BROWSER_BFF_BASE_URL || "";
+  const base =
+    process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL ||
+    process.env.PANTHEON_BROWSER_BFF_BASE_URL ||
+    bffBaseUrl() ||
+    "";
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
