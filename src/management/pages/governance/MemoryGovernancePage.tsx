@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff-v1";
+import { bff, managementConsoleReads } from "@/lib/bff-v1";
 import type { MemoryUpdate, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
@@ -26,7 +26,7 @@ export const MemoryGovernancePage = () => {
   const [personas, setPersonas] = useState<Persona[]>([]);
 
   useEffect(() => {
-    bff.memoryUpdates.list().then(setItems);
+    managementConsoleReads.memoryGovernance().then((envelope) => setItems(envelope.items));
     bff.personas.list().then(setPersonas);
   }, []);
 

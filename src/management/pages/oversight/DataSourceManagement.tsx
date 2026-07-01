@@ -5,15 +5,13 @@ import { Database, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { mgmt } from "@/lib/bff-v1";
+import { managementConsoleReads } from "@/lib/bff-v1";
 import {
-  buildSystemDataSourceRegistry,
   summarizeSystemDataSources,
   type DataSourceHealthTone,
   type SystemDataSourceRecord,
 } from "@/lib/v5/management/systemDataSources";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
-import { productionPersonaFleetRows } from "./personaFleetFilters";
 
 const toneClass: Record<DataSourceHealthTone, string> = {
   ok: "bg-status-success/10 text-status-success border-status-success/30",
@@ -32,9 +30,8 @@ function joinOrDash(values: string[]): string {
 
 export function DataSourceManagementPage() {
   const { t } = useTranslation();
-  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
-  const rows = useMemo(() => productionPersonaFleetRows(data ?? []), [data]);
-  const records = useMemo(() => buildSystemDataSourceRegistry(rows), [rows]);
+  const { data, loading, refresh } = useV5Live(() => managementConsoleReads.dataSources(), []);
+  const records: SystemDataSourceRecord[] = useMemo(() => data?.items ?? [], [data]);
   const summary = useMemo(() => summarizeSystemDataSources(records), [records]);
 
   return (

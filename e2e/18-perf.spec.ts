@@ -44,6 +44,7 @@ type JsonRecord = Record<string, unknown>;
 type RouteCounters = {
   cockpit: number;
   controlRoom: number;
+  lineage: number;
   loopRuns: number;
   me: number;
   personaHealth: number;
@@ -231,6 +232,7 @@ function routeCounters(): RouteCounters {
   return {
     cockpit: 0,
     controlRoom: 0,
+    lineage: 0,
     loopRuns: 0,
     me: 0,
     personaHealth: 0,
@@ -538,6 +540,65 @@ const STRATEGIES_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { strategies: { status: "ok" } } },
 };
 
+const WIDE_LINEAGE_NODES = [
+  {
+    id: WIDE_LINEAGE_STRATEGY.id,
+    label: WIDE_LINEAGE_STRATEGY.name,
+    type: "Strategy",
+    state: WIDE_LINEAGE_STRATEGY.state,
+    risk: WIDE_LINEAGE_STRATEGY.risk,
+    highlight: true,
+  },
+  ...WIDE_LINEAGE_STRATEGY.personaIds.map((id, index) => ({
+    id,
+    label: `F18 Wide Persona ${index + 1}`,
+    type: "Persona",
+    state: "active",
+    risk: index % 7 === 0 ? "medium" : "low",
+  })),
+  {
+    id: "pool-f18-wide",
+    label: "F18 Wide Capital Pool",
+    type: "CapitalPool",
+    state: "active",
+    risk: "medium",
+  },
+  {
+    id: "artifact-f18-wide",
+    label: "F18 Wide Artifact",
+    type: "Artifact",
+    state: "approved",
+    risk: "low",
+  },
+  {
+    id: "experiment-f18-wide",
+    label: "F18 Wide Experiment",
+    type: "Experiment",
+    state: "complete",
+    risk: "low",
+  },
+];
+
+const WIDE_LINEAGE_RESPONSE = {
+  data: {
+    nodes: WIDE_LINEAGE_NODES,
+    edges: [
+      ...WIDE_LINEAGE_STRATEGY.personaIds.map((id) => ({
+        from: WIDE_LINEAGE_STRATEGY.id,
+        to: id,
+        label: "routes",
+      })),
+      { from: "artifact-f18-wide", to: WIDE_LINEAGE_STRATEGY.id, label: "scaffolds" },
+      { from: WIDE_LINEAGE_STRATEGY.id, to: "pool-f18-wide", label: "allocates" },
+      { from: "experiment-f18-wide", to: "artifact-f18-wide", label: "promotes" },
+    ],
+  },
+  meta: {
+    snapshot_at: nowIso(),
+    surfaces: { lineage: { status: "ok", source: "fe-int-gate-d05" } },
+  },
+};
+
 const TOPBAR_APPROVALS_RESPONSE = {
   items: [],
   cursor: {},
@@ -618,6 +679,10 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   await page.route(/\/bff\/strategies(?:\?.*)?$/, async (route) => {
     counters.strategies += 1;
     await fulfillJson(route, STRATEGIES_RESPONSE);
+  });
+  await page.route(/\/bff\/lineage(?:\?.*)?$/, async (route) => {
+    counters.lineage += 1;
+    await fulfillJson(route, WIDE_LINEAGE_RESPONSE);
   });
   await page.route(/\/bff\/approvals(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_APPROVALS_RESPONSE);
@@ -913,7 +978,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     await gotoAndWaitForText(
       page,
       LINEAGE_PATH,
-      [/F18 Wide Lineage Strategy/i, /Lineage has 506 nodes/i],
+      [/strategy-f18-wide/i, /Lineage has 506 nodes/i],
       "Lineage graph",
     );
 
@@ -923,6 +988,6 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       ),
     ).toBeVisible();
     expect(failures, "Lineage graph should not emit console/page errors").toEqual([]);
-    expect(counters.strategies, "Lineage graph fixture should read the live strategies route").toBeGreaterThan(0);
+    expect(counters.lineage, "Lineage graph fixture should read the canonical lineage route").toBeGreaterThan(0);
   });
 });
