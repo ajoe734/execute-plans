@@ -6,11 +6,10 @@ import type { AuditEvent, Channel } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
-import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const ChannelDetail = () => {
   const { id } = useParams();
@@ -36,9 +35,9 @@ export const ChannelDetail = () => {
       object={c}
       subtitle={`${(c.kind ?? "").toUpperCase()} · ${c.subscribers ?? 0} subscribers`}
       actions={
-        <Button size="sm" variant="outline" onClick={() => toast.success("Test message sent")}>
+        <NonProductionActionButton size="sm" variant="outline">
           <Send className="h-4 w-4 mr-1" />Send test
-        </Button>
+        </NonProductionActionButton>
       }
       tabs={[
         {
