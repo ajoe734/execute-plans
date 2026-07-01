@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -10,7 +10,6 @@ import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock
 import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import { EnvSwitcher } from "./EnvSwitcher";
-import { CommandPalette } from "./CommandPalette";
 import {
   lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
   fetchShellSummary, shellSummaryStatus,
@@ -21,6 +20,10 @@ import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 import { scheduleIdleTask, cancelIdleTask } from "@/lib/idleTask";
 
 type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified" | "unavailable";
+
+const CommandPalette = lazy(() =>
+  import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
 
 export const TopBar = () => {
   const t = useT();
@@ -185,7 +188,11 @@ export const TopBar = () => {
         <kbd className="text-mono text-xs bg-background border border-border rounded px-1.5 py-0.5">⌘K</kbd>
       </button>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        </Suspense>
+      )}
 
       {/* Indicators */}
       <div className="flex items-center gap-1">

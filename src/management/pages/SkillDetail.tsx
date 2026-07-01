@@ -18,17 +18,20 @@ import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEdi
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
 import { Card } from "@/components/ui/card";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 export const SkillDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
   const [skill, setSkill] = useState<Skill | undefined>();
+  const [loaded, setLoaded] = useState(false);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   useEffect(() => {
     if (!id) return;
-    bff.skills.get(id).then(setSkill);
+    setLoaded(false);
+    bff.skills.get(id).then((row) => { setSkill(row); setLoaded(true); });
     bff.personas.list().then(setPersonas);
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
   }, [id]);
@@ -39,7 +42,11 @@ export const SkillDetail = () => {
     return skill.publishedAt ? "active" : "approved";
   }, [skill]);
 
-  if (!skill) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!skill) {
+    return loaded
+      ? <CapabilityDetailEmptyState kind="skill" id={id} />
+      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
 
   return (
     <>

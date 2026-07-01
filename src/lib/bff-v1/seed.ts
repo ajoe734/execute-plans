@@ -160,6 +160,56 @@ const recordString = (record: UnknownRecord | undefined, ...keys: string[]): str
   return undefined;
 };
 
+// MGMT-GAP-008 — DTO normalization for BaseObject-derived detail/list families.
+// `liveDetailFrom`/`liveItemsFrom` above only unwrap an optional `{data: ...}`
+// envelope; they never rename fields. A live BFF response that uses a
+// different key (e.g. `status`/`updated_at`) for a field the FE expects as
+// `state`/`updatedAt` would otherwise reach EntityHeader/StatusBadge/RiskBadge
+// as `undefined`, rendering `status.undefined`, blank owner/updated, etc.
+// This recovers the real value from a known alias without ever overwriting a
+// field that's already present — it never fabricates data.
+const BASE_OBJECT_FIELD_ALIASES: Record<string, string[]> = {
+  name: ["name", "title", "label"],
+  owner: ["owner", "owner_id", "ownerId", "owned_by"],
+  updatedAt: ["updatedAt", "updated_at", "last_updated_at", "lastUpdatedAt"],
+  state: ["state", "status", "lifecycle_state", "lifecycleState"],
+  risk: ["risk", "risk_level", "riskLevel"],
+};
+
+export function normalizeBaseObjectFields<T>(raw: T | undefined): T | undefined {
+  const record = asRecord(raw);
+  if (!record) return raw;
+  const patched: UnknownRecord = { ...record };
+  for (const [canonical, aliases] of Object.entries(BASE_OBJECT_FIELD_ALIASES)) {
+    const current = patched[canonical];
+    if (typeof current === "string" && current.trim()) continue;
+    const value = recordString(record, ...aliases);
+    if (value !== undefined) patched[canonical] = value;
+  }
+  return patched as T;
+}
+
+function normalizeBaseObjectList<T>(rows: T[]): T[] {
+  return rows.map((row) => normalizeBaseObjectFields(row) as T);
+}
+
+/** `liveDetailOrSeed` + BaseObject field-alias normalization, for the detail
+ *  families the MGMT-GAP-008 re-audit flagged with undefined/blank fields. */
+const liveDetailOrSeedNormalized = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T | undefined,
+): Promise<T | undefined> =>
+  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeBaseObjectFields);
+
+/** `liveListOrSeed` + BaseObject field-alias normalization (see above). */
+const liveListOrSeedNormalized = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T[],
+): Promise<T[]> =>
+  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeBaseObjectList);
+
 const normalizedKind = (kind: string) => kind.replace(/[^a-z0-9]/gi, "").toLowerCase();
 const isPersonaKind = (kind: string) => normalizedKind(kind) === "persona";
 const isStrategyKind = (kind: string) => normalizedKind(kind) === "strategy";
@@ -418,32 +468,32 @@ export const bff = {
     get: (id: string) => liveDetailOrSeed("bff.personas.get", paths.persona(id), seed.personas.find((s) => s.id === id)),
   },
   capitalPools: {
-    list: () => liveListOrSeed("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools),
-    get: (id: string) => liveDetailOrSeed("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)),
   },
   rankingFormulas: {
-    list: () => liveListOrSeed("bff.rankingFormulas.list", paths.rankingFormulas(), seed.rankingFormulas),
-    get: (id: string) => liveDetailOrSeed("bff.rankingFormulas.get", detailPath(paths.rankingFormulas(), id), seed.rankingFormulas.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.rankingFormulas.list", paths.rankingFormulas(), seed.rankingFormulas),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.rankingFormulas.get", detailPath(paths.rankingFormulas(), id), seed.rankingFormulas.find((s) => s.id === id)),
   },
   rebalances: {
-    list: () => liveListOrSeed("bff.rebalances.list", paths.rebalances(), seed.rebalances),
-    get: (id: string) => liveDetailOrSeed("bff.rebalances.get", paths.rebalance(id), seed.rebalances.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.rebalances.list", paths.rebalances(), seed.rebalances),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.rebalances.get", paths.rebalance(id), seed.rebalances.find((s) => s.id === id)),
   },
   deployments: {
-    list: () => liveListOrSeed("bff.deployments.list", paths.deployments(), seed.deployments),
-    get: (id: string) => liveDetailOrSeed("bff.deployments.get", paths.deployment(id), seed.deployments.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.deployments.list", paths.deployments(), seed.deployments),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.deployments.get", paths.deployment(id), seed.deployments.find((s) => s.id === id)),
   },
   evolution: {
     list: () => liveListOrSeed("bff.evolution.list", paths.evolutionPrograms(), seed.evolutionPrograms),
     get: (id: string) => liveDetailOrSeed("bff.evolution.get", paths.evolutionProgram(id), seed.evolutionPrograms.find((s) => s.id === id)),
   },
   research: {
-    list: () => liveListOrSeed("bff.research.list", paths.researchExperiments(), seed.researchExperiments),
-    get: (id: string) => liveDetailOrSeed("bff.research.get", detailPath(paths.researchExperiments(), id), seed.researchExperiments.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.research.list", paths.researchExperiments(), seed.researchExperiments),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.research.get", detailPath(paths.researchExperiments(), id), seed.researchExperiments.find((s) => s.id === id)),
   },
   artifacts: {
-    list: () => liveListOrSeed("bff.artifacts.list", paths.artifacts(), seed.artifacts),
-    get: (id: string) => liveDetailOrSeed("bff.artifacts.get", paths.artifact(id), seed.artifacts.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.artifacts.list", paths.artifacts(), seed.artifacts),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.artifacts.get", paths.artifact(id), seed.artifacts.find((s) => s.id === id)),
   },
   jobs: { list: () => liveListOrSeed("bff.jobs.list", paths.jobs(), seed.jobs) },
   runtimes: {
@@ -464,24 +514,24 @@ export const bff = {
   },
   audit: { list: () => liveListOrSeed("bff.audit.list", paths.audit(), seed.auditEvents) },
   tools: {
-    list: () => liveListOrSeed("bff.tools.list", paths.tools(), seed.tools),
-    get: (id: string) => liveDetailOrSeed("bff.tools.get", detailPath(paths.tools(), id), seed.tools.find((t) => t.id === id)),
+    list: () => liveListOrSeedNormalized("bff.tools.list", paths.tools(), seed.tools),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.tools.get", detailPath(paths.tools(), id), seed.tools.find((t) => t.id === id)),
   },
   mcpServers: {
-    list: () => liveListOrSeed("bff.mcpServers.list", paths.mcpServers(), seed.mcpServers),
-    get: (id: string) => liveDetailOrSeed("bff.mcpServers.get", detailPath(paths.mcpServers(), id), seed.mcpServers.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.mcpServers.list", paths.mcpServers(), seed.mcpServers),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.mcpServers.get", detailPath(paths.mcpServers(), id), seed.mcpServers.find((s) => s.id === id)),
   },
   mcpTools: {
-    list: () => liveListOrSeed("bff.mcpTools.list", paths.mcpTools(), seed.mcpTools),
-    get: (id: string) => liveDetailOrSeed("bff.mcpTools.get", detailPath(paths.mcpTools(), id), seed.mcpTools.find((t) => t.id === id)),
+    list: () => liveListOrSeedNormalized("bff.mcpTools.list", paths.mcpTools(), seed.mcpTools),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.mcpTools.get", detailPath(paths.mcpTools(), id), seed.mcpTools.find((t) => t.id === id)),
   },
   skills: {
-    list: () => liveListOrSeed("bff.skills.list", paths.skills(), seed.skills),
-    get: (id: string) => liveDetailOrSeed("bff.skills.get", detailPath(paths.skills(), id), seed.skills.find((s) => s.id === id)),
+    list: () => liveListOrSeedNormalized("bff.skills.list", paths.skills(), seed.skills),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.skills.get", detailPath(paths.skills(), id), seed.skills.find((s) => s.id === id)),
   },
   channels: {
-    list: () => liveListOrSeed("bff.channels.list", paths.channels(), seed.channels),
-    get: (id: string) => liveDetailOrSeed("bff.channels.get", detailPath(paths.channels(), id), seed.channels.find((c) => c.id === id)),
+    list: () => liveListOrSeedNormalized("bff.channels.list", paths.channels(), seed.channels),
+    get: (id: string) => liveDetailOrSeedNormalized("bff.channels.get", detailPath(paths.channels(), id), seed.channels.find((c) => c.id === id)),
   },
   routePolicies: {
     list: () => isLiveBffModeConfigured() ? liveRoutePolicies("bff.routePolicies.list") : delay(seed.routePolicies),

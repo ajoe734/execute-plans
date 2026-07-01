@@ -407,12 +407,12 @@ export default {
       needsApproval: "needs approval",
     },
   },
-  risk: { info: "Info", low: "Low", medium: "Medium", high: "High", critical: "Critical" },
+  risk: { info: "Info", low: "Low", medium: "Medium", high: "High", critical: "Critical", unavailable: "Unavailable" },
   status: {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
-    deployed: "Deployed", retired: "Retired",
+    deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
   },
   actions: {
     create: "Create", edit: "Edit", view: "View", delete: "Delete",

@@ -49,7 +49,7 @@ export const CapitalPoolsList = () => {
     <ObjectListPage<CapitalPool>
       title={t("nav.capitalPools")}
       loader={lists.capitalPools}
-      basePath="/management/capital-pools" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
+      basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
         { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
@@ -67,7 +67,7 @@ export const RankingFormulasList = () => {
     <ObjectListPage<RankingFormula>
       title={t("nav.rankingFormulas")}
       loader={lists.rankingFormulas}
-      basePath="/management/ranking-formulas" liveKinds={["RankingFormula"]}
+      basePath="/management/ranking/formulas" liveKinds={["RankingFormula"]}
       createBehavior={{ kind: "redirect", to: "/management/studios/formula", intent: "create" }}
       extraColumns={[
         { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
@@ -83,7 +83,7 @@ export const RebalancesList = () => {
     <ObjectListPage<Rebalance>
       title={t("nav.rebalances")}
       loader={lists.rebalances}
-      basePath="/management/rebalances" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
+      basePath="/management/rebalance" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
@@ -133,7 +133,7 @@ export const ResearchList = () => {
     <ObjectListPage<ResearchExperiment>
       title={t("nav.research")}
       loader={lists.research}
-      basePath="/management/research" liveKinds={["Research"]}
+      basePath="/management/experiments" liveKinds={["Research"]}
       createBehavior={{ kind: "drawer", entity: "researchExperiment" }}
       extraColumns={[
         { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },

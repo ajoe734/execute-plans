@@ -399,12 +399,12 @@ export default {
       needsApproval: "需核准",
     },
   },
-  risk: { info: "資訊", low: "低", medium: "中", high: "高", critical: "極高" },
+  risk: { info: "資訊", low: "低", medium: "中", high: "高", critical: "極高", unavailable: "無資料" },
   status: {
     pending: "待處理", running: "執行中", success: "成功",
     warning: "警告", failed: "失敗", paused: "暫停",
     draft: "草稿", review: "審查中", approved: "已核准",
-    deployed: "已部署", retired: "已退役",
+    deployed: "已部署", retired: "已退役", unavailable: "無資料",
   },
   actions: {
     create: "建立", edit: "編輯", view: "檢視", delete: "刪除",

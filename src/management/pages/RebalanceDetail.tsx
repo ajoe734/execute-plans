@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { safePercent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
@@ -116,7 +117,7 @@ export const RebalanceDetail = () => {
                 </Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label={t("nav.capitalPools")} value={pool ? pool.name : r.targetPoolId} />
-                  <StatCard label="Proposed Δ" value={`${(r.proposedDelta * 100).toFixed(1)}%`} tone="warning" />
+                  <StatCard label="Proposed Δ" value={safePercent(r.proposedDelta)} tone="warning" />
                   <StatCard label={t("table.sharpe")} value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
                   <StatCard label={t("table.drawdown")} value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="danger" />
                 </div>
@@ -136,9 +137,9 @@ export const RebalanceDetail = () => {
                 onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)}
                 columns={[
                   { key: "strat", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
-                  { key: "cur", header: t("section.overview"), cell: (row) => <span className="text-mono text-xs">{(row.currentWeight * 100).toFixed(1)}%</span> },
-                  { key: "prop", header: t("section.changeSummary"), cell: (row) => <span className="text-mono text-xs">{(row.proposedWeight * 100).toFixed(1)}%</span> },
-                  { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
+                  { key: "cur", header: t("section.overview"), cell: (row) => <span className="text-mono text-xs">{safePercent(row.currentWeight)}</span> },
+                  { key: "prop", header: t("section.changeSummary"), cell: (row) => <span className="text-mono text-xs">{safePercent(row.proposedWeight)}</span> },
+                  { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${(row.delta ?? 0) >= 0 ? "text-status-success" : "text-status-failed"}`}>{(row.delta ?? 0) >= 0 ? "+" : ""}{safePercent(row.delta)}</span> },
                 ]}
                 empty={t("empty.noResults")}
               />
@@ -152,7 +153,7 @@ export const RebalanceDetail = () => {
                   <Field label={t("table.risk")} value={pool ? `${pool.currency} ${(pool.allocated * pool.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"} mono />
                   <Field label={t("table.utilization")} value="OK" mono />
                   <Field label={t("table.utilization")} value="Pass" mono />
-                  <Field label="Stress (−20%)" value={`${(r.expectedDrawdown! * 100 * 1.5).toFixed(1)}%`} mono />
+                  <Field label="Stress (−20%)" value={r.expectedDrawdown != null ? safePercent(r.expectedDrawdown * 1.5) : "—"} mono />
                 </div>
               </Section>
             ),
