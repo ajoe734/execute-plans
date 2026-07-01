@@ -300,6 +300,37 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByRole("link", { name: "Continue onboarding for persona-approval" })).not.toBeInTheDocument();
   });
 
+  it("routes researching personas with deployable artifacts to research instead of onboarding", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-researching", "Researching Persona", {
+          humanNeeded: false,
+          state: "researching",
+          currentResearchProjects: [{
+            projectId: "MGMT-RESEARCH-001",
+            title: "Researching Persona candidate review",
+            stage: "researching",
+            frameworks: ["qlib"],
+            experimentId: "exp-researching-001",
+            artifactId: "artifact-researching-001",
+            blockedByTaskIds: [],
+            canDeploy: true,
+          }],
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "View research for persona-researching" })).toHaveAttribute(
+      "href",
+      "/management/experiments/exp-researching-001",
+    );
+    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-researching" })).not.toBeInTheDocument();
+  });
+
   it("keeps onboarding as the primary action only for draft personas", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
