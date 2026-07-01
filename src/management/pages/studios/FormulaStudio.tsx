@@ -1,6 +1,6 @@
 // Phase 12.1 — Ranking Formula Studio.
 // Dropdown to pick a formula, edit expression with metric library + validate,
-// run mock backtest, and compare against another formula.
+// compare formula previews, and gate backtest execution until a governed runner exists.
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
@@ -15,6 +15,7 @@ import { FormulaEditor } from "@/management/components/studios/FormulaEditor";
 import { FormulaBacktestChart } from "@/management/components/studios/FormulaBacktestChart";
 import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const FormulaStudio = () => {
   const t = useT();
@@ -29,7 +30,7 @@ export const FormulaStudio = () => {
   useEffect(() => {
     bff.rankingFormulas.list().then((rows) => {
       setFormulas(rows);
-      if (!activeId && rows[0]) setActiveId(rows[0].id);
+      if (rows[0]) setActiveId((current) => current ?? rows[0].id);
     });
   }, []);
 
@@ -43,7 +44,7 @@ export const FormulaStudio = () => {
       next.delete("intent");
       setParams(next, { replace: true });
     }
-  }, [intent]);
+  }, [intent, params, setParams, t]);
 
   const active = useMemo(() => formulas.find((f) => f.id === activeId), [formulas, activeId]);
   const compare = useMemo(() => formulas.find((f) => f.id === compareId), [formulas, compareId]);
@@ -98,7 +99,7 @@ export const FormulaStudio = () => {
             </TabsContent>
             <TabsContent value="backtest" className="mt-4 space-y-3">
               <div className="flex justify-end">
-                <Button size="sm" onClick={() => toast.success(t("studios.backtestQueued"))}>{t("studios.runBacktest")}</Button>
+                <NonProductionActionButton size="sm">{t("studios.runBacktest")}</NonProductionActionButton>
               </div>
               <FormulaBacktestChart expression={expr || active.expression} label={active.name} />
             </TabsContent>
