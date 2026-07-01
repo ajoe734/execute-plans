@@ -128,6 +128,16 @@ jobs:
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
 
+      - name: Bundle-size budget check
+        id: bundle_budget
+        continue-on-error: true
+        env:
+          PANTHEON_BUNDLE_SKIP_BUILD: "1"
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+        run: |
+          set -o pipefail
+          npm run probe:bundle-budget 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bundle-budget-check.log"
+
       - name: Contract drift
         id: contract
         continue-on-error: true
@@ -249,6 +259,7 @@ jobs:
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
+            "bundle_budget": { "outcome": "${{ steps.bundle_budget.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bundle-budget-check.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
             "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
