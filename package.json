@@ -24,6 +24,7 @@
     "audit:render": "node scripts/audit-console-render.mjs",
     "validate:mgmt-persona:3000": "node scripts/validate-management-persona-3000.mjs",
     "validate:mgmt-live:deep": "node scripts/validate-management-live-deep.mjs",
+    "accept:mgmt:hosted": "node scripts/accept-management-hosted-production.mjs",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "gate:integration": "npm run test && npm run build && npm run test:contract && npm run probe:bff:routes && npm run probe:browser && npm run e2e"
