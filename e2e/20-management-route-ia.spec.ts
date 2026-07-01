@@ -63,6 +63,28 @@ test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
         pathname: "/management/deployments/dep-9",
         search: "?tab=events",
       },
+      // MGMT-GAP-008 — these detail aliases used to mount the canonical
+      // detail component a second time instead of redirecting.
+      {
+        from: "/management/capital-pools/pool-9?tab=risk",
+        pathname: "/management/capital/pool-9",
+        search: "?tab=risk",
+      },
+      {
+        from: "/management/ranking-formulas/rf-9",
+        pathname: "/management/ranking/formulas/rf-9",
+        search: "",
+      },
+      {
+        from: "/management/rebalances/rb-9?tab=lines",
+        pathname: "/management/rebalance/rb-9",
+        search: "?tab=lines",
+      },
+      {
+        from: "/management/research/exp-9",
+        pathname: "/management/experiments/exp-9",
+        search: "",
+      },
     ];
 
     for (const item of cases) {

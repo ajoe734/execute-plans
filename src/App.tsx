@@ -143,6 +143,28 @@ function DeploymentAliasRedirect() {
   return <Navigate to={`${target}${search}${hash}`} replace />;
 }
 
+// MGMT-GAP-008 — old detail aliases (capital-pools, ranking-formulas,
+// rebalances, research) used to mount the canonical detail component a
+// second time under the alias path instead of redirecting, per
+// `DeploymentAliasRedirect` above (the one alias that already did this
+// right). `makeDetailAliasRedirect` generalizes that pattern so bookmarked
+// alias links land on the single canonical render instead of duplicating it.
+function makeDetailAliasRedirect(canonicalListPath: string) {
+  return function DetailAliasRedirect() {
+    const { id } = useParams<{ id?: string }>();
+    const { search, hash } = useLocation();
+    const target = id
+      ? `${canonicalListPath}/${encodeURIComponent(id)}`
+      : canonicalListPath;
+    return <Navigate to={`${target}${search}${hash}`} replace />;
+  };
+}
+
+const CapitalPoolAliasRedirect = makeDetailAliasRedirect("/management/capital");
+const RankingFormulaAliasRedirect = makeDetailAliasRedirect("/management/ranking/formulas");
+const RebalanceAliasRedirect = makeDetailAliasRedirect("/management/rebalance");
+const ResearchAliasRedirect = makeDetailAliasRedirect("/management/experiments");
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -215,22 +237,22 @@ const App = () => (
                 <Route path="capital" element={<CapitalPoolsListRoute />} />
                 <Route path="capital/:id" element={<CapitalPoolDetailRoute />} />
                 <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
-                <Route path="capital-pools/:id" element={<CapitalPoolDetailRoute />} />
+                <Route path="capital-pools/:id" element={<CapitalPoolAliasRedirect />} />
                 <Route path="ranking" element={<RankingDashboardRoute />} />
                 <Route path="ranking/formulas" element={<RankingFormulasListRoute />} />
                 <Route path="ranking/formulas/:id" element={<RankingFormulaDetailRoute />} />
                 <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
-                <Route path="ranking-formulas/:id" element={<RankingFormulaDetailRoute />} />
+                <Route path="ranking-formulas/:id" element={<RankingFormulaAliasRedirect />} />
                 <Route path="rebalance" element={<RebalancesListRoute />} />
                 <Route path="rebalance/:id" element={<RebalanceDetailRoute />} />
                 <Route path="rebalances" element={<Navigate to="/management/rebalance" replace />} />
-                <Route path="rebalances/:id" element={<RebalanceDetailRoute />} />
+                <Route path="rebalances/:id" element={<RebalanceAliasRedirect />} />
                 <Route path="evolution" element={<EvolutionListRoute />} />
                 <Route path="evolution/:id" element={<EvolutionDetailRoute />} />
                 <Route path="experiments" element={<ResearchListRoute />} />
                 <Route path="experiments/:id" element={<ResearchDetailRoute />} />
                 <Route path="research" element={<Navigate to="/management/experiments" replace />} />
-                <Route path="research/:id" element={<ResearchDetailRoute />} />
+                <Route path="research/:id" element={<ResearchAliasRedirect />} />
                 <Route path="artifacts" element={<ArtifactsListRoute />} />
                 <Route path="artifacts/:id" element={<ArtifactDetailRoute />} />
 

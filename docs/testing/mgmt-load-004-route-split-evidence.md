@@ -24,14 +24,14 @@ After route splitting, from `npm run build` on this branch:
 
 | Asset | Size | Gzip |
 |---|---:|---:|
-| `dist/assets/index-D8jH6Dwq.js` | 860.54 kB | 269.59 kB |
-| `dist/assets/PlatformShell-CKDG5Chu.js` | 55.83 kB | 17.02 kB |
-| `dist/assets/ManagementLayout-5317ngGT.js` | 24.25 kB | 7.56 kB |
-| `dist/assets/evidence-Cz6s_amx.js` | 63.17 kB | 13.37 kB |
-| `dist/assets/registry-D32pCVEF.js` | 264.86 kB | 63.47 kB |
-| `dist/assets/v5-oeL84Zjt.js` | 52.19 kB | 11.74 kB |
-| `dist/assets/operations-BWFrqgzh.js` | 84.59 kB | 17.45 kB |
-| `dist/assets/agora-BZtWJ_Wl.js` | 1,285.00 kB | 411.22 kB |
+| `dist/assets/index-CnqyqvrU.js` | 861.18 kB | 269.76 kB |
+| `dist/assets/PlatformShell-UsqXV4r3.js` | 55.83 kB | 17.02 kB |
+| `dist/assets/ManagementLayout-DgQN0-3g.js` | 24.25 kB | 7.55 kB |
+| `dist/assets/evidence-CmKt7_be.js` | 63.17 kB | 13.37 kB |
+| `dist/assets/registry-B2rotSUj.js` | 265.62 kB | 63.84 kB |
+| `dist/assets/v5-LnSCMiS4.js` | 52.19 kB | 11.74 kB |
+| `dist/assets/operations-6wVqV0Bj.js` | 84.59 kB | 17.44 kB |
+| `dist/assets/agora-D4lAAyjN.js` | 1,285.00 kB | 411.21 kB |
 
 Evidence route-specific async chunk gzip is `13.37 kB`, below the `150 kB` budget excluding shared vendor/cache chunks. The initial app entry gzip is `214.75 kB`, below the `800 kB` initial management JS budget.
 

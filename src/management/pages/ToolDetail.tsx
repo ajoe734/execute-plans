@@ -14,6 +14,7 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { toolMachine, type ToolState } from "@/lib/stateMachines";
 import { PlayCircle, Power, ShieldOff, ShieldCheck, ArchiveX, Archive, Gauge, Tag } from "lucide-react";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 const STATE_MAP: Record<string, ToolState> = {
   draft: "draft", testing: "testing", active: "active", deployed: "active",
@@ -25,16 +26,22 @@ export const ToolDetail = () => {
   const t = useT();
   const nav = useNavigate();
   const [tool, setTool] = useState<Tool | undefined>();
+  const [loaded, setLoaded] = useState(false);
   const [consumers, setConsumers] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    bff.tools.get(id).then(setTool);
+    setLoaded(false);
+    bff.tools.get(id).then((row) => { setTool(row); setLoaded(true); });
     bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
-  if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!tool) {
+    return loaded
+      ? <CapabilityDetailEmptyState kind="tool" id={id} />
+      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
 
   const machineState: ToolState = STATE_MAP[tool.state ?? ""] ?? "draft";
 
