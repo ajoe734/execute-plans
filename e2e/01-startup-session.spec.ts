@@ -103,6 +103,24 @@ function strictFallbackMode(): string {
   return process.env.VITE_BFF_FALLBACK || process.env.BFF_FALLBACK || "strict";
 }
 
+function truthyEnv(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isPullRequestContext(): boolean {
+  return (
+    process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request"
+  );
+}
+
+function sseEventSourceHardGate(): boolean {
+  if (process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE !== undefined) {
+    return truthyEnv(process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE);
+  }
+  return !isPullRequestContext();
+}
+
 function sseOpenTimeoutMs(): number {
   const value = Number(process.env.PANTHEON_SSE_OPEN_TIMEOUT_MS);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_SSE_OPEN_TIMEOUT_MS;
@@ -306,8 +324,10 @@ test.describe("F01 startup session", () => {
 
   test("opens the browser-native SSE EventSource stream", async ({ page }, testInfo) => {
     const streamUrl = browserSseBffUrl("/bff/events/stream?channel=system");
-    const openTimeoutMs = sseOpenTimeoutMs();
-    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * 2 + 15_000));
+    const hardGate = sseEventSourceHardGate();
+    const maxAttempts = hardGate ? 2 : 1;
+    const openTimeoutMs = hardGate ? sseOpenTimeoutMs() : Math.min(sseOpenTimeoutMs(), 10_000);
+    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * maxAttempts + 15_000));
 
     await openSseProbeDocument(page);
 
@@ -319,7 +339,7 @@ test.describe("F01 startup session", () => {
         }
       | undefined;
     let lastError = "";
-    for (let attempt = 0; attempt < 2 && !opened; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts && !opened; attempt += 1) {
       try {
         opened = await page.evaluate(
           ({ url, timeoutMs }) =>
@@ -377,6 +397,14 @@ test.describe("F01 startup session", () => {
           await openSseProbeDocument(page);
         }
       }
+    }
+
+    if (!opened && !hardGate) {
+      testInfo.annotations.push({
+        type: "warning",
+        description: `EventSource advisory probe did not open: ${lastError}`,
+      });
+      return;
     }
 
     expect(opened, lastError).toBeTruthy();

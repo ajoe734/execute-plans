@@ -239,6 +239,29 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
   return lastResult;
 }
 
+async function fetchValidatedReadEndpoint(route, validate) {
+  let lastResult = { status: 0, json: null, ok: false, error: "not attempted", attempts: 0 };
+  let lastValidation = { valid: false, note: "not attempted" };
+  let attempts = 0;
+
+  for (let validationAttempt = 1; validationAttempt <= READ_RETRY_ATTEMPTS; validationAttempt++) {
+    lastResult = await fetchEndpoint(route);
+    attempts += lastResult.attempts || 1;
+    lastValidation = validate(lastResult.json);
+    const valid = !lastResult.error && lastResult.status === 200 && lastValidation.valid;
+    if (valid) {
+      return { ...lastResult, attempts, validation: lastValidation };
+    }
+    const malformedSuccess = !lastResult.error && lastResult.status === 200 && !lastValidation.valid;
+    if (!malformedSuccess || validationAttempt >= READ_RETRY_ATTEMPTS) {
+      return { ...lastResult, attempts, validation: lastValidation };
+    }
+    await sleep(RETRY_DELAY_MS * validationAttempt);
+  }
+
+  return { ...lastResult, attempts, validation: lastValidation };
+}
+
 // Canonical list endpoints checked by the release gate aggregate (Gate 3).
 const LIST_ENDPOINTS = [
   "/bff/strategies",
@@ -292,8 +315,17 @@ async function main() {
 
   // /bff/me — non-list identity endpoint; uses isMeResponse validator
   {
-    const { status, json, error, attempts } = await fetchEndpoint("/bff/me");
-    const valid = !error && status === 200 && isMeResponse(json);
+    const { status, error, attempts, validation } = await fetchValidatedReadEndpoint(
+      "/bff/me",
+      (json) => {
+        const valid = isMeResponse(json);
+        return {
+          valid,
+          note: valid ? "MeResponse user/tenant/capabilities present" : "unexpected MeResponse shape",
+        };
+      },
+    );
+    const valid = !error && status === 200 && validation.valid;
     total++;
     if (valid) passed++;
     results.push({
@@ -302,7 +334,7 @@ async function main() {
       status: error ? "ERR" : String(status),
       passed: valid,
       note: noteWithAttempts(
-        error ? error.slice(0, 80) : valid ? "MeResponse user/tenant/capabilities present" : `unexpected shape or status ${status}`,
+        error ? error.slice(0, 80) : validation.note,
         attempts,
       ),
     });
@@ -310,8 +342,10 @@ async function main() {
 
   // List endpoints — use isListEnvelope (top-level items + page_info.total)
   for (const route of LIST_ENDPOINTS) {
-    const { status, json, error, attempts } = await fetchEndpoint(route);
-    const envelope = classifyReadEnvelope(route, json);
+    const { status, error, attempts, validation: envelope } = await fetchValidatedReadEndpoint(
+      route,
+      (json) => classifyReadEnvelope(route, json),
+    );
     const valid = !error && status === 200 && envelope.valid;
     total++;
     if (valid) passed++;
