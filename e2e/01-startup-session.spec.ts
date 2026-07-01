@@ -34,8 +34,9 @@ const DEFAULT_BFF_BASE_URL =
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
-const ME_REQUEST_ATTEMPTS = 4;
-const ME_REQUEST_TIMEOUT_MS = 10_000;
+const ME_REQUEST_MAX_WAIT_MS = 45_000;
+const ME_REQUEST_TIMEOUT_MS = 8_000;
+const ME_TRANSIENT_STATUSES = new Set([0, 502, 503, 504]);
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -184,17 +185,24 @@ async function requestMeWithTransientRetry(
   headers: Record<string, string>,
 ): Promise<{ status: number; body: string }> {
   let last = { status: 0, body: "" };
-  for (let attempt = 0; attempt < ME_REQUEST_ATTEMPTS; attempt += 1) {
+  const deadline = Date.now() + ME_REQUEST_MAX_WAIT_MS;
+  let attempt = 0;
+  while (Date.now() < deadline) {
     try {
-      const response = await request.get(url, { headers, timeout: ME_REQUEST_TIMEOUT_MS });
+      const timeout = Math.max(
+        1_000,
+        Math.min(ME_REQUEST_TIMEOUT_MS, deadline - Date.now()),
+      );
+      const response = await request.get(url, { headers, timeout });
       last = { status: response.status(), body: await response.text() };
-      if (![502, 503, 504].includes(last.status)) return last;
+      if (!ME_TRANSIENT_STATUSES.has(last.status)) return last;
     } catch (err) {
       last = { status: 0, body: String(err) };
     }
-    if (attempt < ME_REQUEST_ATTEMPTS - 1) {
-      await sleep(750 * (attempt + 1));
-    }
+    attempt += 1;
+    const delayMs = Math.min(5_000, 750 * attempt);
+    if (Date.now() + delayMs >= deadline) break;
+    await sleep(delayMs);
   }
   return last;
 }
@@ -202,7 +210,8 @@ async function requestMeWithTransientRetry(
 test.describe("F01 startup session", () => {
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(Math.max(testInfo.timeout, ME_REQUEST_MAX_WAIT_MS + 15_000));
     const tenantId = process.env.BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID;
     const headers: Record<string, string> = {
       Accept: "application/json",
