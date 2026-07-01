@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { lists, useLiveListV1 } from "@/lib/bff-v1";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import type { Runtime } from "@/lib/bff/types";
@@ -32,7 +33,9 @@ export const RuntimesPage = () => {
   const run = async (r: Runtime, action: RuntimeAction) => {
     const mappedAction = action === "disable_new" ? "quarantine" : action;
     const res = await mutations.runtimeAction(r.id, mappedAction, action === "disable_new" ? "disable_new_deployments" : `from runtimes table`);
-    toast.success(t(`runtime.actions.${action}.toast`, { name: r.name }), { description: res.job?.id });
+    toast.success(t(`runtime.actions.${action}.toast`, { name: r.name }), {
+      description: commandReceiptDescription(res, { fallback: `Runtime ${r.id} · ${mappedAction}` }),
+    });
     refresh();
   };
 
@@ -87,8 +90,10 @@ export const RuntimesPage = () => {
           riskImpact={t("runtime.actions.emergency_kill.impact")}
           confirmToken="KILL"
           onConfirm={async (memo) => {
-            await mutations.emergencyKill({ kind: "Runtime", id: killTarget.id }, memo);
-            toast.success(t("runtime.actions.emergency_kill.toast", { name: killTarget.name }));
+            const receipt = await mutations.emergencyKill({ kind: "Runtime", id: killTarget.id }, memo);
+            toast.success(t("runtime.actions.emergency_kill.toast", { name: killTarget.name }), {
+              description: commandReceiptDescription(receipt, { fallback: `Runtime ${killTarget.id} · emergency_kill` }),
+            });
             refresh();
           }}
         />
