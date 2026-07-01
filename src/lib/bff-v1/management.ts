@@ -54,7 +54,7 @@ const unwrap = (raw: unknown): unknown =>
 const asArray = <T>(raw: unknown): T[] | null =>
   Array.isArray(raw) ? (raw as T[]) : null;
 
-export type ManagementOodaStage = "Observe" | "Orient" | "Decide" | "Act";
+export type ManagementOodaStage = "Observe" | "Orient" | "Decide" | "Act" | "Learn";
 export type ManagementAutonomyMode = "manual" | "supervised" | "autonomous";
 
 export interface ManagementDataSourceStatus {
@@ -980,6 +980,7 @@ const normalizeOoda = (value: unknown): ManagementOodaStage => {
   if (stage.startsWith("orient")) return "Orient";
   if (stage.startsWith("decid")) return "Decide";
   if (stage.startsWith("act")) return "Act";
+  if (stage.startsWith("learn")) return "Learn";
   return "Observe";
 };
 
