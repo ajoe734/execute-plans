@@ -204,7 +204,9 @@ export const EvolutionDetail = () => {
         description={t("detail.confirm.stopEvolution")}
         confirmToken="STOP"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }); toast.success("Stop requested"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }, { successTitle: "Stop requested" });
+        }}
       />
     </>
   );

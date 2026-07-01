@@ -9,7 +9,6 @@ import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff/types";
 import { CheckCircle2, Edit } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
@@ -100,7 +99,12 @@ export const RankingFormulaDetail = () => {
         target={{ type: "RankingFormula", id: f.id, name: f.name }}
         risk="high"
         destructive
-        onConfirm={async (memo, token) => { await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }, { confirmToken: token }); toast.success("Activation requested — pending approval"); }}
+        onConfirm={async (memo, token) => {
+          await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }, {
+            confirmToken: token,
+            successTitle: "Activation requested - pending approval",
+          });
+        }}
       />
     </>
   );

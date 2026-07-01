@@ -146,7 +146,9 @@ export const DeploymentDetail = () => {
         description={t("detail.confirm.promoteLive")}
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }, { successTitle: "Promotion request submitted" });
+        }}
       />
       <HighRiskConfirm
         open={rollbackOpen}

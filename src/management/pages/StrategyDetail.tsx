@@ -493,17 +493,20 @@ export const StrategyDetail = () => {
             actionId={v3ActionId}
             confirmEntity={v3ActionId ? { type: "strategy", id: s.id } : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({
+              const receipt = await runActionSafe({
                 kind: "Strategy", id: s.id, action: activeTr.action,
                 newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
                   ? activeTr.to : undefined,
                 memo,
-              }, { confirmToken: token });
+              }, {
+                confirmToken: token,
+                successTitle: `${activeTr.action} requested`,
+              });
+              if (!receipt.ok) return;
               const fresh = await bff.strategies.get(s.id);
               if (fresh) setS(fresh);
               const a = await bff.audit.list();
               setAudit(a.filter((x) => x.target === s.id));
-              toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
             }}
           />
         );
