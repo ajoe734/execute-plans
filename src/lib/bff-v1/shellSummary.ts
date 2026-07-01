@@ -4,7 +4,8 @@
 // approvals/alerts/jobs list endpoints just to render a count.
 
 import { paths } from "./paths";
-import { withLiveOrMock } from "./liveTransport";
+import { bffFetch } from "./client";
+import { liveStatus } from "./liveStatus";
 
 export interface ShellSummaryCounts {
   pendingApprovals: number;
@@ -85,12 +86,22 @@ function adaptShellSummary(raw: unknown): ShellSummaryResponse {
   };
 }
 
-export function fetchShellSummary(): Promise<ShellSummaryResponse> {
-  return withLiveOrMock<ShellSummaryResponse, unknown>(
-    { method: "GET", path: paths.mgmtShellSummary() },
-    async () => mockShellSummary(),
-    adaptShellSummary,
-  );
+// Deliberately NOT `withLiveOrMock`: this is one narrow badge-count read
+// among many, and a transport hiccup here must not flip the shared
+// `liveStatus` transport signal — other live reads (full approvals/alerts/
+// jobs lists) may still be perfectly healthy even when shell-summary itself
+// is down. Reporting through the shared signal would spuriously re-run
+// every effect keyed on it (including this one), double-fetching on every
+// transient blip. TopBar treats a failure here as a local "unknown"/
+// "unavailable" signal and defers to the full-list fallback instead.
+export async function fetchShellSummary(): Promise<ShellSummaryResponse> {
+  if (liveStatus.get().mode !== "live") return mockShellSummary();
+  try {
+    const data = await bffFetch<unknown>({ method: "GET", path: paths.mgmtShellSummary(), mode: "live" });
+    return adaptShellSummary(data);
+  } catch {
+    return mockShellSummary();
+  }
 }
 
 /** Composed shell-summary health; only "ok" counts as truly live/cheap. */

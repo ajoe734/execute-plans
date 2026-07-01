@@ -74,7 +74,7 @@ describe("fetchShellSummary — live mode", () => {
     expect(summary.counts.pendingApprovals).toBe(3);
   });
 
-  it("falls back to mock data (unknown surface) on a transport failure", async () => {
+  it("falls back to mock data (unknown surface) on a transport failure, without flipping the shared liveStatus signal", async () => {
     liveStatus._reset({ mode: "live", effective: "live" });
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("network error"));
 
@@ -82,6 +82,10 @@ describe("fetchShellSummary — live mode", () => {
 
     expect(shellSummaryStatus(summary)).toBe("unknown");
     expect(summary.counts).toEqual({ pendingApprovals: 0, openAlerts: 0, runningJobs: 0 });
-    expect(liveStatus.get().effective).toBe("mock");
+    // Other live reads (full approvals/alerts/jobs) may still be healthy —
+    // this narrow badge-count read must not mask that by reporting through
+    // the shared transport signal (which would also spuriously re-trigger
+    // every effect keyed on it, double-fetching on transient blips).
+    expect(liveStatus.get().effective).toBe("live");
   });
 });

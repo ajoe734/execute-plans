@@ -14,9 +14,11 @@
  * sections 2.6 and 4.5.
  *
  * The non-primary-request count is recorded as a soft-fail annotation, not a
- * hard budget gate. Enforcing the budget is MGMT-LOAD-006's job once the
+ * hard budget gate. Enforcing the budget is MGMT-LOAD-006's job now that the
  * shell-summary endpoint (MGMT-LOAD-002) and shell fanout fix (MGMT-LOAD-003)
- * land; this spec only needs to keep the baseline honest.
+ * have landed; this spec only needs to keep the baseline honest. Hard-gated
+ * assertions on the reduced fanout live in
+ * e2e/23-management-shell-fanout.spec.ts (MGMT-LOAD-003's own acceptance).
  */
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 
@@ -25,6 +27,7 @@ const EVIDENCE_PATH = "/management/evidence";
 const PRIMARY_API_PATTERN = /\/bff\/management\/evidence(?:\?.*)?$/;
 const SHELL_FANOUT_PATTERNS: Array<[string, RegExp]> = [
   ["me", /\/bff\/me(?:\?.*)?$/],
+  ["shellSummary", /\/bff\/management\/shell-summary(?:\?.*)?$/],
   ["approvals", /\/bff\/approvals(?:\?.*)?$/],
   ["alerts", /\/bff\/alerts(?:\?.*)?$/],
   ["jobs", /\/bff\/jobs(?:\?.*)?$/],
@@ -41,9 +44,12 @@ function frontendUrl(path: string): string {
 }
 
 function corsHeaders(route: Route): Record<string, string> {
+  const reqHeaders = route.request().headers();
   return {
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": route.request().headers()["origin"] ?? "*",
+    "Access-Control-Allow-Origin": reqHeaders["origin"] ?? "*",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": reqHeaders["access-control-request-headers"] ?? "*",
   };
 }
 
@@ -53,6 +59,23 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
     contentType: "application/json",
     headers: corsHeaders(route),
     body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Cross-origin GET calls to the live BFF carry custom headers
+ * (X-Request-Id, X-Correlation-Id, ...), so the browser sends a CORS
+ * preflight OPTIONS request ahead of every real GET. Route handlers must
+ * answer the preflight (with matching Allow-Methods/Allow-Headers) without
+ * counting it as a real request, or every fanout counter double-counts.
+ */
+function onRoute(page: Page, pattern: RegExp | string, handler: (route: Route) => Promise<void>): Promise<void> {
+  return page.route(pattern, async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders(route) });
+      return;
+    }
+    await handler(route);
   });
 }
 
@@ -90,26 +113,48 @@ const EVIDENCE_RESPONSE = {
 const EMPTY_ENVELOPE = { items: [], cursor: {}, pageSize: 0, estimatedTotal: 0, totalCountExact: true, meta: { snapshot_at: nowIso() } };
 
 async function installEvidenceFixtures(page: Page): Promise<Record<string, number>> {
-  const counters: Record<string, number> = { me: 0, approvals: 0, alerts: 0, jobs: 0, health: 0, evidence: 0 };
-  await page.route(PRIMARY_API_PATTERN, async (route) => {
+  const counters: Record<string, number> = { me: 0, shellSummary: 0, approvals: 0, alerts: 0, jobs: 0, health: 0, evidence: 0 };
+  await onRoute(page, PRIMARY_API_PATTERN, async (route) => {
     counters.evidence += 1;
     await fulfillJson(route, EVIDENCE_RESPONSE);
   });
   for (const [key, pattern] of SHELL_FANOUT_PATTERNS) {
-    await page.route(pattern, async (route) => {
+    await onRoute(page, pattern, async (route) => {
       counters[key] += 1;
       if (key === "health") {
         await fulfillJson(route, { status: "ok", checked_at: nowIso() });
         return;
       }
       if (key === "me") {
+        // Shape must satisfy src/lib/v4/session/me.ts's `isMeResponse` guard
+        // (user/tenant/roles/capabilities), not the legacy operator_id/
+        // display_name shape — a mismatch here throws inside
+        // normalizeMeResponse, which withLiveOrMock treats as a transport
+        // failure and reports through the shared liveStatus signal,
+        // spuriously flipping every other shell read's fanout counter.
         await fulfillJson(route, {
           data: {
-            operator_id: "op-load-001",
-            display_name: "Load Probe Operator",
+            user: { id: "op-load-001", displayName: "Load Probe Operator", email: "op-load-001@pantheon.local" },
+            tenant: { id: "t_load_001", name: "Load Probe Tenant", tz: "UTC", locale: "en-US" },
             roles: ["admin"],
-            session: { authenticated: true, checked_at: nowIso() },
+            capabilities: [],
+            env: "dev",
+            featureFlags: {},
+            serverTime: nowIso(),
+            sessionExpiresAt: nowIso(),
+            permissionsVersion: "v1",
           },
+        });
+        return;
+      }
+      if (key === "shellSummary") {
+        await fulfillJson(route, {
+          data: {
+            counts: { pending_approvals: 0, open_alerts: 0, running_jobs: 0 },
+            session: { operator_id: "op-load-001", display_label: "Load Probe Operator", roles: ["admin"] },
+            transport: { bff_status: "ok", service: "operator-bff", api_version: "test" },
+          },
+          meta: { snapshot_at: nowIso(), surfaces: { shell_summary: { status: "ok" } } },
         });
         return;
       }
@@ -172,7 +217,7 @@ test.describe("MGMT-LOAD-001 Evidence route-load readiness", () => {
       type: "route-load-baseline",
       description:
         `heading=${headingMs}ms primaryApi=${primaryApiMs}ms firstRow=${firstRowMs}ms ` +
-        `evidenceReads=${counters.evidence} jobsReads=${counters.jobs} ` +
+        `evidenceReads=${counters.evidence} shellSummaryReads=${counters.shellSummary} jobsReads=${counters.jobs} ` +
         `nonPrimaryRequestsBeforeFirstRow=${nonPrimaryBeforeFirstRow}`,
     });
     if (counters.evidence !== 1) {
@@ -180,12 +225,12 @@ test.describe("MGMT-LOAD-001 Evidence route-load readiness", () => {
     }
     if (counters.jobs > 1) {
       console.warn(
-        `[MGMT-LOAD-001] /bff/jobs fetched ${counters.jobs} times on first route load (duplicate TopBar/JobProgressDrawer reads); tracked by MGMT-LOAD-003.`,
+        `[MGMT-LOAD-001] /bff/jobs fetched ${counters.jobs} times on first route load (duplicate TopBar/JobProgressDrawer reads); hard-gated in MGMT-LOAD-003's own spec.`,
       );
     }
     if (nonPrimaryBeforeFirstRow > 2) {
       console.warn(
-        `[MGMT-LOAD-001] non-primary BFF requests before first row (${nonPrimaryBeforeFirstRow}) exceed the target budget of 2; tracked by MGMT-LOAD-002/003.`,
+        `[MGMT-LOAD-001] non-primary BFF requests before first row (${nonPrimaryBeforeFirstRow}) exceed the target budget of 2; hard-gated in MGMT-LOAD-003's own spec.`,
       );
     }
   });
