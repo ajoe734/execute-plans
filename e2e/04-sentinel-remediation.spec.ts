@@ -300,6 +300,7 @@ test.describe("F05 Sentinel investigation workspace", () => {
 
     await expect(drawer).toContainText(/Investigation summary|調查摘要/i);
     await expect(drawer).toContainText(/Severity rationale|嚴重度理由/i);
+    await expect(drawer).toContainText(/Where to resolve this|要去哪裡處理/i);
     await expect(drawer).toContainText(/Blast radius|影響範圍/i);
     await expect(drawer).toContainText(/Evidence packet|證據包/i);
     await expect(drawer).toContainText(/Recommended next steps|建議下一步/i);
@@ -329,6 +330,26 @@ test.describe("F05 Sentinel investigation workspace", () => {
       name: /Open intervention queue|開啟介入佇列/i,
     });
     await expect(interventionLink).toHaveAttribute("href", "/management/interventions");
+
+    const resolutionInterventionLink = drawer.getByRole("link", {
+      name: /Review intervention|檢視介入項目/i,
+    });
+    await expect(resolutionInterventionLink).toHaveAttribute(
+      "href",
+      `/management/interventions?finding=${SENTINEL_FINDING_ID}`,
+    );
+
+    const evidenceLink = drawer.getByRole("link", { name: /Inspect evidence|檢查證據/i });
+    await expect(evidenceLink).toHaveAttribute(
+      "href",
+      "/management/evidence?ref_id=incident-b04-confirm-token",
+    );
+
+    const incidentLink = drawer.getByRole("link", { name: /Open incident|開啟 incident/i });
+    await expect(incidentLink).toHaveAttribute(
+      "href",
+      "/management/incidents/incident-b04-confirm-token",
+    );
 
     const personaTargetLink = drawer.getByRole("link", { name: /persona:persona-b04-risk/i });
     await expect(personaTargetLink).toHaveAttribute(

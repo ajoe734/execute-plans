@@ -53,18 +53,26 @@ export const InterventionsPage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchRunning, setBatchRunning] = useState(false);
 
-  // E2 drill-down: ?item=<id> auto-opens the matching intervention drawer.
+  // E2 drill-down: ?item=<id> / ?intervention=<id> / ?finding=<id>
+  // auto-opens the matching intervention drawer.
   useEffect(() => {
-    const id = params.get("item");
-    if (!id || !list.data) return;
-    const match = list.data.items.find((i) => i.id === id);
+    if (!list.data) return;
+    const id = params.get("item") ?? params.get("intervention");
+    const findingId = params.get("finding");
+    const match = id
+      ? list.data.items.find((i) => i.id === id)
+      : findingId
+        ? list.data.items.find((i) => i.linkedFindingId === findingId)
+        : undefined;
     if (match) setActive(match);
   }, [params, list.data]);
 
   const closeActive = () => {
     setActive(null);
-    if (params.get("item")) {
+    if (params.get("item") || params.get("intervention") || params.get("finding")) {
       params.delete("item");
+      params.delete("intervention");
+      params.delete("finding");
       setParams(params, { replace: true });
     }
   };
@@ -277,7 +285,7 @@ const InterventionDrawer = ({
 
   const sourceLink =
     item.linkedApprovalId ? "/management/approvals" :
-    item.linkedFindingId ? "/management/sentinel" :
+    item.linkedFindingId ? `/management/sentinel?finding=${encodeURIComponent(item.linkedFindingId)}` :
     item.linkedIncidentId ? `/management/incidents/${item.linkedIncidentId}` : null;
 
   return (

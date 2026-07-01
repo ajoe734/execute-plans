@@ -22,6 +22,7 @@ import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, ShieldCheck } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
+import { buildSentinelResolutionLinks } from "@/lib/v5/management/links";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
@@ -198,6 +199,7 @@ const FindingDrawer = ({
     .filter((a): a is RemediationAction => !!a);
 
   const targets = investigationTargets(finding);
+  const resolutionLinks = buildSentinelResolutionLinks(finding);
   const thinEvidence = finding.evidence.length === 0 || finding.evidence.every((e) => !e.snapshot);
 
   return (
@@ -245,6 +247,25 @@ const FindingDrawer = ({
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
               {t("v5.sentinel.severityRationaleDesc")}
             </p>
+          </Card>
+
+          <Card className="border-accent/30 bg-accent/5 p-4">
+            <div className="text-sm font-semibold text-foreground">{t("v5.sentinel.resolutionRoutes")}</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("v5.sentinel.resolutionRoutesDesc")}</p>
+            {resolutionLinks.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {resolutionLinks.map((link) => (
+                  <Button key={link.id} asChild size="sm" variant={link.kind === "decision" ? "default" : "outline"}>
+                    <Link to={link.href}>
+                      {t(link.labelKey, { defaultValue: link.label })}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">{t("v5.sentinel.noResolutionRoutes")}</p>
+            )}
           </Card>
 
           <Card className="p-4">

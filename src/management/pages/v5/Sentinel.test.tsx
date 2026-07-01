@@ -67,6 +67,7 @@ describe("SentinelPage", () => {
 
     expect(await screen.findByText("Investigation summary")).toBeInTheDocument();
     expect(screen.getByText("Severity rationale")).toBeInTheDocument();
+    expect(screen.getByText("Where to resolve this")).toBeInTheDocument();
     expect(screen.getByText("Evidence packet")).toBeInTheDocument();
     expect(screen.getByText("Recommended next steps")).toBeInTheDocument();
     expect(screen.getByText("Governance handling")).toBeInTheDocument();
@@ -75,6 +76,22 @@ describe("SentinelPage", () => {
     expect(screen.getByRole("link", { name: /persona:persona-tw-equity/i })).toHaveAttribute(
       "href",
       "/management/persona-fleet?persona=persona-tw-equity",
+    );
+    expect(screen.getByRole("link", { name: /Review intervention/i })).toHaveAttribute(
+      "href",
+      "/management/interventions?finding=inc-87c655c3e3c9",
+    );
+    expect(screen.getByRole("link", { name: /Open human inbox/i })).toHaveAttribute(
+      "href",
+      "/management/human-inbox?persona=persona-tw-equity",
+    );
+    expect(screen.getByRole("link", { name: /Inspect evidence/i })).toHaveAttribute(
+      "href",
+      "/management/evidence?ref_id=inc-87c655c3e3c9",
+    );
+    expect(screen.getByRole("link", { name: /Open incident/i })).toHaveAttribute(
+      "href",
+      "/management/incidents/inc-87c655c3e3c9",
     );
     expect(screen.getByText("Request human approval")).toBeInTheDocument();
     expect(screen.getByText("Reduce allocation")).toBeInTheDocument();

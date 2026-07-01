@@ -33,10 +33,10 @@ const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
-const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
-const ME_REQUEST_MAX_WAIT_MS = 45_000;
-const ME_REQUEST_TIMEOUT_MS = 8_000;
-const ME_TRANSIENT_STATUSES = new Set([0, 502, 503, 504]);
+const DEFAULT_SSE_OPEN_TIMEOUT_MS = 45_000;
+const ME_REQUEST_MAX_WAIT_MS = 120_000;
+const ME_REQUEST_TIMEOUT_MS = 15_000;
+const ME_TRANSIENT_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -207,10 +207,8 @@ async function requestMeWithTransientRetry(
   let attempt = 0;
   while (Date.now() < deadline) {
     try {
-      const timeout = Math.max(
-        1_000,
-        Math.min(ME_REQUEST_TIMEOUT_MS, deadline - Date.now()),
-      );
+      const remainingMs = Math.max(1_000, deadline - Date.now());
+      const timeout = Math.min(ME_REQUEST_TIMEOUT_MS, remainingMs);
       const response = await request.get(url, { headers, timeout });
       last = { status: response.status(), body: await response.text() };
       if (!ME_TRANSIENT_STATUSES.has(last.status)) return last;
@@ -218,9 +216,9 @@ async function requestMeWithTransientRetry(
       last = { status: 0, body: String(err) };
     }
     attempt += 1;
-    const delayMs = Math.min(5_000, 750 * attempt);
-    if (Date.now() + delayMs >= deadline) break;
-    await sleep(delayMs);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(5_000, 750 * attempt, remainingMs));
   }
   return last;
 }
