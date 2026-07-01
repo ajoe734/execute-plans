@@ -51,6 +51,7 @@ const GATE_OWNERS = {
   5: process.env.PANTHEON_E2E_OWNER || DEFAULT_OWNER,
   6: process.env.PANTHEON_A11Y_PERF_OWNER || "Codex2",
   7: DEFAULT_OWNER,
+  8: process.env.PANTHEON_MGMT_ACCEPT_OWNER || "Claude",
 };
 
 const gateTitles = {
@@ -62,6 +63,7 @@ const gateTitles = {
   5: "Playwright User Flows",
   6: "A11y / Perf",
   7: "Release Decision",
+  8: "Management Production Acceptance",
 };
 
 function truthy(value) {
@@ -508,6 +510,60 @@ function analyzeLiveDeep(stepOutcomes) {
     stepOutcome: step.outcome,
     stepEvidence: evidencePath(step.evidence),
   };
+}
+
+// MGMT-GAP-006: hosted management production-acceptance harness
+// (scripts/accept-management-hosted-production.mjs). Reads its own
+// self-contained JSON evidence, mirroring analyzeLiveDeep's pattern; it does
+// not require the CI step-outcomes file to already know its own gateChecks.
+function analyzeMgmtHostedAccept(stepOutcomes) {
+  const step = stepInfo(stepOutcomes, "mgmt_hosted_accept", ".lovable/audits/management-hosted-acceptance.log");
+  const jsonFile = latestAuditFile([/^management-hosted-acceptance-.*\.json$/]);
+  const mdFile = latestAuditFile([/^management-hosted-acceptance-.*\.md$/]);
+  const report = readJson(jsonFile);
+  return {
+    exists: Boolean(report),
+    file: jsonFile || mdFile || evidencePath(step.evidence),
+    result: report?.result || null,
+    gateChecks: Array.isArray(report?.gateChecks) ? report.gateChecks : [],
+    routeCounts: report?.routeCounts || null,
+    totals: report?.totals || null,
+    missingStatus: missingEvidenceStatus(step.status),
+    missingNote: missingProbeNote("management hosted production acceptance", step.outcome),
+    stepStatus: step.status,
+    stepOutcome: step.outcome,
+    stepEvidence: evidencePath(step.evidence),
+  };
+}
+
+function buildGate8(mgmtHostedAccept) {
+  if (!mgmtHostedAccept.exists) {
+    return [
+      makeCheck("Hosted management production-acceptance harness has run.", mgmtHostedAccept.missingStatus, {
+        owner: GATE_OWNERS[8],
+        evidence: mgmtHostedAccept.file,
+        note: mgmtHostedAccept.missingNote,
+      }),
+    ];
+  }
+  const evidence = mgmtHostedAccept.file;
+  const owner = (status) => (status === "pass" ? "" : GATE_OWNERS[8]);
+  if (!mgmtHostedAccept.gateChecks.length) {
+    return [
+      makeCheck("Hosted management production-acceptance harness reports its gate checks.", "fail", {
+        owner: GATE_OWNERS[8],
+        evidence,
+        note: "evidence JSON present but gateChecks[] is empty/malformed",
+      }),
+    ];
+  }
+  return mgmtHostedAccept.gateChecks.map((check) =>
+    makeCheck(`Hosted acceptance: ${check.label}`, check.status, {
+      owner: owner(check.status),
+      evidence,
+      note: check.note || "",
+    }),
+  );
 }
 
 function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
@@ -1079,6 +1135,7 @@ function main() {
   const liveDeep = analyzeLiveDeep(stepOutcomes);
   const hosted = analyzeHostedProbe(stepOutcomes);
   const playwright = analyzePlaywright();
+  const mgmtHostedAccept = analyzeMgmtHostedAccept(stepOutcomes);
 
   const gates = {
     0: buildGate0(hosted),
@@ -1088,6 +1145,7 @@ function main() {
     4: buildGate4(hosted),
     5: buildGate5(playwright),
     6: buildGate6(playwright),
+    8: buildGate8(mgmtHostedAccept),
   };
   gates[7] = buildGate7(gates);
 
