@@ -33,7 +33,7 @@ After route splitting, from `npm run build` on this branch:
 | `dist/assets/operations-6wVqV0Bj.js` | 84.59 kB | 17.44 kB |
 | `dist/assets/agora-D4lAAyjN.js` | 1,285.00 kB | 411.21 kB |
 
-Evidence route-specific async chunk gzip is `13.37 kB`, below the `150 kB` budget excluding shared vendor/cache chunks. The initial app entry gzip is `214.75 kB`, below the `800 kB` initial management JS budget.
+Evidence route-specific async chunk gzip is `13.37 kB`, below the `150 kB` budget excluding shared vendor/cache chunks. The initial app entry gzip is `269.76 kB`, below the `800 kB` initial management JS budget.
 
 Known build warnings observed before and after this change:
 
