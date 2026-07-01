@@ -170,6 +170,25 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
         credentialExchange: { bffHandlesCredentials: true },
       },
     }),
+    submitReauthCode: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      reauth: {
+        provider: "claude",
+        status: "code_submitted",
+        reauthSessionId: "claude_reauth_1",
+        verificationUri: null,
+        verificationUriComplete: null,
+        userCode: null,
+        expiresAt: null,
+        intervalSeconds: 5,
+        credentialExchange: {
+          bffHandlesCredentials: false,
+          requiresAuthorizationCode: true,
+          codeSubmitToBff: true,
+        },
+      },
+    }),
     registerProvider: vi.fn().mockResolvedValue({
       ok: true,
       kind: "ok",
@@ -402,6 +421,90 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(await screen.findByText("claude reauth pending")).toBeInTheDocument();
     expect(screen.getByText("code=WXYZ-1234")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open login/i })).toHaveAttribute("href", "https://console.anthropic.com/login");
+  });
+
+  it("submits Claude authorization code back to the provider reauth session", async () => {
+    const fakeApi = api({
+      fetchProviders: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "claude",
+            providerName: "Claude CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "claude_auth_probe_non_zero_exit",
+            reauthSupported: true,
+          },
+        ],
+        meta: { auth_probe: true },
+      } satisfies AssistantProvidersResult),
+      startReauth: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        reauth: {
+          provider: "claude",
+          status: "pending",
+          reauthSessionId: "claude_reauth_1",
+          verificationUri: null,
+          verificationUriComplete: "https://console.anthropic.com/oauth/authorize?client_id=abc&code=true",
+          userCode: "true",
+          expiresAt: null,
+          intervalSeconds: 5,
+          credentialExchange: {
+            bffHandlesCredentials: false,
+            requiresAuthorizationCode: true,
+            codeSubmitToBff: true,
+          },
+        },
+      }),
+      submitReauthCode: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        reauth: {
+          provider: "claude",
+          status: "code_submitted",
+          reauthSessionId: "claude_reauth_1",
+          verificationUri: null,
+          verificationUriComplete: null,
+          userCode: null,
+          expiresAt: null,
+          intervalSeconds: 5,
+          credentialExchange: {
+            bffHandlesCredentials: false,
+            requiresAuthorizationCode: true,
+            codeSubmitToBff: true,
+          },
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /start reauth/i }));
+
+    expect(await screen.findByText("claude reauth pending")).toBeInTheDocument();
+    expect(screen.queryByText("code=true")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Authorization code"), {
+      target: { value: "claude-oauth-code-123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /submit code/i }));
+
+    await waitFor(() => {
+      expect(fakeApi.submitReauthCode).toHaveBeenCalledWith({
+        provider: "claude",
+        sessionId: "claude_reauth_1",
+        code: "claude-oauth-code-123",
+      });
+    });
+    expect(await screen.findByText("claude reauth code_submitted")).toBeInTheDocument();
   });
 
   it("keeps provider reauth state inside the provider card that started it", async () => {

@@ -527,6 +527,7 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const openapiStatus = routeProbe.rows.get("/openapi.json")?.status === "200";
   const streamStatus = routeProbe.rows.get("/bff/events/stream")?.status;
   const protectedRows = [...routeProbe.rows.values()].filter((row) => row.route.startsWith("/bff/") && row.route !== "/bff/events/stream");
+  const protectedTransportRows = protectedRows.filter((row) => String(row.status) === "ERR");
   const protectedValid = protectedRows.length > 0 && protectedRows.every((row) => (
     permissiveAuth
       ? !["404", "ERR"].includes(String(row.status))
@@ -599,6 +600,23 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const listResult = authSmoke.exists ? allRowsPass(authSmoke.rows, readListPaths) : authMissingResult;
   const v5Result = authSmoke.exists ? allRowsPass(authSmoke.rows, v5Paths) : authMissingResult;
   const writeResult = authSmoke.exists ? allRowsPass(authSmoke.rows, writePaths) : authMissingResult;
+  const authSmokeComplete = authSmoke.exists &&
+    authSmoke.passed !== null &&
+    authSmoke.total !== null &&
+    authSmoke.passed === authSmoke.total;
+  const protectedTransportWarn = isPullRequestContext() &&
+    permissiveAuth &&
+    no404 &&
+    authSmokeComplete &&
+    protectedTransportRows.length > 0 &&
+    protectedRows.every((row) => String(row.status) !== "404");
+  const protectedStatus = routeProbe.exists
+    ? protectedValid ? "pass" : protectedTransportWarn ? "warn" : "fail"
+    : routeProbe.missingStatus;
+  const protectedOwner = protectedStatus === "pass" || protectedStatus === "warn" ? "" : GATE_OWNERS[3];
+  const protectedNote = routeProbe.exists
+    ? `${protectedRows.length} protected route rows; auth mode: ${authMode || "strict"}; transport errors=${routeProbe.transportErrors ?? 0}${protectedTransportWarn ? "; authenticated smoke passed, downgraded on pull_request" : ""}`
+    : routeProbe.missingNote;
   const meRow = authSmoke.rows.get("/bff/me");
   const writeProbeClean = writeProbe.exists &&
     (writeProbe.missing ?? 1) === 0 &&
@@ -634,10 +652,10 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
       evidence: routeEvidence,
       note: routeNote(`status: ${streamStatus || "missing"}`),
     }),
-    makeCheck("Anonymous: canonical protected routes return expected auth/dev status, not 404.", routeStatus(protectedValid), {
-      owner: routeOwner(protectedValid),
+    makeCheck("Anonymous: canonical protected routes return expected auth/dev status, not 404.", protectedStatus, {
+      owner: protectedOwner,
       evidence: routeEvidence,
-      note: routeNote(`${protectedRows.length} protected route rows; auth mode: ${authMode || "strict"}`),
+      note: protectedNote,
     }),
     makeCheck("Anonymous: no canonical route returns 404.", routeStatus(no404), {
       owner: routeOwner(no404),

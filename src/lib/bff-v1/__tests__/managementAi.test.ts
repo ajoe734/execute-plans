@@ -13,6 +13,7 @@ import {
   prepareAssistantRepairWorktree,
   registerAssistantProvider,
   startAssistantProviderReauth,
+  submitAssistantProviderReauthCode,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -462,6 +463,42 @@ describe("Management AI provider reauth", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/provider/reauth/reauth_123?provider=codex");
     expect(result.reauth.status).toBe("authorized");
     expect(result.reauth.verificationUriComplete).toContain("user_code=ABCD-EFGH");
+  });
+
+  it("submits Claude provider reauth authorization code through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "claude",
+        status: "code_submitted",
+        reauth_session_id: "claude_reauth_123",
+        code_submitted_at: "2026-07-01T00:00:00Z",
+      },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await submitAssistantProviderReauthCode({
+      provider: "claude",
+      sessionId: "claude_reauth_123",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/provider/reauth/claude_reauth_123/code?provider=claude",
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "claude",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+    expect(result.reauth.status).toBe("code_submitted");
+    expect(result.reauth.reauthSessionId).toBe("claude_reauth_123");
   });
 
   it("surfaces provider reauth failures", async () => {

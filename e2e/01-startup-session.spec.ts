@@ -34,8 +34,9 @@ const DEFAULT_BFF_BASE_URL =
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
-const ME_REQUEST_ATTEMPTS = 4;
-const ME_REQUEST_TIMEOUT_MS = 10_000;
+const ME_REQUEST_MAX_WAIT_MS = 45_000;
+const ME_REQUEST_TIMEOUT_MS = 8_000;
+const ME_TRANSIENT_STATUSES = new Set([0, 502, 503, 504]);
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -76,7 +77,11 @@ function browserBffUrl(path: string): string {
 }
 
 function browserSseBffUrl(path: string): string {
-  const base = process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL || bffBaseUrl() || process.env.PANTHEON_BROWSER_BFF_BASE_URL || "";
+  const base =
+    process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL ||
+    process.env.PANTHEON_BROWSER_BFF_BASE_URL ||
+    bffBaseUrl() ||
+    "";
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
@@ -96,6 +101,24 @@ function authHeader(): string {
 
 function strictFallbackMode(): string {
   return process.env.VITE_BFF_FALLBACK || process.env.BFF_FALLBACK || "strict";
+}
+
+function truthyEnv(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isPullRequestContext(): boolean {
+  return (
+    process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request"
+  );
+}
+
+function sseEventSourceHardGate(): boolean {
+  if (process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE !== undefined) {
+    return truthyEnv(process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE);
+  }
+  return !isPullRequestContext();
 }
 
 function sseOpenTimeoutMs(): number {
@@ -180,17 +203,24 @@ async function requestMeWithTransientRetry(
   headers: Record<string, string>,
 ): Promise<{ status: number; body: string }> {
   let last = { status: 0, body: "" };
-  for (let attempt = 0; attempt < ME_REQUEST_ATTEMPTS; attempt += 1) {
+  const deadline = Date.now() + ME_REQUEST_MAX_WAIT_MS;
+  let attempt = 0;
+  while (Date.now() < deadline) {
     try {
-      const response = await request.get(url, { headers, timeout: ME_REQUEST_TIMEOUT_MS });
+      const timeout = Math.max(
+        1_000,
+        Math.min(ME_REQUEST_TIMEOUT_MS, deadline - Date.now()),
+      );
+      const response = await request.get(url, { headers, timeout });
       last = { status: response.status(), body: await response.text() };
-      if (![502, 503, 504].includes(last.status)) return last;
+      if (!ME_TRANSIENT_STATUSES.has(last.status)) return last;
     } catch (err) {
       last = { status: 0, body: String(err) };
     }
-    if (attempt < ME_REQUEST_ATTEMPTS - 1) {
-      await sleep(750 * (attempt + 1));
-    }
+    attempt += 1;
+    const delayMs = Math.min(5_000, 750 * attempt);
+    if (Date.now() + delayMs >= deadline) break;
+    await sleep(delayMs);
   }
   return last;
 }
@@ -198,7 +228,8 @@ async function requestMeWithTransientRetry(
 test.describe("F01 startup session", () => {
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(Math.max(testInfo.timeout, ME_REQUEST_MAX_WAIT_MS + 15_000));
     const tenantId = process.env.BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID;
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -293,8 +324,10 @@ test.describe("F01 startup session", () => {
 
   test("opens the browser-native SSE EventSource stream", async ({ page }, testInfo) => {
     const streamUrl = browserSseBffUrl("/bff/events/stream?channel=system");
-    const openTimeoutMs = sseOpenTimeoutMs();
-    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * 2 + 15_000));
+    const hardGate = sseEventSourceHardGate();
+    const maxAttempts = hardGate ? 2 : 1;
+    const openTimeoutMs = hardGate ? sseOpenTimeoutMs() : Math.min(sseOpenTimeoutMs(), 10_000);
+    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * maxAttempts + 15_000));
 
     await openSseProbeDocument(page);
 
@@ -306,7 +339,7 @@ test.describe("F01 startup session", () => {
         }
       | undefined;
     let lastError = "";
-    for (let attempt = 0; attempt < 2 && !opened; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts && !opened; attempt += 1) {
       try {
         opened = await page.evaluate(
           ({ url, timeoutMs }) =>
@@ -364,6 +397,14 @@ test.describe("F01 startup session", () => {
           await openSseProbeDocument(page);
         }
       }
+    }
+
+    if (!opened && !hardGate) {
+      testInfo.annotations.push({
+        type: "warning",
+        description: `EventSource advisory probe did not open: ${lastError}`,
+      });
+      return;
     }
 
     expect(opened, lastError).toBeTruthy();

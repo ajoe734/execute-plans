@@ -456,6 +456,13 @@ export interface AssistantProviderReauthInput {
   traceId?: string;
 }
 
+export interface AssistantProviderReauthCodeInput {
+  provider?: string;
+  sessionId: string;
+  code: string;
+  traceId?: string;
+}
+
 export type AssistantProviderReauthResult =
   | { ok: true; kind: "ok"; reauth: AssistantProviderReauthSession }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
@@ -1845,6 +1852,84 @@ export async function fetchAssistantProviderReauthStatus(
       kind: "failure",
       statusCode: res.status,
       message: "BFF returned no provider reauth session status.",
+    };
+  }
+  return { ok: true, kind: "ok", reauth };
+}
+
+export async function submitAssistantProviderReauthCode(
+  input: AssistantProviderReauthCodeInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantProviderReauthResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const provider = input.provider ?? "claude";
+  const route = paths.assistantProviderReauthCode(input.sessionId, provider);
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    provider,
+    code: input.code,
+    traceId: input.traceId,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${route}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: bffRouteFailureMessage(parsed, res, route),
+    };
+  }
+
+  const data = asRecord(parsed?.data) ?? {};
+  const reauth = adaptProviderReauthSession({
+    ...data,
+    reauthSessionId: data.reauthSessionId ?? data.reauth_session_id ?? input.sessionId,
+    provider: data.provider ?? provider,
+  });
+  if (!reauth) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no provider reauth code submission status.",
     };
   }
   return { ok: true, kind: "ok", reauth };
