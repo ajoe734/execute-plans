@@ -205,11 +205,6 @@ function normalizedFleetState(r: ManagementPersonaFleetRow): string {
   return String(r.state ?? "").trim().toLowerCase();
 }
 
-function hasDeployableArtifact(r: ManagementPersonaFleetRow): boolean {
-  const item = personaFleetResearchItems(r)[0];
-  return Boolean(item?.artifactId && item.canDeploy !== false);
-}
-
 function personaFleetPrimaryAction(
   r: ManagementPersonaFleetRow,
   links: { personaHref: string; researchHref: string | null },
@@ -242,14 +237,6 @@ function personaFleetPrimaryAction(
       ariaLabelKey: isDraft
         ? "mgmt.fleet.primaryAction.startOnboardingAriaFmt"
         : "mgmt.fleet.primaryAction.continueOnboardingAriaFmt",
-    };
-  }
-
-  if (hasDeployableArtifact(r)) {
-    return {
-      href: personaFleetOnboardingHref(r),
-      labelKey: "mgmt.fleet.primaryAction.continueOnboarding",
-      ariaLabelKey: "mgmt.fleet.primaryAction.continueOnboardingAriaFmt",
     };
   }
 
