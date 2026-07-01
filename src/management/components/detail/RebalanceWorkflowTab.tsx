@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { WorkflowStep } from "@/lib/bff/types";
@@ -19,8 +19,9 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
   const [steps, setSteps] = useState<StepX[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const refresh = () =>
-    bff.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[]));
+  const refresh = useCallback(() =>
+    bff.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[])),
+  [rebalanceId]);
 
   useEffect(() => {
     refresh();
@@ -29,7 +30,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
       if (event?.kind === "RebalanceStep" || event?.kind === "Job") refresh();
     });
     return () => { off(); };
-  }, [rebalanceId]);
+  }, [refresh]);
 
   const current = steps.findIndex((s) => s.status === "in_progress");
   const cur = current >= 0 ? steps[current] : undefined;
