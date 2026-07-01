@@ -5,12 +5,11 @@ import { managementConsoleReads, type KnowledgeInsightRecord } from "@/lib/bff-v
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { useT } from "@/platform/hooks";
-import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const KnowledgeInboxPage = () => {
   const t = useT();
@@ -25,17 +24,6 @@ export const KnowledgeInboxPage = () => {
     setItems(live);
     setActive((prev) => prev && live.some((item) => item.id === prev.id) ? prev : live[0] ?? null);
   }, [live]);
-
-  const dismiss = (id: string) => {
-    setItems((xs) => xs.filter((x) => x.id !== id));
-    setActive(null);
-    toast.success(t("knowledge.dismissed"));
-  };
-  const promote = (target: string) => {
-    if (!active) return;
-    toast.success(t("knowledge.promotedTo", { target }));
-    dismiss(active.id);
-  };
 
   return (
     <>
@@ -68,10 +56,10 @@ export const KnowledgeInboxPage = () => {
                 <p className="text-sm text-muted-foreground leading-relaxed">{active.body}</p>
                 <div className="text-xs text-muted-foreground text-mono">{active.source} · {safeDateTime(active.ts)}</div>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                  <Button size="sm" onClick={() => promote("Artifact")}>{t("knowledge.promoteArtifact")}</Button>
-                  <Button size="sm" variant="outline" onClick={() => promote("Postmortem")}>{t("knowledge.promotePostmortem")}</Button>
-                  <Button size="sm" variant="outline" onClick={() => promote("Research Task")}>{t("knowledge.promoteResearch")}</Button>
-                  <Button size="sm" variant="ghost" onClick={() => dismiss(active.id)}>{t("knowledge.dismiss")}</Button>
+                  <NonProductionActionButton size="sm">{t("knowledge.promoteArtifact")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline">{t("knowledge.promotePostmortem")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline">{t("knowledge.promoteResearch")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="ghost">{t("knowledge.dismiss")}</NonProductionActionButton>
                 </div>
               </>
             ) : (

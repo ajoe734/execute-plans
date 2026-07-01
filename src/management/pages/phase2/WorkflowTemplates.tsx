@@ -7,11 +7,10 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/platform/components/DataTable";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/platform/hooks";
-import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const catTone = (c: WorkflowTemplateRecord["category"]) =>
   c === "rebalance" ? "bg-accent/15 text-accent" :
@@ -30,7 +29,7 @@ export const WorkflowTemplatesPage = () => {
   return (
     <>
       <PageHeader title={t("nav.workflowTemplates")} subtitle={t("workflows.subtitle")} actions={
-        <Button size="sm">{t("workflows.create")}</Button>
+        <NonProductionActionButton size="sm">{t("workflows.create")}</NonProductionActionButton>
       }/>
       <PageBody>
         <Card>
@@ -71,8 +70,8 @@ export const WorkflowTemplatesPage = () => {
                   <div className="flex flex-wrap gap-2">{active.inputs.map((i) => <code key={i} className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{i}</code>)}</div>
                 </Card>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => toast.success(t("workflows.queued", { id: active.id }))}>{t("workflows.run")}</Button>
-                  <Button size="sm" variant="outline">{t("workflows.edit")}</Button>
+                  <NonProductionActionButton size="sm">{t("workflows.run")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline">{t("workflows.edit")}</NonProductionActionButton>
                 </div>
               </div>
             </>
