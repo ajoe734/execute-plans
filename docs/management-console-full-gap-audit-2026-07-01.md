@@ -15,6 +15,7 @@
 - Browser walk artifact was generated at `/tmp/pantheon-management-mock-route-audit.json` during this audit pass.
 - Hosted FE deployment rechecked: `/deployment.json` returns 200 and currently reports dev commit `5e1bb75d3906d744bb9943814b269d12f4087e5b`, `VITE_BFF_MODE=live`, `VITE_BFF_FALLBACK=strict`; this is not the current MGMT-GAP-002 PR head `ec73da1fa4ad6d2cfe51d8da84eabe408d2d4ff1`.
 - Hosted BFF rechecked during this pass: `/healthz` and the browser-style `OPTIONS /bff/management/data-sources` both timed out after 8 seconds. Earlier CORS 400 was fixed in root PR #2653, but current hosted proof is now blocked by BFF availability/timeouts, not by the old allow-header diff.
+- Post-merge update: execute-plans PR #124 merged at `0f92b069a2523eaac8224629054dfd99db878538`; latest dev head `619b74e92472d497d0d6528b1d7102ad7e77fccd` includes that merge. The latest Dev FE Deploy and FE-BFF Integration Gate for `619b74e92472d497d0d6528b1d7102ad7e77fccd` both passed, and `/deployment.json` reports that deployed commit.
 - Local FE validation for MGMT-GAP-002 remains:
   - `npm run test` passed, 99 files / 1007 tests.
   - `npm run build` passed with existing warnings.
@@ -129,7 +130,7 @@ Do not delete these just because their layouts rhyme: human-inbox, sentinel, int
 - MGMT-GAP-002 - Canonical management reads and browser proof.
   - FE canonical read wiring is implemented for data-sources, permissions, memory, consult, lineage, workflows, hooks, and knowledge.
   - Root BFF CORS header fix merged in pantheon PR #2653.
-  - Not complete: execute-plans PR #124 still has a failed integration gate, and current hosted BFF health/preflight rechecks time out.
+  - Complete for this gap: execute-plans PR #124 merged, latest dev deployment includes it, and the latest dev FE-BFF Integration Gate passed.
 
 - MGMT-GAP-003 - BFF canonical read endpoints.
   - Mostly done at contract level.
@@ -142,7 +143,8 @@ Do not delete these just because their layouts rhyme: human-inbox, sentinel, int
   - Pending for ranking, alpha-factory, readiness, performance drilldowns, lineage drilldowns, data-source diagnostics, and LLM provider auth.
 
 - MGMT-GAP-006 - Deployment and hosted browser gate.
-  - Pending. Must prove FE deployed commit, BFF `/healthz`, BFF preflight, browser console without CORS failures, and no seed fallback text in strict-live mode.
+  - Complete for MGMT-GAP-002 scope on latest dev: deployed FE commit recorded, hosted browser BFF probe passed, CORS/preflight passed, and strict-live browser probe reported no failed BFF requests.
+  - Still required for later MGMT-GAP-004/005 changes.
 
 - MGMT-GAP-007 - Final 70-route production audit.
   - Pending. Acceptance should replay this audit shape against hosted strict-live FE after MGMT-GAP-002/004/005/006 are merged and deployed.
@@ -156,11 +158,12 @@ Do not delete these just because their layouts rhyme: human-inbox, sentinel, int
 
 ## Current Production-Level Status
 
-Not production-complete yet.
+MGMT-GAP-002 is production-proofed on dev, but the overall Management Console is not production-complete yet.
 
 - Local FE route audit is strong: 70/70 management entry routes render.
 - Local tests/build/lint/e2e for MGMT-GAP-002 pass.
 - Root BFF CORS fix is merged.
-- Hosted BFF currently times out, and execute-plans PR #124 is still open with a failed integration gate.
+- execute-plans PR #124 is merged.
+- Latest dev deploy and latest dev FE-BFF Integration Gate are green at `619b74e92472d497d0d6528b1d7102ad7e77fccd`, which contains PR #124.
 
-The next hard gate is to stabilize hosted BFF, rerun PR #124 integration-gate, merge #124, wait for FE dev deployment, then replay the 70-route strict-live audit.
+The next hard gates are MGMT-GAP-004 durable writes, MGMT-GAP-005 domain depth, and MGMT-GAP-007 final 70-route strict-live audit after those deeper changes land.
