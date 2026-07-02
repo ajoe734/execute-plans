@@ -248,6 +248,8 @@ jobs:
         continue-on-error: true
         env:
           PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+          PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
+          PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "6000"
         run: |
           set -o pipefail
           npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"

@@ -153,6 +153,20 @@ function isBffUrl(url) {
   }
 }
 
+async function gotoRouteWithRetry(page, targetUrl) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS });
+      return null;
+    } catch (err) {
+      lastError = err;
+      await page.waitForTimeout(750).catch(() => {});
+    }
+  }
+  return lastError;
+}
+
 async function crawlRoute(page, route, { source }) {
   const requests = [];
   const responses = [];
@@ -188,7 +202,8 @@ async function crawlRoute(page, route, { source }) {
   let bodyText = "";
 
   try {
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS });
+    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl);
+    if (navErrorMaybe) throw navErrorMaybe;
     await page
       .waitForFunction(() => (document.body?.innerText || "").trim().length > 15, undefined, { timeout: SETTLE_TIMEOUT_MS })
       .catch(() => {});
