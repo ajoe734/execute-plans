@@ -823,6 +823,70 @@ describe("mgmt façade (PM-Live)", () => {
     expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
   });
 
+  it("adapts live persona fleet summary fields instead of dropping them to nan", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        items: [{
+          id: "persona-crypto",
+          persona_id: "persona-crypto",
+          name: "Crypto Persona",
+          owner: "pantheon-dev-browser",
+          ooda: "Act",
+          autonomy: "supervised",
+          perf_delta: 0.182,
+          human_needed: true,
+          last_mutation: "2026-06-07",
+          state: "paper_running",
+          current_work: "paper broker sandbox readback and funding-rate stress review",
+          runtime_id: "runtime-crypto-paper",
+          data_source_summary: {
+            state: "datasource_smoke_ok",
+            provider_count: 2,
+            provider_status_counts: {
+              datasource_smoke_ok: 1,
+              read_unavailable: 1,
+            },
+            degraded_provider_count: 1,
+            configured_source_count: 2,
+            live_ingestion_enabled: false,
+          },
+          research_summary: {
+            stage: "act",
+            framework: "vectorbt",
+            framework_count: 3,
+            artifact_id: "artifact-crypto-trend-carry-v1",
+            registry_admission_status: "not_requested",
+            can_deploy: false,
+            current_project_count: 1,
+          },
+        }],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0].dataSourceStatus).toMatchObject({
+      state: "datasource_smoke_ok",
+      providerStatusCounts: {
+        datasource_smoke_ok: 1,
+        read_unavailable: 1,
+      },
+      providerCount: 2,
+      configuredSourceCount: 2,
+      degradedProviderCount: 1,
+      liveIngestionEnabled: false,
+    });
+    expect(rows?.[0].researchStatus).toMatchObject({
+      stage: "act",
+      framework: "vectorbt",
+      frameworks: ["vectorbt"],
+      frameworkCount: 3,
+      artifactId: "artifact-crypto-trend-carry-v1",
+      registryAdmissionStatus: "not_requested",
+      canDeploy: false,
+      currentProjectCount: 1,
+    });
+  });
+
   it("management paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
     expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);

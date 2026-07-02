@@ -61,6 +61,11 @@ export interface ManagementDataSourceStatus {
   state: string;
   summary?: string;
   providerStatuses: Record<string, string>;
+  providerStatusCounts?: Record<string, number>;
+  providerCount?: number;
+  requiredSourceCount?: number;
+  configuredSourceCount?: number;
+  degradedProviderCount?: number;
   readbackRefs: string[];
   unavailableRefs: string[];
   researchDatasetRef?: string;
@@ -92,6 +97,7 @@ export interface ManagementResearchStatus {
   stage: string;
   framework?: string;
   frameworks: string[];
+  frameworkCount?: number;
   experimentId?: string;
   strategyId?: string;
   strategySpecId?: string;
@@ -103,6 +109,8 @@ export interface ManagementResearchStatus {
   pendingTaskIds: string[];
   canDeploy: boolean;
   summary?: string;
+  currentProjectCount?: number;
+  evidenceRefCount?: number;
 }
 
 export interface ManagementResearchProject {
@@ -1639,10 +1647,22 @@ const normalizeAutonomy = (value: unknown): ManagementAutonomyMode => {
 
 function adaptDataSourceStatus(value: unknown): ManagementDataSourceStatus | undefined {
   if (!isObject(value)) return undefined;
+  const providerStatusCounts = asCountRecord(value.providerStatusCounts ?? value.provider_status_counts);
+  const countedProviders = Object.values(providerStatusCounts).reduce((total, count) => total + count, 0);
+  const providerStatuses = asStringRecord(value.providerStatuses ?? value.provider_statuses);
+  const providerCount = asFiniteNumber(
+    value.providerCount ?? value.provider_count,
+    countedProviders || Object.keys(providerStatuses).length,
+  );
   return {
     state: asString(value.state, "not_declared"),
     summary: asString(value.summary),
-    providerStatuses: asStringRecord(value.providerStatuses ?? value.provider_statuses),
+    providerStatuses,
+    providerStatusCounts,
+    providerCount,
+    requiredSourceCount: asFiniteNumber(value.requiredSourceCount ?? value.required_source_count, 0),
+    configuredSourceCount: asFiniteNumber(value.configuredSourceCount ?? value.configured_source_count, providerCount),
+    degradedProviderCount: asFiniteNumber(value.degradedProviderCount ?? value.degraded_provider_count, 0),
     readbackRefs: asStringArray(value.readbackRefs ?? value.readback_refs),
     unavailableRefs: asStringArray(value.unavailableRefs ?? value.unavailable_refs),
     researchDatasetRef: asString(value.researchDatasetRef ?? value.research_dataset_ref),
@@ -1681,10 +1701,12 @@ function adaptResearchStatus(value: unknown): ManagementResearchStatus | undefin
   if (!isObject(value)) return undefined;
   const framework = asString(value.framework);
   const frameworks = asStringArray(value.frameworks);
+  const frameworkCount = asFiniteNumber(value.frameworkCount ?? value.framework_count, frameworks.length || (framework ? 1 : 0));
   return {
     stage: asString(value.stage, "observe"),
     framework,
     frameworks: frameworks.length > 0 ? frameworks : framework ? [framework] : [],
+    frameworkCount,
     experimentId: asString(value.experimentId ?? value.experiment_id),
     strategyId: asString(value.strategyId ?? value.strategy_id),
     strategySpecId: asString(value.strategySpecId ?? value.strategy_spec_id),
@@ -1696,6 +1718,8 @@ function adaptResearchStatus(value: unknown): ManagementResearchStatus | undefin
     pendingTaskIds: asStringArray(value.pendingTaskIds ?? value.pending_task_ids),
     canDeploy: asBoolean(value.canDeploy ?? value.can_deploy, false),
     summary: asString(value.summary),
+    currentProjectCount: asFiniteNumber(value.currentProjectCount ?? value.current_project_count, 0),
+    evidenceRefCount: asFiniteNumber(value.evidenceRefCount ?? value.evidence_ref_count, 0),
   };
 }
 
@@ -1765,9 +1789,19 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     tags: asStringArray(value.tags),
     marketScope: asStringArray(value.marketScope ?? value.market_scope),
     currentWork: asString(value.currentWork ?? value.current_work),
-    dataSourceStatus: adaptDataSourceStatus(value.dataSourceStatus ?? value.data_source_status),
+    dataSourceStatus: adaptDataSourceStatus(
+      value.dataSourceStatus
+      ?? value.data_source_status
+      ?? value.dataSourceSummary
+      ?? value.data_source_summary,
+    ),
     dataSources,
-    researchStatus: adaptResearchStatus(value.researchStatus ?? value.research_status),
+    researchStatus: adaptResearchStatus(
+      value.researchStatus
+      ?? value.research_status
+      ?? value.researchSummary
+      ?? value.research_summary,
+    ),
     currentResearchProjects,
     runtimeId: asOptionalString(value.runtimeId ?? value.runtime_id),
     runtimeBindingId: asOptionalString(value.runtimeBindingId ?? value.runtime_binding_id ?? value.bindingId ?? value.binding_id),
