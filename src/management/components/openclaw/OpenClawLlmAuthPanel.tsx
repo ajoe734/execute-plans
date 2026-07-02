@@ -280,7 +280,9 @@ function canSubmitReauthAuthorizationCode(
   if (!result.ok) return false;
   const normalized = reauthStateKeyForValue(result.reauth.provider ?? providerValue);
   if (normalized !== "claude") return false;
-  if (isTerminalReauthStatus(result.reauth.status)) return false;
+  if (result.reauth.codeSubmittedAt) return false;
+  const status = String(result.reauth.status ?? "").trim().toLowerCase();
+  if (["completed", "expired", "timeout", "cancelled", "canceled"].includes(status)) return false;
   return Boolean(reauthHref(result)) || credentialFlag(
     result,
     "requiresAuthorizationCode",
@@ -995,6 +997,7 @@ function ProviderReauthPanel({
   const userCode = reauthUserCode(result);
   const canSubmitCode = canSubmitReauthAuthorizationCode(result, reauthProvider);
   const authCodeInputId = `reauth-code-${providerKey}`;
+  const codeSubmittedAt = result.reauth.codeSubmittedAt;
 
   return (
     <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs" aria-live="polite">
@@ -1015,6 +1018,11 @@ function ProviderReauthPanel({
         <span className="rounded-md border border-border bg-background px-2 py-1 font-mono">
           session={result.reauth.reauthSessionId}
         </span>
+        {codeSubmittedAt && (
+          <span className="rounded-md border border-border bg-background px-2 py-1">
+            code submitted={codeSubmittedAt}
+          </span>
+        )}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {href && (
@@ -1080,6 +1088,11 @@ function ProviderReauthPanel({
           )}
         </form>
       )}
+      {result.reauth.message && (
+        <div className="mt-3 rounded-md border border-border bg-background px-2 py-1.5 text-muted-foreground">
+          {result.reauth.message}
+        </div>
+      )}
     </div>
   );
 }
@@ -1135,6 +1148,7 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
   }
 
   const providers = summary.providers.filter((provider) => !isOpenClawProviderValue(provider.provider ?? provider.providerName));
+  const staleCount = providers.filter((provider) => recordFrom(provider.observedUsage).stale === true).length;
   const totals = providers.reduce(
     (acc, provider) => ({
       liveAuthCount: acc.liveAuthCount + (provider.liveAuth ? 1 : 0),
@@ -1147,11 +1161,16 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
   return (
     <section className="mt-5 border-t border-border pt-4" aria-label="Provider usage history">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">Usage history</h3>
+        <h3 className="text-sm font-semibold text-foreground">Observed usage history</h3>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{formatNumber(totals.liveAuthCount)} live auth</Badge>
           <Badge variant="outline">{formatNumber(totals.calls)} calls</Badge>
           <Badge variant="outline">{formatNumber(totals.totalTokens)} tokens</Badge>
+          {staleCount > 0 && (
+            <Badge variant="outline" className="border-status-warning/30 bg-status-warning/10 text-status-warning">
+              {formatNumber(staleCount)} stale
+            </Badge>
+          )}
         </div>
       </header>
 
@@ -1169,7 +1188,11 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
 
 function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummaryRow }) {
   const quota = recordFrom(provider.quota);
+  const observed = recordFrom(provider.observedUsage);
   const models = provider.models ?? [];
+  const observedSource = usageValue(observed, "coverageLabel", "coverage_label", "source") || "BFF observed";
+  const observedAt = usageValue(observed, "lastObservedAt", "last_observed_at") || provider.lastUsedAt || "unknown";
+  const observedStale = observed.stale === true || observed.stale === "true";
   return (
     <article className="p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1178,6 +1201,12 @@ function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummary
             <span className="font-mono text-sm text-foreground">{provider.provider ?? "unknown"}</span>
             <Badge variant="outline" className={statusTone(provider.authStatus ?? provider.status ?? "unknown", provider.liveAuth)}>
               {provider.liveAuth ? "live auth" : provider.authStatus ?? provider.status ?? "unknown"}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={observedStale ? "border-status-warning/30 bg-status-warning/10 text-status-warning" : ""}
+            >
+              {observedStale ? "stale" : observedSource}
             </Badge>
           </div>
           <div className="mt-1 text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</div>
@@ -1190,6 +1219,8 @@ function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummary
         </dl>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+        <Info label="usage source" value={observedSource} />
+        <Info label="observed at" value={observedAt} />
         <Info label="quota source" value={usageValue(quota, "source") || "unknown"} />
         <Info label="remaining" value={usageRemaining(quota)} />
         <Info label="quota used" value={formatMetric(usageValue(quota, "used"), usageValue(quota, "unit"))} />

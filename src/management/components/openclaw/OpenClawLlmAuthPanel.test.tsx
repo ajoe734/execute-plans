@@ -105,7 +105,10 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
             unit: "requests",
           },
           observedUsage: {
-            source: "management_ai_audit",
+            source: "management_ai_bff_audit",
+            coverage: "bff_observed_management_ai_only",
+            coverageLabel: "BFF observed",
+            stale: false,
             calls: 7,
             totalTokens: 140,
           },
@@ -507,6 +510,121 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(await screen.findByText("claude reauth code_submitted")).toBeInTheDocument();
   });
 
+  it("keeps the Claude authorization code field visible for a failed pre-submit session", async () => {
+    const fakeApi = api({
+      fetchProviders: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "claude",
+            providerName: "Claude CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "claude_auth_probe_non_zero_exit",
+            reauthSupported: true,
+          },
+        ],
+        meta: { auth_probe: true },
+      } satisfies AssistantProvidersResult),
+      startReauth: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        reauth: {
+          provider: "claude",
+          status: "failed",
+          reauthSessionId: "claude_reauth_failed_before_code",
+          verificationUri: null,
+          verificationUriComplete: "https://console.anthropic.com/oauth/authorize?client_id=abc&code=true",
+          userCode: "true",
+          expiresAt: null,
+          intervalSeconds: 5,
+          credentialExchange: {
+            bffHandlesCredentials: false,
+            requiresAuthorizationCode: true,
+            codeSubmitToBff: true,
+          },
+          errorCode: "CLAUDE_REAUTH_LOGIN_INTERRUPTED",
+          message: "Claude login needs an authorization code.",
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /start reauth/i }));
+
+    expect(await screen.findByText("claude reauth failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Authorization code")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open login/i })).toHaveAttribute(
+      "href",
+      "https://console.anthropic.com/oauth/authorize?client_id=abc&code=true",
+    );
+  });
+
+  it("shows submitted Claude auth code state without another code input", async () => {
+    const fakeApi = api({
+      fetchProviders: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        status: "ok",
+        providers: [
+          {
+            provider: "claude",
+            providerName: "Claude CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: false,
+            status: "degraded",
+            authStatus: "failed",
+            degradedReason: "claude_auth_probe_non_zero_exit",
+            reauthSupported: true,
+          },
+        ],
+        meta: { auth_probe: true },
+      } satisfies AssistantProvidersResult),
+      startReauth: vi.fn().mockResolvedValue({
+        ok: true,
+        kind: "ok",
+        reauth: {
+          provider: "claude",
+          status: "completed",
+          reauthSessionId: "claude_reauth_completed_with_warning",
+          verificationUri: null,
+          verificationUriComplete: null,
+          userCode: null,
+          expiresAt: null,
+          intervalSeconds: 5,
+          credentialExchange: {
+            bffHandlesCredentials: false,
+            requiresAuthorizationCode: true,
+            codeSubmitToBff: true,
+          },
+          codeSubmittedAt: "2026-07-02T01:33:58Z",
+          warningCode: "CLAUDE_REAUTH_READY_PROBE_DEGRADED",
+          message: "Claude auth login accepted the authorization code; readiness probe is still degraded.",
+        },
+      }),
+    });
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel mode="full" api={fakeApi} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /start reauth/i }));
+
+    expect(await screen.findByText("claude reauth completed")).toBeInTheDocument();
+    expect(screen.getByText("code submitted=2026-07-02T01:33:58Z")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Authorization code")).not.toBeInTheDocument();
+    expect(screen.getByText("Claude auth login accepted the authorization code; readiness probe is still degraded.")).toBeInTheDocument();
+  });
+
   it("keeps provider reauth state inside the provider card that started it", async () => {
     const fakeApi = api({
       fetchProviders: vi.fn().mockResolvedValue({
@@ -655,10 +773,11 @@ describe("OpenClawLlmAuthPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(await screen.findByText("Observed usage history")).toBeInTheDocument();
     expect(screen.getByText("1 live auth")).toBeInTheDocument();
     expect(screen.getByText("7 calls")).toBeInTheDocument();
     expect(screen.getByText("140 tokens")).toBeInTheDocument();
+    expect(screen.getAllByText("BFF observed").length).toBeGreaterThan(0);
     expect(screen.getAllByText("provider_snapshot").length).toBeGreaterThan(0);
     expect(screen.getByText("gpt-5-codex")).toBeInTheDocument();
   });
@@ -727,7 +846,7 @@ describe("OpenClawLlmAuthPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(await screen.findByText("Observed usage history")).toBeInTheDocument();
     expect(screen.getByText("1 live auth")).toBeInTheDocument();
     expect(screen.getByText("7 calls")).toBeInTheDocument();
     expect(screen.getByText("140 tokens")).toBeInTheDocument();
