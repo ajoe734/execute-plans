@@ -200,10 +200,13 @@ function isOpenClawAdapter(provider: AssistantProviderReadinessStatus): boolean 
 
 function statusTone(status: string, ready?: boolean): string {
   const normalized = status.toLowerCase();
-  if (ready === true || ["ready", "ok", "completed", "authorized"].includes(normalized)) {
+  if (["not_checked"].includes(normalized)) {
+    return "border-border bg-muted/50 text-muted-foreground";
+  }
+  if (ready === true || ["ready", "ok", "completed", "authorized", "account_session"].includes(normalized)) {
     return "border-status-success/30 bg-status-success/10 text-status-success";
   }
-  if (["pending", "capturing", "processing", "code_submitted", "not_checked"].includes(normalized)) {
+  if (["pending", "capturing", "processing", "code_submitted"].includes(normalized)) {
     return "border-primary/30 bg-primary/10 text-primary";
   }
   if (["degraded", "timeout", "unavailable", "unknown"].includes(normalized)) {
@@ -213,6 +216,16 @@ function statusTone(status: string, ready?: boolean): string {
     return "border-status-failed/30 bg-status-failed/10 text-status-failed";
   }
   return "bg-muted text-muted-foreground";
+}
+
+function isSuccessfulStatus(status: string, ready?: boolean): boolean {
+  const normalized = status.toLowerCase();
+  if (normalized === "not_checked") return false;
+  return ready === true || ["ready", "ok", "completed", "authorized", "account_session"].includes(normalized);
+}
+
+function isPendingStatus(status: string): boolean {
+  return ["not_checked", "pending", "capturing", "processing", "code_submitted"].includes(status.toLowerCase());
 }
 
 function needsAttention(provider: AssistantProviderReadinessStatus): boolean {
@@ -874,6 +887,8 @@ function ProviderCard({
   const id = providerId(provider);
   const key = reauthStateKey(provider);
   const authStatus = providerAuthStatus(provider);
+  const authSuccessful = isSuccessfulStatus(authStatus, provider.ready);
+  const authPending = isPendingStatus(authStatus);
   const quota = recordFrom(usageSummary?.quota);
   const usage = Object.keys(quota).length > 0 ? quota : providerUsage(provider);
   const unit = usageValue(usage, "unit");
@@ -888,7 +903,13 @@ function ProviderCard({
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</p>
         </div>
         <Badge variant="outline" className={statusTone(authStatus, provider.ready)}>
-          {provider.ready ? <CheckCircle2 className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
+          {authSuccessful ? (
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+          ) : authPending ? (
+            <RefreshCcw className="mr-1 h-3 w-3" />
+          ) : (
+            <AlertTriangle className="mr-1 h-3 w-3" />
+          )}
           {authStatus}
         </Badge>
       </div>
@@ -992,7 +1013,9 @@ function ProviderReauthPanel({
 
   const href = reauthHref(result);
   const status = result.reauth.status ?? "pending";
+  const normalizedStatus = String(status).trim().toLowerCase();
   const terminal = isTerminalReauthStatus(status);
+  const completed = normalizedStatus === "completed";
   const reauthProvider = result.reauth.provider ?? providerId(provider);
   const userCode = reauthUserCode(result);
   const canSubmitCode = canSubmitReauthAuthorizationCode(result, reauthProvider);
@@ -1025,7 +1048,7 @@ function ProviderReauthPanel({
         )}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {href && (
+        {href && !completed && (
           <Button asChild size="sm" variant="outline">
             <a href={href} target="_blank" rel="noreferrer">
               <ExternalLink className="h-3 w-3" />
@@ -1050,7 +1073,7 @@ function ProviderReauthPanel({
         {terminal && (
           <Button size="sm" variant="outline" onClick={onRetry} disabled={state.busy}>
             <KeyRound className="h-3 w-3" />
-            Retry
+            {completed ? "Reauth again" : "Retry"}
           </Button>
         )}
       </div>
@@ -1099,6 +1122,8 @@ function ProviderReauthPanel({
 
 function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessStatus }) {
   const status = providerAuthStatus(provider);
+  const successful = isSuccessfulStatus(status, provider.ready);
+  const pending = isPendingStatus(status);
   return (
     <article className="rounded-md border border-border bg-muted/20 p-3" aria-label="OpenClaw adapter status">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1107,7 +1132,13 @@ function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessS
           <p className="mt-0.5 break-words text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</p>
         </div>
         <Badge variant="outline" className={statusTone(status, provider.ready)}>
-          {provider.ready ? <CheckCircle2 className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
+          {successful ? (
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+          ) : pending ? (
+            <RefreshCcw className="mr-1 h-3 w-3" />
+          ) : (
+            <AlertTriangle className="mr-1 h-3 w-3" />
+          )}
           {status}
         </Badge>
       </div>
