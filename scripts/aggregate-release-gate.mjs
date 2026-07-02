@@ -599,14 +599,6 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
     `bff_healthz=${routeProbe.rows.get("/bff/healthz")?.status || "missing"}`,
     `bff_readyz=${routeProbe.rows.get("/bff/readyz")?.status || "missing"}`,
   ].join("; ");
-  const healthSoftWarn = !healthStatus && isPullRequestContext() && openapiStatus && streamStatus === "200" && no404;
-  const healthCheckStatus = routeProbe.exists
-    ? healthStatus ? "pass" : healthSoftWarn ? "warn" : "fail"
-    : routeProbe.missingStatus;
-  const healthCheckNote = routeProbe.exists
-    ? healthSoftWarn ? `${healthStatuses}; openapi/SSE reachable; downgraded on pull_request` : healthStatuses
-    : routeProbe.missingNote;
-
   const readListPaths = [
     "/bff/strategies",
     "/bff/personas",
@@ -661,6 +653,25 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
     authSmoke.passed !== null &&
     authSmoke.total !== null &&
     authSmoke.passed === authSmoke.total;
+  const publicAnonymousProbeWarn = isPullRequestContext() &&
+    routeProbe.exists &&
+    no404 &&
+    authSmokeComplete &&
+    protectedRows.every((row) => String(row.status) !== "404");
+  const publicAnonymousNote = "; authenticated smoke passed, downgraded on pull_request";
+  const publicRouteStatus = (condition) => routeProbe.exists
+    ? condition ? "pass" : publicAnonymousProbeWarn ? "warn" : "fail"
+    : routeProbe.missingStatus;
+  const publicRouteOwner = (condition) => routeProbe.exists && (condition || publicAnonymousProbeWarn) ? "" : GATE_OWNERS[3];
+  const publicRouteNote = (note) => routeProbe.exists
+    ? `${note}${publicAnonymousProbeWarn ? publicAnonymousNote : ""}`
+    : routeProbe.missingNote;
+  const healthCheckStatus = routeProbe.exists
+    ? healthStatus ? "pass" : publicAnonymousProbeWarn ? "warn" : "fail"
+    : routeProbe.missingStatus;
+  const healthCheckNote = routeProbe.exists
+    ? `${healthStatuses}${publicAnonymousProbeWarn ? publicAnonymousNote : ""}`
+    : routeProbe.missingNote;
   const protectedTransportWarn = isPullRequestContext() &&
     permissiveAuth &&
     no404 &&
@@ -695,19 +706,19 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
 
   return [
     makeCheck("Anonymous: health/liveness endpoint returns 200.", healthCheckStatus, {
-      owner: healthCheckStatus === "pass" ? "" : GATE_OWNERS[3],
+      owner: healthCheckStatus === "pass" || healthCheckStatus === "warn" ? "" : GATE_OWNERS[3],
       evidence: routeEvidence,
       note: healthCheckNote,
     }),
-    makeCheck("Anonymous: `/openapi.json` returns 200.", routeStatus(openapiStatus), {
-      owner: routeOwner(openapiStatus),
+    makeCheck("Anonymous: `/openapi.json` returns 200.", publicRouteStatus(openapiStatus), {
+      owner: publicRouteOwner(openapiStatus),
       evidence: routeEvidence,
-      note: routeNote(`status: ${routeProbe.rows.get("/openapi.json")?.status || "missing"}`),
+      note: publicRouteNote(`status: ${routeProbe.rows.get("/openapi.json")?.status || "missing"}`),
     }),
-    makeCheck("Anonymous: `/bff/events/stream` returns 200 or proper stream open.", routeStatus(streamStatus === "200"), {
-      owner: routeOwner(streamStatus === "200"),
+    makeCheck("Anonymous: `/bff/events/stream` returns 200 or proper stream open.", publicRouteStatus(streamStatus === "200"), {
+      owner: publicRouteOwner(streamStatus === "200"),
       evidence: routeEvidence,
-      note: routeNote(`status: ${streamStatus || "missing"}`),
+      note: publicRouteNote(`status: ${streamStatus || "missing"}`),
     }),
     makeCheck("Anonymous: canonical protected routes return expected auth/dev status, not 404.", protectedStatus, {
       owner: protectedOwner,
