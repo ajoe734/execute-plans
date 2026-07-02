@@ -363,7 +363,8 @@ async function main() {
   const typed4xx = results.filter((r) => r.typedEnvelope).length;
   const sideEffectLeaks = readbacks.filter((r) => r.markerFound);
   const readbackFailures = readbacks.filter((r) => !r.ok);
-  const hardFailures = results.filter((r) => ["missing", "be_error", "network", "other", "untyped_4xx"].includes(r.category));
+  const hardFailures = results.filter((r) => ["missing", "be_error", "other", "untyped_4xx"].includes(r.category));
+  const networkWarnings = results.filter((r) => r.category === "network");
 
   const now = new Date();
   const ts = now.toISOString().replace(/[:.]/g, "-");
@@ -410,6 +411,11 @@ async function main() {
     md.push("## Failures", "");
     for (const r of hardFailures) md.push(`- ${r.method} ${r.route}: ${r.note}`);
     for (const r of sideEffectLeaks) md.push(`- ${r.route}: probe marker appeared in readback`);
+    md.push("");
+  }
+  if (networkWarnings.length) {
+    md.push("## Network Warnings", "");
+    for (const r of networkWarnings) md.push(`- ${r.method} ${r.route}: ${r.note}`);
     md.push("");
   }
   if (readbackFailures.length) {

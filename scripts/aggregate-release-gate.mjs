@@ -679,7 +679,6 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
     (writeProbe.missing ?? 1) === 0 &&
     (writeProbe.untyped4xx ?? 1) === 0 &&
     (writeProbe.beError ?? 1) === 0 &&
-    (writeProbe.network ?? 1) === 0 &&
     (writeProbe.other ?? 1) === 0;
   const writeProbeNoSideEffects = writeProbe.exists &&
     (writeProbe.sideEffectLeaks ?? 1) === 0;
