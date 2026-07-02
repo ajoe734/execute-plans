@@ -22,6 +22,7 @@ SOURCE_BRANCH="${PANTHEON_DEPLOY_BRANCH:-${GITHUB_REF_NAME:-$(git branch --show-
 ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
+PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -113,6 +114,26 @@ echo "=== install release ==="
 rsync -a --delete dist/ "${TMP_DIR}/"
 sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
 sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
+
+if [[ "${PRESERVE_ASSETS}" == "true" ]]; then
+  echo "=== preserve retained hashed assets ==="
+  # Old browser tabs may still request prior Vite chunks after the symlink switch.
+  mkdir -p "${TMP_DIR}/assets"
+  mapfile -t retained_asset_dirs < <(sudo find "${RELEASES_DIR}" -mindepth 2 -maxdepth 2 -type d -name assets -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2- || true)
+  preserved_asset_dirs=0
+  for retained_asset_dir in "${retained_asset_dirs[@]}"; do
+    case "${retained_asset_dir}" in
+      "${RELEASE_DIR}/assets") continue ;;
+      "${RELEASES_DIR}"/*/assets) ;;
+      *) continue ;;
+    esac
+
+    rsync -rt --ignore-existing "${retained_asset_dir}/" "${TMP_DIR}/assets/"
+    preserved_asset_dirs=$((preserved_asset_dirs + 1))
+  done
+  echo "preserved hashed assets from ${preserved_asset_dirs} retained release(s)"
+fi
+
 sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r "${TMP_DIR}/" "${RELEASE_DIR}/"
 
 if [[ -e "${DEPLOY_ROOT}" && ! -L "${DEPLOY_ROOT}" ]]; then
@@ -169,6 +190,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - bff_host: ${BFF_HOST}
 - release_dir: ${RELEASE_DIR}
 - deploy_root: ${DEPLOY_ROOT}
+- preserve_assets: ${PRESERVE_ASSETS}
 - probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
 EOF
 
