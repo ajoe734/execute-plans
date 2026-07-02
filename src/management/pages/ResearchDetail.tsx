@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
+import { bff, mgmt } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
+import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
 import { Beaker, Package } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -12,21 +13,94 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
+type ResearchExperimentLive = ResearchExperiment & {
+  experimentId?: string;
+  experiment_id?: string;
+  framework?: string;
+  frameworks?: string[];
+  datasetRef?: string;
+  dataset_ref?: string;
+  datasetManifestId?: string;
+  dataset_manifest_id?: string;
+  registryAdmissionStatus?: string;
+  registry_admission_status?: string;
+  deploymentStage?: string;
+  deployment_stage?: string;
+};
+
+type ResearchContext = {
+  persona?: ManagementPersonaFleetRow;
+  project?: ManagementResearchProject;
+  frameworks: string[];
+  datasetRef?: string;
+  registryAdmissionStatus?: string;
+  blockedByTaskIds: string[];
+};
+
+function uniq(values: Array<string | undefined>): string[] {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function experimentIdOf(x: ResearchExperimentLive): string {
+  return x.experimentId ?? x.experiment_id ?? x.id;
+}
+
+function researchContextFor(experiment: ResearchExperimentLive, rows: ManagementPersonaFleetRow[]): ResearchContext {
+  const experimentId = experimentIdOf(experiment);
+  for (const row of rows) {
+    const project = row.currentResearchProjects?.find((candidate) => candidate.experimentId === experimentId);
+    if (project) {
+      return {
+        persona: row,
+        project,
+        frameworks: uniq([...(project.frameworks ?? []), ...(row.researchStatus?.frameworks ?? [])]),
+        datasetRef: project.datasetRef ?? row.researchStatus?.datasetRef,
+        registryAdmissionStatus: row.researchStatus?.registryAdmissionStatus,
+        blockedByTaskIds: project.blockedByTaskIds ?? row.researchStatus?.pendingTaskIds ?? [],
+      };
+    }
+    if (row.researchStatus?.experimentId === experimentId) {
+      return {
+        persona: row,
+        frameworks: uniq(row.researchStatus.frameworks ?? []),
+        datasetRef: row.researchStatus.datasetRef,
+        registryAdmissionStatus: row.researchStatus.registryAdmissionStatus,
+        blockedByTaskIds: row.researchStatus.pendingTaskIds ?? [],
+      };
+    }
+  }
+  return {
+    frameworks: uniq([
+      ...(experiment.frameworks ?? []),
+      experiment.framework,
+    ]),
+    datasetRef: experiment.datasetRef ?? experiment.dataset_ref,
+    registryAdmissionStatus: experiment.registryAdmissionStatus ?? experiment.registry_admission_status,
+    blockedByTaskIds: [],
+  };
+}
+
 export const ResearchDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [x, setX] = useState<ResearchExperiment | undefined>();
+  const [x, setX] = useState<ResearchExperimentLive | undefined>();
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [fleetRows, setFleetRows] = useState<ManagementPersonaFleetRow[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    bff.research.get(id).then(setX);
+    bff.research.get(id).then((value) => setX(value as ResearchExperimentLive | undefined));
     bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
+    mgmt.personaFleet.get().then(setFleetRows).catch(() => setFleetRows([]));
   }, [id]);
 
   if (!x) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  const researchContext = researchContextFor(x, fleetRows);
+  const frameworks = researchContext.frameworks.length
+    ? researchContext.frameworks
+    : uniq([x.framework, ...(x.frameworks ?? [])]);
   const folds = Array.from({ length: 5 }).map((_, i) => ({
     id: `fold_${i + 1}`,
     fold: i + 1,
@@ -60,6 +134,18 @@ export const ResearchDetail = () => {
                 </div>
                 <Section title={t("detail.section.hypothesis")}>
                   <p className="text-sm leading-relaxed">{x.hypothesis}</p>
+                </Section>
+                <Section title="Management research context">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Field label="Persona" value={researchContext.persona?.personaName ?? researchContext.persona?.personaId ?? "nan"} mono />
+                    <Field label="Persona ID" value={researchContext.persona?.personaId ?? "nan"} mono />
+                    <Field label="Project" value={researchContext.project?.projectId ?? "nan"} mono />
+                    <Field label="Frameworks" value={frameworks.length ? frameworks.join(" / ") : "nan"} mono />
+                    <Field label="Dataset" value={researchContext.datasetRef ?? x.datasetRef ?? x.dataset_ref ?? "nan"} mono />
+                    <Field label="Registry admission" value={researchContext.registryAdmissionStatus ?? x.registryAdmissionStatus ?? x.registry_admission_status ?? "nan"} mono />
+                    <Field label="Blocked by" value={researchContext.blockedByTaskIds.length ? researchContext.blockedByTaskIds.join(" / ") : "nan"} mono />
+                    <Field label="Deployment stage" value={x.deploymentStage ?? x.deployment_stage ?? "nan"} mono />
+                  </div>
                 </Section>
               </>
             ),

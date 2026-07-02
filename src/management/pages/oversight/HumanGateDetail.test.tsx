@@ -108,6 +108,9 @@ describe("HumanGateDetailPage", () => {
 
     expect(screen.getByRole("heading", { name: "Persona needs review: Taiwan Equity Persona" })).toBeInTheDocument();
     expect(screen.getByText("Required role: risk-owner · Decision type: single")).toBeInTheDocument();
+    expect(screen.getByText("readiness_blocker:persona:persona-tw-equity")).toBeInTheDocument();
+    expect(screen.getByText("persona-tw-equity")).toBeInTheDocument();
+    expect(screen.getAllByText("TW corporate-action and session-boundary evidence review").length).toBeGreaterThan(0);
     expect(screen.getByText("support/evidence/MGMT-QLIB-006/management_linkage_packet.json")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "support/evidence/MGMT-QLIB-006/management_linkage_packet.json" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
