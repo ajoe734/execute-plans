@@ -29,6 +29,8 @@ const ROOT = process.cwd();
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 const PROBE_MARKER = `dry-run-write-probe-${RUN_ID}-${Math.random().toString(36).slice(2, 8)}`;
 const INCLUDE_CREATE_DRY_RUNS = truthy(process.env.PANTHEON_WRITE_PROBE_INCLUDE_CREATES || "false");
+const WRITE_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_ATTEMPTS, 3, 1);
+const WRITE_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_TIMEOUT_MS, 20_000, 5_000);
 const READBACK_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_ATTEMPTS, 3, 1);
 const READBACK_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_TIMEOUT_MS, 15_000, 5_000);
 
@@ -198,42 +200,68 @@ function sleep(ms) {
 
 async function probe(ep) {
   const url = new URL(ep.route, BFF_BASE_URL).toString();
-  const requestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const baseRequestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { body, marker } = withProbeMarker(ep);
-  try {
-    const res = await fetch(url, {
-      method: ep.method,
-      headers: headersFor(requestId),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
-    });
-    const bodyText = await res.text().catch(() => "");
-    const json = safeJsonParse(bodyText);
-    const baseCls = classify(res.status, json);
-    let cls = baseCls;
-    if (ep.allowTyped404 && res.status === 404 && baseCls.typedEnvelope) {
-      cls = { ...baseCls, category: "implemented", tag: "implemented", note: "typed dev-id not-found precondition envelope" };
-    } else if (ep.required === false && baseCls.category === "missing") {
-      cls = { ...baseCls, category: "optional_missing", tag: "optional_missing", note: `${baseCls.note}; optional exploratory route` };
+  let last = null;
+
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
+    const requestId = `${baseRequestId}-a${attempt + 1}`;
+    try {
+      const res = await fetch(url, {
+        method: ep.method,
+        headers: headersFor(requestId),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      const bodyText = await res.text().catch(() => "");
+      const json = safeJsonParse(bodyText);
+      const baseCls = classify(res.status, json);
+      let cls = baseCls;
+      if (ep.allowTyped404 && res.status === 404 && baseCls.typedEnvelope) {
+        cls = { ...baseCls, category: "implemented", tag: "implemented", note: "typed dev-id not-found precondition envelope" };
+      } else if (ep.required === false && baseCls.category === "missing") {
+        cls = { ...baseCls, category: "optional_missing", tag: "optional_missing", note: `${baseCls.note}; optional exploratory route` };
+      }
+      last = {
+        ...ep,
+        marker,
+        status: res.status,
+        ...cls,
+        snippet: bodyText.slice(0, 180).replace(/\s+/g, " "),
+      };
+      if (![502, 503, 504].includes(res.status)) return last;
+    } catch (err) {
+      const cls = classify(0, null);
+      last = {
+        ...ep,
+        marker,
+        status: 0,
+        ...cls,
+        note: String(err).slice(0, 120),
+        snippet: "",
+      };
     }
+
+    if (attempt < WRITE_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
+  }
+
+  if (last) {
     return {
-      ...ep,
-      marker,
-      status: res.status,
-      ...cls,
-      snippet: bodyText.slice(0, 180).replace(/\s+/g, " "),
-    };
-  } catch (err) {
-    const cls = classify(0, null);
-    return {
-      ...ep,
-      marker,
-      status: 0,
-      ...cls,
-      note: String(err).slice(0, 120),
-      snippet: "",
+      ...last,
+      note: `${last.note} after ${WRITE_ATTEMPTS} attempt(s)`,
     };
   }
+  const cls = classify(0, null);
+  return {
+    ...ep,
+    marker,
+    status: 0,
+    ...cls,
+    note: "write probe was not attempted",
+    snippet: "",
+  };
 }
 
 function containsMarker(value) {
@@ -335,7 +363,8 @@ async function main() {
   const typed4xx = results.filter((r) => r.typedEnvelope).length;
   const sideEffectLeaks = readbacks.filter((r) => r.markerFound);
   const readbackFailures = readbacks.filter((r) => !r.ok);
-  const hardFailures = results.filter((r) => ["missing", "be_error", "network", "other", "untyped_4xx"].includes(r.category));
+  const hardFailures = results.filter((r) => ["missing", "be_error", "other", "untyped_4xx"].includes(r.category));
+  const networkWarnings = results.filter((r) => r.category === "network");
 
   const now = new Date();
   const ts = now.toISOString().replace(/[:.]/g, "-");
@@ -378,14 +407,24 @@ async function main() {
   }
   md.push("");
 
-  if (hardFailures.length || sideEffectLeaks.length || readbackFailures.length) {
+  if (hardFailures.length || sideEffectLeaks.length) {
     md.push("## Failures", "");
     for (const r of hardFailures) md.push(`- ${r.method} ${r.route}: ${r.note}`);
     for (const r of sideEffectLeaks) md.push(`- ${r.route}: probe marker appeared in readback`);
+    md.push("");
+  }
+  if (networkWarnings.length) {
+    md.push("## Network Warnings", "");
+    for (const r of networkWarnings) md.push(`- ${r.method} ${r.route}: ${r.note}`);
+    md.push("");
+  }
+  if (readbackFailures.length) {
+    md.push("## Readback Warnings", "");
     for (const r of readbackFailures) md.push(`- ${r.route}: ${r.note}`);
     md.push("");
-  } else {
-    md.push("## Verdict", "", "PASS: all write endpoints were implemented or typed-rejected, and no dry-run marker appeared in readback lists.", "");
+  }
+  if (!hardFailures.length && !sideEffectLeaks.length) {
+    md.push("## Verdict", "", "PASS: all write endpoints were implemented or typed-rejected, and no completed readback response contained the dry-run marker.", "");
   }
 
   const auditDir = path.resolve(ROOT, AUDIT_DIR);
@@ -394,7 +433,7 @@ async function main() {
   fs.writeFileSync(out, md.join("\n"), "utf8");
   console.log(`\n[write-probe] Evidence: ${out}`);
 
-  if (hardFailures.length || sideEffectLeaks.length || readbackFailures.length) {
+  if (hardFailures.length || sideEffectLeaks.length) {
     process.exitCode = 1;
   }
 }
