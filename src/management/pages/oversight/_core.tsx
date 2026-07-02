@@ -784,7 +784,7 @@ export const HumanInboxPage = () => {
 // Trading Pulse
 // =====================================================================
 
-const CARD_ORDER = ["runtime-status", "pnl", "drawdown", "execution-quality", "baseline-comparison"];
+const CARD_ORDER = ["runtime-status", "row-health", "pnl", "drawdown", "execution-quality", "baseline-comparison"];
 
 const orderedCards = (cards: ManagementTradingPulseCard[]): ManagementTradingPulseCard[] =>
   [...cards].sort((a, b) => {
@@ -795,6 +795,7 @@ const orderedCards = (cards: ManagementTradingPulseCard[]): ManagementTradingPul
 
 const fallbackCardsFromSummary = (model: ManagementTradingPulseModel): ManagementTradingPulseCard[] => ([
   { cardId: "runtime-status", label: "Runtime Status", value: model.summary.runtimeCount, details: { byStatus: model.summary.byStatus, byStage: model.summary.byStage } },
+  { cardId: "row-health", label: "Row Health", value: Number(model.summary.rowHealthDegradedCount ?? model.summary.row_health_degraded_count ?? 0), details: { rowHealthStatusCounts: model.summary.rowHealthStatusCounts ?? model.summary.row_health_status_counts } },
   { cardId: "pnl", label: "P&L", value: model.summary.totalPnl, details: { telemetryCoverageCount: model.summary.telemetryCoverageCount } },
   { cardId: "drawdown", label: "Worst Drawdown", value: model.summary.worstDrawdown, details: {} },
   { cardId: "execution-quality", label: "Execution Quality", value: model.summary.averageFillRate, details: { worstSlippageBps: model.summary.worstSlippageBps } },
@@ -806,7 +807,7 @@ const formatPulseValue = (value: unknown, cardId?: string): string => {
   if (typeof value === "string") return value;
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  if (["runtime-status", "baseline-comparison", "total-trades"].includes(cardId ?? "")) {
+  if (["runtime-status", "row-health", "baseline-comparison", "total-trades"].includes(cardId ?? "")) {
     return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
   }
   if (cardId === "execution-quality") {
@@ -830,6 +831,47 @@ const compactCounts = (value: unknown): string => {
   return entries.map(([key, item]) => `${key}: ${formatPulseValue(item, "runtime-status")}`).join(" · ");
 };
 
+const pulseRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const pulseNumber = (value: unknown): number | null => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const pulseStringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+
+const pulseCoverage = (model: ManagementTradingPulseModel): Record<string, unknown> =>
+  pulseRecord(model.summary.coverage ?? model.meta.coverage);
+
+const coverageCount = (coverage: Record<string, unknown>, availableKey: string, totalKey = "runtimeCount"): string => {
+  const available = pulseNumber(coverage[availableKey]);
+  const explicitTotal = pulseNumber(coverage[totalKey]);
+  const missing = pulseNumber(coverage.missingCount ?? coverage.missing_count);
+  const total = explicitTotal ?? (available !== null && missing !== null ? available + missing : null);
+  if (available === null || total === null) return "—";
+  return `${formatPulseValue(available, "runtime-status")}/${formatPulseValue(total, "runtime-status")}`;
+};
+
+const shortList = (items: string[], limit = 3): string => {
+  if (items.length === 0) return "—";
+  const visible = items.slice(0, limit).join(", ");
+  return items.length > limit ? `${visible} +${items.length - limit}` : visible;
+};
+
+const rowHealth = (row: ManagementTradingPulseRuntimeRow): Record<string, unknown> =>
+  pulseRecord(row.rowHealth ?? row.row_health);
+
+const rowHealthStatus = (row: ManagementTradingPulseRuntimeRow): string =>
+  String(rowHealth(row).status ?? "unknown");
+
+const rowHealthChecks = (row: ManagementTradingPulseRuntimeRow): string[] =>
+  pulseStringList(rowHealth(row).degraded_checks ?? rowHealth(row).degradedChecks);
+
+const cardMetricCoverage = (card: ManagementTradingPulseCard): Record<string, unknown> =>
+  pulseRecord(card.details?.metricCoverage ?? card.details?.metric_coverage);
+
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
   const seed = useMemo(() => defaultTradingPulseModel(), []);
@@ -846,12 +888,11 @@ export const TradingPulsePage = () => {
 
       <TradingPulseSurfaceHealth model={model} />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {cards.map((card) => (
           <Card key={card.cardId} className="p-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <Badge variant="outline">{card.label}</Badge>
-              <Badge variant="outline">{card.cardId}</Badge>
             </div>
             <div className="mt-3 text-2xl font-semibold">{formatPulseValue(card.value, card.cardId)}</div>
             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
@@ -861,16 +902,32 @@ export const TradingPulsePage = () => {
                   <div>{t("mgmt.pulse.byStage")}: {compactCounts(card.details?.byStage)}</div>
                 </>
               )}
+              {card.cardId === "row-health" && (
+                <>
+                  <div>{t("mgmt.pulse.rowHealth")}: {compactCounts(card.details?.rowHealthStatusCounts)}</div>
+                  <div>{t("mgmt.pulse.degradedRows")}: {shortList(pulseStringList(card.details?.degradedRuntimeIds))}</div>
+                </>
+              )}
               {card.cardId === "pnl" && (
-                <div>{t("mgmt.pulse.telemetryCoverage")}: {formatPulseValue(card.details?.telemetryCoverageCount, "runtime-status")}</div>
+                <>
+                  <div>{t("mgmt.pulse.telemetryCoverage")}: {formatPulseValue(card.details?.telemetryCoverageCount, "runtime-status")}</div>
+                  <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
+                </>
+              )}
+              {card.cardId === "drawdown" && (
+                <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
               )}
               {card.cardId === "execution-quality" && (
-                <div>{t("mgmt.pulse.worstSlippage")}: {formatPulseValue(card.details?.worstSlippageBps)}</div>
+                <>
+                  <div>{t("mgmt.pulse.worstSlippage")}: {formatPulseValue(card.details?.worstSlippageBps)}</div>
+                  <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
+                </>
               )}
               {card.cardId === "baseline-comparison" && (
                 <>
                   <div>{t("mgmt.pulse.baselineCoverage")}: {formatPulseValue(card.details?.baselineComparisonCount, "runtime-status")}</div>
                   <div>{t("mgmt.pulse.byBaseline")}: {compactCounts(card.details?.byBaselineStatus)}</div>
+                  <div>{t("mgmt.pulse.missing")}: {shortList(pulseStringList(card.details?.missingBaselineRuntimeIds))}</div>
                 </>
               )}
             </div>
@@ -902,7 +959,8 @@ const TradingPulseSurfaceHealth = ({ model }: { model: ManagementTradingPulseMod
           {degraded.length > 0 ? t("mgmt.pulse.degraded") : t("mgmt.pulse.live")}
         </Badge>
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+      <TradingPulseCoverageSummary model={model} />
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {surfaces.map(([key, surface]) => (
           <SurfaceBadge key={key} name={key} surface={surface} />
         ))}
@@ -910,6 +968,60 @@ const TradingPulseSurfaceHealth = ({ model }: { model: ManagementTradingPulseMod
     </Card>
   );
 };
+
+const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseModel }) => {
+  const { t } = useTranslation();
+  const coverage = pulseCoverage(model);
+  const rowHealthCounts = coverage.rowHealthStatusCounts ?? coverage.row_health_status_counts;
+  const missingTelemetry = pulseStringList(coverage.missingTelemetryRuntimeIds ?? coverage.missing_telemetry_runtime_ids);
+  const missingMonitoring = pulseStringList(coverage.missingMonitoringRuntimeIds ?? coverage.missing_monitoring_runtime_ids);
+  const missingBaseline = pulseStringList(coverage.missingBaselineRuntimeIds ?? coverage.missing_baseline_runtime_ids);
+  const degradedRows = pulseStringList(coverage.degradedRuntimeIds ?? coverage.degraded_runtime_ids);
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <CoverageStat
+        label={t("mgmt.pulse.runtimeRows")}
+        value={formatPulseValue(coverage.runtimeCount ?? model.summary.runtimeCount, "runtime-status")}
+        detail={compactCounts(model.summary.byStatus)}
+      />
+      <CoverageStat
+        label={t("mgmt.pulse.telemetryCoverage")}
+        value={coverageCount(coverage, "telemetryCoverageCount")}
+        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingTelemetry)}`}
+        status={missingTelemetry.length > 0 ? "degraded" : "ok"}
+      />
+      <CoverageStat
+        label={t("mgmt.pulse.monitoringCoverage")}
+        value={coverageCount(coverage, "monitoringCoverageCount", "paperRuntimeCount")}
+        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingMonitoring)}`}
+        status={missingMonitoring.length > 0 ? "degraded" : "ok"}
+      />
+      <CoverageStat
+        label={t("mgmt.pulse.baselineCoverage")}
+        value={coverageCount(coverage, "baselineComparisonCount")}
+        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingBaseline)}`}
+        status={missingBaseline.length > 0 ? "degraded" : "ok"}
+      />
+      <CoverageStat
+        label={t("mgmt.pulse.rowHealth")}
+        value={formatPulseValue(coverage.rowHealthDegradedCount ?? coverage.row_health_degraded_count, "row-health")}
+        detail={`${compactCounts(rowHealthCounts)} · ${shortList(degradedRows)}`}
+        status={degradedRows.length > 0 ? "degraded" : "ok"}
+      />
+    </div>
+  );
+};
+
+const CoverageStat = ({ label, value, detail, status }: { label: string; value: string; detail: string; status?: string }) => (
+  <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      {status && <Badge variant="outline" className={statusTone(status)}>{status}</Badge>}
+    </div>
+    <div className="mt-1 text-lg font-semibold text-foreground">{value}</div>
+    <div className="mt-1 truncate text-muted-foreground" title={detail}>{detail}</div>
+  </div>
+);
 
 const SurfaceBadge = ({ name, surface }: { name: string; surface: ManagementTradingPulseSurface }) => (
   <div className="rounded-md border border-border bg-background p-3 text-xs">
@@ -924,34 +1036,46 @@ const SurfaceBadge = ({ name, surface }: { name: string; surface: ManagementTrad
 
 const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }) => {
   const { t } = useTranslation();
-  const visible = rows.slice(0, 10);
+  const degradedCount = rows.filter((row) => rowHealthStatus(row) !== "ok").length;
   return (
     <Card className="p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.runtimeRows")}</h2>
-        <Badge variant="outline">{rows.length}</Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{rows.length}</Badge>
+          <Badge variant="outline" className={statusTone(degradedCount > 0 ? "degraded" : "ok")}>
+            {t("mgmt.pulse.degradedRows")}: {degradedCount}
+          </Badge>
+        </div>
       </div>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-xs">
+      <div className="mt-3 max-h-[640px] overflow-auto">
+        <table className="w-full min-w-[1040px] text-left text-xs">
           <thead className="text-muted-foreground">
             <tr className="border-b border-border">
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.rowHealth")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.stage")}</th>
               <th className="py-2 pr-3 font-medium">P&L</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.fillRate")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.trades")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.baselineStatus")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.checks")}</th>
               <th className="py-2 font-medium">{t("mgmt.pulse.updated")}</th>
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td className="py-3 text-muted-foreground" colSpan={7}>{t("mgmt.pulse.noRows")}</td>
+                <td className="py-3 text-muted-foreground" colSpan={9}>{t("mgmt.pulse.noRows")}</td>
               </tr>
-            ) : visible.map((row) => (
+            ) : rows.map((row) => {
+              const checks = rowHealthChecks(row);
+              return (
               <tr key={row.runtimeId || row.runtime_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-3 font-mono text-foreground">{row.runtimeId || row.runtime_id || "—"}</td>
+                <td className="py-2 pr-3">
+                  <Badge variant="outline" className={statusTone(rowHealthStatus(row))}>{rowHealthStatus(row)}</Badge>
+                </td>
                 <td className="py-2 pr-3">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="outline">{row.deploymentStage || row.deployment_stage || "—"}</Badge>
@@ -966,9 +1090,15 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
                     {row.baselineComparison?.status ?? row.baseline_comparison?.status ?? "—"}
                   </Badge>
                 </td>
+                <td className="max-w-[220px] py-2 pr-3 text-muted-foreground">
+                  <span className="block truncate" title={checks.join(", ")}>
+                    {shortList(checks)}
+                  </span>
+                </td>
                 <td className="py-2 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -984,7 +1114,19 @@ const RankingBlocks = () => {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("mgmt.pulse.rankingsLabel")}>
       {blocks.map((b) => (
         <Card key={b.kind} className="p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {"eligibleItemCount" in b && (
+                <Badge variant="outline">{formatPulseValue(b.eligibleItemCount, "runtime-status")}</Badge>
+              )}
+              {(b.missingMetricCount ?? b.missing_metric_count ?? 0) > 0 && (
+                <Badge variant="outline" className={statusTone("degraded")}>
+                  {t("mgmt.pulse.metricMissing")}: {formatPulseValue(b.missingMetricCount ?? b.missing_metric_count, "runtime-status")}
+                </Badge>
+              )}
+            </div>
+          </div>
           {(b.rows?.length ?? 0) === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.pulse.noRows")}</p>
           ) : (

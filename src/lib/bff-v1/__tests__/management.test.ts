@@ -71,6 +71,10 @@ describe("mgmt façade (PM-Live)", () => {
             telemetry_summary: {
               metrics: { pnl: -12.5, fill_rate: 0.71234, total_trades: 4 },
             },
+            row_health: {
+              status: "degraded",
+              degraded_checks: ["paper_runtime_monitoring"],
+            },
             baseline_comparison: {
               runtime_id: "rt-live-1",
               status: "ok",
@@ -89,6 +93,10 @@ describe("mgmt façade (PM-Live)", () => {
           management_trading_pulse: { status: "degraded", source: "bff_composed", message: "partial coverage" },
           paper_live_drift: { status: "degraded", source: "service_store" },
         },
+        coverage: {
+          runtimeCount: 2,
+          missingMonitoringRuntimeIds: ["rt-live-1"],
+        },
       },
     });
 
@@ -101,8 +109,10 @@ describe("mgmt façade (PM-Live)", () => {
       deploymentStage: "paper",
       metrics: { pnl: -12.5, fill_rate: 0.71234, total_trades: 4 },
       baselineComparison: { status: "ok", metricCount: 3 },
+      rowHealth: { status: "degraded", degraded_checks: ["paper_runtime_monitoring"] },
     });
     expect(out?.meta.surfaces.paper_live_drift.status).toBe("degraded");
+    expect(out?.meta.coverage).toMatchObject({ missingMonitoringRuntimeIds: ["rt-live-1"] });
   });
 
   it("adapts legacy Trading Pulse rows as degraded local snapshots", () => {

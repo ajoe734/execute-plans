@@ -2111,18 +2111,32 @@ function adaptRankings(raw: unknown): TradingPulseRankBlock[] | null {
         it.runtimeBindingId ?? it.runtime_binding_id ?? it.runtimeId ?? it.runtime_id ?? it.subjectId ?? "",
       );
       return {
+        ...it,
         subjectId,
         subjectLabel: String(it.runtimeId ?? it.runtime_id ?? it.subjectLabel ?? subjectId ?? "—"),
         metric: String(b.label ?? metric),
         metricValue: rankingMetricValue(it, metric),
         metricUnit: undefined,
         links: undefined,
+        rankingEligible: Boolean(it.rankingEligible ?? it.ranking_eligible ?? true),
+        ranking_eligible: Boolean(it.ranking_eligible ?? it.rankingEligible ?? true),
       };
     });
     return {
+      ...b,
       kind: String(b.blockId ?? b.block_id ?? b.kind ?? metric),
       label: String(b.label ?? metric),
       rows,
+      eligibleItemCount: asFiniteNumber(b.eligibleItemCount ?? b.eligible_item_count, rows.length),
+      eligible_item_count: asFiniteNumber(b.eligible_item_count ?? b.eligibleItemCount, rows.length),
+      missingMetricCount: asFiniteNumber(b.missingMetricCount ?? b.missing_metric_count, 0),
+      missing_metric_count: asFiniteNumber(b.missing_metric_count ?? b.missingMetricCount, 0),
+      missingMetricRuntimeIds: Array.isArray(b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids)
+        ? (b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids) as string[]
+        : [],
+      missing_metric_runtime_ids: Array.isArray(b.missing_metric_runtime_ids ?? b.missingMetricRuntimeIds)
+        ? (b.missing_metric_runtime_ids ?? b.missingMetricRuntimeIds) as string[]
+        : [],
     } as unknown as TradingPulseRankBlock;
   });
 }
