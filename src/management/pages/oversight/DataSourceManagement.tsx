@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Database, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -28,11 +28,43 @@ function joinOrDash(values: string[]): string {
   return values.length ? values.join(" / ") : "—";
 }
 
+function matchesToken(needle: string, values: string[]): boolean {
+  const normalized = needle.trim().toLowerCase();
+  return values.some((value) => value.trim().toLowerCase() === normalized);
+}
+
 export function DataSourceManagementPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const sourceFocus = searchParams.get("source")?.trim() ?? "";
   const { data, loading, refresh } = useV5Live(() => managementConsoleReads.dataSources(), []);
   const records: SystemDataSourceRecord[] = useMemo(() => data?.items ?? [], [data]);
-  const summary = useMemo(() => summarizeSystemDataSources(records), [records]);
+  const focus = useMemo(() => {
+    let scoped = records;
+    let matched = true;
+
+    if (sourceFocus) {
+      const next = scoped.filter((record) => matchesToken(sourceFocus, [
+        record.providerKey,
+        record.provider,
+        ...record.sourceClasses,
+      ]));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+
+    if (personaFocus) {
+      const next = scoped.filter((record) => matchesToken(personaFocus, record.consumerPersonaIds));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+
+    return { records: scoped, matched };
+  }, [personaFocus, records, sourceFocus]);
+  const visibleRecords = focus.records;
+  const summary = useMemo(() => summarizeSystemDataSources(visibleRecords), [visibleRecords]);
+  const hasFocus = Boolean(personaFocus || sourceFocus);
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.dataSources.title")}>
@@ -49,6 +81,21 @@ export function DataSourceManagementPage() {
           {t("mgmt.actions.refresh")}
         </Button>
       </header>
+
+      {hasFocus && (
+        <Card className={`p-3 text-sm ${focus.matched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              {focus.matched
+                ? t("mgmt.dataSources.focusedFmt", { persona: personaFocus || "nan", source: sourceFocus || "nan", count: visibleRecords.length })
+                : t("mgmt.dataSources.focusMissingFmt", { persona: personaFocus || "nan", source: sourceFocus || "nan" })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/data-sources">{t("mgmt.dataSources.showAll")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label={t("mgmt.dataSources.total")} value={String(summary.total)} />
@@ -86,7 +133,7 @@ export function DataSourceManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {records.map((record) => (
+              {visibleRecords.map((record) => (
                 <DataSourceRow key={record.providerKey} record={record} />
               ))}
             </tbody>

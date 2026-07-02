@@ -479,6 +479,9 @@ describe("mgmt façade (PM-Live)", () => {
             ooda_stage: "decide",
             governance_required: true,
             recommendation: "hold_for_risk_owner_review",
+            runtime_id: "rt-rescue-0260528-5937dea1",
+            runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
+            deployment_stage: "paper",
             metrics: { training_improvement_pct: 9.5 },
             updated_at: "2026-06-07T13:00:00Z",
             status: "needs_human_approval",
@@ -558,6 +561,9 @@ describe("mgmt façade (PM-Live)", () => {
       humanNeeded: true,
       lastMutation: "2026-06-07",
       state: "needs_human_approval",
+      runtimeId: "rt-rescue-0260528-5937dea1",
+      runtimeBindingId: "rb-433f2a614995432b9e7a463c882dbefb",
+      deploymentStage: "paper",
     });
     expect(rows?.[0].dataSourceStatus).toMatchObject({
       state: "partial_readback",

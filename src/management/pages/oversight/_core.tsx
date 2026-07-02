@@ -988,12 +988,6 @@ interface EvolutionEntry {
   occurred_at?: string; created_at?: string;
 }
 
-const EVOLUTION: EvolutionEntry[] = [
-  { id: "ev-101", mutation: "Tune momentum lookback 30→45", before: 1.20, after: 1.31, verdict: "improved", landedAt: "2026-05-19" },
-  { id: "ev-102", mutation: "Add ATR-based position sizing", before: 1.05, after: 1.04, verdict: "inconclusive", landedAt: "2026-05-17" },
-  { id: "ev-103", mutation: "Switch to vol-target rebal weekly", before: 1.10, after: 0.98, verdict: "degraded", landedAt: "2026-05-15" },
-];
-
 const verdictTone = (v?: string) =>
   v === "improved" || v === "accepted" || v === "approved"
     ? "bg-status-success/15 text-status-success border-status-success/30"
@@ -1001,22 +995,88 @@ const verdictTone = (v?: string) =>
       ? "bg-status-failed/15 text-status-failed border-status-failed/30"
       : "bg-muted text-muted-foreground border-border";
 
+function evolutionEntryText(e: EvolutionEntry): string {
+  const target = e.target ? [e.target.type, e.target.id, e.target.version].filter(Boolean).join(" ") : "";
+  const evidenceRefs = Array.isArray(e.record?.evidence_refs)
+    ? e.record.evidence_refs.map((ref) => JSON.stringify(ref)).join(" ")
+    : "";
+  return [
+    e.id,
+    e.title,
+    e.summary,
+    e.status,
+    e.entryType,
+    e.entry_type,
+    e.source_id,
+    e.action_type,
+    target,
+    evidenceRefs,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => EVOLUTION), []);
-  const rows = data ?? EVOLUTION;
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const mutationFocus = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
+  const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
+  const rows = data ?? [];
+  const focus = useMemo(() => {
+    let scoped = rows;
+    let matched = true;
+
+    if (mutationFocus) {
+      const needle = mutationFocus.toLowerCase();
+      const next = scoped.filter((entry) => evolutionEntryText(entry).includes(needle));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+
+    if (personaFocus) {
+      const needle = personaFocus.toLowerCase();
+      const next = scoped.filter((entry) => evolutionEntryText(entry).includes(needle));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+
+    return { rows: scoped, matched };
+  }, [mutationFocus, personaFocus, rows]);
+  const visibleRows = focus.rows;
+  const hasFocus = Boolean(personaFocus || mutationFocus);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
-      {rows.length === 0 && (
+      {hasFocus && (
+        <Card className={"p-3 text-sm " + (focus.matched
+          ? "border-primary/30 bg-primary/5"
+          : "border-status-warning/30 bg-status-warning/10")}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              {focus.matched
+                ? t("mgmt.evolution.focusedFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan", count: visibleRows.length })
+                : t("mgmt.evolution.focusMissingFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan" })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/evolution-journal">{t("mgmt.evolution.showAll")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+      {loading && rows.length === 0 && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          {t("common.loading", { defaultValue: "Loading..." })}
+        </Card>
+      )}
+      {!loading && rows.length === 0 && (
         <Card className="p-4 text-sm text-muted-foreground">
           {t("common.awaitingData", { defaultValue: "No data yet" })}
         </Card>
       )}
-      {rows.map((e) => {
+      {visibleRows.map((e) => {
         // The live aggregate and the legacy mock have different field sets;
         // normalize defensively so neither shape throws (real entries have no
         // numeric before/after — calling .toFixed on those crashed the page).

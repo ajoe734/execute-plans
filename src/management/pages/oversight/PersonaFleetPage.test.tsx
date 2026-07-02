@@ -108,7 +108,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity human gate" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-live-tw-equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity OODA Orient stage" })).toHaveAttribute(
       "href",
@@ -128,7 +128,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity status detail" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-live-tw-equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
   });
 
@@ -300,11 +300,11 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByRole("link", { name: "Review human gate for persona-approval" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-approval",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
     );
     expect(screen.getByRole("link", { name: "persona-approval OODA Decide stage" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-approval",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
     );
     expect(screen.queryByRole("link", { name: "Continue onboarding for persona-approval" })).not.toBeInTheDocument();
   });

@@ -224,6 +224,9 @@ export default {
         reviewPending: "待審查",
         emptyTitle: "無研究迴圈",
         emptyDesc: "目前 focus 沒有匹配的執行。",
+        focusedFmt: "已聚焦 Persona：{{persona}} · project：{{project}} · {{count}} 筆匹配研究執行",
+        focusMissingFmt: "沒有研究執行宣告 persona {{persona}} / project {{project}}，目前顯示 live 研究執行。",
+        showAll: "顯示全部研究執行",
       },
       execution: {
         title: "執行迴圈",
@@ -644,6 +647,10 @@ export default {
   },
   runtime: {
     subtitle: "Executor、MCP 伺服器、排程與資料攝取的即時運維視圖。",
+    focusedFmt: "已聚焦 Persona：{{persona}} · runtime：{{runtime}} · binding：{{binding}} · {{count}} 筆匹配 runtime",
+    focusMissingFmt: "沒有 runtime 列宣告 persona {{persona}} / runtime {{runtime}} / binding {{binding}}，目前顯示 live runtime 列。",
+    showAll: "顯示全部 runtime",
+    empty: "沒有 runtime 資料列。",
     actions: {
       restart: { label: "重啟", toast: "重啟已派送：{{name}}" },
       drain: { label: "排空封鎖", toast: "排空已啟動：{{name}}" },
@@ -2007,6 +2014,9 @@ export default {
       loadingLive: "正在載入 live Persona Fleet 資料源…",
       liveDataUnavailableTitle: "目前沒有 live 資料源資料",
       liveDataUnavailableBody: "此頁不顯示 demo、seed 或非正式資料源列。",
+      focusedFmt: "已聚焦 Persona：{{persona}} · 資料源：{{source}} · {{count}} 筆匹配資料源",
+      focusMissingFmt: "沒有資料源列宣告 persona {{persona}} / source {{source}}，目前顯示 live 資料源列。",
+      showAll: "顯示全部資料源",
     },
     fleet: {
       title: "Persona 艦隊",
@@ -2121,6 +2131,9 @@ export default {
       before: "改前",
       after: "改後",
       landed: "落地時間",
+      focusedFmt: "已聚焦 Persona：{{persona}} · mutation：{{mutation}} · {{count}} 筆匹配演化項目",
+      focusMissingFmt: "沒有演化項目宣告 persona {{persona}} / mutation {{mutation}}，目前顯示 live 演化項目。",
+      showAll: "顯示全部演化項目",
     },
     evidence: {
       title: "證據庫",

@@ -8,6 +8,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
@@ -37,10 +38,28 @@ const stageDotCls: Record<string, string> = {
   skipped: "bg-muted-foreground/30",
 };
 
+const cleanText = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return undefined;
+};
+
+const containsToken = (needle: string, values: unknown[]): boolean => {
+  const normalized = needle.trim().toLowerCase();
+  return values
+    .map((value) => cleanText(value)?.toLowerCase())
+    .filter((value): value is string => Boolean(value))
+    .some((value) => value === normalized || value.includes(normalized));
+};
+
 export const ResearchLoopPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const runParam = params.get("run");
+  const personaFocus = params.get("persona")?.trim() ?? "";
+  const projectFocus = params.get("project")?.trim() ?? "";
   const runs = useV5Live(() => v5.loops.list("research"));
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunTriggerRef = useRef<HTMLElement | null>(null);
@@ -51,6 +70,25 @@ export const ResearchLoopPage = () => {
   }, [runParam, activeRunId]);
 
   const items = runs.data?.items ?? [];
+  const focus = useMemo(() => {
+    let scoped = items;
+    let matched = true;
+
+    if (projectFocus) {
+      const next = scoped.filter((r) => containsToken(projectFocus, [r.id, r.subjectId, r.subjectName, r.triggeredBy]));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+    if (personaFocus) {
+      const next = scoped.filter((r) => containsToken(personaFocus, [r.subjectId, r.subjectName, r.triggeredBy]));
+      matched = matched && next.length > 0;
+      if (next.length > 0) scoped = next;
+    }
+
+    return { items: scoped, matched };
+  }, [items, personaFocus, projectFocus]);
+  const visibleItems = focus.items;
+  const hasFocus = Boolean(personaFocus || projectFocus);
   const activeRun: LoopRun | null = useMemo(
     () => items.find((r) => r.id === activeRunId) ?? null,
     [items, activeRunId],
@@ -78,10 +116,10 @@ export const ResearchLoopPage = () => {
     restoreRunTriggerFocus();
   };
 
-  const running = items.filter((r) => r.status === "running").length;
-  const blocked = items.filter((r) => r.status === "blocked").length;
-  const reviewPending = items.filter((r) => r.nextAction?.kind === "awaiting_human_decision").length;
-  const succeeded = items.filter((r) => r.status === "succeeded").length;
+  const running = visibleItems.filter((r) => r.status === "running").length;
+  const blocked = visibleItems.filter((r) => r.status === "blocked").length;
+  const reviewPending = visibleItems.filter((r) => r.nextAction?.kind === "awaiting_human_decision").length;
+  const succeeded = visibleItems.filter((r) => r.status === "succeeded").length;
 
   return (
     <>
@@ -96,6 +134,21 @@ export const ResearchLoopPage = () => {
           <StatCard label={t("v5.loops.research.reviewPending", { defaultValue: "Review pending" })} value={reviewPending} tone={reviewPending > 0 ? "warning" : "default"} />
           <StatCard label={t("v5.optimization.succeeded")} value={succeeded} tone="success" />
         </div>
+
+        {hasFocus && (
+          <Card className={`p-3 text-sm ${focus.matched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-foreground">
+                {focus.matched
+                  ? t("v5.loops.research.focusedFmt", { persona: personaFocus || "nan", project: projectFocus || "nan", count: visibleItems.length })
+                  : t("v5.loops.research.focusMissingFmt", { persona: personaFocus || "nan", project: projectFocus || "nan" })}
+              </span>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/management/loops/research">{t("v5.loops.research.showAll", { defaultValue: "Show all research runs" })}</Link>
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Card className="p-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
@@ -113,7 +166,7 @@ export const ResearchLoopPage = () => {
               </tr>
             </thead>
             <tbody>
-              {items.map((r) => (
+              {visibleItems.map((r) => (
                 <tr
                   key={r.id}
                   className={`border-t border-border cursor-pointer hover:bg-muted/40 ${activeRunId === r.id ? "bg-primary/5" : ""}`}
@@ -148,7 +201,7 @@ export const ResearchLoopPage = () => {
                   <SkeletonThreshold loading fallback={<Skeleton className="h-12 w-full" />}>{null}</SkeletonThreshold>
                 </td></tr>
               )}
-              {runs.data && items.length === 0 && (
+              {runs.data && visibleItems.length === 0 && (
                 <tr><td colSpan={5} className="px-3 py-6">
                   <EmptyState
                     icon={<FlaskConical className="h-8 w-8" />}

@@ -232,6 +232,9 @@ export default {
         reviewPending: "Review pending",
         emptyTitle: "No research loops",
         emptyDesc: "Nothing matches the current focus.",
+        focusedFmt: "Focused persona: {{persona}} · project: {{project}} · {{count}} matching research run(s)",
+        focusMissingFmt: "No research run declares persona {{persona}} / project {{project}}. Showing live research runs.",
+        showAll: "Show all research runs",
       },
       execution: {
         title: "Execution Loop",
@@ -658,6 +661,10 @@ export default {
   },
   runtime: {
     subtitle: "Live operational view of executors, MCP servers, schedulers, and ingest pipelines.",
+    focusedFmt: "Focused persona: {{persona}} · runtime: {{runtime}} · binding: {{binding}} · {{count}} matching runtime row(s)",
+    focusMissingFmt: "No runtime row declares persona {{persona}} / runtime {{runtime}} / binding {{binding}}. Showing live runtime rows.",
+    showAll: "Show all runtimes",
+    empty: "No runtime rows.",
     actions: {
       restart: { label: "Restart", toast: "Restart dispatched: {{name}}" },
       drain: { label: "Drain & cordon", toast: "Drain started: {{name}}" },
@@ -2025,6 +2032,9 @@ export default {
       loadingLive: "Loading live Persona Fleet data sources…",
       liveDataUnavailableTitle: "Live data sources unavailable",
       liveDataUnavailableBody: "This page does not render demo, seed, or non-production data source rows.",
+      focusedFmt: "Focused persona: {{persona}} · source: {{source}} · {{count}} matching data source row(s)",
+      focusMissingFmt: "No data source row declares persona {{persona}} / source {{source}}. Showing live data source rows.",
+      showAll: "Show all data sources",
     },
     fleet: {
       title: "Persona Fleet",
@@ -2139,6 +2149,9 @@ export default {
       before: "Before",
       after: "After",
       landed: "Landed",
+      focusedFmt: "Focused persona: {{persona}} · mutation: {{mutation}} · {{count}} matching evolution item(s)",
+      focusMissingFmt: "No evolution item declares persona {{persona}} / mutation {{mutation}}. Showing live evolution items.",
+      showAll: "Show all evolution items",
     },
     evidence: {
       title: "Evidence Explorer",

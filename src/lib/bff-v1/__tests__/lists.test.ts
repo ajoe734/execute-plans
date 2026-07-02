@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { lists, useLiveListV1, asListEnvelope, normalizeLiveListResponse, type ListEnvelope } from "@/lib/bff-v1";
+import { lists, useLiveListV1, asListEnvelope, normalizeLiveListResponse, normalizeRuntimeListResponse, type ListEnvelope } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 
 describe("VI-1 lists facade", () => {
@@ -58,6 +58,35 @@ describe("VI-1 lists facade", () => {
 
     expect(env.items).toEqual([{ alert_id: "al_1" }]);
     expect(env.meta).toEqual({ surfaces: { alerts: { status: "degraded", source: "local_snapshot" } } });
+  });
+
+  it("normalizes live runtime binding rows without inventing telemetry zeros", () => {
+    const env = normalizeRuntimeListResponse({
+      items: [{
+        id: "rb-1",
+        runtime_binding_id: "rb-1",
+        runtime_id: "rt-persona-tw",
+        runtime_kind: "paper",
+        execution_mode: "paper",
+        status: "active",
+        metadata: { persona_id: "persona-tw" },
+      }],
+    });
+
+    expect(env.items[0]).toMatchObject({
+      id: "rt-persona-tw",
+      name: "rt-persona-tw",
+      runtimeId: "rt-persona-tw",
+      runtimeBindingId: "rb-1",
+      personaId: "persona-tw",
+      kind: "paper",
+      env: "paper",
+      status: "active",
+    });
+    expect(Number.isNaN(env.items[0].cpu)).toBe(true);
+    expect(Number.isNaN(env.items[0].memory)).toBe(true);
+    expect(Number.isNaN(env.items[0].latencyP95Ms)).toBe(true);
+    expect(Number.isNaN(env.items[0].uptimePct)).toBe(true);
   });
 });
 
