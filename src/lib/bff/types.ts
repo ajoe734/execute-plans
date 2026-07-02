@@ -9,7 +9,7 @@ import type {
 export type RiskLevel = "info" | "low" | "medium" | "high" | "critical";
 export const RISK_LEVELS: readonly RiskLevel[] = ["info", "low", "medium", "high", "critical"] as const;
 export type LifecycleState = "draft" | "review" | "approved" | "deployed" | "paused" | "retired";
-export type RunState = "pending" | "running" | "success" | "warning" | "failed" | "paused";
+export type RunState = "pending" | "running" | "success" | "warning" | "failed" | "paused" | "active";
 
 export interface BaseObject {
   id: string;
@@ -117,6 +117,16 @@ export interface Runtime {
   uptimePct: number;
   region: string;
   updatedAt: string;
+  runtimeId?: string;
+  runtime_id?: string;
+  runtimeBindingId?: string;
+  runtime_binding_id?: string;
+  personaId?: string;
+  persona_id?: string;
+  artifactId?: string;
+  artifact_id?: string;
+  planId?: string;
+  plan_id?: string;
 }
 
 export interface EvolutionProgram extends BaseObject {

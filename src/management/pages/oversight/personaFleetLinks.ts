@@ -34,6 +34,20 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   current_work?: string;
   research_status?: RawResearchStatus;
   current_research_projects?: RawResearchProject[];
+  humanGateId?: string;
+  human_gate_id?: string;
+  inboxId?: string;
+  inbox_id?: string;
+  decisionId?: string;
+  decision_id?: string;
+  approvalId?: string;
+  approval_id?: string;
+  runtimeId?: string;
+  runtime_id?: string;
+  runtimeBindingId?: string;
+  runtime_binding_id?: string;
+  bindingId?: string;
+  binding_id?: string;
 };
 
 export type PersonaFleetResearchItem = {
@@ -168,7 +182,27 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string {
   return `/management/evolution-journal?persona=${encoded(r.personaId)}`;
 }
 
+function personaFleetHumanGateId(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const explicit =
+    raw.humanGateId ??
+    raw.human_gate_id ??
+    raw.inboxId ??
+    raw.inbox_id ??
+    raw.decisionId ??
+    raw.decision_id ??
+    raw.approvalId ??
+    raw.approval_id;
+  if (explicit) return explicit;
+  if (r.humanNeeded || String(r.ooda ?? "").toLowerCase() === "decide") {
+    return `readiness_blocker:persona:${r.personaId}`;
+  }
+  return undefined;
+}
+
 export function personaFleetHumanGateHref(r: ManagementPersonaFleetRow): string {
+  const gateId = personaFleetHumanGateId(r);
+  if (gateId) return `/management/human-inbox/${encoded(gateId)}`;
   return `/management/human-inbox?persona=${encoded(r.personaId)}`;
 }
 
@@ -177,7 +211,13 @@ export function personaFleetOnboardingHref(r: ManagementPersonaFleetRow): string
 }
 
 export function personaFleetRuntimeHref(r: ManagementPersonaFleetRow): string {
-  return `/management/runtimes?persona=${encoded(r.personaId)}`;
+  const raw = r as RawPersonaFleetRow;
+  const params = new URLSearchParams({ persona: r.personaId });
+  const runtimeId = raw.runtimeId ?? raw.runtime_id;
+  const bindingId = raw.runtimeBindingId ?? raw.runtime_binding_id ?? raw.bindingId ?? raw.binding_id;
+  if (runtimeId) params.set("runtime", runtimeId);
+  if (bindingId) params.set("binding", bindingId);
+  return `/management/runtimes?${params.toString()}`;
 }
 
 export function personaFleetOodaHref(

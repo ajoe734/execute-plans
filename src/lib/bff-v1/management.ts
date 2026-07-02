@@ -135,6 +135,9 @@ export interface ManagementPersonaFleetRow {
   dataSources?: ManagementDataSource[];
   researchStatus?: ManagementResearchStatus;
   currentResearchProjects?: ManagementResearchProject[];
+  runtimeId?: string;
+  runtimeBindingId?: string;
+  deploymentStage?: string;
 }
 
 export interface ManagementTradingPulseSurface {
@@ -1123,6 +1126,9 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     dataSources,
     researchStatus: adaptResearchStatus(value.researchStatus ?? value.research_status),
     currentResearchProjects,
+    runtimeId: asOptionalString(value.runtimeId ?? value.runtime_id),
+    runtimeBindingId: asOptionalString(value.runtimeBindingId ?? value.runtime_binding_id ?? value.bindingId ?? value.binding_id),
+    deploymentStage: asOptionalString(value.deploymentStage ?? value.deployment_stage),
   };
 }
 

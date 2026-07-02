@@ -10,6 +10,7 @@ import {
   personaFleetPersonaHref,
   personaFleetResearchHref,
   personaFleetResearchItems,
+  personaFleetRuntimeHref,
 } from "./personaFleetLinks";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
@@ -101,10 +102,10 @@ describe("PersonaFleetPage deep links", () => {
       "/management/evolution-journal?persona=persona%2Ftw%20equity",
     );
     expect(personaFleetHumanGateHref(row)).toBe(
-      "/management/human-inbox?persona=persona%2Ftw%20equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
     );
     expect(personaFleetOodaHref(row)).toBe(
-      "/management/human-inbox?persona=persona%2Ftw%20equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
     );
   });
 
@@ -131,13 +132,29 @@ describe("PersonaFleetPage deep links", () => {
       "/management/experiments/exp-mgmt-qlib-006",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Decide" })).toBe(
-      "/management/human-inbox?persona=persona-tw-live",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-tw-live",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Act" })).toBe(
       "/management/runtimes?persona=persona-tw-live",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Learn" })).toBe(
       "/management/evolution-journal?persona=persona-tw-live",
+    );
+  });
+
+  it("includes runtime and binding context on Act links when live rows declare them", () => {
+    const row = {
+      personaId: "persona-tw-live",
+      ooda: "Act",
+      runtime_id: "rt-rescue-0260528-5937dea1",
+      runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetRuntimeHref(row)).toBe(
+      "/management/runtimes?persona=persona-tw-live&runtime=rt-rescue-0260528-5937dea1&binding=rb-433f2a614995432b9e7a463c882dbefb",
+    );
+    expect(personaFleetOodaHref(row)).toBe(
+      "/management/runtimes?persona=persona-tw-live&runtime=rt-rescue-0260528-5937dea1&binding=rb-433f2a614995432b9e7a463c882dbefb",
     );
   });
 
