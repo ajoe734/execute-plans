@@ -163,6 +163,9 @@ export interface AssistantProviderUsageSummaryModel {
 
 export interface AssistantProviderUsageObserved {
   source?: string;
+  coverage?: string;
+  coverageLabel?: string;
+  truthPolicy?: string;
   calls?: number;
   successCount?: number;
   failedCount?: number;
@@ -170,6 +173,13 @@ export interface AssistantProviderUsageObserved {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  lastObservedAt?: string | null;
+  ageHours?: number | null;
+  stale?: boolean;
+  staleAfterHours?: number;
+  windowHours?: number | null;
+  eventLimit?: number;
+  message?: string | null;
 }
 
 export interface AssistantProviderUsageSummaryRow {
@@ -217,6 +227,7 @@ export type AssistantProviderUsageSummaryResult =
       providers: AssistantProviderUsageSummaryRow[];
       totals: AssistantProviderUsageTotals;
       quota: Record<string, unknown> | null;
+      usage?: Record<string, unknown> | null;
       meta: Record<string, unknown> | null;
     }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
@@ -442,12 +453,21 @@ export interface AssistantProviderReauthSession {
   provider: string | null;
   status: string | null;
   reauthSessionId: string;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  codeSubmittedAt?: string | null;
+  completedAt?: string | null;
   verificationUri: string | null;
   verificationUriComplete: string | null;
   userCode: string | null;
   expiresAt: string | null;
   intervalSeconds: number | null;
   credentialExchange: AssistantProviderCredentialExchange | null;
+  readiness?: Record<string, unknown> | null;
+  errorCode?: string | null;
+  warningCode?: string | null;
+  message?: string | null;
+  returncode?: number | null;
 }
 
 export interface AssistantProviderReauthInput {
@@ -821,6 +841,9 @@ function adaptProviderObservedUsage(raw: unknown): AssistantProviderUsageObserve
   return {
     ...r,
     source: asString(r.source),
+    coverage: asString(r.coverage),
+    coverageLabel: asString(r.coverageLabel ?? r.coverage_label),
+    truthPolicy: asString(r.truthPolicy ?? r.truth_policy),
     calls: asNumber(r.calls),
     successCount: asNumber(r.successCount ?? r.success_count),
     failedCount: asNumber(r.failedCount ?? r.failed_count),
@@ -828,6 +851,13 @@ function adaptProviderObservedUsage(raw: unknown): AssistantProviderUsageObserve
     inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
     outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
     totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    lastObservedAt: asString(r.lastObservedAt ?? r.last_observed_at) ?? null,
+    ageHours: asNumber(r.ageHours ?? r.age_hours) ?? null,
+    stale: asBoolean(r.stale),
+    staleAfterHours: asNumber(r.staleAfterHours ?? r.stale_after_hours),
+    windowHours: asNumber(r.windowHours ?? r.window_hours) ?? null,
+    eventLimit: asNumber(r.eventLimit ?? r.event_limit),
+    message: asString(r.message) ?? null,
   };
 }
 
@@ -1085,6 +1115,7 @@ export async function fetchAssistantProviderUsageSummary(
     providers,
     totals: adaptProviderUsageTotals(data?.totals),
     quota: asRecord(data?.quota) ?? null,
+    usage: asRecord(data?.usage) ?? null,
     meta: asRecord(parsed?.meta) ?? null,
   };
 }
@@ -1228,12 +1259,21 @@ function adaptProviderReauthSession(raw: unknown): AssistantProviderReauthSessio
     provider: asString(r.provider) ?? null,
     status: asString(r.status) ?? null,
     reauthSessionId,
+    startedAt: asString(r.startedAt ?? r.started_at) ?? null,
+    updatedAt: asString(r.updatedAt ?? r.updated_at) ?? null,
+    codeSubmittedAt: asString(r.codeSubmittedAt ?? r.code_submitted_at) ?? null,
+    completedAt: asString(r.completedAt ?? r.completed_at) ?? null,
     verificationUri: asString(r.verificationUri ?? r.verification_uri) ?? null,
     verificationUriComplete: asString(r.verificationUriComplete ?? r.verification_uri_complete) ?? null,
     userCode: asString(r.userCode ?? r.user_code) ?? null,
     expiresAt: asString(r.expiresAt ?? r.expires_at) ?? null,
     intervalSeconds: asNumber(r.intervalSeconds ?? r.interval_seconds) ?? null,
     credentialExchange: adaptProviderCredentialExchange(r.credentialExchange ?? r.credential_exchange),
+    readiness: asRecord(r.readiness),
+    errorCode: asString(r.errorCode ?? r.error_code) ?? null,
+    warningCode: asString(r.warningCode ?? r.warning_code) ?? null,
+    message: asString(r.message) ?? null,
+    returncode: asNumber(r.returncode) ?? null,
   };
 }
 

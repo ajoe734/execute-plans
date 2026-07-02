@@ -237,7 +237,12 @@ describe("Management AI orchestrator status", () => {
               unit: "requests",
             },
             observed_usage: {
-              source: "management_ai_audit",
+              source: "management_ai_bff_audit",
+              coverage: "bff_observed_management_ai_only",
+              coverage_label: "BFF observed",
+              stale: true,
+              stale_after_hours: 24,
+              last_observed_at: "2026-06-28T11:07:35Z",
               calls: 7,
               total_tokens: 140,
             },
@@ -258,6 +263,10 @@ describe("Management AI orchestrator status", () => {
         },
         quota: {
           truth_policy: "provider_snapshot_only",
+        },
+        usage: {
+          truth_policy: "observed_bff_events_only",
+          source: "management_ai_bff_audit",
         },
       },
       meta: { auth_probe: false },
@@ -284,6 +293,17 @@ describe("Management AI orchestrator status", () => {
       source: "provider_snapshot",
       remaining: 12,
       used: 38,
+    });
+    expect(result.providers[0].observedUsage).toMatchObject({
+      source: "management_ai_bff_audit",
+      coverage: "bff_observed_management_ai_only",
+      coverageLabel: "BFF observed",
+      stale: true,
+      staleAfterHours: 24,
+    });
+    expect(result.usage).toMatchObject({
+      truth_policy: "observed_bff_events_only",
+      source: "management_ai_bff_audit",
     });
     expect(result.providers[0].models?.[0]).toMatchObject({
       model: "gpt-5-codex",

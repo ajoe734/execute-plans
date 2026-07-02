@@ -223,6 +223,37 @@ jobs:
           PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
+      - name: Management route-load baseline
+        id: route_load
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+        run: |
+          set -o pipefail
+          npm run probe:route-load 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/route-load-baseline.log"
+
+      - name: Compose management load gate manifest
+        id: mgmt_load_gate
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+          PANTHEON_LOAD_GATE_MANIFEST: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-load-gate-current.json
+        run: |
+          set -o pipefail
+          node scripts/compose-release-load-gate.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/release-load-gate.log"
+          echo "PANTHEON_LOAD_GATE_MANIFEST=$PANTHEON_LOAD_GATE_MANIFEST" >> "$GITHUB_ENV"
+
+      - name: Management hosted production acceptance
+        id: mgmt_hosted_accept
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+          PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
+          PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "6000"
+        run: |
+          set -o pipefail
+          npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
+
       - name: Playwright E2E
         id: e2e
         continue-on-error: true
@@ -268,6 +299,9 @@ jobs:
             "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
+            "route_load": { "outcome": "${{ steps.route_load.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/route-load-baseline.log" },
+            "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
+            "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
