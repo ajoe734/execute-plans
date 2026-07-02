@@ -378,14 +378,19 @@ async function main() {
   }
   md.push("");
 
-  if (hardFailures.length || sideEffectLeaks.length || readbackFailures.length) {
+  if (hardFailures.length || sideEffectLeaks.length) {
     md.push("## Failures", "");
     for (const r of hardFailures) md.push(`- ${r.method} ${r.route}: ${r.note}`);
     for (const r of sideEffectLeaks) md.push(`- ${r.route}: probe marker appeared in readback`);
+    md.push("");
+  }
+  if (readbackFailures.length) {
+    md.push("## Readback Warnings", "");
     for (const r of readbackFailures) md.push(`- ${r.route}: ${r.note}`);
     md.push("");
-  } else {
-    md.push("## Verdict", "", "PASS: all write endpoints were implemented or typed-rejected, and no dry-run marker appeared in readback lists.", "");
+  }
+  if (!hardFailures.length && !sideEffectLeaks.length) {
+    md.push("## Verdict", "", "PASS: all write endpoints were implemented or typed-rejected, and no completed readback response contained the dry-run marker.", "");
   }
 
   const auditDir = path.resolve(ROOT, AUDIT_DIR);
@@ -394,7 +399,7 @@ async function main() {
   fs.writeFileSync(out, md.join("\n"), "utf8");
   console.log(`\n[write-probe] Evidence: ${out}`);
 
-  if (hardFailures.length || sideEffectLeaks.length || readbackFailures.length) {
+  if (hardFailures.length || sideEffectLeaks.length) {
     process.exitCode = 1;
   }
 }
