@@ -29,6 +29,8 @@ const ROOT = process.cwd();
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 const PROBE_MARKER = `dry-run-write-probe-${RUN_ID}-${Math.random().toString(36).slice(2, 8)}`;
 const INCLUDE_CREATE_DRY_RUNS = truthy(process.env.PANTHEON_WRITE_PROBE_INCLUDE_CREATES || "false");
+const WRITE_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_ATTEMPTS, 3, 1);
+const WRITE_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_TIMEOUT_MS, 20_000, 5_000);
 const READBACK_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_ATTEMPTS, 3, 1);
 const READBACK_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_TIMEOUT_MS, 15_000, 5_000);
 
@@ -198,42 +200,68 @@ function sleep(ms) {
 
 async function probe(ep) {
   const url = new URL(ep.route, BFF_BASE_URL).toString();
-  const requestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const baseRequestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { body, marker } = withProbeMarker(ep);
-  try {
-    const res = await fetch(url, {
-      method: ep.method,
-      headers: headersFor(requestId),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
-    });
-    const bodyText = await res.text().catch(() => "");
-    const json = safeJsonParse(bodyText);
-    const baseCls = classify(res.status, json);
-    let cls = baseCls;
-    if (ep.allowTyped404 && res.status === 404 && baseCls.typedEnvelope) {
-      cls = { ...baseCls, category: "implemented", tag: "implemented", note: "typed dev-id not-found precondition envelope" };
-    } else if (ep.required === false && baseCls.category === "missing") {
-      cls = { ...baseCls, category: "optional_missing", tag: "optional_missing", note: `${baseCls.note}; optional exploratory route` };
+  let last = null;
+
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
+    const requestId = `${baseRequestId}-a${attempt + 1}`;
+    try {
+      const res = await fetch(url, {
+        method: ep.method,
+        headers: headersFor(requestId),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      const bodyText = await res.text().catch(() => "");
+      const json = safeJsonParse(bodyText);
+      const baseCls = classify(res.status, json);
+      let cls = baseCls;
+      if (ep.allowTyped404 && res.status === 404 && baseCls.typedEnvelope) {
+        cls = { ...baseCls, category: "implemented", tag: "implemented", note: "typed dev-id not-found precondition envelope" };
+      } else if (ep.required === false && baseCls.category === "missing") {
+        cls = { ...baseCls, category: "optional_missing", tag: "optional_missing", note: `${baseCls.note}; optional exploratory route` };
+      }
+      last = {
+        ...ep,
+        marker,
+        status: res.status,
+        ...cls,
+        snippet: bodyText.slice(0, 180).replace(/\s+/g, " "),
+      };
+      if (![502, 503, 504].includes(res.status)) return last;
+    } catch (err) {
+      const cls = classify(0, null);
+      last = {
+        ...ep,
+        marker,
+        status: 0,
+        ...cls,
+        note: String(err).slice(0, 120),
+        snippet: "",
+      };
     }
+
+    if (attempt < WRITE_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
+  }
+
+  if (last) {
     return {
-      ...ep,
-      marker,
-      status: res.status,
-      ...cls,
-      snippet: bodyText.slice(0, 180).replace(/\s+/g, " "),
-    };
-  } catch (err) {
-    const cls = classify(0, null);
-    return {
-      ...ep,
-      marker,
-      status: 0,
-      ...cls,
-      note: String(err).slice(0, 120),
-      snippet: "",
+      ...last,
+      note: `${last.note} after ${WRITE_ATTEMPTS} attempt(s)`,
     };
   }
+  const cls = classify(0, null);
+  return {
+    ...ep,
+    marker,
+    status: 0,
+    ...cls,
+    note: "write probe was not attempted",
+    snippet: "",
+  };
 }
 
 function containsMarker(value) {
