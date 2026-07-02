@@ -277,11 +277,47 @@ describe("mgmt façade (PM-Live)", () => {
             entity_ref: "rart-20260615-002",
             display_label: "TW momentum candidate",
           },
+          linkedObjectLink: {
+            availability: "available",
+            route_href: "/management/artifacts/rart-20260615-002",
+            display_label: "TW momentum candidate",
+            entity_type: "artifact",
+            entity_ref: "rart-20260615-002",
+          },
           resolvedLink: {
             availability: "unavailable",
             route_href: null,
             display_label: "Source unavailable",
             open_in_new_tab: false,
+          },
+          actionability: {
+            state: "unresolved_source",
+            severity: "warning",
+            reasons: ["resolved_link_unavailable"],
+            can_trace: false,
+            can_open_source: false,
+            can_open_linked_object: true,
+          },
+          operation: {
+            status: "needs_evidence",
+            reviewer: "ops-reviewer",
+            task_refs: ["EVID-OPS-20260615-abc123"],
+            command_refs: ["cmd-001"],
+            audit_refs: ["audit-001"],
+          },
+          allowedActions: {
+            canOpenSource: false,
+            canOpenLinkedObject: true,
+            canInspectChain: true,
+            canMarkStale: true,
+            canRequestEvidence: true,
+            canCreateDispositionTask: false,
+            canAssignReviewer: true,
+            canResolve: true,
+          },
+          disabledActionReasons: {
+            canOpenSource: "Source link is unavailable or incomplete.",
+            canCreateDispositionTask: "A disposition task is already attached.",
           },
           managementHref: "/management/evidence?ref_id=evref-rart-20260615-002",
         },
@@ -292,6 +328,11 @@ describe("mgmt façade (PM-Live)", () => {
         verifiedEvidence: 1,
         redactedEvidence: 0,
         byCredibilityTier: { producer_record: 1 },
+        traceableEvidence: 0,
+        needsAttentionEvidence: 1,
+        openOperationEvidence: 1,
+        byActionabilityState: { unresolved_source: 1 },
+        byOperationStatus: { needs_evidence: 1 },
       },
       meta: {
         snapshot_at: "2026-06-30T12:23:04Z",
@@ -313,12 +354,49 @@ describe("mgmt façade (PM-Live)", () => {
         entityRef: "rart-20260615-002",
         displayLabel: "TW momentum candidate",
       },
+      linkedObjectLink: {
+        availability: "available",
+        routeHref: "/management/artifacts/rart-20260615-002",
+        displayLabel: "TW momentum candidate",
+        entityType: "artifact",
+        entityRef: "rart-20260615-002",
+      },
       resolvedLink: {
         availability: "unavailable",
         routeHref: null,
         displayLabel: "Source unavailable",
       },
+      actionability: {
+        state: "unresolved_source",
+        severity: "warning",
+        reasons: ["resolved_link_unavailable"],
+        canOpenLinkedObject: true,
+      },
+      operation: {
+        status: "needs_evidence",
+        reviewer: "ops-reviewer",
+        taskRefs: ["EVID-OPS-20260615-abc123"],
+        commandRefs: ["cmd-001"],
+        auditRefs: ["audit-001"],
+      },
+      allowedActions: {
+        canOpenSource: false,
+        canOpenLinkedObject: true,
+        canCreateDispositionTask: false,
+        canResolve: true,
+      },
+      disabledActionReasons: {
+        canOpenSource: "Source link is unavailable or incomplete.",
+        canCreateDispositionTask: "A disposition task is already attached.",
+      },
       managementHref: "/management/evidence?ref_id=evref-rart-20260615-002",
+    });
+    expect(out?.summary).toMatchObject({
+      traceableEvidence: 0,
+      needsAttentionEvidence: 1,
+      openOperationEvidence: 1,
+      byActionabilityState: { unresolved_source: 1 },
+      byOperationStatus: { needs_evidence: 1 },
     });
     expect(out?.items[0] as Record<string, unknown>).not.toHaveProperty("sourceRef");
   });
@@ -357,6 +435,13 @@ describe("mgmt façade (PM-Live)", () => {
         entity_ref: "rart-20260615-001",
         display_label: "TW momentum factor candidate model",
       },
+      linked_object_link: {
+        availability: "available",
+        route_href: "/management/artifacts/rart-20260615-001",
+        display_label: "TW momentum factor candidate model",
+        entity_type: "artifact",
+        entity_ref: "rart-20260615-001",
+      },
       linked_decisions: [
         {
           entity_type: "decision",
@@ -375,6 +460,82 @@ describe("mgmt façade (PM-Live)", () => {
       },
       source_memory_context: null,
       created_at: "2026-06-15T13:02:00Z",
+      actionability: {
+        state: "traceable",
+        severity: "ok",
+        reasons: [],
+        can_trace: true,
+        can_open_source: true,
+        can_open_linked_object: true,
+      },
+      operation: {
+        status: "needs_reviewer",
+        reviewer: "risk-reviewer",
+        task_refs: ["EVID-OPS-20260615-001"],
+        command_refs: ["cmd-001"],
+        audit_refs: ["audit-001"],
+      },
+      relationships: {
+        artifacts: [
+          {
+            entity_type: "artifact",
+            entity_ref: "rart-20260615-001",
+            display_label: "TW momentum factor candidate model",
+            route_href: "/management/artifacts/rart-20260615-001",
+            link_type: "supporting_evidence",
+          },
+        ],
+        decisions: [
+          {
+            entity_type: "decision",
+            entity_ref: "decision-001",
+            display_label: "Approve artifact admission",
+            route_href: "/management/human-inbox/decision-001",
+          },
+        ],
+      },
+      chain: {
+        nodes: [
+          { id: "source:note-001", type: "research_note", label: "Admission note", route_href: "/knowledge/notes/note-001" },
+          { id: "evidence:evref-note-001", type: "evidence_ref", label: "Admission readiness packet", route_href: "/management/evidence?ref_id=evref-note-001" },
+          { id: "artifact:rart-20260615-001", type: "artifact", label: "TW momentum factor candidate model", route_href: "/management/artifacts/rart-20260615-001" },
+        ],
+        edges: [
+          { from: "source:note-001", to: "evidence:evref-note-001", relationship: "captured_as_evidence" },
+          { from: "evidence:evref-note-001", to: "artifact:rart-20260615-001", relationship: "supporting_evidence" },
+        ],
+      },
+      tasks: [
+        {
+          task_ref: "EVID-OPS-20260615-001",
+          status: "linked",
+          materialization: "operation_projection",
+        },
+      ],
+      audit_events: [
+        {
+          audit_ref: "audit-001",
+          event_id: "evop-001",
+          action: "assign_reviewer",
+          actor_id: "operator",
+          created_at: "2026-06-15T13:05:00Z",
+          status_after: "needs_reviewer",
+          command_id: "cmd-001",
+        },
+      ],
+      allowed_actions: {
+        can_open_source: true,
+        can_open_linked_object: true,
+        can_inspect_chain: true,
+        can_mark_stale: true,
+        can_request_evidence: true,
+        can_create_disposition_task: false,
+        can_assign_reviewer: true,
+        can_resolve: true,
+      },
+      disabled_action_reasons: {
+        can_create_disposition_task: "A disposition task is already attached.",
+      },
       meta: {
         snapshot_at: "2026-06-30T12:23:04Z",
         surfaces: {
@@ -410,6 +571,11 @@ describe("mgmt façade (PM-Live)", () => {
         entityRef: "rart-20260615-001",
         displayLabel: "TW momentum factor candidate model",
       },
+      linkedObjectLink: {
+        availability: "available",
+        routeHref: "/management/artifacts/rart-20260615-001",
+        displayLabel: "TW momentum factor candidate model",
+      },
       linkedDecisions: [
         {
           entityType: "decision",
@@ -417,6 +583,70 @@ describe("mgmt façade (PM-Live)", () => {
           routeHref: "/management/human-inbox/decision-001",
         },
       ],
+      actionability: {
+        state: "traceable",
+        severity: "ok",
+        canTrace: true,
+        canOpenSource: true,
+        canOpenLinkedObject: true,
+      },
+      operation: {
+        status: "needs_reviewer",
+        reviewer: "risk-reviewer",
+        taskRefs: ["EVID-OPS-20260615-001"],
+        commandRefs: ["cmd-001"],
+        auditRefs: ["audit-001"],
+      },
+      relationships: {
+        artifacts: [
+          {
+            entityType: "artifact",
+            entityRef: "rart-20260615-001",
+            routeHref: "/management/artifacts/rart-20260615-001",
+          },
+        ],
+        decisions: [
+          {
+            entityType: "decision",
+            entityRef: "decision-001",
+            routeHref: "/management/human-inbox/decision-001",
+          },
+        ],
+      },
+      chain: {
+        nodes: [
+          { id: "source:note-001", routeHref: "/knowledge/notes/note-001" },
+          { id: "evidence:evref-note-001", routeHref: "/management/evidence?ref_id=evref-note-001" },
+          { id: "artifact:rart-20260615-001", routeHref: "/management/artifacts/rart-20260615-001" },
+        ],
+        edges: [
+          { from: "source:note-001", to: "evidence:evref-note-001", relationship: "captured_as_evidence" },
+          { from: "evidence:evref-note-001", to: "artifact:rart-20260615-001", relationship: "supporting_evidence" },
+        ],
+      },
+      tasks: [
+        {
+          taskRef: "EVID-OPS-20260615-001",
+          status: "linked",
+        },
+      ],
+      auditEvents: [
+        {
+          auditRef: "audit-001",
+          eventId: "evop-001",
+          action: "assign_reviewer",
+          statusAfter: "needs_reviewer",
+        },
+      ],
+      allowedActions: {
+        canOpenSource: true,
+        canOpenLinkedObject: true,
+        canInspectChain: true,
+        canCreateDispositionTask: false,
+      },
+      disabledActionReasons: {
+        canCreateDispositionTask: "A disposition task is already attached.",
+      },
     });
     expect(out?.sourceDocument as Record<string, unknown>).not.toHaveProperty("sourceRef");
     expect(out?.sourceDocument.storagePreview as Record<string, unknown>).not.toHaveProperty("previewToken");
@@ -593,7 +823,7 @@ describe("mgmt façade (PM-Live)", () => {
     expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
   });
 
-  it("all 14 mgmt paths exist on paths catalog", () => {
+  it("management paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
     expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
@@ -602,6 +832,7 @@ describe("mgmt façade (PM-Live)", () => {
     expect(paths.mgmtTradingRankings()).toMatch(/trading-pulse\/rankings$/);
     expect(paths.mgmtEvolutionJournal()).toMatch(/evolution-journal$/);
     expect(paths.mgmtEvidenceExplorer()).toMatch(/management\/evidence$/);
+    expect(paths.mgmtEvidenceRef("evref-1")).toBe("/bff/management/evidence/evref-1");
     expect(paths.knowledgeEvidenceRef("evref-1")).toBe("/api/v1/knowledge/evidence/evref-1");
     expect(paths.mgmtPersonaIntent()).toMatch(/persona-intent$/);
     expect(paths.mgmtReadinessEp5()).toMatch(/readiness\/ep5$/);
