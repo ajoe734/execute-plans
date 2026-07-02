@@ -24,6 +24,7 @@ import {
   type BffErrorEnvelope,
   type ErrorCode,
 } from "../errors";
+import { readBffEnv } from "../runtimeEnv";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -251,8 +252,16 @@ export interface WidgetRevisionAcceptResult extends TradingRoomWorkspaceResult {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/**
+ * The Agora SPA is served as a static bundle with no same-origin BFF reverse
+ * proxy, so a bare window.location.origin fallback here silently 404s (or
+ * hits the SPA's own index.html fallback) in live mode instead of reaching
+ * the BFF. Precedence: explicit arg > VITE_BFF_BASE_URL > origin.
+ */
 function resolvedBase(baseUrl?: string): string {
   if (baseUrl) return baseUrl.replace(/\/+$/, "");
+  const configured = readBffEnv().VITE_BFF_BASE_URL;
+  if (configured) return configured.replace(/\/+$/, "");
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin.replace(/\/+$/, "");
   }
