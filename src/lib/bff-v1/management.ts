@@ -266,6 +266,19 @@ export interface ManagementEvidenceResolvedLink {
   open_in_new_tab: boolean;
 }
 
+export interface ManagementEvidenceLinkedObjectLink {
+  availability: string;
+  routeHref?: string | null;
+  route_href?: string | null;
+  displayLabel: string;
+  display_label: string;
+  entityType?: string | null;
+  entity_type?: string | null;
+  entityRef?: string | null;
+  entity_ref?: string | null;
+  reason?: string;
+}
+
 export interface ManagementEvidenceLinkedObjectSummary {
   entityType: string;
   entity_type: string;
@@ -274,6 +287,73 @@ export interface ManagementEvidenceLinkedObjectSummary {
   displayLabel?: string | null;
   display_label?: string | null;
 }
+
+export interface ManagementEvidenceActionability {
+  state: string;
+  severity: string;
+  reasons: string[];
+  canTrace: boolean;
+  can_trace: boolean;
+  canOpenSource: boolean;
+  can_open_source: boolean;
+  canOpenLinkedObject: boolean;
+  can_open_linked_object: boolean;
+}
+
+export interface ManagementEvidenceOperationEvent {
+  eventId?: string | null;
+  event_id?: string | null;
+  refId?: string | null;
+  ref_id?: string | null;
+  action?: string | null;
+  actorId?: string | null;
+  actor_id?: string | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+  reason?: string | null;
+  statusAfter?: string | null;
+  status_after?: string | null;
+  owner?: string | null;
+  reviewer?: string | null;
+  taskRefs: string[];
+  task_refs: string[];
+  commandId?: string | null;
+  command_id?: string | null;
+  auditRef?: string | null;
+  audit_ref?: string | null;
+}
+
+export interface ManagementEvidenceOperation {
+  refId?: string | null;
+  ref_id?: string | null;
+  status: string;
+  owner?: string | null;
+  reviewer?: string | null;
+  taskRefs: string[];
+  task_refs: string[];
+  lastActionAt?: string | null;
+  last_action_at?: string | null;
+  lastReason?: string | null;
+  last_reason?: string | null;
+  commandRefs: string[];
+  command_refs: string[];
+  auditRefs: string[];
+  audit_refs: string[];
+  events: ManagementEvidenceOperationEvent[];
+}
+
+export interface ManagementEvidenceAllowedActions {
+  canOpenSource: boolean;
+  canOpenLinkedObject: boolean;
+  canInspectChain: boolean;
+  canMarkStale: boolean;
+  canRequestEvidence: boolean;
+  canCreateDispositionTask: boolean;
+  canAssignReviewer: boolean;
+  canResolve: boolean;
+}
+
+export type ManagementEvidenceDisabledActionReasons = Partial<Record<keyof ManagementEvidenceAllowedActions, string>>;
 
 export interface ManagementEvidenceListItem {
   id: string;
@@ -291,12 +371,20 @@ export interface ManagementEvidenceListItem {
   credibility: ManagementEvidenceCredibility;
   linkedObjectSummary?: ManagementEvidenceLinkedObjectSummary;
   linked_object_summary?: ManagementEvidenceLinkedObjectSummary;
+  linkedObjectLink?: ManagementEvidenceLinkedObjectLink;
+  linked_object_link?: ManagementEvidenceLinkedObjectLink;
   resolvedLink: ManagementEvidenceResolvedLink;
   resolved_link: ManagementEvidenceResolvedLink;
   routeHref?: string;
   route_href?: string;
   managementHref?: string;
   management_href?: string;
+  actionability: ManagementEvidenceActionability;
+  operation: ManagementEvidenceOperation;
+  allowedActions: ManagementEvidenceAllowedActions;
+  allowed_actions: ManagementEvidenceAllowedActions;
+  disabledActionReasons: ManagementEvidenceDisabledActionReasons;
+  disabled_action_reasons: ManagementEvidenceDisabledActionReasons;
   redacted: boolean;
   requiredCapability?: string;
   required_capability?: string;
@@ -320,6 +408,22 @@ export interface ManagementEvidenceSummary {
   by_link_type: Record<string, number>;
   byCredibilityTier: Record<string, number>;
   by_credibility_tier: Record<string, number>;
+  traceableEvidence: number;
+  traceable_evidence: number;
+  unresolvedSourceEvidence: number;
+  unresolved_source_evidence: number;
+  incompleteEvidence: number;
+  incomplete_evidence: number;
+  needsAttentionEvidence: number;
+  needs_attention_evidence: number;
+  openOperationEvidence: number;
+  open_operation_evidence: number;
+  byActionabilityState: Record<string, number>;
+  by_actionability_state: Record<string, number>;
+  byActionabilitySeverity: Record<string, number>;
+  by_actionability_severity: Record<string, number>;
+  byOperationStatus: Record<string, number>;
+  by_operation_status: Record<string, number>;
 }
 
 export interface ManagementEvidenceFacets {
@@ -329,6 +433,12 @@ export interface ManagementEvidenceFacets {
   link_types: Record<string, number>;
   credibilityTiers: Record<string, number>;
   credibility_tiers: Record<string, number>;
+  actionabilityStates: Record<string, number>;
+  actionability_states: Record<string, number>;
+  actionabilitySeverity: Record<string, number>;
+  actionability_severity: Record<string, number>;
+  operationStatuses: Record<string, number>;
+  operation_statuses: Record<string, number>;
 }
 
 export interface ManagementEvidencePageInfo {
@@ -411,6 +521,76 @@ export interface ManagementEvidenceSourceMemoryContext {
   route_href?: string | null;
 }
 
+export interface ManagementEvidenceRelationshipItem {
+  entityType: string;
+  entity_type: string;
+  entityRef: string;
+  entity_ref: string;
+  displayLabel?: string | null;
+  display_label?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+  linkType?: string | null;
+  link_type?: string | null;
+  relationshipNote?: string | null;
+  relationship_note?: string | null;
+  source?: string | null;
+}
+
+export type ManagementEvidenceRelationships = Record<string, ManagementEvidenceRelationshipItem[]>;
+
+export interface ManagementEvidenceChainNode {
+  id: string;
+  type: string;
+  label: string;
+  routeHref?: string | null;
+  route_href?: string | null;
+  availability?: string | null;
+}
+
+export interface ManagementEvidenceChainEdge {
+  from: string;
+  to: string;
+  relationship: string;
+  source?: string | null;
+  degraded?: boolean;
+}
+
+export interface ManagementEvidenceChain {
+  nodes: ManagementEvidenceChainNode[];
+  edges: ManagementEvidenceChainEdge[];
+  emptyReason?: string | null;
+  empty_reason?: string | null;
+  degradedReasons: string[];
+  degraded_reasons: string[];
+}
+
+export interface ManagementEvidenceTask {
+  taskRef: string;
+  task_ref: string;
+  status: string;
+  materialization?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+}
+
+export interface ManagementEvidenceAuditEvent {
+  auditRef?: string | null;
+  audit_ref?: string | null;
+  eventId?: string | null;
+  event_id?: string | null;
+  action?: string | null;
+  actorId?: string | null;
+  actor_id?: string | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+  reason?: string | null;
+  statusAfter?: string | null;
+  status_after?: string | null;
+  commandId?: string | null;
+  command_id?: string | null;
+}
+
 export interface ManagementEvidenceDetail {
   refId: string;
   ref_id: string;
@@ -424,6 +604,8 @@ export interface ManagementEvidenceDetail {
   resolved_link: ManagementEvidenceResolvedLink;
   linkedObjectSummary?: ManagementEvidenceLinkedObjectSummary;
   linked_object_summary?: ManagementEvidenceLinkedObjectSummary;
+  linkedObjectLink?: ManagementEvidenceLinkedObjectLink;
+  linked_object_link?: ManagementEvidenceLinkedObjectLink;
   linkedDecisions: ManagementEvidenceLinkedDecision[];
   linked_decisions: ManagementEvidenceLinkedDecision[];
   sourceNoteContext?: ManagementEvidenceSourceNoteContext | null;
@@ -432,6 +614,21 @@ export interface ManagementEvidenceDetail {
   source_memory_context?: ManagementEvidenceSourceMemoryContext | null;
   createdAt?: string | null;
   created_at?: string | null;
+  routeHref?: string | null;
+  route_href?: string | null;
+  managementHref?: string | null;
+  management_href?: string | null;
+  actionability: ManagementEvidenceActionability;
+  operation: ManagementEvidenceOperation;
+  relationships: ManagementEvidenceRelationships;
+  chain: ManagementEvidenceChain;
+  tasks: ManagementEvidenceTask[];
+  auditEvents: ManagementEvidenceAuditEvent[];
+  audit_events: ManagementEvidenceAuditEvent[];
+  allowedActions: ManagementEvidenceAllowedActions;
+  allowed_actions: ManagementEvidenceAllowedActions;
+  disabledActionReasons: ManagementEvidenceDisabledActionReasons;
+  disabled_action_reasons: ManagementEvidenceDisabledActionReasons;
   redacted: boolean;
   requiredCapability?: string;
   reason?: string;
@@ -479,6 +676,13 @@ const asStringRecord = (value: unknown): Record<string, string> => {
     Object.entries(value)
       .map(([key, item]) => [key, asString(item)] as const)
       .filter(([, item]) => item.length > 0),
+  );
+};
+
+const asBooleanRecord = (value: unknown): Record<string, boolean> => {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, asBoolean(item, false)] as const),
   );
 };
 
@@ -571,6 +775,25 @@ function adaptEvidenceResolvedLink(value: unknown): ManagementEvidenceResolvedLi
   };
 }
 
+function adaptEvidenceLinkedObjectLink(value: unknown): ManagementEvidenceLinkedObjectLink | undefined {
+  if (!isObject(value)) return undefined;
+  const availability = asString(value.availability, "unavailable");
+  const routeHref = nullableString(value.routeHref ?? value.route_href);
+  const displayLabel = asString(value.displayLabel ?? value.display_label, "Linked object unavailable");
+  return {
+    availability,
+    routeHref,
+    route_href: routeHref,
+    displayLabel,
+    display_label: displayLabel,
+    entityType: nullableString(value.entityType ?? value.entity_type),
+    entity_type: nullableString(value.entity_type ?? value.entityType),
+    entityRef: nullableString(value.entityRef ?? value.entity_ref),
+    entity_ref: nullableString(value.entity_ref ?? value.entityRef),
+    reason: optionalString(value.reason),
+  };
+}
+
 function adaptEvidenceLinkedObjectSummary(value: unknown): ManagementEvidenceLinkedObjectSummary | undefined {
   if (!isObject(value)) return undefined;
   const entityType = asString(value.entityType ?? value.entity_type);
@@ -584,6 +807,251 @@ function adaptEvidenceLinkedObjectSummary(value: unknown): ManagementEvidenceLin
     entity_ref: entityRef,
     displayLabel,
     display_label: displayLabel,
+  };
+}
+
+const defaultEvidenceActionability = (): ManagementEvidenceActionability => ({
+  state: "unknown",
+  severity: "info",
+  reasons: [],
+  canTrace: false,
+  can_trace: false,
+  canOpenSource: false,
+  can_open_source: false,
+  canOpenLinkedObject: false,
+  can_open_linked_object: false,
+});
+
+function adaptEvidenceActionability(value: unknown): ManagementEvidenceActionability {
+  if (!isObject(value)) return defaultEvidenceActionability();
+  const canTrace = asBoolean(value.canTrace ?? value.can_trace, false);
+  const canOpenSource = asBoolean(value.canOpenSource ?? value.can_open_source, false);
+  const canOpenLinkedObject = asBoolean(value.canOpenLinkedObject ?? value.can_open_linked_object, false);
+  return {
+    state: asString(value.state, "unknown"),
+    severity: asString(value.severity, "info"),
+    reasons: asStringArray(value.reasons),
+    canTrace,
+    can_trace: canTrace,
+    canOpenSource,
+    can_open_source: canOpenSource,
+    canOpenLinkedObject,
+    can_open_linked_object: canOpenLinkedObject,
+  };
+}
+
+function adaptEvidenceOperationEvent(value: unknown): ManagementEvidenceOperationEvent | null {
+  if (!isObject(value)) return null;
+  const taskRefs = asStringArray(value.taskRefs ?? value.task_refs);
+  return {
+    eventId: nullableString(value.eventId ?? value.event_id),
+    event_id: nullableString(value.event_id ?? value.eventId),
+    refId: nullableString(value.refId ?? value.ref_id),
+    ref_id: nullableString(value.ref_id ?? value.refId),
+    action: nullableString(value.action),
+    actorId: nullableString(value.actorId ?? value.actor_id),
+    actor_id: nullableString(value.actor_id ?? value.actorId),
+    createdAt: nullableString(value.createdAt ?? value.created_at),
+    created_at: nullableString(value.created_at ?? value.createdAt),
+    reason: nullableString(value.reason),
+    statusAfter: nullableString(value.statusAfter ?? value.status_after),
+    status_after: nullableString(value.status_after ?? value.statusAfter),
+    owner: nullableString(value.owner),
+    reviewer: nullableString(value.reviewer),
+    taskRefs,
+    task_refs: taskRefs,
+    commandId: nullableString(value.commandId ?? value.command_id),
+    command_id: nullableString(value.command_id ?? value.commandId),
+    auditRef: nullableString(value.auditRef ?? value.audit_ref),
+    audit_ref: nullableString(value.audit_ref ?? value.auditRef),
+  };
+}
+
+function adaptEvidenceOperation(value: unknown, refId?: string): ManagementEvidenceOperation {
+  const record = isObject(value) ? value : {};
+  const taskRefs = asStringArray(record.taskRefs ?? record.task_refs);
+  const commandRefs = asStringArray(record.commandRefs ?? record.command_refs);
+  const auditRefs = asStringArray(record.auditRefs ?? record.audit_refs);
+  const events = firstArray<unknown>(record.events)
+    .map(adaptEvidenceOperationEvent)
+    .filter((item): item is ManagementEvidenceOperationEvent => Boolean(item));
+  return {
+    refId: nullableString(record.refId ?? record.ref_id ?? refId),
+    ref_id: nullableString(record.ref_id ?? record.refId ?? refId),
+    status: asString(record.status, "none"),
+    owner: nullableString(record.owner),
+    reviewer: nullableString(record.reviewer),
+    taskRefs,
+    task_refs: taskRefs,
+    lastActionAt: nullableString(record.lastActionAt ?? record.last_action_at),
+    last_action_at: nullableString(record.last_action_at ?? record.lastActionAt),
+    lastReason: nullableString(record.lastReason ?? record.last_reason),
+    last_reason: nullableString(record.last_reason ?? record.lastReason),
+    commandRefs,
+    command_refs: commandRefs,
+    auditRefs,
+    audit_refs: auditRefs,
+    events,
+  };
+}
+
+function adaptEvidenceAllowedActions(value: unknown): ManagementEvidenceAllowedActions {
+  const record = asBooleanRecord(value);
+  return {
+    canOpenSource: record.canOpenSource ?? record.can_open_source ?? false,
+    canOpenLinkedObject: record.canOpenLinkedObject ?? record.can_open_linked_object ?? false,
+    canInspectChain: record.canInspectChain ?? record.can_inspect_chain ?? false,
+    canMarkStale: record.canMarkStale ?? record.can_mark_stale ?? false,
+    canRequestEvidence: record.canRequestEvidence ?? record.can_request_evidence ?? false,
+    canCreateDispositionTask: record.canCreateDispositionTask ?? record.can_create_disposition_task ?? false,
+    canAssignReviewer: record.canAssignReviewer ?? record.can_assign_reviewer ?? false,
+    canResolve: record.canResolve ?? record.can_resolve ?? false,
+  };
+}
+
+function adaptEvidenceDisabledActionReasons(value: unknown): ManagementEvidenceDisabledActionReasons {
+  const record = asStringRecord(value);
+  return {
+    ...(record.canOpenSource || record.can_open_source
+      ? { canOpenSource: record.canOpenSource ?? record.can_open_source }
+      : {}),
+    ...(record.canOpenLinkedObject || record.can_open_linked_object
+      ? { canOpenLinkedObject: record.canOpenLinkedObject ?? record.can_open_linked_object }
+      : {}),
+    ...(record.canInspectChain || record.can_inspect_chain
+      ? { canInspectChain: record.canInspectChain ?? record.can_inspect_chain }
+      : {}),
+    ...(record.canMarkStale || record.can_mark_stale
+      ? { canMarkStale: record.canMarkStale ?? record.can_mark_stale }
+      : {}),
+    ...(record.canRequestEvidence || record.can_request_evidence
+      ? { canRequestEvidence: record.canRequestEvidence ?? record.can_request_evidence }
+      : {}),
+    ...(record.canCreateDispositionTask || record.can_create_disposition_task
+      ? { canCreateDispositionTask: record.canCreateDispositionTask ?? record.can_create_disposition_task }
+      : {}),
+    ...(record.canAssignReviewer || record.can_assign_reviewer
+      ? { canAssignReviewer: record.canAssignReviewer ?? record.can_assign_reviewer }
+      : {}),
+    ...(record.canResolve || record.can_resolve
+      ? { canResolve: record.canResolve ?? record.can_resolve }
+      : {}),
+  };
+}
+
+function adaptEvidenceRelationshipItem(value: unknown): ManagementEvidenceRelationshipItem | null {
+  if (!isObject(value)) return null;
+  const entityType = asString(value.entityType ?? value.entity_type);
+  const entityRef = asString(value.entityRef ?? value.entity_ref);
+  if (!entityType || !entityRef) return null;
+  return {
+    entityType,
+    entity_type: entityType,
+    entityRef,
+    entity_ref: entityRef,
+    displayLabel: nullableString(value.displayLabel ?? value.display_label),
+    display_label: nullableString(value.display_label ?? value.displayLabel),
+    routeHref: nullableString(value.routeHref ?? value.route_href),
+    route_href: nullableString(value.route_href ?? value.routeHref),
+    linkType: nullableString(value.linkType ?? value.link_type),
+    link_type: nullableString(value.link_type ?? value.linkType),
+    relationshipNote: nullableString(value.relationshipNote ?? value.relationship_note),
+    relationship_note: nullableString(value.relationship_note ?? value.relationshipNote),
+    source: nullableString(value.source),
+  };
+}
+
+function adaptEvidenceRelationships(value: unknown): ManagementEvidenceRelationships {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([key, items]) => [
+      key,
+      firstArray<unknown>(items)
+        .map(adaptEvidenceRelationshipItem)
+        .filter((item): item is ManagementEvidenceRelationshipItem => Boolean(item)),
+    ]),
+  );
+}
+
+function adaptEvidenceChainNode(value: unknown): ManagementEvidenceChainNode | null {
+  if (!isObject(value)) return null;
+  const id = asString(value.id);
+  if (!id) return null;
+  const routeHref = nullableString(value.routeHref ?? value.route_href);
+  return {
+    id,
+    type: asString(value.type, "unknown"),
+    label: asString(value.label, id),
+    routeHref,
+    route_href: routeHref,
+    availability: nullableString(value.availability),
+  };
+}
+
+function adaptEvidenceChainEdge(value: unknown): ManagementEvidenceChainEdge | null {
+  if (!isObject(value)) return null;
+  const from = asString(value.from);
+  const to = asString(value.to);
+  if (!from || !to) return null;
+  return {
+    from,
+    to,
+    relationship: asString(value.relationship, "related_to"),
+    source: nullableString(value.source),
+    degraded: asBoolean(value.degraded, false),
+  };
+}
+
+function adaptEvidenceChain(value: unknown): ManagementEvidenceChain {
+  const record = isObject(value) ? value : {};
+  const nodes = firstArray<unknown>(record.nodes)
+    .map(adaptEvidenceChainNode)
+    .filter((item): item is ManagementEvidenceChainNode => Boolean(item));
+  const edges = firstArray<unknown>(record.edges)
+    .map(adaptEvidenceChainEdge)
+    .filter((item): item is ManagementEvidenceChainEdge => Boolean(item));
+  const degradedReasons = asStringArray(record.degradedReasons ?? record.degraded_reasons);
+  return {
+    nodes,
+    edges,
+    emptyReason: nullableString(record.emptyReason ?? record.empty_reason),
+    empty_reason: nullableString(record.empty_reason ?? record.emptyReason),
+    degradedReasons,
+    degraded_reasons: degradedReasons,
+  };
+}
+
+function adaptEvidenceTask(value: unknown): ManagementEvidenceTask | null {
+  if (!isObject(value)) return null;
+  const taskRef = asString(value.taskRef ?? value.task_ref);
+  if (!taskRef) return null;
+  return {
+    taskRef,
+    task_ref: taskRef,
+    status: asString(value.status, "linked"),
+    materialization: nullableString(value.materialization),
+    routeHref: nullableString(value.routeHref ?? value.route_href),
+    route_href: nullableString(value.route_href ?? value.routeHref),
+  };
+}
+
+function adaptEvidenceAuditEvent(value: unknown): ManagementEvidenceAuditEvent | null {
+  if (!isObject(value)) return null;
+  return {
+    auditRef: nullableString(value.auditRef ?? value.audit_ref),
+    audit_ref: nullableString(value.audit_ref ?? value.auditRef),
+    eventId: nullableString(value.eventId ?? value.event_id),
+    event_id: nullableString(value.event_id ?? value.eventId),
+    action: nullableString(value.action),
+    actorId: nullableString(value.actorId ?? value.actor_id),
+    actor_id: nullableString(value.actor_id ?? value.actorId),
+    createdAt: nullableString(value.createdAt ?? value.created_at),
+    created_at: nullableString(value.created_at ?? value.createdAt),
+    reason: nullableString(value.reason),
+    statusAfter: nullableString(value.statusAfter ?? value.status_after),
+    status_after: nullableString(value.status_after ?? value.statusAfter),
+    commandId: nullableString(value.commandId ?? value.command_id),
+    command_id: nullableString(value.command_id ?? value.commandId),
   };
 }
 
@@ -604,9 +1072,14 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
   const capturedAt = optionalString(value.capturedAt ?? value.captured_at ?? sourceDocument.capturedAt ?? sourceDocument.captured_at);
   const linkType = asString(value.linkType ?? value.link_type, "unknown");
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
+  const linkedObjectLink = adaptEvidenceLinkedObjectLink(value.linkedObjectLink ?? value.linked_object_link);
   const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
   const routeHref = optionalString(value.routeHref ?? value.route_href);
   const managementHref = optionalString(value.managementHref ?? value.management_href);
+  const allowedActions = adaptEvidenceAllowedActions(value.allowedActions ?? value.allowed_actions);
+  const disabledActionReasons = adaptEvidenceDisabledActionReasons(
+    value.disabledActionReasons ?? value.disabled_action_reasons,
+  );
   return {
     id: refId,
     refId,
@@ -623,12 +1096,20 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
     credibility: adaptEvidenceCredibility(value.credibility),
     linkedObjectSummary,
     linked_object_summary: linkedObjectSummary,
+    linkedObjectLink,
+    linked_object_link: linkedObjectLink,
     resolvedLink,
     resolved_link: resolvedLink,
     routeHref,
     route_href: routeHref,
     managementHref,
     management_href: managementHref,
+    actionability: adaptEvidenceActionability(value.actionability),
+    operation: adaptEvidenceOperation(value.operation, refId),
+    allowedActions,
+    allowed_actions: allowedActions,
+    disabledActionReasons,
+    disabled_action_reasons: disabledActionReasons,
     redacted: asBoolean(value.redacted, false),
     requiredCapability: optionalString(value.requiredCapability ?? value.required_capability),
     required_capability: optionalString(value.required_capability ?? value.requiredCapability),
@@ -642,17 +1123,34 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
   const byCredibilityTier: Record<string, number> = {};
   let verifiedEvidence = 0;
   let redactedEvidence = 0;
+  const byActionabilityState: Record<string, number> = {};
+  const byActionabilitySeverity: Record<string, number> = {};
+  const byOperationStatus: Record<string, number> = {};
   for (const item of items) {
     const sourceType = item.sourceType || "unknown";
     const linkType = item.linkType || "unknown";
     const tier = item.credibility.tier || "unverified";
+    const actionabilityState = item.actionability?.state || "unknown";
+    const actionabilitySeverity = item.actionability?.severity || "unknown";
+    const operationStatus = item.operation?.status || "none";
     bySourceType[sourceType] = (bySourceType[sourceType] ?? 0) + 1;
     byLinkType[linkType] = (byLinkType[linkType] ?? 0) + 1;
     byCredibilityTier[tier] = (byCredibilityTier[tier] ?? 0) + 1;
+    byActionabilityState[actionabilityState] = (byActionabilityState[actionabilityState] ?? 0) + 1;
+    byActionabilitySeverity[actionabilitySeverity] = (byActionabilitySeverity[actionabilitySeverity] ?? 0) + 1;
+    byOperationStatus[operationStatus] = (byOperationStatus[operationStatus] ?? 0) + 1;
     if (item.credibility.verified) verifiedEvidence += 1;
     if (item.redacted) redactedEvidence += 1;
   }
   const visibleEvidence = Math.max(items.length - redactedEvidence, 0);
+  const traceableEvidence = byActionabilityState.traceable ?? 0;
+  const unresolvedSourceEvidence = byActionabilityState.unresolved_source ?? 0;
+  const incompleteEvidence = byActionabilityState.incomplete ?? 0;
+  const needsAttentionEvidence = Math.max(items.length - traceableEvidence, 0);
+  const openOperationEvidence = items.filter((item) => {
+    const status = String(item.operation?.status ?? "none").toLowerCase();
+    return !["", "none", "resolved"].includes(status) && !item.redacted;
+  }).length;
   return {
     totalEvidence: items.length,
     total_evidence: items.length,
@@ -670,6 +1168,22 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
     by_link_type: byLinkType,
     byCredibilityTier,
     by_credibility_tier: byCredibilityTier,
+    traceableEvidence,
+    traceable_evidence: traceableEvidence,
+    unresolvedSourceEvidence,
+    unresolved_source_evidence: unresolvedSourceEvidence,
+    incompleteEvidence,
+    incomplete_evidence: incompleteEvidence,
+    needsAttentionEvidence,
+    needs_attention_evidence: needsAttentionEvidence,
+    openOperationEvidence,
+    open_operation_evidence: openOperationEvidence,
+    byActionabilityState,
+    by_actionability_state: byActionabilityState,
+    byActionabilitySeverity,
+    by_actionability_severity: byActionabilitySeverity,
+    byOperationStatus,
+    by_operation_status: byOperationStatus,
   };
 }
 
@@ -679,6 +1193,9 @@ function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[
   const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
   const byLinkType = asCountRecord(value.byLinkType ?? value.by_link_type);
   const byCredibilityTier = asCountRecord(value.byCredibilityTier ?? value.by_credibility_tier);
+  const byActionabilityState = asCountRecord(value.byActionabilityState ?? value.by_actionability_state);
+  const byActionabilitySeverity = asCountRecord(value.byActionabilitySeverity ?? value.by_actionability_severity);
+  const byOperationStatus = asCountRecord(value.byOperationStatus ?? value.by_operation_status);
   return {
     totalEvidence: asFiniteNumber(value.totalEvidence ?? value.total_evidence, computed.totalEvidence),
     total_evidence: asFiniteNumber(value.total_evidence ?? value.totalEvidence, computed.totalEvidence),
@@ -696,6 +1213,22 @@ function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[
     by_link_type: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
     byCredibilityTier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
     by_credibility_tier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
+    traceableEvidence: asFiniteNumber(value.traceableEvidence ?? value.traceable_evidence, computed.traceableEvidence),
+    traceable_evidence: asFiniteNumber(value.traceable_evidence ?? value.traceableEvidence, computed.traceableEvidence),
+    unresolvedSourceEvidence: asFiniteNumber(value.unresolvedSourceEvidence ?? value.unresolved_source_evidence, computed.unresolvedSourceEvidence),
+    unresolved_source_evidence: asFiniteNumber(value.unresolved_source_evidence ?? value.unresolvedSourceEvidence, computed.unresolvedSourceEvidence),
+    incompleteEvidence: asFiniteNumber(value.incompleteEvidence ?? value.incomplete_evidence, computed.incompleteEvidence),
+    incomplete_evidence: asFiniteNumber(value.incomplete_evidence ?? value.incompleteEvidence, computed.incompleteEvidence),
+    needsAttentionEvidence: asFiniteNumber(value.needsAttentionEvidence ?? value.needs_attention_evidence, computed.needsAttentionEvidence),
+    needs_attention_evidence: asFiniteNumber(value.needs_attention_evidence ?? value.needsAttentionEvidence, computed.needsAttentionEvidence),
+    openOperationEvidence: asFiniteNumber(value.openOperationEvidence ?? value.open_operation_evidence, computed.openOperationEvidence),
+    open_operation_evidence: asFiniteNumber(value.open_operation_evidence ?? value.openOperationEvidence, computed.openOperationEvidence),
+    byActionabilityState: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
+    by_actionability_state: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
+    byActionabilitySeverity: Object.keys(byActionabilitySeverity).length ? byActionabilitySeverity : computed.byActionabilitySeverity,
+    by_actionability_severity: Object.keys(byActionabilitySeverity).length ? byActionabilitySeverity : computed.byActionabilitySeverity,
+    byOperationStatus: Object.keys(byOperationStatus).length ? byOperationStatus : computed.byOperationStatus,
+    by_operation_status: Object.keys(byOperationStatus).length ? byOperationStatus : computed.byOperationStatus,
   };
 }
 
@@ -704,6 +1237,9 @@ function adaptEvidenceFacets(value: unknown, summary: ManagementEvidenceSummary)
   const sourceTypes = asCountRecord(record.sourceTypes ?? record.source_types);
   const linkTypes = asCountRecord(record.linkTypes ?? record.link_types);
   const credibilityTiers = asCountRecord(record.credibilityTiers ?? record.credibility_tiers);
+  const actionabilityStates = asCountRecord(record.actionabilityStates ?? record.actionability_states);
+  const actionabilitySeverity = asCountRecord(record.actionabilitySeverity ?? record.actionability_severity);
+  const operationStatuses = asCountRecord(record.operationStatuses ?? record.operation_statuses);
   return {
     sourceTypes: Object.keys(sourceTypes).length ? sourceTypes : summary.bySourceType,
     source_types: Object.keys(sourceTypes).length ? sourceTypes : summary.bySourceType,
@@ -711,6 +1247,12 @@ function adaptEvidenceFacets(value: unknown, summary: ManagementEvidenceSummary)
     link_types: Object.keys(linkTypes).length ? linkTypes : summary.byLinkType,
     credibilityTiers: Object.keys(credibilityTiers).length ? credibilityTiers : summary.byCredibilityTier,
     credibility_tiers: Object.keys(credibilityTiers).length ? credibilityTiers : summary.byCredibilityTier,
+    actionabilityStates: Object.keys(actionabilityStates).length ? actionabilityStates : summary.byActionabilityState,
+    actionability_states: Object.keys(actionabilityStates).length ? actionabilityStates : summary.byActionabilityState,
+    actionabilitySeverity: Object.keys(actionabilitySeverity).length ? actionabilitySeverity : summary.byActionabilitySeverity,
+    actionability_severity: Object.keys(actionabilitySeverity).length ? actionabilitySeverity : summary.byActionabilitySeverity,
+    operationStatuses: Object.keys(operationStatuses).length ? operationStatuses : summary.byOperationStatus,
+    operation_statuses: Object.keys(operationStatuses).length ? operationStatuses : summary.byOperationStatus,
   };
 }
 
@@ -866,10 +1408,18 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   if (!refId) return null;
   const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(data.linkedObjectSummary ?? data.linked_object_summary);
+  const linkedObjectLink = adaptEvidenceLinkedObjectLink(data.linkedObjectLink ?? data.linked_object_link);
   const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
     .map(adaptEvidenceLinkedDecision)
     .filter((item): item is ManagementEvidenceLinkedDecision => Boolean(item));
   const linkType = asString(data.linkType ?? data.link_type, "unknown");
+  const allowedActions = adaptEvidenceAllowedActions(data.allowedActions ?? data.allowed_actions);
+  const disabledActionReasons = adaptEvidenceDisabledActionReasons(
+    data.disabledActionReasons ?? data.disabled_action_reasons,
+  );
+  const auditEvents = firstArray<unknown>(data.auditEvents, data.audit_events)
+    .map(adaptEvidenceAuditEvent)
+    .filter((item): item is ManagementEvidenceAuditEvent => Boolean(item));
   return {
     refId,
     ref_id: refId,
@@ -883,6 +1433,8 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     resolved_link: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
     linkedObjectSummary,
     linked_object_summary: linkedObjectSummary,
+    linkedObjectLink,
+    linked_object_link: linkedObjectLink,
     linkedDecisions,
     linked_decisions: linkedDecisions,
     sourceNoteContext: adaptEvidenceSourceNoteContext(data.sourceNoteContext ?? data.source_note_context),
@@ -891,6 +1443,23 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     source_memory_context: adaptEvidenceSourceMemoryContext(data.sourceMemoryContext ?? data.source_memory_context),
     createdAt: nullableString(data.createdAt ?? data.created_at),
     created_at: nullableString(data.created_at ?? data.createdAt),
+    routeHref: nullableString(data.routeHref ?? data.route_href),
+    route_href: nullableString(data.route_href ?? data.routeHref),
+    managementHref: nullableString(data.managementHref ?? data.management_href),
+    management_href: nullableString(data.management_href ?? data.managementHref),
+    actionability: adaptEvidenceActionability(data.actionability),
+    operation: adaptEvidenceOperation(data.operation, refId),
+    relationships: adaptEvidenceRelationships(data.relationships),
+    chain: adaptEvidenceChain(data.chain),
+    tasks: firstArray<unknown>(data.tasks)
+      .map(adaptEvidenceTask)
+      .filter((item): item is ManagementEvidenceTask => Boolean(item)),
+    auditEvents,
+    audit_events: auditEvents,
+    allowedActions,
+    allowed_actions: allowedActions,
+    disabledActionReasons,
+    disabled_action_reasons: disabledActionReasons,
     redacted: asBoolean(data.redacted, false),
     requiredCapability: optionalString(data.requiredCapability ?? data.required_capability),
     reason: optionalString(data.reason),
@@ -918,6 +1487,30 @@ export function defaultManagementEvidenceOverview(): ManagementEvidenceOverview 
           route_href: null,
           display_label: "Source unavailable",
           open_in_new_tab: false,
+        },
+        actionability: {
+          state: "unresolved_source",
+          severity: "warning",
+          reasons: ["mock_unavailable", "resolved_link_unavailable"],
+          can_trace: false,
+          can_open_source: false,
+          can_open_linked_object: false,
+        },
+        operation: { status: "none", task_refs: [], command_refs: [], audit_refs: [], events: [] },
+        allowedActions: {
+          canOpenSource: false,
+          canOpenLinkedObject: false,
+          canInspectChain: true,
+          canMarkStale: true,
+          canRequestEvidence: true,
+          canCreateDispositionTask: true,
+          canAssignReviewer: true,
+          canResolve: false,
+        },
+        disabledActionReasons: {
+          canOpenSource: "Source unavailable",
+          canOpenLinkedObject: "Linked object route is unavailable.",
+          canResolve: "No open evidence operation exists to resolve.",
         },
         managementHref: "/management/evidence?ref_id=evref-demo-readiness-001",
       },
@@ -962,10 +1555,60 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
       entity_ref: "mock-readiness",
       display_label: "Mock readiness gate",
     },
+    linked_object_link: {
+      availability: "unavailable",
+      route_href: null,
+      display_label: "Mock readiness gate",
+      reason: "mock_unavailable",
+    },
     linked_decisions: [],
     source_note_context: null,
     source_memory_context: null,
     created_at: "2026-06-15T13:02:00Z",
+    actionability: {
+      state: "unresolved_source",
+      severity: "warning",
+      reasons: ["mock_unavailable", "resolved_link_unavailable"],
+      can_trace: false,
+      can_open_source: false,
+      can_open_linked_object: false,
+    },
+    operation: { status: "none", task_refs: [], command_refs: [], audit_refs: [], events: [] },
+    relationships: {
+      readiness: [
+        {
+          entity_type: "readiness",
+          entity_ref: "mock-readiness",
+          display_label: "Mock readiness gate",
+          route_href: null,
+          link_type: "supporting_evidence",
+          source: "mock",
+        },
+      ],
+    },
+    chain: {
+      nodes: [],
+      edges: [],
+      empty_reason: "mock_unavailable",
+      degraded_reasons: ["mock_unavailable"],
+    },
+    tasks: [],
+    auditEvents: [],
+    allowedActions: {
+      canOpenSource: false,
+      canOpenLinkedObject: false,
+      canInspectChain: true,
+      canMarkStale: true,
+      canRequestEvidence: true,
+      canCreateDispositionTask: true,
+      canAssignReviewer: true,
+      canResolve: false,
+    },
+    disabledActionReasons: {
+      canOpenSource: "Source unavailable",
+      canOpenLinkedObject: "Linked object route is unavailable.",
+      canResolve: "No open evidence operation exists to resolve.",
+    },
     meta: {
       snapshot_at: "mock",
       surfaces: {
@@ -1963,7 +2606,7 @@ export const mgmt = {
       seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
     ): Promise<ManagementEvidenceDetail> =>
       withLiveOrMock<ManagementEvidenceDetail, unknown>(
-        { method: "GET", path: paths.knowledgeEvidenceRef(refId) },
+        { method: "GET", path: paths.mgmtEvidenceRef(refId) },
         async () => seedFn(),
         safeAdapt(adaptManagementEvidenceDetail, seedFn),
       ),

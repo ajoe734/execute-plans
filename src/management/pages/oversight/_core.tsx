@@ -11,6 +11,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
@@ -35,16 +36,26 @@ import {
   defaultManagementEvidenceOverview,
   defaultTradingPulseModel,
   type ManagementEvidenceDetail,
+  type ManagementEvidenceAllowedActions,
+  type ManagementEvidenceAuditEvent,
+  type ManagementEvidenceChain,
   type ManagementEvidenceLinkedDecision,
   type ManagementEvidenceListItem,
   type ManagementEvidenceMeta,
+  type ManagementEvidenceOperation,
+  type ManagementEvidenceRelationships,
   type ManagementEvidenceResolvedLink,
+  type ManagementEvidenceTask,
   type ManagementPersonaFleetRow,
   type ManagementTradingPulseCard,
   type ManagementTradingPulseModel,
   type ManagementTradingPulseRuntimeRow,
   type ManagementTradingPulseSurface,
 } from "@/lib/bff-v1/management";
+import {
+  submitEvidenceOperation,
+  type EvidenceOperationAction,
+} from "@/lib/bff/evidenceOperations";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   dataSourceLiveEnabled,
@@ -1229,6 +1240,320 @@ const EvidenceField = ({
   </div>
 );
 
+function evidenceStateTone(state?: string): string {
+  const normalized = String(state ?? "").toLowerCase();
+  if (["traceable", "resolved", "ok"].includes(normalized)) {
+    return "bg-status-success/15 text-status-success border-status-success/30";
+  }
+  if (["redacted", "under_review", "open"].includes(normalized)) {
+    return "bg-primary/10 text-primary border-primary/30";
+  }
+  if (["stale", "needs_evidence", "unresolved_source", "incomplete"].includes(normalized)) {
+    return "bg-status-warning/15 text-status-warning border-status-warning/30";
+  }
+  return "bg-muted text-muted-foreground border-border";
+}
+
+const EvidenceStateBadge = ({ state, label }: { state?: string; label?: string }) => (
+  <Badge variant="outline" className={evidenceStateTone(state)}>
+    {label ?? evidenceLabel(state)}
+  </Badge>
+);
+
+function evidenceReasonList(reasons?: string[]): string {
+  const clean = (reasons ?? []).filter(Boolean);
+  return clean.length ? clean.map(evidenceLabel).join(" · ") : "—";
+}
+
+const EvidenceLinkedObjectAction = ({ detail }: { detail: ManagementEvidenceDetail }) => {
+  const { t } = useTranslation();
+  const link = detail.linkedObjectLink ?? detail.linked_object_link;
+  const href = link?.routeHref ?? link?.route_href;
+  const label = link?.displayLabel ?? link?.display_label ?? linkedObjectLabel(detail.linkedObjectSummary ?? detail.linked_object_summary);
+  if (!href) {
+    return (
+      <div className="space-y-1">
+        <EvidenceStateBadge state={link?.availability ?? "unavailable"} />
+        <div className="text-xs text-muted-foreground">{link?.reason ?? t("mgmt.evidence.linkedObjectUnavailable")}</div>
+      </div>
+    );
+  }
+  return (
+    <Button asChild size="sm" variant="outline">
+      <Link to={href}>
+        {label}
+        <ArrowUpRight aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+};
+
+const EVIDENCE_ACTION_LABELS: Record<EvidenceOperationAction, string> = {
+  mark_stale: "mgmt.evidence.actions.markStale",
+  request_more_evidence: "mgmt.evidence.actions.requestEvidence",
+  create_disposition_task: "mgmt.evidence.actions.createTask",
+  assign_reviewer: "mgmt.evidence.actions.assignReviewer",
+  resolve: "mgmt.evidence.actions.resolve",
+};
+
+const EVIDENCE_ACTION_ALLOWED_KEYS: Record<EvidenceOperationAction, keyof ManagementEvidenceAllowedActions> = {
+  mark_stale: "canMarkStale",
+  request_more_evidence: "canRequestEvidence",
+  create_disposition_task: "canCreateDispositionTask",
+  assign_reviewer: "canAssignReviewer",
+  resolve: "canResolve",
+};
+
+const EvidenceOperationPanel = ({
+  refId,
+  operation,
+  allowedActions,
+  disabledReasons,
+  onUpdated,
+}: {
+  refId: string;
+  operation: ManagementEvidenceOperation;
+  allowedActions: ManagementEvidenceAllowedActions;
+  disabledReasons: Partial<Record<keyof ManagementEvidenceAllowedActions, string>>;
+  onUpdated: () => Promise<void> | void;
+}) => {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState("");
+  const [reviewer, setReviewer] = useState(operation.reviewer ?? "");
+  const [pending, setPending] = useState<EvidenceOperationAction | null>(null);
+  const [lastReceipt, setLastReceipt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (action: EvidenceOperationAction) => {
+    setPending(action);
+    setError(null);
+    try {
+      const result = await submitEvidenceOperation({
+        refId,
+        action,
+        reason: reason.trim() || t(EVIDENCE_ACTION_LABELS[action]),
+        reviewer: action === "assign_reviewer" ? reviewer.trim() : undefined,
+      });
+      const commandId = result.response.data?.command_id ?? result.response.data?.commandId ?? result.response.data?.receipt_id ?? result.idempotencyKey;
+      setLastReceipt(commandId);
+      toast.success(t("mgmt.evidence.actions.queued"), {
+        description: commandId,
+      });
+      await onUpdated();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      toast.error(t("mgmt.evidence.actions.failed"), { description: message });
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.operation")}</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <EvidenceStateBadge state={operation.status} />
+            {operation.owner && <Badge variant="outline">{t("mgmt.evidence.ownerFmt", { owner: operation.owner })}</Badge>}
+            {operation.reviewer && <Badge variant="outline">{t("mgmt.evidence.reviewerFmt", { reviewer: operation.reviewer })}</Badge>}
+          </div>
+        </div>
+        <div className="min-w-[220px] text-xs text-muted-foreground">
+          {operation.lastActionAt ?? operation.last_action_at
+            ? t("mgmt.evidence.lastActionFmt", { at: evidenceTimestamp(operation.lastActionAt ?? operation.last_action_at) })
+            : t("mgmt.evidence.noOperationYet")}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+          {t("mgmt.evidence.reason")}
+          <textarea
+            className="min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+          {t("mgmt.evidence.reviewer")}
+          <input
+            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-normal text-foreground"
+            value={reviewer}
+            onChange={(event) => setReviewer(event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {(Object.keys(EVIDENCE_ACTION_LABELS) as EvidenceOperationAction[]).map((action) => {
+          const allowedKey = EVIDENCE_ACTION_ALLOWED_KEYS[action];
+          const allowed = Boolean(allowedActions[allowedKey]);
+          const reasonText = disabledReasons[allowedKey];
+          return (
+            <Button
+              key={action}
+              size="sm"
+              variant={action === "resolve" ? "default" : "outline"}
+              disabled={!allowed || pending !== null || (action === "assign_reviewer" && !reviewer.trim())}
+              title={!allowed ? reasonText : undefined}
+              onClick={() => void submit(action)}
+            >
+              {pending === action ? t("mgmt.evidence.actions.working") : t(EVIDENCE_ACTION_LABELS[action])}
+            </Button>
+          );
+        })}
+      </div>
+      {(lastReceipt || error) && (
+        <div className="mt-3 text-xs">
+          {lastReceipt && <span className="font-mono text-muted-foreground">{t("mgmt.evidence.receiptFmt", { receipt: lastReceipt })}</span>}
+          {error && <span className="text-status-failed">{error}</span>}
+        </div>
+      )}
+    </Card>
+  );
+};
+
+const EvidenceRelationshipsPanel = ({ relationships }: { relationships: ManagementEvidenceRelationships }) => {
+  const { t } = useTranslation();
+  const buckets = Object.entries(relationships).filter(([, rows]) => rows.length > 0);
+  return (
+    <Card className="p-4">
+      <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.relationships")}</h2>
+      {buckets.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{t("mgmt.evidence.noRelationships")}</p>
+      ) : (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {buckets.map(([bucket, rows]) => (
+            <div key={bucket} className="rounded-md border border-border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="outline">{evidenceLabel(bucket)}</Badge>
+                <span className="text-xs text-muted-foreground">{rows.length}</span>
+              </div>
+              <ul className="mt-2 space-y-2 text-sm">
+                {rows.map((row, index) => {
+                  const href = row.routeHref ?? row.route_href;
+                  const label = row.displayLabel ?? row.display_label ?? row.entityRef ?? row.entity_ref;
+                  return (
+                    <li key={`${bucket}-${row.entityRef}-${index}`}>
+                      {href ? (
+                        <Link to={href} className="font-medium text-primary underline-offset-4 hover:underline">{label}</Link>
+                      ) : (
+                        <span className="font-medium text-foreground">{label}</span>
+                      )}
+                      <div className="break-all font-mono text-xs text-muted-foreground">
+                        {[row.entityType ?? row.entity_type, row.entityRef ?? row.entity_ref].filter(Boolean).join(":")}
+                      </div>
+                      {(row.linkType ?? row.link_type) && (
+                        <div className="text-xs text-muted-foreground">{evidenceLabel(row.linkType ?? row.link_type)}</div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+};
+
+const EvidenceChainPanel = ({ chain }: { chain: ManagementEvidenceChain }) => {
+  const { t } = useTranslation();
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.chain")}</h2>
+        <Badge variant="outline">{t("mgmt.evidence.chainCountFmt", { nodes: chain.nodes.length, edges: chain.edges.length })}</Badge>
+      </div>
+      {chain.edges.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{evidenceLabel(chain.emptyReason ?? chain.empty_reason)}</p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {chain.edges.map((edge, index) => {
+            const from = chain.nodes.find((node) => node.id === edge.from);
+            const to = chain.nodes.find((node) => node.id === edge.to);
+            return (
+              <li key={`${edge.from}-${edge.to}-${index}`} className="rounded-md border border-border p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{from?.label ?? edge.from}</span>
+                  <span className="text-xs text-muted-foreground">→ {evidenceLabel(edge.relationship)} →</span>
+                  <span className="font-medium text-foreground">{to?.label ?? edge.to}</span>
+                  {edge.degraded && <EvidenceStateBadge state="degraded" />}
+                </div>
+                <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                  {edge.from} → {edge.to}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {chain.degradedReasons.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">{evidenceReasonList(chain.degradedReasons)}</p>
+      )}
+    </Card>
+  );
+};
+
+const EvidenceTasksPanel = ({ tasks }: { tasks: ManagementEvidenceTask[] }) => {
+  const { t } = useTranslation();
+  return (
+    <Card className="p-4">
+      <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.tasks")}</h2>
+      {tasks.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{t("mgmt.evidence.noTasks")}</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-border">
+          {tasks.map((task) => {
+            const href = task.routeHref ?? task.route_href;
+            return (
+              <li key={task.taskRef} className="py-3 first:pt-0 last:pb-0">
+                {href ? (
+                  <Link to={href} className="font-mono text-primary underline-offset-4 hover:underline">{task.taskRef}</Link>
+                ) : (
+                  <span className="font-mono text-sm text-foreground">{task.taskRef}</span>
+                )}
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <EvidenceStateBadge state={task.status} />
+                  {task.materialization && <Badge variant="outline">{evidenceLabel(task.materialization)}</Badge>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+};
+
+const EvidenceAuditPanel = ({ events }: { events: ManagementEvidenceAuditEvent[] }) => {
+  const { t } = useTranslation();
+  return (
+    <Card className="p-4">
+      <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.audit")}</h2>
+      {events.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{t("mgmt.evidence.noAudit")}</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-border text-sm">
+          {events.map((event, index) => (
+            <li key={event.eventId ?? event.event_id ?? index} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <EvidenceStateBadge state={event.action ?? "event"} />
+                <span className="text-muted-foreground">{evidenceTimestamp(event.createdAt ?? event.created_at)}</span>
+              </div>
+              <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {event.auditRef ?? event.audit_ref ?? event.commandId ?? event.command_id ?? "—"}
+              </div>
+              {event.reason && <p className="mt-1 text-muted-foreground">{event.reason}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+};
+
 const EvidenceExplorerList = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -1271,25 +1596,30 @@ const EvidenceExplorerList = () => {
       <EvidenceSurfaceBanner meta={model.meta} primaryKey="management_evidence" />
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <EvidenceMetric label={t("mgmt.evidence.total")} value={model.summary.totalEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.visible")} value={model.summary.visibleEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.traceable")} value={model.summary.traceableEvidence} />
+        <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={model.summary.needsAttentionEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.redacted")} value={model.summary.redactedEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.surface")} value={evidenceLabel(evidenceSurfaceStatus(model.meta))} />
+        <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
       </dl>
       <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1040px] text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.evidence.source")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.credibility")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.actionability")}</th>
+              <th className="px-3 py-2">{t("mgmt.evidence.operation")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.resolution")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.linkedObject")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.captured")}</th>
+              <th className="px-3 py-2 text-right">{t("mgmt.evidence.actions.title")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((e) => {
               const detailHref = e.managementHref ?? e.management_href;
+              const linkedObjectHref = e.linkedObjectLink?.routeHref ?? e.linked_object_link?.route_href;
+              const linkedObjectUnavailable = e.disabledActionReasons.canOpenLinkedObject ?? e.disabled_action_reasons.canOpenLinkedObject;
               return (
                 <tr key={e.refId} className="border-b border-border/50 align-top">
                   <td className="px-3 py-3">
@@ -1314,24 +1644,56 @@ const EvidenceExplorerList = () => {
                     </div>
                   </td>
                   <td className="px-3 py-3">
+                    <div className="flex flex-col gap-1">
+                      <EvidenceStateBadge state={e.actionability.state} />
+                      <span className="max-w-[220px] text-xs text-muted-foreground">
+                        {evidenceReasonList(e.actionability.reasons)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-col gap-1">
+                      <EvidenceStateBadge state={e.operation.status} />
+                      {e.operation.reviewer && (
+                        <span className="text-xs text-muted-foreground">{t("mgmt.evidence.reviewerFmt", { reviewer: e.operation.reviewer })}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
                     <EvidenceResolvedLinkAction link={e.resolvedLink} />
                   </td>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-foreground">{linkedObjectLabel(e.linkedObjectSummary)}</div>
+                    {linkedObjectHref ? (
+                      <Link to={linkedObjectHref} className="font-medium text-primary underline-offset-4 hover:underline">
+                        {linkedObjectLabel(e.linkedObjectSummary)}
+                      </Link>
+                    ) : (
+                      <div className="font-medium text-foreground">{linkedObjectLabel(e.linkedObjectSummary)}</div>
+                    )}
                     <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
                       {linkedObjectRef(e.linkedObjectSummary)}
                     </div>
+                    {!linkedObjectHref && linkedObjectUnavailable && (
+                      <div className="mt-1 text-xs text-muted-foreground">{linkedObjectUnavailable}</div>
+                    )}
                     {e.redacted && (
                       <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
                     )}
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">{evidenceTimestamp(e.capturedAt ?? e.captured_at)}</td>
+                  <td className="px-3 py-3 text-right">
+                    {detailHref && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={detailHref}>{t("mgmt.evidence.actions.inspect")}</Link>
+                      </Button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td className="px-3 py-6 text-center text-muted-foreground" colSpan={5}>
+                <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
                   {t("mgmt.evidence.noRows")}
                 </td>
               </tr>
@@ -1443,7 +1805,7 @@ const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }
 const EvidenceDetailView = ({ refId }: { refId: string }) => {
   const { t } = useTranslation();
   const seed = useMemo(() => defaultManagementEvidenceDetail(refId), [refId]);
-  const { data, loading } = useV5Live(
+  const { data, loading, refresh } = useV5Live(
     () => refId ? mgmt.evidence.detail(refId, () => seed) : Promise.resolve(seed),
     [refId],
   );
@@ -1494,12 +1856,26 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{sourceTitle}</h1>
           <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.refId}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <EvidenceStateBadge state={detail.actionability.state} />
+            <EvidenceStateBadge state={detail.operation.status} label={t("mgmt.evidence.operationStatusFmt", { status: evidenceLabel(detail.operation.status) })} />
+            {detail.actionability.reasons.length > 0 && (
+              <span className="self-center text-xs text-muted-foreground">{evidenceReasonList(detail.actionability.reasons)}</span>
+            )}
+          </div>
         </div>
         <Button asChild size="sm" variant="outline">
           <Link to="/management/evidence">{t("mgmt.evidence.backToList")}</Link>
         </Button>
       </header>
       <EvidenceSurfaceBanner meta={detail.meta} primaryKey="evidence_ref_detail" />
+      <EvidenceOperationPanel
+        refId={detail.refId}
+        operation={detail.operation}
+        allowedActions={detail.allowedActions}
+        disabledReasons={detail.disabledActionReasons}
+        onUpdated={refresh}
+      />
       {detail.redacted && (
         <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
           <Badge variant="outline">{t("mgmt.evidence.redacted")}</Badge>
@@ -1549,9 +1925,14 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
             <dl className="mt-3 space-y-3">
               <EvidenceField label={t("mgmt.evidence.titleLabel")} value={linkedObjectLabel(linkedObject)} />
               <EvidenceField label={t("mgmt.evidence.entity")} value={linkedObjectRef(linkedObject)} mono />
+              <dd><EvidenceLinkedObjectAction detail={detail} /></dd>
             </dl>
           </Card>
         </div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <EvidenceChainPanel chain={detail.chain} />
+        <EvidenceRelationshipsPanel relationships={detail.relationships} />
       </div>
       <Card className="p-4">
         <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.linkedDecisions")}</h2>
@@ -1563,6 +1944,10 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
         </div>
       </Card>
       <EvidenceSourceContexts detail={detail} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <EvidenceTasksPanel tasks={detail.tasks} />
+        <EvidenceAuditPanel events={detail.auditEvents ?? detail.audit_events} />
+      </div>
     </section>
   );
 };
