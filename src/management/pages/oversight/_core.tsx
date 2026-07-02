@@ -60,6 +60,8 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   dataSourceLiveEnabled,
   dataSourceOrderSideEffectsAllowed,
+  dataSourceProviderCount,
+  dataSourceProviderStatusCounts,
   dataSourceProviderStatuses,
   dataSourceState,
   visibleDataSources,
@@ -173,6 +175,14 @@ function dataSourceTone(state?: string): string {
 }
 
 function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: number } {
+  const summaryCounts = dataSourceProviderStatusCounts(r);
+  if (Object.keys(summaryCounts).length > 0) {
+    const ok = Object.entries(summaryCounts)
+      .filter(([status]) => /read_ok|readback_ok|smoke_ok|quote_readback_ok/i.test(status))
+      .reduce((total, [, count]) => total + count, 0);
+    return { ok, total: dataSourceProviderCount(r) };
+  }
+
   const statuses = dataSourceProviderStatuses(r);
   const values = Object.values(statuses);
   const total = values.length || visibleDataSources(r).length || 0;
@@ -444,6 +454,21 @@ export const PersonaFleetPage = () => {
 	                            </Badge>
 	                          </Link>
 	                        ))
+	                        : sourceStatus
+	                        ? (
+	                          <Link
+	                            to={personaFleetDataSourcesHref(r)}
+	                            aria-label={`${r.personaId} data source status`}
+	                            className="inline-flex"
+	                          >
+	                            <Badge
+	                              variant="outline"
+	                              className={badgeLinkClass(`${dataSourceTone(sourceStatus)} hover:border-primary/60`)}
+	                            >
+	                              {formatToken(sourceStatus)}
+	                            </Badge>
+	                          </Link>
+	                        )
 	                        : (
 	                          <Link
 	                            to={personaFleetDataSourcesHref(r)}
@@ -458,7 +483,7 @@ export const PersonaFleetPage = () => {
 	                      {sourceCount.total > 0 && (
 	                        <span>{t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}</span>
 	                      )}
-	                      {sourceStatus && (
+	                      {sourceStatus && sourceBadges.length > 0 && (
 	                        <Link
 	                          to={personaFleetDataSourcesHref(r)}
 	                          aria-label={`${r.personaId} data source status`}

@@ -2,6 +2,12 @@ import type { ManagementDataSource, ManagementPersonaFleetRow } from "@/lib/bff-
 
 type RawDataSourceStatus = NonNullable<ManagementPersonaFleetRow["dataSourceStatus"]> & {
   provider_statuses?: Record<string, string>;
+  provider_status_counts?: Record<string, number>;
+  providerStatusCounts?: Record<string, number>;
+  provider_count?: number;
+  providerCount?: number;
+  configured_source_count?: number;
+  configuredSourceCount?: number;
   live_source_connector_ids?: string[];
   liveSourceConnectorIds?: string[];
   connector_health?: Array<Record<string, unknown>>;
@@ -42,6 +48,22 @@ export function dataSourceStatus(row: ManagementPersonaFleetRow): RawDataSourceS
 export function dataSourceProviderStatuses(row: ManagementPersonaFleetRow): Record<string, string> {
   const status = dataSourceStatus(row);
   return status?.providerStatuses ?? status?.provider_statuses ?? {};
+}
+
+export function dataSourceProviderStatusCounts(row: ManagementPersonaFleetRow): Record<string, number> {
+  const status = dataSourceStatus(row);
+  return status?.providerStatusCounts ?? status?.provider_status_counts ?? {};
+}
+
+export function dataSourceProviderCount(row: ManagementPersonaFleetRow): number {
+  const status = dataSourceStatus(row);
+  const counts = dataSourceProviderStatusCounts(row);
+  const counted = Object.values(counts).reduce((total, count) => total + count, 0);
+  return status?.providerCount
+    ?? status?.provider_count
+    ?? status?.configuredSourceCount
+    ?? status?.configured_source_count
+    ?? (counted || Object.keys(dataSourceProviderStatuses(row)).length);
 }
 
 export function dataSourceState(row: ManagementPersonaFleetRow): string | undefined {

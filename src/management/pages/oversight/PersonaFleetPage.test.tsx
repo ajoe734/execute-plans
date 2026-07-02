@@ -210,6 +210,59 @@ describe("PersonaFleetPage", () => {
     );
   });
 
+  it("renders live summary-only data source and research fields instead of nan", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [{
+        personaId: "persona-live-summary",
+        personaName: "Live Summary Persona",
+        owner: "pantheon-dev-browser",
+        ooda: "Act",
+        autonomy: "supervised",
+        perfDelta: 0.182,
+        humanNeeded: true,
+        lastMutation: "2026-06-07",
+        state: "paper_running",
+        currentWork: "paper broker sandbox readback and funding-rate stress review",
+        dataSourceStatus: {
+          state: "datasource_smoke_ok",
+          providerStatuses: {},
+          providerStatusCounts: {
+            datasource_smoke_ok: 1,
+            read_unavailable: 1,
+          },
+          providerCount: 2,
+          readbackRefs: [],
+          unavailableRefs: [],
+          readOnly: true,
+          orderSideEffectsAllowed: false,
+          capitalSideEffectsAllowed: false,
+          liveIngestionEnabled: false,
+        },
+        researchStatus: {
+          stage: "act",
+          framework: "vectorbt",
+          frameworks: ["vectorbt"],
+          frameworkCount: 3,
+          artifactId: "artifact-live-summary-v1",
+          pendingTaskIds: [],
+          canDeploy: false,
+        },
+      } as ManagementPersonaFleetRow],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getAllByText("datasource smoke ok")).toHaveLength(1);
+    expect(screen.getByText("1/2 readable")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-summary research detail" })).toHaveTextContent("act");
+    expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
+    expect(screen.getByText(/vectorbt/)).toBeInTheDocument();
+    expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "persona-live-summary data sources" })).not.toBeInTheDocument();
+  });
+
   it("does not report a focused persona as missing before live fleet data loads", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,
