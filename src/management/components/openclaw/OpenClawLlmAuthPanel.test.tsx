@@ -258,6 +258,7 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(await screen.findByText("Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("checking auth")).toBeInTheDocument();
     expect(screen.getByText("Updating LLM provider auth probe results.")).toBeInTheDocument();
+    expect(screen.getByText("not_checked").closest("[class]")?.className).not.toContain("border-status-success/30");
 
     await act(async () => {
       probe.resolve({
@@ -596,7 +597,7 @@ describe("OpenClawLlmAuthPanel", () => {
           status: "completed",
           reauthSessionId: "claude_reauth_completed_with_warning",
           verificationUri: null,
-          verificationUriComplete: null,
+          verificationUriComplete: "https://claude.com/cai/oauth/authorize?code=true",
           userCode: null,
           expiresAt: null,
           intervalSeconds: 5,
@@ -622,6 +623,8 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(await screen.findByText("claude reauth completed")).toBeInTheDocument();
     expect(screen.getByText("code submitted=2026-07-02T01:33:58Z")).toBeInTheDocument();
     expect(screen.queryByLabelText("Authorization code")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open login/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reauth again/i })).toBeInTheDocument();
     expect(screen.getByText("Claude auth login accepted the authorization code; readiness probe is still degraded.")).toBeInTheDocument();
   });
 
