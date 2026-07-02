@@ -78,10 +78,13 @@ function CommandBar({
 }) {
   return (
     <header
-      className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4"
+      className="flex h-12 shrink-0 items-center gap-3 border-b border-[#2a2e38] bg-[#1a1d23] px-4"
       data-testid="trading-desk-command-bar"
     >
-      <span className="text-sm font-semibold text-slate-900">Trading Desk</span>
+      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#e8b750] text-xs font-black text-[#1a1410]">
+        A
+      </span>
+      <span className="text-sm font-bold tracking-wide text-[#f0ece4]">AGORA</span>
       <span className="flex-1" />
       <button
         aria-label={drawerOpen ? "Close servant drawer" : "Open servant drawer"}
@@ -89,8 +92,8 @@ function CommandBar({
         className={cn(
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
           drawerOpen
-            ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+            ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+            : "border-[#2a2e38] bg-transparent text-[#8c96a6] hover:bg-[#171b22]",
         )}
         onClick={onToggleDrawer}
         type="button"
@@ -116,7 +119,7 @@ function TabBar({
   return (
     <nav
       aria-label="Trading desk sections"
-      className="flex h-10 shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-4"
+      className="flex h-10 shrink-0 items-end gap-0 border-b border-[#2a2e38] bg-[#171b22] px-4"
       data-testid="trading-desk-tab-bar"
     >
       {TABS.map((tab) => {
@@ -128,8 +131,8 @@ function TabBar({
             className={cn(
               "relative -mb-px flex h-9 items-center px-4 text-sm font-medium transition-colors",
               isActive
-                ? "border-b-2 border-blue-600 text-blue-700"
-                : "text-slate-600 hover:text-slate-900",
+                ? "border-b-2 border-[#e8b750] text-[#e8b750]"
+                : "text-[#8c96a6] hover:text-[#f0ece4]",
             )}
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
@@ -150,21 +153,21 @@ function ServantDrawer({ open, workshopId }: { open: boolean; workshopId?: strin
   return (
     <aside
       aria-label="Servant drawer"
-      className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white"
+      className="flex w-80 shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]"
       data-testid="trading-desk-servant-drawer"
     >
-      <div className="flex h-10 shrink-0 items-center border-b border-slate-100 px-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="flex h-10 shrink-0 items-center border-b border-[#2a2e38] px-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[#e8b750]">
           Servant
         </span>
         {workshopId && (
-          <span className="ml-auto font-mono text-xs text-slate-400">
+          <span className="ml-auto font-mono text-xs text-[#737d8e]">
             {workshopId.slice(0, 8)}…
           </span>
         )}
       </div>
       <div className="flex-1 p-3">
-        <p className="text-xs text-slate-400">Servant panel — workshop context loads here.</p>
+        <p className="text-xs text-[#737d8e]">Servant panel — workshop context loads here.</p>
       </div>
     </aside>
   );
@@ -187,7 +190,7 @@ function BottomStrip({
 }) {
   return (
     <footer
-      className="flex h-10 shrink-0 items-center gap-0 border-t border-slate-200 bg-slate-50 px-4"
+      className="flex h-10 shrink-0 items-center gap-0 border-t border-[#2a2e38] bg-[#1a1d23] px-4"
       data-testid="trading-desk-bottom-strip"
     >
       {BOTTOM_SECTIONS.map((section) => {
@@ -198,8 +201,8 @@ function BottomStrip({
             className={cn(
               "h-full px-3 text-xs font-medium transition-colors",
               isActive
-                ? "border-t-2 border-blue-600 bg-white text-blue-700"
-                : "text-slate-500 hover:text-slate-800",
+                ? "border-t-2 border-[#e8b750] bg-[#171b22] text-[#e8b750]"
+                : "text-[#737d8e] hover:text-[#f0ece4]",
             )}
             key={section.id}
             onClick={() => onSectionChange(isActive ? null : section.id)}
@@ -239,7 +242,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
   return (
     <div
-      className={cn("flex flex-1 flex-col overflow-hidden min-h-0", className)}
+      className={cn("flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
       data-testid="trading-desk-shell"
     >
       <CommandBar
