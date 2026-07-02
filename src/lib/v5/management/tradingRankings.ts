@@ -44,12 +44,20 @@ export interface TradingPulseRankRow {
   metricValue: number | string | null;
   metricUnit?: string;
   links?: ManagementLinkSet;
+  rankingEligible?: boolean;
+  ranking_eligible?: boolean;
 }
 
 export interface TradingPulseRankBlock {
   kind: RankingBlockKind;
   label: string;
   rows: TradingPulseRankRow[];
+  eligibleItemCount?: number;
+  eligible_item_count?: number;
+  missingMetricCount?: number;
+  missing_metric_count?: number;
+  missingMetricRuntimeIds?: string[];
+  missing_metric_runtime_ids?: string[];
 }
 
 const seed = (
