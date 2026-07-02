@@ -87,6 +87,16 @@ const formatTime = (trace: PersonaIntentTrace) => {
 
 const protectionLabelKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.protection.${visibility}`;
 
+const recordPurposeKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.recordPurpose.${visibility}`;
+const auditOutcomeKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.auditOutcome.${visibility}`;
+const fallbackTitleKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.fallbackTitle.${visibility}`;
+
+const redactedByKey = (redactedBy?: PersonaIntentTrace["redaction"]["redactedBy"]) =>
+  `mgmt.personaIntent.redactedBy.${redactedBy ?? "unknown"}`;
+
+const isPlaceholderSummary = (value?: string) =>
+  !value || /^\[(redacted|restricted)(?:\s+by\s+policy)?\]$/i.test(value.trim());
+
 const SummaryStat = ({ label, value }: { label: string; value: number }) => (
   <Card className="p-3">
     <div className="text-xs text-muted-foreground">{label}</div>
@@ -94,14 +104,46 @@ const SummaryStat = ({ label, value }: { label: string; value: number }) => (
   </Card>
 );
 
+const PurposePanel = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="rounded-md border border-border bg-background p-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.personaIntent.purposeTitle")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("mgmt.personaIntent.purposeBody")}</p>
+        </div>
+        <dl className="grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.personaIntent.purposeQuestionLabel")}</dt>
+            <dd className="mt-1 text-foreground">{t("mgmt.personaIntent.purposeQuestionIntent")}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.personaIntent.purposeProtectionLabel")}</dt>
+            <dd className="mt-1 text-foreground">{t("mgmt.personaIntent.purposeQuestionProtection")}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.personaIntent.purposeFollowupLabel")}</dt>
+            <dd className="mt-1 text-foreground">{t("mgmt.personaIntent.purposeQuestionFollowup")}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  );
+};
+
 const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
   const { t } = useTranslation();
   const r = intentDisplayRules(trace.visibility);
   const time = formatTime(trace);
   const sourceLabel = t(`mgmt.personaIntent.sourceTypes.${sourceTypeKey(trace.sourceType)}`);
-  const displayTitle = r.showSummary
+  const redactedBy = t(redactedByKey(trace.redaction?.redactedBy));
+  const policy = trace.redaction?.policyRef || t("mgmt.personaIntent.policyUnknown");
+  const status = trace.sourceStatus || t("mgmt.personaIntent.statusUnknown");
+  const visibleSummary = r.showSummary && !isPlaceholderSummary(trace.userIntentSummary);
+  const displayTitle = visibleSummary
     ? trace.userIntentSummary
-    : t("mgmt.personaIntent.restrictedRecordTitle");
+    : t(fallbackTitleKey(r.badge));
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -109,9 +151,12 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{sourceLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{trace.sourceStatus || t("mgmt.personaIntent.statusUnknown")}</span>
+            <span>{status}</span>
           </div>
           <h2 className="mt-1 break-words text-base font-semibold text-foreground">{displayTitle}</h2>
+          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
+            {t(auditOutcomeKey(r.badge), { actor: redactedBy, policy })}
+          </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>{t("mgmt.personaIntent.personaLabel")}: <span className="font-mono">{trace.ringPersonaId}</span></span>
             <span>{t("mgmt.personaIntent.recordLabel")}: <span className="font-mono">{trace.id}</span></span>
@@ -125,20 +170,25 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
 
       <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-md bg-muted/40 p-3">
+          <dt className="text-muted-foreground">{t("mgmt.personaIntent.recordPurposeLabel")}</dt>
+          <dd className="mt-1 font-medium text-foreground">{t(recordPurposeKey(r.badge))}</dd>
+        </div>
+        <div className="rounded-md bg-muted/40 p-3">
           <dt className="text-muted-foreground">{t("mgmt.personaIntent.sourceLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{sourceLabel}</dd>
+          <dd className="mt-1 font-medium text-foreground">{sourceLabel} · {status}</dd>
         </div>
         <div className="rounded-md bg-muted/40 p-3">
           <dt className="text-muted-foreground">{t("mgmt.personaIntent.protectionLabel")}</dt>
           <dd className="mt-1 font-medium text-foreground">{t(protectionLabelKey(r.badge))}</dd>
         </div>
         <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.riskFlagsLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{trace.riskFlags?.length ?? 0}</dd>
-        </div>
-        <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.evidenceRefsLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{trace.evidenceRefs?.length ?? 0}</dd>
+          <dt className="text-muted-foreground">{t("mgmt.personaIntent.followupSignalsLabel")}</dt>
+          <dd className="mt-1 font-medium text-foreground">
+            {t("mgmt.personaIntent.followupSignalsFmt", {
+              risks: trace.riskFlags?.length ?? 0,
+              evidence: trace.evidenceRefs?.length ?? 0,
+            })}
+          </dd>
         </div>
       </dl>
 
@@ -154,30 +204,56 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
           )}
         </dl>
       ) : (
-        <div className="mt-3 space-y-2">
-          {r.showSummary && trace.title && trace.title !== trace.id && trace.title !== trace.userIntentSummary && (
-            <p className="text-sm text-foreground">{trace.title}</p>
-          )}
-          {r.showInterpretation && trace.personaInterpretation && (
-            <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.interpretationFmt", { text: trace.personaInterpretation })}</p>
-          )}
-          {r.showToolsUsed && (trace.toolsUsed?.length ?? 0) > 0 && (
-            <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: (trace.toolsUsed ?? []).join(", ") })}</p>
-          )}
-          {r.showRiskFlags && (trace.riskFlags?.length ?? 0) > 0 && (
-            <p className="text-xs">
-              {(trace.riskFlags ?? []).map((f) => (
-                <Badge key={f} variant="outline" className="mr-1 bg-status-warning/15 text-status-warning border-status-warning/30">{f}</Badge>
-              ))}
-            </p>
-          )}
-          {r.showEvidenceRefs && (trace.evidenceRefs?.length ?? 0) > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {t("mgmt.personaIntent.evidenceLabel")} {(trace.evidenceRefs ?? []).map((e) => (
-                <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
-              ))}
-            </p>
-          )}
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
+          <div className="space-y-2">
+            <div className="text-xs font-medium uppercase text-muted-foreground">
+              {t("mgmt.personaIntent.safeSummaryLabel")}
+            </div>
+            {r.showSummary && trace.title && trace.title !== trace.id && trace.title !== trace.userIntentSummary && (
+              <p className="text-sm text-foreground">{trace.title}</p>
+            )}
+            {r.showInterpretation && trace.personaInterpretation && (
+              <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.interpretationFmt", { text: trace.personaInterpretation })}</p>
+            )}
+            {r.showToolsUsed && (trace.toolsUsed?.length ?? 0) > 0 && (
+              <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: (trace.toolsUsed ?? []).join(", ") })}</p>
+            )}
+            {!r.showInterpretation && (
+              <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.summaryRedactedHint")}</p>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div>
+              <div className="text-xs font-medium uppercase text-muted-foreground">
+                {t("mgmt.personaIntent.riskFlagsLabel")}
+              </div>
+              {r.showRiskFlags && (trace.riskFlags?.length ?? 0) > 0 && (
+                <p className="mt-2 text-xs">
+                  {(trace.riskFlags ?? []).map((f) => (
+                    <Badge key={f} variant="outline" className="mr-1 bg-status-warning/15 text-status-warning border-status-warning/30">{f}</Badge>
+                  ))}
+                </p>
+              )}
+              {(!r.showRiskFlags || (trace.riskFlags?.length ?? 0) === 0) && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.personaIntent.noRiskFlags")}</p>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase text-muted-foreground">
+                {t("mgmt.personaIntent.evidenceRefsLabel")}
+              </div>
+              {r.showEvidenceRefs && (trace.evidenceRefs?.length ?? 0) > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {(trace.evidenceRefs ?? []).map((e) => (
+                    <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
+                  ))}
+                </p>
+              )}
+              {(!r.showEvidenceRefs || (trace.evidenceRefs?.length ?? 0) === 0) && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.personaIntent.noEvidenceRefs")}</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
       {/* HARD RULE: no Reveal/Expand/Download/Reconstruct buttons here. */}
@@ -198,6 +274,7 @@ export const PersonaIntentTracesPage = () => {
       <header className="space-y-4">
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.personaIntent.title")}</h1>
         <p className="max-w-4xl text-sm text-muted-foreground">{t("mgmt.personaIntent.subtitle")}</p>
+        <PurposePanel />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryStat label={t("mgmt.personaIntent.totalLabel")} value={traces.length} />
           <SummaryStat label={t("mgmt.personaIntent.redactedLabel")} value={redactedCount} />
@@ -206,7 +283,14 @@ export const PersonaIntentTracesPage = () => {
           <SummaryStat label={t("mgmt.personaIntent.evidenceRefsLabel")} value={evidenceRefCount} />
         </div>
       </header>
-      {traces.map((tr) => <Trace key={tr.id} trace={tr} />)}
+      {traces.length > 0 ? (
+        traces.map((tr) => <Trace key={tr.id} trace={tr} />)
+      ) : (
+        <div className="rounded-md border border-dashed border-border p-6">
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.personaIntent.emptyTitle")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("mgmt.personaIntent.emptyBody")}</p>
+        </div>
+      )}
     </section>
   );
 };
