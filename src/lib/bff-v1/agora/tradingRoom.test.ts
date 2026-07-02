@@ -27,6 +27,7 @@ import {
   getDecisionEvent,
 } from "./tradingRoom";
 import { BffError } from "../errors";
+import { getAuthProvider, setAuthProvider } from "../headers";
 
 const BASE = "https://test.example";
 
@@ -51,6 +52,7 @@ function bffErrorResponse(status: number, code: string, message: string): Respon
 
 afterEach(() => {
   vi.restoreAllMocks();
+  setAuthProvider({ getToken: () => null, getTenantId: () => null });
 });
 
 // ── decideOnEvent — header forwarding ────────────────────────────────────────
@@ -258,6 +260,101 @@ describe("getTradingRoom — read-only, no mutation headers", () => {
       monitoring_state: "inactive",
       pending_event_counts: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
     });
+  });
+});
+
+// ── Authorization forwarding — AG-DYNUI-LIVE-DEFAULT-001 auth-header fix ──────
+//
+// The BFF's trading-room routes are `require_read_role`/user-scoped and 401
+// with AUTH_REQUIRED when no Bearer token is present; `credentials: "include"`
+// alone does not satisfy that. Every exported call in this file must forward
+// the auth provider's token/tenant, and must not send them when unauthenticated.
+
+describe("Authorization header forwarding", () => {
+  it("getTradingRoom sends Authorization and X-Tenant-Id when the auth provider has a token", async () => {
+    setAuthProvider({ getToken: () => "live-token-1", getTenantId: () => "tenant-dev" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        data: {
+          strategies: [],
+          queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+          risk_summary: { state: "normal" },
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    await getTradingRoom(BASE);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer live-token-1");
+    expect(headers["X-Tenant-Id"]).toBe("tenant-dev");
+  });
+
+  it("getTradingRoom omits Authorization when the auth provider has no token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        data: {
+          strategies: [],
+          queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+          risk_summary: { state: "normal" },
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    await getTradingRoom(BASE);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+    expect(headers["X-Tenant-Id"]).toBeUndefined();
+  });
+
+  it("listDecisionEvents forwards Authorization", async () => {
+    setAuthProvider({ getToken: () => "live-token-2", getTenantId: () => null });
+    const fetchMock = vi.fn().mockResolvedValue(ok({ items: [] }));
+    globalThis.fetch = fetchMock;
+
+    await listDecisionEvents(undefined, BASE);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer live-token-2");
+  });
+
+  it("decideOnEvent forwards Authorization alongside If-Match/Idempotency-Key/X-Request-Id", async () => {
+    setAuthProvider({ getToken: () => "live-token-3", getTenantId: () => null });
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { decision_state: "approved_by_trader" } }));
+    globalThis.fetch = fetchMock;
+
+    await decideOnEvent(
+      "evt-1",
+      { decision: "approve" },
+      { ifMatch: '"evt-etag-v1"', idempotencyKey: "idem-decide-1", requestId: "req-decide-1" },
+      BASE,
+    );
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer live-token-3");
+    expect(headers["If-Match"]).toBe('"evt-etag-v1"');
+    expect(headers["Idempotency-Key"]).toBe("idem-decide-1");
+    expect(headers["X-Request-Id"]).toBe("req-decide-1");
+  });
+
+  it("createTradingRoomWorkspaceProposal forwards Authorization", async () => {
+    setAuthProvider({ getToken: () => "live-token-4", getTenantId: () => null });
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { id: "proposal-1" } }));
+    globalThis.fetch = fetchMock;
+
+    await createTradingRoomWorkspaceProposal("strat-001", { strategyVersion: "v1" }, undefined, BASE);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer live-token-4");
+  });
+
+  it("getAuthProvider reflects the provider set via setAuthProvider", () => {
+    setAuthProvider({ getToken: () => "probe-token", getTenantId: () => "probe-tenant" });
+    expect(getAuthProvider().getToken()).toBe("probe-token");
+    expect(getAuthProvider().getTenantId()).toBe("probe-tenant");
   });
 });
 
