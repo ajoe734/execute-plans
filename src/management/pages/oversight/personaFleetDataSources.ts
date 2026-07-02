@@ -146,7 +146,7 @@ function uniqueSources(sources: ManagementDataSource[]): ManagementDataSource[] 
   });
 }
 
-export function visibleDataSources(r: ManagementPersonaFleetRow): ManagementDataSource[] {
+export function personaFleetDataSources(r: ManagementPersonaFleetRow): ManagementDataSource[] {
   return uniqueSources([
     ...explicitSources(r),
     ...providerStatusSources(r),
@@ -158,6 +158,10 @@ export function visibleDataSources(r: ManagementPersonaFleetRow): ManagementData
       providerStatusPriority(a.source) - providerStatusPriority(b.source)
       || a.index - b.index
     ))
-    .map(({ source }) => source)
+    .map(({ source }) => source);
+}
+
+export function visibleDataSources(r: ManagementPersonaFleetRow): ManagementDataSource[] {
+  return personaFleetDataSources(r)
     .slice(0, 4);
 }

@@ -5,13 +5,21 @@ import { Database, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { managementConsoleReads } from "@/lib/bff-v1";
+import { managementConsoleReads, mgmt } from "@/lib/bff-v1";
+import type { ManagementDataSource, ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import {
+  dataSourceTone,
   summarizeSystemDataSources,
   type DataSourceHealthTone,
+  type SystemDataSourceSummary,
   type SystemDataSourceRecord,
 } from "@/lib/v5/management/systemDataSources";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import {
+  dataSourceState,
+  dataSourceStatus,
+  personaFleetDataSources,
+} from "./personaFleetDataSources";
 
 const toneClass: Record<DataSourceHealthTone, string> = {
   ok: "bg-status-success/10 text-status-success border-status-success/30",
@@ -39,7 +47,16 @@ export function DataSourceManagementPage() {
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const sourceFocus = searchParams.get("source")?.trim() ?? "";
   const { data, loading, refresh } = useV5Live(() => managementConsoleReads.dataSources(), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const records: SystemDataSourceRecord[] = useMemo(() => data?.items ?? [], [data]);
+  const focusedPersona = useMemo(
+    () => (fleetRows ?? []).find((row) => row.personaId === personaFocus),
+    [fleetRows, personaFocus],
+  );
+  const personaSources = useMemo(() => {
+    if (!focusedPersona) return [];
+    return personaFleetDataSources(focusedPersona);
+  }, [focusedPersona]);
   const focus = useMemo(() => {
     let scoped = records;
     let matched = true;
@@ -63,8 +80,35 @@ export function DataSourceManagementPage() {
     return { records: scoped, matched };
   }, [personaFocus, records, sourceFocus]);
   const visibleRecords = focus.records;
-  const summary = useMemo(() => summarizeSystemDataSources(visibleRecords), [visibleRecords]);
+  const showPersonaOverlay = Boolean(focusedPersona && personaSources.length > 0);
+  const personaSummary = useMemo<SystemDataSourceSummary | null>(() => {
+    if (!focusedPersona || personaSources.length === 0) return null;
+    const status = dataSourceStatus(focusedPersona);
+    const markets = new Set<string>();
+    for (const source of personaSources) {
+      if (source.market) markets.add(source.market);
+    }
+    return {
+      total: personaSources.length,
+      readable: personaSources.filter((source) => dataSourceTone(source.status) === "ok").length,
+      degraded: personaSources.filter((source) => {
+        const tone = dataSourceTone(source.status);
+        return tone === "warn" || tone === "bad";
+      }).length,
+      credentialMissing: personaSources.filter((source) => /credential/i.test(source.status)).length,
+      liveIngestionOn: status?.liveIngestionEnabled ? personaSources.length : 0,
+      orderSideEffectsOn: personaSources.filter((source) => source.orderSideEffectsAllowed || source.capitalSideEffectsAllowed).length,
+      markets: Array.from(markets).sort(),
+      consumerPersonas: 1,
+    };
+  }, [focusedPersona, personaSources]);
+  const summary = useMemo(
+    () => personaSummary ?? summarizeSystemDataSources(visibleRecords),
+    [personaSummary, visibleRecords],
+  );
   const hasFocus = Boolean(personaFocus || sourceFocus);
+  const focusMatched = focus.matched || showPersonaOverlay;
+  const focusCount = showPersonaOverlay ? personaSources.length : visibleRecords.length;
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.dataSources.title")}>
@@ -83,11 +127,11 @@ export function DataSourceManagementPage() {
       </header>
 
       {hasFocus && (
-        <Card className={`p-3 text-sm ${focus.matched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
+        <Card className={`p-3 text-sm ${focusMatched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {focus.matched
-                ? t("mgmt.dataSources.focusedFmt", { persona: personaFocus || "nan", source: sourceFocus || "nan", count: visibleRecords.length })
+              {focusMatched
+                ? t("mgmt.dataSources.focusedFmt", { persona: personaFocus || "nan", source: sourceFocus || "nan", count: focusCount })
                 : t("mgmt.dataSources.focusMissingFmt", { persona: personaFocus || "nan", source: sourceFocus || "nan" })}
             </span>
             <Button asChild size="sm" variant="outline">
@@ -95,6 +139,14 @@ export function DataSourceManagementPage() {
             </Button>
           </div>
         </Card>
+      )}
+
+      {showPersonaOverlay && focusedPersona && (
+        <PersonaSourceOverlay
+          persona={focusedPersona}
+          sources={personaSources}
+          sourceFocus={sourceFocus}
+        />
       )}
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -106,20 +158,20 @@ export function DataSourceManagementPage() {
         <Metric label={t("mgmt.dataSources.markets")} value={joinOrDash(summary.markets)} />
       </div>
 
-      {loading && records.length === 0 && (
+      {loading && records.length === 0 && !showPersonaOverlay && (
         <Card className="p-4 text-sm text-muted-foreground">
           {t("mgmt.dataSources.loadingLive")}
         </Card>
       )}
 
-      {!loading && records.length === 0 && (
+      {!loading && records.length === 0 && !showPersonaOverlay && (
         <Card className="p-4 text-sm">
           <div className="font-medium text-foreground">{t("mgmt.dataSources.liveDataUnavailableTitle")}</div>
           <p className="mt-1 text-muted-foreground">{t("mgmt.dataSources.liveDataUnavailableBody")}</p>
         </Card>
       )}
 
-      {records.length > 0 && (
+      {!showPersonaOverlay && records.length > 0 && (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -141,6 +193,73 @@ export function DataSourceManagementPage() {
         </Card>
       )}
     </section>
+  );
+}
+
+function PersonaSourceOverlay({
+  persona,
+  sources,
+  sourceFocus,
+}: {
+  persona: ManagementPersonaFleetRow;
+  sources: ManagementDataSource[];
+  sourceFocus: string;
+}) {
+  const { t } = useTranslation();
+  const status = dataSourceStatus(persona);
+  const readable = sources.filter((source) => /read_ok|readback_ok|smoke_ok/i.test(source.status)).length;
+  const refs = [...(status?.readbackRefs ?? []), ...(status?.unavailableRefs ?? [])].slice(0, 4);
+
+  return (
+    <Card className="overflow-x-auto border-primary/20">
+      <div className="border-b border-border px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-foreground">{persona.personaName ?? persona.personaId}</span>
+          <code className="text-xs text-muted-foreground">{persona.personaId}</code>
+          <Badge variant="outline" className={readable === sources.length ? toneClass.ok : toneClass.warn}>
+            {readable}/{sources.length} {t("mgmt.dataSources.readable").toLowerCase()}
+          </Badge>
+          {sourceFocus && <Badge variant="outline">{sourceFocus}</Badge>}
+          {dataSourceState(persona) && <Badge variant="outline">{fmtToken(dataSourceState(persona))}</Badge>}
+        </div>
+        {status?.summary && <p className="mt-1 text-xs text-muted-foreground">{status.summary}</p>}
+      </div>
+      <table className="w-full text-sm">
+        <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2">{t("mgmt.dataSources.source")}</th>
+            <th className="px-3 py-2">{t("mgmt.dataSources.health")}</th>
+            <th className="px-3 py-2">{t("mgmt.dataSources.controls")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sources.map((source) => (
+            <tr key={source.providerKey} className="border-b border-border/50 align-top">
+              <td className="px-3 py-3">
+                <div className="font-medium text-foreground">{source.provider}</div>
+                <div className="font-mono text-xs text-muted-foreground">{source.providerKey}</div>
+              </td>
+              <td className="px-3 py-3">
+                <Badge variant="outline" className={/read_ok|readback_ok|smoke_ok/i.test(source.status) ? toneClass.ok : toneClass.warn}>
+                  {fmtToken(source.status)}
+                </Badge>
+              </td>
+              <td className="px-3 py-3 text-xs text-muted-foreground">
+                <div>{source.readOnly ? t("mgmt.dataSources.readOnly") : t("mgmt.dataSources.writeCapable")}</div>
+                <div>{source.orderSideEffectsAllowed || source.capitalSideEffectsAllowed ? t("mgmt.dataSources.sideEffectsOn") : t("mgmt.dataSources.sideEffectsOff")}</div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {refs.length > 0 && (
+        <div className="space-y-1 px-3 py-3">
+          {refs.map((ref) => (
+            <div key={ref} className="truncate font-mono text-xs text-muted-foreground">{ref}</div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 

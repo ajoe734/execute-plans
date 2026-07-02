@@ -8,6 +8,19 @@ import { Button } from "@/components/ui/button";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 
+function personaIdFromDetail(itemId: string, manageHref?: string): string | undefined {
+  const decodedId = decodeURIComponent(itemId);
+  const fromId = decodedId.match(/persona:([^/?#]+)/)?.[1];
+  if (fromId) return fromId;
+  if (!manageHref) return undefined;
+  try {
+    const url = new URL(manageHref, "https://pantheon.local");
+    return url.searchParams.get("persona") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
@@ -54,6 +67,7 @@ export const HumanGateDetailPage = () => {
   );
   const hasSignatures = item.signatures.length > 0;
   const hasEvidence = item.evidenceRefs.length > 0;
+  const personaId = personaIdFromDetail(item.id, item.links?.manageHref);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -67,6 +81,23 @@ export const HumanGateDetailPage = () => {
           <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
         </Button>
       </header>
+
+      <Card className="p-4">
+        <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+          <div>
+            <dt className="text-muted-foreground">Gate ID</dt>
+            <dd className="font-mono text-foreground">{item.id}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Persona</dt>
+            <dd className="font-mono text-foreground">{personaId ?? "nan"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Summary</dt>
+            <dd className="text-foreground">{item.summary || "nan"}</dd>
+          </div>
+        </dl>
+      </Card>
 
       {!item.canProceed && (
         <Card className="border-status-failed/40 bg-status-failed/5 p-3">
