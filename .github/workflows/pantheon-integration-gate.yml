@@ -156,6 +156,10 @@ jobs:
       - name: Anonymous BFF route probe
         id: route_probe
         continue-on-error: true
+        timeout-minutes: 8
+        env:
+          PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: ${{ github.event_name == 'pull_request' && '1' || '3' }}
+          PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: ${{ github.event_name == 'pull_request' && '8000' || '25000' }}
         run: |
           set -o pipefail
           node scripts/probe-bff-routes.mjs --anonymous 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-route-probe-anonymous.log"
