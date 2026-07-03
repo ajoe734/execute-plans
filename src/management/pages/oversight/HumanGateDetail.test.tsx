@@ -1,11 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { HumanGateDetailPage } from "./HumanGateDetail";
 import type { HumanInboxDetail } from "@/lib/v5/management/humanInbox";
+import { mgmt } from "@/lib/bff-v1";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -61,9 +62,51 @@ function readinessBlockerDetail(): HumanInboxDetail {
   };
 }
 
+function promotionReviewDetail(): HumanInboxDetail {
+  return {
+    id: "promotion_review:review-persona-paper-1",
+    kind: "promotion_review",
+    title: "Paper to Canary promotion review: Paper Persona",
+    summary: "promotion_to_canary is awaiting human decision.",
+    requiredRole: "approver",
+    consequenceIfApproved: "",
+    consequenceIfRejected: "",
+    consequenceIfIgnored: "",
+    canDecide: true,
+    canProceed: false,
+    status: "pending",
+    sourceId: "review-persona-paper-1",
+    personaId: "persona-paper-1",
+    reviewId: "review-persona-paper-1",
+    reviewType: "promotion_to_canary",
+    decisionHref: "/bff/management/promotion-reviews/review-persona-paper-1/decisions",
+    allowedActions: {
+      canDecide: true,
+      canApprove: true,
+      canReject: true,
+      canRequestEvidence: true,
+    },
+    blockingReasons: [],
+    detailHref: "/management/human-inbox/promotion_review%3Areview-persona-paper-1",
+    links: {
+      manageHref: "/management/persona-fleet?persona=persona-paper-1",
+      recommendedActionHref: "/management/human-inbox/promotion_review%3Areview-persona-paper-1",
+    },
+    decisionType: "single",
+    signatures: [],
+    evidenceRefs: ["evidence:persona-paper-1:paper-score"],
+    decisionHistory: [],
+    auditRefs: [],
+  };
+}
+
 describe("HumanGateDetailPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("does not render the deterministic seed approval form while live detail is loading", () => {
@@ -122,5 +165,43 @@ describe("HumanGateDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request more evidence" })).not.toBeInTheDocument();
+  });
+
+  it("renders promotion review decision controls and submits an approval", async () => {
+    const refresh = vi.fn();
+    const decidePromotionReview = vi.spyOn(mgmt.humanInbox, "decidePromotionReview").mockResolvedValue({
+      ok: true,
+      persisted: true,
+      reviewId: "review-persona-paper-1",
+      status: "approved",
+      idempotencyKey: "idk-test",
+      replayed: false,
+    });
+    mocks.useV5Live.mockReturnValue({
+      data: promotionReviewDetail(),
+      loading: false,
+      refresh,
+    });
+
+    renderDetail("promotion_review:review-persona-paper-1");
+
+    expect(screen.getByRole("heading", { name: "Paper to Canary promotion review: Paper Persona" })).toBeInTheDocument();
+    expect(screen.getByText("Promotion decision")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Rationale"), {
+      target: { value: "Paper evidence passed risk and cost gates." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Approve Canary/ }));
+
+    await waitFor(() => {
+      expect(decidePromotionReview).toHaveBeenCalledWith(
+        "review-persona-paper-1",
+        {
+          decision: "approve",
+          rationale: "Paper evidence passed risk and cost gates.",
+          evidenceRefs: ["evidence:persona-paper-1:paper-score"],
+        },
+      );
+    });
+    expect(refresh).toHaveBeenCalled();
   });
 });

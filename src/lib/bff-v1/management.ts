@@ -14,6 +14,9 @@
 import { withLiveOrMock } from "./liveTransport";
 import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import { paths } from "./paths";
+import { bffFetch } from "./client";
+import { idempotencyKey as mintIdempotencyKey } from "./headers";
+import { liveWriteGated } from "./writeGate";
 
 import {
   composeCockpit, defaultCockpitSeed, type CockpitModel,
@@ -23,6 +26,7 @@ import {
 } from "@/lib/v5/management/tradingRankings";
 import {
   HUMAN_INBOX_KINDS,
+  type HumanInboxAllowedActions,
   type HumanInboxDecisionRecord,
   type HumanInboxDetail,
   type HumanInboxItem,
@@ -126,6 +130,13 @@ export interface ManagementResearchProject {
   canDeploy: boolean;
 }
 
+export interface ManagementPersonaFleetRowAction {
+  actionId: string;
+  label?: string;
+  href?: string;
+  startupWizardVisible?: boolean;
+}
+
 export interface ManagementPersonaFleetRow {
   personaId: string;
   personaName?: string;
@@ -146,6 +157,12 @@ export interface ManagementPersonaFleetRow {
   runtimeId?: string;
   runtimeBindingId?: string;
   deploymentStage?: string;
+  requiredHumanReview?: string;
+  reviewStatus?: string;
+  promotionReviewId?: string;
+  humanGateId?: string;
+  inboxId?: string;
+  rowAction?: ManagementPersonaFleetRowAction;
 }
 
 export interface ManagementTradingPulseSurface {
@@ -1742,6 +1759,22 @@ function adaptResearchProject(value: unknown): ManagementResearchProject | null 
   };
 }
 
+function adaptPersonaFleetRowAction(value: unknown): ManagementPersonaFleetRowAction | undefined {
+  if (!isObject(value)) return undefined;
+  const actionId = asString(value.actionId ?? value.action_id);
+  if (!actionId) return undefined;
+  return {
+    actionId,
+    label: asOptionalString(value.label),
+    href: asOptionalString(value.href),
+    startupWizardVisible: typeof value.startupWizardVisible === "boolean"
+      ? value.startupWizardVisible
+      : typeof value.startup_wizard_visible === "boolean"
+        ? value.startup_wizard_visible
+        : undefined,
+  };
+}
+
 function firstArrayValue(...values: unknown[]): unknown[] | null {
   for (const value of values) {
     if (Array.isArray(value)) return value;
@@ -1806,6 +1839,12 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     runtimeId: asOptionalString(value.runtimeId ?? value.runtime_id),
     runtimeBindingId: asOptionalString(value.runtimeBindingId ?? value.runtime_binding_id ?? value.bindingId ?? value.binding_id),
     deploymentStage: asOptionalString(value.deploymentStage ?? value.deployment_stage),
+    requiredHumanReview: asOptionalString(value.requiredHumanReview ?? value.required_human_review),
+    reviewStatus: asOptionalString(value.reviewStatus ?? value.review_status),
+    promotionReviewId: asOptionalString(value.promotionReviewId ?? value.promotion_review_id),
+    humanGateId: asOptionalString(value.humanGateId ?? value.human_gate_id),
+    inboxId: asOptionalString(value.inboxId ?? value.inbox_id),
+    rowAction: adaptPersonaFleetRowAction(value.rowAction ?? value.row_action),
   };
 }
 
@@ -1854,6 +1893,25 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 const emptyHumanInbox = (): HumanInboxItem[] => [];
 const missingHumanInboxDetail = (): HumanInboxDetail | undefined => undefined;
 
+export type PromotionReviewDecisionValue = "approve" | "approve_with_conditions" | "reject";
+
+export interface PromotionReviewDecisionInput {
+  decision: PromotionReviewDecisionValue;
+  rationale?: string;
+  evidenceRefs?: string[];
+  approvalDecisionId?: string;
+}
+
+export interface PromotionReviewDecisionResult {
+  ok: true;
+  persisted: boolean;
+  reviewId: string;
+  status: string;
+  idempotencyKey: string;
+  decision?: unknown;
+  replayed?: boolean;
+}
+
 const asOptionalString = (raw: unknown): string | undefined => {
   const value = asString(raw);
   return value ? value : undefined;
@@ -1901,6 +1959,8 @@ const normalizeInboxKind = (raw: unknown): HumanInboxKind => {
     governance_review: "approval",
     model_artifact_approval: "approval",
     sentinel_finding: "sentinel",
+    paper_to_canary_review: "promotion_review",
+    canary_to_live_review: "promotion_review",
   };
   if (kind in aliases) return aliases[kind];
   return HUMAN_INBOX_KINDS.includes(kind as HumanInboxKind) ? (kind as HumanInboxKind) : "approval";
@@ -1957,6 +2017,21 @@ const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
+const adaptInboxAllowedActions = (raw: unknown, canDecide: boolean): HumanInboxAllowedActions | undefined => {
+  const allowed = isObject(raw) ? raw : null;
+  if (!allowed) return undefined;
+  return {
+    canDecide,
+    canApprove: asBoolean(allowed.canApprove ?? allowed.can_approve, false),
+    canReject: asBoolean(allowed.canReject ?? allowed.can_reject, false),
+    canRequestRevision: asBoolean(allowed.canRequestRevision ?? allowed.can_request_revision, false),
+    canRequestEvidence: asBoolean(allowed.canRequestEvidence ?? allowed.can_request_evidence, false),
+  };
+};
+
+const inboxPersonaManageHref = (personaId: string): string =>
+  `/management/persona-fleet?persona=${encodeURIComponent(personaId)}`;
+
 const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKind): string => {
   const researchContext = isObject(it.research_context) ? it.research_context : {};
   const recommendation = asString(researchContext.recommendation).toLowerCase();
@@ -1968,9 +2043,14 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
-  const id = asString(it.id ?? it.inbox_id ?? it.inboxId);
+  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType;
+  const kind = normalizeInboxKind(rawKind);
+  const fallbackReviewId = asString(it.reviewId ?? it.review_id ?? it.source_id);
+  const id = asString(
+    it.id ?? it.inbox_id ?? it.inboxId,
+    kind === "promotion_review" && fallbackReviewId ? `promotion_review:${fallbackReviewId}` : "",
+  );
   if (!id) return null;
-  const kind = normalizeInboxKind(it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType);
   const actionState = asString(it.action_state ?? it.actionState ?? it.status);
   const canDecide = asBoolean(
     it.canDecide ?? it.can_decide,
@@ -1980,8 +2060,16 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     it.canProceed ?? it.can_proceed,
     actionState ? !actionStateBlocksProceed(actionState) : true,
   );
+  const personaId = asOptionalString(it.personaId ?? it.persona_id);
+  const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
+  const reviewType = asOptionalString(it.reviewType ?? it.review_type);
+  const sourceId = asOptionalString(it.sourceId ?? it.source_id ?? reviewId);
+  const decisionHref = asOptionalString(it.decisionHref ?? it.decision_href);
   const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
-  const route = it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+  const route = kind === "promotion_review" && personaId
+    ? inboxPersonaManageHref(personaId)
+    : it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+  const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
   return {
     id,
     kind,
@@ -1994,6 +2082,13 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     ttlSec: typeof it.ttlSec === "number" ? it.ttlSec : typeof it.ttl_sec === "number" ? it.ttl_sec : undefined,
     canDecide,
     canProceed,
+    status: asOptionalString(it.status),
+    sourceId,
+    personaId,
+    reviewId,
+    reviewType,
+    decisionHref,
+    allowedActions,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,
     evidenceRefs: nestedInboxEvidenceRefs(it),
     detailHref: inboxDetailHref(id),
@@ -2064,6 +2159,28 @@ export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
     auditRefs: asInboxStringList(item.auditRefs ?? item.audit_refs),
   };
 }
+
+const promotionReviewIdFromInboxId = (id: string): string =>
+  id.startsWith("promotion_review:") ? id.slice("promotion_review:".length) : id;
+
+const adaptPromotionReviewDecisionResult = (
+  raw: unknown,
+  reviewId: string,
+  idempotencyKey: string,
+): PromotionReviewDecisionResult => {
+  const root = isObject(raw) ? raw : {};
+  const meta = isObject(root.meta) ? root.meta : {};
+  const idem = isObject(meta.idempotency) ? meta.idempotency : {};
+  return {
+    ok: true,
+    persisted: true,
+    reviewId,
+    status: asString(root.status, "decided"),
+    idempotencyKey: asString(idem.idempotencyKey ?? idem.key, idempotencyKey),
+    decision: root.decision,
+    replayed: asBoolean(idem.replayed, false),
+  };
+};
 
 // ---------- PM-4 Trading Pulse ----------
 
@@ -2596,6 +2713,38 @@ export const mgmt = {
         (raw) => adaptHumanInboxDetail(raw) ?? missingHumanInboxDetail(),
         strictNotFoundAsUndefined,
       ),
+    decidePromotionReview: async (
+      reviewOrInboxId: string,
+      input: PromotionReviewDecisionInput,
+      opts: { idempotencyKey?: string } = {},
+    ): Promise<PromotionReviewDecisionResult> => {
+      const reviewId = promotionReviewIdFromInboxId(reviewOrInboxId);
+      const idempotencyKey = opts.idempotencyKey ?? mintIdempotencyKey();
+      const writeAllowed = await liveWriteGated();
+      if (!writeAllowed) {
+        return {
+          ok: true,
+          persisted: false,
+          reviewId,
+          status: "write_disabled",
+          idempotencyKey,
+        };
+      }
+      const body: Record<string, unknown> = {
+        decision: input.decision,
+        rationale: input.rationale,
+        evidence_refs: input.evidenceRefs ?? [],
+      };
+      if (input.approvalDecisionId) body.approval_decision_id = input.approvalDecisionId;
+      const raw = await bffFetch<unknown>({
+        method: "POST",
+        path: paths.mgmtPromotionReviewDecision(reviewId),
+        body,
+        idempotencyKey,
+        mode: "live",
+      });
+      return adaptPromotionReviewDecisionResult(raw, reviewId, idempotencyKey);
+    },
   },
 
   tradingPulse: {

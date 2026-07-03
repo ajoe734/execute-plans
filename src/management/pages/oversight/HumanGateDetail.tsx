@@ -1,12 +1,18 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
 
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { toast } from "sonner";
+import type { PromotionReviewDecisionValue } from "@/lib/bff-v1/management";
 
 function personaIdFromDetail(itemId: string, manageHref?: string): string | undefined {
   const decodedId = decodeURIComponent(itemId);
@@ -24,7 +30,9 @@ function personaIdFromDetail(itemId: string, manageHref?: string): string | unde
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  const { data, loading } = useV5Live(() => mgmt.humanInbox.get(id), [id]);
+  const { data, loading, refresh } = useV5Live(() => mgmt.humanInbox.get(id), [id]);
+  const [rationale, setRationale] = useState("");
+  const [submittingDecision, setSubmittingDecision] = useState<PromotionReviewDecisionValue | null>(null);
   const item = data;
 
   if (loading && !item) {
@@ -68,6 +76,38 @@ export const HumanGateDetailPage = () => {
   const hasSignatures = item.signatures.length > 0;
   const hasEvidence = item.evidenceRefs.length > 0;
   const personaId = personaIdFromDetail(item.id, item.links?.manageHref);
+  const reviewId = item.reviewId ?? (item.id.startsWith("promotion_review:") ? item.id.slice("promotion_review:".length) : "");
+  const isPromotionReview = item.kind === "promotion_review" && Boolean(reviewId);
+  const promotionTargetKey = item.reviewType === "canary_to_live"
+    ? "mgmt.inbox.approveLive"
+    : "mgmt.inbox.approveCanary";
+  const canApprovePromotion = item.allowedActions?.canApprove ?? item.canDecide;
+  const canRejectPromotion = item.allowedActions?.canReject ?? item.canDecide;
+  const rationaleValue = rationale.trim();
+  const submitPromotionDecision = async (decision: PromotionReviewDecisionValue) => {
+    if (!reviewId) return;
+    if (decision === "reject" && !rationaleValue) return;
+    setSubmittingDecision(decision);
+    try {
+      const result = await mgmt.humanInbox.decidePromotionReview(reviewId, {
+        decision,
+        rationale: rationaleValue,
+        evidenceRefs: item.evidenceRefs,
+      });
+      if (result.persisted) {
+        toast.success(t("mgmt.inbox.decisionAcceptedFmt", { status: result.status }));
+      } else {
+        toast.warning(t("mgmt.inbox.decisionLocalOnly"));
+      }
+      refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(t("mgmt.inbox.decisionFailedFmt", { message }));
+    } finally {
+      setSubmittingDecision(null);
+    }
+  };
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -130,6 +170,66 @@ export const HumanGateDetailPage = () => {
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {isPromotionReview && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("mgmt.inbox.promotionDecision")}
+            </h2>
+            <Badge variant="outline">{item.status ?? "pending"}</Badge>
+          </div>
+          <div className="mt-3 space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="promotion-rationale" className="text-xs text-muted-foreground">
+                {t("mgmt.inbox.rationaleLabel")}
+              </Label>
+              <Textarea
+                id="promotion-rationale"
+                value={rationale}
+                onChange={(event) => setRationale(event.target.value)}
+                rows={3}
+                disabled={submittingDecision !== null || !item.canDecide}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => void submitPromotionDecision("approve")}
+                disabled={!item.canDecide || !canApprovePromotion || submittingDecision !== null}
+              >
+                {submittingDecision === "approve"
+                  ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                {t(promotionTargetKey)}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void submitPromotionDecision("approve_with_conditions")}
+                disabled={!item.canDecide || !canApprovePromotion || submittingDecision !== null}
+              >
+                {submittingDecision === "approve_with_conditions"
+                  ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                {t("mgmt.inbox.approveWithConditions")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void submitPromotionDecision("reject")}
+                disabled={!item.canDecide || !canRejectPromotion || !rationaleValue || submittingDecision !== null}
+                className="border-status-failed/40 text-status-failed hover:text-status-failed"
+              >
+                {submittingDecision === "reject"
+                  ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  : <XCircle className="mr-1 h-4 w-4" />}
+                {t("mgmt.inbox.rejectPromotion")}
+              </Button>
+            </div>
+          </div>
         </Card>
       )}
 
