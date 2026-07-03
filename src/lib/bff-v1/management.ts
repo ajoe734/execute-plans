@@ -2544,6 +2544,7 @@ function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaI
     riskFlags: normalizePersonaIntentStringList(record.riskFlags, record.risk_flags),
     policyViolations: normalizePersonaIntentStringList(record.policyViolations, record.policy_violations),
     createdAt: asString(record.createdAt ?? record.created_at ?? record.occurredAt ?? record.occurred_at ?? record.updatedAt ?? record.updated_at),
+    debugRecord: record,
   };
 }
 

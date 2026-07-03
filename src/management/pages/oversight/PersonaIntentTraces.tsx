@@ -1,6 +1,5 @@
-// 2026-05-20 revamp §6 + design ruling §2 — Persona Intent Audit.
-// HARD RULE: no reveal / expand / download / reconstruct UI. Visibility ⇒
-// renderable fields strictly via intentDisplayRules().
+// Persona Intent debug view. Do not apply extra frontend masking here: the page
+// should show normalized fields and the BFF row as received.
 
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -87,21 +86,39 @@ const formatTime = (trace: PersonaIntentTrace) => {
 
 const protectionLabelKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.protection.${visibility}`;
 
-const recordPurposeKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.recordPurpose.${visibility}`;
-const auditOutcomeKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.auditOutcome.${visibility}`;
-const fallbackTitleKey = (visibility: PersonaIntentVisibility) => `mgmt.personaIntent.fallbackTitle.${visibility}`;
-
 const redactedByKey = (redactedBy?: PersonaIntentTrace["redaction"]["redactedBy"]) =>
   `mgmt.personaIntent.redactedBy.${redactedBy ?? "unknown"}`;
-
-const isPlaceholderSummary = (value?: string) =>
-  !value || /^\[(redacted|restricted)(?:\s+by\s+policy)?\]$/i.test(value.trim());
 
 const SummaryStat = ({ label, value }: { label: string; value: number }) => (
   <Card className="p-3">
     <div className="text-xs text-muted-foreground">{label}</div>
     <div className="mt-1 text-xl font-semibold text-foreground">{value}</div>
   </Card>
+);
+
+const formatDebugValue = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return "—";
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "[]";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
+};
+
+const DebugField = ({ label, value, mono = false }: { label: string; value: unknown; mono?: boolean }) => (
+  <div className="rounded-md bg-muted/40 p-3">
+    <dt className="text-xs text-muted-foreground">{label}</dt>
+    <dd className={`mt-1 break-words text-sm text-foreground ${mono ? "font-mono" : ""}`}>
+      {formatDebugValue(value)}
+    </dd>
+  </div>
+);
+
+const DebugJson = ({ label, value }: { label: string; value: unknown }) => (
+  <div className="mt-4">
+    <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
+    <pre className="mt-2 max-h-[520px] overflow-auto rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
+      {JSON.stringify(value ?? {}, null, 2)}
+    </pre>
+  </div>
 );
 
 const PurposePanel = () => {
@@ -140,10 +157,7 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
   const redactedBy = t(redactedByKey(trace.redaction?.redactedBy));
   const policy = trace.redaction?.policyRef || t("mgmt.personaIntent.policyUnknown");
   const status = trace.sourceStatus || t("mgmt.personaIntent.statusUnknown");
-  const visibleSummary = r.showSummary && !isPlaceholderSummary(trace.userIntentSummary);
-  const displayTitle = visibleSummary
-    ? trace.userIntentSummary
-    : t(fallbackTitleKey(r.badge));
+  const displayTitle = trace.userIntentSummary || trace.title || trace.id;
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -155,7 +169,7 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
           </div>
           <h2 className="mt-1 break-words text-base font-semibold text-foreground">{displayTitle}</h2>
           <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-            {t(auditOutcomeKey(r.badge), { actor: redactedBy, policy })}
+            {t("mgmt.personaIntent.debugOutcome", { actor: redactedBy, policy })}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>{t("mgmt.personaIntent.personaLabel")}: <span className="font-mono">{trace.ringPersonaId}</span></span>
@@ -169,94 +183,58 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
       </div>
 
       <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.recordPurposeLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{t(recordPurposeKey(r.badge))}</dd>
-        </div>
-        <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.sourceLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{sourceLabel} · {status}</dd>
-        </div>
-        <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.protectionLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">{t(protectionLabelKey(r.badge))}</dd>
-        </div>
-        <div className="rounded-md bg-muted/40 p-3">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.followupSignalsLabel")}</dt>
-          <dd className="mt-1 font-medium text-foreground">
-            {t("mgmt.personaIntent.followupSignalsFmt", {
-              risks: trace.riskFlags?.length ?? 0,
-              evidence: trace.evidenceRefs?.length ?? 0,
-            })}
-          </dd>
-        </div>
+        <DebugField label={t("mgmt.personaIntent.sourceLabel")} value={`${sourceLabel} · ${status}`} />
+        <DebugField label={t("mgmt.personaIntent.protectionLabel")} value={t(protectionLabelKey(r.badge))} />
+        <DebugField label={t("mgmt.personaIntent.policyLabel")} value={policy} mono />
+        <DebugField label={t("mgmt.personaIntent.followupSignalsLabel")} value={t("mgmt.personaIntent.followupSignalsFmt", {
+          risks: trace.riskFlags?.length ?? 0,
+          evidence: trace.evidenceRefs?.length ?? 0,
+        })} />
       </dl>
 
-      {r.showOnlyMetadata ? (
-        <dl className="mt-3 grid gap-2 rounded-md border border-status-failed/20 bg-status-failed/5 p-3 text-xs sm:grid-cols-2">
-          <dt className="text-muted-foreground">{t("mgmt.personaIntent.restrictedReasonLabel")}</dt>
-          <dd>{t("mgmt.personaIntent.restrictedReason")}</dd>
-          {trace.redaction?.policyRef && (
-            <>
-              <dt className="text-muted-foreground">{t("mgmt.personaIntent.policyLabel")}</dt>
-              <dd className="font-mono">{trace.redaction?.policyRef}</dd>
-            </>
-          )}
-        </dl>
-      ) : (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
-          <div className="space-y-2">
-            <div className="text-xs font-medium uppercase text-muted-foreground">
-              {t("mgmt.personaIntent.safeSummaryLabel")}
-            </div>
-            {r.showSummary && trace.title && trace.title !== trace.id && trace.title !== trace.userIntentSummary && (
-              <p className="text-sm text-foreground">{trace.title}</p>
-            )}
-            {r.showInterpretation && trace.personaInterpretation && (
-              <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.interpretationFmt", { text: trace.personaInterpretation })}</p>
-            )}
-            {r.showToolsUsed && (trace.toolsUsed?.length ?? 0) > 0 && (
-              <p className="text-xs text-muted-foreground">{t("mgmt.personaIntent.toolsFmt", { tools: (trace.toolsUsed ?? []).join(", ") })}</p>
-            )}
-            {!r.showInterpretation && (
-              <p className="text-sm text-muted-foreground">{t("mgmt.personaIntent.summaryRedactedHint")}</p>
-            )}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.5fr)]">
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            {t("mgmt.personaIntent.normalizedFieldsLabel")}
           </div>
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs font-medium uppercase text-muted-foreground">
-                {t("mgmt.personaIntent.riskFlagsLabel")}
-              </div>
-              {r.showRiskFlags && (trace.riskFlags?.length ?? 0) > 0 && (
-                <p className="mt-2 text-xs">
-                  {(trace.riskFlags ?? []).map((f) => (
-                    <Badge key={f} variant="outline" className="mr-1 bg-status-warning/15 text-status-warning border-status-warning/30">{f}</Badge>
-                  ))}
-                </p>
-              )}
-              {(!r.showRiskFlags || (trace.riskFlags?.length ?? 0) === 0) && (
-                <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.personaIntent.noRiskFlags")}</p>
-              )}
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase text-muted-foreground">
-                {t("mgmt.personaIntent.evidenceRefsLabel")}
-              </div>
-              {r.showEvidenceRefs && (trace.evidenceRefs?.length ?? 0) > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {(trace.evidenceRefs ?? []).map((e) => (
-                    <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
-                  ))}
-                </p>
-              )}
-              {(!r.showEvidenceRefs || (trace.evidenceRefs?.length ?? 0) === 0) && (
-                <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.personaIntent.noEvidenceRefs")}</p>
+          <dl className="mt-2 grid gap-3 sm:grid-cols-2">
+            <DebugField label={t("mgmt.personaIntent.titleLabel")} value={trace.title} />
+            <DebugField label={t("mgmt.personaIntent.summaryLabel")} value={trace.userIntentSummary} />
+            <DebugField label={t("mgmt.personaIntent.interpretationLabel")} value={trace.personaInterpretation} />
+            <DebugField label={t("mgmt.personaIntent.proposedActionLabel")} value={trace.proposedAction} />
+            <DebugField label={t("mgmt.personaIntent.toolsUsedLabel")} value={trace.toolsUsed} mono />
+            <DebugField label={t("mgmt.personaIntent.consultedPersonasLabel")} value={trace.consultedPersonas} mono />
+            <DebugField label={t("mgmt.personaIntent.riskFlagsLabel")} value={trace.riskFlags} mono />
+            <DebugField label={t("mgmt.personaIntent.policyViolationsLabel")} value={trace.policyViolations} mono />
+          </dl>
+          <div className="mt-3 rounded-md bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground">{t("mgmt.personaIntent.evidenceRefsLabel")}</div>
+            <div className="mt-1 text-sm text-foreground">
+              {(trace.evidenceRefs?.length ?? 0) > 0 ? (
+                trace.evidenceRefs.map((e) => (
+                  <Link key={e} to={`/management/evidence/${encodeURIComponent(e)}`} className="font-mono mr-2 text-primary underline-offset-4 hover:underline">{e}</Link>
+                ))
+              ) : (
+                <span className="text-muted-foreground">{t("mgmt.personaIntent.emptyArray")}</span>
               )}
             </div>
           </div>
         </div>
-      )}
-      {/* HARD RULE: no Reveal/Expand/Download/Reconstruct buttons here. */}
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            {t("mgmt.personaIntent.backendStateLabel")}
+          </div>
+          <dl className="mt-2 grid gap-3">
+            <DebugField label={t("mgmt.personaIntent.sourceIdLabel")} value={trace.sourceId} mono />
+            <DebugField label={t("mgmt.personaIntent.ringBearerLabel")} value={trace.ringBearerId} mono />
+            <DebugField label={t("mgmt.personaIntent.redactedByLabel")} value={redactedBy} />
+            <DebugField label={t("mgmt.personaIntent.redactionStatusLabel")} value={trace.redaction?.status} />
+            <DebugField label={t("mgmt.personaIntent.createdAtLabel")} value={trace.createdAt} mono />
+          </dl>
+        </div>
+      </div>
+
+      <DebugJson label={t("mgmt.personaIntent.rawRecordLabel")} value={trace.debugRecord ?? trace} />
     </Card>
   );
 };

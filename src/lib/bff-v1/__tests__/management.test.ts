@@ -679,6 +679,7 @@ describe("mgmt façade (PM-Live)", () => {
             policy: "management_persona_intent_public_summary",
             redacted_by: "bff",
           },
+          raw_prompt: "debug raw prompt if BFF sends one",
           risk_flags: ["policy-flag"],
           evidence_refs: ["ev-001"],
         },
@@ -701,6 +702,10 @@ describe("mgmt façade (PM-Live)", () => {
       riskFlags: ["policy-flag"],
       evidenceRefs: ["ev-001"],
       createdAt: "2026-04-11T11:55:00Z",
+    });
+    expect(rows?.[0].debugRecord).toMatchObject({
+      raw_prompt: "debug raw prompt if BFF sends one",
+      summary: "Interactive session intent summary.",
     });
   });
 

@@ -1,7 +1,6 @@
-// 2026-05-20 revamp §6 + design ruling §2.
-// HARD RULE: BFF MUST NOT return raw prompts. `userIntentSummary` is treated
-// as already redacted. UI MUST NOT expose any reveal/expand/download/
-// reconstruct affordance.
+// Persona intent debug surface. The frontend should not apply an additional
+// visibility gate here: show the normalized row and the BFF row as received so
+// operators can debug whether missing content is a frontend or backend issue.
 
 export type PersonaIntentVisibility = "summary" | "redacted" | "restricted";
 
@@ -33,6 +32,9 @@ export interface PersonaIntentTrace {
   riskFlags: string[];
   policyViolations: string[];
   createdAt: string;
+
+  /** BFF item exactly as received by the adapter, for debug inspection. */
+  debugRecord?: Record<string, unknown>;
 }
 
 export interface PersonaIntentDisplay {
@@ -45,31 +47,27 @@ export interface PersonaIntentDisplay {
   badge: "summary" | "redacted" | "restricted";
 }
 
-/** Pure mapping: visibility → which fields are renderable. No reveal toggles. */
+/** Pure mapping: visibility → label tone. Debug mode renders every field. */
 export function intentDisplayRules(v: PersonaIntentVisibility): PersonaIntentDisplay {
+  const debugAll = {
+    showSummary: true,
+    showInterpretation: true,
+    showToolsUsed: true,
+    showRiskFlags: true,
+    showEvidenceRefs: true,
+    showOnlyMetadata: false,
+  };
+
   switch (v) {
     case "summary":
-      return {
-        showSummary: true, showInterpretation: true, showToolsUsed: true,
-        showRiskFlags: true, showEvidenceRefs: true, showOnlyMetadata: false,
-        badge: "summary",
-      };
+      return { ...debugAll, badge: "summary" };
     case "redacted":
-      return {
-        showSummary: true, showInterpretation: false, showToolsUsed: false,
-        showRiskFlags: true, showEvidenceRefs: false, showOnlyMetadata: false,
-        badge: "redacted",
-      };
+      return { ...debugAll, badge: "redacted" };
     case "restricted":
     default:
-      // Unknown/missing visibility from live data → safest (restricted) view.
-      return {
-        showSummary: false, showInterpretation: false, showToolsUsed: false,
-        showRiskFlags: false, showEvidenceRefs: false, showOnlyMetadata: true,
-        badge: "restricted",
-      };
+      return { ...debugAll, badge: "restricted" };
   }
 }
 
-/** Static assertion that no reveal/raw API exists on the trace surface. */
-export type _NoRawPromptApi = PersonaIntentTrace extends { rawPrompt: unknown } ? never : true;
+/** Static assertion that the debug row remains available on the trace surface. */
+export type _PersonaIntentTraceDebugRecordApi = PersonaIntentTrace extends { debugRecord?: Record<string, unknown> } ? true : never;

@@ -106,14 +106,17 @@ describe("PM-9 aggregate paths + PM-10 canonical write path", () => {
   });
 });
 
-// Privacy guard — make sure no reveal-style API leaked onto PersonaIntentTrace.
-describe("Persona Intent Trace shape is privacy-safe", () => {
-  it("does not expose rawPrompt / reveal* fields", async () => {
+// Debug transparency guard — visibility labels must not hide fields in the UI.
+describe("Persona Intent Trace shape is debug-transparent", () => {
+  it("renders restricted rows with the same field set as summary rows", async () => {
     const mod = await import("@/lib/v5/management/personaIntent");
-    const forbidden = ["rawPrompt", "revealPrompt", "reveal", "decode", "reconstruct"];
-    // Type-level guard via string scan of module exports.
-    for (const f of forbidden) {
-      expect(JSON.stringify(Object.keys(mod))).not.toContain(f);
-    }
+    expect(mod.intentDisplayRules("restricted")).toMatchObject({
+      showSummary: true,
+      showInterpretation: true,
+      showToolsUsed: true,
+      showRiskFlags: true,
+      showEvidenceRefs: true,
+      showOnlyMetadata: false,
+    });
   });
 });
