@@ -168,9 +168,6 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
             <span>{status}</span>
           </div>
           <h2 className="mt-1 break-words text-base font-semibold text-foreground">{displayTitle}</h2>
-          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-            {t("mgmt.personaIntent.debugOutcome", { actor: redactedBy, policy })}
-          </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>{t("mgmt.personaIntent.personaLabel")}: <span className="font-mono">{trace.ringPersonaId}</span></span>
             <span>{t("mgmt.personaIntent.recordLabel")}: <span className="font-mono">{trace.id}</span></span>
