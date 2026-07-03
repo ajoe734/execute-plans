@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
 import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
-import { EnvSwitcher } from "./EnvSwitcher";
 import {
   lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
   fetchShellSummary, shellSummaryStatus,
@@ -196,8 +195,6 @@ export const TopBar = () => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      <EnvSwitcher />
 
       {/* Search */}
       <button
