@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -20,24 +20,103 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 
-const loadListItems = <T,>(loader: () => Promise<{ items: T[] }>) =>
+type ListLoader<T> = () => Promise<{ items: T[] }>;
+
+const OPERATION_LIST_CACHE_TTL_MS = 60_000;
+const operationListCache = new Map<string, {
+  expiresAt: number;
+  items?: unknown[];
+  promise?: Promise<unknown[]>;
+}>();
+
+const loadListItems = <T,>(loader: ListLoader<T>) =>
   loader().then((envelope) => envelope.items);
+
+function loadCachedListItems<T>(
+  cacheKey: string,
+  loader: ListLoader<T>,
+  opts: { force?: boolean } = {},
+): Promise<T[]> {
+  const now = Date.now();
+  const cached = operationListCache.get(cacheKey);
+  if (!opts.force && cached?.items && cached.expiresAt > now) {
+    return Promise.resolve(cached.items as T[]);
+  }
+  if (!opts.force && cached?.promise) {
+    return cached.promise as Promise<T[]>;
+  }
+  const promise = loadListItems(loader)
+    .then((items) => {
+      operationListCache.set(cacheKey, {
+        items,
+        expiresAt: Date.now() + OPERATION_LIST_CACHE_TTL_MS,
+      });
+      return items;
+    })
+    .catch((err) => {
+      if (cached?.items) {
+        operationListCache.set(cacheKey, {
+          items: cached.items,
+          expiresAt: cached.expiresAt,
+        });
+      } else {
+        const latest = operationListCache.get(cacheKey);
+        if (latest?.promise) operationListCache.delete(cacheKey);
+      }
+      throw err;
+    });
+  operationListCache.set(cacheKey, {
+    items: cached?.items,
+    expiresAt: cached?.expiresAt ?? 0,
+    promise,
+  });
+  return promise;
+}
+
+function updateCachedListItems<T>(cacheKey: string, updater: (items: T[]) => T[]): void {
+  const cached = operationListCache.get(cacheKey);
+  if (!cached?.items) return;
+  operationListCache.set(cacheKey, {
+    ...cached,
+    items: updater(cached.items as T[]),
+    expiresAt: Date.now() + OPERATION_LIST_CACHE_TTL_MS,
+  });
+}
+
+function useCachedOperationList<T>(
+  cacheKey: string,
+  loader: ListLoader<T>,
+): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
+  const cached = operationListCache.get(cacheKey);
+  const [rows, setRows] = useState<T[]>(() => cached?.items
+    ? cached.items as T[]
+    : []);
+  const refresh = useCallback(async () => {
+    const items = await loadCachedListItems(cacheKey, loader);
+    setRows(items);
+  }, [cacheKey, loader]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  return [rows, setRows, refresh];
+}
 
 export const JobsPage = () => {
   const t = useT();
-  const [rows, setRows] = useState<Job[]>([]);
+  const [rows, setRows] = useCachedOperationList<Job>("operations.jobs", lists.jobs);
   const [liveCount, setLiveCount] = useState(0);
-  useEffect(() => { loadListItems<Job>(lists.jobs).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("job", (p) => {
         const e = p as { jobId: string; kind: string; status: Job["status"]; owner: string; ts: string };
-        setRows((rs) => [{ id: e.jobId, kind: e.kind, status: e.status, owner: e.owner, startedAt: e.ts }, ...rs].slice(0, 50));
+        setRows((rs) => {
+          const next = [{ id: e.jobId, kind: e.kind, status: e.status, owner: e.owner, startedAt: e.ts }, ...rs].slice(0, 50);
+          updateCachedListItems<Job>("operations.jobs", () => next);
+          return next;
+        });
         setLiveCount((c) => c + 1);
       });
       return off;
     });
-  }, []);
+  }, [setRows]);
   return (
     <>
       <PageHeader title={t("nav.jobs")} subtitle={t("page.jobsSubtitle", { count: liveCount })} />
@@ -56,22 +135,29 @@ export const JobsPage = () => {
 
 export const AlertsPage = () => {
   const t = useT();
-  const [rows, setRows] = useState<Alert[]>([]);
+  const [rows, setRows] = useCachedOperationList<Alert>("operations.alerts", lists.alerts);
   const [active, setActive] = useState<Alert | null>(null);
-  useEffect(() => { loadListItems<Alert>(lists.alerts).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("alert", (p) => {
         const alert = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
-        setRows((rs) => [alert, ...rs]);
+        setRows((rs) => {
+          const next = [alert, ...rs];
+          updateCachedListItems<Alert>("operations.alerts", () => next);
+          return next;
+        });
       });
       return off;
     });
-  }, []);
+  }, [setRows]);
 
   const ack = async (id: string) => {
     const receipt = await bffWrites.acknowledgeAlert(id);
-    setRows((rs) => rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
+    setRows((rs) => {
+      const next = rs.map((r) => r.id === id ? { ...r, acknowledged: true } : r);
+      updateCachedListItems<Alert>("operations.alerts", () => next);
+      return next;
+    });
     setActive((a) => a && a.id === id ? { ...a, acknowledged: true } : a);
     toast.success(t("toast.alertAcknowledged", { id }), {
       description: commandReceiptDescription(receipt),
@@ -144,10 +230,9 @@ export const AlertsPage = () => {
 
 export const IncidentsPage = () => {
   const t = useT();
-  const [rows, setRows] = useState<Incident[]>([]);
+  const [rows, setRows] = useCachedOperationList<Incident>("operations.incidents", lists.incidents);
   const [active, setActive] = useState<Incident | null>(null);
   const [resolveOpen, setResolveOpen] = useState(false);
-  useEffect(() => { loadListItems<Incident>(lists.incidents).then(setRows); }, []);
 
   const advance = async (id: string, status: Incident["status"], memo?: string) => {
     const receipt = await runActionSafe({
@@ -159,7 +244,11 @@ export const IncidentsPage = () => {
       silent: true,
     });
     if (!receipt.ok) return;
-    setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
+    setRows((rs) => {
+      const next = rs.map((r) => r.id === id ? { ...r, status } : r);
+      updateCachedListItems<Incident>("operations.incidents", () => next);
+      return next;
+    });
     setActive((a) => a && a.id === id ? { ...a, status } : a);
     toast.success(t("toast.incidentAdvanced", { id, status }), {
       description: commandReceiptDescription(receipt),

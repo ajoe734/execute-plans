@@ -51,7 +51,9 @@ const statusLabel = (t: (key: string, opts?: Record<string, unknown>) => string,
 
 export const SentinelPage = () => {
   const t = useT();
-  const findings = useV5Live(() => v5.sentinel.list());
+  const findings = useV5Live(() => v5.sentinel.list(), [], {
+    cacheKey: "v5.sentinel.findings",
+  });
   const [active, setActive] = useState<SentinelFinding | null>(null);
   const [filter, setFilter] = useState("");
   const [sevFilter, setSevFilter] = useState<string>("all");
