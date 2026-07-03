@@ -7,6 +7,7 @@ import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { mockMe } from "@/lib/v4/session/me";
 import i18n from "@/i18n";
 import { markRoutePrimaryReady, resetRoutePrimaryReadyForTests } from "@/platform/routePrimaryReady";
+import { usePlatform } from "@/platform/store";
 
 const realFetch = globalThis.fetch;
 
@@ -91,6 +92,22 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     expect(approvalsSpy).not.toHaveBeenCalled();
     expect(alertsSpy).not.toHaveBeenCalled();
     expect(jobsSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not render the retired global environment selector", async () => {
+    usePlatform.getState().setEnv("paper");
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("ok")),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.queryByRole("button", { name: /^Paper$/i })).not.toBeInTheDocument();
   });
 
   it("shows a degraded badge and still renders shell-summary counts when a source is degraded", async () => {
