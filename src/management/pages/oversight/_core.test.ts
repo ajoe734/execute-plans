@@ -17,7 +17,7 @@ import { visibleDataSources } from "./personaFleetDataSources";
 import { filterEvolutionJournalRowsForFocus } from "./evolutionJournalFocus";
 
 describe("PersonaFleetPage data source badges", () => {
-  it("prioritizes readable providers before truncating", () => {
+  it("prioritizes readable providers and keeps every declared source visible", () => {
     const row = {
       dataSources: [
         { providerKey: "twse", provider: "TWSE OpenAPI", status: "read_unavailable" },
@@ -33,6 +33,7 @@ describe("PersonaFleetPage data source badges", () => {
       "twse",
       "tpex",
       "mops",
+      "tej",
     ]);
   });
 
