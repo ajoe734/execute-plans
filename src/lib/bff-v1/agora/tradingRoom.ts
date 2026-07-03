@@ -25,6 +25,7 @@ import {
   type ErrorCode,
 } from "../errors";
 import { readBffEnv } from "../runtimeEnv";
+import { getAuthProvider } from "../headers";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -266,6 +267,29 @@ function resolvedBase(baseUrl?: string): string {
     return window.location.origin.replace(/\/+$/, "");
   }
   return "";
+}
+
+/**
+ * Every route in this file is `require_read_role`/user-scoped on the BFF
+ * side (see AG-BE-TR-002) and 401s with AUTH_REQUIRED when the Authorization
+ * header is absent. `credentials: "include"` alone does not satisfy that —
+ * the BFF checks for a Bearer token, not a cookie. Mirrors the token/tenant
+ * injection in `buildHeaders()` (../headers.ts) without adopting its
+ * unconditional X-Request-Id/X-Correlation-Id/Accept-Language headers, which
+ * this file's existing tests assert are absent unless explicitly supplied.
+ */
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    const provider = getAuthProvider();
+    const token = provider.getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const tenant = provider.getTenantId();
+    if (tenant) headers["X-Tenant-Id"] = tenant;
+  } catch {
+    // Auth provider failures must not block requests; live mode will surface 401 from server.
+  }
+  return headers;
 }
 
 function recordFrom(value: unknown): Record<string, unknown> {
@@ -562,6 +586,7 @@ function mutationHeaders(options?: TradingRoomWorkspaceMutationOptions): Record<
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
+    ...authHeaders(),
   };
   if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
   if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
@@ -577,7 +602,7 @@ export async function getTradingRoom(baseUrl?: string): Promise<TradingRoomAggre
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -598,7 +623,7 @@ export async function getTradingRoomStrategy(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -636,7 +661,7 @@ export async function listDecisionEvents(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -660,7 +685,7 @@ export async function getDecisionEvent(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -684,6 +709,7 @@ export async function createTradingRoomWorkspaceProposal(
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
+    ...authHeaders(),
   };
   if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   const res = await fetch(url, {
@@ -710,7 +736,7 @@ export async function getTradingRoomWorkspaceProposal(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (!res.ok) {
     await throwTypedBffError(res, "GET", url);
@@ -750,6 +776,7 @@ export async function acceptTradingRoomWorkspaceProposalWithMeta(
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
+    ...authHeaders(),
   };
   if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   const res = await fetch(url, {
@@ -795,7 +822,7 @@ export async function getTradingRoomWorkspaceWithMeta(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (!res.ok) {
     await throwTypedBffError(res, "GET", url);
@@ -836,7 +863,7 @@ export async function listTradingRoomWorkspaceVersions(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   if (!res.ok) {
     await throwTypedBffError(res, "GET", url);
@@ -932,6 +959,7 @@ export async function decideOnEvent(
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
+    ...authHeaders(),
   };
   if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
   if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
