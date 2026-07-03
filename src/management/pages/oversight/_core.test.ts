@@ -14,6 +14,7 @@ import {
 } from "./personaFleetLinks";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
+import { filterEvolutionJournalRowsForFocus } from "./evolutionJournalFocus";
 
 describe("PersonaFleetPage data source badges", () => {
   it("prioritizes readable providers before truncating", () => {
@@ -257,5 +258,24 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetResearchHref(row)).toBe(
       "/management/loops/research?persona=persona-live-without-project",
     );
+  });
+});
+
+describe("EvolutionJournalPage focus filtering", () => {
+  it("does not fall back to global evolution items when persona focus misses", () => {
+    type EvolutionEntry = Parameters<typeof filterEvolutionJournalRowsForFocus>[0][number];
+    const rows: EvolutionEntry[] = [{
+      id: "mutation-crypto",
+      title: "Crypto mutation review",
+      summary: "persona-crypto approved",
+      status: "approved",
+    }];
+
+    const focus = filterEvolutionJournalRowsForFocus(rows, {
+      personaFocus: "persona-tw",
+    });
+
+    expect(focus.matched).toBe(false);
+    expect(focus.rows).toEqual([]);
   });
 });

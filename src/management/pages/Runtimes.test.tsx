@@ -73,4 +73,35 @@ describe("RuntimesPage", () => {
     expect(screen.queryByText("0ms")).not.toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
   });
+
+  it("does not fall back to unrelated runtime rows when focus misses", () => {
+    const rows: RuntimeListItem[] = [{
+      id: "rt-other",
+      name: "rt-other",
+      kind: "executor" as RuntimeListItem["kind"],
+      env: "live",
+      status: "active",
+      cpu: 0.1,
+      memory: 0.2,
+      latencyP95Ms: 15,
+      uptimePct: 99.9,
+      region: "ap-northeast-1",
+      updatedAt: "",
+      runtimeId: "rt-other",
+      runtimeBindingId: "rb-other",
+      personaId: "persona-other",
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: vi.fn(),
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes?persona=persona-tw&runtime=rt-tw&binding=rb-tw");
+
+    expect(screen.getByText("No runtime row declares persona persona-tw / runtime rt-tw / binding rb-tw.")).toBeInTheDocument();
+    expect(screen.getByText("No runtime rows.")).toBeInTheDocument();
+    expect(screen.queryByText("rt-other")).not.toBeInTheDocument();
+    expect(screen.queryByText("persona-other")).not.toBeInTheDocument();
+  });
 });

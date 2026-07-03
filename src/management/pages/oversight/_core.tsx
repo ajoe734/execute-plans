@@ -84,6 +84,7 @@ import {
   personaFleetRuntimeHref,
   type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
+import { filterEvolutionJournalRowsForFocus } from "./evolutionJournalFocus";
 import { safeDateTime } from "@/lib/utils";
 import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
@@ -1200,52 +1201,17 @@ const verdictTone = (v?: string) =>
       ? "bg-status-failed/15 text-status-failed border-status-failed/30"
       : "bg-muted text-muted-foreground border-border";
 
-function evolutionEntryText(e: EvolutionEntry): string {
-  const target = e.target ? [e.target.type, e.target.id, e.target.version].filter(Boolean).join(" ") : "";
-  const evidenceRefs = Array.isArray(e.record?.evidence_refs)
-    ? e.record.evidence_refs.map((ref) => JSON.stringify(ref)).join(" ")
-    : "";
-  return [
-    e.id,
-    e.title,
-    e.summary,
-    e.status,
-    e.entryType,
-    e.entry_type,
-    e.source_id,
-    e.action_type,
-    target,
-    evidenceRefs,
-  ].filter(Boolean).join(" ").toLowerCase();
-}
-
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const mutationFocus = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
   const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
-  const rows = data ?? [];
-  const focus = useMemo(() => {
-    let scoped = rows;
-    let matched = true;
-
-    if (mutationFocus) {
-      const needle = mutationFocus.toLowerCase();
-      const next = scoped.filter((entry) => evolutionEntryText(entry).includes(needle));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-
-    if (personaFocus) {
-      const needle = personaFocus.toLowerCase();
-      const next = scoped.filter((entry) => evolutionEntryText(entry).includes(needle));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-
-    return { rows: scoped, matched };
-  }, [mutationFocus, personaFocus, rows]);
+  const rows = useMemo(() => data ?? [], [data]);
+  const focus = useMemo(
+    () => filterEvolutionJournalRowsForFocus(rows, { personaFocus, mutationFocus }),
+    [mutationFocus, personaFocus, rows],
+  );
   const visibleRows = focus.rows;
   const hasFocus = Boolean(personaFocus || mutationFocus);
   return (

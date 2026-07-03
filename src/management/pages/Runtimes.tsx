@@ -82,6 +82,35 @@ const matchesRuntime = (r: RuntimeRow, runtime: string): boolean =>
 const matchesBinding = (r: RuntimeRow, binding: string): boolean =>
   matchesAny(binding, [bindingIdOf(r), cleanText(r.id)]);
 
+function filterRuntimeRowsForFocus(
+  rows: RuntimeRow[],
+  focus: { personaFocus?: string; runtimeFocus?: string; bindingFocus?: string },
+): { rows: RuntimeRow[]; matched: boolean } {
+  let scoped = rows;
+  let matched = true;
+  const runtimeFocus = focus.runtimeFocus?.trim() ?? "";
+  const bindingFocus = focus.bindingFocus?.trim() ?? "";
+  const personaFocus = focus.personaFocus?.trim() ?? "";
+
+  if (runtimeFocus) {
+    const next = scoped.filter((r) => matchesRuntime(r, runtimeFocus));
+    matched = matched && next.length > 0;
+    scoped = next;
+  }
+  if (bindingFocus) {
+    const next = scoped.filter((r) => matchesBinding(r, bindingFocus));
+    matched = matched && next.length > 0;
+    scoped = next;
+  }
+  if (personaFocus) {
+    const next = scoped.filter((r) => matchesPersona(r, personaFocus));
+    matched = matched && next.length > 0;
+    scoped = next;
+  }
+
+  return { rows: scoped, matched };
+}
+
 export const RuntimesPage = () => {
   const t = useT();
   const [searchParams] = useSearchParams();
@@ -91,28 +120,10 @@ export const RuntimesPage = () => {
   const { items: rows, refresh, loading } = useLiveListV1<RuntimeRow>(lists.runtimes, ["Runtime"]);
   const [killTarget, setKillTarget] = useState<RuntimeRow | null>(null);
 
-  const focusFiltered = useMemo(() => {
-    let scoped = rows;
-    let matched = true;
-
-    if (runtimeFocus) {
-      const next = scoped.filter((r) => matchesRuntime(r, runtimeFocus));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-    if (bindingFocus) {
-      const next = scoped.filter((r) => matchesBinding(r, bindingFocus));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-    if (personaFocus) {
-      const next = scoped.filter((r) => matchesPersona(r, personaFocus));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-
-    return { rows: scoped, matched };
-  }, [bindingFocus, personaFocus, rows, runtimeFocus]);
+  const focusFiltered = useMemo(
+    () => filterRuntimeRowsForFocus(rows, { personaFocus, runtimeFocus, bindingFocus }),
+    [bindingFocus, personaFocus, rows, runtimeFocus],
+  );
 
   const hasFocus = Boolean(personaFocus || runtimeFocus || bindingFocus);
   const visibleRows = focusFiltered.rows;
