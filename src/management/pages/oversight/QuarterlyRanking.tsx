@@ -8,10 +8,34 @@ import { Button } from "@/components/ui/button";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
-  defaultQuarterlyRanking, defaultQuarterlyFormula, defaultQuarterlySnapshot,
-  type QuarterlyRankingRow,
+  type QuarterlyRankingFormula, type QuarterlyRankingRow,
 } from "@/lib/v5/management/quarterlyRanking";
 import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
+
+const EMPTY_FORMULA: QuarterlyRankingFormula = {
+  formulaId: "nan",
+  version: "—",
+  activeFrom: "—",
+  weights: {
+    pnl: Number.NaN,
+    sharpe: Number.NaN,
+    drawdownControl: Number.NaN,
+    executionQuality: Number.NaN,
+    riskCompliance: Number.NaN,
+    improvement: Number.NaN,
+    humanInterventionPenalty: Number.NaN,
+  },
+  hardPenalties: {
+    riskPolicyViolation: Number.NaN,
+    unresolvedCriticalIncident: Number.NaN,
+    missingEvidence: Number.NaN,
+    capitalBreach: Number.NaN,
+  },
+  minDataRequirements: {
+    minTradingDays: Number.NaN,
+    minTrades: Number.NaN,
+  },
+};
 
 const fmtUsd = (n: number) =>
   Number.isFinite(n)
@@ -24,22 +48,42 @@ const fmtNum = (n: number, d = 2) =>
 const deltaArrow = (d?: number) =>
   d === undefined ? "·" : d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${Math.abs(d)}` : "—";
 
+function currentQuarterId(today = new Date()): string {
+  const year = today.getFullYear();
+  const quarter = Math.floor(today.getMonth() / 3) + 1;
+  return `${year}-Q${quarter}`;
+}
+
+function quarterCutoffDate(quarterId: string): string {
+  const match = /^(\d{4})-Q([1-4])$/.exec(quarterId);
+  if (!match) return "—";
+  const cutoff = new Date(Date.UTC(Number(match[1]), Number(match[2]) * 3, 0));
+  return cutoff.toISOString().slice(0, 10);
+}
+
+function daysUntil(dateText: string): string {
+  const cutoff = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(cutoff.getTime())) return "—";
+  return String(Math.max(0, Math.ceil((cutoff.getTime() - Date.now()) / 86_400_000)));
+}
+
+const personaManageHref = (row: QuarterlyRankingRow): string =>
+  row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
+
 export const QuarterlyRankingPage = () => {
   const { t } = useTranslation();
-  const seedRows = useMemo(() => defaultQuarterlyRanking(), []);
-  const seedFormula = useMemo(() => defaultQuarterlyFormula(), []);
-  const snap = useMemo(() => defaultQuarterlySnapshot(), []);
+  const currentQuarter = useMemo(() => currentQuarterId(), []);
 
   const { data: rows } = useV5Live(
-    () => mgmt.quarterlyRanking.list(snap.quarter, () => seedRows), [snap.quarter],
+    () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter), [currentQuarter],
   );
   const { data: formula } = useV5Live(
-    () => mgmt.quarterlyRanking.formula(() => seedFormula), [],
+    () => mgmt.quarterlyRanking.formulaLiveOnly(), [],
   );
   // Normalize live rows: the BFF shape carries overallScore/tierLabel/metrics
   // and no `eligibility` field, so map them onto the FE view-model (otherwise
   // every persona is treated as disqualified and score/pnl render NaN).
-  const ranking: QuarterlyRankingRow[] = (rows ?? seedRows).map((raw, i) => {
+  const ranking: QuarterlyRankingRow[] = (rows ?? []).map((raw, i) => {
     const r = raw as QuarterlyRankingRow & {
       overallScore?: number; tierLabel?: string; name?: string; rank?: number;
       metrics?: { pnl?: number | null; sharpe?: number | null };
@@ -54,13 +98,16 @@ export const QuarterlyRankingPage = () => {
       tier: r.tier ?? r.tierLabel ?? "—",
       pnlQuarter: r.pnlQuarter ?? r.metrics?.pnl ?? NaN,
       sharpeQuarter: r.sharpeQuarter ?? r.metrics?.sharpe ?? NaN,
+      evidenceRefs: r.evidenceRefs ?? [],
     } as QuarterlyRankingRow;
   });
-  const f = formula ?? seedFormula;
+  const f = formula ?? EMPTY_FORMULA;
 
   const disqualified = ranking.filter((r) => r.eligibility !== "eligible");
   const eligible = ranking.filter((r) => r.eligibility === "eligible");
-  const evidence = ranking.flatMap((r) => r.evidenceRefs);
+  const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
+  const quarter = ranking.find((row) => row.quarter)?.quarter ?? currentQuarter;
+  const cutoffDate = quarterCutoffDate(quarter);
 
   return (
     <section className="p-6 space-y-6" aria-label={t("mgmt.quarterly.title")}>
@@ -72,9 +119,9 @@ export const QuarterlyRankingPage = () => {
       {/* Snapshot */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { k: "currentQuarter", v: snap.quarter },
-          { k: "cutoffDate", v: snap.cutoffDate },
-          { k: "daysRemaining", v: String(snap.daysRemaining) },
+          { k: "currentQuarter", v: quarter },
+          { k: "cutoffDate", v: cutoffDate },
+          { k: "daysRemaining", v: daysUntil(cutoffDate) },
           { k: "formulaVersion", v: f.version },
         ].map((c) => (
           <Card key={c.k} className="p-3">
@@ -96,8 +143,8 @@ export const QuarterlyRankingPage = () => {
           ))}
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
-          {t("mgmt.quarterly.minTradingDays")}: <span className="font-mono text-foreground">{f.minDataRequirements?.minTradingDays ?? "—"}</span>
-          {"  ·  "}{t("mgmt.quarterly.minTrades")}: <span className="font-mono text-foreground">{f.minDataRequirements?.minTrades ?? "—"}</span>
+          {t("mgmt.quarterly.minTradingDays")}: <span className="font-mono text-foreground">{fmtNum(f.minDataRequirements?.minTradingDays ?? Number.NaN, 0)}</span>
+          {"  ·  "}{t("mgmt.quarterly.minTrades")}: <span className="font-mono text-foreground">{fmtNum(f.minDataRequirements?.minTrades ?? Number.NaN, 0)}</span>
         </div>
       </Card>
 
@@ -125,7 +172,7 @@ export const QuarterlyRankingPage = () => {
                 <td className="px-3 py-2 font-mono">{r.previousQuarterRank ?? "·"}</td>
                 <td className={`px-3 py-2 font-mono ${(r.rankDelta ?? 0) > 0 ? "text-status-success" : (r.rankDelta ?? 0) < 0 ? "text-status-failed" : "text-muted-foreground"}`}>{deltaArrow(r.rankDelta)}</td>
                 <td className="px-3 py-2">
-                  <Link to={r.links.manageHref} className="text-primary hover:underline font-mono">{r.personaName}</Link>
+                  <Link to={personaManageHref(r)} className="text-primary hover:underline font-mono">{r.personaName}</Link>
                 </td>
                 <td className="px-3 py-2"><Badge variant="outline">{r.tier}</Badge></td>
                 <td className="px-3 py-2 font-mono">{fmtNum(r.score, 1)}</td>
@@ -140,7 +187,7 @@ export const QuarterlyRankingPage = () => {
                         const id = sendRankingRecommendation({
                           personaId: r.personaId, personaName: r.personaName,
                           recommendation: r.recommendation!, source: "quarterly_ranking",
-                          quarter: r.quarter, evidenceRefs: r.evidenceRefs,
+                          quarter: r.quarter ?? quarter, evidenceRefs: r.evidenceRefs ?? [],
                         });
                         window.location.assign(`/management/human-inbox/${id}`);
                       }}
@@ -153,6 +200,9 @@ export const QuarterlyRankingPage = () => {
                 </td>
               </tr>
             ))}
+            {eligible.length === 0 && (
+              <tr><td className="px-3 py-6 text-center text-muted-foreground" colSpan={10}>{t("mgmt.pulse.noRows")}</td></tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -164,7 +214,7 @@ export const QuarterlyRankingPage = () => {
           <ul className="text-sm space-y-1">
             {disqualified.map((d) => (
               <li key={d.personaId}>
-                <Link to={d.links.manageHref} className="text-primary hover:underline font-mono">{d.personaName}</Link>
+                <Link to={personaManageHref(d)} className="text-primary hover:underline font-mono">{d.personaName}</Link>
                 <span className="text-muted-foreground"> — {d.disqualificationReason ?? t(`mgmt.quarterly.eligibilityValues.${d.eligibility}`, { defaultValue: String(d.eligibility ?? "—") })}</span>
               </li>
             ))}
@@ -181,6 +231,9 @@ export const QuarterlyRankingPage = () => {
               {e}
             </Link>
           ))}
+          {evidence.length === 0 && (
+            <span className="text-xs text-muted-foreground">{t("mgmt.pulse.noRows")}</span>
+          )}
         </div>
       </Card>
     </section>

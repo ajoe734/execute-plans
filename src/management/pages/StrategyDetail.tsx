@@ -93,22 +93,8 @@ export const StrategyDetail = () => {
 
   if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
-  // ─── Mock data scoped to this strategy ───
-  const params = [
-    { key: "lookback_days", value: "120", note: "Sampling window" },
-    { key: "rebalance_freq", value: "weekly", note: "Cron: 0 2 * * 1" },
-    { key: "max_position_pct", value: "8.0%", note: "Per-leg cap" },
-    { key: "stop_loss_pct", value: "2.5%", note: "Hard stop" },
-    { key: "leverage_cap", value: "3.0x", note: "Cross-margin" },
-  ];
-
-  const paperLive = [
-    { metric: "Sharpe",      paper: (s.sharpe + 0.3).toFixed(2), live: (s.sharpe ?? 0).toFixed(2),  delta: "-0.30" },
-    { metric: "PnL 30d",     paper: `${((s.pnl30d + 0.012) * 100).toFixed(2)}%`, live: `${(s.pnl30d * 100).toFixed(2)}%`, delta: "-1.20%" },
-    { metric: "Max Drawdown",paper: `${((s.drawdown + 0.005) * 100).toFixed(2)}%`, live: `${(s.drawdown * 100).toFixed(2)}%`, delta: "+0.50%" },
-    { metric: "Win Rate",    paper: "57.4%", live: "54.1%", delta: "-3.30%" },
-    { metric: "Avg Slippage",paper: "1.2 bps", live: "2.4 bps", delta: "+1.20" },
-  ];
+  const params: { key: string; value: string; note: string }[] = [];
+  const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
 
   return (
     <>
@@ -223,13 +209,13 @@ export const StrategyDetail = () => {
             content: (
               <Section title={t("strategyDetail.costsTab", { defaultValue: "Costs & Slippage" })}>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Avg fee (bps)" value="3.2" hint="taker" />
-                  <StatCard label="Avg slippage (bps)" value="6.8" tone="warning" />
-                  <StatCard label="Funding (30d)" value={`${(s.pnl30d * 0.05 * 100).toFixed(2)}%`} />
-                  <StatCard label="Borrow cost (30d)" value="0.18%" />
+                  <StatCard label="Avg fee (bps)" value="—" />
+                  <StatCard label="Avg slippage (bps)" value="—" />
+                  <StatCard label="Funding (30d)" value="—" />
+                  <StatCard label="Borrow cost (30d)" value="—" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
-                  Mock cost decomposition. v3 §13 — Costs & Slippage tab.
+                  {t("common.awaitingData", { defaultValue: "No data yet" })}
                 </p>
               </Section>
             ),
@@ -280,6 +266,13 @@ export const StrategyDetail = () => {
                           <td className={`p-3 text-right text-mono text-sm ${(row.delta ?? "").startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
                         </tr>
                       ))}
+                      {paperLive.length === 0 && (
+                        <tr>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={4}>
+                            {t("common.awaitingData", { defaultValue: "No data yet" })}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </Card>
@@ -293,16 +286,13 @@ export const StrategyDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-3 gap-4">
-                  <StatCard label={t("strategyDetail.var95")} value={`${(s.drawdown * 1.6 * 100).toFixed(2)}%`} tone="warning" />
-                  <StatCard label={t("strategyDetail.beta")} value="0.78" />
-                  <StatCard label={t("strategyDetail.exposure")} value={`${(s.pnl30d * 0 + 4.2).toFixed(1)}M`} hint="USD notional" />
+                  <StatCard label={t("strategyDetail.var95")} value="—" />
+                  <StatCard label={t("strategyDetail.beta")} value="—" />
+                  <StatCard label={t("strategyDetail.exposure")} value="—" />
                 </div>
                 <Section title={t("strategyDetail.activeAlerts")}>
                   <DataTable<Alert>
-                    rows={alerts.length ? alerts : [
-                      { id: "alt_demo_01", severity: "medium", title: "Realized vol > 30d avg + 1σ", source: s.id, openedAt: new Date(Date.now() - 3600_000).toISOString(), acknowledged: false },
-                      { id: "alt_demo_02", severity: "low", title: "Slippage uptick on US session", source: s.id, openedAt: new Date(Date.now() - 7 * 3600_000).toISOString(), acknowledged: true },
-                    ]}
+                    rows={alerts}
                     columns={[
                       { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                       { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
@@ -336,6 +326,7 @@ export const StrategyDetail = () => {
                         </div>
                       ) },
                     ]}
+                    empty={t("empty.noResults")}
                   />
                 </Section>
               </>

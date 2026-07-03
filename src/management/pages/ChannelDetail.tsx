@@ -22,12 +22,7 @@ export const ChannelDetail = () => {
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
   }, [id]);
 
-  const recent = c ? Array.from({ length: 6 }).map((_, i) => ({
-    id: `msg_${id}_${i}`,
-    ts: new Date(Date.now() - (i + 1) * 1800_000).toISOString(),
-    title: i % 3 === 0 ? "Daily macro briefing" : i % 3 === 1 ? "Alert: drawdown breach stg_004" : "Job completed: rebalance.simulate",
-    severity: i % 3 === 1 ? "high" : "low",
-  })) : [];
+  const recent: { id: string; ts: string; title: string; severity: string }[] = [];
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
   return (

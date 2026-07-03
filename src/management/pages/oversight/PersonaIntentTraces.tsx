@@ -9,54 +9,6 @@ import { intentDisplayRules, type PersonaIntentTrace, type PersonaIntentVisibili
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 
-// Phase 1 deterministic mock list.
-const TRACES: PersonaIntentTrace[] = [
-  {
-    id: "trace-001",
-    ringPersonaId: "persona:alpha-trader",
-    ringBearerId: "ringbearer:research-1",
-    userIntentSummary: "Rebalance momentum sleeve toward higher beta names.",
-    personaInterpretation: "Increase momentum sleeve gross to 1.2x; rotate into TSMC, NVDA.",
-    proposedAction: "Submit rebalance proposal v3 to risk-owner.",
-    toolsUsed: ["screener.momentum", "risk.var-projection"],
-    consultedPersonas: ["persona:risk-guard"],
-    visibility: "summary",
-    redaction: { status: "not_required" },
-    evidenceRefs: ["ev:proposal-v3"],
-    riskFlags: ["beta-drift"],
-    policyViolations: [],
-    createdAt: "2026-05-20T09:15:00Z",
-  },
-  {
-    id: "trace-002",
-    ringPersonaId: "persona:fx-scout",
-    ringBearerId: "ringbearer:trading-1",
-    userIntentSummary: "[redacted by policy]",
-    toolsUsed: [],
-    consultedPersonas: [],
-    visibility: "redacted",
-    redaction: { status: "redacted", policyRef: "policy:pii-v2", redactedBy: "policy_engine" },
-    evidenceRefs: [],
-    riskFlags: ["policy-flag"],
-    policyViolations: [],
-    createdAt: "2026-05-20T10:00:00Z",
-  },
-  {
-    id: "trace-003",
-    ringPersonaId: "persona:capital-steward",
-    ringBearerId: "ringbearer:capital-1",
-    userIntentSummary: "[restricted]",
-    toolsUsed: [],
-    consultedPersonas: [],
-    visibility: "restricted",
-    redaction: { status: "restricted", policyRef: "policy:trade-secret", redactedBy: "bff" },
-    evidenceRefs: ["ev:legal-hold-1"],
-    riskFlags: [],
-    policyViolations: ["confidentiality"],
-    createdAt: "2026-05-20T11:00:00Z",
-  },
-];
-
 const badgeTone = (b: "summary" | "redacted" | "restricted") =>
   b === "summary" ? "bg-status-success/15 text-status-success border-status-success/30" :
   b === "redacted" ? "bg-status-warning/15 text-status-warning border-status-warning/30" :
@@ -241,8 +193,8 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
 
 export const PersonaIntentTracesPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.personaIntent.list(() => TRACES), []);
-  const traces = data ?? TRACES;
+  const { data } = useV5Live(() => mgmt.personaIntent.listLiveOnly(), []);
+  const traces = data ?? [];
   const redactedCount = traces.filter((trace) => trace.visibility === "redacted").length;
   const restrictedCount = traces.filter((trace) => trace.visibility === "restricted").length;
   const riskFlagCount = traces.reduce((total, trace) => total + (trace.riskFlags?.length ?? 0), 0);

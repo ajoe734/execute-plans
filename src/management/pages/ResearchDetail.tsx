@@ -101,12 +101,7 @@ export const ResearchDetail = () => {
   const frameworks = researchContext.frameworks.length
     ? researchContext.frameworks
     : uniq([x.framework, ...(x.frameworks ?? [])]);
-  const folds = Array.from({ length: 5 }).map((_, i) => ({
-    id: `fold_${i + 1}`,
-    fold: i + 1,
-    metric: x.metricValue + (Math.random() - 0.5) * 0.08,
-    samples: 800 + i * 120,
-  }));
+  const folds: { id: string; fold: number; metric: number; samples: number }[] = [];
 
   return (
     <>

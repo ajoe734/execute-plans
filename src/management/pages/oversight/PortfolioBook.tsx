@@ -1,5 +1,5 @@
 // 2026-05-22 PM12-003 — Portfolio Book page.
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -9,9 +9,28 @@ import { Input } from "@/components/ui/input";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
-  defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings,
-  type HoldingRow, type CapitalPoolSummaryRow, type PortfolioStatus,
+  type HoldingRow, type CapitalPoolSummaryRow, type PortfolioStatus, type PortfolioSummary,
 } from "@/lib/v5/management/portfolio";
+
+const EMPTY_PORTFOLIO_SUMMARY: PortfolioSummary = {
+  asOf: "",
+  baseCurrency: "USD",
+  totalNav: Number.NaN,
+  totalCash: Number.NaN,
+  grossExposure: Number.NaN,
+  netExposure: Number.NaN,
+  leverage: Number.NaN,
+  unrealizedPnl: Number.NaN,
+  realizedPnl: Number.NaN,
+  pnlToday: Number.NaN,
+  pnl7d: Number.NaN,
+  pnl30d: Number.NaN,
+  var95: Number.NaN,
+  activeCapitalPools: Number.NaN,
+  activePersonas: Number.NaN,
+  activeStrategies: Number.NaN,
+  activeRuntimes: Number.NaN,
+};
 
 const fmtUsd = (n: number) =>
   Number.isFinite(n)
@@ -20,6 +39,7 @@ const fmtUsd = (n: number) =>
 const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
 const fmtNum = (n: number) =>
   Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n) : "—";
+const fmtLeverage = (n: number) => (Number.isFinite(n) ? `${fmtNum(n)}×` : "—");
 
 const statusTone = (s: PortfolioStatus) =>
   s === "ok" ? "bg-status-success/15 text-status-success border-status-success/30" :
@@ -29,15 +49,12 @@ const statusTone = (s: PortfolioStatus) =>
 
 export const PortfolioBookPage = () => {
   const { t } = useTranslation();
-  const seed = useMemo(() => defaultPortfolioBook(), []);
-  const { data: summary } = useV5Live(() => mgmt.portfolioBook.summary(() => seed.summary), []);
-  const { data: pools } = useV5Live(
-    () => mgmt.portfolioBook.pools(() => defaultPortfolioPools()), []);
-  const { data: holdings } = useV5Live(
-    () => mgmt.portfolioBook.holdings(() => defaultPortfolioHoldings()), []);
-  const s = summary ?? seed.summary;
-  const poolRows: CapitalPoolSummaryRow[] = pools ?? seed.pools;
-  const holdingRows: HoldingRow[] = holdings ?? seed.holdings;
+  const { data: summary, loading: summaryLoading } = useV5Live(() => mgmt.portfolioBook.summaryLiveOnly(), []);
+  const { data: pools } = useV5Live(() => mgmt.portfolioBook.poolsLiveOnly(), []);
+  const { data: holdings } = useV5Live(() => mgmt.portfolioBook.holdingsLiveOnly(), []);
+  const s = summary ?? EMPTY_PORTFOLIO_SUMMARY;
+  const poolRows: CapitalPoolSummaryRow[] = pools ?? [];
+  const holdingRows: HoldingRow[] = holdings ?? [];
 
   const [symbolFilter, setSymbolFilter] = useState("");
   const filtered = holdingRows.filter((h) =>
@@ -50,6 +67,16 @@ export const PortfolioBookPage = () => {
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.portfolio.subtitle")}</p>
       </header>
+      {!summary && !summaryLoading && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}
+          </p>
+        </Card>
+      )}
 
       {/* Section A: Total Snapshot */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -58,7 +85,7 @@ export const PortfolioBookPage = () => {
           { k: "totalCash", v: fmtUsd(s.totalCash) },
           { k: "grossExposure", v: fmtUsd(s.grossExposure) },
           { k: "netExposure", v: fmtUsd(s.netExposure) },
-          { k: "leverage", v: `${fmtNum(s.leverage)}×` },
+          { k: "leverage", v: fmtLeverage(s.leverage) },
           { k: "unrealizedPnl", v: fmtUsd(s.unrealizedPnl) },
           { k: "pnlToday", v: fmtUsd(s.pnlToday) },
           { k: "pnl30d", v: fmtUsd(s.pnl30d) },
@@ -105,6 +132,9 @@ export const PortfolioBookPage = () => {
                 </td>
               </tr>
             ))}
+            {poolRows.length === 0 && (
+              <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={8}>{t("mgmt.pulse.noRows")}</td></tr>
+            )}
           </tbody>
         </table>
       </Card>

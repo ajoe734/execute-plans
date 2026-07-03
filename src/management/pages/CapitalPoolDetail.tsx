@@ -196,7 +196,7 @@ export const CapitalPoolDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
+                  <Field label="VaR" value="—" mono />
                   <Field label={t("section.limits")} value={safePercent(c.riskBudget, 2)} mono />
                   <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
                   <Field label={t("table.value")} value={c.currency} mono />

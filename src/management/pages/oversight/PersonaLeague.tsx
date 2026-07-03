@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
-  defaultPersonaLeague, sortByPreset, tierDistribution, computeTopMovers,
+  sortByPreset, tierDistribution, computeTopMovers,
   PERSONA_LEAGUE_PRESETS,
   type PersonaLeaguePreset, type PersonaLeagueRow, type LeagueRecommendedAction,
 } from "@/lib/v5/management/personaLeague";
@@ -33,11 +33,15 @@ const tierTone = (tier: string) =>
 const deltaArrow = (d?: number) =>
   d === undefined ? "·" : d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${Math.abs(d)}` : "—";
 
+const personaManageHref = (row: PersonaLeagueRow): string =>
+  row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
+
+const EMPTY_PERSONA_LEAGUE_ROWS: PersonaLeagueRow[] = [];
+
 export const PersonaLeaguePage = () => {
   const { t } = useTranslation();
-  const seed = useMemo(() => defaultPersonaLeague(), []);
-  const { data } = useV5Live(() => mgmt.personaLeague.list(() => seed), []);
-  const rows: PersonaLeagueRow[] = data ?? seed;
+  const { data } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
+  const rows = data ?? EMPTY_PERSONA_LEAGUE_ROWS;
 
   const [preset, setPreset] = useState<PersonaLeaguePreset>("overall");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -86,7 +90,7 @@ export const PersonaLeaguePage = () => {
           <ul className="text-sm space-y-1">
             {movers.topUp.map((m) => (
               <li key={m.personaId} className="flex justify-between">
-                <Link to={m.links.manageHref} className="text-primary hover:underline">{m.personaName}</Link>
+                <Link to={personaManageHref(m)} className="text-primary hover:underline">{m.personaName}</Link>
                 <span className="text-status-success font-mono">{deltaArrow(m.rankDelta)}</span>
               </li>
             ))}
@@ -97,7 +101,7 @@ export const PersonaLeaguePage = () => {
           <ul className="text-sm space-y-1">
             {movers.topDown.map((m) => (
               <li key={m.personaId} className="flex justify-between">
-                <Link to={m.links.manageHref} className="text-primary hover:underline">{m.personaName}</Link>
+                <Link to={personaManageHref(m)} className="text-primary hover:underline">{m.personaName}</Link>
                 <span className="text-status-failed font-mono">{deltaArrow(m.rankDelta)}</span>
               </li>
             ))}
@@ -128,6 +132,9 @@ export const PersonaLeaguePage = () => {
               <RowFragment key={r.personaId} r={r} expanded={expanded === r.personaId}
                 onToggle={() => setExpanded(expanded === r.personaId ? null : r.personaId)} />
             ))}
+            {sorted.length === 0 && (
+              <tr><td className="px-3 py-6 text-center text-muted-foreground" colSpan={11}>{t("mgmt.pulse.noRows")}</td></tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -139,7 +146,7 @@ export const PersonaLeaguePage = () => {
           <ul className="text-sm space-y-1">
             {suspended.map((s) => (
               <li key={s.personaId}>
-                <Link to={s.links.manageHref} className="text-primary hover:underline font-mono">{s.personaName}</Link>
+                <Link to={personaManageHref(s)} className="text-primary hover:underline font-mono">{s.personaName}</Link>
               </li>
             ))}
           </ul>
@@ -155,7 +162,7 @@ export const PersonaLeaguePage = () => {
           <td className="px-3 py-2 font-mono">#{r.currentRank}</td>
           <td className={`px-3 py-2 font-mono ${(r.rankDelta ?? 0) > 0 ? "text-status-success" : (r.rankDelta ?? 0) < 0 ? "text-status-failed" : "text-muted-foreground"}`}>{deltaArrow(r.rankDelta)}</td>
           <td className="px-3 py-2">
-            <Link to={r.links.manageHref} className="text-primary hover:underline font-mono">{r.personaName}</Link>
+            <Link to={personaManageHref(r)} className="text-primary hover:underline font-mono">{r.personaName}</Link>
           </td>
           <td className="px-3 py-2"><Badge variant="outline" className={tierTone(r.tier)}>{r.tier}</Badge></td>
           <td className="px-3 py-2 font-mono">{fmtNum(r.score, 1)}</td>
@@ -180,7 +187,7 @@ export const PersonaLeaguePage = () => {
           <tr className="bg-muted/30">
             <td colSpan={11} className="px-4 py-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                {Object.entries(r.scoreBreakdown).map(([k, v]) => (
+                {Object.entries(r.scoreBreakdown ?? {}).map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-2">
                     <span className="text-muted-foreground">{t(`mgmt.league.breakdownKeys.${k}`)}</span>
                     <span className="font-mono text-foreground">{fmtNum(v as number, 1)}</span>

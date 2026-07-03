@@ -45,7 +45,8 @@ export const IncidentDetail = () => {
   const showRollbackSaga = () => {
     if (!incident) return;
     const policy = findAsyncTransitionPolicy("rollback.saga");
-    const deploymentId = (incident.affected ?? [])[0] ?? "deploy-mock";
+    const deploymentId = (incident.affected ?? [])[0];
+    if (!deploymentId) return;
     const now = new Date().toISOString();
     const saga: RollbackSagaDTO = {
       id: `saga-${incident.id}`,
@@ -137,7 +138,7 @@ export const IncidentDetail = () => {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
-            <Button variant="outline" size="sm" onClick={showRollbackSaga}>
+            <Button variant="outline" size="sm" onClick={showRollbackSaga} disabled={(incident.affected ?? []).length === 0}>
               {t("incident.viewRollbackSaga", { defaultValue: "View rollback saga" })}
             </Button>
             {incident.status === "open" && (

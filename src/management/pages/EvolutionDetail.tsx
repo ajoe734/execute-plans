@@ -46,9 +46,7 @@ export const EvolutionDetail = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
-  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([
-    { id: "ec_seed1", expr: "max_drawdown < 0.15", ts: new Date(Date.now() - 86400_000).toISOString() },
-  ]);
+  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([]);
   const [newConstraint, setNewConstraint] = useState("");
 
   useEffect(() => {
