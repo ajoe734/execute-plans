@@ -22,10 +22,12 @@
 // Usage:
 //   node scripts/accept-management-hosted-production.mjs \
 //     [--load-gate-manifest <path>] [--src-scan-dir <path>] [--out-dir <path>]
+//   node scripts/accept-management-hosted-production.mjs --load-gate-only
 //
 // Env overrides mirror the sibling hosted probes (see
 // scripts/probe-hosted-browser-bff.mjs / scripts/validate-management-live-deep.mjs):
 //   PANTHEON_FE_BASE_URL, PANTHEON_BFF_BASE_URL, PANTHEON_AUDIT_OUT_DIR,
+//   PANTHEON_LOAD_BASELINE_OUT_DIR, PANTHEON_LOAD_GATE_MANIFEST,
 //   PANTHEON_BFF_SMOKE_BEARER_TOKEN, PANTHEON_TENANT_ID.
 import fs from "node:fs";
 import path from "node:path";
@@ -62,10 +64,12 @@ const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https:/
 const OUT_DIR = argv["out-dir"] || process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const SRC_SCAN_DIR = argv["src-scan-dir"] || "src/management";
 const LOAD_GATE_MANIFEST = argv["load-gate-manifest"] || process.env.PANTHEON_LOAD_GATE_MANIFEST || "";
+const LOAD_BASELINE_DIR = argv["load-baseline-dir"] || process.env.PANTHEON_LOAD_BASELINE_OUT_DIR || OUT_DIR;
 const ROUTE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS || 20_000);
 const SETTLE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS || 4_000);
 const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANTHEON_ACCEPT_CLICK_WRITE_CTAS === "1";
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
+const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";
 
 const OPERATOR_ID = process.env.PANTHEON_ACCEPT_OPERATOR_ID || "op-mgmt-gap-006";
 const OPERATOR_ROLES = (process.env.PANTHEON_ACCEPT_OPERATOR_ROLES || "operator,reviewer,approver").split(",").map((r) => r.trim()).filter(Boolean);
@@ -88,6 +92,10 @@ function nowStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
+}
+
 function currentSha() {
   try {
     return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], { encoding: "utf8" }).trim();
@@ -98,12 +106,13 @@ function currentSha() {
 
 // --- Playwright ----------------------------------------------------------
 
-let chromium;
-try {
-  ({ chromium } = await import("@playwright/test"));
-} catch {
-  console.error("Missing @playwright/test. Install with: npm install -D @playwright/test && npx playwright install chromium");
-  process.exit(2);
+async function loadChromium() {
+  try {
+    return (await import("@playwright/test")).chromium;
+  } catch {
+    console.error("Missing @playwright/test. Install with: npm install -D @playwright/test && npx playwright install chromium");
+    process.exit(2);
+  }
 }
 
 const CORS_PATTERN = /has been blocked by cors|cors policy|cross-origin request blocked/i;
@@ -399,21 +408,45 @@ async function sessionRbacCheck() {
   return { overall, checks };
 }
 
+function latestManifestIn(dir) {
+  if (!dir || !fs.existsSync(dir)) return "";
+  return fs.readdirSync(dir)
+    .filter((name) => /^release-load-gate.*\.json$/.test(name))
+    .map((name) => path.join(dir, name))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] || "";
+}
+
+function resolveLoadGateManifestPath() {
+  const candidates = uniqueStrings([
+    LOAD_GATE_MANIFEST,
+    path.join(LOAD_BASELINE_DIR, "release-load-gate-current.json"),
+    path.join(OUT_DIR, "release-load-gate-current.json"),
+    latestManifestIn(LOAD_BASELINE_DIR),
+    latestManifestIn(OUT_DIR),
+  ]);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0] || "";
+}
+
 function loadGateCheck() {
-  if (!LOAD_GATE_MANIFEST) {
-    return { status: "missing", note: "no --load-gate-manifest / PANTHEON_LOAD_GATE_MANIFEST supplied", pass: null };
+  const manifestPath = resolveLoadGateManifestPath();
+  if (!manifestPath) {
+    return {
+      status: "missing",
+      note: `no load gate manifest supplied or found in ${LOAD_BASELINE_DIR} / ${OUT_DIR}`,
+      pass: null,
+    };
   }
-  if (!fs.existsSync(LOAD_GATE_MANIFEST)) {
-    return { status: "missing", note: `file not found: ${LOAD_GATE_MANIFEST}`, pass: null };
+  if (!fs.existsSync(manifestPath)) {
+    return { status: "missing", note: `file not found: ${manifestPath}`, pass: null };
   }
   try {
-    const manifest = JSON.parse(fs.readFileSync(LOAD_GATE_MANIFEST, "utf8"));
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     const pass = manifest?.result?.pass === true;
     return {
       status: pass ? "pass" : "fail",
       note: `result.pass:${manifest?.result?.pass} overall:${manifest?.result?.overall} failures:${(manifest?.result?.failures || []).length} missing:${(manifest?.result?.missing || []).length}`,
       pass,
-      manifestPath: LOAD_GATE_MANIFEST,
+      manifestPath,
       generatedAt: manifest?.generatedAt,
     };
   } catch (err) {
@@ -473,6 +506,15 @@ function sourceScanWriteCtas(srcDir) {
 
 async function main() {
   const startedAt = new Date().toISOString();
+
+  if (LOAD_GATE_ONLY) {
+    const loadGate = loadGateCheck();
+    console.log(JSON.stringify(loadGate, null, 2));
+    if (loadGate.status !== "pass") process.exitCode = 1;
+    return;
+  }
+
+  const chromium = await loadChromium();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 

@@ -244,8 +244,8 @@ jobs:
           PANTHEON_LOAD_GATE_MANIFEST: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-load-gate-current.json
         run: |
           set -o pipefail
-          node scripts/compose-release-load-gate.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/release-load-gate.log"
           echo "PANTHEON_LOAD_GATE_MANIFEST=$PANTHEON_LOAD_GATE_MANIFEST" >> "$GITHUB_ENV"
+          node scripts/compose-release-load-gate.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/release-load-gate.log"
 
       - name: Management hosted production acceptance
         id: mgmt_hosted_accept
