@@ -11,10 +11,14 @@
 // canonical Management read surfaces have a real adapter when live mode is on.
 
 import * as seed from "@/mocks/seed";
-import type { Runtime } from "@/lib/bff/types";
+import type { Alert, Incident, Runtime } from "@/lib/bff/types";
 import type { ListEnvelope } from "./dto";
 import { withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
+import {
+  normalizeAlertTimestampFields,
+  normalizeIncidentTimestampFields,
+} from "./eventTimestamps";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -99,6 +103,10 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
     dataRecord?.items,
     record?.alerts,
     dataRecord?.alerts,
+    record?.incidents,
+    dataRecord?.incidents,
+    record?.events,
+    dataRecord?.events,
     record?.jobs,
     dataRecord?.jobs,
   );
@@ -142,6 +150,50 @@ function liveOrMockList<T>(
       { method: "GET", path },
       mockFn,
       (data) => normalizeLiveListResponse<T>(data, cls),
+    );
+}
+
+export function normalizeAlertListResponse(payload: unknown, cls: ListClass = "realtimeFeed"): ListEnvelope<Alert> {
+  const env = normalizeLiveListResponse<Alert>(payload, cls);
+  return {
+    ...env,
+    items: env.items.map((row) => normalizeAlertTimestampFields(row) as Alert),
+  };
+}
+
+export function normalizeIncidentListResponse(payload: unknown, cls: ListClass = "governanceQueue"): ListEnvelope<Incident> {
+  const env = normalizeLiveListResponse<Incident>(payload, cls);
+  return {
+    ...env,
+    items: env.items.map((row) => normalizeIncidentTimestampFields(row) as Incident),
+  };
+}
+
+function liveOrMockAlertList(
+  path: string,
+  loader: () => Promise<Alert[]>,
+  cls: ListClass,
+): () => Promise<ListEnvelope<Alert>> {
+  const mockFn = async (): Promise<ListEnvelope<Alert>> => envelope(await loader(), cls);
+  return () =>
+    withLiveOrMock<ListEnvelope<Alert>, unknown>(
+      { method: "GET", path },
+      mockFn,
+      (data) => normalizeAlertListResponse(data, cls),
+    );
+}
+
+function liveOrMockIncidentList(
+  path: string,
+  loader: () => Promise<Incident[]>,
+  cls: ListClass,
+): () => Promise<ListEnvelope<Incident>> {
+  const mockFn = async (): Promise<ListEnvelope<Incident>> => envelope(await loader(), cls);
+  return () =>
+    withLiveOrMock<ListEnvelope<Incident>, unknown>(
+      { method: "GET", path },
+      mockFn,
+      (data) => normalizeIncidentListResponse(data, cls),
     );
 }
 
@@ -300,8 +352,8 @@ export const lists = {
   channels:        liveOrMockList(paths.channels(),           async () => seed.channels,             LIST_CLASS_BY_KEY.channels),
   jobs:            liveOrMockList(paths.jobs(),               async () => seed.jobs,                 LIST_CLASS_BY_KEY.jobs),
   runtimes:        liveOrMockRuntimeList(paths.runtimes(),    async () => seed.runtimes,             LIST_CLASS_BY_KEY.runtimes),
-  alerts:          liveOrMockList(paths.alerts(),             async () => seed.alerts,               LIST_CLASS_BY_KEY.alerts),
-  incidents:       liveOrMockList(paths.incidents(),          async () => seed.incidents,            LIST_CLASS_BY_KEY.incidents),
+  alerts:          liveOrMockAlertList(paths.alerts(),        async () => seed.alerts,               LIST_CLASS_BY_KEY.alerts),
+  incidents:       liveOrMockIncidentList(paths.incidents(),  async () => seed.incidents,            LIST_CLASS_BY_KEY.incidents),
   approvals:       liveOrMockList(paths.approvals(),          async () => seed.approvals,            LIST_CLASS_BY_KEY.approvals),
   audit:           liveOrMockList(paths.audit(),              async () => seed.auditEvents,          LIST_CLASS_BY_KEY.audit),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;

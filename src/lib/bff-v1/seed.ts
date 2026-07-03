@@ -25,6 +25,12 @@ import { BffError, makeBffError } from "@/lib/bff-v1/errors";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { paths } from "@/lib/bff-v1/paths";
 import {
+  normalizeAlertTimestampFields,
+  normalizeAlertTimestampList,
+  normalizeIncidentTimestampFields,
+  normalizeIncidentTimestampList,
+} from "@/lib/bff-v1/eventTimestamps";
+import {
   isLiveBffModeConfigured,
   seedHelperMustReturnEmptyInLive,
   seedHelperEmptyReason,
@@ -259,6 +265,34 @@ const liveListOrSeedNormalized = <T>(
   seedValue: T[],
 ): Promise<T[]> =>
   liveListOrSeed<T>(helperName, path, seedValue).then(normalizeBaseObjectList);
+
+const liveDetailOrSeedAlert = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T | undefined,
+): Promise<T | undefined> =>
+  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeAlertTimestampFields);
+
+const liveListOrSeedAlert = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T[],
+): Promise<T[]> =>
+  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeAlertTimestampList);
+
+const liveDetailOrSeedIncident = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T | undefined,
+): Promise<T | undefined> =>
+  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeIncidentTimestampFields);
+
+const liveListOrSeedIncident = <T>(
+  helperName: string,
+  path: string,
+  seedValue: T[],
+): Promise<T[]> =>
+  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeIncidentTimestampList);
 
 const normalizedKind = (kind: string) => kind.replace(/[^a-z0-9]/gi, "").toLowerCase();
 const isPersonaKind = (kind: string) => normalizedKind(kind) === "persona";
@@ -551,12 +585,12 @@ export const bff = {
     get: (id: string) => liveDetailOrSeed("bff.runtimes.get", detailPath(paths.runtimes(), id), seed.runtimes.find((r) => r.id === id)),
   },
   alerts: {
-    list: () => liveListOrSeed("bff.alerts.list", paths.alerts(), seed.alerts),
-    get: (id: string) => liveDetailOrSeed("bff.alerts.get", detailPath(paths.alerts(), id), seed.alerts.find((a) => a.id === id)),
+    list: () => liveListOrSeedAlert("bff.alerts.list", paths.alerts(), seed.alerts),
+    get: (id: string) => liveDetailOrSeedAlert("bff.alerts.get", detailPath(paths.alerts(), id), seed.alerts.find((a) => a.id === id)),
   },
   incidents: {
-    list: () => liveListOrSeed("bff.incidents.list", paths.incidents(), seed.incidents),
-    get: (id: string) => liveDetailOrSeed("bff.incidents.get", paths.incident(id), seed.incidents.find((i) => i.id === id)),
+    list: () => liveListOrSeedIncident("bff.incidents.list", paths.incidents(), seed.incidents),
+    get: (id: string) => liveDetailOrSeedIncident("bff.incidents.get", paths.incident(id), seed.incidents.find((i) => i.id === id)),
   },
   approvals: {
     list: () => liveListOrSeed("bff.approvals.list", paths.approvals(), seed.approvals),

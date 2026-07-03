@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { lists, useLiveListV1, asListEnvelope, normalizeLiveListResponse, normalizeRuntimeListResponse, type ListEnvelope } from "@/lib/bff-v1";
+import {
+  lists,
+  useLiveListV1,
+  asListEnvelope,
+  normalizeLiveListResponse,
+  normalizeAlertListResponse,
+  normalizeIncidentListResponse,
+  normalizeRuntimeListResponse,
+  type ListEnvelope,
+} from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 
 describe("VI-1 lists facade", () => {
@@ -58,6 +67,47 @@ describe("VI-1 lists facade", () => {
 
     expect(env.items).toEqual([{ alert_id: "al_1" }]);
     expect(env.meta).toEqual({ surfaces: { alerts: { status: "degraded", source: "local_snapshot" } } });
+  });
+
+  it("normalizes alert timestamp aliases into openedAt", () => {
+    const env = normalizeAlertListResponse({
+      alerts: [{
+        alert_id: "al_1",
+        severity: "high",
+        message: "Paper drawdown breach",
+        source_kind: "incident",
+        created_at: "2026-06-30T19:54:38Z",
+        acknowledged: false,
+      }],
+    });
+
+    expect(env.items[0]).toMatchObject({
+      id: "al_1",
+      title: "Paper drawdown breach",
+      source: "incident",
+      openedAt: "2026-06-30T19:54:38Z",
+      acknowledged: false,
+    });
+  });
+
+  it("normalizes incident arrays and timestamp aliases into openedAt", () => {
+    const env = normalizeIncidentListResponse({
+      incidents: [{
+        incident_id: "inc-1",
+        severity: "critical",
+        status: "open",
+        summary: "Canary breach",
+        detected_at: "2026-07-01T08:10:00Z",
+        events: [{ created_at: "2026-07-01T08:11:00Z", user: "sentinel", message: "triaged" }],
+      }],
+    });
+
+    expect(env.items[0]).toMatchObject({
+      id: "inc-1",
+      title: "Canary breach",
+      openedAt: "2026-07-01T08:10:00Z",
+      timeline: [{ ts: "2026-07-01T08:11:00Z", actor: "sentinel", note: "triaged" }],
+    });
   });
 
   it("normalizes live runtime binding rows without inventing telemetry zeros", () => {

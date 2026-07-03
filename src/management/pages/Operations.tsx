@@ -8,6 +8,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { lists, runActionSafe } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff/runAction";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
+import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,8 @@ export const AlertsPage = () => {
   useEffect(() => {
     import("@/lib/bff/realtime").then(({ realtime }) => {
       const off = realtime.on("alert", (p) => {
-        setRows((rs) => [p as Alert, ...rs]);
+        const alert = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
+        setRows((rs) => [alert, ...rs]);
       });
       return off;
     });
@@ -191,6 +193,7 @@ export const IncidentsPage = () => {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
+                  <Field label={t("table.opened")} value={safeDateTime(active.openedAt)} mono />
                   <Field label={t("table.commander")} value={active.commander ?? "—"} mono />
                   <Field label={t("table.affected")} value={active.affected?.join(", ") ?? "—"} mono />
                 </Card>

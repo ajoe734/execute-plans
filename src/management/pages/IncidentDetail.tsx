@@ -208,6 +208,7 @@ export const IncidentDetail = () => {
                     <li key={a.id} className="py-2 flex items-center gap-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 rounded" onClick={() => navigate("/management/alerts")}>
                       <RiskBadge level={a.severity} />
                       <span className="text-sm flex-1">{a.title}</span>
+                      <span className="text-mono text-xs text-muted-foreground">{safeDateTime(a.openedAt)}</span>
                       <span className="text-mono text-xs text-muted-foreground">{a.source}</span>
                     </li>
                   ))}
