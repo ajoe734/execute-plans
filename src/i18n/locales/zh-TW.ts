@@ -2014,8 +2014,12 @@ export default {
       loadingLive: "正在載入 live Persona Fleet 資料源…",
       liveDataUnavailableTitle: "目前沒有 live 資料源資料",
       liveDataUnavailableBody: "此頁不顯示 demo、seed 或非正式資料源列。",
+      allSources: "全部",
+      focusLoadingFmt: "正在載入 Persona {{persona}} 的資料源列 · 資料源：{{source}}…",
       focusedFmt: "已聚焦 Persona：{{persona}} · 資料源：{{source}} · {{count}} 筆匹配資料源",
-      focusMissingFmt: "沒有資料源列宣告 persona {{persona}} / source {{source}}，目前顯示 live 資料源列。",
+      focusMissingFmt: "沒有資料源列宣告 persona {{persona}} / source {{source}}。",
+      focusNoRowsTitle: "沒有聚焦資料源列",
+      focusNoRowsBody: "啟用 persona 或資料源篩選時，不會回退顯示全域資料源列。",
       showAll: "顯示全部資料源",
     },
     fleet: {

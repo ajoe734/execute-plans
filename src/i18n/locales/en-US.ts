@@ -2032,8 +2032,12 @@ export default {
       loadingLive: "Loading live Persona Fleet data sources…",
       liveDataUnavailableTitle: "Live data sources unavailable",
       liveDataUnavailableBody: "This page does not render demo, seed, or non-production data source rows.",
+      allSources: "all",
+      focusLoadingFmt: "Loading data source rows for persona {{persona}} · source: {{source}}…",
       focusedFmt: "Focused persona: {{persona}} · source: {{source}} · {{count}} matching data source row(s)",
-      focusMissingFmt: "No data source row declares persona {{persona}} / source {{source}}. Showing live data source rows.",
+      focusMissingFmt: "No data source row declares persona {{persona}} / source {{source}}.",
+      focusNoRowsTitle: "No focused data source rows",
+      focusNoRowsBody: "No global data source rows are shown while a persona or source filter is active.",
       showAll: "Show all data sources",
     },
     fleet: {
