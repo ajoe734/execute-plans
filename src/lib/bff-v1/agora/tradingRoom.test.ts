@@ -52,6 +52,7 @@ function bffErrorResponse(status: number, code: string, message: string): Respon
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   setAuthProvider({ getToken: () => null, getTenantId: () => null });
 });
 
@@ -292,6 +293,7 @@ describe("Authorization header forwarding", () => {
   });
 
   it("getTradingRoom omits Authorization when the auth provider has no token", async () => {
+    vi.stubEnv("VITE_BFF_MODE", "mock");
     const fetchMock = vi.fn().mockResolvedValue(
       ok({
         data: {
@@ -319,6 +321,18 @@ describe("Authorization header forwarding", () => {
 
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer live-token-2");
+  });
+
+  it("listDecisionEvents uses the shared live dev bearer fallback when browser auth storage is empty", async () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "dev-live-token");
+    const fetchMock = vi.fn().mockResolvedValue(ok({ items: [] }));
+    globalThis.fetch = fetchMock;
+
+    await listDecisionEvents(undefined, BASE);
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer dev-live-token");
   });
 
   it("decideOnEvent forwards Authorization alongside If-Match/Idempotency-Key/X-Request-Id", async () => {

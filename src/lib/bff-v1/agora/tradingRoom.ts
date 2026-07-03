@@ -25,7 +25,7 @@ import {
   type ErrorCode,
 } from "../errors";
 import { readBffEnv } from "../runtimeEnv";
-import { getAuthProvider } from "../headers";
+import { buildHeaders } from "../headers";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -273,22 +273,15 @@ function resolvedBase(baseUrl?: string): string {
  * Every route in this file is `require_read_role`/user-scoped on the BFF
  * side (see AG-BE-TR-002) and 401s with AUTH_REQUIRED when the Authorization
  * header is absent. `credentials: "include"` alone does not satisfy that —
- * the BFF checks for a Bearer token, not a cookie. Mirrors the token/tenant
- * injection in `buildHeaders()` (../headers.ts) without adopting its
- * unconditional X-Request-Id/X-Correlation-Id/Accept-Language headers, which
- * this file's existing tests assert are absent unless explicitly supplied.
+ * the BFF checks for a Bearer token, not a cookie. Reuse `buildHeaders()` so
+ * live auth transport stays aligned with the shared BFF client, including the
+ * VITE_BFF_DEV_BEARER_TOKEN fallback used by hosted dev.
  */
 function authHeaders(): Record<string, string> {
+  const shared = buildHeaders({ method: "GET" });
   const headers: Record<string, string> = {};
-  try {
-    const provider = getAuthProvider();
-    const token = provider.getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const tenant = provider.getTenantId();
-    if (tenant) headers["X-Tenant-Id"] = tenant;
-  } catch {
-    // Auth provider failures must not block requests; live mode will surface 401 from server.
-  }
+  if (shared.Authorization) headers.Authorization = shared.Authorization;
+  if (shared["X-Tenant-Id"]) headers["X-Tenant-Id"] = shared["X-Tenant-Id"];
   return headers;
 }
 
