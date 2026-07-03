@@ -151,6 +151,24 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
+  it("keeps the Persona Fleet horizontal scrollbar pinned for long row sets", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-live-gold", "Gold Futures Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    const tableScroll = screen.getByTestId("persona-fleet-table-scroll");
+    expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
+    expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeTruthy();
+    expect(tableScroll.querySelector("[data-management-table-scrollbar='native']")).toBeTruthy();
+    expect(screen.getByRole("table")).toHaveClass("min-w-[1640px]");
+  });
+
   it("renders snake_case live data source and research lists inline", () => {
     mocks.useV5Live.mockReturnValue({
       data: [{
