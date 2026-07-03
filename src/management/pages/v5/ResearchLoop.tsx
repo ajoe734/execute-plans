@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FlaskConical } from "lucide-react";
 import type { LoopRun } from "@/lib/v5";
 import { safeDateTime } from "@/lib/utils";
+import { filterResearchLoopRunsForFocus } from "./ResearchLoopFocus";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",
@@ -38,22 +39,6 @@ const stageDotCls: Record<string, string> = {
   skipped: "bg-muted-foreground/30",
 };
 
-const cleanText = (...values: unknown[]): string | undefined => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-};
-
-const containsToken = (needle: string, values: unknown[]): boolean => {
-  const normalized = needle.trim().toLowerCase();
-  return values
-    .map((value) => cleanText(value)?.toLowerCase())
-    .filter((value): value is string => Boolean(value))
-    .some((value) => value === normalized || value.includes(normalized));
-};
-
 export const ResearchLoopPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -69,24 +54,11 @@ export const ResearchLoopPage = () => {
     else if (!runParam && activeRunId) setActiveRunId(null);
   }, [runParam, activeRunId]);
 
-  const items = runs.data?.items ?? [];
-  const focus = useMemo(() => {
-    let scoped = items;
-    let matched = true;
-
-    if (projectFocus) {
-      const next = scoped.filter((r) => containsToken(projectFocus, [r.id, r.subjectId, r.subjectName, r.triggeredBy]));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-    if (personaFocus) {
-      const next = scoped.filter((r) => containsToken(personaFocus, [r.subjectId, r.subjectName, r.triggeredBy]));
-      matched = matched && next.length > 0;
-      if (next.length > 0) scoped = next;
-    }
-
-    return { items: scoped, matched };
-  }, [items, personaFocus, projectFocus]);
+  const items = useMemo(() => runs.data?.items ?? [], [runs.data]);
+  const focus = useMemo(
+    () => filterResearchLoopRunsForFocus(items, { personaFocus, projectFocus }),
+    [items, personaFocus, projectFocus],
+  );
   const visibleItems = focus.items;
   const hasFocus = Boolean(personaFocus || projectFocus);
   const activeRun: LoopRun | null = useMemo(

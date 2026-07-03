@@ -225,7 +225,7 @@ export default {
         emptyTitle: "無研究迴圈",
         emptyDesc: "目前 focus 沒有匹配的執行。",
         focusedFmt: "已聚焦 Persona：{{persona}} · project：{{project}} · {{count}} 筆匹配研究執行",
-        focusMissingFmt: "沒有研究執行宣告 persona {{persona}} / project {{project}}，目前顯示 live 研究執行。",
+        focusMissingFmt: "沒有研究執行宣告 persona {{persona}} / project {{project}}。",
         showAll: "顯示全部研究執行",
       },
       execution: {
@@ -648,7 +648,7 @@ export default {
   runtime: {
     subtitle: "Executor、MCP 伺服器、排程與資料攝取的即時運維視圖。",
     focusedFmt: "已聚焦 Persona：{{persona}} · runtime：{{runtime}} · binding：{{binding}} · {{count}} 筆匹配 runtime",
-    focusMissingFmt: "沒有 runtime 列宣告 persona {{persona}} / runtime {{runtime}} / binding {{binding}}，目前顯示 live runtime 列。",
+    focusMissingFmt: "沒有 runtime 列宣告 persona {{persona}} / runtime {{runtime}} / binding {{binding}}。",
     showAll: "顯示全部 runtime",
     empty: "沒有 runtime 資料列。",
     actions: {
@@ -2143,7 +2143,7 @@ export default {
       after: "改後",
       landed: "落地時間",
       focusedFmt: "已聚焦 Persona：{{persona}} · mutation：{{mutation}} · {{count}} 筆匹配演化項目",
-      focusMissingFmt: "沒有演化項目宣告 persona {{persona}} / mutation {{mutation}}，目前顯示 live 演化項目。",
+      focusMissingFmt: "沒有演化項目宣告 persona {{persona}} / mutation {{mutation}}。",
       showAll: "顯示全部演化項目",
     },
     evidence: {
@@ -2482,6 +2482,9 @@ export default {
       pnlPct: "損益 %",
       riskPct: "風險 %",
       drawdownPct: "回撤 %",
+      focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆匹配績效歸因",
+      focusMissingPersonaFmt: "沒有績效歸因列宣告 persona {{persona}}。",
+      showAllPersona: "顯示全部 Persona 績效歸因",
       dimensions: {
         persona: "Persona",
         strategy: "策略",

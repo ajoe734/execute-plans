@@ -233,7 +233,7 @@ export default {
         emptyTitle: "No research loops",
         emptyDesc: "Nothing matches the current focus.",
         focusedFmt: "Focused persona: {{persona}} · project: {{project}} · {{count}} matching research run(s)",
-        focusMissingFmt: "No research run declares persona {{persona}} / project {{project}}. Showing live research runs.",
+        focusMissingFmt: "No research run declares persona {{persona}} / project {{project}}.",
         showAll: "Show all research runs",
       },
       execution: {
@@ -662,7 +662,7 @@ export default {
   runtime: {
     subtitle: "Live operational view of executors, MCP servers, schedulers, and ingest pipelines.",
     focusedFmt: "Focused persona: {{persona}} · runtime: {{runtime}} · binding: {{binding}} · {{count}} matching runtime row(s)",
-    focusMissingFmt: "No runtime row declares persona {{persona}} / runtime {{runtime}} / binding {{binding}}. Showing live runtime rows.",
+    focusMissingFmt: "No runtime row declares persona {{persona}} / runtime {{runtime}} / binding {{binding}}.",
     showAll: "Show all runtimes",
     empty: "No runtime rows.",
     actions: {
@@ -2161,7 +2161,7 @@ export default {
       after: "After",
       landed: "Landed",
       focusedFmt: "Focused persona: {{persona}} · mutation: {{mutation}} · {{count}} matching evolution item(s)",
-      focusMissingFmt: "No evolution item declares persona {{persona}} / mutation {{mutation}}. Showing live evolution items.",
+      focusMissingFmt: "No evolution item declares persona {{persona}} / mutation {{mutation}}.",
       showAll: "Show all evolution items",
     },
     evidence: {
@@ -2500,6 +2500,9 @@ export default {
       pnlPct: "PnL %",
       riskPct: "Risk %",
       drawdownPct: "DD %",
+      focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching attribution row(s)",
+      focusMissingPersonaFmt: "No performance attribution row declares persona {{persona}}.",
+      showAllPersona: "Show all persona attribution",
       dimensions: {
         persona: "Persona",
         strategy: "Strategy",
