@@ -9,6 +9,7 @@ function encoded(value: string): string {
 }
 
 type RawResearchStatus = ManagementResearchStatus & {
+  framework_count?: number;
   experiment_id?: string;
   strategy_id?: string;
   strategy_spec_id?: string;
@@ -56,6 +57,7 @@ export type PersonaFleetResearchItem = {
   stage?: string;
   status?: string;
   frameworks: string[];
+  frameworkCount?: number;
   projectId?: string;
   experimentId?: string;
   artifactId?: string;
@@ -105,6 +107,12 @@ function frameworks(status?: RawResearchStatus, project?: RawResearchProject): s
   return status?.framework ? [status.framework] : [];
 }
 
+function frameworkCount(status?: RawResearchStatus, project?: RawResearchProject): number | undefined {
+  const declared = status?.frameworkCount ?? status?.framework_count;
+  const visible = frameworks(status, project).length;
+  return declared && declared > visible ? declared : visible || undefined;
+}
+
 export function personaFleetResearchItems(r: ManagementPersonaFleetRow): PersonaFleetResearchItem[] {
   const status = researchStatus(r);
   const projects = currentResearchProjects(r);
@@ -119,6 +127,7 @@ export function personaFleetResearchItems(r: ManagementPersonaFleetRow): Persona
         stage: project.stage ?? status?.stage,
         status: project.status,
         frameworks: frameworks(status, project),
+        frameworkCount: frameworkCount(status, project),
         projectId: id,
         experimentId: expId,
         artifactId: artId,
@@ -130,13 +139,14 @@ export function personaFleetResearchItems(r: ManagementPersonaFleetRow): Persona
 
   const expId = experimentId(status);
   const artId = artifactId(status);
-  const title = currentWork(r) || status?.summary;
+  const title = currentWork(r) || status?.summary || artId || expId || status?.stage;
   if (!title && !status?.stage && !expId && !artId && frameworks(status).length === 0) return [];
   return [{
     key: expId ?? artId ?? `${r.personaId}-research-status`,
     title: title ?? "nan",
     stage: status?.stage,
     frameworks: frameworks(status),
+    frameworkCount: frameworkCount(status),
     experimentId: expId,
     artifactId: artId,
     datasetRef: datasetRef(status),
