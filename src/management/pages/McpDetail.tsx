@@ -131,8 +131,8 @@ export const McpServerDetail = () => {
             <Section title={t("detail.section.runtimeHealth")}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label={t("table.status")} value={(s.health ?? "").toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
-                <StatCard label="Uptime" value="99.9%" tone="success" />
-                <StatCard label="P95 latency" value="42 ms" />
+                <StatCard label="Uptime" value="—" />
+                <StatCard label="P95 latency" value="—" />
                 <StatCard label={t("table.region")} value={s.region} />
               </div>
             </Section>
@@ -160,10 +160,7 @@ export const McpServerDetail = () => {
         ) },
         { value: "schema", label: t("phase13.mcp.tabs.schema"), content: <McpServerSchemaPanel server={s} /> },
         { value: "secrets", label: t("phase13.mcp.tabs.secrets"), content: <McpSecretsPanel server={s} /> },
-        { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
-          { id: "au_mcp_1", actor: s.owner, action: "mcp.health.check", target: s.id, ts: new Date(Date.now() - 600_000).toISOString() },
-          { id: "au_mcp_2", actor: "ops", action: "mcp.tool.register", target: s.id, ts: new Date(Date.now() - 7200_000).toISOString() },
-        ]} /> },
+        { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[]} /> },
       ]}
     />
     </>
@@ -230,10 +227,7 @@ export const McpToolDetail = () => {
               </>
             ),
           },
-          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
-            { id: "au_mt_1", actor: tool.owner, action: "mcp_tool.invoke", target: tool.id, ts: new Date(Date.now() - 1200_000).toISOString(), memo: `${(tool.callsLast24h ?? 0).toLocaleString()} calls in last 24h` },
-            { id: "au_mt_2", actor: "ops", action: "mcp_tool.grant_env", target: tool.id, ts: new Date(Date.now() - 86400_000).toISOString(), memo: `Granted: ${tool.envGrants.join(", ")}` },
-          ]} /> },
+          { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[]} /> },
         ]}
       />
     </>

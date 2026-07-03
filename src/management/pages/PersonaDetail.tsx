@@ -193,7 +193,7 @@ export const PersonaDetail = () => {
               <div className="grid grid-cols-3 gap-4">
                 <StatCard label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
                 <StatCard label={t("nav.strategies")} value={p.routedStrategies} />
-                <StatCard label={t("section.activity")} value={Math.floor(Math.random() * 12)} hint="mock" />
+                <StatCard label={t("section.activity")} value="—" />
               </div>
             ),
           },

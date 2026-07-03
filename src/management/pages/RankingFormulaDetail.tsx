@@ -34,8 +34,6 @@ export const RankingFormulaDetail = () => {
     .sort((a, b) => b.score - a.score);
   const versions = [
     { v: "v3", at: f.updatedAt, by: f.owner, note: "Current — activated" },
-    { v: "v2", at: new Date(Date.now() - 86400_000 * 14).toISOString(), by: f.owner, note: "Tightened drawdown weight" },
-    { v: "v1", at: new Date(Date.now() - 86400_000 * 60).toISOString(), by: "system", note: "Initial draft" },
   ];
 
   return (

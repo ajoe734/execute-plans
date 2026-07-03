@@ -14,7 +14,7 @@
 import { withLiveOrMock } from "./liveTransport";
 import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import { paths } from "./paths";
-import { bffFetch } from "./client";
+import { bffFetch, type BffRequest } from "./client";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { liveWriteGated } from "./writeGate";
 
@@ -670,6 +670,55 @@ function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
       return seedFn();
     }
   };
+}
+
+function optionalAdapt<T>(adapt: (raw: unknown) => T | null) {
+  return (raw: unknown): T | undefined => {
+    try {
+      return adapt(raw) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+function listAdapt<T>(adapt: (raw: unknown) => T[] | null) {
+  return (raw: unknown): T[] => {
+    try {
+      return adapt(raw) ?? [];
+    } catch {
+      return [];
+    }
+  };
+}
+
+const strictNotFoundAsEmptyArray = <T,>(err: unknown) => {
+  const missing = strictNotFoundAsUndefined<T[]>(err);
+  return missing?.handled ? { handled: true as const, value: [] as T[] } : undefined;
+};
+
+function liveOnlyRead<T, TLive = unknown>(
+  req: BffRequest,
+  adapt: (raw: unknown) => T | null,
+): Promise<T | undefined> {
+  return withStrictLiveOrMock<T | undefined, TLive>(
+    req,
+    async () => undefined,
+    optionalAdapt(adapt),
+    (err) => strictNotFoundAsUndefined<T>(err),
+  );
+}
+
+function liveOnlyList<T>(
+  req: BffRequest,
+  adapt: (raw: unknown) => T[] | null,
+): Promise<T[]> {
+  return withStrictLiveOrMock<T[], unknown>(
+    req,
+    async () => [],
+    listAdapt(adapt),
+    strictNotFoundAsEmptyArray<T>,
+  );
 }
 
 const asString = (value: unknown, fallback = ""): string => {
@@ -2697,6 +2746,8 @@ export const mgmt = {
         async () => seedFn(),
         safeAdapt(adaptCockpit, seedFn),
       ),
+    getLiveOnly: (): Promise<CockpitModel | undefined> =>
+      liveOnlyRead<CockpitModel>({ method: "GET", path: paths.mgmtCockpit() }, adaptCockpit),
   },
 
   humanInbox: {
@@ -2748,6 +2799,11 @@ export const mgmt = {
   },
 
   tradingPulse: {
+    rankingsLiveOnly: (): Promise<TradingPulseRankBlock[]> =>
+      liveOnlyList<TradingPulseRankBlock>(
+        { method: "GET", path: paths.mgmtTradingRankings() },
+        adaptRankings,
+      ),
     rankings: (seedFn: () => TradingPulseRankBlock[] = defaultPulseRankings):
       Promise<TradingPulseRankBlock[]> =>
       withLiveOrMock<TradingPulseRankBlock[]>(
@@ -2763,6 +2819,11 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtTradingPulse() },
         async () => seedFn(),
         safeAdapt(adaptTradingPulseOverview, seedFn),
+      ),
+    getLiveOnly: (): Promise<ManagementTradingPulseModel | undefined> =>
+      liveOnlyRead<ManagementTradingPulseModel>(
+        { method: "GET", path: paths.mgmtTradingPulse() },
+        adaptTradingPulseOverview,
       ),
   },
 
@@ -2799,6 +2860,11 @@ export const mgmt = {
         async () => seedFn(),
         safeAdapt(adaptManagementEvidenceOverview, seedFn),
       ),
+    overviewLiveOnly: (): Promise<ManagementEvidenceOverview | undefined> =>
+      liveOnlyRead<ManagementEvidenceOverview>(
+        { method: "GET", path: paths.mgmtEvidenceExplorer() },
+        adaptManagementEvidenceOverview,
+      ),
     detail: (
       refId: string,
       seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
@@ -2807,6 +2873,11 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtEvidenceRef(refId) },
         async () => seedFn(),
         safeAdapt(adaptManagementEvidenceDetail, seedFn),
+      ),
+    detailLiveOnly: (refId: string): Promise<ManagementEvidenceDetail | undefined> =>
+      liveOnlyRead<ManagementEvidenceDetail>(
+        { method: "GET", path: paths.mgmtEvidenceRef(refId) },
+        adaptManagementEvidenceDetail,
       ),
   },
 
@@ -2817,33 +2888,48 @@ export const mgmt = {
         async () => seedFn(),
         safeAdapt(adaptPersonaIntent, seedFn),
       ),
+    listLiveOnly: (): Promise<PersonaIntentTrace[]> =>
+      liveOnlyList<PersonaIntentTrace>(
+        { method: "GET", path: paths.mgmtPersonaIntent() },
+        adaptPersonaIntent,
+      ),
   },
 
   readiness: {
+    ep5LiveOnly: (): Promise<ReadinessPageModel | undefined> =>
+      liveOnlyRead<ReadinessPageModel>({ method: "GET", path: paths.mgmtReadinessEp5() }, adaptReadiness),
     ep5: (seedFn: () => ReadinessPageModel): Promise<ReadinessPageModel> =>
       withLiveOrMock<ReadinessPageModel>(
         { method: "GET", path: paths.mgmtReadinessEp5() },
         async () => seedFn(),
         safeAdapt(adaptReadiness, seedFn),
       ),
+    brokerLiveOnly: (): Promise<ReadinessPageModel | undefined> =>
+      liveOnlyRead<ReadinessPageModel>({ method: "GET", path: paths.mgmtReadinessBrokerLive() }, adaptReadiness),
     brokerLive: (seedFn: () => ReadinessPageModel): Promise<ReadinessPageModel> =>
       withLiveOrMock<ReadinessPageModel>(
         { method: "GET", path: paths.mgmtReadinessBrokerLive() },
         async () => seedFn(),
         safeAdapt(adaptReadiness, seedFn),
       ),
+    capitalBindingLiveOnly: (): Promise<ReadinessPageModel | undefined> =>
+      liveOnlyRead<ReadinessPageModel>({ method: "GET", path: paths.mgmtReadinessCapitalBinding() }, adaptReadiness),
     capitalBinding: (seedFn: () => ReadinessPageModel): Promise<ReadinessPageModel> =>
       withLiveOrMock<ReadinessPageModel>(
         { method: "GET", path: paths.mgmtReadinessCapitalBinding() },
         async () => seedFn(),
         safeAdapt(adaptReadiness, seedFn),
       ),
+    bffHaLiveOnly: (): Promise<ReadinessPageModel | undefined> =>
+      liveOnlyRead<ReadinessPageModel>({ method: "GET", path: paths.mgmtReadinessBffHa() }, adaptReadiness),
     bffHa: (seedFn: () => ReadinessPageModel): Promise<ReadinessPageModel> =>
       withLiveOrMock<ReadinessPageModel>(
         { method: "GET", path: paths.mgmtReadinessBffHa() },
         async () => seedFn(),
         safeAdapt(adaptReadiness, seedFn),
       ),
+    strictPublishLiveOnly: (): Promise<ReadinessPageModel | undefined> =>
+      liveOnlyRead<ReadinessPageModel>({ method: "GET", path: paths.mgmtReadinessStrictPublish() }, adaptReadiness),
     strictPublish: (seedFn: () => ReadinessPageModel): Promise<ReadinessPageModel> =>
       withLiveOrMock<ReadinessPageModel>(
         { method: "GET", path: paths.mgmtReadinessStrictPublish() },
@@ -2855,6 +2941,14 @@ export const mgmt = {
   // ---------- PM-12 ----------
 
   portfolioBook: {
+    summaryLiveOnly: (): Promise<PortfolioSummary | undefined> =>
+      liveOnlyRead<PortfolioSummary>(
+        { method: "GET", path: paths.mgmtPortfolioBook() },
+        (raw) => {
+          const data = unwrap(raw);
+          return isObject(data) && "totalNav" in data ? (data as unknown as PortfolioSummary) : null;
+        },
+      ),
     summary: (seedFn: () => PortfolioSummary): Promise<PortfolioSummary> =>
       withLiveOrMock<PortfolioSummary>(
         { method: "GET", path: paths.mgmtPortfolioBook() },
@@ -2864,11 +2958,21 @@ export const mgmt = {
           return isObject(data) && "totalNav" in data ? (data as unknown as PortfolioSummary) : null;
         }, seedFn),
       ),
+    poolsLiveOnly: (): Promise<CapitalPoolSummaryRow[]> =>
+      liveOnlyList<CapitalPoolSummaryRow>(
+        { method: "GET", path: paths.mgmtPortfolioPools() },
+        adaptArrayPassthrough<CapitalPoolSummaryRow>,
+      ),
     pools: (seedFn: () => CapitalPoolSummaryRow[]): Promise<CapitalPoolSummaryRow[]> =>
       withLiveOrMock<CapitalPoolSummaryRow[]>(
         { method: "GET", path: paths.mgmtPortfolioPools() },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<CapitalPoolSummaryRow>, seedFn),
+      ),
+    holdingsLiveOnly: (): Promise<HoldingRow[]> =>
+      liveOnlyList<HoldingRow>(
+        { method: "GET", path: paths.mgmtPortfolioHoldings() },
+        adaptArrayPassthrough<HoldingRow>,
       ),
     holdings: (seedFn: () => HoldingRow[]): Promise<HoldingRow[]> =>
       withLiveOrMock<HoldingRow[]>(
@@ -2879,11 +2983,21 @@ export const mgmt = {
   },
 
   personaLeague: {
+    listLiveOnly: (): Promise<PersonaLeagueRow[]> =>
+      liveOnlyList<PersonaLeagueRow>(
+        { method: "GET", path: paths.mgmtPersonaLeague() },
+        adaptArrayPassthrough<PersonaLeagueRow>,
+      ),
     list: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
       withLiveOrMock<PersonaLeagueRow[]>(
         { method: "GET", path: paths.mgmtPersonaLeague() },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<PersonaLeagueRow>, seedFn),
+      ),
+    rankingsLiveOnly: (): Promise<PersonaLeagueRow[]> =>
+      liveOnlyList<PersonaLeagueRow>(
+        { method: "GET", path: paths.mgmtPersonaLeagueRankings() },
+        adaptArrayPassthrough<PersonaLeagueRow>,
       ),
     rankings: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
       withLiveOrMock<PersonaLeagueRow[]>(
@@ -2903,11 +3017,25 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
+    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+      liveOnlyList<QuarterlyRankingRow>(
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        adaptArrayPassthrough<QuarterlyRankingRow>,
+      ),
     list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
       withLiveOrMock<QuarterlyRankingRow[]>(
         { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+      ),
+    formulaLiveOnly: (): Promise<QuarterlyRankingFormula | undefined> =>
+      liveOnlyRead<QuarterlyRankingFormula>(
+        { method: "GET", path: paths.mgmtQuarterlyRankingFormula() },
+        (raw) => {
+          const data = unwrap(raw);
+          return isObject(data) && "weights" in data
+            ? (data as unknown as QuarterlyRankingFormula) : null;
+        },
       ),
     formula: (seedFn: () => QuarterlyRankingFormula): Promise<QuarterlyRankingFormula> =>
       withLiveOrMock<QuarterlyRankingFormula>(
@@ -2927,6 +3055,11 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+      ),
+    recommendationsLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+      liveOnlyList<QuarterlyRankingRow>(
+        { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
+        adaptArrayPassthrough<QuarterlyRankingRow>,
       ),
   },
 

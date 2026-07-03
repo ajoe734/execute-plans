@@ -71,6 +71,23 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out.meta.surfaces.management_trading_pulse.source).toBe("local_snapshot");
   });
 
+  it("live-only management readers do not expose seeded data in mock/test mode", async () => {
+    expect(await mgmt.cockpit.getLiveOnly()).toBeUndefined();
+    expect(await mgmt.tradingPulse.getLiveOnly()).toBeUndefined();
+    expect(await mgmt.tradingPulse.rankingsLiveOnly()).toEqual([]);
+    expect(await mgmt.evidence.overviewLiveOnly()).toBeUndefined();
+    expect(await mgmt.evidence.detailLiveOnly("evref-demo-readiness-001")).toBeUndefined();
+    expect(await mgmt.personaIntent.listLiveOnly()).toEqual([]);
+    expect(await mgmt.readiness.ep5LiveOnly()).toBeUndefined();
+    expect(await mgmt.readiness.brokerLiveOnly()).toBeUndefined();
+    expect(await mgmt.portfolioBook.summaryLiveOnly()).toBeUndefined();
+    expect(await mgmt.portfolioBook.poolsLiveOnly()).toEqual([]);
+    expect(await mgmt.portfolioBook.holdingsLiveOnly()).toEqual([]);
+    expect(await mgmt.personaLeague.listLiveOnly()).toEqual([]);
+    expect(await mgmt.quarterlyRanking.listLiveOnly("2026-Q2")).toEqual([]);
+    expect(await mgmt.quarterlyRanking.formulaLiveOnly()).toBeUndefined();
+  });
+
   it("adapts live Trading Pulse aggregate without falling back to legacy rows", () => {
     const out = adaptTradingPulseOverview({
       data: {

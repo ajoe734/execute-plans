@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
-import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
+import type { QuarterlyRankingFormula, QuarterlyRankingRow, QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
 import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
 import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
 import { PersonaOodaMatrix } from "@/management/components/cockpit/PersonaOodaMatrix";
@@ -23,18 +23,11 @@ import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLe
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
-import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
-import { defaultPortfolioBook } from "@/lib/v5/management/portfolio";
-import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
-import { defaultQuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
 import {
-  defaultManagementEvidenceDetail,
-  defaultManagementEvidenceOverview,
-  defaultTradingPulseModel,
   type ManagementEvidenceDetail,
   type ManagementEvidenceAllowedActions,
   type ManagementEvidenceAuditEvent,
@@ -92,20 +85,87 @@ import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
 // Pathreon Management Cockpit (PM-3)
 // =====================================================================
 
+function LiveOnlyNotice({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+        </div>
+        {action}
+      </div>
+    </Card>
+  );
+}
+
+function currentQuarterId(today = new Date()): string {
+  const year = today.getFullYear();
+  const quarter = Math.floor(today.getMonth() / 3) + 1;
+  return `${year}-Q${quarter}`;
+}
+
+function quarterCutoffDate(quarterId: string): string {
+  const match = /^(\d{4})-Q([1-4])$/.exec(quarterId);
+  if (!match) return "—";
+  const year = Number(match[1]);
+  const quarter = Number(match[2]);
+  const cutoff = new Date(Date.UTC(year, quarter * 3, 0));
+  return cutoff.toISOString().slice(0, 10);
+}
+
+function daysUntil(dateText: string): number {
+  const cutoff = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(cutoff.getTime())) return 0;
+  const now = new Date();
+  return Math.max(0, Math.ceil((cutoff.getTime() - now.getTime()) / 86_400_000));
+}
+
+function quarterlySnapshotFromLive(
+  rows: QuarterlyRankingRow[] | undefined,
+  formula: QuarterlyRankingFormula | undefined,
+): QuarterlySnapshot | undefined {
+  if (!rows && !formula) return undefined;
+  const rowList = rows ?? [];
+  const quarter = rowList.find((row) => row.quarter)?.quarter ?? currentQuarterId();
+  const cutoffDate = quarterCutoffDate(quarter);
+  return {
+    quarter,
+    cutoffDate,
+    daysRemaining: daysUntil(cutoffDate),
+    eligiblePersonas: rowList.filter((row) => row.eligibility === "eligible").length,
+    disqualifiedPersonas: rowList.filter((row) => row.eligibility === "disqualified").length,
+    pendingEvidenceGaps: rowList.filter((row) => (row.evidenceRefs ?? []).length === 0).length,
+    formulaVersion: formula?.version ?? "—",
+  };
+}
+
 export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
-  const seed = useMemo(() => composeCockpit(defaultCockpitSeed()), []);
-  const { data } = useV5Live(() => mgmt.cockpit.get(() => seed), []);
-  const model = data ?? seed;
-
-  // PM-12 snapshots
-  const pSeed = useMemo(() => defaultPortfolioBook(), []);
-  const lSeed = useMemo(() => defaultPersonaLeague(), []);
-  const qSnap = useMemo(() => defaultQuarterlySnapshot(), []);
-  const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summary(() => pSeed.summary), []);
-  const { data: league } = useV5Live(() => mgmt.personaLeague.list(() => lSeed), []);
+  const { data: model, loading } = useV5Live(() => mgmt.cockpit.getLiveOnly(), []);
+  const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summaryLiveOnly(), []);
+  const { data: league } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
+  const { data: quarterlyRows } = useV5Live(() => mgmt.quarterlyRanking.listLiveOnly(), []);
+  const { data: quarterlyFormula } = useV5Live(() => mgmt.quarterlyRanking.formulaLiveOnly(), []);
   const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const productionFleetRows = useMemo(() => productionPersonaFleetRows(fleetRows ?? []), [fleetRows]);
+  const quarterlySnapshot = useMemo(
+    () => quarterlySnapshotFromLive(quarterlyRows, quarterlyFormula),
+    [quarterlyFormula, quarterlyRows],
+  );
+
+  const unavailableTitle = t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" });
+  const unavailableBody = t("mgmt.liveOnly.unavailableBody", {
+    defaultValue: "This page does not render seed, demo, or non-production fallback data.",
+  });
 
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.cockpit.title")}>
@@ -118,19 +178,45 @@ export const OneRingCockpitPage = () => {
           💬 詢問 AI Management
         </Button>
       </header>
-      <SystemStateStrip model={model.strip} />
+      {!model && (
+        <LiveOnlyNotice
+          title={loading ? t("common.loading", { defaultValue: "Loading..." }) : unavailableTitle}
+          body={loading ? t("mgmt.liveOnly.loadingBody", { defaultValue: "Waiting for live BFF data." }) : unavailableBody}
+        />
+      )}
+      {model && <SystemStateStrip model={model.strip} />}
       <OpenClawLlmAuthPanel mode="summary" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <TotalCapitalSnapshot summary={pSummary ?? pSeed.summary} />
-        <PersonaLeagueSnapshot rows={league ?? lSeed} />
-        <QuarterlyRankingCountdown snap={qSnap} />
+        {pSummary ? (
+          <TotalCapitalSnapshot summary={pSummary} />
+        ) : (
+          <LiveOnlyNotice
+            title={t("mgmt.cockpit.totalCapital")}
+            body={unavailableBody}
+            action={<Link to="/management/portfolio-book" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+          />
+        )}
+        <PersonaLeagueSnapshot rows={league ?? []} />
+        {quarterlySnapshot ? (
+          <QuarterlyRankingCountdown snap={quarterlySnapshot} />
+        ) : (
+          <LiveOnlyNotice
+            title={t("mgmt.cockpit.quarterlyCountdown")}
+            body={unavailableBody}
+            action={<Link to="/management/quarterly-ranking" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+          />
+        )}
         <DataSourceHealthSnapshot rows={productionFleetRows} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <LoopFlowMap model={model.loopFlow} />
-        <PersonaOodaMatrix model={model.matrix} />
-      </div>
-      <CriticalAnomalyPanel anomalies={model.anomalies} />
+      {model && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <LoopFlowMap model={model.loopFlow} />
+            <PersonaOodaMatrix model={model.matrix} />
+          </div>
+          <CriticalAnomalyPanel anomalies={model.anomalies} />
+        </>
+      )}
     </section>
   );
 };
@@ -902,9 +988,25 @@ const cardMetricCoverage = (card: ManagementTradingPulseCard): Record<string, un
 
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
-  const seed = useMemo(() => defaultTradingPulseModel(), []);
-  const { data } = useV5Live(() => mgmt.tradingPulse.get(() => seed), []);
-  const model = data ?? seed;
+  const { data: model, loading } = useV5Live(() => mgmt.tradingPulse.getLiveOnly(), []);
+  if (!model) {
+    return (
+      <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
+        <header>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.pulse.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.pulse.subtitle")}</p>
+        </header>
+        <LiveOnlyNotice
+          title={loading
+            ? t("common.loading", { defaultValue: "Loading..." })
+            : t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+          body={loading
+            ? t("mgmt.liveOnly.loadingBody", { defaultValue: "Waiting for live BFF data." })
+            : t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}
+        />
+      </section>
+    );
+  }
   const cards = orderedCards(model.cards.length > 0 ? model.cards : fallbackCardsFromSummary(model));
 
   return (
@@ -1136,11 +1238,16 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
 
 const RankingBlocks = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.tradingPulse.rankings(), []);
-  const blocks = data ?? defaultPulseRankings();
+  const { data } = useV5Live(() => mgmt.tradingPulse.rankingsLiveOnly(), []);
+  const blocks = data ?? [];
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("mgmt.pulse.rankingsLabel")}>
-      {blocks.map((b) => (
+      {blocks.length === 0 ? (
+        <LiveOnlyNotice
+          title={t("mgmt.pulse.rankingsLabel")}
+          body={t("mgmt.pulse.noRows")}
+        />
+      ) : blocks.map((b) => (
         <Card key={b.kind} className="p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
@@ -1717,8 +1824,7 @@ const EvidenceAuditPanel = ({ events }: { events: ManagementEvidenceAuditEvent[]
 const EvidenceExplorerList = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const seed = useMemo(() => defaultManagementEvidenceOverview(), []);
-  const { data, loading } = useV5Live(() => mgmt.evidence.overview(() => seed), []);
+  const { data, loading } = useV5Live(() => mgmt.evidence.overviewLiveOnly(), []);
   useEffect(() => {
     if (!loading) markRoutePrimaryReady(location.pathname);
   }, [loading, location.pathname]);
@@ -1964,9 +2070,8 @@ const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }
 
 const EvidenceDetailView = ({ refId }: { refId: string }) => {
   const { t } = useTranslation();
-  const seed = useMemo(() => defaultManagementEvidenceDetail(refId), [refId]);
   const { data, loading, refresh } = useV5Live(
-    () => refId ? mgmt.evidence.detail(refId, () => seed) : Promise.resolve(seed),
+    () => refId ? mgmt.evidence.detailLiveOnly(refId) : Promise.resolve(undefined),
     [refId],
   );
 
