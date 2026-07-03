@@ -82,6 +82,7 @@ import {
   personaFleetResearchHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
+  type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
 import { safeDateTime } from "@/lib/utils";
 import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
@@ -174,6 +175,14 @@ function dataSourceTone(state?: string): string {
   return "bg-muted text-muted-foreground";
 }
 
+function dataSourceStatusPriority(state?: string): number {
+  const token = String(state ?? "").toLowerCase();
+  if (token.includes("read_ok") || token.includes("readback_ok") || token.includes("smoke_ok")) return 0;
+  if (token.includes("partial")) return 1;
+  if (token.includes("unavailable") || token.includes("credential")) return 2;
+  return 3;
+}
+
 function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: number } {
   const summaryCounts = dataSourceProviderStatusCounts(r);
   if (Object.keys(summaryCounts).length > 0) {
@@ -188,6 +197,24 @@ function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: num
   const total = values.length || visibleDataSources(r).length || 0;
   const ok = values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length;
   return { ok, total };
+}
+
+function summaryStatusCountEntries(r: ManagementPersonaFleetRow): Array<[string, number]> {
+  return Object.entries(dataSourceProviderStatusCounts(r))
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => dataSourceStatusPriority(left) - dataSourceStatusPriority(right) || left.localeCompare(right));
+}
+
+function frameworkText(item?: PersonaFleetResearchItem): string {
+  if (!item) return "";
+  const visible = item.frameworks;
+  const declared = item.frameworkCount ?? visible.length;
+  const missing = Math.max(0, declared - visible.length);
+  const parts = [...visible];
+  if (missing > 0) {
+    parts.push(`${missing} more framework${missing === 1 ? "" : "s"}`);
+  }
+  return parts.join(" / ");
 }
 
 type PersonaFleetPrimaryAction = {
@@ -393,12 +420,11 @@ export const PersonaFleetPage = () => {
               const nonProduction = isNonProductionPersonaFleetRow(r);
               const sourceCount = providerOkCount(r);
               const sourceBadges = visibleDataSources(r);
+              const sourceSummaryCounts = sourceBadges.length === 0 ? summaryStatusCountEntries(r) : [];
               const sourceStatus = dataSourceState(r);
               const researchItems = personaFleetResearchItems(r);
               const primaryResearch = researchItems[0];
-              const frameworkText = primaryResearch?.frameworks.length
-                ? primaryResearch.frameworks.join(" / ")
-                : "";
+              const frameworkSummary = frameworkText(primaryResearch);
               const personaHref = personaFleetPersonaHref(r);
               const researchHref = personaFleetResearchHref(r, primaryResearch);
               const primaryAction = personaFleetPrimaryAction(r, { personaHref, researchHref });
@@ -454,21 +480,22 @@ export const PersonaFleetPage = () => {
 	                            </Badge>
 	                          </Link>
 	                        ))
-	                        : sourceStatus
-	                        ? (
+	                        : sourceSummaryCounts.length > 0
+	                        ? sourceSummaryCounts.map(([status, count]) => (
 	                          <Link
+	                            key={status}
 	                            to={personaFleetDataSourcesHref(r)}
-	                            aria-label={`${r.personaId} data source status`}
+	                            aria-label={`${r.personaId} data source ${status} summary`}
 	                            className="inline-flex"
 	                          >
 	                            <Badge
 	                              variant="outline"
-	                              className={badgeLinkClass(`${dataSourceTone(sourceStatus)} hover:border-primary/60`)}
+	                              className={badgeLinkClass(`${dataSourceTone(status)} hover:border-primary/60`)}
 	                            >
-	                              {formatToken(sourceStatus)}
+	                              {count} {formatToken(status)}
 	                            </Badge>
 	                          </Link>
-	                        )
+	                        ))
 	                        : (
 	                          <Link
 	                            to={personaFleetDataSourcesHref(r)}
@@ -483,7 +510,7 @@ export const PersonaFleetPage = () => {
 	                      {sourceCount.total > 0 && (
 	                        <span>{t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}</span>
 	                      )}
-	                      {sourceStatus && sourceBadges.length > 0 && (
+	                      {sourceStatus && (sourceBadges.length > 0 || sourceSummaryCounts.length > 0) && (
 	                        <Link
 	                          to={personaFleetDataSourcesHref(r)}
 	                          aria-label={`${r.personaId} data source status`}
@@ -543,12 +570,12 @@ export const PersonaFleetPage = () => {
 	                          </Link>
 	                        )}
 	                    </div>
-	                    {(frameworkText || artifactLabel) && (
+	                    {(frameworkSummary || artifactLabel) && (
 	                    <div className="mt-0.5 max-w-[360px] truncate text-xs text-muted-foreground">
-	                      {frameworkText}
+	                      {frameworkSummary}
 	                      {artifactLabel && (
 	                        <>
-	                          {frameworkText ? " · " : ""}
+	                          {frameworkSummary ? " · " : ""}
 	                          {artifactHref ? (
 	                            <Link
 	                              to={artifactHref}

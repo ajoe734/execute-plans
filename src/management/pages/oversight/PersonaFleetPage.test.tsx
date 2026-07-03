@@ -254,11 +254,19 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getAllByText("datasource smoke ok")).toHaveLength(1);
+    expect(screen.getByText("1 datasource smoke ok")).toBeInTheDocument();
+    expect(screen.getByText("1 read unavailable")).toBeInTheDocument();
     expect(screen.getByText("1/2 readable")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-summary data source datasource_smoke_ok summary" })).toHaveAttribute(
+      "href",
+      "/management/data-sources?persona=persona-live-summary",
+    );
+    expect(screen.getByRole("link", { name: "persona-live-summary data source status" })).toHaveTextContent(
+      "datasource smoke ok",
+    );
     expect(screen.getByRole("link", { name: "persona-live-summary research detail" })).toHaveTextContent("act");
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
-    expect(screen.getByText(/vectorbt/)).toBeInTheDocument();
+    expect(screen.getByText(/vectorbt \/ 2 more frameworks/)).toBeInTheDocument();
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "persona-live-summary data sources" })).not.toBeInTheDocument();
   });

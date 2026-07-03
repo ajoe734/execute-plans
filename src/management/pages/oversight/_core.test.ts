@@ -52,6 +52,22 @@ describe("PersonaFleetPage data source badges", () => {
       "crypto-coingecko-spot:declared",
     ]);
   });
+
+  it("does not fabricate provider chips from provider status counts", () => {
+    const row = {
+      dataSourceStatus: {
+        state: "datasource_smoke_ok",
+        providerStatuses: {},
+        providerStatusCounts: {
+          datasource_smoke_ok: 1,
+          read_unavailable: 1,
+        },
+        providerCount: 2,
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(visibleDataSources(row)).toEqual([]);
+  });
 });
 
 describe("PersonaFleetPage deep links", () => {
@@ -204,6 +220,33 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetArtifactHref(row, item)).toBe(
       "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
     );
+  });
+
+  it("keeps summary-only research rows as structured research items", () => {
+    const row = {
+      personaId: "persona-crypto",
+      currentWork: "paper broker sandbox readback and funding-rate stress review",
+      researchStatus: {
+        stage: "act",
+        framework: "vectorbt",
+        frameworks: ["vectorbt"],
+        frameworkCount: 3,
+        artifactId: "artifact-crypto-trend-carry-v1",
+        pendingTaskIds: [],
+        canDeploy: false,
+      },
+    } as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(item).toMatchObject({
+      title: "paper broker sandbox readback and funding-rate stress review",
+      stage: "act",
+      frameworks: ["vectorbt"],
+      frameworkCount: 3,
+      artifactId: "artifact-crypto-trend-carry-v1",
+      canDeploy: false,
+    });
   });
 
   it("links to the persona-scoped research loop when there is no active research project", () => {
