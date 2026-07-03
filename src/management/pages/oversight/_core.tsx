@@ -23,6 +23,7 @@ import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLe
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
 } from "@/lib/v5/management/humanInbox";
@@ -478,8 +479,9 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length > 0 && (
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <Card>
+        <ManagementTableScroll testId="persona-fleet-table-scroll" minScrollWidth={1640}>
+        <table className="w-full min-w-[1640px] text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
@@ -741,6 +743,7 @@ export const PersonaFleetPage = () => {
             })}
           </tbody>
         </table>
+        </ManagementTableScroll>
       </Card>
       )}
     </section>
@@ -1152,7 +1155,12 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
           </Badge>
         </div>
       </div>
-      <div className="mt-3 max-h-[640px] overflow-auto">
+      <ManagementTableScroll
+        className="mt-3"
+        viewportClassName="max-h-[640px] overflow-auto"
+        testId="trading-pulse-runtime-table-scroll"
+        minScrollWidth={1040}
+      >
         <table className="w-full min-w-[1040px] text-left text-xs">
           <thead className="text-muted-foreground">
             <tr className="border-b border-border">
@@ -1205,7 +1213,7 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
             })}
           </tbody>
         </table>
-      </div>
+      </ManagementTableScroll>
     </Card>
   );
 };
@@ -1841,7 +1849,8 @@ const EvidenceExplorerList = () => {
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
       </dl>
-      <Card className="overflow-x-auto">
+      <Card>
+        <ManagementTableScroll testId="evidence-explorer-table-scroll" minScrollWidth={1040}>
         <table className="w-full min-w-[1040px] text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
@@ -1940,6 +1949,7 @@ const EvidenceExplorerList = () => {
             )}
           </tbody>
         </table>
+        </ManagementTableScroll>
       </Card>
     </section>
   );
