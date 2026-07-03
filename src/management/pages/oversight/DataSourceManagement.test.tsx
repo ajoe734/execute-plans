@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
 import { DataSourceManagementPage } from "./DataSourceManagement";
 
 const mocks = vi.hoisted(() => ({
@@ -17,10 +18,12 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
 
 void i18n.changeLanguage("en-US");
 
-function renderPage() {
+const PERSONA_ID = "persona-20260528-5937dea1";
+
+function renderPage(initialEntry = `/management/data-sources?persona=${PERSONA_ID}`) {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/management/data-sources?persona=persona-20260528-5937dea1&source=shioaji"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/management/data-sources" element={<DataSourceManagementPage />} />
         </Routes>
@@ -31,7 +34,7 @@ function renderPage() {
 
 function fleetRow(): ManagementPersonaFleetRow {
   return {
-    personaId: "persona-20260528-5937dea1",
+    personaId: PERSONA_ID,
     personaName: "TW-Index-Arbitrage",
     owner: "pantheon-dev-browser",
     ooda: "Decide",
@@ -59,15 +62,37 @@ function fleetRow(): ManagementPersonaFleetRow {
   };
 }
 
+function systemRecord(): SystemDataSourceRecord {
+  return {
+    providerKey: "conn-bounded-feed",
+    provider: "Pantheon bounded external feed",
+    markets: [],
+    sourceClasses: ["bounded"],
+    status: "enabled",
+    tone: "muted",
+    credentialState: "unknown",
+    readOnly: true,
+    orderCapableProvider: false,
+    orderSideEffectsAllowed: false,
+    capitalSideEffectsAllowed: false,
+    liveIngestionEnabled: false,
+    consumerPersonaIds: ["persona-global-only"],
+    consumerPersonaNames: ["Global Only"],
+    evidenceRefs: [],
+    unavailableRefs: [],
+    reasons: [],
+  };
+}
+
 describe("DataSourceManagementPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
   });
 
-  it("renders Persona Fleet declared provider statuses for focused OODA Observe links", () => {
+  it("renders only the focused Persona Fleet provider statuses for OODA Observe links", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
-        data: { items: [] },
+        data: { items: [systemRecord()] },
         loading: false,
         refresh: vi.fn(),
       })
@@ -79,13 +104,83 @@ describe("DataSourceManagementPage", () => {
 
     renderPage();
 
-    expect(screen.getByText("TW-Index-Arbitrage")).toBeInTheDocument();
-    expect(screen.getByText("persona-20260528-5937dea1")).toBeInTheDocument();
-    expect(screen.getByText("5/5 readable")).toBeInTheDocument();
+    expect(screen.getByText("Focused persona: persona-20260528-5937dea1 · source: all · 5 matching data source row(s)")).toBeInTheDocument();
+    expect(screen.getAllByText("TW-Index-Arbitrage").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("persona-20260528-5937dea1").length).toBeGreaterThan(0);
+    expect(screen.getByText("5/5")).toBeInTheDocument();
+    expect(screen.getByText("5 data sources")).toBeInTheDocument();
+    expect(screen.getByText("Connection")).toBeInTheDocument();
+    expect(screen.getAllByText("Consumer personas").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Controls").length).toBeGreaterThan(0);
     for (const provider of ["shioaji", "twse", "tpex", "mops", "finmind"]) {
       expect(screen.getAllByText(provider).length).toBeGreaterThan(0);
     }
     expect(screen.getAllByText("read ok")).toHaveLength(5);
-    expect(screen.getByText("support/evidence/readback/shioaji.json")).toBeInTheDocument();
+    expect(screen.getAllByText("support/evidence/readback/shioaji.json").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
+  });
+
+  it("narrows a focused persona page to the requested source without falling back to global rows", () => {
+    mocks.useV5Live
+      .mockReturnValueOnce({
+        data: { items: [systemRecord()] },
+        loading: false,
+        refresh: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        data: [fleetRow()],
+        loading: false,
+        refresh: vi.fn(),
+      });
+
+    renderPage(`/management/data-sources?persona=${PERSONA_ID}&source=shioaji`);
+
+    expect(screen.getByText("Focused persona: persona-20260528-5937dea1 · source: shioaji · 1 matching data source row(s)")).toBeInTheDocument();
+    expect(screen.getAllByText("shioaji").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("read ok")).toHaveLength(1);
+    expect(screen.queryByText("twse")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
+  });
+
+  it("keeps summary-only focused personas scoped and renders nan instead of global data sources", () => {
+    mocks.useV5Live
+      .mockReturnValueOnce({
+        data: { items: [systemRecord()] },
+        loading: false,
+        refresh: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        data: [{
+          ...fleetRow(),
+          dataSourceStatus: {
+            state: "datasource_smoke_ok",
+            summary: "Provider identities are not declared yet.",
+            providerStatuses: {},
+            providerStatusCounts: {
+              datasource_smoke_ok: 1,
+              read_unavailable: 1,
+            },
+            providerCount: 2,
+            readbackRefs: [],
+            unavailableRefs: [],
+            readOnly: true,
+            orderSideEffectsAllowed: false,
+            capitalSideEffectsAllowed: false,
+            liveIngestionEnabled: false,
+          },
+          dataSources: [],
+        }],
+        loading: false,
+        refresh: vi.fn(),
+      });
+
+    renderPage();
+
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(screen.getAllByText("nan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("datasource smoke ok").length).toBeGreaterThan(0);
+    expect(screen.getByText("Provider identities are not declared yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
   });
 });
