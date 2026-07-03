@@ -263,6 +263,19 @@ Persona Fleet 慢有兩層問題：
 7. merge 到 `dev` 後驗證 dev deploy、`/deployment.json`、hosted browser/BFF probe。
 8. 若 integration gate 還因實際 route-load latency 紅燈，不能宣稱完成；要把 latency 當 production blocker 繼續修。
 
+## Fleet Execution Tasks
+
+這份 gap 文件不是 fleet 派工本身。實際可派給 fleets 執行的任務包在
+`docs/persona-paper-live-execution-tasks-2026-07-03.md`，包含：
+
+- `PPL-EXEC-001` - one-shot paper-running Persona creation。
+- `PPL-EXEC-002` - Persona Fleet lifecycle projection normalization。
+- `PPL-EXEC-003` - unified paper/canary/live league ranking。
+- `PPL-EXEC-004` - Human-reviewed promotion to canary/live。
+- `PPL-EXEC-005` - quarterly review and emergency intervention。
+- `PPL-EXEC-006` - management UI mode cleanup。
+- `PPL-EXEC-007` - Persona Fleet performance and production gate proof。
+
 ## 驗收標準
 
 本輪不能只用「我本地可以」當完成。完成必須同時滿足：
