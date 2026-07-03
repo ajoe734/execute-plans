@@ -262,34 +262,25 @@ function dataSourceTone(state?: string): string {
   return "bg-muted text-muted-foreground";
 }
 
-function dataSourceStatusPriority(state?: string): number {
-  const token = String(state ?? "").toLowerCase();
-  if (token.includes("read_ok") || token.includes("readback_ok") || token.includes("smoke_ok")) return 0;
-  if (token.includes("partial")) return 1;
-  if (token.includes("unavailable") || token.includes("credential")) return 2;
-  return 3;
-}
-
 function providerOkCount(r: ManagementPersonaFleetRow): { ok: number; total: number } {
+  const sources = visibleDataSources(r);
+  if (sources.length === 0) return { ok: 0, total: 0 };
+
   const summaryCounts = dataSourceProviderStatusCounts(r);
   if (Object.keys(summaryCounts).length > 0) {
     const ok = Object.entries(summaryCounts)
       .filter(([status]) => /read_ok|readback_ok|smoke_ok|quote_readback_ok/i.test(status))
       .reduce((total, [, count]) => total + count, 0);
-    return { ok, total: dataSourceProviderCount(r) };
+    return { ok, total: Math.max(dataSourceProviderCount(r), sources.length) };
   }
 
   const statuses = dataSourceProviderStatuses(r);
   const values = Object.values(statuses);
-  const total = values.length || visibleDataSources(r).length || 0;
-  const ok = values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length;
+  const total = values.length || sources.length;
+  const ok = values.length
+    ? values.filter((status) => /read_ok|smoke_ok|quote_readback_ok/i.test(status)).length
+    : sources.filter((source) => /read_ok|smoke_ok|quote_readback_ok/i.test(source.status)).length;
   return { ok, total };
-}
-
-function summaryStatusCountEntries(r: ManagementPersonaFleetRow): Array<[string, number]> {
-  return Object.entries(dataSourceProviderStatusCounts(r))
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => dataSourceStatusPriority(left) - dataSourceStatusPriority(right) || left.localeCompare(right));
 }
 
 function frameworkText(item?: PersonaFleetResearchItem): string {
@@ -507,7 +498,6 @@ export const PersonaFleetPage = () => {
               const nonProduction = isNonProductionPersonaFleetRow(r);
               const sourceCount = providerOkCount(r);
               const sourceBadges = visibleDataSources(r);
-              const sourceSummaryCounts = sourceBadges.length === 0 ? summaryStatusCountEntries(r) : [];
               const sourceStatus = dataSourceState(r);
               const researchItems = personaFleetResearchItems(r);
               const primaryResearch = researchItems[0];
@@ -567,22 +557,6 @@ export const PersonaFleetPage = () => {
 	                            </Badge>
 	                          </Link>
 	                        ))
-	                        : sourceSummaryCounts.length > 0
-	                        ? sourceSummaryCounts.map(([status, count]) => (
-	                          <Link
-	                            key={status}
-	                            to={personaFleetDataSourcesHref(r)}
-	                            aria-label={`${r.personaId} data source ${status} summary`}
-	                            className="inline-flex"
-	                          >
-	                            <Badge
-	                              variant="outline"
-	                              className={badgeLinkClass(`${dataSourceTone(status)} hover:border-primary/60`)}
-	                            >
-	                              {count} {formatToken(status)}
-	                            </Badge>
-	                          </Link>
-	                        ))
 	                        : (
 	                          <Link
 	                            to={personaFleetDataSourcesHref(r)}
@@ -597,7 +571,7 @@ export const PersonaFleetPage = () => {
 	                      {sourceCount.total > 0 && (
 	                        <span>{t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}</span>
 	                      )}
-	                      {sourceStatus && (sourceBadges.length > 0 || sourceSummaryCounts.length > 0) && (
+	                      {sourceStatus && sourceBadges.length > 0 && (
 	                        <Link
 	                          to={personaFleetDataSourcesHref(r)}
 	                          aria-label={`${r.personaId} data source status`}

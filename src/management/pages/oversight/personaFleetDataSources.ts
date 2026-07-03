@@ -184,6 +184,5 @@ export function personaFleetDataSources(r: ManagementPersonaFleetRow): Managemen
 }
 
 export function visibleDataSources(r: ManagementPersonaFleetRow): ManagementDataSource[] {
-  return personaFleetDataSources(r)
-    .slice(0, 4);
+  return personaFleetDataSources(r);
 }

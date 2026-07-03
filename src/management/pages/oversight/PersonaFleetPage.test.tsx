@@ -210,7 +210,7 @@ describe("PersonaFleetPage", () => {
     );
   });
 
-  it("renders live summary-only data source and research fields instead of nan", () => {
+  it("does not turn summary-only data source counts into provider chips", () => {
     mocks.useV5Live.mockReturnValue({
       data: [{
         personaId: "persona-live-summary",
@@ -254,21 +254,19 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByText("1 datasource smoke ok")).toBeInTheDocument();
-    expect(screen.getByText("1 read unavailable")).toBeInTheDocument();
-    expect(screen.getByText("1/2 readable")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "persona-live-summary data source datasource_smoke_ok summary" })).toHaveAttribute(
+    expect(screen.queryByText("1 datasource smoke ok")).not.toBeInTheDocument();
+    expect(screen.queryByText("1 read unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("1/2 readable")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-summary data sources" })).toHaveAttribute(
       "href",
       "/management/data-sources?persona=persona-live-summary",
     );
-    expect(screen.getByRole("link", { name: "persona-live-summary data source status" })).toHaveTextContent(
-      "datasource smoke ok",
-    );
+    expect(screen.getByRole("link", { name: "persona-live-summary data sources" })).toHaveTextContent("nan");
+    expect(screen.queryByRole("link", { name: "persona-live-summary data source status" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-summary research detail" })).toHaveTextContent("act");
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
     expect(screen.getByText(/vectorbt \/ 2 more frameworks/)).toBeInTheDocument();
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "persona-live-summary data sources" })).not.toBeInTheDocument();
   });
 
   it("does not report a focused persona as missing before live fleet data loads", () => {
