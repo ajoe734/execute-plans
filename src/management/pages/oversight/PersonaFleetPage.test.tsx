@@ -108,7 +108,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity human gate" })).toHaveAttribute(
       "href",
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
+      "/management/human-inbox?persona=persona-live-tw-equity",
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity OODA Orient stage" })).toHaveAttribute(
       "href",
@@ -128,7 +128,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity status detail" })).toHaveAttribute(
       "href",
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
+      "/management/human-inbox?persona=persona-live-tw-equity",
     );
   });
 
@@ -361,13 +361,35 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByRole("link", { name: "Review human gate for persona-approval" })).toHaveAttribute(
       "href",
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
+      "/management/human-inbox?persona=persona-approval",
     );
     expect(screen.getByRole("link", { name: "persona-approval OODA Decide stage" })).toHaveAttribute(
       "href",
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
+      "/management/human-inbox?persona=persona-approval",
     );
     expect(screen.queryByRole("link", { name: "Continue onboarding for persona-approval" })).not.toBeInTheDocument();
+  });
+
+  it("routes explicit promotion review inbox ids directly to the review detail", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-review", "Review Persona", {
+          ooda: "Decide",
+          humanNeeded: true,
+          state: "promotion_review_pending",
+          inboxId: "promotion_review:review-persona-review",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("link", { name: "Review human gate for persona-review" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox/promotion_review%3Areview-persona-review",
+    );
   });
 
   it("routes researching personas with deployable artifacts to research instead of onboarding", () => {

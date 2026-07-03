@@ -119,10 +119,10 @@ describe("PersonaFleetPage deep links", () => {
       "/management/evolution-journal?persona=persona%2Ftw%20equity",
     );
     expect(personaFleetHumanGateHref(row)).toBe(
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
+      "/management/human-inbox?persona=persona%2Ftw%20equity",
     );
     expect(personaFleetOodaHref(row)).toBe(
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
+      "/management/human-inbox?persona=persona%2Ftw%20equity",
     );
   });
 
@@ -149,7 +149,7 @@ describe("PersonaFleetPage deep links", () => {
       "/management/experiments/exp-mgmt-qlib-006",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Decide" })).toBe(
-      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-tw-live",
+      "/management/human-inbox?persona=persona-tw-live",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Act" })).toBe(
       "/management/runtimes?persona=persona-tw-live",

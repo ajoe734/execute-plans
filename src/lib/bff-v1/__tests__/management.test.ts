@@ -1,7 +1,7 @@
 // 2026-05-22 PM-Live — verifies the mgmt.* façade returns seed shape in mock
 // mode and that all 14 mgmt paths are reachable through the helpers.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import {
   adaptManagementEvidenceDetail,
   adaptManagementEvidenceOverview,
@@ -14,12 +14,40 @@ import {
   mgmt,
 } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
 
 beforeEach(() => {
   // Force mock mode regardless of env (matches detectMode test-mode pinning).
 });
+
+afterEach(() => {
+  process.env.VITE_BFF_REAL_WRITES = "false";
+  window.sessionStorage?.clear();
+  window.localStorage?.clear();
+  liveStatus._reset();
+  vi.restoreAllMocks();
+});
+
+function writeSessionResponse(): Response {
+  return new Response(JSON.stringify({
+    data: {
+      session: { authenticated: true, session_kind: "bearer" },
+      environment: { name: "dev", strict_auth: false },
+    },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 describe("mgmt façade (PM-Live)", () => {
   it("cockpit.get falls through to seed in mock/test mode", async () => {
@@ -248,6 +276,125 @@ describe("mgmt façade (PM-Live)", () => {
       links: {
         manageHref: "/management/persona-fleet?persona=persona-crypto",
       },
+    });
+  });
+
+  it("adapts promotion review inbox records as decidable review items", () => {
+    const out = adaptHumanInboxList({
+      items: [
+        {
+          review_id: "review-persona-paper-1",
+          kind: "promotion_review",
+          source_type: "promotion_review",
+          persona_id: "persona-paper-1",
+          review_type: "promotion_to_canary",
+          title: "Paper to Canary promotion review: Paper Persona",
+          summary: "promotion_to_canary is awaiting human decision.",
+          status: "pending",
+          action_state: "pending",
+          canDecide: true,
+          canProceed: false,
+          decisionHref: "/bff/management/promotion-reviews/review-persona-paper-1/decisions",
+          evidence_refs: ["evidence:persona-paper-1:paper-score"],
+          allowedActions: {
+            canApprove: true,
+            canReject: true,
+            canRequestEvidence: true,
+          },
+        },
+      ],
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out?.[0]).toMatchObject({
+      id: "promotion_review:review-persona-paper-1",
+      kind: "promotion_review",
+      reviewId: "review-persona-paper-1",
+      reviewType: "promotion_to_canary",
+      personaId: "persona-paper-1",
+      status: "pending",
+      canDecide: true,
+      canProceed: false,
+      decisionHref: "/bff/management/promotion-reviews/review-persona-paper-1/decisions",
+      evidenceRefs: ["evidence:persona-paper-1:paper-score"],
+      allowedActions: {
+        canDecide: true,
+        canApprove: true,
+        canReject: true,
+        canRequestEvidence: true,
+      },
+      detailHref: "/management/human-inbox/promotion_review%3Areview-persona-paper-1",
+      links: {
+        manageHref: "/management/persona-fleet?persona=persona-paper-1",
+      },
+    });
+  });
+
+  it("does not POST promotion review decisions when real writes are disabled", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "false";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const result = await mgmt.humanInbox.decidePromotionReview(
+      "promotion_review:review-disabled",
+      { decision: "approve", rationale: "Paper evidence passed." },
+      { idempotencyKey: "idk-disabled" },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      persisted: false,
+      reviewId: "review-disabled",
+      status: "write_disabled",
+      idempotencyKey: "idk-disabled",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("POSTs promotion review decisions to the governed BFF route when real writes are enabled", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    window.sessionStorage.setItem("pantheon.bff.bearerToken", "tok-review-test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    let decisionUrl = "";
+    let decisionBody: Record<string, unknown> = {};
+    let decisionHeaders: Record<string, string> = {};
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return writeSessionResponse();
+      decisionUrl = url;
+      decisionBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      decisionHeaders = init?.headers as Record<string, string>;
+      return jsonResponse({
+        status: "approved",
+        decision: { decision_id: "approval-review-enabled", outcome: "approved" },
+        meta: { idempotency: { idempotencyKey: "idk-review-enabled", replayed: false } },
+      });
+    });
+
+    const result = await mgmt.humanInbox.decidePromotionReview(
+      "promotion_review:review-enabled",
+      {
+        decision: "approve",
+        rationale: "Paper evidence passed risk and cost gates.",
+        evidenceRefs: ["evidence:review-enabled"],
+      },
+      { idempotencyKey: "idk-review-enabled" },
+    );
+
+    expect(decisionUrl.endsWith("/bff/management/promotion-reviews/review-enabled/decisions")).toBe(true);
+    expect(decisionBody).toMatchObject({
+      decision: "approve",
+      rationale: "Paper evidence passed risk and cost gates.",
+      evidence_refs: ["evidence:review-enabled"],
+    });
+    expect(decisionHeaders["Idempotency-Key"]).toBe("idk-review-enabled");
+    expect(result).toMatchObject({
+      ok: true,
+      persisted: true,
+      reviewId: "review-enabled",
+      status: "approved",
+      idempotencyKey: "idk-review-enabled",
+      replayed: false,
     });
   });
 
@@ -907,6 +1054,9 @@ describe("mgmt façade (PM-Live)", () => {
     expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
     expect(paths.mgmtHumanInboxItem("xyz")).toMatch(/human-inbox\/xyz$/);
+    expect(paths.mgmtPromotionReviews()).toMatch(/promotion-reviews$/);
+    expect(paths.mgmtPromotionReview("review-1")).toBe("/bff/management/promotion-reviews/review-1");
+    expect(paths.mgmtPromotionReviewDecision("review-1")).toBe("/bff/management/promotion-reviews/review-1/decisions");
     expect(paths.mgmtTradingPulse()).toMatch(/trading-pulse$/);
     expect(paths.mgmtTradingRankings()).toMatch(/trading-pulse\/rankings$/);
     expect(paths.mgmtEvolutionJournal()).toMatch(/evolution-journal$/);

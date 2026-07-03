@@ -688,7 +688,7 @@ export const PersonaFleetPage = () => {
 };
 
 // =====================================================================
-// Human Inbox — 9 kinds (PM-6)
+// Human Inbox — governance work queue
 // =====================================================================
 
 export const HumanInboxPage = () => {

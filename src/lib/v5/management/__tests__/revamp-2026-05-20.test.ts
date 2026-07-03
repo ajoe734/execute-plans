@@ -50,10 +50,10 @@ describe("PM-5 anomaly model", () => {
 });
 
 describe("PM-6 human inbox", () => {
-  it("exposes 10 kinds with unique rank (PM-12: ranking_recommendation added)", () => {
-    expect(HUMAN_INBOX_KINDS).toHaveLength(10);
+  it("exposes 11 kinds with unique rank (PPLG: promotion_review added)", () => {
+    expect(HUMAN_INBOX_KINDS).toHaveLength(11);
     const ranks = new Set(HUMAN_INBOX_KINDS.map((k) => humanInboxRank(k)));
-    expect(ranks.size).toBe(10);
+    expect(ranks.size).toBe(11);
   });
 });
 

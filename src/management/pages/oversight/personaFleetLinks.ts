@@ -43,6 +43,10 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   decision_id?: string;
   approvalId?: string;
   approval_id?: string;
+  promotionReviewId?: string;
+  promotion_review_id?: string;
+  requiredHumanReview?: string;
+  required_human_review?: string;
   runtimeId?: string;
   runtime_id?: string;
   runtimeBindingId?: string;
@@ -194,6 +198,8 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string {
 
 function personaFleetHumanGateId(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as RawPersonaFleetRow;
+  const promotionReviewId = raw.promotionReviewId ?? raw.promotion_review_id;
+  if (promotionReviewId) return `promotion_review:${promotionReviewId}`;
   const explicit =
     raw.humanGateId ??
     raw.human_gate_id ??
@@ -204,9 +210,6 @@ function personaFleetHumanGateId(r: ManagementPersonaFleetRow): string | undefin
     raw.approvalId ??
     raw.approval_id;
   if (explicit) return explicit;
-  if (r.humanNeeded || String(r.ooda ?? "").toLowerCase() === "decide") {
-    return `readiness_blocker:persona:${r.personaId}`;
-  }
   return undefined;
 }
 
