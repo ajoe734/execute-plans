@@ -154,6 +154,7 @@ export const SentinelPage = () => {
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
                     <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
+                      <span>{t("v5.sentinel.detectedAt")}: {safeDateTime(f.detectedAt)}</span>
                       <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
                       <span>{t("v5.sentinel.source")}: {f.source}</span>
                       <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
