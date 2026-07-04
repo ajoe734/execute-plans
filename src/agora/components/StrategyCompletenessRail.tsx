@@ -26,13 +26,14 @@ function DimensionIcon({ grade }: { grade: string }) {
 }
 
 function dimensionProgress(completeness: StrategyCompleteness): number {
-  if (!completeness.dimensions.length) return 0;
-  const score = completeness.dimensions.reduce((sum, dim) => {
+  const dimensions = completeness.dimensions ?? [];
+  if (!dimensions.length) return 0;
+  const score = dimensions.reduce((sum, dim) => {
     if (dim.grade === "complete") return sum + 1;
     if (dim.grade === "partial") return sum + 0.5;
     return sum;
   }, 0);
-  return (score / completeness.dimensions.length) * 100;
+  return (score / dimensions.length) * 100;
 }
 
 function ReadinessPanel({
@@ -169,7 +170,7 @@ export function StrategyCompletenessRail({
 
       <Section title="Dimensions">
         <div className="space-y-3">
-          {completeness.dimensions.map((dim) => (
+          {(completeness.dimensions ?? []).map((dim) => (
             <div
               className="space-y-2 border-l border-slate-200 pl-3"
               data-testid={`completeness-dimension-${dim.dimension}`}

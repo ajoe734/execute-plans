@@ -285,7 +285,10 @@ function WorkspaceWidgetCard({
             {validation.title} · {formatSensitivityLabel(widget.sensitivity)}
           </div>
         </div>
-        <div style={{ alignItems: "center", display: "flex", gap: 6, position: "relative" }}>
+        <div
+          onMouseDown={(event) => event.stopPropagation()}
+          style={{ alignItems: "center", display: "flex", gap: 6, position: "relative" }}
+        >
           <span
             style={{
               background: validation.ok ? "#ecfdf5" : "#fef2f2",

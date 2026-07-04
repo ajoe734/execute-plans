@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { bffFetch } from "@/lib/bff-v1/client";
 import {
   getWorkshop,
+  getWorkshopCompleteness,
+  getWorkshopReadiness,
   listWorkshopCards,
   listWorkshops,
   openWorkshopStream,
@@ -76,6 +78,37 @@ describe("getWorkshop", () => {
     const result = await getWorkshop("ws-001");
 
     expect(result).toEqual(mockWorkshop);
+  });
+});
+
+describe("getWorkshopCompleteness", () => {
+  it("returns null for a not-yet-assessed `{ data: null }` envelope instead of a truthy placeholder", async () => {
+    // AG-DYNUI-PROD-006: the hosted dev BFF returns `{"data": null}` (200 OK)
+    // for a workshop that has not been assessed yet. Before this fix,
+    // `dataFrom()`'s `root.data ?? value` fell through to the raw envelope,
+    // producing a truthy `{ data: null, meta: {...} }` placeholder that
+    // crashed StrategyCompletenessRail's `completeness.dimensions.length`.
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: null,
+      meta: { snapshot_at: "2026-07-04T17:32:02Z" },
+    });
+
+    const result = await getWorkshopCompleteness("ws-001");
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("getWorkshopReadiness", () => {
+  it("returns null for a not-yet-assessed `{ data: null }` envelope instead of a truthy placeholder", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: null,
+      meta: { snapshot_at: "2026-07-04T17:32:02Z" },
+    });
+
+    const result = await getWorkshopReadiness("ws-001");
+
+    expect(result).toBeNull();
   });
 });
 
