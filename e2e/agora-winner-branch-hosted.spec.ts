@@ -137,8 +137,20 @@ async function fulfillJson(route: Route, status: number, body: JsonRecord, extra
   await route.fulfill({ status, headers: jsonHeaders(route, extraHeaders), body: JSON.stringify(body) });
 }
 
-async function mockRoute(page: Page, url: string | RegExp, handler: (route: Route) => Promise<void>) {
-  await page.route(url, async (route) => {
+// Matches on the request's path only, not its origin. The PR integration
+// gate serves the frontend under test from a local preview
+// (VITE_BFF_BASE_URL="") that resolves its BFF base to same-origin and lets
+// the dev server proxy /bff/* through to the real hosted BFF, so the
+// browser-visible request origin is FE_BASE_URL, not BFF_BASE_URL, even
+// though a genuinely hosted deployment would call BFF_BASE_URL directly
+// (cross-origin). Matching on path keeps these fixtures correct in both.
+function pathMatcher(path: string | RegExp): (url: URL) => boolean {
+  if (typeof path === "string") return (url) => url.pathname === path;
+  return (url) => path.test(url.pathname);
+}
+
+async function mockRoute(page: Page, path: string | RegExp, handler: (route: Route) => Promise<void>) {
+  await page.route(pathMatcher(path), async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ status: 204, headers: corsHeaders(route) });
       return;
@@ -231,7 +243,7 @@ function applyLayoutOperations(state: ServerState, operations: JsonRecord[]) {
 }
 
 async function installTradingRoomFixtures(page: Page, state: ServerState) {
-  await mockRoute(page, `${BFF_BASE_URL}/bff/agora/trading-room`, async (route) => {
+  await mockRoute(page, `/bff/agora/trading-room`, async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     await fulfillJson(route, 200, {
       data: {
@@ -260,7 +272,7 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
   });
 
   await mockRoute(page, 
-    `${BFF_BASE_URL}/bff/agora/strategies/${state.strategyId}/trading-room/proposals`,
+    `/bff/agora/strategies/${state.strategyId}/trading-room/proposals`,
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const body = (route.request().postDataJSON() ?? {}) as JsonRecord;
@@ -287,7 +299,7 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
   );
 
   await mockRoute(page, 
-    `${BFF_BASE_URL}/bff/agora/strategies/${state.strategyId}/trading-room/proposals/${state.proposalId}/accept`,
+    `/bff/agora/strategies/${state.strategyId}/trading-room/proposals/${state.proposalId}/accept`,
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       state.dashboardVersion = 1;
@@ -315,17 +327,17 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
     },
   );
 
-  await mockRoute(page, `${BFF_BASE_URL}/bff/agora/trading-room/workspaces/${state.workspaceId}`, async (route) => {
+  await mockRoute(page, `/bff/agora/trading-room/workspaces/${state.workspaceId}`, async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     await fulfillJson(route, 200, { data: state.workspace }, { ETag: etagFor(state) });
   });
 
-  await mockRoute(page, `${BFF_BASE_URL}/bff/agora/trading-room/workspaces/${state.workspaceId}/versions`, async (route) => {
+  await mockRoute(page, `/bff/agora/trading-room/workspaces/${state.workspaceId}/versions`, async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     await fulfillJson(route, 200, { data: state.versions });
   });
 
-  await mockRoute(page, `${BFF_BASE_URL}/bff/agora/trading-room/workspaces/${state.workspaceId}/layout`, async (route) => {
+  await mockRoute(page, `/bff/agora/trading-room/workspaces/${state.workspaceId}/layout`, async (route) => {
     if (route.request().method() !== "PATCH") return route.continue();
     const body = (route.request().postDataJSON() ?? {}) as JsonRecord;
     applyLayoutOperations(state, (body.operations ?? []) as JsonRecord[]);
@@ -341,7 +353,7 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
   });
 
   await mockRoute(page, 
-    new RegExp(`${BFF_BASE_URL.replace(/[.]/g, "\\.")}/bff/agora/trading-room/workspaces/${state.workspaceId}/versions/[^/]+/rollback$`),
+    new RegExp(`^/bff/agora/trading-room/workspaces/${state.workspaceId}/versions/[^/]+/rollback$`),
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const url = new URL(route.request().url());
@@ -371,7 +383,7 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
   );
 
   await mockRoute(page, 
-    new RegExp(`${BFF_BASE_URL.replace(/[.]/g, "\\.")}/bff/agora/trading-room/workspaces/${state.workspaceId}/widgets/[^/]+/revision-proposals$`),
+    new RegExp(`^/bff/agora/trading-room/workspaces/${state.workspaceId}/widgets/[^/]+/revision-proposals$`),
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const url = new URL(route.request().url());
@@ -400,7 +412,7 @@ async function installTradingRoomFixtures(page: Page, state: ServerState) {
   );
 
   await mockRoute(page, 
-    new RegExp(`${BFF_BASE_URL.replace(/[.]/g, "\\.")}/bff/agora/trading-room/widget-revision-proposals/[^/]+/accept$`),
+    new RegExp(`^/bff/agora/trading-room/widget-revision-proposals/[^/]+/accept$`),
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const url = new URL(route.request().url());
