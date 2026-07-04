@@ -2,13 +2,32 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { AgoraLayoutRoute } from "./agora";
+import { AgoraLayoutRoute, AgoraStrategyWorkshopRoute } from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
 
+const routeMocks = vi.hoisted(() => ({
+  strategyWorkshopPage: vi.fn(),
+}));
+
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshop: vi.fn(),
+}));
+
+vi.mock("@/agora/pages/strategy-workshop/StrategyWorkshopPage", () => ({
+  StrategyWorkshopPage: (props: { onAddToTradingRoom?: () => void; workshopId?: string }) => {
+    routeMocks.strategyWorkshopPage(props);
+    return (
+      <button
+        data-testid="mock-add-to-trading-room"
+        onClick={props.onAddToTradingRoom}
+        type="button"
+      >
+        Add to Trading Room
+      </button>
+    );
+  },
 }));
 
 function stubLiveEnv() {
@@ -23,6 +42,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
   liveStatus._reset();
+  routeMocks.strategyWorkshopPage.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -90,5 +110,28 @@ describe("AgoraLayoutRoute", () => {
     await waitFor(() => {
       expect(getWorkshop).toHaveBeenCalledWith("ws-9");
     });
+  });
+});
+
+describe("AgoraStrategyWorkshopRoute", () => {
+  it("passes workshopId and routes Add to Trading Room into the dynamic default entry", () => {
+    render(
+      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9"]}>
+        <Routes>
+          <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
+          <Route path="/agora/trading-room" element={<div data-testid="trading-room-content">Trading Room</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(routeMocks.strategyWorkshopPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onAddToTradingRoom: expect.any(Function),
+        workshopId: "ws-9",
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId("mock-add-to-trading-room"));
+    expect(screen.getByTestId("trading-room-content")).toBeDefined();
   });
 });

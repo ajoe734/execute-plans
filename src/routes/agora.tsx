@@ -46,7 +46,15 @@ export function AgoraTradingRoomRoute() {
 }
 
 export function AgoraStrategyWorkshopRoute() {
-  return <StrategyWorkshopPage />;
+  const navigate = useNavigate();
+  const { workshopId } = useParams<{ workshopId?: string }>();
+
+  return (
+    <StrategyWorkshopPage
+      onAddToTradingRoom={() => navigate("/agora/trading-room")}
+      workshopId={workshopId}
+    />
+  );
 }
 
 export function AgoraStrategyPerformanceRoute() {
