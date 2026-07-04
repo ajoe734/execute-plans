@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Database, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { managementConsoleReads, mgmt } from "@/lib/bff-v1";
@@ -336,8 +337,9 @@ function PersonaSourceContext({
 function DataSourceTable({ records }: { records: SystemDataSourceRecord[] }) {
   const { t } = useTranslation();
   return (
-    <Card className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <Card>
+      <ManagementTableScroll minScrollWidth={1120}>
+      <table className="w-full min-w-[1120px] text-sm">
         <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="px-3 py-2">{t("mgmt.dataSources.source")}</th>
@@ -354,6 +356,7 @@ function DataSourceTable({ records }: { records: SystemDataSourceRecord[] }) {
           ))}
         </tbody>
       </table>
+      </ManagementTableScroll>
     </Card>
   );
 }

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Input } from "@/components/ui/input";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
@@ -98,11 +99,12 @@ export const PortfolioBookPage = () => {
       </div>
 
       {/* Section B: Capital Pool Summary */}
-      <Card className="overflow-x-auto">
+      <Card>
         <header className="px-4 py-2 border-b border-border">
           <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.poolsTitle")}</h2>
         </header>
-        <table className="w-full text-sm">
+        <ManagementTableScroll minScrollWidth={1120}>
+        <table className="w-full min-w-[1120px] text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.portfolio.pool")}</th>
@@ -137,10 +139,11 @@ export const PortfolioBookPage = () => {
             )}
           </tbody>
         </table>
+        </ManagementTableScroll>
       </Card>
 
       {/* Section C: Holdings */}
-      <Card className="overflow-x-auto">
+      <Card>
         <header className="px-4 py-2 border-b border-border flex items-center gap-3">
           <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
           <Input
@@ -151,7 +154,8 @@ export const PortfolioBookPage = () => {
             aria-label={t("mgmt.portfolio.filterSymbol")}
           />
         </header>
-        <table className="w-full text-sm">
+        <ManagementTableScroll minScrollWidth={1120}>
+        <table className="w-full min-w-[1120px] text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.portfolio.symbol")}</th>
@@ -189,6 +193,7 @@ export const PortfolioBookPage = () => {
             )}
           </tbody>
         </table>
+        </ManagementTableScroll>
       </Card>
     </section>
   );

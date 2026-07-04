@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DATATABLE_ROW_HEIGHT_PX } from "@/lib/v4/uiBudgets";
+import { PinnedHorizontalScroll } from "@/platform/components/PinnedHorizontalScroll";
 
 export interface Column<T> {
   key: string;
@@ -24,33 +25,36 @@ export function DataTable<T extends { id: string }>({
 }) {
   const rowH = DATATABLE_ROW_HEIGHT_PX[density];
   const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
+  const minScrollWidth = Math.max(720, columns.length * 160);
   return (
-    <Card className="overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            {columns.map((c) => (
-              <TableHead key={c.key} className={`text-xs uppercase tracking-wider ${c.className ?? ""}`}>{c.header}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 ? (
-            <TableRow><TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">{empty ?? "—"}</TableCell></TableRow>
-          ) : rows.map((row) => (
-            <TableRow
-              key={row.id}
-              className={onRowClick ? "cursor-pointer" : ""}
-              onClick={() => onRowClick?.(row)}
-              style={{ height: rowH }}
-            >
+    <Card>
+      <PinnedHorizontalScroll minScrollWidth={minScrollWidth}>
+        <Table className="w-full" style={{ minWidth: minScrollWidth }}>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map((c) => (
-                <TableCell key={c.key} className={`${cellPad} ${c.className ?? ""}`}>{c.cell(row)}</TableCell>
+                <TableHead key={c.key} className={"text-xs uppercase tracking-wider " + (c.className ?? "")}>{c.header}</TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow><TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">{empty ?? "—"}</TableCell></TableRow>
+            ) : rows.map((row) => (
+              <TableRow
+                key={row.id}
+                className={onRowClick ? "cursor-pointer" : ""}
+                onClick={() => onRowClick?.(row)}
+                style={{ height: rowH }}
+              >
+                {columns.map((c) => (
+                  <TableCell key={c.key} className={cellPad + " " + (c.className ?? "")}>{c.cell(row)}</TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </PinnedHorizontalScroll>
     </Card>
   );
 }

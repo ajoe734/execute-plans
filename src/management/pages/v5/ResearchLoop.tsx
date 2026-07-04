@@ -7,6 +7,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { v5 } from "@/lib/bff-v1";
@@ -122,12 +123,13 @@ export const ResearchLoopPage = () => {
           </Card>
         )}
 
-        <Card className="p-0 overflow-hidden">
+        <Card className="p-0">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.loops.research.runs", { defaultValue: "Research runs" })}</h2>
             <p className="text-xs text-muted-foreground">{t("v5.loops.research.runsHint", { defaultValue: "One run per active experiment. Click to inspect stages and act on the loop." })}</p>
           </div>
-          <table className="w-full text-sm">
+          <ManagementTableScroll minScrollWidth={1040}>
+          <table className="w-full min-w-[1040px] text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -184,6 +186,7 @@ export const ResearchLoopPage = () => {
               )}
             </tbody>
           </table>
+          </ManagementTableScroll>
         </Card>
       </PageBody>
       <LoopRunDrawer run={activeRun} onClose={closeRun} />

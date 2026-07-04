@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -84,7 +85,8 @@ export const LoopsPage = () => {
           <div className="text-sm text-muted-foreground">…</div>
         ) : (
           <Card className="p-0">
-            <table className="w-full text-sm">
+            <ManagementTableScroll minScrollWidth={960}>
+          <table className="w-full min-w-[960px] text-sm">
               <thead className="text-xs text-muted-foreground bg-muted/40">
                 <tr>
                   <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -107,6 +109,7 @@ export const LoopsPage = () => {
                 )}
               </tbody>
             </table>
+          </ManagementTableScroll>
             <div className="px-3 py-2 text-xs text-muted-foreground">
               {t("v5.col.total")}: {data.totalCount} · exact={String(data.totalCountExact)}
             </div>

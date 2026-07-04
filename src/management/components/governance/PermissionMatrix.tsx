@@ -2,6 +2,7 @@
 // Cells are clickable to cycle grants; dirty cells are tracked and submitted via runAction.
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { ShieldAlert } from "lucide-react";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
@@ -51,7 +52,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
   };
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0">
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div>
           <div className="text-sm font-semibold">{t(`governance.permission.instance.${matrix.instance}`)}</div>
@@ -71,7 +72,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
           </div>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <ManagementTableScroll minScrollWidth={Math.max(720, matrix.cols.length * 132)}>
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-muted/40">
@@ -114,7 +115,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
             ))}
           </tbody>
         </table>
-      </div>
+      </ManagementTableScroll>
       {matrix.cols.some((c) => c.risk === "critical") && (
         <div className="p-3 border-t border-border bg-status-warning/5 text-xs text-status-warning flex items-center gap-2">
           <ShieldAlert className="h-3.5 w-3.5" />

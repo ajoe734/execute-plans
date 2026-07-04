@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
 import { bff, managementConsoleReads } from "@/lib/bff-v1";
@@ -131,8 +132,9 @@ export const MemoryGovernancePage = () => {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
-            <Card className="p-0 overflow-hidden">
-              <table className="w-full text-sm">
+            <Card className="p-0">
+              <ManagementTableScroll minScrollWidth={1120}>
+          <table className="w-full min-w-[1120px] text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
                     <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.persona")}</th>
@@ -155,6 +157,7 @@ export const MemoryGovernancePage = () => {
                   {decided.length === 0 && <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-6">{t("empty.none")}</td></tr>}
                 </tbody>
               </table>
+          </ManagementTableScroll>
             </Card>
           </TabsContent>
         </Tabs>

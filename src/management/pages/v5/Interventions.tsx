@@ -8,6 +8,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -190,8 +191,9 @@ export const InterventionsPage = () => {
           </Card>
         )}
 
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
+        <Card className="p-0">
+          <ManagementTableScroll minScrollWidth={1200}>
+          <table className="w-full min-w-[1200px] text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="px-3 py-2 w-8">
@@ -257,6 +259,7 @@ export const InterventionsPage = () => {
               )}
             </tbody>
           </table>
+          </ManagementTableScroll>
         </Card>
       </PageBody>
 

@@ -19,6 +19,11 @@ describe("ManagementTableScroll", () => {
 
     expect(pinned).toBeTruthy();
     expect(native).toBeTruthy();
+    expect(pinned).toHaveClass("sticky");
+    expect(pinned).toHaveClass("bottom-0");
+    expect(native).toHaveAttribute("role", "region");
+    expect(native).toHaveAttribute("tabindex", "0");
+    expect(native).toHaveAttribute("aria-label", "Table horizontal scroll");
 
     pinned!.scrollLeft = 320;
     fireEvent.scroll(pinned!);
