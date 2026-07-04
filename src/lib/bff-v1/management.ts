@@ -137,6 +137,36 @@ export interface ManagementPersonaFleetRowAction {
   startupWizardVisible?: boolean;
 }
 
+export interface ManagementPersonaFleetCapitalPool {
+  id?: string;
+  mode?: string;
+  liveCapitalEnabled?: boolean;
+}
+
+export interface ManagementPersonaFleetRuntimeBinding {
+  id?: string;
+  runtimeId?: string;
+  state?: string;
+  deploymentStage?: string;
+  capitalMode?: string;
+  health?: string;
+}
+
+export interface ManagementPersonaFleetReview {
+  id?: string;
+  type?: string;
+  status?: string;
+  inboxId?: string;
+  route?: string;
+  requiresHumanGate?: boolean;
+}
+
+export interface ManagementPersonaFleetRank {
+  leagueRank?: number;
+  leagueScore?: number;
+  basis?: string;
+}
+
 export interface ManagementPersonaFleetRow {
   personaId: string;
   personaName?: string;
@@ -157,11 +187,22 @@ export interface ManagementPersonaFleetRow {
   runtimeId?: string;
   runtimeBindingId?: string;
   deploymentStage?: string;
+  capitalMode?: string;
+  capitalPoolId?: string;
+  capitalPool?: ManagementPersonaFleetCapitalPool;
+  runtimeBinding?: ManagementPersonaFleetRuntimeBinding;
+  runtimeHealth?: Record<string, unknown>;
   requiredHumanReview?: string;
+  reviewId?: string;
+  reviewType?: string;
   reviewStatus?: string;
+  review?: ManagementPersonaFleetReview;
   promotionReviewId?: string;
   humanGateId?: string;
   inboxId?: string;
+  leagueRank?: number;
+  leagueScore?: number;
+  rank?: ManagementPersonaFleetRank;
   rowAction?: ManagementPersonaFleetRowAction;
 }
 
@@ -1831,6 +1872,41 @@ function firstArrayValue(...values: unknown[]): unknown[] | null {
   return null;
 }
 
+function optionalFiniteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function objectOrEmpty(value: unknown): Record<string, unknown> {
+  return isObject(value) ? value : {};
+}
+
+function normalizePersonaFleetLifecycleState(
+  rawState: unknown,
+  deploymentStage?: string,
+  capitalMode?: string,
+): string {
+  const state = asString(rawState).trim().toLowerCase();
+  if (!state) return "";
+  if (["paper_running", "canary_running", "live_running"].includes(state)) return state;
+  if ([
+    "draft",
+    "needs_human_approval",
+    "canary_authorized_not_started",
+    "rollback_required",
+    "paused",
+    "retired",
+    "stopped",
+    "failed",
+  ].includes(state)) return state;
+  const mode = asString(capitalMode ?? deploymentStage).trim().toLowerCase();
+  if (["paper", "canary", "live"].includes(mode)) return `${mode}_running`;
+  if (state === "paper" || state === "canary" || state === "live") return `${state}_running`;
+  if (["deployed", "active", "running", "ready"].includes(state)) return "paper_running";
+  return state;
+}
+
 function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null {
   if (!isObject(value)) return null;
   const metrics = isObject(value.metrics) ? value.metrics : {};
@@ -1857,6 +1933,39 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
   const currentResearchProjects = firstArrayValue(value.currentResearchProjects, value.current_research_projects)
     ?.map(adaptResearchProject)
     .filter((project): project is ManagementResearchProject => project !== null);
+  const capitalPool = objectOrEmpty(value.capitalPool ?? value.capital_pool);
+  const runtimeBinding = objectOrEmpty(value.runtimeBinding ?? value.runtime_binding);
+  const review = objectOrEmpty(value.review);
+  const rank = objectOrEmpty(value.rank);
+  const capitalMode = asOptionalString(
+    value.capitalMode
+    ?? value.capital_mode
+    ?? capitalPool.mode
+    ?? runtimeBinding.capitalMode
+    ?? runtimeBinding.capital_mode,
+  );
+  const deploymentStage = asOptionalString(
+    value.deploymentStage
+    ?? value.deployment_stage
+    ?? runtimeBinding.deploymentStage
+    ?? runtimeBinding.deployment_stage,
+  );
+  const runtimeId = asOptionalString(value.runtimeId ?? value.runtime_id ?? runtimeBinding.runtimeId ?? runtimeBinding.runtime_id);
+  const runtimeBindingId = asOptionalString(
+    value.runtimeBindingId
+    ?? value.runtime_binding_id
+    ?? value.bindingId
+    ?? value.binding_id
+    ?? runtimeBinding.id
+    ?? runtimeBinding.runtimeBindingId
+    ?? runtimeBinding.runtime_binding_id,
+  );
+  const reviewId = asOptionalString(value.reviewId ?? value.review_id ?? review.id);
+  const reviewType = asOptionalString(value.reviewType ?? value.review_type ?? review.type);
+  const reviewStatus = asOptionalString(value.reviewStatus ?? value.review_status ?? review.status);
+  const inboxId = asOptionalString(value.inboxId ?? value.inbox_id ?? review.inboxId ?? review.inbox_id);
+  const leagueRank = optionalFiniteNumber(value.leagueRank ?? value.league_rank ?? rank.leagueRank ?? rank.league_rank);
+  const leagueScore = optionalFiniteNumber(value.leagueScore ?? value.league_score ?? rank.leagueScore ?? rank.league_score);
 
   return {
     personaId,
@@ -1867,7 +1976,11 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     perfDelta: Number.isFinite(perfDelta) ? perfDelta : 0,
     humanNeeded,
     lastMutation: updated.length >= 10 ? updated.slice(0, 10) : updated,
-    state: asString(value.state ?? value.lifecycleState ?? value.lifecycle_state ?? value.status),
+    state: normalizePersonaFleetLifecycleState(
+      value.state ?? value.lifecycleState ?? value.lifecycle_state ?? value.status,
+      deploymentStage,
+      capitalMode,
+    ),
     tags: asStringArray(value.tags),
     marketScope: asStringArray(value.marketScope ?? value.market_scope),
     currentWork: asString(value.currentWork ?? value.current_work),
@@ -1885,14 +1998,49 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       ?? value.research_summary,
     ),
     currentResearchProjects,
-    runtimeId: asOptionalString(value.runtimeId ?? value.runtime_id),
-    runtimeBindingId: asOptionalString(value.runtimeBindingId ?? value.runtime_binding_id ?? value.bindingId ?? value.binding_id),
-    deploymentStage: asOptionalString(value.deploymentStage ?? value.deployment_stage),
+    runtimeId,
+    runtimeBindingId,
+    deploymentStage,
+    capitalMode,
+    capitalPoolId: asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id),
+    capitalPool: isObject(value.capitalPool ?? value.capital_pool) ? {
+      id: asOptionalString(capitalPool.id),
+      mode: asOptionalString(capitalPool.mode),
+      liveCapitalEnabled: asBoolean(capitalPool.liveCapitalEnabled ?? capitalPool.live_capital_enabled, false),
+    } : undefined,
+    runtimeBinding: isObject(value.runtimeBinding ?? value.runtime_binding) ? {
+      id: asOptionalString(runtimeBinding.id),
+      runtimeId: asOptionalString(runtimeBinding.runtimeId ?? runtimeBinding.runtime_id),
+      state: asOptionalString(runtimeBinding.state ?? runtimeBinding.status),
+      deploymentStage: asOptionalString(runtimeBinding.deploymentStage ?? runtimeBinding.deployment_stage),
+      capitalMode: asOptionalString(runtimeBinding.capitalMode ?? runtimeBinding.capital_mode),
+      health: asOptionalString(runtimeBinding.health),
+    } : undefined,
+    runtimeHealth: isObject(value.runtimeHealth ?? value.runtime_health)
+      ? { ...((value.runtimeHealth ?? value.runtime_health) as Record<string, unknown>) }
+      : undefined,
     requiredHumanReview: asOptionalString(value.requiredHumanReview ?? value.required_human_review),
-    reviewStatus: asOptionalString(value.reviewStatus ?? value.review_status),
+    reviewId,
+    reviewType,
+    reviewStatus,
+    review: isObject(value.review) ? {
+      id: asOptionalString(review.id),
+      type: asOptionalString(review.type),
+      status: asOptionalString(review.status),
+      inboxId: asOptionalString(review.inboxId ?? review.inbox_id),
+      route: asOptionalString(review.route),
+      requiresHumanGate: asBoolean(review.requiresHumanGate ?? review.requires_human_gate, false),
+    } : undefined,
     promotionReviewId: asOptionalString(value.promotionReviewId ?? value.promotion_review_id),
     humanGateId: asOptionalString(value.humanGateId ?? value.human_gate_id),
-    inboxId: asOptionalString(value.inboxId ?? value.inbox_id),
+    inboxId,
+    leagueRank,
+    leagueScore,
+    rank: isObject(value.rank) ? {
+      leagueRank,
+      leagueScore,
+      basis: asOptionalString(rank.basis),
+    } : undefined,
     rowAction: adaptPersonaFleetRowAction(value.rowAction ?? value.row_action),
   };
 }

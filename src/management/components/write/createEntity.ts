@@ -48,7 +48,13 @@ export async function createEntityFromInput<K extends CreatableEntity>(
         ...built,
         description: personaInput.description,
         memo: personaInput.memo,
-        initialMode: personaInput.initialMode,
+        initialMode: personaInput.initialMode ?? "paper",
+        executionMode: "paper",
+        capitalMode: "paper",
+        deploymentStage: "paper",
+        liveCapitalEnabled: false,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
       }, { idempotencyKey: opts.idempotencyKey });
       return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
     } catch (err) {
@@ -89,6 +95,16 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
   void _ignore; void _c;
 
   if (entity === "persona") {
+    if (!(input as CreateInputMap["persona"]).initialMode) {
+      delete clean.state;
+      delete clean.lifecycleStatus;
+      delete clean.executionMode;
+      delete clean.capitalMode;
+      delete clean.deploymentStage;
+      delete clean.liveCapitalEnabled;
+      delete clean.orderSideEffectsAllowed;
+      delete clean.capitalSideEffectsAllowed;
+    }
     try {
       const data = await runPersonaAction(id, "edit", clean, { idempotencyKey: opts.idempotencyKey });
       writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
