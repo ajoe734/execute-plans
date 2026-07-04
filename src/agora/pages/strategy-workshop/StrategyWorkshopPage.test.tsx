@@ -1,7 +1,8 @@
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+import type { StrategyReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
@@ -27,6 +28,16 @@ const MOCK_WORKSHOP = {
   },
   created_at: "2026-06-01T00:00:00Z",
 } satisfies StrategyWorkshop;
+
+const TRADING_ROOM_READY = {
+  assessment_id: "ready-001",
+  assessed_at: "2026-07-04T00:00:00Z",
+  blockers: [],
+  gate: "trading_room",
+  highest_ready_gate: "trading_room",
+  passed: true,
+  workshop_id: "ws-abc",
+} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 afterEach(cleanup);
 
@@ -92,6 +103,34 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     expect(screen.getByTestId("servant-composer")).toBeDefined();
+  });
+
+  it("enables Add to Trading Room only when the trading-room readiness gate passes and a route handler exists", async () => {
+    const onAddToTradingRoom = vi.fn();
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(TRADING_ROOM_READY);
+
+    render(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-abc" />);
+
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+
+    expect(onAddToTradingRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Add to Trading Room disabled when the route handler is missing", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(TRADING_ROOM_READY);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
   });
 
   it("calls listWorkshops through the BFF module (not direct fetch)", () => {
