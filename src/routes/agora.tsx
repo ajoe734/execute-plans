@@ -35,6 +35,7 @@ export function AgoraTradingRoomRoute() {
   return (
     <TradingRoomPage
       onBackToWorkshop={() => navigate("/agora/strategy-workshop")}
+      onOpenWorkshop={() => navigate("/agora/strategy-workshop")}
       onStrategySelect={(nextStrategyId) =>
         navigate(nextStrategyId ? `/agora/trading-room/${encodeURIComponent(nextStrategyId)}${suffix}` : "/agora/trading-room")
       }
