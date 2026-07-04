@@ -202,6 +202,13 @@ export async function getWorkshopCompleteness(
       method: "GET",
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/completeness`,
     });
+    // The BFF signals "not yet assessed" as `{ data: null }` (200 OK) as well
+    // as 404. `dataFrom()`'s `root.data ?? value` falls through to the raw
+    // envelope when `data` is explicitly null, which would otherwise return
+    // a truthy `{ data: null, meta: {...} }` placeholder here and crash
+    // StrategyCompletenessRail's `completeness.dimensions.length` on every
+    // workshop that hasn't been assessed yet.
+    if (recordFrom(response).data === null) return null;
     return entityFrom<StrategyCompleteness>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
@@ -337,6 +344,9 @@ export async function getWorkshopReadiness(
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/readiness`,
       query,
     });
+    // See getWorkshopCompleteness() above: `{ data: null }` means "not yet
+    // assessed" and must not be treated as a truthy placeholder assessment.
+    if (recordFrom(response).data === null) return null;
     return entityFrom<WorkshopReadinessAssessment>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
