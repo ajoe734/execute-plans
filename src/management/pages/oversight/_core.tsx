@@ -238,6 +238,44 @@ function formatToken(value?: string): string {
   return value ? value.replace(/_/g, " ") : "—";
 }
 
+function fleetCapitalMode(r: ManagementPersonaFleetRow): string {
+  const raw = r as ManagementPersonaFleetRow & { capital_mode?: string; capital_pool?: { mode?: string } };
+  return String(r.capitalMode ?? raw.capital_mode ?? r.capitalPool?.mode ?? raw.capital_pool?.mode ?? "").trim().toLowerCase();
+}
+
+function displayFleetState(r: ManagementPersonaFleetRow): string {
+  const state = String(r.state ?? "").trim().toLowerCase();
+  if (["paper_running", "canary_running", "live_running"].includes(state)) return state;
+  if (["deployed", "active", "running", "ready"].includes(state)) {
+    const mode = fleetCapitalMode(r) || String(r.deploymentStage ?? "").trim().toLowerCase();
+    if (["paper", "canary", "live"].includes(mode)) return `${mode}_running`;
+    return "paper_running";
+  }
+  return state;
+}
+
+function fleetCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as ManagementPersonaFleetRow & { capital_pool_id?: string };
+  return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
+}
+
+function fleetRuntimeHealth(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as ManagementPersonaFleetRow & { runtime_health?: Record<string, unknown> };
+  const health = r.runtimeHealth ?? raw.runtime_health;
+  if (health && typeof health.status === "string") return health.status;
+  return r.runtimeBinding?.health ?? r.runtimeBinding?.state;
+}
+
+function fleetLeagueRank(r: ManagementPersonaFleetRow): number | undefined {
+  const raw = r as ManagementPersonaFleetRow & { league_rank?: number; rank?: { league_rank?: number } };
+  return r.leagueRank ?? raw.league_rank ?? r.rank?.leagueRank ?? raw.rank?.league_rank;
+}
+
+function fleetLeagueScore(r: ManagementPersonaFleetRow): number | undefined {
+  const raw = r as ManagementPersonaFleetRow & { league_score?: number; rank?: { league_score?: number } };
+  return r.leagueScore ?? raw.league_score ?? r.rank?.leagueScore ?? raw.rank?.league_score;
+}
+
 function fieldLinkClass(className?: string): string {
   return [
     "font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80",
@@ -317,21 +355,10 @@ const RUNTIME_ACTION_STATES = new Set([
   "failed",
 ]);
 
-const ONBOARDING_ACTION_STATES = new Set([
-  "draft",
-  "none",
-  "not_deployed",
-  "not_started",
-  "pending_onboarding",
-  "onboarding",
-  "no_runtime_binding",
-  "missing_runtime_binding",
-  "ready_for_paper",
-  "ready_for_deployment",
-]);
+const ONBOARDING_ACTION_STATES = new Set(["draft"]);
 
 function normalizedFleetState(r: ManagementPersonaFleetRow): string {
-  return String(r.state ?? "").trim().toLowerCase();
+  return displayFleetState(r);
 }
 
 function personaFleetPrimaryAction(
@@ -480,12 +507,13 @@ export const PersonaFleetPage = () => {
       )}
       {visibleRows.length > 0 && (
       <Card>
-        <ManagementTableScroll testId="persona-fleet-table-scroll" minScrollWidth={1640}>
-        <table className="w-full min-w-[1640px] text-sm">
+        <ManagementTableScroll testId="persona-fleet-table-scroll" minScrollWidth={1840}>
+        <table className="w-full min-w-[1840px] text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
+              <th className="px-3 py-2">{t("mgmt.fleet.capital")}</th><th className="px-3 py-2">{t("mgmt.fleet.rank")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="px-3 py-2">{t("mgmt.fleet.research")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
@@ -510,6 +538,12 @@ export const PersonaFleetPage = () => {
               const artifactHref = personaFleetArtifactHref(r, primaryResearch);
               const artifactLabel = primaryResearch?.artifactId;
               const oodaHref = personaFleetOodaHref(r, primaryResearch);
+              const capitalMode = fleetCapitalMode(r);
+              const capitalPoolId = fleetCapitalPoolId(r);
+              const runtimeHealth = fleetRuntimeHealth(r);
+              const leagueRank = fleetLeagueRank(r);
+              const leagueScore = fleetLeagueScore(r);
+              const stateLabel = displayFleetState(r);
               const focused = personaFocus === r.personaId;
               return (
                 <tr
@@ -541,6 +575,52 @@ export const PersonaFleetPage = () => {
                     </Link>
                   </td>
 	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
+	                  <td className="px-3 py-2 min-w-[170px]">
+	                    <div className="flex flex-wrap gap-1">
+	                      <Badge
+	                        variant="outline"
+	                        className={capitalMode === "live"
+	                          ? "border-status-failed/40 text-status-failed"
+	                          : capitalMode === "canary"
+	                          ? "border-status-warning/40 text-status-warning"
+	                          : "border-status-success/40 text-status-success"}
+	                      >
+	                        {formatToken(capitalMode || "none")}
+	                      </Badge>
+	                      {runtimeHealth && (
+	                        <Badge variant="outline" className={statusTone(runtimeHealth)}>
+	                          {formatToken(runtimeHealth)}
+	                        </Badge>
+	                      )}
+	                    </div>
+	                    {capitalPoolId && (
+	                      <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalPoolId}>
+	                        {capitalPoolId}
+	                      </div>
+	                    )}
+	                  </td>
+	                  <td className="px-3 py-2 min-w-[120px]">
+	                    {leagueRank ? (
+	                      <div className="font-medium text-foreground">
+	                        {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
+	                      </div>
+	                    ) : (
+	                      <span className="text-muted-foreground">—</span>
+	                    )}
+	                    {typeof leagueScore === "number" && Number.isFinite(leagueScore) && (
+	                      <div className="text-xs text-muted-foreground">
+	                        {t("mgmt.fleet.scoreFmt", { score: leagueScore.toFixed(1) })}
+	                      </div>
+	                    )}
+	                    {(r.reviewType || r.reviewStatus) && (
+	                      <Link
+	                        to={personaFleetHumanGateHref(r)}
+	                        className={fieldLinkClass("mt-1 block text-xs text-muted-foreground hover:text-primary")}
+	                      >
+	                        {formatToken(r.reviewType || r.reviewStatus)}
+	                      </Link>
+	                    )}
+	                  </td>
 	                  <td className="px-3 py-2 min-w-[240px]">
 	                    <div className="flex max-w-[360px] flex-wrap gap-1">
 	                      {sourceBadges.length > 0
@@ -699,7 +779,7 @@ export const PersonaFleetPage = () => {
                       )}
                   </td>
                   <td className="px-3 py-2">
-                    {r.state && (
+                    {stateLabel && (
                       <Link
                         to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}
                         aria-label={`${r.personaId} status detail`}
@@ -711,7 +791,7 @@ export const PersonaFleetPage = () => {
                             ? badgeLinkClass("bg-muted text-muted-foreground hover:border-primary/60")
                             : badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
                         >
-                          {r.state}
+                          {stateLabel}
                         </Badge>
                       </Link>
                     )}

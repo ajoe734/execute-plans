@@ -891,6 +891,34 @@ describe("mgmt façade (PM-Live)", () => {
             runtime_id: "rt-rescue-0260528-5937dea1",
             runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
             deployment_stage: "paper",
+            capital_mode: "paper",
+            capital_pool_id: "cp-paper-tw-equity",
+            capital_pool: {
+              id: "cp-paper-tw-equity",
+              mode: "paper",
+              live_capital_enabled: false,
+            },
+            runtime_binding: {
+              id: "rb-433f2a614995432b9e7a463c882dbefb",
+              runtime_id: "rt-rescue-0260528-5937dea1",
+              state: "running",
+              deployment_stage: "paper",
+              capital_mode: "paper",
+              health: "healthy",
+            },
+            runtime_health: { status: "healthy" },
+            review: {
+              id: "review-paper-to-live-tw",
+              type: "paper_to_live",
+              status: "pending_human_review",
+              inbox_id: "promotion_review:review-paper-to-live-tw",
+              requires_human_gate: true,
+            },
+            rank: {
+              league_rank: 2,
+              league_score: 91.7,
+              basis: "quarterly_paper_live_league",
+            },
             metrics: { training_improvement_pct: 9.5 },
             updated_at: "2026-06-07T13:00:00Z",
             status: "needs_human_approval",
@@ -973,6 +1001,40 @@ describe("mgmt façade (PM-Live)", () => {
       runtimeId: "rt-rescue-0260528-5937dea1",
       runtimeBindingId: "rb-433f2a614995432b9e7a463c882dbefb",
       deploymentStage: "paper",
+      capitalMode: "paper",
+      capitalPoolId: "cp-paper-tw-equity",
+      runtimeHealth: { status: "healthy" },
+      reviewId: "review-paper-to-live-tw",
+      reviewType: "paper_to_live",
+      reviewStatus: "pending_human_review",
+      inboxId: "promotion_review:review-paper-to-live-tw",
+      leagueRank: 2,
+      leagueScore: 91.7,
+      rank: {
+        leagueRank: 2,
+        leagueScore: 91.7,
+        basis: "quarterly_paper_live_league",
+      },
+    });
+    expect(rows?.[0].capitalPool).toMatchObject({
+      id: "cp-paper-tw-equity",
+      mode: "paper",
+      liveCapitalEnabled: false,
+    });
+    expect(rows?.[0].runtimeBinding).toMatchObject({
+      id: "rb-433f2a614995432b9e7a463c882dbefb",
+      runtimeId: "rt-rescue-0260528-5937dea1",
+      state: "running",
+      deploymentStage: "paper",
+      capitalMode: "paper",
+      health: "healthy",
+    });
+    expect(rows?.[0].review).toMatchObject({
+      id: "review-paper-to-live-tw",
+      type: "paper_to_live",
+      status: "pending_human_review",
+      inboxId: "promotion_review:review-paper-to-live-tw",
+      requiresHumanGate: true,
     });
     expect(rows?.[0].dataSourceStatus).toMatchObject({
       state: "partial_readback",
@@ -1000,6 +1062,32 @@ describe("mgmt façade (PM-Live)", () => {
       canDeploy: false,
     });
     expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
+  });
+
+  it("normalizes legacy deployed fleet rows to paper-running when live capital is absent", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        items: [{
+          persona_id: "persona-legacy-deployed",
+          name: "Legacy Deployed Persona",
+          state: "deployed",
+          capital_mode: "paper",
+          deployment_stage: "paper",
+          runtime_id: "rt-paper-legacy",
+          runtime_binding_id: "rb-paper-legacy",
+        }],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-legacy-deployed",
+      state: "paper_running",
+      capitalMode: "paper",
+      deploymentStage: "paper",
+      runtimeId: "rt-paper-legacy",
+      runtimeBindingId: "rb-paper-legacy",
+    });
   });
 
   it("adapts live persona fleet summary fields instead of dropping them to nan", () => {

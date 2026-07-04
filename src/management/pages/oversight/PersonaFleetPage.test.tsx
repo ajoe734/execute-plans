@@ -166,7 +166,7 @@ describe("PersonaFleetPage", () => {
     expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
     expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeTruthy();
     expect(tableScroll.querySelector("[data-management-table-scrollbar='native']")).toBeTruthy();
-    expect(screen.getByRole("table")).toHaveClass("min-w-[1640px]");
+    expect(screen.getByRole("table")).toHaveClass("min-w-[1840px]");
   });
 
   it("renders snake_case live data source and research lists inline", () => {
@@ -225,6 +225,53 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("link", { name: "persona-20260528-aabbccdd research detail" })).toHaveAttribute(
       "href",
       "/management/experiments/exp-mgmt-qlib-006",
+    );
+  });
+
+  it("renders paper capital, league rank, and human review context from fleet rows", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-live-paper-alpha", "Paper League Persona", {
+          humanNeeded: true,
+          state: "deployed",
+          capitalMode: "paper",
+          capitalPoolId: "cp-paper-alpha",
+          runtimeId: "rt-paper-alpha",
+          runtimeBindingId: "rb-paper-alpha",
+          runtimeBinding: {
+            id: "rb-paper-alpha",
+            runtimeId: "rt-paper-alpha",
+            state: "running",
+            deploymentStage: "paper",
+            capitalMode: "paper",
+            health: "healthy",
+          },
+          runtimeHealth: { status: "healthy" },
+          reviewType: "paper_to_live",
+          reviewStatus: "pending_human_review",
+          promotionReviewId: "review-paper-alpha",
+          leagueRank: 3,
+          leagueScore: 87.4,
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("cp-paper-alpha")).toBeInTheDocument();
+    expect(screen.getByText("#3")).toBeInTheDocument();
+    expect(screen.getByText("score 87.4")).toBeInTheDocument();
+    expect(screen.getByText("healthy")).toBeInTheDocument();
+    expect(screen.getByText("paper_running")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "paper to live" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox/promotion_review%3Areview-paper-alpha",
+    );
+    expect(screen.getByRole("link", { name: "View runtime for persona-live-paper-alpha" })).toHaveAttribute(
+      "href",
+      "/management/runtimes?persona=persona-live-paper-alpha&runtime=rt-paper-alpha&binding=rb-paper-alpha",
     );
   });
 
@@ -335,8 +382,7 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/runtimes?persona=persona-paper",
     );
-    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-paper" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Start onboarding for persona-paper" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Complete paper setup for persona-paper" })).not.toBeInTheDocument();
   });
 
   it("routes deployed personas to runtime management instead of persona onboarding", () => {
@@ -357,7 +403,8 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/runtimes?persona=persona-deployed",
     );
-    expect(screen.queryByRole("link", { name: "Start onboarding for persona-deployed" })).not.toBeInTheDocument();
+    expect(screen.getByText("paper_running")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Complete paper setup for persona-deployed" })).not.toBeInTheDocument();
   });
 
   it("routes personas waiting on humans to the human gate", () => {
@@ -383,7 +430,7 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox?persona=persona-approval",
     );
-    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-approval" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Complete paper setup for persona-approval" })).not.toBeInTheDocument();
   });
 
   it("routes explicit promotion review inbox ids directly to the review detail", () => {
@@ -436,7 +483,7 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/experiments/exp-researching-001",
     );
-    expect(screen.queryByRole("link", { name: "Continue onboarding for persona-researching" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Complete paper setup for persona-researching" })).not.toBeInTheDocument();
   });
 
   it("keeps onboarding as the primary action only for draft personas", () => {
@@ -453,7 +500,7 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByRole("link", { name: "Start onboarding for persona-draft" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Complete paper setup for persona-draft" })).toHaveAttribute(
       "href",
       "/management/personas/persona-draft/onboarding",
     );

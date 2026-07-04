@@ -34,7 +34,6 @@ describe("createEntityFromInput", () => {
         owner: "admin",
         archetype: "macro",
         description: "Persist me",
-        initialMode: "shadow",
       },
       { idempotencyKey: "idem-persona" },
     );
@@ -47,7 +46,13 @@ describe("createEntityFromInput", () => {
         owner: "admin",
         archetype: "macro",
         description: "Persist me",
-        initialMode: "shadow",
+        initialMode: "paper",
+        executionMode: "paper",
+        capitalMode: "paper",
+        deploymentStage: "paper",
+        liveCapitalEnabled: false,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
       }),
       { idempotencyKey: "idem-persona" },
     );

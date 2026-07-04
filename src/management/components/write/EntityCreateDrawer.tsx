@@ -83,7 +83,7 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
   const base = { name: "", owner: "you", memo: "" };
   switch (entity) {
     case "strategy": return { ...base, alpha: "", capitalPoolId: "", personaIds: [] as string[] };
-    case "persona": return { ...base, archetype: "", description: "", initialMode: "shadow",
+    case "persona": return { ...base, archetype: "", description: "",
       mandate: "", strategyFamily: "", instruments: "", riskAppetite: "",
       decisionStyle: "", timeHorizon: "", hardRules: "", personaVoice: "" };
     case "capitalPool": return { ...base, currency: "USD", allocated: 0, riskBudget: 0.1 };
@@ -127,10 +127,6 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
         { name: "hardRules", labelKey: "hardRules", type: "textarea", hintKey: "hardRules" },
         { name: "personaVoice", labelKey: "personaVoice", type: "text", hintKey: "personaVoice" },
         { name: "description", labelKey: "description", type: "textarea" },
-        { name: "initialMode", labelKey: "initialMode", type: "select", hintKey: "initialMode", options: [
-          { value: "shadow", labelKey: "initialMode.shadow" },
-          { value: "suspended", labelKey: "initialMode.suspended" },
-        ] },
         memo,
       ];
     case "capitalPool":

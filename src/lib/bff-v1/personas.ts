@@ -15,6 +15,11 @@ export type PersonaCreatePayload = Partial<Persona> & {
   memo?: string;
   initialMode?: string;
   executionMode?: string;
+  capitalMode?: string;
+  deploymentStage?: string;
+  liveCapitalEnabled?: boolean;
+  orderSideEffectsAllowed?: boolean;
+  capitalSideEffectsAllowed?: boolean;
 };
 
 function unwrapData<T>(payload: BffEnvelope<T>): T {
