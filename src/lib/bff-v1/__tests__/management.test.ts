@@ -572,7 +572,7 @@ describe("mgmt façade (PM-Live)", () => {
       byActionabilityState: { unresolved_source: 1 },
       byOperationStatus: { needs_evidence: 1 },
     });
-    expect(out?.items[0] as Record<string, unknown>).not.toHaveProperty("sourceRef");
+    expect(out?.items[0] as unknown as Record<string, unknown>).not.toHaveProperty("sourceRef");
   });
 
   it("adapts knowledge evidence detail without exposing opaque storage refs", () => {
@@ -822,8 +822,8 @@ describe("mgmt façade (PM-Live)", () => {
         canCreateDispositionTask: "A disposition task is already attached.",
       },
     });
-    expect(out?.sourceDocument as Record<string, unknown>).not.toHaveProperty("sourceRef");
-    expect(out?.sourceDocument.storagePreview as Record<string, unknown>).not.toHaveProperty("previewToken");
+    expect(out?.sourceDocument as unknown as Record<string, unknown>).not.toHaveProperty("sourceRef");
+    expect(out?.sourceDocument.storagePreview as unknown as Record<string, unknown>).not.toHaveProperty("previewToken");
   });
 
   it("adapts live Persona Intent aggregates into safe UI rows", () => {
@@ -1113,6 +1113,21 @@ describe("mgmt façade (PM-Live)", () => {
               datasource_smoke_ok: 1,
               read_unavailable: 1,
             },
+            entries: [
+              {
+                provider_key: "kraken",
+                provider: "Kraken REST",
+                status: "datasource_smoke_ok",
+                link_targets: {
+                  dataSource: "/management/data-sources?persona=persona-crypto&source=kraken",
+                },
+              },
+              {
+                provider_key: "coingecko",
+                provider: "CoinGecko",
+                status: "read_unavailable",
+              },
+            ],
             degraded_provider_count: 1,
             configured_source_count: 2,
             live_ingestion_enabled: false,
@@ -1125,6 +1140,11 @@ describe("mgmt façade (PM-Live)", () => {
             registry_admission_status: "not_requested",
             can_deploy: false,
             current_project_count: 1,
+          },
+          link_targets: {
+            dataSources: "/management/data-sources?persona=persona-crypto",
+            performance: "/management/performance-attribution?dimension=persona&persona=persona-crypto",
+            act: "/management/runtimes?persona=persona-crypto&runtime=runtime-crypto-paper",
           },
         }],
       },
@@ -1142,6 +1162,13 @@ describe("mgmt façade (PM-Live)", () => {
       degradedProviderCount: 1,
       liveIngestionEnabled: false,
     });
+    expect(rows?.[0].dataSources?.map((source) => `${source.providerKey}:${source.status}`)).toEqual([
+      "kraken:datasource_smoke_ok",
+      "coingecko:read_unavailable",
+    ]);
+    expect(rows?.[0].dataSources?.[0].linkTargets?.dataSource).toBe(
+      "/management/data-sources?persona=persona-crypto&source=kraken",
+    );
     expect(rows?.[0].researchStatus).toMatchObject({
       stage: "act",
       framework: "vectorbt",
@@ -1151,6 +1178,11 @@ describe("mgmt façade (PM-Live)", () => {
       registryAdmissionStatus: "not_requested",
       canDeploy: false,
       currentProjectCount: 1,
+    });
+    expect(rows?.[0].linkTargets).toMatchObject({
+      dataSources: "/management/data-sources?persona=persona-crypto",
+      performance: "/management/performance-attribution?dimension=persona&persona=persona-crypto",
+      act: "/management/runtimes?persona=persona-crypto&runtime=runtime-crypto-paper",
     });
   });
 

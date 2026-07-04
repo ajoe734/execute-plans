@@ -8,6 +8,11 @@ type RawDataSourceStatus = NonNullable<ManagementPersonaFleetRow["dataSourceStat
   providerCount?: number;
   configured_source_count?: number;
   configuredSourceCount?: number;
+  entries?: ManagementDataSource[];
+  items?: ManagementDataSource[];
+  sources?: ManagementDataSource[];
+  data_sources?: ManagementDataSource[];
+  dataSources?: ManagementDataSource[];
   live_source_connector_ids?: string[];
   liveSourceConnectorIds?: string[];
   connector_health?: Array<Record<string, unknown>>;
@@ -18,6 +23,8 @@ type RawDataSourceStatus = NonNullable<ManagementPersonaFleetRow["dataSourceStat
 
 type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   data_source_status?: RawDataSourceStatus;
+  dataSourceSummary?: RawDataSourceStatus;
+  data_source_summary?: RawDataSourceStatus;
   data_sources?: ManagementDataSource[];
 };
 
@@ -42,7 +49,10 @@ function providerStatusPriority(source: ManagementDataSource): number {
 }
 
 export function dataSourceStatus(row: ManagementPersonaFleetRow): RawDataSourceStatus | undefined {
-  return row.dataSourceStatus ?? (row as RawPersonaFleetRow).data_source_status;
+  return row.dataSourceStatus
+    ?? (row as RawPersonaFleetRow).data_source_status
+    ?? (row as RawPersonaFleetRow).dataSourceSummary
+    ?? (row as RawPersonaFleetRow).data_source_summary;
 }
 
 export function dataSourceProviderStatuses(row: ManagementPersonaFleetRow): Record<string, string> {
@@ -89,7 +99,7 @@ function connectorHealthSources(row: ManagementPersonaFleetRow): ManagementDataS
   const status = dataSourceStatus(row);
   const health = status?.connectorHealth ?? status?.connector_health ?? [];
   return health.map((raw) => {
-    const source = raw as RawDataSource;
+    const source = raw as unknown as RawDataSource;
     const providerKey = String(
       source.providerKey
       ?? source.provider_key
@@ -155,7 +165,11 @@ function normalizeSource(source: ManagementDataSource): ManagementDataSource {
 }
 
 function explicitSources(row: ManagementPersonaFleetRow): ManagementDataSource[] {
-  return (row.dataSources ?? (row as RawPersonaFleetRow).data_sources ?? []).map(normalizeSource);
+  const status = dataSourceStatus(row);
+  return [
+    ...(row.dataSources ?? (row as RawPersonaFleetRow).data_sources ?? []),
+    ...(status?.entries ?? status?.items ?? status?.sources ?? status?.dataSources ?? status?.data_sources ?? []),
+  ].map(normalizeSource);
 }
 
 function uniqueSources(sources: ManagementDataSource[]): ManagementDataSource[] {

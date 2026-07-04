@@ -26,7 +26,7 @@ describe("PersonaFleetPage data source badges", () => {
         { providerKey: "tej", provider: "TEJ API", status: "credential_unavailable" },
         { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" },
       ],
-    } as ManagementPersonaFleetRow;
+    } as unknown as ManagementPersonaFleetRow;
 
     expect(visibleDataSources(row).map((source) => source.providerKey)).toEqual([
       "shioaji",
@@ -70,6 +70,26 @@ describe("PersonaFleetPage data source badges", () => {
 
     expect(visibleDataSources(row)).toEqual([]);
   });
+
+  it("uses dataSourceSummary entries as individual provider chips", () => {
+    const row = {
+      dataSourceSummary: {
+        state: "datasource_smoke_ok",
+        providerStatusCounts: {
+          datasource_smoke_ok: 2,
+        },
+        entries: [
+          { providerKey: "kraken", provider: "Kraken REST", status: "datasource_smoke_ok" },
+          { provider_key: "coingecko", provider: "CoinGecko", status: "read_ok" },
+        ],
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(visibleDataSources(row).map((source) => `${source.providerKey}:${source.status}`)).toEqual([
+      "kraken:datasource_smoke_ok",
+      "coingecko:read_ok",
+    ]);
+  });
 });
 
 describe("PersonaFleetPage deep links", () => {
@@ -103,7 +123,16 @@ describe("PersonaFleetPage deep links", () => {
           canDeploy: false,
         },
       ],
-    } as ManagementPersonaFleetRow;
+      linkTargets: {
+        persona: "/management/personas/persona%2Ftw%20equity",
+        dataSources: "/management/data-sources?persona=persona%2Ftw%20equity",
+        research: "/management/experiments/exp-mgmt-qlib-006",
+        artifact: "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
+        performance: "/management/performance-attribution?dimension=persona&persona=persona%2Ftw%20equity",
+        mutation: "/management/evolution-journal?persona=persona%2Ftw%20equity",
+        humanGate: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
+      },
+    } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona%2Ftw%20equity");
     expect(personaFleetResearchHref(row)).toBe("/management/experiments/exp-mgmt-qlib-006");
@@ -120,14 +149,14 @@ describe("PersonaFleetPage deep links", () => {
       "/management/evolution-journal?persona=persona%2Ftw%20equity",
     );
     expect(personaFleetHumanGateHref(row)).toBe(
-      "/management/human-inbox?persona=persona%2Ftw%20equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
     );
     expect(personaFleetOodaHref(row)).toBe(
-      "/management/human-inbox?persona=persona%2Ftw%20equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
     );
   });
 
-  it("routes OODA stages to the existing stage-specific management pages", () => {
+  it("routes OODA stages through canonical targets", () => {
     const baseRow = {
       personaId: "persona-tw-live",
       currentResearchProjects: [
@@ -141,31 +170,41 @@ describe("PersonaFleetPage deep links", () => {
           canDeploy: false,
         },
       ],
-    } as ManagementPersonaFleetRow;
+      linkTargets: {
+        observe: "/management/data-sources?persona=persona-tw-live",
+        orient: "/management/experiments/exp-canonical-orient",
+        decide: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-tw-live",
+        act: "/management/runtimes?persona=persona-tw-live&runtime=rt-canonical-act",
+        learn: "/management/evolution-journal?persona=persona-tw-live",
+      },
+    } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Observe" })).toBe(
       "/management/data-sources?persona=persona-tw-live",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Orient" })).toBe(
-      "/management/experiments/exp-mgmt-qlib-006",
+      "/management/experiments/exp-canonical-orient",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Decide" })).toBe(
-      "/management/human-inbox?persona=persona-tw-live",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-tw-live",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Act" })).toBe(
-      "/management/runtimes?persona=persona-tw-live",
+      "/management/runtimes?persona=persona-tw-live&runtime=rt-canonical-act",
     );
     expect(personaFleetOodaHref({ ...baseRow, ooda: "Learn" })).toBe(
       "/management/evolution-journal?persona=persona-tw-live",
     );
   });
 
-  it("includes runtime and binding context on Act links when live rows declare them", () => {
+  it("uses canonical runtime targets instead of persona-only Act links", () => {
     const row = {
       personaId: "persona-tw-live",
       ooda: "Act",
       runtime_id: "rt-rescue-0260528-5937dea1",
       runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
+      linkTargets: {
+        act: "/management/runtimes?persona=persona-tw-live&runtime=rt-rescue-0260528-5937dea1&binding=rb-433f2a614995432b9e7a463c882dbefb",
+      },
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetRuntimeHref(row)).toBe(
@@ -176,7 +215,24 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("falls back to the research loop when an item has no experiment detail id", () => {
+  it("accepts snake_case canonical link_targets from live rows", () => {
+    const row = {
+      personaId: "persona-snake-case",
+      ooda: "Observe",
+      link_targets: {
+        data_sources: "/management/data-sources?persona=persona-snake-case",
+        performance_attribution: "/management/performance-attribution?dimension=persona&persona=persona-snake-case",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetDataSourcesHref(row)).toBe("/management/data-sources?persona=persona-snake-case");
+    expect(personaFleetPerformanceHref(row)).toBe(
+      "/management/performance-attribution?dimension=persona&persona=persona-snake-case",
+    );
+    expect(personaFleetOodaHref(row)).toBe("/management/data-sources?persona=persona-snake-case");
+  });
+
+  it("does not fabricate a research-loop project link when no canonical target exists", () => {
     const row = {
       personaId: "persona-crypto",
       currentResearchProjects: [
@@ -191,9 +247,7 @@ describe("PersonaFleetPage deep links", () => {
       ],
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBe(
-      "/management/loops/research?persona=persona-crypto&project=research-crypto-paper-001",
-    );
+    expect(personaFleetResearchHref(row)).toBeNull();
     expect(personaFleetArtifactHref(row)).toBeNull();
   });
 
@@ -212,6 +266,10 @@ describe("PersonaFleetPage deep links", () => {
           can_deploy: false,
         },
       ],
+      linkTargets: {
+        research: "/management/experiments/exp-mgmt-qlib-006",
+        artifact: "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
+      },
     } as unknown as ManagementPersonaFleetRow;
 
     const [item] = personaFleetResearchItems(row);
@@ -251,14 +309,48 @@ describe("PersonaFleetPage deep links", () => {
     });
   });
 
-  it("links to the persona-scoped research loop when there is no active research project", () => {
+  it("does not fabricate a persona-scoped research loop when there is no active project target", () => {
     const row = {
       personaId: "persona-live-without-project",
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBe(
-      "/management/loops/research?persona=persona-live-without-project",
-    );
+    expect(personaFleetResearchHref(row)).toBeNull();
+  });
+
+  it("does not turn nan values into hrefs or filter keys", () => {
+    const row = {
+      personaId: "nan",
+      ooda: "Observe",
+      perfDelta: 0.12,
+    } as ManagementPersonaFleetRow;
+    const source = { providerKey: "nan", provider: "nan", status: "nan" } as NonNullable<ManagementPersonaFleetRow["dataSources"]>[number];
+
+    expect(personaFleetPersonaHref(row)).toBeNull();
+    expect(personaFleetDataSourcesHref(row, source)).toBeNull();
+    expect(personaFleetPerformanceHref(row)).toBeNull();
+    expect(personaFleetOodaHref(row)).toBeNull();
+  });
+
+  it("keeps performance display unlinkable when no canonical performance target exists", () => {
+    const row = {
+      personaId: "persona-with-performance",
+      perfDelta: 0.42,
+    } as ManagementPersonaFleetRow;
+
+    expect(personaFleetPerformanceHref(row)).toBeNull();
+  });
+
+  it("ignores legacy unvalidated links when no canonical link target exists", () => {
+    const row = {
+      personaId: "persona-with-stale-runtime",
+      ooda: "Act",
+      links: {
+        runtime: "/management/runtimes/runtime-stale",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetRuntimeHref(row)).toBeNull();
+    expect(personaFleetOodaHref(row)).toBeNull();
   });
 });
 
