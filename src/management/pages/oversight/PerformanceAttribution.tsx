@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -247,8 +248,9 @@ export const PerformanceAttributionPage = () => {
         </Card>
       )}
 
-      <Card className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <Card>
+        <ManagementTableScroll minScrollWidth={1040}>
+        <table className="w-full min-w-[1040px] text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
             <tr>
               <th className="px-3 py-2">{t("mgmt.attribution.dimension")}</th>
@@ -279,6 +281,7 @@ export const PerformanceAttributionPage = () => {
             )}
           </tbody>
         </table>
+        </ManagementTableScroll>
       </Card>
     </section>
   );

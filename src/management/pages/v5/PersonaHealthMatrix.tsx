@@ -3,6 +3,7 @@
 // Pure presentational; data injected by ExecutionLoop page.
 
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import type { PersonaExecutionHealth } from "@/lib/v5";
@@ -62,8 +63,9 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
   });
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <table className="w-full text-sm">
+    <Card className="p-0">
+      <ManagementTableScroll minScrollWidth={1120}>
+          <table className="w-full min-w-[1120px] text-sm">
         <thead className="text-xs text-muted-foreground bg-muted/40">
           <tr>
             <th className="text-left px-3 py-2">{t("v5.matrix.persona")}</th>
@@ -107,6 +109,7 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
           )}
         </tbody>
       </table>
+          </ManagementTableScroll>
     </Card>
   );
 };
