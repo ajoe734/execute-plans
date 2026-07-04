@@ -36,8 +36,12 @@ function fleetRow(
     dataSourceStatus: {
       state: "readback_ok",
       providerStatuses: { shioaji: "read_ok" },
+      readbackRefs: [],
+      unavailableRefs: [],
+      readOnly: true,
       liveIngestionEnabled: true,
       orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
     },
     dataSources: [{
       providerKey: "shioaji",
@@ -47,6 +51,9 @@ function fleetRow(
       readOnly: true,
       orderSideEffectsAllowed: false,
       capitalSideEffectsAllowed: false,
+      linkTargets: {
+        dataSource: `/management/data-sources?persona=${personaId}&source=shioaji`,
+      },
     }],
     researchStatus: {
       stage: "management_review_linked",
@@ -64,6 +71,16 @@ function fleetRow(
       blockedByTaskIds: [],
       canDeploy: false,
     }],
+    linkTargets: {
+      persona: `/management/personas/${personaId}`,
+      dataSources: `/management/data-sources?persona=${personaId}`,
+      orient: "/management/experiments/exp-mgmt-qlib-006",
+      performance: `/management/performance-attribution?dimension=persona&persona=${personaId}`,
+      mutation: `/management/evolution-journal?persona=${personaId}`,
+      humanGate: `/management/human-inbox/readiness_blocker%3Apersona%3A${personaId}`,
+      runtime: `/management/runtimes?persona=${personaId}&runtime=rt-${personaId}`,
+      onboarding: `/management/personas/${personaId}/onboarding`,
+    },
   };
   return { ...row, ...overrides };
 }
@@ -108,7 +125,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity human gate" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-live-tw-equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity OODA Orient stage" })).toHaveAttribute(
       "href",
@@ -128,7 +145,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity status detail" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-live-tw-equity",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
   });
 
@@ -207,6 +224,13 @@ describe("PersonaFleetPage", () => {
           can_deploy: false,
           blocked_by_task_ids: ["MGMT-QLIB-003"],
         }],
+        linkTargets: {
+          dataSources: {
+            shioaji: "/management/data-sources?persona=persona-20260528-aabbccdd&source=shioaji",
+            finmind: "/management/data-sources?persona=persona-20260528-aabbccdd&source=finmind",
+          },
+          orient: "/management/experiments/exp-mgmt-qlib-006",
+        },
       } as unknown as ManagementPersonaFleetRow],
       loading: false,
       refresh: vi.fn(),
@@ -252,6 +276,14 @@ describe("PersonaFleetPage", () => {
           promotionReviewId: "review-paper-alpha",
           leagueRank: 3,
           leagueScore: 87.4,
+          linkTargets: {
+            humanGate: "/management/human-inbox/promotion_review%3Areview-paper-alpha",
+            runtime: "/management/runtimes?persona=persona-live-paper-alpha&runtime=rt-paper-alpha&binding=rb-paper-alpha",
+            performance: "/management/performance-attribution?dimension=persona&persona=persona-live-paper-alpha",
+            mutation: "/management/evolution-journal?persona=persona-live-paper-alpha",
+            dataSources: "/management/data-sources?persona=persona-live-paper-alpha",
+            orient: "/management/experiments/exp-mgmt-qlib-006",
+          },
         }),
       ],
       loading: false,
@@ -269,9 +301,9 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox/promotion_review%3Areview-paper-alpha",
     );
-    expect(screen.getByRole("link", { name: "View runtime for persona-live-paper-alpha" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Review human gate for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/runtimes?persona=persona-live-paper-alpha&runtime=rt-paper-alpha&binding=rb-paper-alpha",
+      "/management/human-inbox/promotion_review%3Areview-paper-alpha",
     );
   });
 
@@ -322,16 +354,15 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("1 datasource smoke ok")).not.toBeInTheDocument();
     expect(screen.queryByText("1 read unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("1/2 readable")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "persona-live-summary data sources" })).toHaveAttribute(
-      "href",
-      "/management/data-sources?persona=persona-live-summary",
-    );
-    expect(screen.getByRole("link", { name: "persona-live-summary data sources" })).toHaveTextContent("nan");
+    expect(screen.queryByRole("link", { name: "persona-live-summary data sources" })).not.toBeInTheDocument();
+    expect(screen.getByText("nan")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "persona-live-summary data source status" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "persona-live-summary research detail" })).toHaveTextContent("act");
+    expect(screen.getByLabelText("persona-live-summary research detail")).toHaveTextContent("act");
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
     expect(screen.getByText(/vectorbt \/ 2 more frameworks/)).toBeInTheDocument();
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "persona-live-summary performance attribution" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("persona-live-summary performance attribution unavailable")).toHaveTextContent("18.20%");
   });
 
   it("does not report a focused persona as missing before live fleet data loads", () => {
@@ -368,7 +399,7 @@ describe("PersonaFleetPage", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-paper", "Paper Persona", {
-          humanNeeded: true,
+          humanNeeded: false,
           state: "paper_running",
         }),
       ],
@@ -380,7 +411,7 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByRole("link", { name: "View runtime for persona-paper" })).toHaveAttribute(
       "href",
-      "/management/runtimes?persona=persona-paper",
+      "/management/runtimes?persona=persona-paper&runtime=rt-persona-paper",
     );
     expect(screen.queryByRole("link", { name: "Complete paper setup for persona-paper" })).not.toBeInTheDocument();
   });
@@ -401,7 +432,7 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByRole("link", { name: "View runtime for persona-deployed" })).toHaveAttribute(
       "href",
-      "/management/runtimes?persona=persona-deployed",
+      "/management/runtimes?persona=persona-deployed&runtime=rt-persona-deployed",
     );
     expect(screen.getByText("paper_running")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Complete paper setup for persona-deployed" })).not.toBeInTheDocument();
@@ -424,16 +455,16 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByRole("link", { name: "Review human gate for persona-approval" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-approval",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
     );
     expect(screen.getByRole("link", { name: "persona-approval OODA Decide stage" })).toHaveAttribute(
       "href",
-      "/management/human-inbox?persona=persona-approval",
+      "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-approval",
     );
     expect(screen.queryByRole("link", { name: "Complete paper setup for persona-approval" })).not.toBeInTheDocument();
   });
 
-  it("routes explicit promotion review inbox ids directly to the review detail", () => {
+  it("does not route explicit promotion review ids without a canonical target", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-review", "Review Persona", {
@@ -441,6 +472,7 @@ describe("PersonaFleetPage", () => {
           humanNeeded: true,
           state: "promotion_review_pending",
           inboxId: "promotion_review:review-persona-review",
+          linkTargets: undefined,
         }),
       ],
       loading: false,
@@ -449,10 +481,8 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByRole("link", { name: "Review human gate for persona-review" })).toHaveAttribute(
-      "href",
-      "/management/human-inbox/promotion_review%3Areview-persona-review",
-    );
+    expect(screen.queryByRole("link", { name: "Review human gate for persona-review" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review human gate for persona-review" })).toBeDisabled();
   });
 
   it("routes researching personas with deployable artifacts to research instead of onboarding", () => {
@@ -471,6 +501,12 @@ describe("PersonaFleetPage", () => {
             blockedByTaskIds: [],
             canDeploy: true,
           }],
+          linkTargets: {
+            dataSources: "/management/data-sources?persona=persona-researching",
+            orient: "/management/experiments/exp-researching-001",
+            performance: "/management/performance-attribution?dimension=persona&persona=persona-researching",
+            mutation: "/management/evolution-journal?persona=persona-researching",
+          },
         }),
       ],
       loading: false,

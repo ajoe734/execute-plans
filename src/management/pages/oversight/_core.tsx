@@ -290,6 +290,38 @@ function badgeLinkClass(className?: string): string {
   ].filter(Boolean).join(" ");
 }
 
+function badgeUnavailableClass(className?: string): string {
+  return [
+    "cursor-default border-muted text-muted-foreground",
+    className,
+  ].filter(Boolean).join(" ");
+}
+
+function OptionalFleetLink({
+  href,
+  ariaLabel,
+  className,
+  children,
+}: {
+  href?: string | null;
+  ariaLabel?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  if (href) {
+    return (
+      <Link to={href} aria-label={ariaLabel} className={className}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <span aria-label={ariaLabel} className={className}>
+      {children}
+    </span>
+  );
+}
+
 function dataSourceTone(state?: string): string {
   const token = String(state ?? "").toLowerCase();
   if (token.includes("read_ok") || token.includes("readback_ok") || token.includes("smoke_ok")) {
@@ -335,7 +367,7 @@ function frameworkText(item?: PersonaFleetResearchItem): string {
 }
 
 type PersonaFleetPrimaryAction = {
-  href: string;
+  href: string | null;
   labelKey: string;
   ariaLabelKey: string;
   className?: string;
@@ -363,32 +395,46 @@ function normalizedFleetState(r: ManagementPersonaFleetRow): string {
 
 function personaFleetPrimaryAction(
   r: ManagementPersonaFleetRow,
-  links: { personaHref: string; researchHref: string | null },
+  links: {
+    personaHref: string | null;
+    researchHref: string | null;
+    humanGateHref: string | null;
+    onboardingHref: string | null;
+    runtimeHref: string | null;
+  },
 ): PersonaFleetPrimaryAction {
   const state = normalizedFleetState(r);
 
-  if (RUNTIME_ACTION_STATES.has(state) || state.endsWith("_running")) {
+  if (state === "needs_human_approval" || r.humanNeeded) {
     return {
-      href: personaFleetRuntimeHref(r),
-      labelKey: "mgmt.fleet.primaryAction.viewRuntime",
-      ariaLabelKey: "mgmt.fleet.primaryAction.viewRuntimeAriaFmt",
-      className: "border-status-success/40 text-status-success hover:text-status-success",
+      href: links.humanGateHref,
+      labelKey: "mgmt.fleet.primaryAction.reviewHumanGate",
+      ariaLabelKey: "mgmt.fleet.primaryAction.reviewHumanGateAriaFmt",
+      className: links.humanGateHref
+        ? "border-status-warning/40 text-status-warning hover:text-status-warning"
+        : "border-muted text-muted-foreground",
     };
   }
 
-  if (state === "needs_human_approval" || r.humanNeeded) {
+  if (RUNTIME_ACTION_STATES.has(state) || state.endsWith("_running")) {
     return {
-      href: personaFleetHumanGateHref(r),
-      labelKey: "mgmt.fleet.primaryAction.reviewHumanGate",
-      ariaLabelKey: "mgmt.fleet.primaryAction.reviewHumanGateAriaFmt",
-      className: "border-status-warning/40 text-status-warning hover:text-status-warning",
+      href: links.runtimeHref,
+      labelKey: links.runtimeHref
+        ? "mgmt.fleet.primaryAction.viewRuntime"
+        : "mgmt.fleet.primaryAction.viewPersona",
+      ariaLabelKey: links.runtimeHref
+        ? "mgmt.fleet.primaryAction.viewRuntimeAriaFmt"
+        : "mgmt.fleet.primaryAction.viewPersonaAriaFmt",
+      className: links.runtimeHref
+        ? "border-status-success/40 text-status-success hover:text-status-success"
+        : "border-muted text-muted-foreground",
     };
   }
 
   if (ONBOARDING_ACTION_STATES.has(state)) {
     const isDraft = state === "draft";
     return {
-      href: personaFleetOnboardingHref(r),
+      href: links.onboardingHref,
       labelKey: isDraft ? "mgmt.fleet.primaryAction.startOnboarding" : "mgmt.fleet.primaryAction.continueOnboarding",
       ariaLabelKey: isDraft
         ? "mgmt.fleet.primaryAction.startOnboardingAriaFmt"
@@ -534,7 +580,19 @@ export const PersonaFleetPage = () => {
               const frameworkSummary = frameworkText(primaryResearch);
               const personaHref = personaFleetPersonaHref(r);
               const researchHref = personaFleetResearchHref(r, primaryResearch);
-              const primaryAction = personaFleetPrimaryAction(r, { personaHref, researchHref });
+              const dataSourcesHref = personaFleetDataSourcesHref(r);
+              const performanceHref = personaFleetPerformanceHref(r);
+              const mutationHref = personaFleetMutationHref(r);
+              const humanGateHref = personaFleetHumanGateHref(r);
+              const onboardingHref = personaFleetOnboardingHref(r);
+              const runtimeHref = personaFleetRuntimeHref(r);
+              const primaryAction = personaFleetPrimaryAction(r, {
+                personaHref,
+                researchHref,
+                humanGateHref,
+                onboardingHref,
+                runtimeHref,
+              });
               const artifactHref = personaFleetArtifactHref(r, primaryResearch);
               const artifactLabel = primaryResearch?.artifactId;
               const oodaHref = personaFleetOodaHref(r, primaryResearch);
@@ -551,28 +609,34 @@ export const PersonaFleetPage = () => {
                   className={"border-b border-border/50 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
                 >
                   <td className="px-3 py-2">
-                    <Link
-                      to={personaHref}
-                      className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
-                    >
-                      {r.personaName || r.personaId}
-                    </Link>
+                    {personaHref ? (
+                      <Link
+                        to={personaHref}
+                        className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                      >
+                        {r.personaName || r.personaId}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-foreground">{r.personaName || r.personaId}</span>
+                    )}
                     <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.personaId}</div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2">
-                    <Link
-                      to={oodaHref}
-                      aria-label={`${r.personaId} OODA ${r.ooda} stage`}
+                    <OptionalFleetLink
+                      href={oodaHref}
+                      ariaLabel={`${r.personaId} OODA ${r.ooda} stage`}
                       className="inline-flex"
                     >
                       <Badge
                         variant="outline"
-                        className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+                        className={oodaHref
+                          ? badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")
+                          : badgeUnavailableClass()}
                       >
                         {r.ooda}
                       </Badge>
-                    </Link>
+                    </OptionalFleetLink>
                   </td>
 	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
 	                  <td className="px-3 py-2 min-w-[170px]">
@@ -613,49 +677,64 @@ export const PersonaFleetPage = () => {
 	                      </div>
 	                    )}
 	                    {(r.reviewType || r.reviewStatus) && (
-	                      <Link
-	                        to={personaFleetHumanGateHref(r)}
-	                        className={fieldLinkClass("mt-1 block text-xs text-muted-foreground hover:text-primary")}
-	                      >
-	                        {formatToken(r.reviewType || r.reviewStatus)}
-	                      </Link>
+	                      humanGateHref ? (
+	                        <Link
+	                          to={humanGateHref}
+	                          className={fieldLinkClass("mt-1 block text-xs text-muted-foreground hover:text-primary")}
+	                        >
+	                          {formatToken(r.reviewType || r.reviewStatus)}
+	                        </Link>
+	                      ) : (
+	                        <span className="mt-1 block text-xs text-muted-foreground">
+	                          {formatToken(r.reviewType || r.reviewStatus)}
+	                        </span>
+	                      )
 	                    )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[240px]">
 	                    <div className="flex max-w-[360px] flex-wrap gap-1">
 	                      {sourceBadges.length > 0
-	                        ? sourceBadges.map((source) => (
-	                          <Link
-	                            key={source.providerKey}
-	                            to={`${personaFleetDataSourcesHref(r)}&source=${encodeURIComponent(source.providerKey)}`}
-	                            aria-label={`${r.personaId} data source ${source.providerKey}`}
-	                            className="inline-flex"
-	                          >
-	                            <Badge
-	                              variant="outline"
-	                              className={badgeLinkClass(`${dataSourceTone(source.status)} hover:border-primary/60`)}
+	                        ? sourceBadges.map((source) => {
+	                          const sourceHref = personaFleetDataSourcesHref(r, source);
+	                          return (
+	                            <OptionalFleetLink
+	                              key={source.providerKey}
+	                              href={sourceHref}
+	                              ariaLabel={`${r.personaId} data source ${source.providerKey}`}
+	                              className="inline-flex"
 	                            >
-	                              {source.providerKey}: {formatToken(source.status)}
-	                            </Badge>
-	                          </Link>
-	                        ))
+	                              <Badge
+	                                variant="outline"
+	                                className={sourceHref
+	                                  ? badgeLinkClass(`${dataSourceTone(source.status)} hover:border-primary/60`)
+	                                  : `${dataSourceTone(source.status)} cursor-default`}
+	                              >
+	                                {source.providerKey}: {formatToken(source.status)}
+	                              </Badge>
+	                            </OptionalFleetLink>
+	                          );
+	                        })
 	                        : (
-	                          <Link
-	                            to={personaFleetDataSourcesHref(r)}
-	                            aria-label={`${r.personaId} data sources`}
-	                            className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
-	                          >
-	                            nan
-	                          </Link>
+	                          dataSourcesHref ? (
+	                            <Link
+	                              to={dataSourcesHref}
+	                              aria-label={`${r.personaId} data sources`}
+	                              className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
+	                            >
+	                              nan
+	                            </Link>
+	                          ) : (
+	                            <span className="text-xs text-muted-foreground">nan</span>
+	                          )
 	                        )}
 	                    </div>
 	                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
 	                      {sourceCount.total > 0 && (
 	                        <span>{t("mgmt.fleet.providersFmt", { ok: sourceCount.ok, total: sourceCount.total })}</span>
 	                      )}
-	                      {sourceStatus && sourceBadges.length > 0 && (
+	                      {sourceStatus && sourceBadges.length > 0 && dataSourcesHref && (
 	                        <Link
-	                          to={personaFleetDataSourcesHref(r)}
+	                          to={dataSourcesHref}
 	                          aria-label={`${r.personaId} data source status`}
 	                          className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
 	                        >
@@ -675,18 +754,20 @@ export const PersonaFleetPage = () => {
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[260px]">
 	                    <div className="flex flex-wrap items-center gap-1">
-	                      <Link
-	                        to={researchHref}
-	                        aria-label={`${r.personaId} research detail`}
+	                      <OptionalFleetLink
+	                        href={researchHref}
+	                        ariaLabel={`${r.personaId} research detail`}
 	                        className="inline-flex"
 	                      >
 	                        <Badge
 	                          variant="outline"
-	                          className={badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+	                          className={researchHref
+	                            ? badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")
+	                            : badgeUnavailableClass()}
 	                        >
 	                          {primaryResearch?.stage ? formatToken(primaryResearch.stage) : "nan"}
 	                        </Badge>
-	                      </Link>
+	                      </OptionalFleetLink>
 	                      {primaryResearch?.canDeploy === false && (
 	                        <Badge variant="outline" className="bg-status-warning/15 text-status-warning border-status-warning/30">
 	                          {t("mgmt.fleet.governed")}
@@ -695,22 +776,36 @@ export const PersonaFleetPage = () => {
 	                    </div>
 	                    <div className="mt-1 max-w-[360px] space-y-0.5">
 	                      {researchItems.length > 0
-	                        ? researchItems.slice(0, 3).map((item) => (
-	                          <Link
-	                            key={item.key}
-	                            to={personaFleetResearchHref(r, item)}
-	                            className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
-	                          >
-	                            {item.title || "nan"}
-	                          </Link>
-	                        ))
+	                        ? researchItems.slice(0, 3).map((item) => {
+	                          const itemHref = personaFleetResearchHref(r, item);
+	                          return itemHref ? (
+	                            <Link
+	                              key={item.key}
+	                              to={itemHref}
+	                              className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+	                            >
+	                              {item.title || "nan"}
+	                            </Link>
+	                          ) : (
+	                            <span
+	                              key={item.key}
+	                              className="block truncate font-medium text-foreground"
+	                            >
+	                              {item.title || "nan"}
+	                            </span>
+	                          );
+	                        })
 	                        : (
-	                          <Link
-	                            to={researchHref}
-	                            className={fieldLinkClass("block text-muted-foreground hover:text-primary")}
-	                          >
-	                            nan
-	                          </Link>
+	                          researchHref ? (
+	                            <Link
+	                              to={researchHref}
+	                              className={fieldLinkClass("block text-muted-foreground hover:text-primary")}
+	                            >
+	                              nan
+	                            </Link>
+	                          ) : (
+	                            <span className="block text-muted-foreground">nan</span>
+	                          )
 	                        )}
 	                    </div>
 	                    {(frameworkSummary || artifactLabel) && (
@@ -735,66 +830,92 @@ export const PersonaFleetPage = () => {
 	                    )}
 	                  </td>
                   <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
-                    <Link
-                      to={personaFleetPerformanceHref(r)}
-                      aria-label={`${r.personaId} performance attribution`}
-                      className={fieldLinkClass(Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success hover:text-status-success" : "text-status-failed hover:text-status-failed")}
-                    >
-                      {formatPerfDelta(r.perfDelta)}
-                    </Link>
+                    {performanceHref ? (
+                      <Link
+                        to={performanceHref}
+                        aria-label={`${r.personaId} performance attribution`}
+                        className={fieldLinkClass(Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success hover:text-status-success" : "text-status-failed hover:text-status-failed")}
+                      >
+                        {formatPerfDelta(r.perfDelta)}
+                      </Link>
+                    ) : (
+                      <span
+                        aria-label={`${r.personaId} performance attribution unavailable`}
+                        className="font-medium"
+                      >
+                        {formatPerfDelta(r.perfDelta)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    <Link
-                      to={personaFleetMutationHref(r)}
-                      aria-label={`${r.personaId} mutation history`}
-                      className={fieldLinkClass("text-muted-foreground hover:text-primary")}
-                    >
-                      {r.lastMutation || "—"}
-                    </Link>
+                    {mutationHref ? (
+                      <Link
+                        to={mutationHref}
+                        aria-label={`${r.personaId} mutation history`}
+                        className={fieldLinkClass("text-muted-foreground hover:text-primary")}
+                      >
+                        {r.lastMutation || "—"}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">{r.lastMutation || "—"}</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {r.humanNeeded
                       ? (
-                        <Link
-                          to={personaFleetHumanGateHref(r)}
-                          aria-label={`${r.personaId} human gate`}
+                        <OptionalFleetLink
+                          href={humanGateHref}
+                          ariaLabel={`${r.personaId} human gate`}
                           className="inline-flex"
                         >
                           <Badge
                             variant="outline"
-                            className={badgeLinkClass("bg-status-warning/15 text-status-warning border-status-warning/30 hover:border-status-warning/60 hover:bg-status-warning/20")}
+                            className={humanGateHref
+                              ? badgeLinkClass("bg-status-warning/15 text-status-warning border-status-warning/30 hover:border-status-warning/60 hover:bg-status-warning/20")
+                              : "bg-status-warning/15 text-status-warning border-status-warning/30 cursor-default"}
                           >
                             {t("mgmt.fleet.yes")}
                           </Badge>
-                        </Link>
+                        </OptionalFleetLink>
                       )
                       : (
-                        <Link
-                          to={personaFleetHumanGateHref(r)}
-                          aria-label={`${r.personaId} human gate`}
-                          className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
-                        >
-                          {t("mgmt.fleet.no")}
-                        </Link>
+                        humanGateHref ? (
+                          <Link
+                            to={humanGateHref}
+                            aria-label={`${r.personaId} human gate`}
+                            className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
+                          >
+                            {t("mgmt.fleet.no")}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{t("mgmt.fleet.no")}</span>
+                        )
                       )}
                   </td>
                   <td className="px-3 py-2">
-                    {stateLabel && (
-                      <Link
-                        to={r.humanNeeded ? personaFleetHumanGateHref(r) : personaHref}
-                        aria-label={`${r.personaId} status detail`}
+                    {stateLabel && (() => {
+                      const stateHref = r.humanNeeded ? humanGateHref : personaHref;
+                      return (
+                      <OptionalFleetLink
+                        href={stateHref}
+                        ariaLabel={`${r.personaId} status detail`}
                         className="inline-flex"
                       >
                         <Badge
                           variant="outline"
                           className={retired
-                            ? badgeLinkClass("bg-muted text-muted-foreground hover:border-primary/60")
-                            : badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")}
+                            ? stateHref
+                              ? badgeLinkClass("bg-muted text-muted-foreground hover:border-primary/60")
+                              : badgeUnavailableClass("bg-muted")
+                            : stateHref
+                            ? badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")
+                            : badgeUnavailableClass()}
                         >
                           {stateLabel}
                         </Badge>
-                      </Link>
-                    )}
+                      </OptionalFleetLink>
+                      );
+                    })()}
                     {nonProduction && (
                       <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">
                         {t("mgmt.fleet.nonProduction")}
@@ -803,19 +924,31 @@ export const PersonaFleetPage = () => {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {!retired && (
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="outline"
-                        className={primaryAction.className}
-                      >
-                        <Link
-                          to={primaryAction.href}
+                      primaryAction.href ? (
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className={primaryAction.className}
+                        >
+                          <Link
+                            to={primaryAction.href}
+                            aria-label={t(primaryAction.ariaLabelKey, { persona: r.personaId })}
+                          >
+                            {t(primaryAction.labelKey)}
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled
+                          className={primaryAction.className}
                           aria-label={t(primaryAction.ariaLabelKey, { persona: r.personaId })}
                         >
                           {t(primaryAction.labelKey)}
-                        </Link>
-                      </Button>
+                        </Button>
+                      )
                     )}
                   </td>
                 </tr>

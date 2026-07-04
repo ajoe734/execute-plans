@@ -64,6 +64,7 @@ export type ManagementAutonomyMode = "manual" | "supervised" | "autonomous";
 export interface ManagementDataSourceStatus {
   state: string;
   summary?: string;
+  entries?: ManagementDataSource[];
   providerStatuses: Record<string, string>;
   providerStatusCounts?: Record<string, number>;
   providerCount?: number;
@@ -95,6 +96,7 @@ export interface ManagementDataSource {
   orderSideEffectsAllowed: boolean;
   capitalSideEffectsAllowed: boolean;
   reason?: string;
+  linkTargets?: ManagementPersonaFleetLinkTargets;
 }
 
 export interface ManagementResearchStatus {
@@ -128,6 +130,7 @@ export interface ManagementResearchProject {
   experimentId?: string;
   blockedByTaskIds: string[];
   canDeploy: boolean;
+  linkTargets?: ManagementPersonaFleetLinkTargets;
 }
 
 export interface ManagementPersonaFleetRowAction {
@@ -136,6 +139,27 @@ export interface ManagementPersonaFleetRowAction {
   href?: string;
   startupWizardVisible?: boolean;
 }
+
+export type ManagementPersonaFleetLinkTarget =
+  | string
+  | null
+  | undefined
+  | (Record<string, unknown> & {
+    href?: string;
+    routeHref?: string;
+    route_href?: string;
+    managementHref?: string;
+    management_href?: string;
+    manageHref?: string;
+    manage_href?: string;
+    detailHref?: string;
+    detail_href?: string;
+    available?: boolean;
+    disabled?: boolean;
+    unavailable?: boolean;
+  });
+
+export type ManagementPersonaFleetLinkTargets = Record<string, ManagementPersonaFleetLinkTarget>;
 
 export interface ManagementPersonaFleetCapitalPool {
   id?: string;
@@ -204,6 +228,7 @@ export interface ManagementPersonaFleetRow {
   leagueScore?: number;
   rank?: ManagementPersonaFleetRank;
   rowAction?: ManagementPersonaFleetRowAction;
+  linkTargets?: ManagementPersonaFleetLinkTargets;
 }
 
 export interface ManagementTradingPulseSurface {
@@ -1764,6 +1789,15 @@ function adaptDataSourceStatus(value: unknown): ManagementDataSourceStatus | und
   return {
     state: asString(value.state, "not_declared"),
     summary: asString(value.summary),
+    entries: firstArrayValue(
+      value.entries,
+      value.items,
+      value.sources,
+      value.dataSources,
+      value.data_sources,
+    )
+      ?.map(adaptDataSource)
+      .filter((source): source is ManagementDataSource => source !== null),
     providerStatuses,
     providerStatusCounts,
     providerCount,
@@ -1801,6 +1835,7 @@ function adaptDataSource(value: unknown): ManagementDataSource | null {
     orderSideEffectsAllowed: asBoolean(value.orderSideEffectsAllowed ?? value.order_side_effects_allowed, false),
     capitalSideEffectsAllowed: asBoolean(value.capitalSideEffectsAllowed ?? value.capital_side_effects_allowed, false),
     reason: asString(value.reason),
+    linkTargets: adaptPersonaFleetLinkTargets(value.linkTargets ?? value.link_targets),
   };
 }
 
@@ -1846,6 +1881,7 @@ function adaptResearchProject(value: unknown): ManagementResearchProject | null 
     experimentId: asString(value.experimentId ?? value.experiment_id),
     blockedByTaskIds: asStringArray(value.blockedByTaskIds ?? value.blocked_by_task_ids),
     canDeploy: asBoolean(value.canDeploy ?? value.can_deploy, false),
+    linkTargets: adaptPersonaFleetLinkTargets(value.linkTargets ?? value.link_targets),
   };
 }
 
@@ -1863,6 +1899,11 @@ function adaptPersonaFleetRowAction(value: unknown): ManagementPersonaFleetRowAc
         ? value.startup_wizard_visible
         : undefined,
   };
+}
+
+function adaptPersonaFleetLinkTargets(value: unknown): ManagementPersonaFleetLinkTargets | undefined {
+  if (!isObject(value)) return undefined;
+  return { ...value } as ManagementPersonaFleetLinkTargets;
 }
 
 function firstArrayValue(...values: unknown[]): unknown[] | null {
@@ -1927,9 +1968,19 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
   );
 
   const updated = asString(value.lastMutation ?? value.last_mutation ?? value.updatedAt ?? value.updated_at, "unknown");
-  const dataSources = firstArrayValue(value.dataSources, value.data_sources)
+  const dataSourceStatus = adaptDataSourceStatus(
+    value.dataSourceStatus
+    ?? value.data_source_status
+    ?? value.dataSourceSummary
+    ?? value.data_source_summary,
+  );
+  const explicitDataSources = firstArrayValue(value.dataSources, value.data_sources)
     ?.map(adaptDataSource)
     .filter((source): source is ManagementDataSource => source !== null);
+  const dataSources = [
+    ...(explicitDataSources ?? []),
+    ...(dataSourceStatus?.entries ?? []),
+  ];
   const currentResearchProjects = firstArrayValue(value.currentResearchProjects, value.current_research_projects)
     ?.map(adaptResearchProject)
     .filter((project): project is ManagementResearchProject => project !== null);
@@ -1984,13 +2035,8 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     tags: asStringArray(value.tags),
     marketScope: asStringArray(value.marketScope ?? value.market_scope),
     currentWork: asString(value.currentWork ?? value.current_work),
-    dataSourceStatus: adaptDataSourceStatus(
-      value.dataSourceStatus
-      ?? value.data_source_status
-      ?? value.dataSourceSummary
-      ?? value.data_source_summary,
-    ),
-    dataSources,
+    dataSourceStatus,
+    dataSources: dataSources.length > 0 ? dataSources : undefined,
     researchStatus: adaptResearchStatus(
       value.researchStatus
       ?? value.research_status
@@ -2042,6 +2088,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       basis: asOptionalString(rank.basis),
     } : undefined,
     rowAction: adaptPersonaFleetRowAction(value.rowAction ?? value.row_action),
+    linkTargets: adaptPersonaFleetLinkTargets(value.linkTargets ?? value.link_targets),
   };
 }
 
