@@ -2,9 +2,27 @@ import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { StrategyWorkshopPage } from "@/agora/pages/strategy-workshop/StrategyWorkshopPage";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
+import { useLiveSseConnection } from "@/platform/hooks";
 
+// Agora is an intentional standalone workbench shell (not a Management
+// PlatformShell tab). It preserves live/auth status through the same
+// LiveStatusBanner + SSE substrate PlatformShell uses, without pulling in
+// Management-only chrome (TopBar, NotificationCenter, JobProgressDrawer,
+// HandoffDrawer, RollbackSagaDrawer).
 export function AgoraLayoutRoute() {
-  return <TradingDeskLayout />;
+  useLiveSseConnection();
+  // useParams() resolves against the full matched route branch in React
+  // Router v6, so `workshopId` is populated here even though this component
+  // renders at the parent `/agora` layout route, not the
+  // `/agora/strategy-workshop/:workshopId` leaf route.
+  const { workshopId } = useParams<{ workshopId?: string }>();
+  return (
+    <div className="min-h-screen flex flex-col bg-background" data-testid="agora-standalone-shell">
+      <LiveStatusBanner />
+      <TradingDeskLayout workshopId={workshopId} />
+    </div>
+  );
 }
 
 export function AgoraTradingRoomRoute() {

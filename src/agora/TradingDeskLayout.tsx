@@ -19,9 +19,30 @@
 //   /agora/strategy-workshop     策略工坊
 //   /agora/strategy-performance  策略執行與績效
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+
+/** Below this width the servant drawer becomes a full-width overlay instead of a fixed side column. */
+const MOBILE_BREAKPOINT_PX = 768;
+
+function useIsMobileViewport(): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth < MOBILE_BREAKPOINT_PX : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT_PX);
+    handler();
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  return isMobile;
+}
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -119,7 +140,7 @@ function TabBar({
   return (
     <nav
       aria-label="Trading desk sections"
-      className="flex h-10 shrink-0 items-end gap-0 border-b border-[#2a2e38] bg-[#171b22] px-4"
+      className="flex h-10 shrink-0 items-end gap-0 overflow-x-auto border-b border-[#2a2e38] bg-[#171b22] px-4"
       data-testid="trading-desk-tab-bar"
     >
       {TABS.map((tab) => {
@@ -148,12 +169,61 @@ function TabBar({
 
 // ─── ServantDrawer ────────────────────────────────────────────────────────────
 
-function ServantDrawer({ open, workshopId }: { open: boolean; workshopId?: string }) {
+type ServantWorkshopState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; workshop: StrategyWorkshop }
+  | { status: "error"; message: string };
+
+function useServantWorkshopContext(workshopId: string | undefined): ServantWorkshopState {
+  const [state, setState] = useState<ServantWorkshopState>({ status: "idle" });
+
+  useEffect(() => {
+    if (!workshopId) {
+      setState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: "loading" });
+    getWorkshop(workshopId)
+      .then((workshop) => {
+        if (!cancelled) setState({ status: "loaded", workshop });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: err instanceof Error ? err.message : "Unable to load workshop context",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopId]);
+
+  return state;
+}
+
+function ServantDrawer({
+  open,
+  workshopId,
+  isMobile,
+}: {
+  open: boolean;
+  workshopId?: string;
+  isMobile: boolean;
+}) {
+  const contextState = useServantWorkshopContext(workshopId);
   if (!open) return null;
+
   return (
     <aside
       aria-label="Servant drawer"
-      className="flex w-80 shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]"
+      className={cn(
+        "flex shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]",
+        isMobile ? "fixed inset-x-0 bottom-10 top-[122px] z-30 w-full" : "w-80",
+      )}
       data-testid="trading-desk-servant-drawer"
     >
       <div className="flex h-10 shrink-0 items-center border-b border-[#2a2e38] px-3">
@@ -166,8 +236,33 @@ function ServantDrawer({ open, workshopId }: { open: boolean; workshopId?: strin
           </span>
         )}
       </div>
-      <div className="flex-1 p-3">
-        <p className="text-xs text-[#737d8e]">Servant panel — workshop context loads here.</p>
+      <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">
+        {!workshopId && (
+          <p className="text-xs text-[#737d8e]">
+            Servant panel — open a strategy workshop session for contextual state.
+          </p>
+        )}
+        {workshopId && contextState.status === "loading" && (
+          <p className="text-xs text-[#737d8e]">Loading workshop context…</p>
+        )}
+        {workshopId && contextState.status === "error" && (
+          <p className="text-xs text-[#f87171]" role="alert">
+            Workshop context unavailable: {contextState.message}
+          </p>
+        )}
+        {workshopId && contextState.status === "loaded" && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium text-[#f0ece4]">
+              {contextState.workshop.subject.title ?? contextState.workshop.subject.ref}
+            </p>
+            <p className="text-xs text-[#8c96a6]">Status: {contextState.workshop.status}</p>
+            {typeof contextState.workshop.message_count === "number" && (
+              <p className="text-xs text-[#8c96a6]">
+                Messages: {contextState.workshop.message_count}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -229,6 +324,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bottomSection, setBottomSection] = useState<string | null>(null);
+  const isMobile = useIsMobileViewport();
 
   const activeTab = tabFromPath(location.pathname);
 
@@ -244,6 +340,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
     <div
       className={cn("flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
       data-testid="trading-desk-shell"
+      data-viewport={isMobile ? "mobile" : "desktop"}
     >
       <CommandBar
         drawerOpen={drawerOpen}
@@ -261,7 +358,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
           <Outlet />
         </main>
 
-        <ServantDrawer open={drawerOpen} workshopId={servantWorkshopId} />
+        <ServantDrawer open={drawerOpen} workshopId={servantWorkshopId} isMobile={isMobile} />
       </div>
 
       <BottomStrip activeSection={bottomSection} onSectionChange={setBottomSection} />
