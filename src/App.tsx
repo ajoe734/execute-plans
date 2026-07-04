@@ -295,18 +295,28 @@ const App = () => (
                 <Route path="studios/skill-sandbox" element={<SkillSandboxRoute />} />
               </Route>
 
-              <Route path="/agora" element={<AgoraLayoutRoute />}>
-                <Route index element={<Navigate to="/agora/trading-room" replace />} />
-                <Route path="trading-room" element={<AgoraTradingRoomRoute />} />
-                <Route path="trading-room/:strategyId" element={<AgoraTradingRoomRoute />} />
-                <Route path="strategy-workshop" element={<AgoraStrategyWorkshopRoute />} />
-                <Route path="strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
-                <Route path="strategy-performance" element={<AgoraStrategyPerformanceRoute />} />
-                <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
-              </Route>
-
               {import.meta.env.DEV && <Route path="/qa" element={<QAChecklistRoute />} />}
               <Route path="/audits" element={<AuditViewerRoute />} />
+            </Route>
+
+            {/*
+              Agora is an intentional standalone workbench shell, not a
+              Management PlatformShell tab. It stays inside AuthProvider /
+              TooltipProvider / ErrorBoundary (wrapped above) but owns its own
+              top chrome via TradingDeskLayout instead of PlatformShell's
+              Management TopBar/NotificationCenter/JobProgressDrawer/
+              HandoffDrawer/RollbackSagaDrawer, none of which are Agora
+              concerns. AgoraLayoutRoute preserves live/auth status through
+              the shared LiveStatusBanner + useLiveSseConnection substrate.
+            */}
+            <Route path="/agora" element={<AgoraLayoutRoute />}>
+              <Route index element={<Navigate to="/agora/trading-room" replace />} />
+              <Route path="trading-room" element={<AgoraTradingRoomRoute />} />
+              <Route path="trading-room/:strategyId" element={<AgoraTradingRoomRoute />} />
+              <Route path="strategy-workshop" element={<AgoraStrategyWorkshopRoute />} />
+              <Route path="strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
+              <Route path="strategy-performance" element={<AgoraStrategyPerformanceRoute />} />
+              <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
             </Route>
 
             <Route path="*" element={<NotFoundRoute />} />

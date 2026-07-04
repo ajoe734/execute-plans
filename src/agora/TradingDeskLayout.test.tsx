@@ -1,16 +1,36 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { TradingDeskLayout } from "./TradingDeskLayout";
+import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
 
-afterEach(cleanup);
+vi.mock("@/lib/bff-v1/agora/workshops", () => ({
+  getWorkshop: vi.fn(),
+}));
 
-function renderTradingDesk(initialPath = "/agora/trading-room") {
+const DESKTOP_WIDTH = 1280;
+const MOBILE_WIDTH = 375;
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+  act(() => {
+    window.dispatchEvent(new Event("resize"));
+  });
+}
+
+afterEach(() => {
+  cleanup();
+  setViewportWidth(DESKTOP_WIDTH);
+  vi.restoreAllMocks();
+});
+
+function renderTradingDesk(initialPath = "/agora/trading-room", workshopId?: string) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
-        <Route path="/agora" element={<TradingDeskLayout />}>
+        <Route path="/agora" element={<TradingDeskLayout workshopId={workshopId} />}>
           <Route path="trading-room" element={<div data-testid="trading-room-content">Trading Room content</div>} />
           <Route path="strategy-workshop" element={<div data-testid="strategy-workshop-content">Strategy Workshop content</div>} />
           <Route path="strategy-performance" element={<div data-testid="strategy-performance-content">Performance content</div>} />
@@ -97,5 +117,91 @@ describe("TradingDeskLayout", () => {
   it("renders the full shell container", () => {
     renderTradingDesk();
     expect(screen.getByTestId("trading-desk-shell")).toBeDefined();
+  });
+
+  it("marks the shell as desktop viewport by default", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    renderTradingDesk();
+    expect(screen.getByTestId("trading-desk-shell").dataset.viewport).toBe("desktop");
+  });
+
+  it("marks the shell as mobile viewport below the breakpoint", () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderTradingDesk();
+    expect(screen.getByTestId("trading-desk-shell").dataset.viewport).toBe("mobile");
+  });
+
+  it("renders the servant drawer as a fixed full-width overlay on mobile", () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderTradingDesk();
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    const drawer = screen.getByTestId("trading-desk-servant-drawer");
+    expect(drawer.className).toContain("fixed");
+    expect(drawer.className).toContain("w-full");
+  });
+
+  it("renders the servant drawer as a fixed-width side column on desktop", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    renderTradingDesk();
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    const drawer = screen.getByTestId("trading-desk-servant-drawer");
+    expect(drawer.className).not.toContain("fixed");
+    expect(drawer.className).toContain("w-80");
+  });
+
+  it("keeps the tab bar horizontally scrollable so tabs never clip on narrow viewports", () => {
+    renderTradingDesk();
+    expect(screen.getByTestId("trading-desk-tab-bar").className).toContain("overflow-x-auto");
+  });
+
+  it("shows a neutral placeholder in the servant drawer without a workshop id", () => {
+    renderTradingDesk("/agora/strategy-workshop");
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
+      "open a strategy workshop session",
+    );
+  });
+
+  it("loads and renders real workshop context in the servant drawer", async () => {
+    const workshop: StrategyWorkshop = {
+      spec_version: "1.0",
+      workshop_id: "ws-1",
+      operator_id: "operator-1",
+      status: "open",
+      subject: { kind: "free_form", ref: "strategy-draft-1", title: "Momentum draft" },
+      message_count: 4,
+      created_at: "2026-06-01T00:00:00Z",
+    };
+    vi.mocked(getWorkshop).mockResolvedValue(workshop);
+
+    renderTradingDesk("/agora/strategy-workshop", "ws-1");
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Momentum draft");
+    });
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Status: open");
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Messages: 4");
+    expect(getWorkshop).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("shows a degraded state instead of a placeholder when workshop context fails to load", async () => {
+    vi.mocked(getWorkshop).mockRejectedValue(new Error("boom"));
+
+    renderTradingDesk("/agora/strategy-workshop", "ws-2");
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain("Workshop context unavailable");
+    });
+  });
+
+  it("only propagates the servant workshop id while on the strategy-workshop tab", async () => {
+    renderTradingDesk("/agora/trading-room", "ws-1");
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    expect(getWorkshop).not.toHaveBeenCalled();
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
+      "open a strategy workshop session",
+    );
   });
 });
