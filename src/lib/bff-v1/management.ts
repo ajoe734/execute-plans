@@ -2519,37 +2519,32 @@ const promotionReviewInboxId = (reviewId?: string): string | undefined => {
 const humanInboxDetailHref = (humanInboxId?: string): string | undefined =>
   humanInboxId ? `/management/human-inbox/${encodeURIComponent(humanInboxId)}` : undefined;
 
-const buildRankingRecommendationSubmitBody = (
+const buildRankingRecommendationSubmitPayload = (
   input: RankingRecommendationSubmitInput,
   recommendationId: string,
 ): Record<string, unknown> => {
   const governanceDestinations = normalizeGovernanceDestinations(input.governanceDestinations);
   return {
-    command: "QuarterlyRankingRecommendationSubmit",
-    target: { type: "Ranking", id: recommendationId },
-    action: "submit",
-    params: {
-      quarter: input.quarter,
-      recommendation_id: recommendationId,
-      recommendationId,
-      recommendation_action_id: input.actionId,
-      recommendationActionId: input.actionId,
-      actionId: input.actionId,
-      persona_id: input.personaId,
-      personaId: input.personaId,
-      persona_name: input.personaName,
-      personaName: input.personaName,
-      source: input.source,
-      evidence_refs: input.evidenceRefs ?? [],
-      evidenceRefs: input.evidenceRefs ?? [],
-      governance_destinations: governanceDestinations,
-      governanceDestinations,
-      live_capital_mutation: false,
-      liveCapitalMutation: false,
-    },
-    audit_context: {
-      reason: `PM-12 ${input.source} recommendation requires Human Inbox review before any governed action.`,
-    },
+    quarter: input.quarter,
+    recommendation_id: recommendationId,
+    recommendationId,
+    recommendation_action_id: input.actionId,
+    recommendationActionId: input.actionId,
+    actionId: input.actionId,
+    persona_id: input.personaId,
+    personaId: input.personaId,
+    persona_name: input.personaName,
+    personaName: input.personaName,
+    source: input.source,
+    evidence_refs: input.evidenceRefs ?? [],
+    evidenceRefs: input.evidenceRefs ?? [],
+    governance_destinations: governanceDestinations,
+    governanceDestinations,
+    live_capital_mutation: false,
+    liveCapitalMutation: false,
+    direct_live_capital_mutation: false,
+    runtime_mutation: false,
+    reason: `PM-12 ${input.source} recommendation requires Human Inbox review before any governed action.`,
   };
 };
 
@@ -3480,8 +3475,8 @@ export const mgmt = {
       }
       const raw = await bffFetch<unknown>({
         method: "POST",
-        path: paths.commandsV1(),
-        body: buildRankingRecommendationSubmitBody(input, recommendationId),
+        path: paths.mgmtQuarterlyRankingRecommendationSubmit(recommendationId),
+        body: buildRankingRecommendationSubmitPayload(input, recommendationId),
         idempotencyKey,
         mode: "live",
       });

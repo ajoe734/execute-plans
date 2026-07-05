@@ -220,6 +220,8 @@ export const paths = {
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
   mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
     `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRankingRecommendationSubmit: (recommendationId: string) =>
+    `${BASE}/management/quarterly-ranking/recommendations/${enc(recommendationId)}/submit`,
   mgmtPerformanceAttribution: (dimension?: string, period?: string) => {
     const qs: string[] = [];
     if (dimension) qs.push(`dimension=${enc(dimension)}`);

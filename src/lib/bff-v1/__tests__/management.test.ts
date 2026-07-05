@@ -487,13 +487,8 @@ describe("mgmt façade (PM-Live)", () => {
       { idempotencyKey: "idk-ranking-enabled" },
     );
 
-    expect(commandUrl.endsWith("/bff/v1/commands")).toBe(true);
+    expect(commandUrl.endsWith("/bff/management/quarterly-ranking/recommendations/pm12-rec-enabled/submit")).toBe(true);
     expect(commandBody).toMatchObject({
-      command: "QuarterlyRankingRecommendationSubmit",
-      target: { type: "Ranking", id: "pm12-rec-enabled" },
-      action: "submit",
-    });
-    expect(commandBody.params).toMatchObject({
       quarter: "2026-Q3",
       recommendation_id: "pm12-rec-enabled",
       recommendationId: "pm12-rec-enabled",
@@ -506,6 +501,8 @@ describe("mgmt façade (PM-Live)", () => {
       governance_destinations: ["human_inbox", "human_gate_decision"],
       live_capital_mutation: false,
       liveCapitalMutation: false,
+      direct_live_capital_mutation: false,
+      runtime_mutation: false,
     });
     expect(commandHeaders["Idempotency-Key"]).toBe("idk-ranking-enabled");
     expect(result).toMatchObject({
