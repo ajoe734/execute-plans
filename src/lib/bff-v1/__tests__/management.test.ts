@@ -1117,6 +1117,7 @@ describe("mgmt façade (PM-Live)", () => {
       deploymentStage: "paper",
       capitalMode: "paper",
       paperLedgerId: "paper-ledger-persona-tw-equity",
+      paperCapitalPoolId: "cp-paper-tw-equity",
       runtimeHealth: { status: "healthy" },
       reviewId: "review-paper-to-live-tw",
       reviewType: "paper_to_live",
@@ -1204,6 +1205,7 @@ describe("mgmt façade (PM-Live)", () => {
       capitalMode: "paper",
       deploymentStage: "paper",
       paperLedgerId: "paper-ledger-persona-legacy-deployed",
+      paperCapitalPoolId: "shared-legacy-paper-pool",
       runtimeId: "rt-paper-legacy",
       runtimeBindingId: "rb-paper-legacy",
     });

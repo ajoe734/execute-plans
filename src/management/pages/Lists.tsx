@@ -3,6 +3,7 @@ import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
 import { capitalPoolsWithFleetFallback, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
+import { Badge } from "@/components/ui/badge";
 
 // Defensive numeric formatters — live BFF rows can omit numeric fields; never crash a cell.
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -10,8 +11,52 @@ const fix = (v: unknown, d = 2): string => num(v).toFixed(d);
 const pct = (v: unknown, d = 0): string => `${(num(v) * 100).toFixed(d)}%`;
 const loc = (v: unknown): string => num(v).toLocaleString();
 const hasNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const locOrNan = (v: unknown): string => hasNumber(v) ? v.toLocaleString() : "nan";
-const pctOrNan = (v: unknown, d = 0): string => hasNumber(v) ? `${(v * 100).toFixed(d)}%` : "nan";
+const locOrMissing = (v: unknown): string => hasNumber(v) ? v.toLocaleString() : "unconfigured";
+const pctOrMissing = (v: unknown, d = 0): string => hasNumber(v) ? `${(v * 100).toFixed(d)}%` : "unconfigured";
+
+function capitalScopeLabel(value: unknown): string {
+  const scope = String(value ?? "").trim().toLowerCase();
+  if (scope === "paper" || scope === "paper_ledger") return "paper";
+  if (scope === "canary") return "canary";
+  if (scope === "live") return "live";
+  return "capital";
+}
+
+function capitalScopeClass(scope: string): string {
+  if (scope === "live") return "border-status-failed/40 text-status-failed";
+  if (scope === "canary") return "border-status-warning/40 text-status-warning";
+  if (scope === "paper") return "border-status-success/40 text-status-success";
+  return "border-muted text-muted-foreground";
+}
+
+function personaCountLabel(count?: number): string {
+  if (!count) return "Unbound";
+  return `${count} persona${count === 1 ? "" : "s"}`;
+}
+
+function CapitalPoolNameCell(row: FleetCapitalPool) {
+  const scope = capitalScopeLabel(row.capitalScope);
+  const summary = row.bindingSummary ?? (row.personaCount ? row.personaNames : "Unbound");
+  return (
+    <div className="min-w-0">
+      <div className="font-medium text-foreground">{row.name}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline" className={capitalScopeClass(scope)}>{scope}</Badge>
+        <span className="text-xs font-medium text-foreground">{personaCountLabel(row.personaCount)}</span>
+        {summary && (
+          <span className="max-w-[360px] truncate text-xs text-muted-foreground" title={row.personaNames || summary}>
+            {summary}
+          </span>
+        )}
+      </div>
+      {row.bindingDetail && (
+        <div className="mt-1 max-w-[520px] truncate font-mono text-xs text-muted-foreground" title={row.bindingDetail}>
+          {row.bindingDetail}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const StrategiesList = () => {
   const t = useT();
@@ -54,17 +99,18 @@ export const CapitalPoolsList = () => {
       title={t("nav.capitalPools")}
       loader={capitalPoolsWithFleetFallback}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
+      nameCell={CapitalPoolNameCell}
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
-        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency ?? "nan"}</span> },
-        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{locOrNan(r.allocated)}</span> },
-        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{locOrNan(r.utilized)}</span> },
-        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pctOrNan(r.riskBudget, 1)}</span> },
+        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency ?? "unconfigured"}</span> },
+        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.allocated)}</span> },
+        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.utilized)}</span> },
+        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pctOrMissing(r.riskBudget, 1)}</span> },
         { key: "personas", header: t("nav.personas"), cell: (r) => (
           <span className="text-mono text-xs" title={r.personaNames}>
-            {r.personaCount ? `${r.personaCount} persona${r.personaCount === 1 ? "" : "s"}` : "nan"}
+            {personaCountLabel(r.personaCount)}
           </span>
         ) },
       ]}
