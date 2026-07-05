@@ -2,12 +2,16 @@ import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
+import { capitalPoolsWithFleetFallback, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
 
 // Defensive numeric formatters — live BFF rows can omit numeric fields; never crash a cell.
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const fix = (v: unknown, d = 2): string => num(v).toFixed(d);
 const pct = (v: unknown, d = 0): string => `${(num(v) * 100).toFixed(d)}%`;
 const loc = (v: unknown): string => num(v).toLocaleString();
+const hasNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const locOrNan = (v: unknown): string => hasNumber(v) ? v.toLocaleString() : "nan";
+const pctOrNan = (v: unknown, d = 0): string => hasNumber(v) ? `${(v * 100).toFixed(d)}%` : "nan";
 
 export const StrategiesList = () => {
   const t = useT();
@@ -46,18 +50,23 @@ export const PersonasList = () => {
 export const CapitalPoolsList = () => {
   const t = useT();
   return (
-    <ObjectListPage<CapitalPool>
+    <ObjectListPage<FleetCapitalPool>
       title={t("nav.capitalPools")}
-      loader={lists.capitalPools}
+      loader={capitalPoolsWithFleetFallback}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
-        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
-        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{loc(r.allocated)}</span> },
-        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{loc(r.utilized)}</span> },
-        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pct(r.riskBudget, 1)}</span> },
+        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency ?? "nan"}</span> },
+        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{locOrNan(r.allocated)}</span> },
+        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{locOrNan(r.utilized)}</span> },
+        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pctOrNan(r.riskBudget, 1)}</span> },
+        { key: "personas", header: t("nav.personas"), cell: (r) => (
+          <span className="text-mono text-xs" title={r.personaNames}>
+            {r.personaCount ? `${r.personaCount} persona${r.personaCount === 1 ? "" : "s"}` : "nan"}
+          </span>
+        ) },
       ]}
     />
   );
