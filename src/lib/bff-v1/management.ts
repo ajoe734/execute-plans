@@ -167,6 +167,13 @@ export interface ManagementPersonaFleetCapitalPool {
   liveCapitalEnabled?: boolean;
 }
 
+export interface ManagementPersonaFleetPerformanceSummary {
+  pnl?: number;
+  sharpe?: number;
+  maxDrawdown?: number;
+  violationCount?: number;
+}
+
 export interface ManagementPersonaFleetRuntimeBinding {
   id?: string;
   runtimeId?: string;
@@ -214,6 +221,7 @@ export interface ManagementPersonaFleetRow {
   capitalMode?: string;
   capitalPoolId?: string;
   capitalPool?: ManagementPersonaFleetCapitalPool;
+  performanceSummary?: ManagementPersonaFleetPerformanceSummary;
   runtimeBinding?: ManagementPersonaFleetRuntimeBinding;
   runtimeHealth?: Record<string, unknown>;
   requiredHumanReview?: string;
@@ -1985,6 +1993,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?.map(adaptResearchProject)
     .filter((project): project is ManagementResearchProject => project !== null);
   const capitalPool = objectOrEmpty(value.capitalPool ?? value.capital_pool);
+  const performanceSummary = objectOrEmpty(value.performanceSummary ?? value.performance_summary);
   const runtimeBinding = objectOrEmpty(value.runtimeBinding ?? value.runtime_binding);
   const review = objectOrEmpty(value.review);
   const rank = objectOrEmpty(value.rank);
@@ -2053,6 +2062,12 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       id: asOptionalString(capitalPool.id),
       mode: asOptionalString(capitalPool.mode),
       liveCapitalEnabled: asBoolean(capitalPool.liveCapitalEnabled ?? capitalPool.live_capital_enabled, false),
+    } : undefined,
+    performanceSummary: isObject(value.performanceSummary ?? value.performance_summary) ? {
+      pnl: optionalFiniteNumber(performanceSummary.pnl),
+      sharpe: optionalFiniteNumber(performanceSummary.sharpe),
+      maxDrawdown: optionalFiniteNumber(performanceSummary.maxDrawdown ?? performanceSummary.max_drawdown),
+      violationCount: optionalFiniteNumber(performanceSummary.violationCount ?? performanceSummary.violation_count),
     } : undefined,
     runtimeBinding: isObject(value.runtimeBinding ?? value.runtime_binding) ? {
       id: asOptionalString(runtimeBinding.id),

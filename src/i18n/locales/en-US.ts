@@ -469,6 +469,9 @@ export default {
     noUpstreamExperiment: "No upstream experiment recorded.",
     noArtifactsYet: "No artifacts produced yet.",
     noDetailRoute: "No detail route registered for this id.",
+    focusedObjectFmt: "Focused {{label}}: {{id}} · {{count}} matching row(s)",
+    focusMissingObjectFmt: "No {{label}} row found for {{id}}. Showing all rows.",
+    showAllObjects: "Show all {{label}}",
   },
   detail: {
     section: {

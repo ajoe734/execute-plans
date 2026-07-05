@@ -50,6 +50,8 @@ export const CapitalPoolsList = () => {
       title={t("nav.capitalPools")}
       loader={lists.capitalPools}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
+      focusParam="pool"
+      focusLabel={t("nav.capitalPools")}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       extraColumns={[
         { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },

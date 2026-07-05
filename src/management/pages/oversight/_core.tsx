@@ -66,6 +66,7 @@ import {
 } from "./personaFleetFilters";
 import {
   personaFleetArtifactHref,
+  personaFleetCapitalHref,
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
@@ -583,6 +584,7 @@ export const PersonaFleetPage = () => {
               const dataSourcesHref = sourceBadges.length > 0 ? personaFleetDataSourcesHref(r) : null;
               const performanceHref = personaFleetPerformanceHref(r);
               const mutationHref = personaFleetMutationHref(r);
+              const capitalHref = personaFleetCapitalHref(r);
               const humanGateHref = personaFleetHumanGateHref(r);
               const onboardingHref = personaFleetOnboardingHref(r);
               const runtimeHref = personaFleetRuntimeHref(r);
@@ -658,9 +660,20 @@ export const PersonaFleetPage = () => {
 	                      )}
 	                    </div>
 	                    {capitalPoolId && (
-	                      <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalPoolId}>
-	                        {capitalPoolId}
-	                      </div>
+                        capitalHref ? (
+                          <Link
+                            to={capitalHref}
+                            aria-label={`${r.personaId} capital pool ${capitalPoolId}`}
+                            className={fieldLinkClass("mt-1 block max-w-[190px] truncate font-mono text-xs text-muted-foreground hover:text-primary")}
+                            title={capitalPoolId}
+                          >
+                            {capitalPoolId}
+                          </Link>
+                        ) : (
+                          <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalPoolId}>
+                            {capitalPoolId}
+                          </div>
+                        )
 	                    )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[120px]">
@@ -1496,6 +1509,46 @@ interface EvolutionEntry {
   occurred_at?: string; created_at?: string;
 }
 
+type RawEvolutionFleetRow = ManagementPersonaFleetRow & {
+  id?: string;
+  persona_id?: string;
+  name?: string;
+  current_work?: string;
+  last_mutation?: string;
+};
+
+function evolutionFleetPersonaId(row: ManagementPersonaFleetRow): string | undefined {
+  const raw = row as RawEvolutionFleetRow;
+  const id = row.personaId ?? raw.persona_id ?? raw.id;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function fallbackEvolutionEntryFromFleet(
+  fleetRows: ManagementPersonaFleetRow[] | undefined,
+  personaFocus: string,
+): EvolutionEntry | null {
+  const focus = personaFocus.trim();
+  if (!focus) return null;
+  const row = (fleetRows ?? []).find((item) => evolutionFleetPersonaId(item) === focus);
+  if (!row) return null;
+  const raw = row as RawEvolutionFleetRow;
+  const lastMutation = row.lastMutation ?? raw.last_mutation ?? "nan";
+  const personaName = row.personaName ?? raw.name ?? focus;
+  const currentWork = row.currentWork ?? raw.current_work;
+  return {
+    id: `persona-fleet-summary:${focus}:${lastMutation}`,
+    title: `Persona Fleet mutation summary · ${personaName}`,
+    summary: [currentWork, row.state ? `state ${row.state}` : undefined]
+      .filter(Boolean)
+      .join(" · "),
+    status: row.state ?? "fleet_summary",
+    entryType: "persona_fleet_summary",
+    action_type: lastMutation,
+    target: { type: "Persona", id: focus },
+    occurred_at: lastMutation && lastMutation !== "nan" ? lastMutation : undefined,
+  };
+}
+
 const verdictTone = (v?: string) =>
   v === "improved" || v === "accepted" || v === "approved"
     ? "bg-status-success/15 text-status-success border-status-success/30"
@@ -1509,12 +1562,18 @@ export const EvolutionJournalPage = () => {
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const mutationFocus = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
   const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const rows = useMemo(() => data ?? [], [data]);
   const focus = useMemo(
     () => filterEvolutionJournalRowsForFocus(rows, { personaFocus, mutationFocus }),
     [mutationFocus, personaFocus, rows],
   );
-  const visibleRows = focus.rows;
+  const fleetFallback = useMemo(
+    () => focus.matched || mutationFocus ? null : fallbackEvolutionEntryFromFleet(fleetRows, personaFocus),
+    [fleetRows, focus.matched, mutationFocus, personaFocus],
+  );
+  const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
+  const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || mutationFocus);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
@@ -1529,7 +1588,7 @@ export const EvolutionJournalPage = () => {
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {focus.matched
+              {focusMatched
                 ? t("mgmt.evolution.focusedFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan", count: visibleRows.length })
                 : t("mgmt.evolution.focusMissingFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan" })}
             </span>

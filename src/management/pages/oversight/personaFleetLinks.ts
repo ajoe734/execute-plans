@@ -108,6 +108,10 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   runtime_binding_id?: string;
   bindingId?: string;
   binding_id?: string;
+  capitalPoolId?: string;
+  capital_pool_id?: string;
+  capitalPool?: { id?: unknown };
+  capital_pool?: { id?: unknown };
   links?: RawLinkRecord;
   review?: RawLinkRecord;
   linkTargets?: RawLinkRecord;
@@ -229,6 +233,12 @@ function currentWork(r: ManagementPersonaFleetRow): string | undefined {
 function encodedPersonaId(r: ManagementPersonaFleetRow): string | null {
   const personaId = rowPersonaId(r);
   return personaId ? encodeURIComponent(personaId) : null;
+}
+
+function capitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const id = raw.capitalPoolId ?? raw.capital_pool_id ?? raw.capitalPool?.id ?? raw.capital_pool?.id;
+  return isUsableToken(id) ? id.trim() : undefined;
 }
 
 function runtimeId(r: ManagementPersonaFleetRow): string | undefined {
@@ -422,7 +432,13 @@ export function personaFleetResearchHref(
   ]);
   if (canonical) return canonical;
   const id = item?.experimentId ?? experimentId(researchStatus(r), project);
-  return id && isUsableToken(id) ? `/management/experiments/${encodeURIComponent(id)}` : null;
+  if (id && isUsableToken(id)) return `/management/experiments/${encodeURIComponent(id)}`;
+  const personaId = encodedPersonaId(r);
+  if (!personaId) return null;
+  const projectFocus = item?.projectId ?? projectId(project);
+  return `/management/loops/research?persona=${personaId}${
+    projectFocus && isUsableToken(projectFocus) ? `&project=${encodeURIComponent(projectFocus)}` : ""
+  }`;
 }
 
 export function personaFleetArtifactHref(
@@ -496,17 +512,20 @@ export function personaFleetDataSourcesHref(
 }
 
 export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): string | null {
-  return firstCanonicalHref(rowLinkRecords(r), [
+  const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "performance",
     "performanceAttribution",
     "performance_attribution",
     "performanceHref",
     "performance_href",
   ]);
+  if (canonical) return canonical;
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/performance-attribution?dimension=persona&persona=${personaId}` : null;
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {
-  return firstCanonicalHref(rowLinkRecords(r), [
+  const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "mutation",
     "mutationHref",
     "mutation_href",
@@ -517,6 +536,28 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
     "learnHref",
     "learn_href",
   ]);
+  if (canonical) return canonical;
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/evolution-journal?persona=${personaId}` : null;
+}
+
+export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
+  const canonical = firstCanonicalHref(rowLinkRecords(r), [
+    "capital",
+    "capitalHref",
+    "capital_href",
+    "capitalPool",
+    "capital_pool",
+    "capitalPoolHref",
+    "capital_pool_href",
+  ]);
+  if (canonical?.startsWith("/management/capital/")) {
+    const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
+    return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
+  }
+  if (canonical) return canonical;
+  const id = capitalPoolId(r);
+  return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
 
 export function personaFleetHumanGateHref(r: ManagementPersonaFleetRow): string | null {

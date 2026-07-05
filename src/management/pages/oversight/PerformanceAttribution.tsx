@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { mgmt } from "@/lib/bff-v1";
+import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   ATTRIBUTION_DIMENSIONS, buildAttributionLinks,
@@ -63,6 +64,20 @@ type RawAttributionRow = Partial<PerformanceAttributionRow> & {
 
 type AttributionViewRow = PerformanceAttributionRow & {
   sourceRefs?: RawSourceRefs | null;
+};
+
+type RawPersonaFleetRow = ManagementPersonaFleetRow & {
+  id?: string;
+  persona_id?: string;
+  name?: string;
+  performance_summary?: {
+    pnl?: unknown;
+    sharpe?: unknown;
+    max_drawdown?: unknown;
+    maxDrawdown?: unknown;
+    violation_count?: unknown;
+    violationCount?: unknown;
+  } | null;
 };
 
 function cleanText(...values: unknown[]): string | undefined {
@@ -139,6 +154,38 @@ function sourceRefPersonaIds(row: AttributionViewRow): string[] {
   return stringArray(refs.personaIds ?? refs.persona_ids);
 }
 
+function fleetPersonaId(row: ManagementPersonaFleetRow): string | undefined {
+  const raw = row as RawPersonaFleetRow;
+  return cleanText(row.personaId, raw.persona_id, raw.id);
+}
+
+function fallbackAttributionRowFromFleet(
+  fleetRows: ManagementPersonaFleetRow[] | undefined,
+  personaFocus: string,
+): AttributionViewRow | null {
+  const focus = personaFocus.trim();
+  if (!focus) return null;
+  const row = (fleetRows ?? []).find((item) => fleetPersonaId(item) === focus);
+  if (!row) return null;
+  const raw = row as RawPersonaFleetRow;
+  const summary = row.performanceSummary ?? raw.performance_summary ?? {};
+  const label = cleanText(row.personaName, raw.name, focus) ?? focus;
+  return {
+    dimension: "persona",
+    key: focus,
+    label: `${label} · Persona Fleet summary`,
+    pnlContribution: finiteNumber(summary.pnl),
+    pnlContributionPct: finiteNumber(row.perfDelta),
+    riskContributionPct: NaN,
+    drawdownContributionPct: finiteNumber(summary.maxDrawdown, summary.max_drawdown),
+    evidenceRefs: [],
+    links: {
+      manageHref: `/management/persona-fleet?persona=${encodeURIComponent(focus)}`,
+    },
+    sourceRefs: { personaIds: [focus] },
+  };
+}
+
 function filterPerformanceRowsForPersona(
   rows: AttributionViewRow[],
   personaFocus: string,
@@ -167,6 +214,7 @@ export const PerformanceAttributionPage = () => {
     ),
     [dimension, period],
   );
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const allRows = useMemo(() => (data ?? []).map(normalizePerformanceAttributionRow), [data]);
   const dimensionRows = useMemo(() => {
     const filtered = dimension === "all" ? allRows : allRows.filter((r) => r.dimension === dimension);
@@ -176,7 +224,12 @@ export const PerformanceAttributionPage = () => {
     () => filterPerformanceRowsForPersona(dimensionRows, personaFocus),
     [dimensionRows, personaFocus],
   );
-  const rows = focus.rows;
+  const fleetFallback = useMemo(
+    () => focus.matched ? null : fallbackAttributionRowFromFleet(fleetRows, personaFocus),
+    [fleetRows, focus.matched, personaFocus],
+  );
+  const rows = fleetFallback ? [fleetFallback] : focus.rows;
+  const focusMatched = focus.matched || Boolean(fleetFallback);
   const showAllPersonaHref = useMemo(() => {
     const params = new URLSearchParams();
     params.set("dimension", "persona");
@@ -231,13 +284,13 @@ export const PerformanceAttributionPage = () => {
       </header>
 
       {personaFocus && (
-        <Card className={"p-3 text-sm " + (focus.matched
+        <Card className={"p-3 text-sm " + (focusMatched
           ? "border-primary/30 bg-primary/5"
           : "border-status-warning/30 bg-status-warning/10")}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {focus.matched
+              {focusMatched
                 ? t("mgmt.attribution.focusedPersonaFmt", { persona: personaFocus, count: rows.length })
                 : t("mgmt.attribution.focusMissingPersonaFmt", { persona: personaFocus })}
             </span>

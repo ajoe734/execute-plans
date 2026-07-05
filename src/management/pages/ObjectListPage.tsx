@@ -2,12 +2,13 @@
 // VI-1 — migrated to bffV1: loader returns ListEnvelope<T>; refresh via useLiveListV1.
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable, type Column } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
@@ -29,6 +30,8 @@ interface Props<T extends BaseObject> {
   liveKinds?: string[];
   /** Pack F F01 — describes the Create button behavior. */
   createBehavior?: CreateBehavior;
+  focusParam?: string;
+  focusLabel?: string;
   emptyState?: {
     title: string;
     description: string;
@@ -37,10 +40,12 @@ interface Props<T extends BaseObject> {
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior, emptyState,
+  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const focusId = focusParam ? searchParams.get(focusParam)?.trim() ?? "" : "";
   const shouldMergeOverlay = createBehavior?.kind === "drawer" && createBehavior.entity !== "persona";
   const wrappedLoader: () => Promise<ListEnvelope<T>> = shouldMergeOverlay
     ? (() => withOverlay<T>(createBehavior.entity, async () => (await loader()).items)().then((items) => ({
@@ -50,6 +55,9 @@ export function ObjectListPage<T extends BaseObject>({
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
+  const focusedRows = focusId ? rows.filter((row) => row.id === focusId) : rows;
+  const focusMatched = Boolean(focusId && focusedRows.length > 0);
+  const visibleRows = focusMatched ? focusedRows : rows;
 
   const columns: Column<T>[] = [
     { key: "name", header: t("common.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
@@ -133,6 +141,37 @@ export function ObjectListPage<T extends BaseObject>({
             {t("realtime.newUpdates", { count: pending, defaultValue: `${pending} new update(s) — click to refresh` })}
           </button>
         )}
+        {focusId && (
+          <Card className={"mb-3 p-3 text-sm " + (focusMatched
+            ? "border-primary/30 bg-primary/5"
+            : "border-status-warning/30 bg-status-warning/10")}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-foreground">
+                {focusMatched
+                  ? t("common.focusedObjectFmt", {
+                    label: focusLabel ?? title,
+                    id: focusId,
+                    count: focusedRows.length,
+                    defaultValue: `Focused ${focusLabel ?? title}: ${focusId} · ${focusedRows.length} matching row(s)`,
+                  })
+                  : t("common.focusMissingObjectFmt", {
+                    label: focusLabel ?? title,
+                    id: focusId,
+                    defaultValue: `No ${focusLabel ?? title} row found for ${focusId}. Showing all rows.`,
+                  })}
+              </span>
+              <Button asChild size="sm" variant="outline">
+                <Link to={basePath}>
+                  {t("common.showAllObjects", {
+                    label: title,
+                    defaultValue: `Show all ${title}`,
+                  })}
+                </Link>
+              </Button>
+            </div>
+          </Card>
+        )}
         {rows.length === 0 && (degradation.degraded || emptyState) ? (
           <EmptyState
             icon={emptyState?.icon ?? <Inbox className="h-8 w-8" />}
@@ -152,7 +191,7 @@ export function ObjectListPage<T extends BaseObject>({
           />
         ) : (
           <DataTable
-            rows={rows}
+            rows={visibleRows}
             columns={columns}
             empty={t("common.noResults")}
             onRowClick={(r) => navigate(`${basePath}/${r.id}`)}

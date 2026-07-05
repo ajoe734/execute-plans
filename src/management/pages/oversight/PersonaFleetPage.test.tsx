@@ -292,7 +292,10 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByText("cp-paper-alpha")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-paper-alpha capital pool cp-paper-alpha" })).toHaveAttribute(
+      "href",
+      "/management/capital?pool=cp-paper-alpha",
+    );
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
@@ -361,8 +364,10 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
     expect(screen.getByText(/vectorbt \/ 2 more frameworks/)).toBeInTheDocument();
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "persona-live-summary performance attribution" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("persona-live-summary performance attribution unavailable")).toHaveTextContent("18.20%");
+    expect(screen.getByRole("link", { name: "persona-live-summary performance attribution" })).toHaveAttribute(
+      "href",
+      "/management/performance-attribution?dimension=persona&persona=persona-live-summary",
+    );
   });
 
   it("does not report a focused persona as missing before live fleet data loads", () => {
