@@ -101,4 +101,48 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
     expect(screen.getByText("No rows.")).toBeInTheDocument();
   });
+
+  it("shows a Persona Fleet summary row when attribution rows miss but fleet has the persona", () => {
+    mocks.useV5Live
+      .mockReturnValueOnce({
+        data: [{
+          dimension: "persona",
+          dimension_key: "persona-crypto",
+          label: "Crypto Persona",
+          metrics: { total_pnl: 9876 },
+          source_refs: { persona_ids: ["persona-crypto"] },
+        }],
+        loading: false,
+        refresh: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        data: [{
+          personaId: "persona-live-paper-alpha",
+          personaName: "Paper Alpha",
+          owner: "pantheon-dev-browser",
+          ooda: "Act",
+          autonomy: "supervised",
+          perfDelta: 0.182,
+          humanNeeded: true,
+          lastMutation: "2026-06-03",
+          performanceSummary: {
+            pnl: 48000,
+            maxDrawdown: 0.064,
+          },
+        }],
+        loading: false,
+        refresh: vi.fn(),
+      });
+
+    renderPage("/management/performance-attribution?dimension=persona&persona=persona-live-paper-alpha");
+
+    expect(screen.getByText("Focused persona: persona-live-paper-alpha · 1 matching attribution row(s)")).toBeInTheDocument();
+    expect(screen.getByText("Paper Alpha · Persona Fleet summary")).toBeInTheDocument();
+    expect(screen.getByText("$48,000")).toBeInTheDocument();
+    expect(screen.getByText("18.20%")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage →" })).toHaveAttribute(
+      "href",
+      "/management/persona-fleet?persona=persona-live-paper-alpha",
+    );
+  });
 });

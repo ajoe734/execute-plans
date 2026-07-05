@@ -461,6 +461,9 @@ export default {
     noUpstreamExperiment: "未紀錄上游實驗。",
     noArtifactsYet: "尚未產出 artifact。",
     noDetailRoute: "此 id 尚未註冊明細路由。",
+    focusedObjectFmt: "已聚焦 {{label}}：{{id}} · {{count}} 筆匹配資料",
+    focusMissingObjectFmt: "找不到 {{id}} 的 {{label}} row，目前顯示全部資料。",
+    showAllObjects: "顯示全部{{label}}",
   },
   detail: {
     section: {

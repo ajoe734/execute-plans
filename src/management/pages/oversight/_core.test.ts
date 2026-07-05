@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import {
   personaFleetArtifactHref,
+  personaFleetCapitalHref,
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
@@ -125,6 +126,7 @@ describe("PersonaFleetPage deep links", () => {
       ],
       linkTargets: {
         persona: "/management/personas/persona%2Ftw%20equity",
+        capitalPool: "/management/capital/pool-tw-paper",
         dataSources: "/management/data-sources?persona=persona%2Ftw%20equity",
         research: "/management/experiments/exp-mgmt-qlib-006",
         artifact: "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
@@ -135,6 +137,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona%2Ftw%20equity");
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-tw-paper");
     expect(personaFleetResearchHref(row)).toBe("/management/experiments/exp-mgmt-qlib-006");
     expect(personaFleetArtifactHref(row)).toBe(
       "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
@@ -319,7 +322,7 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetDataSourcesHref(row, source)).toBeNull();
   });
 
-  it("does not fabricate a research-loop project link when no canonical target exists", () => {
+  it("links to research loop focus when no canonical experiment target exists", () => {
     const row = {
       personaId: "persona-crypto",
       currentResearchProjects: [
@@ -334,8 +337,27 @@ describe("PersonaFleetPage deep links", () => {
       ],
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchHref(row)).toBe(
+      "/management/loops/research?persona=persona-crypto&project=research-crypto-paper-001",
+    );
     expect(personaFleetArtifactHref(row)).toBeNull();
+  });
+
+  it("derives stable capital, performance, and mutation links from slim rows", () => {
+    const row = {
+      persona_id: "persona-crypto-paper",
+      capital_pool_id: "pool-crypto-paper",
+      perf_delta: 0.182,
+      last_mutation: "2026-06-03",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-crypto-paper");
+    expect(personaFleetPerformanceHref(row)).toBe(
+      "/management/performance-attribution?dimension=persona&persona=persona-crypto-paper",
+    );
+    expect(personaFleetMutationHref(row)).toBe(
+      "/management/evolution-journal?persona=persona-crypto-paper",
+    );
   });
 
   it("uses snake_case live research project fields for detail links and labels", () => {
@@ -396,12 +418,14 @@ describe("PersonaFleetPage deep links", () => {
     });
   });
 
-  it("does not fabricate a persona-scoped research loop when there is no active project target", () => {
+  it("uses a persona-scoped research loop when no active project target exists", () => {
     const row = {
       personaId: "persona-live-without-project",
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchHref(row)).toBe(
+      "/management/loops/research?persona=persona-live-without-project",
+    );
   });
 
   it("does not turn nan values into hrefs or filter keys", () => {
@@ -418,13 +442,15 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBeNull();
   });
 
-  it("keeps performance display unlinkable when no canonical performance target exists", () => {
+  it("links performance display to persona-scoped attribution when no canonical target exists", () => {
     const row = {
       personaId: "persona-with-performance",
       perfDelta: 0.42,
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetPerformanceHref(row)).toBeNull();
+    expect(personaFleetPerformanceHref(row)).toBe(
+      "/management/performance-attribution?dimension=persona&persona=persona-with-performance",
+    );
   });
 
   it("ignores legacy unvalidated links when no canonical link target exists", () => {
