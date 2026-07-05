@@ -5,7 +5,19 @@ import type {
   ManagementResearchStatus,
 } from "@/lib/bff-v1/management";
 
-const UNAVAILABLE_TOKENS = new Set(["", "#", "nan", "null", "undefined", "none", "n/a", "na", "unavailable"]);
+const UNAVAILABLE_TOKENS = new Set([
+  "",
+  "#",
+  "nan",
+  "null",
+  "undefined",
+  "none",
+  "n/a",
+  "na",
+  "unavailable",
+  "not declared",
+  "not_declared",
+]);
 
 function isUsableToken(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -18,6 +30,25 @@ function normalizeManagementHref(value: unknown): string | null {
   if (href.startsWith("/management/") || href === "/management") return href;
   if (href.startsWith("management/")) return `/${href}`;
   return null;
+}
+
+function sourceProviderKey(source?: ManagementDataSource): string | null {
+  const raw = source as RawDataSource | undefined;
+  const key = raw?.providerKey ?? raw?.provider_key;
+  return isUsableToken(key) ? key.trim() : null;
+}
+
+function rowPersonaId(r: ManagementPersonaFleetRow): string | null {
+  return isUsableToken(r.personaId) ? r.personaId.trim() : null;
+}
+
+function dataSourceFocusHref(r: ManagementPersonaFleetRow, providerKey?: string | null): string | null {
+  const personaId = rowPersonaId(r);
+  if (!personaId) return null;
+  const href = `/management/data-sources?persona=${encodeURIComponent(personaId)}`;
+  return providerKey && isUsableToken(providerKey)
+    ? `${href}&source=${encodeURIComponent(providerKey.trim())}`
+    : href;
 }
 
 type RawLinkRecord = Record<string, unknown>;
@@ -331,8 +362,8 @@ export function personaFleetDataSourcesHref(
   r: ManagementPersonaFleetRow,
   source?: ManagementDataSource,
 ): string | null {
-  const providerKey = (source as RawDataSource | undefined)?.providerKey
-    ?? (source as RawDataSource | undefined)?.provider_key;
+  if (!rowPersonaId(r)) return null;
+  const providerKey = sourceProviderKey(source);
   const sourceKeys = isUsableToken(providerKey)
     ? [
       `dataSources.${providerKey}`,
@@ -345,11 +376,31 @@ export function personaFleetDataSourcesHref(
       `provider:${providerKey}`,
     ]
     : [];
+  if (source) {
+    return firstCanonicalHref(sourceLinkRecords(source), [
+      "dataSource",
+      "data_source",
+      "dataSources",
+      "data_sources",
+      "href",
+      "detailHref",
+      "detail_href",
+      "manageHref",
+      "manage_href",
+      "observe",
+      "observeHref",
+      "observe_href",
+    ])
+      ?? firstCanonicalHref(rowLinkRecords(r), sourceKeys)
+      ?? dataSourceFocusHref(r, providerKey);
+  }
+
+  const personaScopedHref = dataSourceFocusHref(r);
+  if (personaScopedHref) return personaScopedHref;
+
   return firstCanonicalHref([
-    ...sourceLinkRecords(source),
     ...rowLinkRecords(r),
   ], [
-    ...sourceKeys,
     "dataSources",
     "data_sources",
     "dataSource",

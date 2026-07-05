@@ -232,6 +232,40 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBe("/management/data-sources?persona=persona-snake-case");
   });
 
+  it("uses each provider key for data-source chip hrefs instead of the row primary source", () => {
+    const row = {
+      personaId: "persona-20260528-ba7de5a4",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const shioaji = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+    const mops = { providerKey: "mops", provider: "MOPS", status: "public_reference_unavailable" };
+
+    expect(personaFleetDataSourcesHref(row)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4",
+    );
+    expect(personaFleetDataSourcesHref(row, shioaji)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=shioaji",
+    );
+    expect(personaFleetDataSourcesHref(row, mops)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+    );
+  });
+
+  it("does not use nan or not declared values in synthesized data-source hrefs", () => {
+    const row = {
+      personaId: "not declared",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=not%20declared&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const source = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+
+    expect(personaFleetDataSourcesHref(row)).toBeNull();
+    expect(personaFleetDataSourcesHref(row, source)).toBeNull();
+  });
+
   it("does not fabricate a research-loop project link when no canonical target exists", () => {
     const row = {
       personaId: "persona-crypto",
