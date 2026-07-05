@@ -112,6 +112,10 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   capital_pool_id?: string;
   capitalPool?: { id?: unknown };
   capital_pool?: { id?: unknown };
+  paperLedgerId?: string;
+  paper_ledger_id?: string;
+  paperLedger?: { id?: unknown };
+  paper_ledger?: { id?: unknown };
   links?: RawLinkRecord;
   review?: RawLinkRecord;
   linkTargets?: RawLinkRecord;
@@ -238,6 +242,12 @@ function encodedPersonaId(r: ManagementPersonaFleetRow): string | null {
 function capitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as RawPersonaFleetRow;
   const id = raw.capitalPoolId ?? raw.capital_pool_id ?? raw.capitalPool?.id ?? raw.capital_pool?.id;
+  return isUsableToken(id) ? id.trim() : undefined;
+}
+
+function paperLedgerId(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const id = raw.paperLedgerId ?? raw.paper_ledger_id ?? raw.paperLedger?.id ?? raw.paper_ledger?.id;
   return isUsableToken(id) ? id.trim() : undefined;
 }
 
@@ -556,7 +566,7 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
     return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
   }
   if (canonical) return canonical;
-  const id = capitalPoolId(r);
+  const id = capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
 

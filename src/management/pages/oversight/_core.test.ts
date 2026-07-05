@@ -360,6 +360,17 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
+  it("derives capital links from paper ledger ids when no capital pool is declared", () => {
+    const row = {
+      persona_id: "persona-paper-ledger",
+      paper_ledger_id: "paper-ledger-persona-paper-ledger",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe(
+      "/management/capital?pool=paper-ledger-persona-paper-ledger",
+    );
+  });
+
   it("uses snake_case live research project fields for detail links and labels", () => {
     const row = {
       personaId: "persona-tw-live",

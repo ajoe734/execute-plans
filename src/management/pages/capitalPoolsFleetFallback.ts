@@ -11,6 +11,9 @@ export type FleetCapitalPool = CapitalPool & {
 type RawFleetCapitalRow = ManagementPersonaFleetRow & {
   capital_pool_id?: string | null;
   capitalPoolId?: string | null;
+  paper_ledger_id?: string | null;
+  paperLedgerId?: string | null;
+  paper_ledger?: { id?: string | null } | null;
   updated_at?: string | null;
   name?: string | null;
   owner?: string | null;
@@ -27,7 +30,14 @@ function usableText(value: unknown): string | undefined {
 
 function fleetCapitalPoolId(row: ManagementPersonaFleetRow): string | undefined {
   const raw = row as RawFleetCapitalRow;
-  return usableText(row.capitalPoolId) ?? usableText(raw.capital_pool_id) ?? usableText(raw.capitalPoolId);
+  return usableText(row.capitalPoolId)
+    ?? usableText(raw.capital_pool_id)
+    ?? usableText(raw.capitalPoolId)
+    ?? usableText(row.paperLedgerId)
+    ?? usableText(raw.paper_ledger_id)
+    ?? usableText(raw.paperLedgerId)
+    ?? usableText(row.paperLedger?.id)
+    ?? usableText(raw.paper_ledger?.id);
 }
 
 function fleetRowUpdatedAt(row: ManagementPersonaFleetRow): string {

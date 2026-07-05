@@ -2048,6 +2048,7 @@ export default {
       liveOff: "live 關閉",
       sideEffectsOn: "交易副作用開啟",
       sideEffectsOff: "交易副作用關閉",
+      openCapital: "查看資金",
       governed: "治理中",
       loadingLive: "正在載入 live Persona Fleet 資料…",
       liveDataUnavailableTitle: "目前沒有 live Persona Fleet 資料",

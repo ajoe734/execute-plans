@@ -98,4 +98,28 @@ describe("capitalPoolsWithFleetFallback", () => {
     expect(env.items).toHaveLength(1);
     expect(env.items[0].name).toBe("Canonical Crypto Pool");
   });
+
+  it("adds paper ledger rows when paper personas do not declare a capital pool", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-paper-a",
+        personaName: "Paper A",
+        owner: "pantheon-dev-browser",
+        paperLedgerId: "paper-ledger-persona-paper-a",
+        updatedAt: "2026-06-05T08:27:44Z",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const env = await capitalPoolsWithFleetFallback();
+
+    expect(env.items[0]).toMatchObject({
+      id: "paper-ledger-persona-paper-a",
+      name: "paper-ledger-persona-paper-a · 1 persona",
+      owner: "pantheon-dev-browser",
+      personaCount: 1,
+      personaNames: "Paper A",
+      fleetDerived: true,
+    });
+  });
 });
