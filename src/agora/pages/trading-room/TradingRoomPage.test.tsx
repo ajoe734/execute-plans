@@ -757,6 +757,70 @@ describe("TradingRoomPage", () => {
     );
   });
 
+  it("loads an explicit strategy route even when the aggregate has no selected strategy", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue({
+      ...MOCK_AGGREGATE,
+      strategies: [],
+      queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+    });
+
+    render(
+      <TradingRoomPage
+        readinessAssessmentId="ready-route-001"
+        readinessGate="trading_room"
+        strategyId="strat-route-001"
+        strategyVersion="reg-route-001"
+      />,
+    );
+
+    await screen.findByTestId("workspace-proposal-preview");
+    expect(screen.getByTestId("strategy-workspace-strat-route-001")).toBeDefined();
+    expect(screen.queryByTestId("trading-room-default-entry")).toBeNull();
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledWith(
+      "strat-route-001",
+      expect.objectContaining({
+        personalizationHints: expect.objectContaining({
+          readinessAssessmentId: "ready-route-001",
+          readinessGate: "trading_room",
+        }),
+        strategyVersion: "reg-route-001",
+        tradingRoomReady: true,
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("does not mark an explicit route as ready when readiness context is blocked", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue({
+      ...MOCK_AGGREGATE,
+      strategies: [],
+      queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+    });
+
+    render(
+      <TradingRoomPage
+        readinessAssessmentId="ready-route-blocked"
+        readinessGate="full_validation"
+        strategyId="strat-route-001"
+        strategyVersion="reg-route-001"
+      />,
+    );
+
+    await screen.findByTestId("workspace-proposal-preview");
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledWith(
+      "strat-route-001",
+      expect.objectContaining({
+        personalizationHints: expect.objectContaining({
+          readinessAssessmentId: "ready-route-blocked",
+          readinessGate: "full_validation",
+        }),
+        strategyVersion: "reg-route-001",
+        tradingRoomReady: false,
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
   it("shows V11 generation progress while proposal generation is pending", async () => {
     vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockReturnValue(new Promise(() => {}));
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);

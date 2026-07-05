@@ -538,7 +538,12 @@ test.describe("AG-DYNUI-PROD-006 hosted Winner Branch E2E", () => {
     });
 
     await test.step("join Trading Room for the ready strategy and generate a proposal", async () => {
-      await page.goto(`${FE_BASE_URL}/agora/trading-room/${state.strategyId}`);
+      const params = new URLSearchParams({
+        readinessAssessmentId: "ready-prod-006-e2e-fixture",
+        readinessGate: "trading_room",
+        strategyVersion: state.strategyVersion,
+      });
+      await page.goto(`${FE_BASE_URL}/agora/trading-room/${state.strategyId}?${params.toString()}`);
       await expect(page.getByTestId(`strategy-lens-${state.strategyId}`)).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId("workspace-proposal-preview")).toBeVisible({ timeout: 15_000 });
       const warningsSection = page.getByTestId("workspace-proposal-warnings");
