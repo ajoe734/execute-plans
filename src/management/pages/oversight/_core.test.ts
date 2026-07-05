@@ -247,9 +247,7 @@ describe("PersonaFleetPage deep links", () => {
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona-20260528-5937dea1");
     expect(personaFleetResearchHref(row, item)).toBe("/management/experiments/exp-mgmt-qlib-006");
-    expect(personaFleetArtifactHref(row, item)).toBe(
-      "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
-    );
+    expect(personaFleetArtifactHref(row, item)).toBeNull();
     const shioaji = {
       providerKey: "shioaji",
       provider: "Shioaji quote",
@@ -260,13 +258,13 @@ describe("PersonaFleetPage deep links", () => {
       "/management/data-sources?persona=persona-20260528-5937dea1&source=shioaji",
     );
     expect(personaFleetHumanGateHref(row)).toBe(
-      "/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+      "/management/human-inbox?persona=persona-20260528-5937dea1",
     );
     expect(personaFleetRuntimeHref(row)).toBe(
       "/management/runtimes?persona=persona-20260528-5937dea1&runtime=runtime-tw-equity-paper&binding=runtime-tw-equity-paper",
     );
     expect(personaFleetOodaHref(row)).toBe(
-      "/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+      "/management/human-inbox?persona=persona-20260528-5937dea1",
     );
   });
 

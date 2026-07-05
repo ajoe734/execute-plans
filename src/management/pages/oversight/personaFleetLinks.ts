@@ -278,9 +278,11 @@ function normalizeRuntimeHref(r: ManagementPersonaFleetRow, href: string | null)
 function humanInboxHrefFromRow(r: ManagementPersonaFleetRow): string | null {
   const raw = r as RawPersonaFleetRow;
   const route = normalizeManagementHref(raw.review?.route);
-  if (route?.startsWith("/management/human-inbox")) return route;
+  if (route?.startsWith("/management/human-inbox?")) return route;
   const id = humanInboxId(r);
-  return id ? `/management/human-inbox/${encodeURIComponent(id)}` : null;
+  if (!id && !route?.startsWith("/management/human-inbox")) return null;
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/human-inbox?persona=${personaId}` : "/management/human-inbox";
 }
 
 function researchStatus(r: ManagementPersonaFleetRow): RawResearchStatus | undefined {
@@ -427,14 +429,15 @@ export function personaFleetArtifactHref(
   r: ManagementPersonaFleetRow,
   item?: PersonaFleetResearchItem,
 ): string | null {
-  const canonical = firstCanonicalHref(rowLinkRecords(r), [
+  const canonical = firstCanonicalHref([
+    ...researchLinkRecords(item, firstResearchProject(r)),
+    ...rowLinkRecords(r),
+  ], [
     "artifact",
     "artifactHref",
     "artifact_href",
   ]);
-  if (canonical) return canonical;
-  const id = item?.artifactId ?? artifactId(researchStatus(r), firstResearchProject(r));
-  return id && isUsableToken(id) ? `/management/artifacts/${encodeURIComponent(id)}` : null;
+  return canonical;
 }
 
 export function personaFleetDataSourcesHref(
