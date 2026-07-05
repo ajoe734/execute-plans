@@ -159,6 +159,17 @@
   }
 }
 
+@layer components {
+  .pinned-horizontal-scroll__native {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .pinned-horizontal-scroll__native::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer utilities {
   .text-mono {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;

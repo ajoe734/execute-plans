@@ -21,6 +21,7 @@ describe("ManagementTableScroll", () => {
     expect(native).toBeTruthy();
     expect(pinned).toHaveClass("sticky");
     expect(pinned).toHaveClass("bottom-0");
+    expect(native).toHaveClass("pinned-horizontal-scroll__native");
     expect(native).toHaveAttribute("role", "region");
     expect(native).toHaveAttribute("tabindex", "0");
     expect(native).toHaveAttribute("aria-label", "Table horizontal scroll");
