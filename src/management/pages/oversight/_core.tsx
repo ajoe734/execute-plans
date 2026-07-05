@@ -642,39 +642,41 @@ export const PersonaFleetPage = () => {
                   </td>
 	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
 	                  <td className="px-3 py-2 min-w-[170px]">
-	                    <div className="flex flex-wrap gap-1">
-	                      <Badge
-	                        variant="outline"
-	                        className={capitalMode === "live"
-	                          ? "border-status-failed/40 text-status-failed"
-	                          : capitalMode === "canary"
-	                          ? "border-status-warning/40 text-status-warning"
-	                          : "border-status-success/40 text-status-success"}
-	                      >
-	                        {formatToken(capitalMode || "none")}
-	                      </Badge>
-	                      {runtimeHealth && (
-	                        <Badge variant="outline" className={statusTone(runtimeHealth)}>
-	                          {formatToken(runtimeHealth)}
+	                    <OptionalFleetLink
+	                      href={capitalHref}
+	                      ariaLabel={`${r.personaId} capital pool ${(capitalPoolId ?? capitalMode) || "nan"}`}
+	                      className={capitalHref
+	                        ? "block rounded-sm outline-offset-2 transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60"
+	                        : "block"}
+	                    >
+	                      <div className="flex flex-wrap gap-1">
+	                        <Badge
+	                          variant="outline"
+	                          className={capitalMode === "live"
+	                            ? (capitalHref ? badgeLinkClass("border-status-failed/40 text-status-failed hover:border-status-failed/60") : "border-status-failed/40 text-status-failed")
+	                            : capitalMode === "canary"
+	                            ? (capitalHref ? badgeLinkClass("border-status-warning/40 text-status-warning hover:border-status-warning/60") : "border-status-warning/40 text-status-warning")
+	                            : (capitalHref ? badgeLinkClass("border-status-success/40 text-status-success hover:border-status-success/60") : "border-status-success/40 text-status-success")}
+	                        >
+	                          {formatToken(capitalMode || "none")}
 	                        </Badge>
+	                        {runtimeHealth && (
+	                          <Badge variant="outline" className={capitalHref ? badgeLinkClass(statusTone(runtimeHealth)) : statusTone(runtimeHealth)}>
+	                            {formatToken(runtimeHealth)}
+	                          </Badge>
+	                        )}
+	                      </div>
+	                      {capitalPoolId && (
+	                        <div
+	                          className={capitalHref
+	                            ? fieldLinkClass("mt-1 block max-w-[190px] truncate font-mono text-xs text-muted-foreground hover:text-primary")
+	                            : "mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground"}
+	                          title={capitalPoolId}
+	                        >
+	                          {capitalPoolId}
+	                        </div>
 	                      )}
-	                    </div>
-	                    {capitalPoolId && (
-                        capitalHref ? (
-                          <Link
-                            to={capitalHref}
-                            aria-label={`${r.personaId} capital pool ${capitalPoolId}`}
-                            className={fieldLinkClass("mt-1 block max-w-[190px] truncate font-mono text-xs text-muted-foreground hover:text-primary")}
-                            title={capitalPoolId}
-                          >
-                            {capitalPoolId}
-                          </Link>
-                        ) : (
-                          <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalPoolId}>
-                            {capitalPoolId}
-                          </div>
-                        )
-	                    )}
+	                    </OptionalFleetLink>
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[120px]">
 	                    {leagueRank ? (
