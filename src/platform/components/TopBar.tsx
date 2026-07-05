@@ -178,13 +178,13 @@ export const TopBar = () => {
   }, []);
 
   return (
-    <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 sticky top-0 z-40">
+    <header className="min-h-14 max-w-full overflow-x-hidden border-b border-border bg-card flex items-center px-3 gap-2 sticky top-0 z-40 sm:px-4 sm:gap-3">
       {/* Logo + product switcher */}
-      <div className="flex items-center gap-2">
-        <div className="font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <div className="whitespace-nowrap font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="font-medium">
+            <Button variant="ghost" size="sm" className="max-w-[9rem] truncate font-medium sm:max-w-none">
               {isManagement ? t("app.management") : t("app.agora")}
             </Button>
           </DropdownMenuTrigger>
@@ -199,7 +199,7 @@ export const TopBar = () => {
       {/* Search */}
       <button
         onClick={() => setPaletteOpen(true)}
-        className="flex items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition"
+        className="hidden items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition md:flex"
       >
         <Search className="h-4 w-4" />
         <span className="flex-1 text-left">{t("topbar.search")}</span>
@@ -213,7 +213,7 @@ export const TopBar = () => {
       )}
 
       {/* Indicators */}
-      <div className="flex items-center gap-1">
+      <div className="ml-auto hidden items-center gap-1 sm:flex">
         <IndicatorButton icon={ClipboardCheck} count={countsAreLive ? counts.approvals : undefined} muted={!countsAreLive} tooltip={t("topbar.pendingApprovals")} onClick={() => navigate("/management/approvals")} />
         <IndicatorButton icon={AlertTriangle} count={countsAreLive ? counts.alerts : undefined} muted={!countsAreLive} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={countsAreLive ? counts.jobs : undefined} muted={!countsAreLive} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
@@ -226,7 +226,9 @@ export const TopBar = () => {
       </div>
 
       {/* Realtime / BFF status */}
-      <RealtimeStatusBadge />
+      <div className="hidden sm:block">
+        <RealtimeStatusBadge />
+      </div>
 
       {/* Locale */}
       <DropdownMenu>
@@ -242,18 +244,18 @@ export const TopBar = () => {
 
       {/* User / Session — sourced from /bff/me; 401 surfaces auth error, never mock user */}
       {meLoading && !me ? (
-        <Button variant="ghost" size="sm" disabled className="gap-1">
+        <Button variant="ghost" size="sm" disabled className="hidden gap-1 md:inline-flex">
           <Loader2 className="h-4 w-4 animate-spin" />
         </Button>
       ) : meError || !me ? (
-        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
+        <Button variant="ghost" size="sm" className="hidden gap-1 text-destructive md:inline-flex" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
           <Lock className="h-4 w-4" />
           <span className="text-xs">Auth</span>
         </Button>
       ) : me ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1">
+            <Button variant="ghost" size="sm" className="hidden gap-1 md:inline-flex">
               <User className="h-4 w-4" />
               {String(
                 (me.user as { displayName?: string; display_name?: string }).displayName

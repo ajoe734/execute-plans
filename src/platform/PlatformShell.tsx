@@ -22,10 +22,10 @@ export const PlatformShell = () => {
   const closeBulkResult = useOverlay((s) => s.closeBulkResult);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen min-w-0 flex flex-col overflow-x-hidden bg-background">
       <LiveStatusBanner />
       <TopBar />
-      <div className="flex-1 flex pb-10">
+      <div className="flex-1 min-w-0 flex flex-col lg:flex-row pb-10">
         <Outlet />
       </div>
       <RightDrawer />

@@ -914,6 +914,8 @@ interface StrategyWorkspaceViewProps {
   events: TradingDecisionEvent[];
   eventsLoading: boolean;
   eventsEtag: string | null;
+  readinessAssessmentId?: string;
+  readinessGate?: string;
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
 }
@@ -925,12 +927,16 @@ function StrategyWorkspaceView({
   events,
   eventsLoading,
   eventsEtag,
+  readinessAssessmentId,
+  readinessGate,
   strategyVersion,
   onBackToWorkshop,
 }: StrategyWorkspaceViewProps): JSX.Element {
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
 
   const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
+  const routeTradingRoomReady = readinessGate === "trading_room";
+  const aggregateTradingRoomReady = strategy?.readiness_state === "ready";
   const [proposal, setProposal] = useState<TradingRoomWorkspaceProposal | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<TradingRoomUiError | null>(null);
@@ -960,9 +966,14 @@ function StrategyWorkspaceView({
     createTradingRoomWorkspaceProposal(
       strategyId,
       {
-        personalizationHints: { source: "trading_room_join", surface: "agora" },
+        personalizationHints: {
+          readinessAssessmentId,
+          readinessGate,
+          source: "trading_room_join",
+          surface: "agora",
+        },
         strategyVersion: resolvedStrategyVersion,
-        tradingRoomReady: strategy?.readiness_state === "ready",
+        tradingRoomReady: routeTradingRoomReady || aggregateTradingRoomReady,
       },
       { idempotencyKey: newUUID() },
     )
@@ -987,7 +998,15 @@ function StrategyWorkspaceView({
     return () => {
       cancelled = true;
     };
-  }, [proposalRevision, resolvedStrategyVersion, strategy?.readiness_state, strategyId]);
+  }, [
+    aggregateTradingRoomReady,
+    proposalRevision,
+    readinessAssessmentId,
+    readinessGate,
+    resolvedStrategyVersion,
+    routeTradingRoomReady,
+    strategyId,
+  ]);
 
   async function handleAcceptProposal() {
     if (!proposal) return;
@@ -1120,6 +1139,8 @@ type LoadState = "loading" | "loaded" | "error";
 interface TradingRoomPageProps {
   strategyId?: string;
   strategyVersion?: string;
+  readinessAssessmentId?: string;
+  readinessGate?: string;
   onBackToWorkshop?: () => void;
   onOpenWorkshop?: () => void;
   onStrategySelect?: (strategyId: string | undefined) => void;
@@ -1128,6 +1149,8 @@ interface TradingRoomPageProps {
 export function TradingRoomPage({
   strategyId,
   strategyVersion,
+  readinessAssessmentId,
+  readinessGate,
   onBackToWorkshop,
   onOpenWorkshop,
   onStrategySelect,
@@ -1230,6 +1253,8 @@ export function TradingRoomPage({
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           onBackToWorkshop={onBackToWorkshop}
+          readinessAssessmentId={readinessAssessmentId}
+          readinessGate={readinessGate}
           strategyVersion={strategyVersion}
         />
       ) : (

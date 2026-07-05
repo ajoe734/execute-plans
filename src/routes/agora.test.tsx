@@ -1,7 +1,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AgoraLayoutRoute, AgoraStrategyWorkshopRoute } from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
@@ -16,12 +16,33 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 }));
 
 vi.mock("@/agora/pages/strategy-workshop/StrategyWorkshopPage", () => ({
-  StrategyWorkshopPage: (props: { onAddToTradingRoom?: () => void; workshopId?: string }) => {
+  StrategyWorkshopPage: (props: {
+    onAddToTradingRoom?: (handoff: {
+      assessedAt?: string;
+      readinessAssessmentId: string;
+      readinessGate: "trading_room";
+      strategyId: string;
+      strategyVersion: string;
+      workshopId: string;
+      workshopVersionId?: string;
+    }) => void;
+    workshopId?: string;
+  }) => {
     routeMocks.strategyWorkshopPage(props);
     return (
       <button
         data-testid="mock-add-to-trading-room"
-        onClick={props.onAddToTradingRoom}
+        onClick={() =>
+          props.onAddToTradingRoom?.({
+            assessedAt: "2026-07-05T00:00:00Z",
+            readinessAssessmentId: "ready-001",
+            readinessGate: "trading_room",
+            strategyId: "strat-001",
+            strategyVersion: "reg-001",
+            workshopId: props.workshopId ?? "ws-9",
+            workshopVersionId: "wsv-001",
+          })
+        }
         type="button"
       >
         Add to Trading Room
@@ -59,6 +80,22 @@ function renderAgoraShell(initialPath = "/agora/trading-room") {
         </Route>
       </Routes>
     </MemoryRouter>,
+  );
+}
+
+function LocationProbe(): JSX.Element {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  return (
+    <div
+      data-pathname={location.pathname}
+      data-readiness-assessment-id={params.get("readinessAssessmentId") ?? ""}
+      data-readiness-gate={params.get("readinessGate") ?? ""}
+      data-strategy-version={params.get("strategyVersion") ?? ""}
+      data-testid="trading-room-location"
+    >
+      Trading Room
+    </div>
   );
 }
 
@@ -114,12 +151,12 @@ describe("AgoraLayoutRoute", () => {
 });
 
 describe("AgoraStrategyWorkshopRoute", () => {
-  it("passes workshopId and routes Add to Trading Room into the dynamic default entry", () => {
+  it("passes workshopId and routes Add to Trading Room into the explicit strategy entry", () => {
     render(
       <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9"]}>
         <Routes>
           <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
-          <Route path="/agora/trading-room" element={<div data-testid="trading-room-content">Trading Room</div>} />
+          <Route path="/agora/trading-room/:strategyId" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -132,6 +169,10 @@ describe("AgoraStrategyWorkshopRoute", () => {
     );
 
     fireEvent.click(screen.getByTestId("mock-add-to-trading-room"));
-    expect(screen.getByTestId("trading-room-content")).toBeDefined();
+    const location = screen.getByTestId("trading-room-location");
+    expect(location.getAttribute("data-pathname")).toBe("/agora/trading-room/strat-001");
+    expect(location.getAttribute("data-strategy-version")).toBe("reg-001");
+    expect(location.getAttribute("data-readiness-gate")).toBe("trading_room");
+    expect(location.getAttribute("data-readiness-assessment-id")).toBe("ready-001");
   });
 });

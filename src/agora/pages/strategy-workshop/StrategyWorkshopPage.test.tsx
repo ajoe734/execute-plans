@@ -36,7 +36,25 @@ const TRADING_ROOM_READY = {
   gate: "trading_room",
   highest_ready_gate: "trading_room",
   passed: true,
+  strategy_id: "strat-001",
+  strategy_spec_registry_id: "reg-001",
+  workshop_version_id: "wsv-001",
   workshop_id: "ws-abc",
+} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+
+const BLOCKED_READINESS = {
+  ...TRADING_ROOM_READY,
+  assessment_id: "ready-blocked-001",
+  blockers: ["Full validation is incomplete"],
+  gate: "full_validation",
+  highest_ready_gate: "full_validation",
+  passed: true,
+} as StrategyReadinessAssessment & { highest_ready_gate: "full_validation" };
+
+const MISSING_STRATEGY_ID_READINESS = {
+  ...TRADING_ROOM_READY,
+  assessment_id: "ready-missing-strategy",
+  strategy_id: undefined,
 } as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 afterEach(cleanup);
@@ -119,6 +137,47 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(button);
 
     expect(onAddToTradingRoom).toHaveBeenCalledTimes(1);
+    expect(onAddToTradingRoom).toHaveBeenCalledWith({
+      assessedAt: "2026-07-04T00:00:00Z",
+      readinessAssessmentId: "ready-001",
+      readinessGate: "trading_room",
+      strategyId: "strat-001",
+      strategyVersion: "reg-001",
+      workshopId: "ws-abc",
+      workshopVersionId: "wsv-001",
+    });
+  });
+
+  it("keeps Add to Trading Room disabled when live readiness is blocked before trading_room", async () => {
+    const onAddToTradingRoom = vi.fn();
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(BLOCKED_READINESS);
+
+    render(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-abc" />);
+
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("full_validation");
+    fireEvent.click(button);
+    expect(onAddToTradingRoom).not.toHaveBeenCalled();
+  });
+
+  it("keeps Add to Trading Room disabled when readiness lacks a strategy id", async () => {
+    const onAddToTradingRoom = vi.fn();
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(MISSING_STRATEGY_ID_READINESS);
+
+    render(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-abc" />);
+
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("missing strategy id");
+    fireEvent.click(button);
+    expect(onAddToTradingRoom).not.toHaveBeenCalled();
   });
 
   it("keeps Add to Trading Room disabled when the route handler is missing", async () => {
