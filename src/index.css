@@ -150,12 +150,27 @@
 }
 
 @layer base {
+  html {
+    scroll-padding-top: 7rem;
+    overflow-x: hidden;
+  }
+
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased overflow-x-hidden;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  #root {
+    min-width: 0;
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 4.5rem;
+    }
   }
 }
 
