@@ -625,6 +625,31 @@ const TOPBAR_JOBS_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { jobs: { status: "ok", source: "live" } } },
 };
 
+const TOPBAR_SHELL_SUMMARY_RESPONSE = {
+  data: {
+    counts: {
+      pending_approvals: 0,
+      open_alerts: 0,
+      running_jobs: 0,
+    },
+    session: {
+      operator_id: "op-fe-gate",
+      authenticated: true,
+      mfa_verified: true,
+    },
+    transport: {
+      bff_status: "ok",
+      service: "fe-int-gate-d05",
+    },
+  },
+  meta: {
+    snapshot_at: nowIso(),
+    surfaces: {
+      shell_summary: { status: "ok", source: "fe-int-gate-d05" },
+    },
+  },
+};
+
 async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<void> {
   await page.route(/\/bff\/me(?:\?.*)?$/, async (route) => {
     counters.me += 1;
@@ -692,6 +717,9 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   });
   await page.route(/\/bff\/jobs(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_JOBS_RESPONSE);
+  });
+  await page.route(/\/bff\/management\/shell-summary(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, TOPBAR_SHELL_SUMMARY_RESPONSE);
   });
   await page.route(/\/bff\/search(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, {

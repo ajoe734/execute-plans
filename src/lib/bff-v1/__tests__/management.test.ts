@@ -415,6 +415,113 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("does not POST ranking recommendations when real writes are disabled", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "false";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const result = await mgmt.quarterlyRanking.submitRecommendation(
+      {
+        recommendationId: "pm12-rec-disabled",
+        actionId: "promote_to_canary_candidate",
+        quarter: "2026-Q3",
+        personaId: "persona-disabled",
+        personaName: "Disabled Persona",
+        source: "quarterly_ranking",
+        evidenceRefs: ["evidence:disabled"],
+      },
+      { idempotencyKey: "idk-ranking-disabled" },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      persisted: false,
+      recommendationId: "pm12-rec-disabled",
+      actionId: "promote_to_canary_candidate",
+      quarter: "2026-Q3",
+      personaId: "persona-disabled",
+      status: "write_disabled",
+      idempotencyKey: "idk-ranking-disabled",
+      liveCapitalMutation: false,
+      governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("POSTs ranking recommendations as governed commands when real writes are enabled", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    window.sessionStorage.setItem("pantheon.bff.bearerToken", "tok-ranking-test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    let commandUrl = "";
+    let commandBody: Record<string, unknown> = {};
+    let commandHeaders: Record<string, string> = {};
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return writeSessionResponse();
+      commandUrl = url;
+      commandBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      commandHeaders = init?.headers as Record<string, string>;
+      return jsonResponse({
+        status: "accepted",
+        data: {
+          status: "accepted",
+          commandId: "cmd-ranking-enabled",
+          humanInboxId: "promotion_review:review-ranking-enabled",
+          detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled",
+        },
+        meta: { idempotency: { idempotencyKey: "idk-ranking-enabled", replayed: false } },
+      }, 202);
+    });
+
+    const result = await mgmt.quarterlyRanking.submitRecommendation(
+      {
+        recommendationId: "pm12-rec-enabled",
+        actionId: "promote_to_canary_candidate",
+        quarter: "2026-Q3",
+        personaId: "persona-enabled",
+        personaName: "Enabled Persona",
+        source: "persona_league",
+        evidenceRefs: ["evidence:enabled"],
+        governanceDestinations: ["human_inbox", "human_gate_decision"],
+      },
+      { idempotencyKey: "idk-ranking-enabled" },
+    );
+
+    expect(commandUrl.endsWith("/bff/management/quarterly-ranking/recommendations/pm12-rec-enabled/submit")).toBe(true);
+    expect(commandBody).toMatchObject({
+      quarter: "2026-Q3",
+      recommendation_id: "pm12-rec-enabled",
+      recommendationId: "pm12-rec-enabled",
+      recommendation_action_id: "promote_to_canary_candidate",
+      recommendationActionId: "promote_to_canary_candidate",
+      actionId: "promote_to_canary_candidate",
+      persona_id: "persona-enabled",
+      personaId: "persona-enabled",
+      evidence_refs: ["evidence:enabled"],
+      governance_destinations: ["human_inbox", "human_gate_decision"],
+      live_capital_mutation: false,
+      liveCapitalMutation: false,
+      direct_live_capital_mutation: false,
+      runtime_mutation: false,
+    });
+    expect(commandHeaders["Idempotency-Key"]).toBe("idk-ranking-enabled");
+    expect(result).toMatchObject({
+      ok: true,
+      persisted: true,
+      recommendationId: "pm12-rec-enabled",
+      actionId: "promote_to_canary_candidate",
+      quarter: "2026-Q3",
+      personaId: "persona-enabled",
+      status: "accepted",
+      idempotencyKey: "idk-ranking-enabled",
+      commandId: "cmd-ranking-enabled",
+      humanInboxId: "promotion_review:review-ranking-enabled",
+      detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled",
+      replayed: false,
+      liveCapitalMutation: false,
+    });
+  });
+
   it("readiness helpers all pass seed through", async () => {
     const seed = { header: { title: "t" }, checklist: [], packets: [], blockers: [] } as never;
     for (const fn of [
@@ -892,6 +999,13 @@ describe("mgmt façade (PM-Live)", () => {
             runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
             deployment_stage: "paper",
             capital_mode: "paper",
+            paper_ledger_id: "paper-ledger-persona-tw-equity",
+            paper_ledger: {
+              id: "paper-ledger-persona-tw-equity",
+              mode: "paper",
+              isolated: true,
+              benchmark_budget: 1000000,
+            },
             capital_pool_id: "cp-paper-tw-equity",
             capital_pool: {
               id: "cp-paper-tw-equity",
@@ -1002,7 +1116,7 @@ describe("mgmt façade (PM-Live)", () => {
       runtimeBindingId: "rb-433f2a614995432b9e7a463c882dbefb",
       deploymentStage: "paper",
       capitalMode: "paper",
-      capitalPoolId: "cp-paper-tw-equity",
+      paperLedgerId: "paper-ledger-persona-tw-equity",
       runtimeHealth: { status: "healthy" },
       reviewId: "review-paper-to-live-tw",
       reviewType: "paper_to_live",
@@ -1016,10 +1130,13 @@ describe("mgmt façade (PM-Live)", () => {
         basis: "quarterly_paper_live_league",
       },
     });
-    expect(rows?.[0].capitalPool).toMatchObject({
-      id: "cp-paper-tw-equity",
+    expect(rows?.[0].capitalPoolId).toBeUndefined();
+    expect(rows?.[0].capitalPool).toBeUndefined();
+    expect(rows?.[0].paperLedger).toMatchObject({
+      id: "paper-ledger-persona-tw-equity",
       mode: "paper",
-      liveCapitalEnabled: false,
+      isolated: true,
+      benchmarkBudget: 1000000,
     });
     expect(rows?.[0].runtimeBinding).toMatchObject({
       id: "rb-433f2a614995432b9e7a463c882dbefb",
@@ -1073,6 +1190,7 @@ describe("mgmt façade (PM-Live)", () => {
           state: "deployed",
           capital_mode: "paper",
           deployment_stage: "paper",
+          capital_pool_id: "shared-legacy-paper-pool",
           runtime_id: "rt-paper-legacy",
           runtime_binding_id: "rb-paper-legacy",
         }],
@@ -1085,8 +1203,16 @@ describe("mgmt façade (PM-Live)", () => {
       state: "paper_running",
       capitalMode: "paper",
       deploymentStage: "paper",
+      paperLedgerId: "paper-ledger-persona-legacy-deployed",
       runtimeId: "rt-paper-legacy",
       runtimeBindingId: "rb-paper-legacy",
+    });
+    expect(rows?.[0].capitalPoolId).toBeUndefined();
+    expect(rows?.[0].capitalPool).toBeUndefined();
+    expect(rows?.[0].paperLedger).toMatchObject({
+      id: "paper-ledger-persona-legacy-deployed",
+      mode: "paper",
+      isolated: true,
     });
   });
 

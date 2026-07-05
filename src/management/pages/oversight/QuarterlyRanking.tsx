@@ -1,6 +1,6 @@
 // 2026-05-22 PM12-007 — Quarterly Ranking page.
-import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,13 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   type QuarterlyRankingFormula, type QuarterlyRankingRow,
 } from "@/lib/v5/management/quarterlyRanking";
-import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
+import {
+  currentPm12QuarterId,
+  isGovernedRankingRecommendationAction,
+  makeRankingRecommendationId,
+  sendRankingRecommendation,
+  type RankingRecommendationSubmitResult,
+} from "@/lib/v5/management/rankingGovernance";
 
 const EMPTY_FORMULA: QuarterlyRankingFormula = {
   formulaId: "nan",
@@ -49,12 +55,6 @@ const fmtNum = (n: number, d = 2) =>
 const deltaArrow = (d?: number) =>
   d === undefined ? "·" : d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${Math.abs(d)}` : "—";
 
-function currentQuarterId(today = new Date()): string {
-  const year = today.getFullYear();
-  const quarter = Math.floor(today.getMonth() / 3) + 1;
-  return `${year}-Q${quarter}`;
-}
-
 function quarterCutoffDate(quarterId: string): string {
   const match = /^(\d{4})-Q([1-4])$/.exec(quarterId);
   if (!match) return "—";
@@ -71,9 +71,27 @@ function daysUntil(dateText: string): string {
 const personaManageHref = (row: QuarterlyRankingRow): string =>
   row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
 
+type RecommendationUiState =
+  | { kind: "submitting" }
+  | { kind: "local_only"; result: RankingRecommendationSubmitResult }
+  | { kind: "submitted"; result: RankingRecommendationSubmitResult }
+  | { kind: "error"; message: string };
+
+type QuarterlyRecommendationRow = QuarterlyRankingRow & {
+  recommendationId?: string;
+  recommendation_id?: string;
+  governanceDestinations?: string[];
+  governance_destinations?: string[];
+};
+
+const governanceDestinationsFromRow = (row: QuarterlyRecommendationRow): string[] | undefined =>
+  row.governanceDestinations ?? row.governance_destinations;
+
 export const QuarterlyRankingPage = () => {
   const { t } = useTranslation();
-  const currentQuarter = useMemo(() => currentQuarterId(), []);
+  const navigate = useNavigate();
+  const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
+  const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
 
   const { data: rows } = useV5Live(
     () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter), [currentQuarter],
@@ -109,6 +127,43 @@ export const QuarterlyRankingPage = () => {
   const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
   const quarter = ranking.find((row) => row.quarter)?.quarter ?? currentQuarter;
   const cutoffDate = quarterCutoffDate(quarter);
+
+  const submitRecommendation = async (r: QuarterlyRankingRow) => {
+    if (!isGovernedRankingRecommendationAction(r.recommendation)) return;
+    const row = r as QuarterlyRecommendationRow;
+    const recommendationId = row.recommendationId ?? row.recommendation_id ?? makeRankingRecommendationId({
+      personaId: r.personaId,
+      personaName: r.personaName,
+      recommendation: r.recommendation,
+      source: "quarterly_ranking",
+      quarter: r.quarter ?? quarter,
+      evidenceRefs: r.evidenceRefs ?? [],
+    });
+    setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "submitting" } }));
+    try {
+      const result = await sendRankingRecommendation({
+        personaId: r.personaId,
+        personaName: r.personaName,
+        recommendation: r.recommendation,
+        recommendationId,
+        source: "quarterly_ranking",
+        quarter: r.quarter ?? quarter,
+        evidenceRefs: r.evidenceRefs ?? [],
+        governanceDestinations: governanceDestinationsFromRow(row),
+      });
+      if (result.persisted && result.detailHref) {
+        navigate(result.detailHref);
+        return;
+      }
+      setRecommendationState((prev) => ({
+        ...prev,
+        [recommendationId]: { kind: result.persisted ? "submitted" : "local_only", result },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "error", message } }));
+    }
+  };
 
   return (
     <section className="p-6 space-y-6" aria-label={t("mgmt.quarterly.title")}>
@@ -182,20 +237,22 @@ export const QuarterlyRankingPage = () => {
                 <td className="px-3 py-2 font-mono">{fmtNum(r.sharpeQuarter)}</td>
                 <td className="px-3 py-2 text-xs">{t(`mgmt.quarterly.eligibilityValues.${r.eligibility}`, { defaultValue: String(r.eligibility ?? "—") })}</td>
                 <td className="px-3 py-2">
-                  {r.recommendation && r.recommendation !== "no_change" ? (
-                    <Button
-                      size="sm" variant="outline"
-                      onClick={() => {
-                        const id = sendRankingRecommendation({
-                          personaId: r.personaId, personaName: r.personaName,
-                          recommendation: r.recommendation!, source: "quarterly_ranking",
-                          quarter: r.quarter ?? quarter, evidenceRefs: r.evidenceRefs ?? [],
-                        });
-                        window.location.assign(`/management/human-inbox/${id}`);
-                      }}
-                    >
-                      {t(`mgmt.league.recommendations.${r.recommendation}`)} →
-                    </Button>
+                  {isGovernedRankingRecommendationAction(r.recommendation) ? (
+                    <RecommendationSubmitCell
+                      label={t(`mgmt.league.recommendations.${r.recommendation}`)}
+                      state={recommendationState[
+                        ((r as QuarterlyRecommendationRow).recommendationId ?? (r as QuarterlyRecommendationRow).recommendation_id)
+                        ?? makeRankingRecommendationId({
+                          personaId: r.personaId,
+                          personaName: r.personaName,
+                          recommendation: r.recommendation,
+                          source: "quarterly_ranking",
+                          quarter: r.quarter ?? quarter,
+                          evidenceRefs: r.evidenceRefs ?? [],
+                        })
+                      ]}
+                      onSubmit={() => void submitRecommendation(r)}
+                    />
                   ) : (
                     <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
                   )}
@@ -242,3 +299,40 @@ export const QuarterlyRankingPage = () => {
     </section>
   );
 };
+
+function RecommendationSubmitCell({
+  label,
+  state,
+  onSubmit,
+}: {
+  label: string;
+  state?: RecommendationUiState;
+  onSubmit: () => void;
+}) {
+  const busy = state?.kind === "submitting";
+  return (
+    <div className="max-w-[240px] space-y-1">
+      <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy}>
+        {busy ? "Submitting…" : `${label} →`}
+      </Button>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Human review required; liveCapitalMutation=false.
+      </p>
+      {state?.kind === "local_only" && (
+        <p role="status" className="text-[11px] leading-snug text-status-warning">
+          Local only: real writes are disabled; no BFF Human Inbox review was created.
+        </p>
+      )}
+      {state?.kind === "submitted" && (
+        <p role="status" className="text-[11px] leading-snug text-primary">
+          Submitted to BFF; waiting for returned Human Inbox detail.
+        </p>
+      )}
+      {state?.kind === "error" && (
+        <p role="alert" className="text-[11px] leading-snug text-status-failed">
+          Submit failed: {state.message}
+        </p>
+      )}
+    </div>
+  );
+}
