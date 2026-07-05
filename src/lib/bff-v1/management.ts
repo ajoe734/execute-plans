@@ -174,6 +174,13 @@ export interface ManagementPersonaFleetPerformanceSummary {
   violationCount?: number;
 }
 
+export interface ManagementPersonaFleetPaperLedger {
+  id?: string;
+  mode?: string;
+  isolated?: boolean;
+  benchmarkBudget?: number;
+}
+
 export interface ManagementPersonaFleetRuntimeBinding {
   id?: string;
   runtimeId?: string;
@@ -219,6 +226,8 @@ export interface ManagementPersonaFleetRow {
   runtimeBindingId?: string;
   deploymentStage?: string;
   capitalMode?: string;
+  paperLedgerId?: string;
+  paperLedger?: ManagementPersonaFleetPaperLedger;
   capitalPoolId?: string;
   capitalPool?: ManagementPersonaFleetCapitalPool;
   performanceSummary?: ManagementPersonaFleetPerformanceSummary;
@@ -1994,6 +2003,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     .filter((project): project is ManagementResearchProject => project !== null);
   const capitalPool = objectOrEmpty(value.capitalPool ?? value.capital_pool);
   const performanceSummary = objectOrEmpty(value.performanceSummary ?? value.performance_summary);
+  const paperLedger = objectOrEmpty(value.paperLedger ?? value.paper_ledger);
   const runtimeBinding = objectOrEmpty(value.runtimeBinding ?? value.runtime_binding);
   const review = objectOrEmpty(value.review);
   const rank = objectOrEmpty(value.rank);
@@ -2004,6 +2014,21 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? runtimeBinding.capitalMode
     ?? runtimeBinding.capital_mode,
   );
+  const normalizedCapitalMode = String(capitalMode ?? "").trim().toLowerCase();
+  const paperLedgerId = asOptionalString(
+    value.paperLedgerId
+    ?? value.paper_ledger_id
+    ?? paperLedger.id
+    ?? (normalizedCapitalMode === "paper" ? `paper-ledger-${personaId}` : undefined),
+  );
+  const capitalPoolId = normalizedCapitalMode === "paper"
+    ? asOptionalString(
+        value.targetCapitalPoolId
+        ?? value.target_capital_pool_id
+        ?? value.liveCapitalPoolId
+        ?? value.live_capital_pool_id,
+      )
+    : asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id);
   const deploymentStage = asOptionalString(
     value.deploymentStage
     ?? value.deployment_stage
@@ -2057,8 +2082,15 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     runtimeBindingId,
     deploymentStage,
     capitalMode,
-    capitalPoolId: asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id),
-    capitalPool: isObject(value.capitalPool ?? value.capital_pool) ? {
+    paperLedgerId,
+    paperLedger: paperLedgerId ? {
+      id: paperLedgerId,
+      mode: asOptionalString(paperLedger.mode ?? value.paperLedgerMode ?? value.paper_ledger_mode ?? "paper"),
+      isolated: asBoolean(paperLedger.isolated ?? paperLedger.is_isolated ?? value.paperLedgerIsolated ?? value.paper_ledger_isolated, true),
+      benchmarkBudget: optionalFiniteNumber(paperLedger.benchmarkBudget ?? paperLedger.benchmark_budget ?? value.paperBenchmarkBudget ?? value.paper_benchmark_budget),
+    } : undefined,
+    capitalPoolId,
+    capitalPool: normalizedCapitalMode !== "paper" && isObject(value.capitalPool ?? value.capital_pool) ? {
       id: asOptionalString(capitalPool.id),
       mode: asOptionalString(capitalPool.mode),
       liveCapitalEnabled: asBoolean(capitalPool.liveCapitalEnabled ?? capitalPool.live_capital_enabled, false),

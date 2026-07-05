@@ -185,6 +185,12 @@
   }
 }
 
+@media (max-width: 767px) {
+  html {
+    scroll-padding-top: 14rem;
+  }
+}
+
 @layer utilities {
   .text-mono {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;

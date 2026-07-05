@@ -255,8 +255,16 @@ function displayFleetState(r: ManagementPersonaFleetRow): string {
   return state;
 }
 
-function fleetCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
-  const raw = r as ManagementPersonaFleetRow & { capital_pool_id?: string };
+function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as ManagementPersonaFleetRow & {
+    capital_pool_id?: string;
+    paper_ledger_id?: string;
+    paper_ledger?: { id?: string };
+  };
+  const mode = fleetCapitalMode(r);
+  if (mode === "paper") {
+    return r.paperLedgerId ?? raw.paper_ledger_id ?? r.paperLedger?.id ?? raw.paper_ledger?.id;
+  }
   return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
 }
 
@@ -584,7 +592,6 @@ export const PersonaFleetPage = () => {
               const dataSourcesHref = sourceBadges.length > 0 ? personaFleetDataSourcesHref(r) : null;
               const performanceHref = personaFleetPerformanceHref(r);
               const mutationHref = personaFleetMutationHref(r);
-              const capitalHref = personaFleetCapitalHref(r);
               const humanGateHref = personaFleetHumanGateHref(r);
               const onboardingHref = personaFleetOnboardingHref(r);
               const runtimeHref = personaFleetRuntimeHref(r);
@@ -599,7 +606,8 @@ export const PersonaFleetPage = () => {
               const artifactLabel = primaryResearch?.artifactId;
               const oodaHref = personaFleetOodaHref(r, primaryResearch);
               const capitalMode = fleetCapitalMode(r);
-              const capitalPoolId = fleetCapitalPoolId(r);
+              const capitalReference = fleetCapitalReference(r);
+              const capitalHref = capitalMode === "paper" ? null : personaFleetCapitalHref(r);
               const runtimeHealth = fleetRuntimeHealth(r);
               const leagueRank = fleetLeagueRank(r);
               const leagueScore = fleetLeagueScore(r);
@@ -644,7 +652,7 @@ export const PersonaFleetPage = () => {
 	                  <td className="px-3 py-2 min-w-[170px]">
 	                    <OptionalFleetLink
 	                      href={capitalHref}
-	                      ariaLabel={`${r.personaId} capital pool ${(capitalPoolId ?? capitalMode) || "nan"}`}
+	                      ariaLabel={`${r.personaId} ${capitalMode === "paper" ? "paper ledger" : "capital pool"} ${(capitalReference ?? capitalMode) || "nan"}`}
 	                      className={capitalHref
 	                        ? "block rounded-sm outline-offset-2 transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60"
 	                        : "block"}
@@ -666,14 +674,14 @@ export const PersonaFleetPage = () => {
 	                          </Badge>
 	                        )}
 	                      </div>
-	                      {capitalPoolId && (
+	                      {capitalReference && (
 	                        <div
 	                          className={capitalHref
 	                            ? fieldLinkClass("mt-1 block max-w-[190px] truncate font-mono text-xs text-muted-foreground hover:text-primary")
 	                            : "mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground"}
-	                          title={capitalPoolId}
+	                          title={capitalReference}
 	                        >
-	                          {capitalPoolId}
+	                          {capitalReference}
 	                        </div>
 	                      )}
 	                    </OptionalFleetLink>

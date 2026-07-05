@@ -98,86 +98,90 @@ export const SentinelPage = () => {
     <>
       <PageHeader title={t("nav.sentinel")} subtitle={t("v5.sentinel.subtitle")} />
       <PageBody>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label={t("v5.kpi.openFindings")} value={open} tone={open > 0 ? "warning" : "default"} />
-          <StatCard label={t("v5.kpi.criticalFindings")} value={critical} tone={critical > 0 ? "danger" : "default"} />
-          <StatCard label={t("v5.sentinel.mitigating")} value={mitigating} tone={mitigating > 0 ? "warning" : "default"} />
-          <StatCard label={t("v5.sentinel.total")} value={all.length} />
-        </div>
+        <div className="flex flex-col gap-6">
+          <div className="order-3 grid gap-3 sm:grid-cols-2 md:order-1 lg:grid-cols-4">
+            <StatCard label={t("v5.kpi.openFindings")} value={open} tone={open > 0 ? "warning" : "default"} />
+            <StatCard label={t("v5.kpi.criticalFindings")} value={critical} tone={critical > 0 ? "danger" : "default"} />
+            <StatCard label={t("v5.sentinel.mitigating")} value={mitigating} tone={mitigating > 0 ? "warning" : "default"} />
+            <StatCard label={t("v5.sentinel.total")} value={all.length} />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder={t("v5.sentinel.search")}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="max-w-xs"
-          />
-          {(["all", "critical", "warning", "watch", "info"] as const).map((s) => (
-            <Button key={s} size="sm" variant={sevFilter === s ? "default" : "outline"} onClick={() => setSevFilter(s)}>
-              {s}
-            </Button>
-          ))}
-          <div className="ml-auto inline-flex rounded-md border border-border overflow-hidden">
-            <Button size="sm" variant={view === "list" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("list")}>
-              {t("v5.sentinel.viewList")}
-            </Button>
-            <Button size="sm" variant={view === "timeline" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("timeline")}>
-              {t("v5.sentinel.viewTimeline")}
-            </Button>
+          <div className="order-1 flex flex-wrap items-center gap-2 md:order-2">
+            <Input
+              placeholder={t("v5.sentinel.search")}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="max-w-xs"
+            />
+            {(["all", "critical", "warning", "watch", "info"] as const).map((s) => (
+              <Button key={s} size="sm" variant={sevFilter === s ? "default" : "outline"} onClick={() => setSevFilter(s)}>
+                {s}
+              </Button>
+            ))}
+            <div className="ml-auto inline-flex rounded-md border border-border overflow-hidden">
+              <Button size="sm" variant={view === "list" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("list")}>
+                {t("v5.sentinel.viewList")}
+              </Button>
+              <Button size="sm" variant={view === "timeline" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("timeline")}>
+                {t("v5.sentinel.viewTimeline")}
+              </Button>
+            </div>
+          </div>
+
+          <div className="order-2 md:order-3">
+            <SkeletonThreshold
+              loading={!findings.data}
+              fallback={
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              }
+            >
+              {view === "timeline" ? (
+                <SentinelTimelineView findings={visible} onPick={openFinding} />
+              ) : (
+                <ul className="space-y-2">
+                  {visible.map((f) => (
+                    <li key={f.id}>
+                      <button
+                        onClick={(e) => openFinding(f, e.currentTarget)}
+                        className="relative z-10 w-full scroll-mt-56 text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors md:scroll-mt-28"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="relative z-10 scroll-mt-56 font-medium text-sm truncate md:scroll-mt-28">{f.title}</div>
+                          <div className="flex gap-2 shrink-0">
+                            <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
+                            <Badge variant="outline" className={statusCls[f.status]}>{statusLabel(t, f.status)}</Badge>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
+                        <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
+                          <span>{t("v5.sentinel.detectedAt")}: {safeDateTime(f.detectedAt)}</span>
+                          <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
+                          <span>{t("v5.sentinel.source")}: {f.source}</span>
+                          <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                  {visible.length === 0 && (
+                    <li>
+                      <EmptyState
+                        icon={<ShieldCheck className="h-8 w-8" />}
+                        title={all.length === 0 ? t("v5.sentinel.noFindingsTitle", { defaultValue: "No findings" }) : t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
+                        description={all.length === 0
+                          ? t("v5.sentinel.noFindingsDesc", { defaultValue: "Sentinel hasn't surfaced any findings for the current scope." })
+                          : t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter to see more findings." })}
+                      />
+                    </li>
+                  )}
+                </ul>
+              )}
+            </SkeletonThreshold>
           </div>
         </div>
-
-        <SkeletonThreshold
-          loading={!findings.data}
-          fallback={
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          }
-        >
-          {view === "timeline" ? (
-            <SentinelTimelineView findings={visible} onPick={openFinding} />
-          ) : (
-            <ul className="space-y-2">
-              {visible.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onClick={(e) => openFinding(f, e.currentTarget)}
-                    className="w-full text-left border border-border rounded-md p-3 bg-card hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium text-sm truncate">{f.title}</div>
-                      <div className="flex gap-2 shrink-0">
-                        <Badge variant="outline" className={sevCls[f.severity]}>{f.severity}</Badge>
-                        <Badge variant="outline" className={statusCls[f.status]}>{statusLabel(t, f.status)}</Badge>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{f.summary}</div>
-                    <div className="text-xs mt-2 text-muted-foreground flex flex-wrap gap-x-3">
-                      <span>{t("v5.sentinel.detectedAt")}: {safeDateTime(f.detectedAt)}</span>
-                      <span>{t("v5.sentinel.confidence")}: {(f.confidence * 100).toFixed(0)}%</span>
-                      <span>{t("v5.sentinel.source")}: {f.source}</span>
-                      <span>{t("v5.sentinel.actions")}: {f.recommendedActionIds.length}</span>
-                    </div>
-                  </button>
-                </li>
-              ))}
-              {visible.length === 0 && (
-                <li>
-                  <EmptyState
-                    icon={<ShieldCheck className="h-8 w-8" />}
-                    title={all.length === 0 ? t("v5.sentinel.noFindingsTitle", { defaultValue: "No findings" }) : t("v5.sentinel.noMatchTitle", { defaultValue: "No matches" })}
-                    description={all.length === 0
-                      ? t("v5.sentinel.noFindingsDesc", { defaultValue: "Sentinel hasn't surfaced any findings for the current scope." })
-                      : t("v5.sentinel.noMatchDesc", { defaultValue: "Adjust the search or severity filter to see more findings." })}
-                  />
-                </li>
-              )}
-            </ul>
-          )}
-        </SkeletonThreshold>
       </PageBody>
 
       <FindingDrawer finding={active} onClose={closeActive} triggerRef={activeFindingTriggerRef} />

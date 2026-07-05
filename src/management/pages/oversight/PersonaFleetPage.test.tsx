@@ -259,7 +259,12 @@ describe("PersonaFleetPage", () => {
           humanNeeded: true,
           state: "deployed",
           capitalMode: "paper",
-          capitalPoolId: "cp-paper-alpha",
+          paperLedgerId: "paper-ledger-persona-live-paper-alpha",
+          paperLedger: {
+            id: "paper-ledger-persona-live-paper-alpha",
+            mode: "paper",
+            isolated: true,
+          },
           runtimeId: "rt-paper-alpha",
           runtimeBindingId: "rb-paper-alpha",
           runtimeBinding: {
@@ -292,10 +297,8 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByRole("link", { name: "persona-live-paper-alpha capital pool cp-paper-alpha" })).toHaveAttribute(
-      "href",
-      "/management/capital?pool=cp-paper-alpha",
-    );
+    expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();

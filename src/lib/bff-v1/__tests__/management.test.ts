@@ -999,6 +999,13 @@ describe("mgmt façade (PM-Live)", () => {
             runtime_binding_id: "rb-433f2a614995432b9e7a463c882dbefb",
             deployment_stage: "paper",
             capital_mode: "paper",
+            paper_ledger_id: "paper-ledger-persona-tw-equity",
+            paper_ledger: {
+              id: "paper-ledger-persona-tw-equity",
+              mode: "paper",
+              isolated: true,
+              benchmark_budget: 1000000,
+            },
             capital_pool_id: "cp-paper-tw-equity",
             capital_pool: {
               id: "cp-paper-tw-equity",
@@ -1109,7 +1116,7 @@ describe("mgmt façade (PM-Live)", () => {
       runtimeBindingId: "rb-433f2a614995432b9e7a463c882dbefb",
       deploymentStage: "paper",
       capitalMode: "paper",
-      capitalPoolId: "cp-paper-tw-equity",
+      paperLedgerId: "paper-ledger-persona-tw-equity",
       runtimeHealth: { status: "healthy" },
       reviewId: "review-paper-to-live-tw",
       reviewType: "paper_to_live",
@@ -1123,10 +1130,13 @@ describe("mgmt façade (PM-Live)", () => {
         basis: "quarterly_paper_live_league",
       },
     });
-    expect(rows?.[0].capitalPool).toMatchObject({
-      id: "cp-paper-tw-equity",
+    expect(rows?.[0].capitalPoolId).toBeUndefined();
+    expect(rows?.[0].capitalPool).toBeUndefined();
+    expect(rows?.[0].paperLedger).toMatchObject({
+      id: "paper-ledger-persona-tw-equity",
       mode: "paper",
-      liveCapitalEnabled: false,
+      isolated: true,
+      benchmarkBudget: 1000000,
     });
     expect(rows?.[0].runtimeBinding).toMatchObject({
       id: "rb-433f2a614995432b9e7a463c882dbefb",
@@ -1180,6 +1190,7 @@ describe("mgmt façade (PM-Live)", () => {
           state: "deployed",
           capital_mode: "paper",
           deployment_stage: "paper",
+          capital_pool_id: "shared-legacy-paper-pool",
           runtime_id: "rt-paper-legacy",
           runtime_binding_id: "rb-paper-legacy",
         }],
@@ -1192,8 +1203,16 @@ describe("mgmt façade (PM-Live)", () => {
       state: "paper_running",
       capitalMode: "paper",
       deploymentStage: "paper",
+      paperLedgerId: "paper-ledger-persona-legacy-deployed",
       runtimeId: "rt-paper-legacy",
       runtimeBindingId: "rb-paper-legacy",
+    });
+    expect(rows?.[0].capitalPoolId).toBeUndefined();
+    expect(rows?.[0].capitalPool).toBeUndefined();
+    expect(rows?.[0].paperLedger).toMatchObject({
+      id: "paper-ledger-persona-legacy-deployed",
+      mode: "paper",
+      isolated: true,
     });
   });
 
