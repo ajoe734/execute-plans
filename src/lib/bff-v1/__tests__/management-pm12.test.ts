@@ -21,6 +21,7 @@ describe("PM12 paths", () => {
     expect(paths.mgmtQuarterlyRanking()).toBe("/bff/management/quarterly-ranking");
     expect(paths.mgmtQuarterlyRanking("2026-Q2")).toContain("quarter=2026-Q2");
     expect(paths.mgmtQuarterlyRankingFormula()).toBe("/bff/management/quarterly-ranking/formula");
+    expect(paths.commandsV1()).toBe("/bff/v1/commands");
   });
   it("performance attribution", () => {
     expect(paths.mgmtPerformanceAttribution()).toBe("/bff/management/performance-attribution");

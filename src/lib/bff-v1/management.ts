@@ -39,7 +39,7 @@ import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
 import type {
   PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
 } from "@/lib/v5/management/portfolio";
-import type { PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
+import type { LeagueRecommendedAction, PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
 import type {
   QuarterlyRankingRow, QuarterlyRankingFormula,
 } from "@/lib/v5/management/quarterlyRanking";
@@ -2171,6 +2171,39 @@ export interface PromotionReviewDecisionResult {
   replayed?: boolean;
 }
 
+export type ManagementRankingRecommendationAction = Exclude<LeagueRecommendedAction, "no_change">;
+export type ManagementRankingRecommendationSource = "persona_league" | "quarterly_ranking";
+
+export interface RankingRecommendationSubmitInput {
+  recommendationId?: string;
+  actionId: ManagementRankingRecommendationAction;
+  quarter: string;
+  personaId: string;
+  personaName?: string;
+  source: ManagementRankingRecommendationSource;
+  evidenceRefs?: string[];
+  governanceDestinations?: string[];
+  liveCapitalMutation?: false;
+}
+
+export interface RankingRecommendationSubmitResult {
+  ok: true;
+  persisted: boolean;
+  recommendationId: string;
+  actionId: ManagementRankingRecommendationAction;
+  quarter: string;
+  personaId: string;
+  status: string;
+  idempotencyKey: string;
+  commandId?: string;
+  humanInboxId?: string;
+  reviewId?: string;
+  detailHref?: string;
+  replayed?: boolean;
+  liveCapitalMutation: false;
+  governanceDestinations: string[];
+}
+
 const asOptionalString = (raw: unknown): string | undefined => {
   const value = asString(raw);
   return value ? value : undefined;
@@ -2438,6 +2471,158 @@ const adaptPromotionReviewDecisionResult = (
     idempotencyKey: asString(idem.idempotencyKey ?? idem.key, idempotencyKey),
     decision: root.decision,
     replayed: asBoolean(idem.replayed, false),
+  };
+};
+
+const RANKING_RECOMMENDATION_GOVERNANCE_DESTINATIONS = [
+  "human_inbox",
+  "governance_queue",
+  "human_gate_decision",
+] as const;
+
+const sanitizeRecommendationPart = (value: unknown, fallback: string): string => {
+  const text = asString(value, fallback)
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return text || fallback;
+};
+
+const defaultRankingRecommendationId = (input: RankingRecommendationSubmitInput): string =>
+  [
+    "pm12-rec",
+    sanitizeRecommendationPart(input.source, "ranking"),
+    sanitizeRecommendationPart(input.quarter, "quarter"),
+    sanitizeRecommendationPart(input.personaId, "persona"),
+    sanitizeRecommendationPart(input.actionId, "action"),
+  ].join("-");
+
+const normalizeGovernanceDestinations = (destinations?: string[]): string[] => {
+  const raw = destinations && destinations.length > 0
+    ? destinations
+    : [...RANKING_RECOMMENDATION_GOVERNANCE_DESTINATIONS];
+  return Array.from(new Set(raw.map((item) => asString(item)).filter(Boolean)));
+};
+
+const firstOptionalString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    const text = asOptionalString(value);
+    if (text) return text;
+  }
+  return undefined;
+};
+
+const promotionReviewInboxId = (reviewId?: string): string | undefined => {
+  if (!reviewId) return undefined;
+  return reviewId.startsWith("promotion_review:") ? reviewId : `promotion_review:${reviewId}`;
+};
+
+const humanInboxDetailHref = (humanInboxId?: string): string | undefined =>
+  humanInboxId ? `/management/human-inbox/${encodeURIComponent(humanInboxId)}` : undefined;
+
+const buildRankingRecommendationSubmitBody = (
+  input: RankingRecommendationSubmitInput,
+  recommendationId: string,
+): Record<string, unknown> => {
+  const governanceDestinations = normalizeGovernanceDestinations(input.governanceDestinations);
+  return {
+    command: "QuarterlyRankingRecommendationSubmit",
+    target: { type: "Ranking", id: recommendationId },
+    action: "submit",
+    params: {
+      quarter: input.quarter,
+      recommendation_id: recommendationId,
+      recommendationId,
+      recommendation_action_id: input.actionId,
+      recommendationActionId: input.actionId,
+      actionId: input.actionId,
+      persona_id: input.personaId,
+      personaId: input.personaId,
+      persona_name: input.personaName,
+      personaName: input.personaName,
+      source: input.source,
+      evidence_refs: input.evidenceRefs ?? [],
+      evidenceRefs: input.evidenceRefs ?? [],
+      governance_destinations: governanceDestinations,
+      governanceDestinations,
+      live_capital_mutation: false,
+      liveCapitalMutation: false,
+    },
+    audit_context: {
+      reason: `PM-12 ${input.source} recommendation requires Human Inbox review before any governed action.`,
+    },
+  };
+};
+
+const adaptRankingRecommendationSubmitResult = (
+  raw: unknown,
+  input: RankingRecommendationSubmitInput,
+  recommendationId: string,
+  idempotencyKey: string,
+): RankingRecommendationSubmitResult => {
+  const root = isObject(raw) ? raw : {};
+  const data = isObject(root.data) ? root.data : {};
+  const item = isObject(data.item) ? data.item
+    : isObject(root.item) ? root.item
+      : {};
+  const receipt = isObject(data.receipt) ? data.receipt : {};
+  const meta = isObject(root.meta) ? root.meta : {};
+  const idem = isObject(meta.idempotency) ? meta.idempotency : {};
+  const reviewId = firstOptionalString(
+    data.reviewId,
+    data.review_id,
+    data.promotionReviewId,
+    data.promotion_review_id,
+    item.reviewId,
+    item.review_id,
+    item.promotionReviewId,
+    item.promotion_review_id,
+  );
+  const humanInboxId = firstOptionalString(
+    data.humanInboxId,
+    data.human_inbox_id,
+    data.inboxId,
+    data.inbox_id,
+    item.humanInboxId,
+    item.human_inbox_id,
+    item.inboxId,
+    item.inbox_id,
+    promotionReviewInboxId(reviewId),
+  );
+  const detailHref = firstOptionalString(
+    data.detailHref,
+    data.detail_href,
+    data.humanInboxHref,
+    data.human_inbox_href,
+    data.reviewHref,
+    data.review_href,
+    item.detailHref,
+    item.detail_href,
+    item.humanInboxHref,
+    item.human_inbox_href,
+    humanInboxDetailHref(humanInboxId),
+  );
+  return {
+    ok: true,
+    persisted: true,
+    recommendationId,
+    actionId: input.actionId,
+    quarter: input.quarter,
+    personaId: input.personaId,
+    status: asString(data.status ?? root.status, "accepted"),
+    idempotencyKey: asString(idem.idempotencyKey ?? idem.key, idempotencyKey),
+    commandId: firstOptionalString(
+      data.commandId,
+      data.command_id,
+      receipt.commandId,
+      receipt.command_id,
+      receipt.receipt_id,
+    ),
+    humanInboxId,
+    reviewId,
+    detailHref,
+    replayed: asBoolean(idem.replayed, false),
+    liveCapitalMutation: false,
+    governanceDestinations: normalizeGovernanceDestinations(input.governanceDestinations),
   };
 };
 
@@ -3271,6 +3456,37 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
         adaptArrayPassthrough<QuarterlyRankingRow>,
       ),
+    submitRecommendation: async (
+      input: RankingRecommendationSubmitInput,
+      opts: { idempotencyKey?: string } = {},
+    ): Promise<RankingRecommendationSubmitResult> => {
+      const recommendationId = input.recommendationId || defaultRankingRecommendationId(input);
+      const idempotencyKey = opts.idempotencyKey ?? mintIdempotencyKey();
+      const governanceDestinations = normalizeGovernanceDestinations(input.governanceDestinations);
+      const writeAllowed = await liveWriteGated();
+      if (!writeAllowed) {
+        return {
+          ok: true,
+          persisted: false,
+          recommendationId,
+          actionId: input.actionId,
+          quarter: input.quarter,
+          personaId: input.personaId,
+          status: "write_disabled",
+          idempotencyKey,
+          liveCapitalMutation: false,
+          governanceDestinations,
+        };
+      }
+      const raw = await bffFetch<unknown>({
+        method: "POST",
+        path: paths.commandsV1(),
+        body: buildRankingRecommendationSubmitBody(input, recommendationId),
+        idempotencyKey,
+        mode: "live",
+      });
+      return adaptRankingRecommendationSubmitResult(raw, input, recommendationId, idempotencyKey);
+    },
   },
 
   performanceAttribution: {

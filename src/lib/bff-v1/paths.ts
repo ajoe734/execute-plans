@@ -108,6 +108,7 @@ export const paths = {
   strategySpecs: (id: string) => `${BASE}/strategies/${enc(id)}/specs`,
 
   // ---- Command confirmations (v3 §6.2) — submission endpoint ----
+  commandsV1: () => `${BASE}/v1/commands`,
   // /bff/command-confirmations requires confirm_token + command_id in body (submission of an already-issued token).
   commandConfirmations: () => `${BASE}/command-confirmations`,
   commandConfirmation: (token: string) => `${BASE}/command-confirmations/${enc(token)}`,

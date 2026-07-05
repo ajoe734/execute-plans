@@ -1,0 +1,134 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { I18nextProvider } from "react-i18next";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import i18n from "@/i18n";
+import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
+import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
+import { PersonaLeaguePage } from "./PersonaLeague";
+import { QuarterlyRankingPage } from "./QuarterlyRanking";
+
+const mocks = vi.hoisted(() => ({
+  useV5Live: vi.fn(),
+  sendRankingRecommendation: vi.fn(),
+}));
+
+vi.mock("@/management/pages/v5/useV5Live", () => ({
+  useV5Live: mocks.useV5Live,
+}));
+
+vi.mock("@/lib/v5/management/rankingGovernance", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/v5/management/rankingGovernance")>();
+  return {
+    ...actual,
+    sendRankingRecommendation: mocks.sendRankingRecommendation,
+  };
+});
+
+void i18n.changeLanguage("en-US");
+
+function renderWithRoutes(initialEntry: string, element: ReactElement) {
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path={initialEntry} element={element} />
+          <Route path="/management/human-inbox/:id" element={<div>Human Inbox detail route</div>} />
+        </Routes>
+      </MemoryRouter>
+    </I18nextProvider>,
+  );
+}
+
+describe("ranking recommendation submit pages", () => {
+  beforeEach(() => {
+    mocks.useV5Live.mockReset();
+    mocks.sendRankingRecommendation.mockReset();
+  });
+
+  it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {
+    const row = {
+      ...defaultPersonaLeague()[0],
+      recommendationId: "pm12-rec-league-alpha",
+      evidenceRefs: ["evidence:league-alpha"],
+    };
+    mocks.useV5Live.mockReturnValue({ data: [row], loading: false, refresh: vi.fn() });
+    mocks.sendRankingRecommendation.mockResolvedValue({
+      ok: true,
+      persisted: true,
+      recommendationId: "pm12-rec-league-alpha",
+      actionId: "promote_to_canary_candidate",
+      quarter: "2026-Q3",
+      personaId: row.personaId,
+      status: "accepted",
+      idempotencyKey: "idk-league-page",
+      humanInboxId: "promotion_review:review-league-alpha",
+      detailHref: "/management/human-inbox/promotion_review%3Areview-league-alpha",
+      liveCapitalMutation: false,
+      governanceDestinations: ["human_inbox", "human_gate_decision"],
+    });
+
+    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
+
+    await waitFor(() => {
+      expect(mocks.sendRankingRecommendation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recommendationId: "pm12-rec-league-alpha",
+          source: "persona_league",
+          personaId: row.personaId,
+          recommendation: "promote_to_canary_candidate",
+          evidenceRefs: ["evidence:league-alpha"],
+        }),
+      );
+    });
+    expect(await screen.findByText("Human Inbox detail route")).toBeInTheDocument();
+  });
+
+  it("Quarterly Ranking shows local-only state when BFF writes are disabled", async () => {
+    const row = {
+      ...defaultQuarterlyRanking()[0],
+      recommendationId: "pm12-rec-quarterly-alpha",
+      quarter: "2026-Q3",
+    };
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: [row], loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+    mocks.sendRankingRecommendation.mockResolvedValue({
+      ok: true,
+      persisted: false,
+      recommendationId: "pm12-rec-quarterly-alpha",
+      actionId: "promote_to_canary_candidate",
+      quarter: "2026-Q3",
+      personaId: row.personaId,
+      status: "write_disabled",
+      idempotencyKey: "idk-quarterly-page",
+      liveCapitalMutation: false,
+      governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
+    });
+
+    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
+
+    await waitFor(() => {
+      expect(mocks.sendRankingRecommendation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recommendationId: "pm12-rec-quarterly-alpha",
+          source: "quarterly_ranking",
+          personaId: row.personaId,
+          quarter: "2026-Q3",
+        }),
+      );
+    });
+    expect(screen.getByText("Human review required; liveCapitalMutation=false.")).toBeInTheDocument();
+    expect(screen.getByText("Local only: real writes are disabled; no BFF Human Inbox review was created.")).toBeInTheDocument();
+  });
+});
