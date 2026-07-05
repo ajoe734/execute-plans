@@ -75,7 +75,7 @@ export function PinnedHorizontalScroll({
       <div
         ref={viewportRef}
         aria-label={ariaLabel}
-        className={cn("overflow-x-auto overscroll-x-contain", viewportClassName)}
+        className={cn("pinned-horizontal-scroll__native overflow-x-auto overscroll-x-contain", viewportClassName)}
         data-management-table-scrollbar="native"
         data-pinned-horizontal-scrollbar="native"
         role="region"
