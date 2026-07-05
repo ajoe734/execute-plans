@@ -215,6 +215,61 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
+  it("builds links from slim live persona fleet rows without linkTargets", () => {
+    const row = {
+      id: "persona-20260528-5937dea1",
+      persona_id: "persona-20260528-5937dea1",
+      name: "TW-Index-Arbitrage",
+      ooda: "Decide",
+      runtime_id: "runtime-tw-equity-paper",
+      runtime_binding_id: "runtime-tw-equity-paper",
+      inbox_id: "human_gate_review:approval-rescue-0260528-5937dea1",
+      review: {
+        route: "/bff/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+      },
+      links: {
+        detail: "/personas/persona-20260528-5937dea1",
+        runtime: "/management/runtimes/runtime-tw-equity-paper",
+      },
+      research_status: {
+        stage: "management_review_linked",
+        framework: "qlib",
+        frameworks: ["qlib"],
+        framework_count: 3,
+        experiment_id: "exp-mgmt-qlib-006",
+        artifact_id: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+        pending_task_ids: [],
+        can_deploy: false,
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona-20260528-5937dea1");
+    expect(personaFleetResearchHref(row, item)).toBe("/management/experiments/exp-mgmt-qlib-006");
+    expect(personaFleetArtifactHref(row, item)).toBe(
+      "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
+    );
+    const shioaji = {
+      providerKey: "shioaji",
+      provider: "Shioaji quote",
+      status: "read_ok",
+    } as NonNullable<ManagementPersonaFleetRow["dataSources"]>[number];
+
+    expect(personaFleetDataSourcesHref(row, shioaji)).toBe(
+      "/management/data-sources?persona=persona-20260528-5937dea1&source=shioaji",
+    );
+    expect(personaFleetHumanGateHref(row)).toBe(
+      "/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+    );
+    expect(personaFleetRuntimeHref(row)).toBe(
+      "/management/runtimes?persona=persona-20260528-5937dea1&runtime=runtime-tw-equity-paper&binding=runtime-tw-equity-paper",
+    );
+    expect(personaFleetOodaHref(row)).toBe(
+      "/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+    );
+  });
+
   it("accepts snake_case canonical link_targets from live rows", () => {
     const row = {
       personaId: "persona-snake-case",
@@ -230,6 +285,40 @@ describe("PersonaFleetPage deep links", () => {
       "/management/performance-attribution?dimension=persona&persona=persona-snake-case",
     );
     expect(personaFleetOodaHref(row)).toBe("/management/data-sources?persona=persona-snake-case");
+  });
+
+  it("uses each provider key for data-source chip hrefs instead of the row primary source", () => {
+    const row = {
+      personaId: "persona-20260528-ba7de5a4",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const shioaji = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+    const mops = { providerKey: "mops", provider: "MOPS", status: "public_reference_unavailable" };
+
+    expect(personaFleetDataSourcesHref(row)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4",
+    );
+    expect(personaFleetDataSourcesHref(row, shioaji)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=shioaji",
+    );
+    expect(personaFleetDataSourcesHref(row, mops)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+    );
+  });
+
+  it("does not use nan or not declared values in synthesized data-source hrefs", () => {
+    const row = {
+      personaId: "not declared",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=not%20declared&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const source = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+
+    expect(personaFleetDataSourcesHref(row)).toBeNull();
+    expect(personaFleetDataSourcesHref(row, source)).toBeNull();
   });
 
   it("does not fabricate a research-loop project link when no canonical target exists", () => {

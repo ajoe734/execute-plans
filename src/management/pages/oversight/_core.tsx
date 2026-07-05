@@ -580,7 +580,7 @@ export const PersonaFleetPage = () => {
               const frameworkSummary = frameworkText(primaryResearch);
               const personaHref = personaFleetPersonaHref(r);
               const researchHref = personaFleetResearchHref(r, primaryResearch);
-              const dataSourcesHref = personaFleetDataSourcesHref(r);
+              const dataSourcesHref = sourceBadges.length > 0 ? personaFleetDataSourcesHref(r) : null;
               const performanceHref = personaFleetPerformanceHref(r);
               const mutationHref = personaFleetMutationHref(r);
               const humanGateHref = personaFleetHumanGateHref(r);
