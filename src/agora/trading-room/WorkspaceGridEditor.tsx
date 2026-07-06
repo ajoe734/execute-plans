@@ -37,6 +37,20 @@ import WorkspaceWidgetRevisionDrawer from "./WorkspaceWidgetRevisionDrawer";
 const GRID_COLS = 12;
 const GRID_WIDTH = 1320;
 const ROW_HEIGHT = 74;
+const COLORS = {
+  accent: "#e8b750",
+  border: "#2a2e38",
+  borderStrong: "#3a4254",
+  danger: "#ff6b6b",
+  good: "#56d98b",
+  muted: "#8c96a6",
+  panel: "#171b22",
+  panelElevated: "#1e2330",
+  panelInset: "#11151d",
+  text: "#f0ece4",
+  textSoft: "#c4ccda",
+  warning: "#f0b84d",
+};
 
 type SaveState = "idle" | "saving" | "error";
 
@@ -156,10 +170,10 @@ function AddWidgetLibrary({
     <aside
       data-testid="workspace-add-widget-library"
       style={{
-        background: "#ffffff",
-        border: "1px solid #cbd5e1",
+        background: COLORS.panelElevated,
+        border: `1px solid ${COLORS.borderStrong}`,
         borderRadius: 8,
-        boxShadow: "0 12px 30px rgba(15, 23, 42, 0.12)",
+        boxShadow: "0 18px 42px rgba(0, 0, 0, 0.42)",
         maxHeight: 420,
         overflow: "auto",
         padding: 12,
@@ -171,14 +185,14 @@ function AddWidgetLibrary({
       }}
     >
       <header style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <strong style={{ color: "#0f172a", fontSize: 13 }}>新增 Widget</strong>
+        <strong style={{ color: COLORS.text, fontSize: 13 }}>新增 Widget</strong>
         <button aria-label="Close widget library" onClick={onClose} style={plainButtonStyle} type="button">
           ×
         </button>
       </header>
       {Object.entries(grouped).map(([category, categoryEntries]) => (
         <section key={category} style={{ marginTop: 10 }}>
-          <div style={{ color: "#64748b", fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>
+          <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>
             {category}
           </div>
           <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
@@ -188,10 +202,10 @@ function AddWidgetLibrary({
                 key={entry.widget_type}
                 onClick={() => onAdd(entry)}
                 style={{
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
+                  background: COLORS.panel,
+                  border: `1px solid ${COLORS.border}`,
                   borderRadius: 6,
-                  color: "#334155",
+                  color: COLORS.textSoft,
                   cursor: "pointer",
                   fontSize: 12,
                   padding: "8px 10px",
@@ -199,7 +213,7 @@ function AddWidgetLibrary({
                 }}
                 type="button"
               >
-                <span style={{ color: "#0f172a", display: "block", fontWeight: 700 }}>{entry.display_name}</span>
+                <span style={{ color: COLORS.text, display: "block", fontWeight: 700 }}>{entry.display_name}</span>
                 <span>{entry.description}</span>
               </button>
             ))}
@@ -251,8 +265,8 @@ function WorkspaceWidgetCard({
       }}
       role={editMode ? undefined : "button"}
       style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
+        background: COLORS.panel,
+        border: `1px solid ${COLORS.border}`,
         borderRadius: 8,
         cursor: editMode ? "default" : "pointer",
         display: "flex",
@@ -268,7 +282,7 @@ function WorkspaceWidgetCard({
         className="workspace-widget-drag-handle"
         style={{
           alignItems: "center",
-          borderBottom: "1px solid #e2e8f0",
+          borderBottom: `1px solid ${COLORS.border}`,
           cursor: editMode ? "grab" : "default",
           display: "flex",
           gap: 10,
@@ -278,10 +292,10 @@ function WorkspaceWidgetCard({
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <h3 style={{ color: "#0f172a", fontSize: 13, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <h3 style={{ color: COLORS.text, fontSize: 13, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {widget.title}
           </h3>
-          <div style={{ color: "#64748b", fontSize: 11 }}>
+          <div style={{ color: COLORS.muted, fontSize: 11 }}>
             {validation.title} · {formatSensitivityLabel(widget.sensitivity)}
           </div>
         </div>
@@ -291,10 +305,10 @@ function WorkspaceWidgetCard({
         >
           <span
             style={{
-              background: validation.ok ? "#ecfdf5" : "#fef2f2",
-              border: `1px solid ${validation.ok ? "#a7f3d0" : "#fecaca"}`,
+              background: validation.ok ? "rgba(86, 217, 139, 0.13)" : "rgba(255, 107, 107, 0.13)",
+              border: `1px solid ${validation.ok ? "rgba(86, 217, 139, 0.42)" : "rgba(255, 107, 107, 0.42)"}`,
               borderRadius: 999,
-              color: validation.ok ? "#047857" : "#b91c1c",
+              color: validation.ok ? COLORS.good : COLORS.danger,
               fontSize: 10,
               fontWeight: 800,
               padding: "3px 7px",
@@ -317,10 +331,10 @@ function WorkspaceWidgetCard({
             <div
               data-testid={`workspace-widget-menu-panel-${widget.id}`}
               style={{
-                background: "#ffffff",
-                border: "1px solid #cbd5e1",
+                background: COLORS.panelElevated,
+                border: `1px solid ${COLORS.borderStrong}`,
                 borderRadius: 8,
-                boxShadow: "0 12px 30px rgba(15, 23, 42, 0.12)",
+                boxShadow: "0 18px 42px rgba(0, 0, 0, 0.42)",
                 display: "grid",
                 gap: 4,
                 padding: 8,
@@ -334,8 +348,8 @@ function WorkspaceWidgetCard({
               <button onClick={onRequestRevision} style={menuButtonStyle} type="button">交代僕人修改</button>
               <button onClick={onDuplicate} style={menuButtonStyle} type="button">複製 Widget</button>
               <button onClick={onRemove} style={dangerMenuButtonStyle} type="button">移除 Widget</button>
-              <div style={{ borderTop: "1px solid #e2e8f0", marginTop: 4, paddingTop: 6 }}>
-                <div style={{ color: "#64748b", fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
+              <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4, paddingTop: 6 }}>
+                <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
                   換一種圖表
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -346,8 +360,8 @@ function WorkspaceWidgetCard({
                       onClick={() => onChangeChart(kind)}
                       style={{
                         ...chipButtonStyle,
-                        background: widget.chartSpec.kind === kind ? "#eff6ff" : "#ffffff",
-                        color: widget.chartSpec.kind === kind ? "#1d4ed8" : "#334155",
+                        background: widget.chartSpec.kind === kind ? "rgba(232, 183, 80, 0.14)" : COLORS.panel,
+                        color: widget.chartSpec.kind === kind ? COLORS.accent : COLORS.textSoft,
                       }}
                       type="button"
                     >
@@ -360,7 +374,7 @@ function WorkspaceWidgetCard({
           ) : null}
         </div>
       </header>
-      <div style={{ color: "#475569", display: "grid", fontSize: 11, gap: 3, padding: "8px 10px" }}>
+      <div style={{ color: COLORS.textSoft, display: "grid", fontSize: 11, gap: 3, padding: "8px 10px" }}>
         <span>{widget.purpose}</span>
         <span>{widget.dataSource}</span>
         <span>{chartSpecSummary(widget.chartSpec)}</span>
@@ -369,7 +383,7 @@ function WorkspaceWidgetCard({
         {validation.ok ? (
           <ChartSpecRenderer data={[]} height={170} spec={widget.chartSpec} />
         ) : (
-          <div data-testid={`workspace-widget-${widget.id}-validation`} style={{ color: "#b91c1c", fontSize: 12 }}>
+          <div data-testid={`workspace-widget-${widget.id}-validation`} style={{ color: COLORS.danger, fontSize: 12 }}>
             {validation.messages.join(" ")}
           </div>
         )}
@@ -718,23 +732,26 @@ export function WorkspaceGridEditor({
 
   if (!activeView) {
     return (
-      <div data-testid="trading-room-workspace-empty" style={{ color: "#94a3b8", fontSize: 13, padding: 16 }}>
+      <div data-testid="trading-room-workspace-empty" style={{ color: COLORS.muted, fontSize: 13, padding: 16 }}>
         Workspace contains no views.
       </div>
     );
   }
 
   return (
-    <section data-testid="trading-room-workspace-shell" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}>
-      <header style={{ borderBottom: "1px solid #e2e8f0", padding: "10px 16px", position: "relative" }}>
+    <section
+      data-testid="trading-room-workspace-shell"
+      style={{ background: COLORS.panelInset, color: COLORS.text, display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}
+    >
+      <header style={{ borderBottom: `1px solid ${COLORS.border}`, padding: "10px 16px", position: "relative" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
           <div>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Workspace Shell</div>
-            <h2 style={{ color: "#0f172a", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
+            <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 700 }}>Workspace Shell</div>
+            <h2 style={{ color: COLORS.text, fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
               {draftWorkspace.strategyVersion}
             </h2>
           </div>
-          <div style={{ alignItems: "center", color: "#64748b", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
+          <div style={{ alignItems: "center", color: COLORS.muted, display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
             <span>Status: {draftWorkspace.status}</span>
             <span data-testid="workspace-dashboard-version">Dashboard v{draftWorkspace.dashboardVersion}</span>
             <span>{currentEtag ? "ETag ready" : "ETag missing"}</span>
@@ -756,11 +773,11 @@ export function WorkspaceGridEditor({
               key={view.id}
               onClick={() => setActiveViewId(view.id)}
               style={{
-                background: view.id === activeView.id ? "#eff6ff" : "#ffffff",
-                border: "1px solid #cbd5e1",
-                borderBottomColor: view.id === activeView.id ? "#2563eb" : "#cbd5e1",
+                background: view.id === activeView.id ? "rgba(232, 183, 80, 0.14)" : COLORS.panel,
+                border: `1px solid ${view.id === activeView.id ? COLORS.accent : COLORS.border}`,
+                borderBottomColor: view.id === activeView.id ? COLORS.accent : COLORS.border,
                 borderRadius: 6,
-                color: view.id === activeView.id ? "#1d4ed8" : "#334155",
+                color: view.id === activeView.id ? COLORS.accent : COLORS.textSoft,
                 cursor: "pointer",
                 flex: "0 0 auto",
                 fontSize: 12,
@@ -779,8 +796,8 @@ export function WorkspaceGridEditor({
             data-testid="workspace-unsaved-bar"
             style={{
               alignItems: "center",
-              background: dirty ? "#fffbeb" : "#f8fafc",
-              border: `1px solid ${dirty ? "#fde68a" : "#e2e8f0"}`,
+              background: dirty ? "rgba(240, 184, 77, 0.12)" : COLORS.panel,
+              border: `1px solid ${dirty ? "rgba(240, 184, 77, 0.45)" : COLORS.border}`,
               borderRadius: 8,
               display: "flex",
               flexWrap: "wrap",
@@ -790,7 +807,7 @@ export function WorkspaceGridEditor({
               padding: "8px 10px",
             }}
           >
-            <div style={{ color: dirty ? "#92400e" : "#475569", fontSize: 12, fontWeight: 700 }}>
+            <div style={{ color: dirty ? COLORS.warning : COLORS.textSoft, fontSize: 12, fontWeight: 700 }}>
               {dirty ? `${pendingOps.length} unsaved layout operation${pendingOps.length > 1 ? "s" : ""}` : "Grid drop targets and resize handles are active."}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -813,10 +830,10 @@ export function WorkspaceGridEditor({
       </header>
 
       <div data-testid={`workspace-active-view-${activeView.id}`} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 16 }}>
-        <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong style={{ color: "#0f172a" }}>{activeView.title}</strong> · {activeView.purpose}
+        <div style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
+          <strong style={{ color: COLORS.text }}>{activeView.title}</strong> · {activeView.purpose}
           {activeView.warnings?.length ? (
-            <div style={{ color: "#b45309", marginTop: 4 }}>
+            <div style={{ color: COLORS.warning, marginTop: 4 }}>
               {activeView.warnings.map((warning, index) => (
                 <span key={`${activeView.id}-warning-${index}`}>{safeWarningText(warning)}</span>
               ))}
@@ -825,8 +842,8 @@ export function WorkspaceGridEditor({
         </div>
 
         {editMode && removedWidgets.length ? (
-          <section data-testid="workspace-restore-library" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 12, padding: 10 }}>
-            <strong style={{ color: "#0f172a", fontSize: 12 }}>可還原 Widget</strong>
+          <section data-testid="workspace-restore-library" style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 8, marginBottom: 12, padding: 10 }}>
+            <strong style={{ color: COLORS.text, fontSize: 12 }}>可還原 Widget</strong>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {removedWidgets.map((widget) => (
                 <button
@@ -847,10 +864,10 @@ export function WorkspaceGridEditor({
           data-testid="workspace-grid-drop-surface"
           style={{
             background: editMode
-              ? "linear-gradient(#f8fafc 1px, transparent 1px), linear-gradient(90deg, #f8fafc 1px, transparent 1px)"
+              ? "linear-gradient(rgba(232, 183, 80, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(232, 183, 80, 0.1) 1px, transparent 1px)"
               : "transparent",
             backgroundSize: editMode ? "110px 74px" : undefined,
-            border: editMode ? "1px dashed #cbd5e1" : "1px solid transparent",
+            border: editMode ? `1px dashed ${COLORS.borderStrong}` : "1px solid transparent",
             borderRadius: 8,
             minWidth: GRID_WIDTH,
             padding: editMode ? 8 : 0,
@@ -888,20 +905,20 @@ export function WorkspaceGridEditor({
         </div>
 
         {error ? (
-          <div data-testid="workspace-layout-error" style={{ color: "#b91c1c", fontSize: 13, marginTop: 10 }}>
+          <div data-testid="workspace-layout-error" style={{ color: COLORS.danger, fontSize: 13, marginTop: 10 }}>
             {error}
           </div>
         ) : null}
 
-        <section data-testid="workspace-personalization-events" style={{ color: "#475569", fontSize: 12, marginTop: 14 }}>
+        <section data-testid="workspace-personalization-events" style={{ color: COLORS.muted, fontSize: 12, marginTop: 14 }}>
           Personalization events: {events.length}
           {events[0] ? <span> · latest {events[0].event_type}</span> : null}
         </section>
 
         <section data-testid="workspace-version-history" style={{ marginTop: 14 }}>
           <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <strong style={{ color: "#0f172a", fontSize: 13 }}>Dashboard Version History</strong>
-            {versionError ? <span style={{ color: "#b91c1c", fontSize: 12 }}>{versionError}</span> : null}
+            <strong style={{ color: COLORS.text, fontSize: 13 }}>Dashboard Version History</strong>
+            {versionError ? <span style={{ color: COLORS.danger, fontSize: 12 }}>{versionError}</span> : null}
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {versions.length ? versions.map((version) => {
@@ -912,8 +929,8 @@ export function WorkspaceGridEditor({
                   key={version.id}
                   style={{
                     alignItems: "center",
-                    background: isCurrent ? "#ecfdf5" : "#ffffff",
-                    border: "1px solid #e2e8f0",
+                    background: isCurrent ? "rgba(86, 217, 139, 0.13)" : COLORS.panel,
+                    border: `1px solid ${isCurrent ? "rgba(86, 217, 139, 0.42)" : COLORS.border}`,
                     borderRadius: 8,
                     display: "grid",
                     gap: 8,
@@ -921,8 +938,8 @@ export function WorkspaceGridEditor({
                     padding: "8px 10px",
                   }}
                 >
-                  <span style={{ color: "#0f172a", fontSize: 12, fontWeight: 800 }}>v{version.dashboardVersion}</span>
-                  <span style={{ color: "#475569", fontSize: 12 }}>
+                  <span style={{ color: COLORS.text, fontSize: 12, fontWeight: 800 }}>v{version.dashboardVersion}</span>
+                  <span style={{ color: COLORS.textSoft, fontSize: 12 }}>
                     {version.changeSummary} · {version.changeLog?.reason ?? "-"}
                   </span>
                   <button
@@ -937,7 +954,7 @@ export function WorkspaceGridEditor({
                 </div>
               );
             }) : (
-              <div style={{ color: "#94a3b8", fontSize: 12 }}>No version records returned.</div>
+              <div style={{ color: COLORS.muted, fontSize: 12 }}>No version records returned.</div>
             )}
           </div>
         </section>
@@ -957,10 +974,10 @@ export function WorkspaceGridEditor({
 }
 
 const primaryButtonStyle: React.CSSProperties = {
-  background: "#2563eb",
-  border: "1px solid #1d4ed8",
+  background: COLORS.accent,
+  border: `1px solid ${COLORS.accent}`,
   borderRadius: 6,
-  color: "#ffffff",
+  color: "#17120a",
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 800,
@@ -968,10 +985,10 @@ const primaryButtonStyle: React.CSSProperties = {
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
+  background: "transparent",
+  border: `1px solid ${COLORS.borderStrong}`,
   borderRadius: 6,
-  color: "#334155",
+  color: COLORS.textSoft,
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 700,
@@ -979,10 +996,10 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 
 const plainButtonStyle: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
+  background: "transparent",
+  border: `1px solid ${COLORS.borderStrong}`,
   borderRadius: 6,
-  color: "#334155",
+  color: COLORS.textSoft,
   cursor: "pointer",
   fontSize: 13,
   fontWeight: 800,
@@ -992,10 +1009,10 @@ const plainButtonStyle: React.CSSProperties = {
 };
 
 const menuButtonStyle: React.CSSProperties = {
-  background: "#ffffff",
+  background: "transparent",
   border: "none",
   borderRadius: 4,
-  color: "#334155",
+  color: COLORS.textSoft,
   cursor: "pointer",
   fontSize: 12,
   padding: "6px 8px",
@@ -1004,14 +1021,14 @@ const menuButtonStyle: React.CSSProperties = {
 
 const dangerMenuButtonStyle: React.CSSProperties = {
   ...menuButtonStyle,
-  color: "#b91c1c",
+  color: COLORS.danger,
 };
 
 const chipButtonStyle: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
+  background: COLORS.panel,
+  border: `1px solid ${COLORS.borderStrong}`,
   borderRadius: 999,
-  color: "#334155",
+  color: COLORS.textSoft,
   cursor: "pointer",
   fontSize: 11,
   fontWeight: 700,
