@@ -241,6 +241,30 @@ function poolLookupKeys(pool: FleetCapitalPool): string[] {
   return lookupKeys(poolLookupIds(pool));
 }
 
+/**
+ * Focus matcher for the capital pool list. A pool is deep-linked from the persona fleet by any
+ * of its ids OR by a bound persona's ledger / pool / persona id (see personaFleetCapitalHref,
+ * which falls back to the persona's `paper_ledger_id` when no capital pool id is declared).
+ * Matching only on `pool.id` would miss those links and show the "no matching row" banner, so we
+ * also resolve the focus id against every enriched binding's alias ids.
+ */
+export function capitalPoolMatchesFocus(pool: FleetCapitalPool, focusId: string): boolean {
+  const target = lookupKey(focusId);
+  if (!target) return false;
+  const keys = new Set<string>(poolLookupKeys(pool));
+  for (const binding of pool.personaBindings ?? []) {
+    for (const key of lookupKeys([
+      binding.paperLedgerId,
+      binding.paperCapitalPoolId,
+      binding.capitalPoolId,
+      binding.personaId,
+    ])) {
+      keys.add(key);
+    }
+  }
+  return keys.has(target);
+}
+
 function fleetLookupKeys(row: ManagementPersonaFleetRow): string[] {
   return lookupKeys([
     fleetPrimaryPoolId(row),
