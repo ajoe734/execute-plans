@@ -196,9 +196,18 @@ test.describe("MGMT-LOAD-001 Evidence route-load readiness", () => {
     await expect
       .poll(
         async () => {
+          const readyMarker = await page
+            .locator(
+              [
+                '[data-testid="evidence-route-row"]',
+                '[data-testid="evidence-route-empty"]',
+                '[data-testid="evidence-route-unavailable"]',
+              ].join(","),
+            )
+            .count();
           const rowCount = await page.locator("tbody tr").count();
           const bodyText = await page.locator("body").innerText();
-          return rowCount > 0 || /no evidence|unavailable/i.test(bodyText);
+          return readyMarker > 0 || rowCount > 0 || /no evidence|unavailable|暫無|無資料|不可用/i.test(bodyText);
         },
         { message: "Evidence route should reach a row or empty state", timeout: 10_000 },
       )

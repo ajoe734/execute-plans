@@ -2110,7 +2110,7 @@ const EvidenceExplorerList = () => {
 
   if (!data && loading) {
     return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-loading">
         <header>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
@@ -2121,7 +2121,7 @@ const EvidenceExplorerList = () => {
   }
   if (!data) {
     return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-unavailable">
         <header>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.evidence.unavailableTitle")}</p>
@@ -2133,7 +2133,7 @@ const EvidenceExplorerList = () => {
   const rows = model.items;
 
   return (
-    <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+    <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
@@ -2172,7 +2172,7 @@ const EvidenceExplorerList = () => {
               const linkedObjectHref = e.linkedObjectLink?.routeHref ?? e.linked_object_link?.route_href;
               const linkedObjectUnavailable = e.disabledActionReasons.canOpenLinkedObject ?? e.disabled_action_reasons.canOpenLinkedObject;
               return (
-                <tr key={e.refId} className="border-b border-border/50 align-top">
+                <tr key={e.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
                   <td className="px-3 py-3">
                     {detailHref ? (
                       <Link to={detailHref} className="font-medium text-primary underline-offset-4 hover:underline">
@@ -2243,7 +2243,7 @@ const EvidenceExplorerList = () => {
               );
             })}
             {rows.length === 0 && !loading && (
-              <tr>
+              <tr data-testid="evidence-route-empty">
                 <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
                   {t("mgmt.evidence.noRows")}
                 </td>
