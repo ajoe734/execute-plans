@@ -119,6 +119,13 @@ async function strictLiveRead<T>(
     liveStatus.reportSuccess();
     return adaptLive(data);
   } catch (err) {
+    if (err instanceof BffError && err.status < 500 && err.status !== 0) {
+      // Real backend reply (e.g. 404 not-found, 4xx validation) — NOT a transport failure.
+      // Do not flip the app to "offline"/fallback; propagate so the caller renders its own
+      // not-found/error state. (Previously any 404 here took the whole console offline, which
+      // then cascaded every other live read to mock seed via withLiveOrMock's offline path.)
+      throw err;
+    }
     const reason = err instanceof Error ? err.message : "live transport failed";
     liveStatus.reportFallback(`strict: ${reason}`);
     if (err instanceof BffError) throw err;
