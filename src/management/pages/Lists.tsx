@@ -4,6 +4,7 @@ import { useT } from "@/platform/hooks";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
 import { capitalPoolsWithFleetFallback, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
 import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/platform/components/StatCard";
 
 // Defensive numeric formatters — live BFF rows can omit numeric fields; never crash a cell.
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -58,6 +59,19 @@ function CapitalPoolNameCell(row: FleetCapitalPool) {
   );
 }
 
+const currencyBreakdown = (rows: CapitalPool[], pick: (row: CapitalPool) => number, mixedLabel: string) => {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const currency = row.currency || "USD";
+    totals.set(currency, (totals.get(currency) ?? 0) + pick(row));
+  }
+  const parts = Array.from(totals.entries()).map(([currency, value]) => `${currency} ${loc(value)}`);
+  return {
+    headline: parts.length === 1 ? parts[0] : mixedLabel,
+    hint: parts.length > 1 ? parts.join(" · ") : undefined,
+  };
+};
+
 export const StrategiesList = () => {
   const t = useT();
   return (
@@ -103,7 +117,65 @@ export const CapitalPoolsList = () => {
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
+      summary={(rows) => {
+        const mixedCurrencyLabel = t("phase13.capital.summary.currencies", { count: new Set(rows.map((row) => row.currency || "USD")).size });
+        const allocated = currencyBreakdown(rows, (row) => num(row.allocated), mixedCurrencyLabel);
+        const utilized = currencyBreakdown(rows, (row) => num(row.utilized), mixedCurrencyLabel);
+        const totalAllocated = rows.reduce((sum, row) => sum + num(row.allocated), 0);
+        const totalUtilized = rows.reduce((sum, row) => sum + num(row.utilized), 0);
+        const utilization = totalAllocated > 0 ? totalUtilized / totalAllocated : 0;
+        const weightedRiskBudget = totalAllocated > 0
+          ? rows.reduce((sum, row) => sum + num(row.allocated) * num(row.riskBudget), 0) / totalAllocated
+          : 0;
+        const activePools = rows.filter((row) => row.state === "deployed" || row.state === "approved").length;
+        const bindingCount = rows.reduce((sum, row) => sum + num(row.bindingCount ?? row.personaCount), 0);
+        return (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label={t("phase13.capital.summary.pools")}
+              value={rows.length}
+              hint={t("phase13.capital.summary.active", { count: activePools })}
+            />
+            <StatCard
+              label={t("phase13.capital.summary.allocated")}
+              value={allocated.headline}
+              hint={allocated.hint}
+            />
+            <StatCard
+              label={t("phase13.capital.summary.utilized")}
+              value={utilized.headline}
+              hint={t("phase13.capital.summary.utilization", { pct: (utilization * 100).toFixed(1) })}
+              tone={utilization >= 0.9 ? "danger" : utilization >= 0.75 ? "warning" : "default"}
+            />
+            <StatCard
+              label={t("phase13.capital.summary.riskBudget")}
+              value={`${(weightedRiskBudget * 100).toFixed(2)}%`}
+              hint={t("phase13.capital.summary.bindings", { count: bindingCount })}
+              tone={weightedRiskBudget >= 0.08 ? "danger" : weightedRiskBudget >= 0.06 ? "warning" : "default"}
+            />
+          </div>
+        );
+      }}
       extraColumns={[
+        {
+          key: "summary",
+          header: t("table.summary", { defaultValue: "Summary" }),
+          cell: (r) => {
+            const utilization = hasNumber(r.allocated) && r.allocated > 0 && hasNumber(r.utilized)
+              ? r.utilized / r.allocated
+              : undefined;
+            return (
+              <div className="max-w-[26rem] text-xs text-muted-foreground">
+                <span className="text-foreground">{r.currency ?? "unconfigured"} {locOrMissing(r.allocated)}</span>
+                {hasNumber(utilization) && (
+                  <span> · {t("phase13.capital.summary.utilization", { pct: (utilization * 100).toFixed(1) })}</span>
+                )}
+                {r.riskPolicyRef && <span> · {r.riskPolicyRef}</span>}
+                {r.bindingSummary && <span> · {r.bindingSummary}</span>}
+              </div>
+            );
+          },
+        },
         { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency ?? "unconfigured"}</span> },
         { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.allocated)}</span> },
         { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.utilized)}</span> },

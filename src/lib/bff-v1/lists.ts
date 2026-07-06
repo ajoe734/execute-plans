@@ -19,6 +19,7 @@ import {
   normalizeAlertTimestampFields,
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
+import { normalizeCapitalPool } from "./capitalPools";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -143,13 +144,25 @@ function liveOrMockList<T>(
   path: string,
   loader: () => Promise<T[]>,
   cls: ListClass,
+  adaptItem?: (value: unknown) => T | undefined,
 ): () => Promise<ListEnvelope<T>> {
-  const mockFn = async (): Promise<ListEnvelope<T>> => envelope(await loader(), cls);
+  const adaptItems = (items: unknown[]): T[] => adaptItem
+    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    : items as T[];
+  const mockFn = async (): Promise<ListEnvelope<T>> => envelope(adaptItems(await loader()), cls);
   return () =>
     withLiveOrMock<ListEnvelope<T>, unknown>(
       { method: "GET", path },
       mockFn,
-      (data) => normalizeLiveListResponse<T>(data, cls),
+      (data) => {
+        const env = normalizeLiveListResponse<unknown>(data, cls);
+        const items = adaptItems(env.items);
+        return {
+          ...env,
+          items,
+          pageSize: items.length,
+        };
+      },
     );
 }
 
@@ -338,7 +351,7 @@ export const LIST_CLASS_BY_KEY = {
 export const lists = {
   strategies:      liveOrMockList(paths.strategies(),         async () => seed.strategies,           LIST_CLASS_BY_KEY.strategies),
   personas:        liveOrMockList(paths.personas(),           async () => seed.personas,             LIST_CLASS_BY_KEY.personas),
-  capitalPools:    liveOrMockList(paths.capitalPools(),       async () => seed.capitalPools,         LIST_CLASS_BY_KEY.capitalPools),
+  capitalPools:    liveOrMockList(paths.capitalPools(),       async () => seed.capitalPools,         LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
   rankingFormulas: liveOrMockList(paths.rankingFormulas(),    async () => seed.rankingFormulas,      LIST_CLASS_BY_KEY.rankingFormulas),
   rebalances:      liveOrMockList(paths.rebalances(),         async () => seed.rebalances,           LIST_CLASS_BY_KEY.rebalances),
   deployments:     liveOrMockList(paths.deployments(),        async () => seed.deployments,          LIST_CLASS_BY_KEY.deployments),

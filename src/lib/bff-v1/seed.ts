@@ -42,6 +42,7 @@ import {
   refreshSession,
   type MeResponse,
 } from "@/lib/v4/session/me";
+import { normalizeCapitalPool, normalizeCapitalPools } from "@/lib/bff-v1/capitalPools";
 
 const acceptLanguage = (): string => {
   const l = usePlatform.getState().locale;
@@ -552,8 +553,8 @@ export const bff = {
     get: (id: string) => liveDetailOrSeed("bff.personas.get", paths.persona(id), seed.personas.find((s) => s.id === id)),
   },
   capitalPools: {
-    list: () => liveListOrSeedNormalized("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools),
-    get: (id: string) => liveDetailOrSeedNormalized("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)),
+    list: () => liveListOrSeed<unknown>("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools).then(normalizeCapitalPools),
+    get: (id: string) => liveDetailOrSeed<unknown>("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)).then(normalizeCapitalPool),
   },
   rankingFormulas: {
     list: () => liveListOrSeedNormalized("bff.rankingFormulas.list", paths.rankingFormulas(), seed.rankingFormulas),

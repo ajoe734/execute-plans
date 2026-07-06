@@ -32,6 +32,7 @@ import {
   normalizeIncidentTimestampFields,
 } from "@/lib/bff-v1/eventTimestamps";
 import * as seed from "@/mocks/seed";
+import { normalizeCapitalPool } from "@/lib/bff-v1/capitalPools";
 import type {
   Strategy,
   Persona,
@@ -115,7 +116,9 @@ const personas = {
 
 const capitalPools = {
   list:  bffV1Lists.capitalPools as () => Promise<ListEnvelope<CapitalPool>>,
-  get:   liveOrMockDetail<CapitalPool>(paths.capitalPool, async (id) => seed.capitalPools.find((item) => item.id === id)),
+  get:   (id: string): Promise<CapitalPool | undefined> =>
+    liveOrMockDetail<unknown>(paths.capitalPool, async (poolId) => seed.capitalPools.find((item) => item.id === poolId))(id)
+      .then(normalizeCapitalPool),
 };
 
 const rankingFormulas = {

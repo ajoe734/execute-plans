@@ -21,6 +21,7 @@ export * from "./personas";
 export * from "./liveStatus";
 export * from "./liveTransport";
 export * from "./seedTaxonomy";
+export * from "./capitalPools";
 // Batch VII — escape hatch for legacy seed accessors during migration.
 export * from "./legacy";
 // Batch VII-c — v5 closed-loop OS namespace (single entrypoint).
