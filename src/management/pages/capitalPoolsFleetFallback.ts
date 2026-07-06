@@ -55,6 +55,15 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+function lookupKey(value: unknown): string | undefined {
+  const text = usableText(value);
+  return text?.toLowerCase().replace(/\s+/g, " ");
+}
+
+function lookupKeys(values: Array<string | undefined>): string[] {
+  return uniqueStrings(values.map(lookupKey));
+}
+
 function declaredCapitalPoolId(row: ManagementPersonaFleetRow): string | undefined {
   const raw = row as RawFleetCapitalRow;
   return usableText(row.capitalPoolId)
@@ -168,6 +177,21 @@ function bindingNames(bindings: FleetCapitalPoolBinding[]): string {
   return bindings.map((binding) => binding.personaName).join(", ");
 }
 
+function fleetNameLookupIds(row: ManagementPersonaFleetRow): string[] {
+  const name = personaName(row);
+  if (!name) return [];
+  if (isPaperFleetRow(row)) {
+    return [
+      `${name} paper pool`,
+      `${name} paper capital pool`,
+    ];
+  }
+  return [
+    `${name} capital pool`,
+    `${name} live capital pool`,
+  ];
+}
+
 export function capitalPoolBindingSummary(pool: FleetCapitalPool): string {
   const bindings = pool.personaBindings ?? [];
   if (bindings.length === 0) return "Unbound";
@@ -200,11 +224,26 @@ function poolLookupIds(pool: FleetCapitalPool): string[] {
   };
   return uniqueStrings([
     usableText(pool.id),
+    usableText(pool.name),
     usableText(raw.pool_id),
     usableText(raw.capital_pool_id),
     usableText(raw.capitalPoolId),
     usableText(raw.paperLedgerId),
     usableText(raw.paper_ledger_id),
+  ]);
+}
+
+function poolLookupKeys(pool: FleetCapitalPool): string[] {
+  return lookupKeys(poolLookupIds(pool));
+}
+
+function fleetLookupKeys(row: ManagementPersonaFleetRow): string[] {
+  return lookupKeys([
+    fleetPrimaryPoolId(row),
+    fleetPaperCapitalPoolId(row),
+    fleetPaperLedgerId(row),
+    fleetLiveCapitalPoolId(row),
+    ...fleetNameLookupIds(row),
   ]);
 }
 
@@ -262,22 +301,30 @@ export async function capitalPoolsWithFleetFallback(): Promise<ListEnvelope<Flee
     lists.capitalPools() as Promise<ListEnvelope<FleetCapitalPool>>,
     mgmt.personaFleet.get().catch(() => [] as ManagementPersonaFleetRow[]),
   ]);
-  const existingIds = new Set(capitalEnv.items.flatMap(poolLookupIds));
-  const fleetPools = new Map<string, ManagementPersonaFleetRow[]>();
+  const fleetPoolsByPrimaryId = new Map<string, ManagementPersonaFleetRow[]>();
+  const fleetRowsByLookupKey = new Map<string, ManagementPersonaFleetRow[]>();
   for (const row of fleetRows) {
     const poolId = fleetPrimaryPoolId(row);
     if (!poolId) continue;
-    const rows = fleetPools.get(poolId) ?? [];
+    const rows = fleetPoolsByPrimaryId.get(poolId) ?? [];
     rows.push(row);
-    fleetPools.set(poolId, rows);
+    fleetPoolsByPrimaryId.set(poolId, rows);
+    for (const key of fleetLookupKeys(row)) {
+      const keyedRows = fleetRowsByLookupKey.get(key) ?? [];
+      keyedRows.push(row);
+      fleetRowsByLookupKey.set(key, keyedRows);
+    }
   }
+  const matchedPersonaIds = new Set<string>();
   const enrichedCapitalItems: FleetCapitalPool[] = capitalEnv.items.map((pool) => {
-    const rows = uniqueStrings(poolLookupIds(pool)).flatMap((poolId) => fleetPools.get(poolId) ?? []);
+    const rows = poolLookupKeys(pool).flatMap((key) => fleetRowsByLookupKey.get(key) ?? []);
     const uniqueRows = Array.from(new Map(rows.map((row) => [row.personaId, row])).values());
+    uniqueRows.forEach((row) => matchedPersonaIds.add(row.personaId));
     return enrichPool(pool, uniqueRows);
   });
-  const fallbackPools: FleetCapitalPool[] = Array.from(fleetPools.entries())
-    .filter(([poolId]) => !existingIds.has(poolId))
+  const fallbackPools: FleetCapitalPool[] = Array.from(fleetPoolsByPrimaryId.entries())
+    .map(([poolId, rows]) => [poolId, rows.filter((row) => !matchedPersonaIds.has(row.personaId))] as const)
+    .filter(([, rows]) => rows.length > 0)
     .map(([poolId, rows]) => {
       const first = rows[0];
       const scope = rows.every(isPaperFleetRow) ? "paper" : "capital";
@@ -285,7 +332,7 @@ export async function capitalPoolsWithFleetFallback(): Promise<ListEnvelope<Flee
       return enrichPool({
         id: poolId,
         name: first && rows.length === 1 && !ledgerOnly
-          ? `${personaName(first)} ${scope === "paper" ? "paper" : "capital"} pool`
+          ? `${personaName(first)} ${scope === "paper" ? "paper capital" : "capital"} pool`
           : `${poolId} · ${rows.length} ${rows.length === 1 ? "persona" : "personas"}`,
         owner: ownerSummary(rows),
         updatedAt: latestIso(rows),

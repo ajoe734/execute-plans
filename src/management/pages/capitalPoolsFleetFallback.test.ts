@@ -112,6 +112,48 @@ describe("capitalPoolsWithFleetFallback", () => {
     expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool pool-crypto-paper");
   });
 
+  it("binds legacy paper capital pool rows by generated pool name", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope([
+      {
+        id: "legacy-cron-scope-row",
+        name: "Cron Scope Smoke 2 paper capital pool",
+        owner: "capital-service",
+        updatedAt: "2026-07-04T12:52:18Z",
+        state: "approved",
+        risk: "low",
+        currency: "USD",
+        allocated: Number.NaN,
+        utilized: Number.NaN,
+        riskBudget: Number.NaN,
+      },
+    ]));
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-20260704-5d946ca4",
+        personaName: "Cron Scope Smoke 2",
+        capitalMode: "paper",
+        paperLedgerId: "paper-ledger-persona-20260704-5d946ca4",
+        paperCapitalPoolId: "paper-pool-persona-20260704-5d946ca4",
+        runtimeId: "runtime-persona-20260704-5d946ca4-paper",
+        state: "paper_running",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const env = await capitalPoolsWithFleetFallback();
+
+    expect(env.items).toHaveLength(1);
+    expect(env.items[0]).toMatchObject({
+      id: "legacy-cron-scope-row",
+      name: "Cron Scope Smoke 2 paper capital pool",
+      personaCount: 1,
+      personaNames: "Cron Scope Smoke 2",
+      bindingSummary: "Cron Scope Smoke 2",
+      capitalScope: "paper",
+    });
+    expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool paper-pool-persona-20260704-5d946ca4");
+    expect(capitalPoolBindingDetail(env.items[0])).toContain("ledger paper-ledger-persona-20260704-5d946ca4");
+  });
+
   it("adds paper ledger rows when paper personas do not declare a capital pool", async () => {
     vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
     vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
