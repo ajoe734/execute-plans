@@ -38,10 +38,12 @@ interface Props<T extends BaseObject> {
     description: string;
     icon?: ReactNode;
   };
+  /** Optional aggregate summary rendered above the data grid. */
+  summary?: (rows: T[]) => ReactNode;
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState,
+  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState, summary,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -138,6 +140,7 @@ export function ObjectListPage<T extends BaseObject>({
     <>
       <PageHeader title={title} actions={renderCreateAction()} />
       <PageBody>
+        {summary && rows.length > 0 && <div className="mb-4">{summary(rows)}</div>}
         {pending > 0 && (
           <button
             onClick={refresh}
@@ -200,7 +203,7 @@ export function ObjectListPage<T extends BaseObject>({
             rows={visibleRows}
             columns={columns}
             empty={t("common.noResults")}
-            onRowClick={(r) => navigate(`${basePath}/${r.id}`)}
+            onRowClick={(r) => navigate(`${basePath}/${encodeURIComponent(r.id)}`)}
           />
         )}
       </PageBody>
