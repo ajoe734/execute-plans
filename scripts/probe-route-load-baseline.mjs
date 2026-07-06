@@ -177,9 +177,14 @@ try {
 
   await page.waitForFunction(
     () => {
+      const readyMarker = [
+        '[data-testid="evidence-route-row"]',
+        '[data-testid="evidence-route-empty"]',
+        '[data-testid="evidence-route-unavailable"]',
+      ].some((selector) => document.querySelector(selector));
       const rowCount = document.querySelectorAll("tbody tr").length;
       const text = document.body.innerText || "";
-      return rowCount > 0 || /no evidence|unavailable/i.test(text);
+      return readyMarker || rowCount > 0 || /no evidence|unavailable|暫無|無資料|不可用/i.test(text);
     },
     undefined,
     { timeout: CONTENT_TIMEOUT_MS },
