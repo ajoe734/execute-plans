@@ -2066,6 +2066,7 @@ export default {
       liveOff: "live off",
       sideEffectsOn: "trade side effects on",
       sideEffectsOff: "trade side effects off",
+      openCapital: "Open capital",
       governed: "governed",
       loadingLive: "Loading live Persona Fleet data…",
       liveDataUnavailableTitle: "Live Persona Fleet data unavailable",
