@@ -28,6 +28,8 @@ type RawFleetCapitalRow = ManagementPersonaFleetRow & {
   capitalPoolId?: string | null;
   paper_capital_pool_id?: string | null;
   paperCapitalPoolId?: string | null;
+  legacy_paper_capital_pool_id?: string | null;
+  legacyPaperCapitalPoolId?: string | null;
   paper_ledger_id?: string | null;
   paperLedgerId?: string | null;
   capital_mode?: string | null;
@@ -107,6 +109,8 @@ function fleetPaperCapitalPoolId(row: ManagementPersonaFleetRow): string | undef
   return usableText(row.paperCapitalPoolId)
     ?? usableText(raw.paperCapitalPoolId)
     ?? usableText(raw.paper_capital_pool_id)
+    ?? usableText(raw.legacyPaperCapitalPoolId)
+    ?? usableText(raw.legacy_paper_capital_pool_id)
     ?? (isPaperFleetRow(row) ? declaredCapitalPoolId(row) : undefined);
 }
 
