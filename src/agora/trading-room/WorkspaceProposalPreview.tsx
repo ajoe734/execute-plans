@@ -49,10 +49,12 @@ function StatusPill({ status }: { status: DataAvailabilityStatus }) {
         borderRadius: 999,
         color: color.fg,
         display: "inline-flex",
+        flex: "0 0 auto",
         fontSize: 11,
         fontWeight: 600,
         lineHeight: 1,
         padding: "4px 8px",
+        whiteSpace: "nowrap",
       }}
     >
       {STATUS_LABEL[status]}
@@ -139,10 +141,10 @@ function ViewProposalCard({
       }}
     >
       <ProposalThumbnail view={view} />
-      <div style={{ alignItems: "flex-start", display: "flex", gap: 10, justifyContent: "space-between" }}>
-        <div style={{ minWidth: 0 }}>
-          <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, margin: 0 }}>{view.title}</h3>
-          <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0" }}>{view.purpose}</p>
+      <div style={{ alignItems: "flex-start", display: "flex", gap: 10, justifyContent: "space-between", minWidth: 0 }}>
+        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+          <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, lineHeight: 1.25, margin: 0, overflowWrap: "anywhere" }}>{view.title}</h3>
+          <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0", overflowWrap: "anywhere" }}>{view.purpose}</p>
         </div>
         <StatusPill status={status} />
       </div>
@@ -154,7 +156,7 @@ function ViewProposalCard({
         <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: 0 }}>{view.rationale}</p>
       ) : null}
       {unavailableWidgets.length ? (
-        <div style={{ color: COLORS.warning, fontSize: 12 }} data-testid={`workspace-proposal-view-${view.id}-data-gaps`}>
+        <div style={{ color: COLORS.warning, fontSize: 12, lineHeight: 1.45, overflowWrap: "anywhere" }} data-testid={`workspace-proposal-view-${view.id}-data-gaps`}>
           資料狀態需確認: {unavailableWidgets.join("、")}
         </div>
       ) : null}
@@ -235,17 +237,17 @@ export function WorkspaceProposalPreview({
         padding: 16,
       }}
     >
-      <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
-        <div>
+      <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", minWidth: 0 }}>
+        <div style={{ flex: "1 1 420px", minWidth: 0 }}>
           <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>Trading Servant Proposal</div>
-          <h2 style={{ color: COLORS.text, fontSize: 20, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
+          <h2 style={{ color: COLORS.text, fontSize: 20, fontWeight: 800, letterSpacing: 0, lineHeight: 1.25, margin: "2px 0 0", overflowWrap: "anywhere" }}>
             {proposal.strategyVersion} - 操盤室提案
           </h2>
           <p style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 760 }}>
             {proposal.rationale}
           </p>
         </div>
-        <div style={{ alignItems: "flex-end", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ alignItems: "flex-end", display: "flex", flex: "0 0 auto", flexDirection: "column", gap: 8 }}>
           <span style={{ color: COLORS.muted, fontSize: 12 }}>Generated {new Date(proposal.generatedAt).toLocaleString()}</span>
           <StatusPill status={availability} />
         </div>
@@ -271,17 +273,17 @@ export function WorkspaceProposalPreview({
           borderRadius: 8,
           display: "grid",
           gap: 10,
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
           padding: 12,
         }}
       >
         {proposal.dataAvailability.sources.map((source) => (
           <div key={source.dataSource} style={{ minWidth: 0 }}>
-            <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+            <div style={{ alignItems: "flex-start", display: "flex", gap: 8, minWidth: 0 }}>
               <StatusPill status={source.status} />
-              <span style={{ color: COLORS.text, fontSize: 12, fontWeight: 700 }}>{source.dataSource}</span>
+              <span style={{ color: COLORS.text, flex: "1 1 auto", fontSize: 12, fontWeight: 700, lineHeight: 1.35, minWidth: 0, overflowWrap: "anywhere" }}>{source.dataSource}</span>
             </div>
-            {source.reason ? <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>{source.reason}</div> : null}
+            {source.reason ? <div style={{ color: COLORS.muted, fontSize: 12, lineHeight: 1.4, marginTop: 4, overflowWrap: "anywhere" }}>{source.reason}</div> : null}
           </div>
         ))}
       </section>
@@ -304,7 +306,7 @@ export function WorkspaceProposalPreview({
         style={{
           display: "grid",
           gap: 12,
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
         }}
       >
         {proposal.views.map((view) => (
