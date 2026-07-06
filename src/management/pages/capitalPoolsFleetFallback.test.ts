@@ -3,7 +3,7 @@ import { lists, mgmt } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
 import type { CapitalPool } from "@/lib/bff/types";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
-import { capitalPoolsWithFleetFallback } from "./capitalPoolsFleetFallback";
+import { capitalPoolBindingDetail, capitalPoolsWithFleetFallback } from "./capitalPoolsFleetFallback";
 
 vi.mock("@/lib/bff-v1", () => ({
   lists: {
@@ -89,14 +89,27 @@ describe("capitalPoolsWithFleetFallback", () => {
     vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
       {
         personaId: "persona-a",
-        capitalPoolId: "pool-crypto-paper",
+        personaName: "Crypto Paper Persona",
+        capitalMode: "paper",
+        paperLedgerId: "paper-ledger-persona-a",
+        paperCapitalPoolId: "pool-crypto-paper",
+        runtimeId: "runtime-paper-a",
       },
     ] as unknown as ManagementPersonaFleetRow[]);
 
     const env = await capitalPoolsWithFleetFallback();
 
     expect(env.items).toHaveLength(1);
-    expect(env.items[0].name).toBe("Canonical Crypto Pool");
+    expect(env.items[0]).toMatchObject({
+      id: "pool-crypto-paper",
+      name: "Canonical Crypto Pool",
+      personaCount: 1,
+      personaNames: "Crypto Paper Persona",
+      bindingSummary: "Crypto Paper Persona",
+      capitalScope: "paper",
+    });
+    expect(capitalPoolBindingDetail(env.items[0])).toContain("ledger paper-ledger-persona-a");
+    expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool pool-crypto-paper");
   });
 
   it("adds paper ledger rows when paper personas do not declare a capital pool", async () => {
