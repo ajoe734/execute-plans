@@ -689,16 +689,6 @@ export const PersonaFleetPage = () => {
 	                          </div>
 	                        )
 	                      )}
-	                      {capitalHref && (
-	                        <Link
-	                          to={capitalHref}
-	                          aria-label={`Open capital management for ${r.personaId}`}
-	                          className="mt-1 inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
-	                        >
-	                          {t("mgmt.fleet.openCapital")}
-	                          <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-	                        </Link>
-	                      )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[120px]">
 	                    {leagueRank ? (
