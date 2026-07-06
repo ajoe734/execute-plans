@@ -179,7 +179,9 @@ try {
     () => {
       const rowCount = document.querySelectorAll("tbody tr").length;
       const text = document.body.innerText || "";
-      return rowCount > 0 || /no evidence|unavailable/i.test(text);
+      const evidenceTableReady = Boolean(document.querySelector("[data-testid='evidence-explorer-table-scroll']"));
+      const emptyOrUnavailable = /no evidence|unavailable|沒有證據|不可用|無資料/i.test(text);
+      return rowCount > 0 || evidenceTableReady || emptyOrUnavailable;
     },
     undefined,
     { timeout: CONTENT_TIMEOUT_MS },
