@@ -25,6 +25,7 @@ interface Props<T extends BaseObject> {
   /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
   loader: () => Promise<ListEnvelope<T>>;
   basePath: string;
+  nameCell?: (row: T) => ReactNode;
   extraColumns?: Column<T>[];
   /** Realtime data:{kind} events that should refresh this list. */
   liveKinds?: string[];
@@ -40,7 +41,7 @@ interface Props<T extends BaseObject> {
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState,
+  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -60,7 +61,12 @@ export function ObjectListPage<T extends BaseObject>({
   const visibleRows = focusMatched ? focusedRows : rows;
 
   const columns: Column<T>[] = [
-    { key: "name", header: t("common.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+    {
+      key: "name",
+      header: t("common.name"),
+      className: nameCell ? "min-w-[320px]" : undefined,
+      cell: (r) => nameCell ? nameCell(r) : <div className="font-medium">{r.name}</div>,
+    },
     { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
     ...extraColumns,

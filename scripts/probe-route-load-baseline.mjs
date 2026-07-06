@@ -184,7 +184,9 @@ try {
       ].some((selector) => document.querySelector(selector));
       const rowCount = document.querySelectorAll("tbody tr").length;
       const text = document.body.innerText || "";
-      return readyMarker || rowCount > 0 || /no evidence|unavailable|暫無|無資料|不可用/i.test(text);
+      const evidenceTableReady = Boolean(document.querySelector("[data-testid='evidence-explorer-table-scroll']"));
+      const emptyOrUnavailable = /no evidence|unavailable|沒有證據|不可用|無資料/i.test(text);
+      return readyMarker || rowCount > 0 || evidenceTableReady || emptyOrUnavailable;
     },
     undefined,
     { timeout: CONTENT_TIMEOUT_MS },

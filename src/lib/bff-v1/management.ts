@@ -227,6 +227,7 @@ export interface ManagementPersonaFleetRow {
   deploymentStage?: string;
   capitalMode?: string;
   paperLedgerId?: string;
+  paperCapitalPoolId?: string;
   paperLedger?: ManagementPersonaFleetPaperLedger;
   capitalPoolId?: string;
   capitalPool?: ManagementPersonaFleetCapitalPool;
@@ -2021,6 +2022,8 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? paperLedger.id
     ?? (normalizedCapitalMode === "paper" ? `paper-ledger-${personaId}` : undefined),
   );
+  const declaredCapitalPoolId = asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id);
+  const paperCapitalPoolId = normalizedCapitalMode === "paper" ? declaredCapitalPoolId : undefined;
   const capitalPoolId = normalizedCapitalMode === "paper"
     ? asOptionalString(
         value.targetCapitalPoolId
@@ -2028,7 +2031,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
         ?? value.liveCapitalPoolId
         ?? value.live_capital_pool_id,
       )
-    : asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id);
+    : declaredCapitalPoolId;
   const deploymentStage = asOptionalString(
     value.deploymentStage
     ?? value.deployment_stage
@@ -2083,6 +2086,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     deploymentStage,
     capitalMode,
     paperLedgerId,
+    paperCapitalPoolId,
     paperLedger: paperLedgerId ? {
       id: paperLedgerId,
       mode: asOptionalString(paperLedger.mode ?? value.paperLedgerMode ?? value.paper_ledger_mode ?? "paper"),

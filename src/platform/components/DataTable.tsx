@@ -27,10 +27,14 @@ export function DataTable<T extends { id: string }>({
   const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
   const minScrollWidth = Math.max(720, columns.length * 160);
   return (
-    <Card>
-      <PinnedHorizontalScroll minScrollWidth={minScrollWidth}>
+    <Card className="overflow-hidden">
+      <PinnedHorizontalScroll
+        minScrollWidth={minScrollWidth}
+        showPinnedScrollbar={false}
+        viewportClassName="max-h-[calc(100vh-220px)] overflow-auto"
+      >
         <Table className="w-full" style={{ minWidth: minScrollWidth }}>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map((c) => (
                 <TableHead key={c.key} className={"text-xs uppercase tracking-wider " + (c.className ?? "")}>{c.header}</TableHead>

@@ -561,10 +561,15 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length > 0 && (
-      <Card>
-        <ManagementTableScroll testId="persona-fleet-table-scroll" minScrollWidth={1840}>
+      <Card className="overflow-hidden">
+        <ManagementTableScroll
+          testId="persona-fleet-table-scroll"
+          minScrollWidth={1840}
+          showPinnedScrollbar={false}
+          viewportClassName="max-h-[calc(100vh-220px)] overflow-auto"
+        >
         <table className="w-full min-w-[1840px] text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
@@ -1403,11 +1408,12 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
       <ManagementTableScroll
         className="mt-3"
         viewportClassName="max-h-[640px] overflow-auto"
+        showPinnedScrollbar={false}
         testId="trading-pulse-runtime-table-scroll"
         minScrollWidth={1040}
       >
         <table className="w-full min-w-[1040px] text-left text-xs">
-          <thead className="text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-card text-muted-foreground">
             <tr className="border-b border-border">
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.rowHealth")}</th>
@@ -2140,10 +2146,15 @@ const EvidenceExplorerList = () => {
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
       </dl>
-      <Card>
-        <ManagementTableScroll testId="evidence-explorer-table-scroll" minScrollWidth={1040}>
+      <Card className="overflow-hidden">
+        <ManagementTableScroll
+          testId="evidence-explorer-table-scroll"
+          minScrollWidth={1040}
+          showPinnedScrollbar={false}
+          viewportClassName="max-h-[calc(100vh-240px)] overflow-auto"
+        >
         <table className="w-full min-w-[1040px] text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.evidence.source")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.credibility")}</th>
