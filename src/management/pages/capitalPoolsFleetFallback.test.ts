@@ -133,7 +133,7 @@ describe("capitalPoolsWithFleetFallback", () => {
         personaName: "Cron Scope Smoke 2",
         capitalMode: "paper",
         paperLedgerId: "paper-ledger-persona-20260704-5d946ca4",
-        paperCapitalPoolId: "paper-pool-persona-20260704-5d946ca4",
+        legacyPaperCapitalPoolId: "paper-pool-persona-20260704-5d946ca4",
         runtimeId: "runtime-persona-20260704-5d946ca4-paper",
         state: "paper_running",
       },
