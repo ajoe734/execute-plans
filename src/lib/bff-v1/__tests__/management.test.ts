@@ -1218,6 +1218,35 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("normalizes legacy paper capital pool ids into paper fleet bindings", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        items: [{
+          persona_id: "persona-20260704-5d946ca4",
+          name: "Cron Scope Smoke 2",
+          state: "paper_running",
+          capital_mode: "paper",
+          deployment_stage: "paper",
+          paper_ledger_id: "paper-ledger-persona-20260704-5d946ca4",
+          legacy_paper_capital_pool_id: "paper-pool-persona-20260704-5d946ca4",
+          runtime_id: "runtime-persona-20260704-5d946ca4-paper",
+        }],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-20260704-5d946ca4",
+      personaName: "Cron Scope Smoke 2",
+      capitalMode: "paper",
+      deploymentStage: "paper",
+      paperLedgerId: "paper-ledger-persona-20260704-5d946ca4",
+      paperCapitalPoolId: "paper-pool-persona-20260704-5d946ca4",
+      runtimeId: "runtime-persona-20260704-5d946ca4-paper",
+    });
+    expect(rows?.[0].capitalPoolId).toBeUndefined();
+  });
+
   it("adapts live persona fleet summary fields instead of dropping them to nan", () => {
     const rows = adaptManagementPersonaFleet({
       data: {

@@ -2023,7 +2023,15 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? (normalizedCapitalMode === "paper" ? `paper-ledger-${personaId}` : undefined),
   );
   const declaredCapitalPoolId = asOptionalString(value.capitalPoolId ?? value.capital_pool_id ?? capitalPool.id);
-  const paperCapitalPoolId = normalizedCapitalMode === "paper" ? declaredCapitalPoolId : undefined;
+  const declaredPaperCapitalPoolId = asOptionalString(
+    value.paperCapitalPoolId
+    ?? value.paper_capital_pool_id
+    ?? value.legacyPaperCapitalPoolId
+    ?? value.legacy_paper_capital_pool_id
+    ?? capitalPool.paperCapitalPoolId
+    ?? capitalPool.paper_capital_pool_id,
+  );
+  const paperCapitalPoolId = normalizedCapitalMode === "paper" ? declaredPaperCapitalPoolId ?? declaredCapitalPoolId : undefined;
   const capitalPoolId = normalizedCapitalMode === "paper"
     ? asOptionalString(
         value.targetCapitalPoolId
