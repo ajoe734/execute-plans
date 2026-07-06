@@ -33,6 +33,13 @@ interface Props<T extends BaseObject> {
   createBehavior?: CreateBehavior;
   focusParam?: string;
   focusLabel?: string;
+  /**
+   * Optional matcher for the `focusParam` value. Defaults to strict `row.id === focusId`.
+   * Surfaces that are deep-linked by a related id rather than the row id (e.g. a capital pool
+   * linked from a persona's paper-ledger id) supply a matcher that also resolves those aliases,
+   * so the link lands on a row instead of the "no matching row" banner.
+   */
+  focusMatch?: (row: T, focusId: string) => boolean;
   emptyState?: {
     title: string;
     description: string;
@@ -43,7 +50,7 @@ interface Props<T extends BaseObject> {
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, emptyState, summary,
+  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, summary,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -58,7 +65,9 @@ export function ObjectListPage<T extends BaseObject>({
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
-  const focusedRows = focusId ? rows.filter((row) => row.id === focusId) : rows;
+  const focusedRows = focusId
+    ? rows.filter((row) => (focusMatch ? focusMatch(row, focusId) : row.id === focusId))
+    : rows;
   const focusMatched = Boolean(focusId && focusedRows.length > 0);
   const visibleRows = focusMatched ? focusedRows : rows;
 

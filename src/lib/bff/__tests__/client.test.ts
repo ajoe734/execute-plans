@@ -112,9 +112,13 @@ describe("managementClient — hybrid fallback (live transport failure)", () => 
   const realFetch = globalThis.fetch;
 
   beforeEach(() => {
+    // This block exercises the auto (mock-fallback) path; the product default is now strict
+    // (VITE_BFF_FALLBACK=strict in .env), so pin auto here rather than rely on the default.
+    vi.stubEnv("VITE_BFF_FALLBACK", "auto");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     globalThis.fetch = realFetch;
     liveStatus._reset();
   });

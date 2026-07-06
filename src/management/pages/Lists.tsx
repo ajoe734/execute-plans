@@ -2,7 +2,7 @@ import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff/types";
-import { capitalPoolsWithFleetFallback, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
+import { capitalPoolsWithFleetFallback, capitalPoolMatchesFocus, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
 
@@ -116,6 +116,7 @@ export const CapitalPoolsList = () => {
       nameCell={CapitalPoolNameCell}
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
+      focusMatch={capitalPoolMatchesFocus}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
       summary={(rows) => {
         const mixedCurrencyLabel = t("phase13.capital.summary.currencies", { count: new Set(rows.map((row) => row.currency || "USD")).size });
