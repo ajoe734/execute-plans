@@ -840,6 +840,17 @@ describe("TradingRoomPage", () => {
     }
   });
 
+  it("renders the proposal preview as a native dark Trading Room surface", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    const preview = await screen.findByTestId("workspace-proposal-preview");
+    const firstView = screen.getByTestId("workspace-proposal-view-strategy-overview");
+    const availability = screen.getByTestId("workspace-proposal-data-availability");
+
+    expect(preview).toHaveStyle({ background: "#11151d" });
+    expect(firstView).toHaveStyle({ background: "#222535" });
+    expect(availability).toHaveStyle({ background: "#171b22" });
+  });
+
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
@@ -864,6 +875,17 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-view-tabs")).toBeDefined();
     expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
+  });
+
+  it("keeps the accepted workspace shell and widgets on the dark Trading Room surface", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    const shell = await screen.findByTestId("trading-room-workspace-shell");
+    const widget = await screen.findByTestId("workspace-widget-w-status");
+
+    expect(shell).toHaveStyle({ background: "#11151d" });
+    expect(widget).toHaveStyle({ background: "#171b22" });
   });
 
   it("saves drag and resize operations with workspace ETag and idempotency key", async () => {
