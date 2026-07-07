@@ -2031,7 +2031,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? capitalPool.paperCapitalPoolId
     ?? capitalPool.paper_capital_pool_id,
   );
-  const paperCapitalPoolId = normalizedCapitalMode === "paper" ? declaredPaperCapitalPoolId ?? declaredCapitalPoolId : undefined;
+  const paperCapitalPoolId = normalizedCapitalMode === "paper" ? declaredPaperCapitalPoolId : undefined;
   const capitalPoolId = normalizedCapitalMode === "paper"
     ? asOptionalString(
         value.targetCapitalPoolId

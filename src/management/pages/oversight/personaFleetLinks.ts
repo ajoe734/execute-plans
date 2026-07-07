@@ -141,16 +141,20 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   binding_id?: string;
   capitalMode?: string;
   capital_mode?: string;
+  deploymentStage?: string;
+  deployment_stage?: string;
+  state?: string;
+  status?: string;
   capitalPoolId?: string;
   capital_pool_id?: string;
-  capitalPool?: { id?: unknown; mode?: unknown };
-  capital_pool?: { id?: unknown; mode?: unknown };
-  paperLedgerId?: string;
-  paper_ledger_id?: string;
+  capitalPool?: { id?: unknown; mode?: unknown; paperCapitalPoolId?: unknown; paper_capital_pool_id?: unknown };
+  capital_pool?: { id?: unknown; mode?: unknown; paperCapitalPoolId?: unknown; paper_capital_pool_id?: unknown };
   paperCapitalPoolId?: string;
   paper_capital_pool_id?: string;
   legacyPaperCapitalPoolId?: string;
   legacy_paper_capital_pool_id?: string;
+  paperLedgerId?: string;
+  paper_ledger_id?: string;
   paperLedger?: { id?: unknown };
   paper_ledger?: { id?: unknown };
   links?: RawLinkRecord;
@@ -282,10 +286,17 @@ function capitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
   return isUsableToken(id) ? id.trim() : undefined;
 }
 
-function capitalMode(r: ManagementPersonaFleetRow): string | undefined {
+function paperCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as RawPersonaFleetRow;
-  const mode = raw.capitalMode ?? raw.capital_mode ?? raw.capitalPool?.mode ?? raw.capital_pool?.mode;
-  return isUsableToken(mode) ? mode.trim().toLowerCase() : undefined;
+  const id = raw.paperCapitalPoolId
+    ?? raw.paper_capital_pool_id
+    ?? raw.legacyPaperCapitalPoolId
+    ?? raw.legacy_paper_capital_pool_id
+    ?? raw.capitalPool?.paperCapitalPoolId
+    ?? raw.capitalPool?.paper_capital_pool_id
+    ?? raw.capital_pool?.paperCapitalPoolId
+    ?? raw.capital_pool?.paper_capital_pool_id;
+  return isUsableToken(id) ? String(id).trim() : undefined;
 }
 
 function paperLedgerId(r: ManagementPersonaFleetRow): string | undefined {
@@ -294,21 +305,26 @@ function paperLedgerId(r: ManagementPersonaFleetRow): string | undefined {
   return isUsableToken(id) ? id.trim() : undefined;
 }
 
-function isPaperCapitalRow(r: ManagementPersonaFleetRow): boolean {
-  const mode = capitalMode(r);
-  if (mode === "paper" || mode === "paper_running" || mode === "paper_challenger") return true;
-  if (mode === "live" || mode === "canary" || mode === "real") return false;
-  return Boolean(paperLedgerId(r));
+function capitalMode(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const mode = raw.capitalMode
+    ?? raw.capital_mode
+    ?? raw.capitalPool?.mode
+    ?? raw.capital_pool?.mode
+    ?? raw.deploymentStage
+    ?? raw.deployment_stage
+    ?? raw.state
+    ?? raw.status;
+  return isUsableToken(mode) ? String(mode).trim().toLowerCase() : undefined;
 }
 
-function paperCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
-  const raw = r as RawPersonaFleetRow;
-  const id = raw.paperCapitalPoolId
-    ?? raw.paper_capital_pool_id
-    ?? raw.legacyPaperCapitalPoolId
-    ?? raw.legacy_paper_capital_pool_id
-    ?? (isPaperCapitalRow(r) ? capitalPoolId(r) : undefined);
-  return isUsableToken(id) ? id.trim() : undefined;
+function isPaperCapitalRow(r: ManagementPersonaFleetRow): boolean {
+  const mode = capitalMode(r);
+  if (["live", "live_running", "canary", "canary_running", "real", "real_running"].includes(mode ?? "")) return false;
+  return Boolean(
+    (mode && (mode === "paper" || mode === "paper_running" || mode === "paper_challenger"))
+    || paperLedgerId(r),
+  );
 }
 
 function personaPromotionAllocationHref(r: ManagementPersonaFleetRow, tab: string): string | null {
@@ -658,7 +674,9 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
     return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
   }
   if (canonical?.startsWith("/management/capital")) return canonical;
-  const id = paperCapitalPoolId(r) ?? capitalPoolId(r) ?? paperLedgerId(r);
+  const id = isPaperCapitalRow(r)
+    ? paperCapitalPoolId(r) ?? paperLedgerId(r) ?? capitalPoolId(r)
+    : capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
 

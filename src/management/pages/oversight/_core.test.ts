@@ -402,6 +402,34 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
+  it("uses paper ledger links for paper rows unless a paper capital pool is explicit", () => {
+    const row = {
+      persona_id: "persona-crypto-paper",
+      capital_mode: "paper",
+      capital_pool_id: "pool-crypto-paper",
+      paper_ledger_id: "paper-ledger-persona-crypto-paper",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe(
+      "/management/capital?pool=paper-ledger-persona-crypto-paper",
+    );
+
+    expect(personaFleetCapitalHref({
+      ...row,
+      paper_capital_pool_id: "pool-explicit-shared-paper",
+    } as unknown as ManagementPersonaFleetRow)).toBe(
+      "/management/capital?pool=pool-explicit-shared-paper",
+    );
+
+    expect(personaFleetCapitalHref({
+      persona_id: "persona-paper-slim",
+      capital_pool_id: "pool-crypto-paper",
+      paper_ledger_id: "paper-ledger-persona-paper-slim",
+    } as unknown as ManagementPersonaFleetRow)).toBe(
+      "/management/capital?pool=paper-ledger-persona-paper-slim",
+    );
+  });
+
   it("derives capital links from paper ledger ids when no capital pool is declared", () => {
     const row = {
       persona_id: "persona-paper-ledger",

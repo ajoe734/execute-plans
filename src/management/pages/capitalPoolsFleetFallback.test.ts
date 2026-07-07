@@ -71,6 +71,55 @@ describe("capitalPoolsWithFleetFallback", () => {
     expect(Number.isNaN(pool?.riskBudget)).toBe(true);
   });
 
+  it("keeps paper rows with only a generic capital_pool_id isolated by paper ledger", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-a",
+        personaName: "Crypto A",
+        owner: "pantheon-dev-browser",
+        capitalMode: "paper",
+        capitalPoolId: "pool-crypto-paper",
+        paperLedgerId: "paper-ledger-persona-a",
+        health: "healthy",
+        updatedAt: "2026-06-03T08:27:44Z",
+      },
+      {
+        personaId: "persona-b",
+        personaName: "Crypto B",
+        owner: "pantheon-dev-browser",
+        capital_mode: "paper",
+        capital_pool_id: "pool-crypto-paper",
+        paper_ledger_id: "paper-ledger-persona-b",
+        health: "healthy",
+        updated_at: "2026-06-04T08:27:44Z",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const env = await capitalPoolsWithFleetFallback();
+
+    expect(env.items.map((item) => item.id)).toEqual([
+      "paper-ledger-persona-a",
+      "paper-ledger-persona-b",
+    ]);
+    expect(env.items).toHaveLength(2);
+    expect(env.items).not.toContainEqual(expect.objectContaining({ id: "pool-crypto-paper" }));
+    expect(env.items[0]).toMatchObject({
+      personaCount: 1,
+      personaNames: "Crypto A",
+      bindingSummary: "Crypto A",
+      capitalScope: "paper",
+    });
+    expect(env.items[1]).toMatchObject({
+      personaCount: 1,
+      personaNames: "Crypto B",
+      bindingSummary: "Crypto B",
+      capitalScope: "paper",
+    });
+    expect(capitalPoolBindingDetail(env.items[0])).not.toContain("paper pool pool-crypto-paper");
+    expect(capitalPoolBindingDetail(env.items[1])).not.toContain("paper pool pool-crypto-paper");
+  });
+
   it("does not duplicate a pool that already exists in the capital pool list", async () => {
     vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope([
       {

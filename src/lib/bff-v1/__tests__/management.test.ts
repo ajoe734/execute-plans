@@ -1007,6 +1007,7 @@ describe("mgmt façade (PM-Live)", () => {
               benchmark_budget: 1000000,
             },
             capital_pool_id: "cp-paper-tw-equity",
+            paper_capital_pool_id: "cp-paper-tw-equity",
             capital_pool: {
               id: "cp-paper-tw-equity",
               mode: "paper",
@@ -1205,11 +1206,11 @@ describe("mgmt façade (PM-Live)", () => {
       capitalMode: "paper",
       deploymentStage: "paper",
       paperLedgerId: "paper-ledger-persona-legacy-deployed",
-      paperCapitalPoolId: "shared-legacy-paper-pool",
       runtimeId: "rt-paper-legacy",
       runtimeBindingId: "rb-paper-legacy",
     });
     expect(rows?.[0].capitalPoolId).toBeUndefined();
+    expect(rows?.[0].paperCapitalPoolId).toBeUndefined();
     expect(rows?.[0].capitalPool).toBeUndefined();
     expect(rows?.[0].paperLedger).toMatchObject({
       id: "paper-ledger-persona-legacy-deployed",
