@@ -58,6 +58,15 @@ function promotionAllocationHref(href: string, tab: string): string {
   return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
+function promotionAllocationHrefWithTab(href: string, tab: string): string {
+  const [beforeHash, hash = ""] = href.split("#", 2);
+  const [, query = ""] = beforeHash.split("?", 2);
+  const params = new URLSearchParams(query);
+  params.set("tab", tab);
+  const suffix = params.toString();
+  return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
 function sourceProviderKey(source?: ManagementDataSource): string | null {
   const raw = source as RawDataSource | undefined;
   const key = raw?.providerKey ?? raw?.provider_key;
@@ -130,12 +139,18 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   runtime_binding_id?: string;
   bindingId?: string;
   binding_id?: string;
+  capitalMode?: string;
+  capital_mode?: string;
   capitalPoolId?: string;
   capital_pool_id?: string;
-  capitalPool?: { id?: unknown };
-  capital_pool?: { id?: unknown };
+  capitalPool?: { id?: unknown; mode?: unknown };
+  capital_pool?: { id?: unknown; mode?: unknown };
   paperLedgerId?: string;
   paper_ledger_id?: string;
+  paperCapitalPoolId?: string;
+  paper_capital_pool_id?: string;
+  legacyPaperCapitalPoolId?: string;
+  legacy_paper_capital_pool_id?: string;
   paperLedger?: { id?: unknown };
   paper_ledger?: { id?: unknown };
   links?: RawLinkRecord;
@@ -267,10 +282,38 @@ function capitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
   return isUsableToken(id) ? id.trim() : undefined;
 }
 
+function capitalMode(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const mode = raw.capitalMode ?? raw.capital_mode ?? raw.capitalPool?.mode ?? raw.capital_pool?.mode;
+  return isUsableToken(mode) ? mode.trim().toLowerCase() : undefined;
+}
+
 function paperLedgerId(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as RawPersonaFleetRow;
   const id = raw.paperLedgerId ?? raw.paper_ledger_id ?? raw.paperLedger?.id ?? raw.paper_ledger?.id;
   return isUsableToken(id) ? id.trim() : undefined;
+}
+
+function isPaperCapitalRow(r: ManagementPersonaFleetRow): boolean {
+  const mode = capitalMode(r);
+  if (mode === "paper" || mode === "paper_running" || mode === "paper_challenger") return true;
+  if (mode === "live" || mode === "canary" || mode === "real") return false;
+  return Boolean(paperLedgerId(r));
+}
+
+function paperCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as RawPersonaFleetRow;
+  const id = raw.paperCapitalPoolId
+    ?? raw.paper_capital_pool_id
+    ?? raw.legacyPaperCapitalPoolId
+    ?? raw.legacy_paper_capital_pool_id
+    ?? (isPaperCapitalRow(r) ? capitalPoolId(r) : undefined);
+  return isUsableToken(id) ? id.trim() : undefined;
+}
+
+function personaPromotionAllocationHref(r: ManagementPersonaFleetRow, tab: string): string | null {
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/promotion-allocation?tab=${tab}&persona=${personaId}` : null;
 }
 
 function runtimeId(r: ManagementPersonaFleetRow): string | undefined {
@@ -557,6 +600,7 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
 }
 
 export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | null {
+  const tab = isPaperCapitalRow(r) ? "paper-candidates" : "real-ranking";
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "rank",
     "rankHref",
@@ -575,9 +619,11 @@ export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | nul
     href.startsWith("/management/promotion-allocation")
     || href.startsWith("/management/ranking")
   ));
-  if (canonical) return canonical;
-  const personaId = encodedPersonaId(r);
-  return personaId ? `/management/promotion-allocation?tab=real-ranking&persona=${personaId}` : null;
+  if (canonical?.startsWith("/management/promotion-allocation")) {
+    return promotionAllocationHrefWithTab(canonical, tab);
+  }
+  if (canonical && !isPaperCapitalRow(r)) return canonical;
+  return personaPromotionAllocationHref(r, tab);
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {
@@ -630,8 +676,8 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
     const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
     return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
   }
-  if (canonical) return canonical;
-  const id = capitalPoolId(r) ?? paperLedgerId(r);
+  if (canonical?.startsWith("/management/capital")) return canonical;
+  const id = paperCapitalPoolId(r) ?? capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
 

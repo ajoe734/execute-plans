@@ -69,7 +69,7 @@ export function PinnedHorizontalScroll({
 
   return (
     <div
-      className={cn("relative max-w-full", className)}
+      className={cn("relative max-w-full min-h-0", className)}
       data-management-table-scroll="pinned-horizontal"
       data-management-table-scroll-mode={showPinnedScrollbar ? "pinned" : "native"}
       data-pinned-horizontal-scroll="true"
@@ -80,7 +80,7 @@ export function PinnedHorizontalScroll({
         aria-label={ariaLabel}
         className={cn(
           showPinnedScrollbar && "pinned-horizontal-scroll__native",
-          "overflow-auto overscroll-contain",
+          "min-h-0 overflow-auto overscroll-contain [scrollbar-gutter:stable_both-edges]",
           viewportClassName,
         )}
         data-management-table-scrollbar="native"
