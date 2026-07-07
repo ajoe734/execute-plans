@@ -268,13 +268,13 @@ function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined
   };
   const mode = fleetCapitalMode(r);
   if (mode === "paper") {
-    return r.paperCapitalPoolId
-      ?? raw.paper_capital_pool_id
-      ?? raw.legacy_paper_capital_pool_id
-      ?? r.paperLedgerId
+    return r.paperLedgerId
       ?? raw.paper_ledger_id
       ?? r.paperLedger?.id
       ?? raw.paper_ledger?.id
+      ?? r.paperCapitalPoolId
+      ?? raw.paper_capital_pool_id
+      ?? raw.legacy_paper_capital_pool_id
       ?? r.capitalPoolId
       ?? raw.capital_pool_id;
   }

@@ -129,7 +129,7 @@ function fleetLiveCapitalPoolId(row: ManagementPersonaFleetRow): string | undefi
 
 function fleetPrimaryPoolId(row: ManagementPersonaFleetRow): string | undefined {
   if (isPaperFleetRow(row)) {
-    return fleetPaperCapitalPoolId(row) ?? fleetPaperLedgerId(row);
+    return fleetPaperLedgerId(row) ?? fleetPaperCapitalPoolId(row);
   }
   return fleetLiveCapitalPoolId(row);
 }
@@ -164,12 +164,13 @@ function fleetCapitalMode(row: ManagementPersonaFleetRow): string {
 
 function fleetBinding(row: ManagementPersonaFleetRow): FleetCapitalPoolBinding {
   const raw = row as RawFleetCapitalRow;
+  const paperLedgerId = fleetPaperLedgerId(row);
   return {
     personaId: row.personaId,
     personaName: personaName(row),
     capitalMode: fleetCapitalMode(row),
-    paperLedgerId: fleetPaperLedgerId(row),
-    paperCapitalPoolId: fleetPaperCapitalPoolId(row),
+    paperLedgerId,
+    paperCapitalPoolId: paperLedgerId ? undefined : fleetPaperCapitalPoolId(row),
     capitalPoolId: fleetLiveCapitalPoolId(row),
     runtimeId: usableText(row.runtimeId) ?? usableText(raw.runtime_id),
     state: usableText(row.state) ?? usableText(raw.status),
@@ -243,7 +244,7 @@ function poolLookupKeys(pool: FleetCapitalPool): string[] {
 /**
  * Focus matcher for the capital pool list. A pool is deep-linked from the persona fleet by any
  * of its ids OR by a bound persona's ledger / pool / persona id (see personaFleetCapitalHref,
- * which falls back to the persona's `paper_ledger_id` when no capital pool id is declared).
+ * which uses the persona's `paper_ledger_id` as the primary paper capital identity).
  * Matching only on `pool.id` would miss those links and show the "no matching row" banner, so we
  * also resolve the focus id against every enriched binding's alias ids.
  */
@@ -265,10 +266,11 @@ export function capitalPoolMatchesFocus(pool: FleetCapitalPool, focusId: string)
 }
 
 function fleetLookupKeys(row: ManagementPersonaFleetRow): string[] {
+  const paperLedgerId = fleetPaperLedgerId(row);
   return lookupKeys([
     fleetPrimaryPoolId(row),
-    fleetPaperCapitalPoolId(row),
-    fleetPaperLedgerId(row),
+    paperLedgerId,
+    paperLedgerId ? undefined : fleetPaperCapitalPoolId(row),
     fleetLiveCapitalPoolId(row),
     ...fleetNameLookupIds(row),
   ]);
@@ -355,7 +357,7 @@ export async function capitalPoolsWithFleetFallback(): Promise<ListEnvelope<Flee
     .map(([poolId, rows]) => {
       const first = rows[0];
       const scope = rows.every(isPaperFleetRow) ? "paper" : "capital";
-      const ledgerOnly = Boolean(first && poolId === fleetPaperLedgerId(first) && !fleetPaperCapitalPoolId(first));
+      const ledgerOnly = Boolean(first && poolId === fleetPaperLedgerId(first));
       return enrichPool({
         id: poolId,
         name: first && rows.length === 1 && !ledgerOnly
@@ -391,11 +393,10 @@ export function getPersonaIdsForPoolId(poolId: string, fleetRows: ManagementPers
     const paperPool = fleetPaperCapitalPoolId(row);
     const paperLedger = fleetPaperLedgerId(row);
     const livePool = fleetLiveCapitalPoolId(row);
-    const keys = lookupKeys([primary, paperPool, paperLedger, livePool, row.personaId]);
+    const keys = lookupKeys([primary, paperLedger, paperLedger ? undefined : paperPool, livePool, row.personaId]);
     if (keys.includes(target)) {
       result.add(row.personaId);
     }
   }
   return result;
 }
-

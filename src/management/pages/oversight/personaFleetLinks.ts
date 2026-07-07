@@ -710,7 +710,7 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
   }
   if (canonical?.startsWith("/management/capital")) return canonical;
   const id = isPaperCapitalRow(r)
-    ? paperCapitalPoolId(r) ?? paperLedgerId(r) ?? capitalPoolId(r)
+    ? paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r)
     : capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
