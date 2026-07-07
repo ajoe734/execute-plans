@@ -8,6 +8,7 @@ import i18n from "@/i18n";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
+import { PromotionAllocationPage } from "./PromotionAllocation";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
 
 const mocks = vi.hoisted(() => ({
@@ -48,16 +49,34 @@ describe("ranking recommendation submit pages", () => {
     mocks.sendRankingRecommendation.mockReset();
   });
 
+  it("Promotion & Allocation is the single governed entry for paper promotion, real ranking, and capital allocation", () => {
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: defaultQuarterlyRanking(), loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
+
+    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
+  });
+
   it("Persona League honors persona query focus from Fleet rank links", () => {
     const rows = defaultPersonaLeague();
     const focused = rows[1];
     const other = rows[0];
     mocks.useV5Live.mockReturnValue({ data: [other, focused], loading: false, refresh: vi.fn() });
 
-    renderWithRoutes(`/management/persona-league?persona=${focused.personaId}`, <PersonaLeaguePage />);
+    renderWithRoutes(`/management/promotion-allocation?tab=real-ranking&persona=${focused.personaId}`, <PersonaLeaguePage />);
 
     expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 matching league row(s)`)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/persona-league");
+    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/promotion-allocation?tab=real-ranking");
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
@@ -85,7 +104,7 @@ describe("ranking recommendation submit pages", () => {
       governanceDestinations: ["human_inbox", "human_gate_decision"],
     });
 
-    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+    renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
 
     fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
 
@@ -129,7 +148,7 @@ describe("ranking recommendation submit pages", () => {
       governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
     });
 
-    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
 

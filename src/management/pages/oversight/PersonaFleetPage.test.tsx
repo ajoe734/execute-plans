@@ -312,7 +312,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
       "href",
-      "/management/persona-league?persona=persona-live-paper-alpha",
+      "/management/promotion-allocation?tab=real-ranking&persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();

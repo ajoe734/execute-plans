@@ -157,6 +157,7 @@ export default {
     dataSourcesManagement: "Data Source Management",
     // PM-12
     portfolioBook: "Portfolio Book",
+    promotionAllocation: "Promotion & Allocation",
     personaLeague: "Persona League",
     quarterlyRanking: "Quarterly Ranking",
     performanceAttribution: "Performance Attribution",
@@ -183,6 +184,16 @@ export default {
     liveReadiness: "Live Readiness",
     advancedRegistry: "Advanced Registry",
     performanceLeague: "Performance & League",
+  },
+
+  promotionAllocation: {
+    title: "Promotion & Allocation",
+    subtitle: "Paper candidates, real rankings, and quarterly capital allocation in one governed workflow.",
+    tabs: {
+      "paper-candidates": "Paper → Real",
+      "real-ranking": "Real ranking",
+      "quarterly-capital": "Quarterly allocation",
+    },
   },
 
   v5: {
@@ -329,7 +340,7 @@ export default {
       runs: "Optimization runs",
       runsHint: "One run per pending rebalance. Approval is the gating stage.",
       evidence: "Approval",
-      createIntent: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
+      createIntent: "Start a new rebalance from /management/promotion-allocation?tab=quarterly-capital, then return here to monitor the optimization loop.",
     },
     sentinel: {
       subtitle: "Sentinel risk finding desk for investigating anomalies, evidence, blast radius, and governance handoff.",

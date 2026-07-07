@@ -149,6 +149,7 @@ export default {
     dataSourcesManagement: "資料源管理",
     // PM-12
     portfolioBook: "資金持倉總覽",
+    promotionAllocation: "升級與資金配置",
     personaLeague: "Persona 聯賽",
     quarterlyRanking: "季度排名",
     performanceAttribution: "績效歸因",
@@ -176,6 +177,15 @@ export default {
     advancedRegistry: "進階登錄",
     performanceLeague: "績效與排名",
 
+  },
+  promotionAllocation: {
+    title: "升級與資金配置",
+    subtitle: "Paper 候選、Real 排名與季度資金配置集中在同一條治理流程。",
+    tabs: {
+      "paper-candidates": "Paper → Real",
+      "real-ranking": "Real 排名",
+      "quarterly-capital": "季度資金配置",
+    },
   },
   v5: {
     controlRoom: {
@@ -321,7 +331,7 @@ export default {
       runs: "最佳化執行",
       runsHint: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
       evidence: "核准單",
-      createIntent: "請先在 /management/rebalance 建立新的調倉，再回到此處監控最佳化迴圈。",
+      createIntent: "請先在 /management/promotion-allocation?tab=quarterly-capital 建立新的調倉，再回到此處監控最佳化迴圈。",
     },
     sentinel: {
       subtitle: "Sentinel 風險 findings 調查台：檢視異常、證據、影響範圍與治理交接。",

@@ -161,7 +161,7 @@ export const PersonaLeaguePage = () => {
                 : t("mgmt.league.focusMissingPersonaFmt", { persona: personaFocus })}
             </p>
             <Button asChild size="sm" variant="outline">
-              <Link to="/management/persona-league">{t("mgmt.league.showAllPersonas")}</Link>
+              <Link to="/management/promotion-allocation?tab=real-ranking">{t("mgmt.league.showAllPersonas")}</Link>
             </Button>
           </div>
         </Card>

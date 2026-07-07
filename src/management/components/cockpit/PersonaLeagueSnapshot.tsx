@@ -14,7 +14,7 @@ export const PersonaLeagueSnapshot = ({ rows }: { rows: PersonaLeagueRow[] }) =>
     <Card className="p-4">
       <header className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground">{t("mgmt.cockpit.personaLeague")}</h3>
-        <Link to="/management/persona-league" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>
+        <Link to="/management/promotion-allocation?tab=real-ranking" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>
       </header>
       <div className="grid grid-cols-2 gap-3 text-xs">
         <Block title={t("mgmt.league.top3")} rows={top3} />

@@ -100,7 +100,8 @@ function devBearerTokenFromEnv(): string | null {
   let token = env.VITE_BFF_DEV_BEARER_TOKEN;
   if (!token) {
     try {
-      // @ts-expect-error: import.meta is not allowed under some tsc targets but Vite requires it for static replacement
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore: import.meta is not allowed under some tsc targets but Vite requires this literal for static replacement
       token = import.meta.env.VITE_BFF_DEV_BEARER_TOKEN;
     } catch {
       // ignore

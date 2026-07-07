@@ -458,8 +458,8 @@ function processSseChunk(state, text) {
   }
 }
 
-async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
-  const state = {
+function makeSsePhaseState(phase) {
+  return {
     phase,
     opened: false,
     status: 0,
@@ -472,38 +472,58 @@ async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
     current: { id: "", event: "", data: [] },
     error: "",
   };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), durationMs);
-  const headers = {
-    Accept: "text/event-stream",
-    "X-Request-Id": `sse-${phase}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  };
-  if (token) headers.Authorization = `Bearer ${normalizeToken(token)}`;
-  if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+}
 
-  try {
-    const res = await fetch(new URL("/bff/events/stream", BFF_BASE_URL), {
-      method: "GET",
-      headers,
-      signal: controller.signal,
-    });
-    state.status = res.status;
-    state.opened = res.ok;
-    if (!res.ok || !res.body) return state;
+function shouldRetrySsePhase(state) {
+  return !state.opened && (
+    state.status === 0 ||
+    [502, 503, 504].includes(state.status)
+  );
+}
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      processSseChunk(state, decoder.decode(value, { stream: true }));
+async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
+  let lastState = makeSsePhaseState(phase);
+  for (let attempt = 0; attempt < LIVE_FETCH_ATTEMPTS; attempt += 1) {
+    const state = makeSsePhaseState(phase);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), durationMs);
+    const headers = {
+      Accept: "text/event-stream",
+      "X-Request-Id": `sse-${phase}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    };
+    if (token) headers.Authorization = `Bearer ${normalizeToken(token)}`;
+    if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+
+    try {
+      const res = await fetch(new URL("/bff/events/stream", BFF_BASE_URL), {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+      state.status = res.status;
+      state.opened = res.ok;
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          processSseChunk(state, decoder.decode(value, { stream: true }));
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) state.error = String(err).slice(0, 180);
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (err) {
-    if (!controller.signal.aborted) state.error = String(err).slice(0, 180);
-  } finally {
-    clearTimeout(timer);
+
+    lastState = state;
+    if (!shouldRetrySsePhase(lastState) || attempt >= LIVE_FETCH_ATTEMPTS - 1) {
+      return lastState;
+    }
+    await sleep(750 * (attempt + 1));
   }
-  return state;
+  return lastState;
 }
 
 async function runSseLongReconnect() {

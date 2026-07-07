@@ -48,7 +48,7 @@ export const OptimizationLoopPage = () => {
   useEffect(() => {
     if (intent === "create") {
       toast.info(t("v5.optimization.createIntent", {
-        defaultValue: "Start a new rebalance from /management/rebalance, then return here to monitor the optimization loop.",
+        defaultValue: "Start a new rebalance from /management/promotion-allocation?tab=quarterly-capital, then return here to monitor the optimization loop.",
       }));
       const next = new URLSearchParams(params);
       next.delete("intent");

@@ -45,8 +45,11 @@ const EvidencePacketDetailRoute = lazyNamedRoute(
 );
 
 const PortfolioBookRoute = lazyNamedRoute(() => import("@/routes/management/performance"), "PortfolioBookRoute", "Portfolio book");
-const PersonaLeagueRoute = lazyNamedRoute(() => import("@/routes/management/performance"), "PersonaLeagueRoute", "Persona league");
-const QuarterlyRankingRoute = lazyNamedRoute(() => import("@/routes/management/performance"), "QuarterlyRankingRoute", "Quarterly ranking");
+const PromotionAllocationRoute = lazyNamedRoute(
+  () => import("@/routes/management/performance"),
+  "PromotionAllocationRoute",
+  "Promotion allocation",
+);
 const PerformanceAttributionRoute = lazyNamedRoute(
   () => import("@/routes/management/performance"),
   "PerformanceAttributionRoute",
@@ -81,7 +84,6 @@ const CapitalPoolsListRoute = lazyNamedRoute(() => import("@/routes/management/r
 const CapitalPoolDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "CapitalPoolDetailRoute", "Capital pool detail");
 const RankingFormulasListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RankingFormulasListRoute", "Ranking formulas");
 const RankingFormulaDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RankingFormulaDetailRoute", "Ranking formula detail");
-const RebalancesListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RebalancesListRoute", "Rebalances");
 const RebalanceDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RebalanceDetailRoute", "Rebalance detail");
 const EvolutionListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "EvolutionListRoute", "Evolution");
 const EvolutionDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "EvolutionDetailRoute", "Evolution detail");
@@ -211,8 +213,9 @@ const App = () => (
                 <Route path="ask" element={<Navigate to="/management/cockpit" replace />} />
 
                 <Route path="portfolio-book" element={<PortfolioBookRoute />} />
-                <Route path="persona-league" element={<PersonaLeagueRoute />} />
-                <Route path="quarterly-ranking" element={<QuarterlyRankingRoute />} />
+                <Route path="promotion-allocation" element={<PromotionAllocationRoute />} />
+                <Route path="persona-league" element={<Navigate to="/management/promotion-allocation?tab=real-ranking" replace />} />
+                <Route path="quarterly-ranking" element={<Navigate to="/management/promotion-allocation?tab=paper-candidates" replace />} />
                 <Route path="performance-attribution" element={<PerformanceAttributionRoute />} />
 
                 <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
@@ -243,9 +246,9 @@ const App = () => (
                 <Route path="ranking/formulas/:id" element={<RankingFormulaDetailRoute />} />
                 <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
                 <Route path="ranking-formulas/:id" element={<RankingFormulaAliasRedirect />} />
-                <Route path="rebalance" element={<RebalancesListRoute />} />
+                <Route path="rebalance" element={<Navigate to="/management/promotion-allocation?tab=quarterly-capital" replace />} />
                 <Route path="rebalance/:id" element={<RebalanceDetailRoute />} />
-                <Route path="rebalances" element={<Navigate to="/management/rebalance" replace />} />
+                <Route path="rebalances" element={<Navigate to="/management/promotion-allocation?tab=quarterly-capital" replace />} />
                 <Route path="rebalances/:id" element={<RebalanceAliasRedirect />} />
                 <Route path="evolution" element={<EvolutionListRoute />} />
                 <Route path="evolution/:id" element={<EvolutionDetailRoute />} />

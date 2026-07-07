@@ -206,7 +206,7 @@ export const OneRingCockpitPage = () => {
           <LiveOnlyNotice
             title={t("mgmt.cockpit.quarterlyCountdown")}
             body={unavailableBody}
-            action={<Link to="/management/quarterly-ranking" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+            action={<Link to="/management/promotion-allocation?tab=paper-candidates" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
         <DataSourceHealthSnapshot rows={productionFleetRows} />

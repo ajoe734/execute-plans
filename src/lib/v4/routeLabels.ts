@@ -34,6 +34,7 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/personas", i18nKey: "nav.personaRegistry", parent: "/management" },
   { path: "/management/capital", i18nKey: "nav.capital", parent: "/management" },
   { path: "/management/ranking", i18nKey: "nav.ranking", parent: "/management" },
+  { path: "/management/promotion-allocation", i18nKey: "nav.promotionAllocation", parent: "/management" },
   { path: "/management/rebalance", i18nKey: "nav.rebalance", parent: "/management" },
   { path: "/management/evolution", i18nKey: "nav.evolution", parent: "/management" },
   { path: "/management/alpha-factory", i18nKey: "nav.alphaFactory", parent: "/management" },
