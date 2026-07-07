@@ -51,6 +51,7 @@ import {
   type EvidenceOperationAction,
 } from "@/lib/bff/evidenceOperations";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import {
   dataSourceLiveEnabled,
   dataSourceOrderSideEffectsAllowed,
@@ -2479,10 +2480,12 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
             <EvidenceField label={t("mgmt.evidence.created")} value={evidenceTimestamp(detail.createdAt ?? detail.created_at)} />
           </dl>
           <div className="mt-4">
-            <div className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.evidence.excerpt")}</div>
-            <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm text-foreground">
-              {detail.sourceDocument.excerpt || t("mgmt.evidence.noExcerpt")}
-            </pre>
+            <div className="text-xs font-medium uppercase text-muted-foreground mb-2">{t("mgmt.evidence.excerpt")}</div>
+            <CodeBlock
+              code={detail.sourceDocument.excerpt || t("mgmt.evidence.noExcerpt")}
+              language="json"
+              className="max-h-80 overflow-auto"
+            />
           </div>
         </Card>
         <div className="space-y-4">
