@@ -89,6 +89,29 @@ describe("BFF live transport — fallback to mock on failure", () => {
     expect(liveStatus.get().effective).toBe("live");
   });
 
+  it("strict typed errors stay visible until retry even when another live read succeeds", async () => {
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus.reportFallback("strict: primary surface failed");
+    expect(liveStatus.get().effective).toBe("mock");
+
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const out = await withLiveOrMock<{ ok: boolean }>(
+      { method: "GET", path: "/bff/alerts" },
+      async () => ({ ok: false }),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toBe("strict: primary surface failed");
+
+    liveStatus.retry();
+    expect(liveStatus.get().effective).toBe("live");
+    expect(liveStatus.get().lastError).toBeUndefined();
+  });
+
   it("mock mode: never touches fetch", async () => {
     liveStatus._reset({ mode: "mock", effective: "mock" });
     const fetchSpy = vi.fn();
