@@ -6,11 +6,11 @@ import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
 import { useT } from "@/platform/hooks";
 import {
-  Boxes, Users, Wallet, ListOrdered, Repeat, GitBranch,
+  Boxes, Users, Wallet, ListOrdered, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
-  Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart, CalendarClock,
+  Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart,
   KeyRound,
 } from "lucide-react";
 
@@ -36,8 +36,7 @@ export const ManagementLayout = () => {
     // 2026-05-22 PM-12 — Performance & League group.
     { label: t("groups.performanceLeague"), items: [
       { to: "/management/portfolio-book", label: t("nav.portfolioBook"), icon: PieChart },
-      { to: "/management/persona-league", label: t("nav.personaLeague"), icon: Trophy },
-      { to: "/management/quarterly-ranking", label: t("nav.quarterlyRanking"), icon: CalendarClock },
+      { to: "/management/promotion-allocation", label: t("nav.promotionAllocation"), icon: Trophy },
       { to: "/management/performance-attribution", label: t("nav.performanceAttribution"), icon: BarChart3 },
     ]},
 
@@ -54,7 +53,6 @@ export const ManagementLayout = () => {
       { to: "/management/personas", label: t("nav.personaRegistry"), icon: Users, dedupeKey: "personas" },
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
-      { to: "/management/rebalance", label: t("nav.rebalance"), icon: Repeat },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
       { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
@@ -103,7 +101,7 @@ export const ManagementLayout = () => {
   return (
     <>
       <SideNav groups={groups} />
-      <main className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden">
+      <main className="flex h-full min-h-0 w-full flex-1 min-w-0 max-w-full flex-col overflow-y-auto overflow-x-hidden">
         <ErrorBoundary key={useLocation().pathname} scope="Management page">
           <Outlet />
         </ErrorBoundary>

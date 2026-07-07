@@ -5,7 +5,6 @@ export {
   PersonasList as PersonasListRoute,
   CapitalPoolsList as CapitalPoolsListRoute,
   RankingFormulasList as RankingFormulasListRoute,
-  RebalancesList as RebalancesListRoute,
   DeploymentsList as DeploymentsListRoute,
   EvolutionList as EvolutionListRoute,
   ResearchList as ResearchListRoute,

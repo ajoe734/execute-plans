@@ -168,7 +168,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
-  it("renders Persona Fleet as a bounded native table viewport for long row sets", () => {
+  it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-live-gold", "Gold Futures Persona"),
@@ -182,11 +182,16 @@ describe("PersonaFleetPage", () => {
     const tableScroll = screen.getByTestId("persona-fleet-table-scroll");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll-mode", "native");
+    expect(tableScroll).toHaveClass("flex-1");
+    expect(tableScroll).toHaveClass("min-h-0");
     expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
     const native = tableScroll.querySelector("[data-management-table-scrollbar='native']");
     expect(native).toBeTruthy();
-    expect(native).toHaveClass("max-h-[calc(100vh-220px)]");
+    expect(native).not.toHaveClass("max-h-[calc(100vh-220px)]");
+    expect(native).toHaveClass("h-full");
+    expect(native).toHaveClass("min-h-0");
     expect(native).toHaveClass("overflow-auto");
+    expect(native).toHaveClass("pb-4");
     expect(native).not.toHaveClass("pinned-horizontal-scroll__native");
     expect(screen.getByRole("table")).toHaveClass("min-w-[1840px]");
   });
@@ -264,6 +269,7 @@ describe("PersonaFleetPage", () => {
           humanNeeded: true,
           state: "deployed",
           capitalMode: "paper",
+          paperCapitalPoolId: "pool-paper-alpha",
           paperLedgerId: "paper-ledger-persona-live-paper-alpha",
           paperLedger: {
             id: "paper-ledger-persona-live-paper-alpha",
@@ -302,17 +308,18 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
+    expect(screen.getByText("pool-paper-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("paper-ledger-persona-live-paper-alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/capital?pool=paper-ledger-persona-live-paper-alpha",
+      "/management/capital?pool=pool-paper-alpha",
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
       "href",
-      "/management/persona-league?persona=persona-live-paper-alpha",
+      "/management/promotion-allocation?tab=paper-candidates&persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();

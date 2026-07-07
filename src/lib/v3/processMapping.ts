@@ -20,7 +20,7 @@ export const PROCESS_SURFACE_MAPPING: readonly ProcessSurfaceMapping[] = [
   { processId: "P07", processName: "Persona Lifecycle Management",       primaryRoute: "/management/personas",     detailRoute: "/management/personas/:id", relatedTabs: ["Identity & Role","Activity Monitor"] },
   { processId: "P08", processName: "Capital Pool Mandate & Binding",     primaryRoute: "/management/capital",      detailRoute: "/management/capital/:id", relatedTabs: ["Mandate","Persona Binding","Strategy Binding"] },
   { processId: "P09", processName: "Ranking Formula Lifecycle",          primaryRoute: "/management/ranking",      detailRoute: "/management/ranking/:id", relatedTabs: ["Performance & Ranking","Ranking Inputs"] },
-  { processId: "P10", processName: "Quarterly Rebalance",                primaryRoute: "/management/rebalances",   detailRoute: "/management/rebalances/:id", relatedTabs: ["Rebalance History","Overrides & Audit"] },
+  { processId: "P10", processName: "Quarterly Rebalance",                primaryRoute: "/management/promotion-allocation?tab=quarterly-capital", detailRoute: "/management/rebalance/:id", relatedTabs: ["Quarterly Allocation","Overrides & Audit"] },
   { processId: "P11", processName: "Evolution Steering",                 primaryRoute: "/management/evolution",    detailRoute: "/management/evolution/:id", relatedTabs: ["Evolution"] },
   { processId: "P12", processName: "Tools / MCP / Skill Onboarding",     primaryRoute: "/management/capabilities", detailRoute: "/management/capabilities/:kind/:id", relatedTabs: ["Tools / MCP / Skills"] },
   { processId: "P13", processName: "Memory Governance",                  primaryRoute: "/management/governance/memory", relatedTabs: ["Training & Memory"] },
