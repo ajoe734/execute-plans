@@ -55,6 +55,7 @@ describe("ManagementTableScroll", () => {
     expect(root.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
     expect(native).toBeTruthy();
     expect(native).not.toHaveClass("pinned-horizontal-scroll__native");
+    expect(native).toHaveClass("[scrollbar-gutter:stable_both-edges]");
     expect(native).toHaveClass("max-h-[400px]");
     expect(native).toHaveClass("overflow-auto");
   });

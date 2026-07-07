@@ -563,6 +563,25 @@ describe("EvidenceExplorerPage", () => {
     );
   });
 
+  it("renders Evidence Explorer as a native table viewport that fills available page height", () => {
+    mocks.useV5Live.mockReturnValue({ data: evidenceOverview(), loading: false, refresh: vi.fn() });
+
+    renderEvidence("/management/evidence");
+
+    const tableScroll = screen.getByTestId("evidence-explorer-table-scroll");
+    expect(tableScroll).toHaveAttribute("data-management-table-scroll-mode", "native");
+    expect(tableScroll).toHaveClass("flex-1");
+    expect(tableScroll).toHaveClass("min-h-0");
+    expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
+    const native = tableScroll.querySelector("[data-management-table-scrollbar='native']");
+    expect(native).toBeTruthy();
+    expect(native).not.toHaveClass("max-h-[calc(100vh-240px)]");
+    expect(native).toHaveClass("h-full");
+    expect(native).toHaveClass("min-h-0");
+    expect(native).toHaveClass("overflow-auto");
+    expect(native).toHaveClass("pb-4");
+  });
+
   it("renders detail from the BFF evidence detail model", () => {
     mocks.useV5Live.mockReturnValue({ data: evidenceDetail(), loading: false, refresh: vi.fn() });
 

@@ -27,11 +27,13 @@ export function DataTable<T extends { id: string }>({
   const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
   const minScrollWidth = Math.max(720, columns.length * 160);
   return (
-    <Card className="overflow-hidden">
+    <Card className="flex min-h-0 overflow-hidden">
       <PinnedHorizontalScroll
         minScrollWidth={minScrollWidth}
         showPinnedScrollbar={false}
-        viewportClassName="max-h-[calc(100vh-220px)] overflow-auto"
+        className="min-h-0 flex-1"
+        contentClassName="pb-4"
+        viewportClassName="max-h-[calc(100dvh-10rem)] overflow-auto pb-4"
       >
         <Table className="w-full" style={{ minWidth: minScrollWidth }}>
           <TableHeader className="sticky top-0 z-10 bg-card">
