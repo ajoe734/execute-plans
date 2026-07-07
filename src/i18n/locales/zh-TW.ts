@@ -2443,6 +2443,9 @@ export default {
       bottom3: "後 3 名",
       biggestUp: "升幅最大",
       biggestDown: "跌幅最大",
+      focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆聯賽列",
+      focusMissingPersonaFmt: "找不到 {{persona}} 的 Persona 聯賽列。",
+      showAllPersonas: "顯示全部 Persona",
       presets: {
         overall: "綜合",
         pnl: "損益",
