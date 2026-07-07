@@ -20,6 +20,7 @@ import {
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
+import { normalizeBaseObjectFields } from "./seed";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -349,26 +350,26 @@ export const LIST_CLASS_BY_KEY = {
  *  live adapters; mock fallback is governed by liveTransport's `auto` /
  *  `strict` fallback mode (VITE_BFF_FALLBACK). */
 export const lists = {
-  strategies:      liveOrMockList(paths.strategies(),         async () => seed.strategies,           LIST_CLASS_BY_KEY.strategies),
-  personas:        liveOrMockList(paths.personas(),           async () => seed.personas,             LIST_CLASS_BY_KEY.personas),
+  strategies:      liveOrMockList(paths.strategies(),         async () => seed.strategies,           LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
+  personas:        liveOrMockList(paths.personas(),           async () => seed.personas,             LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
   capitalPools:    liveOrMockList(paths.capitalPools(),       async () => seed.capitalPools,         LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
-  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    async () => seed.rankingFormulas,      LIST_CLASS_BY_KEY.rankingFormulas),
-  rebalances:      liveOrMockList(paths.rebalances(),         async () => seed.rebalances,           LIST_CLASS_BY_KEY.rebalances),
-  deployments:     liveOrMockList(paths.deployments(),        async () => seed.deployments,          LIST_CLASS_BY_KEY.deployments),
-  evolution:       liveOrMockList(paths.evolutionPrograms(),  async () => seed.evolutionPrograms,    LIST_CLASS_BY_KEY.evolution),
-  research:        liveOrMockList(paths.researchExperiments(),async () => seed.researchExperiments,  LIST_CLASS_BY_KEY.research),
+  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    async () => seed.rankingFormulas,      LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
+  rebalances:      liveOrMockList(paths.rebalances(),         async () => seed.rebalances,           LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
+  deployments:     liveOrMockList(paths.deployments(),        async () => seed.deployments,          LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
+  evolution:       liveOrMockList(paths.evolutionPrograms(),  async () => seed.evolutionPrograms,    LIST_CLASS_BY_KEY.evolution, normalizeBaseObjectFields),
+  research:        liveOrMockList(paths.researchExperiments(),async () => seed.researchExperiments,  LIST_CLASS_BY_KEY.research, normalizeBaseObjectFields),
   artifacts:       liveOrMockList(paths.artifacts(),          async () => seed.artifacts,            LIST_CLASS_BY_KEY.artifacts),
-  tools:           liveOrMockList(paths.tools(),              async () => seed.tools,                LIST_CLASS_BY_KEY.tools),
-  mcpServers:      liveOrMockList(paths.mcpServers(),         async () => seed.mcpServers,           LIST_CLASS_BY_KEY.mcpServers),
-  mcpTools:        liveOrMockList(paths.mcpTools(),           async () => seed.mcpTools,             LIST_CLASS_BY_KEY.mcpTools),
-  skills:          liveOrMockList(paths.skills(),             async () => seed.skills,               LIST_CLASS_BY_KEY.skills),
-  channels:        liveOrMockList(paths.channels(),           async () => seed.channels,             LIST_CLASS_BY_KEY.channels),
+  tools:           liveOrMockList(paths.tools(),              async () => seed.tools,                LIST_CLASS_BY_KEY.tools, normalizeBaseObjectFields),
+  mcpServers:      liveOrMockList(paths.mcpServers(),         async () => seed.mcpServers,           LIST_CLASS_BY_KEY.mcpServers, normalizeBaseObjectFields),
+  mcpTools:        liveOrMockList(paths.mcpTools(),           async () => seed.mcpTools,             LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
+  skills:          liveOrMockList(paths.skills(),             async () => seed.skills,               LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
+  channels:        liveOrMockList(paths.channels(),           async () => seed.channels,             LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
   jobs:            liveOrMockList(paths.jobs(),               async () => seed.jobs,                 LIST_CLASS_BY_KEY.jobs),
   runtimes:        liveOrMockRuntimeList(paths.runtimes(),    async () => seed.runtimes,             LIST_CLASS_BY_KEY.runtimes),
   alerts:          liveOrMockAlertList(paths.alerts(),        async () => seed.alerts,               LIST_CLASS_BY_KEY.alerts),
   incidents:       liveOrMockIncidentList(paths.incidents(),  async () => seed.incidents,            LIST_CLASS_BY_KEY.incidents),
-  approvals:       liveOrMockList(paths.approvals(),          async () => seed.approvals,            LIST_CLASS_BY_KEY.approvals),
-  audit:           liveOrMockList(paths.audit(),              async () => seed.auditEvents,          LIST_CLASS_BY_KEY.audit),
+  approvals:       liveOrMockList(paths.approvals(),          async () => seed.approvals,            LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
+  audit:           liveOrMockList(paths.audit(),              async () => seed.auditEvents,          LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
 
 export type ListKey = keyof typeof lists;
