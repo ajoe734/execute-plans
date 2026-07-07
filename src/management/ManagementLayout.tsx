@@ -26,6 +26,7 @@ export const ManagementLayout = () => {
       { to: "/management/persona-fleet", label: t("nav.personaFleet"), icon: Users, dedupeKey: "fleet" },
       { to: "/management/human-inbox", label: t("nav.humanInbox"), icon: Eye, dedupeKey: "humanQueue" },
       { to: "/management/trading-pulse", label: t("nav.tradingPulse"), icon: Target },
+      { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/evolution-journal", label: t("nav.evolutionJournal"), icon: GitBranch },
       { to: "/management/evidence", label: t("nav.evidenceExplorer"), icon: FileText },
       { to: "/management/persona-intent", label: t("nav.personaIntent"), icon: Brain },
@@ -54,7 +55,6 @@ export const ManagementLayout = () => {
       { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
       { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
-      { to: "/management/experiments", label: t("nav.experiments"), icon: FlaskConical },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
       { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
       // Closed-Loop OS detail surfaces stay routable, but the primary nav only
