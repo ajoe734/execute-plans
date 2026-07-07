@@ -9,6 +9,7 @@ import {
   personaFleetOodaHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
+  personaFleetRankHref,
   personaFleetResearchHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
@@ -157,6 +158,47 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBe(
       "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
     );
+  });
+
+  it("routes paper persona rank links to the Paper to Real tab", () => {
+    const row = {
+      personaId: "persona-paper-alpha",
+      capitalMode: "paper",
+      paperLedgerId: "paper-ledger-persona-paper-alpha",
+      linkTargets: {
+        rank: "/management/promotion-allocation?tab=real-ranking&persona=persona-paper-alpha",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetRankHref(row)).toBe(
+      "/management/promotion-allocation?tab=paper-candidates&persona=persona-paper-alpha",
+    );
+  });
+
+  it("keeps live persona rank links on the Real ranking tab", () => {
+    const row = {
+      personaId: "persona-live-alpha",
+      capitalMode: "live",
+      capitalPoolId: "pool-live-alpha",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetRankHref(row)).toBe(
+      "/management/promotion-allocation?tab=real-ranking&persona=persona-live-alpha",
+    );
+  });
+
+  it("keeps capital links on capital management even when stale link targets point at promotion", () => {
+    const row = {
+      personaId: "persona-paper-capital",
+      capitalMode: "paper",
+      paperCapitalPoolId: "pool-paper-alpha",
+      paperLedgerId: "paper-ledger-persona-paper-capital",
+      linkTargets: {
+        capital: "/management/promotion-allocation?tab=real-ranking&persona=persona-paper-capital",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-paper-alpha");
   });
 
   it("routes OODA stages through canonical targets", () => {
