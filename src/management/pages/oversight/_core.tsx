@@ -259,12 +259,22 @@ function displayFleetState(r: ManagementPersonaFleetRow): string {
 function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as ManagementPersonaFleetRow & {
     capital_pool_id?: string;
+    paper_capital_pool_id?: string;
+    legacy_paper_capital_pool_id?: string;
     paper_ledger_id?: string;
     paper_ledger?: { id?: string };
   };
   const mode = fleetCapitalMode(r);
   if (mode === "paper") {
-    return r.paperLedgerId ?? raw.paper_ledger_id ?? r.paperLedger?.id ?? raw.paper_ledger?.id;
+    return r.paperCapitalPoolId
+      ?? raw.paper_capital_pool_id
+      ?? raw.legacy_paper_capital_pool_id
+      ?? r.capitalPoolId
+      ?? raw.capital_pool_id
+      ?? r.paperLedgerId
+      ?? raw.paper_ledger_id
+      ?? r.paperLedger?.id
+      ?? raw.paper_ledger?.id;
   }
   return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
 }

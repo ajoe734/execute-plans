@@ -264,6 +264,7 @@ describe("PersonaFleetPage", () => {
           humanNeeded: true,
           state: "deployed",
           capitalMode: "paper",
+          paperCapitalPoolId: "pool-paper-alpha",
           paperLedgerId: "paper-ledger-persona-live-paper-alpha",
           paperLedger: {
             id: "paper-ledger-persona-live-paper-alpha",
@@ -302,17 +303,18 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
+    expect(screen.getByText("pool-paper-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("paper-ledger-persona-live-paper-alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/capital?pool=paper-ledger-persona-live-paper-alpha",
+      "/management/capital?pool=pool-paper-alpha",
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
       "href",
-      "/management/promotion-allocation?tab=real-ranking&persona=persona-live-paper-alpha",
+      "/management/promotion-allocation?tab=paper-candidates&persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
