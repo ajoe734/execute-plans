@@ -100,6 +100,7 @@ function devBearerTokenFromEnv(): string | null {
   let token = env.VITE_BFF_DEV_BEARER_TOKEN;
   if (!token) {
     try {
+      // @ts-ignore: import.meta is not allowed under some tsc targets but Vite requires it for static replacement
       token = import.meta.env.VITE_BFF_DEV_BEARER_TOKEN;
     } catch {
       // ignore
