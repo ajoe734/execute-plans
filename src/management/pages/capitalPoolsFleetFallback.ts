@@ -381,3 +381,21 @@ export async function capitalPoolsWithFleetFallback(): Promise<ListEnvelope<Flee
     estimatedTotal: typeof capitalEnv.estimatedTotal === "number" ? capitalEnv.estimatedTotal + fallbackPools.length : capitalEnv.estimatedTotal,
   };
 }
+
+export function getPersonaIdsForPoolId(poolId: string, fleetRows: ManagementPersonaFleetRow[]): Set<string> {
+  const target = lookupKey(poolId);
+  const result = new Set<string>();
+  if (!target) return result;
+  for (const row of fleetRows) {
+    const primary = fleetPrimaryPoolId(row);
+    const paperPool = fleetPaperCapitalPoolId(row);
+    const paperLedger = fleetPaperLedgerId(row);
+    const livePool = fleetLiveCapitalPoolId(row);
+    const keys = lookupKeys([primary, paperPool, paperLedger, livePool, row.personaId]);
+    if (keys.includes(target)) {
+      result.add(row.personaId);
+    }
+  }
+  return result;
+}
+
