@@ -110,8 +110,7 @@ function fleetPaperCapitalPoolId(row: ManagementPersonaFleetRow): string | undef
     ?? usableText(raw.paperCapitalPoolId)
     ?? usableText(raw.paper_capital_pool_id)
     ?? usableText(raw.legacyPaperCapitalPoolId)
-    ?? usableText(raw.legacy_paper_capital_pool_id)
-    ?? (isPaperFleetRow(row) ? declaredCapitalPoolId(row) : undefined);
+    ?? usableText(raw.legacy_paper_capital_pool_id);
 }
 
 function fleetLiveCapitalPoolId(row: ManagementPersonaFleetRow): string | undefined {
