@@ -2097,6 +2097,7 @@ export default {
       sideEffectsOn: "trade side effects on",
       sideEffectsOff: "trade side effects off",
       governed: "governed",
+      viewResearchLoop: "View research execution",
       loadingLive: "Loading live Persona Fleet data…",
       liveDataUnavailableTitle: "Live Persona Fleet data unavailable",
       liveDataUnavailableBody: "This page does not render demo, seed, or non-production Persona Fleet rows.",

@@ -13,9 +13,26 @@ const typeRoute: Record<string, string> = {
   RankingFormula: "/management/ranking-formulas",
   Rebalance: "/management/rebalance",
   Deployment: "/management/deployments",
+  ResearchExperiment: "/management/experiments",
+  Experiment: "/management/experiments",
+  Artifact: "/management/artifacts",
+  Loop: "/management/loops",
+  Oversight: "/management/cockpit",
 };
 
-const TYPE_ORDER = ["Strategy", "Persona", "CapitalPool", "RankingFormula", "Rebalance", "Deployment"];
+const TYPE_ORDER = [
+  "Strategy",
+  "Persona",
+  "CapitalPool",
+  "RankingFormula",
+  "Rebalance",
+  "Deployment",
+  "ResearchExperiment",
+  "Experiment",
+  "Artifact",
+  "Loop",
+  "Oversight",
+];
 
 export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) => {
   const t = useT();

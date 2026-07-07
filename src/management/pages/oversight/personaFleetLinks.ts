@@ -24,15 +24,41 @@ function isUsableToken(value: unknown): value is string {
   return !UNAVAILABLE_TOKENS.has(value.trim().toLowerCase());
 }
 
+export function cleanQueryParameters(href: string): string {
+  try {
+    const [pathPart, queryPart] = href.split("?", 2);
+    if (!queryPart) return href;
+    const params = new URLSearchParams(queryPart);
+    const keysToDelete: string[] = [];
+    params.forEach((value, key) => {
+      const cleanVal = value.trim().toLowerCase();
+      const cleanKey = key.trim().toLowerCase();
+      if (UNAVAILABLE_TOKENS.has(cleanVal) || UNAVAILABLE_TOKENS.has(cleanKey)) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach((key) => params.delete(key));
+    const newQuery = params.toString().replace(/\+/g, "%20");
+    return newQuery ? `${pathPart}?${newQuery}` : pathPart;
+  } catch {
+    return href;
+  }
+}
+
 function normalizeManagementHref(value: unknown): string | null {
   if (!isUsableToken(value)) return null;
   const href = value.trim();
-  if (href.startsWith("/management/") || href === "/management") return normalizeRetiredPromotionHref(href);
-  if (href.startsWith("management/")) return normalizeRetiredPromotionHref(`/${href}`);
-  if (href.startsWith("/bff/management/")) return normalizeRetiredPromotionHref(href.replace(/^\/bff/, ""));
-  if (href.startsWith("bff/management/")) return normalizeRetiredPromotionHref(`/${href.replace(/^bff\//, "")}`);
-  if (href.startsWith("/personas/")) return `/management${href}`;
-  if (href.startsWith("personas/")) return `/management/${href}`;
+  let normalized: string | null = null;
+  if (href.startsWith("/management/") || href === "/management") normalized = normalizeRetiredPromotionHref(href);
+  else if (href.startsWith("management/")) normalized = normalizeRetiredPromotionHref(`/${href}`);
+  else if (href.startsWith("/bff/management/")) normalized = normalizeRetiredPromotionHref(href.replace(/^\/bff/, ""));
+  else if (href.startsWith("bff/management/")) normalized = normalizeRetiredPromotionHref(`/${href.replace(/^bff\//, "")}`);
+  else if (href.startsWith("/personas/")) normalized = `/management${href}`;
+  else if (href.startsWith("personas/")) normalized = `/management/${href}`;
+
+  if (normalized) {
+    return cleanQueryParameters(normalized);
+  }
   return null;
 }
 
@@ -521,15 +547,24 @@ export function personaFleetResearchHref(
     "orientHref",
     "orient_href",
   ]);
-  if (canonical) return canonical;
+  if (canonical && !canonical.includes("/loops/research")) return cleanQueryParameters(canonical);
   const id = item?.experimentId ?? experimentId(researchStatus(r), project);
   if (id && isUsableToken(id)) return `/management/experiments/${encodeURIComponent(id)}`;
+  return null;
+}
+
+export function personaFleetResearchLoopHref(
+  r: ManagementPersonaFleetRow,
+  item?: PersonaFleetResearchItem,
+): string | null {
   const personaId = encodedPersonaId(r);
   if (!personaId) return null;
+  const project = firstResearchProject(r);
   const projectFocus = item?.projectId ?? projectId(project);
-  return `/management/loops/research?persona=${personaId}${
-    projectFocus && isUsableToken(projectFocus) ? `&project=${encodeURIComponent(projectFocus)}` : ""
-  }`;
+  const cleanProject = projectFocus && isUsableToken(projectFocus) && projectFocus !== "nan"
+    ? `&project=${encodeURIComponent(projectFocus)}`
+    : "";
+  return `/management/loops/research?persona=${personaId}${cleanProject}`;
 }
 
 export function personaFleetArtifactHref(
@@ -660,7 +695,7 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 }
 
 function isPaperRow(r: ManagementPersonaFleetRow): boolean {
-  const raw = r as Record<string, unknown>;
+  const raw = r as unknown as Record<string, unknown>;
   return [
     raw["capitalMode"],
     raw["capital_mode"],

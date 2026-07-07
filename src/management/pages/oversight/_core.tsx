@@ -76,6 +76,7 @@ import {
   personaFleetPersonaHref,
   personaFleetRankHref,
   personaFleetResearchHref,
+  personaFleetResearchLoopHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
   type PersonaFleetResearchItem,
@@ -263,18 +264,19 @@ function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined
     legacy_paper_capital_pool_id?: string;
     paper_ledger_id?: string;
     paper_ledger?: { id?: string };
+    paperLedger?: { id?: string };
   };
   const mode = fleetCapitalMode(r);
   if (mode === "paper") {
-    return r.paperCapitalPoolId
+    return r.paperLedgerId
+      ?? raw.paper_ledger_id
+      ?? r.paperLedger?.id
+      ?? raw.paper_ledger?.id
+      ?? r.paperCapitalPoolId
       ?? raw.paper_capital_pool_id
       ?? raw.legacy_paper_capital_pool_id
       ?? r.capitalPoolId
-      ?? raw.capital_pool_id
-      ?? r.paperLedgerId
-      ?? raw.paper_ledger_id
-      ?? r.paperLedger?.id
-      ?? raw.paper_ledger?.id;
+      ?? raw.capital_pool_id;
   }
   return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
 }
@@ -820,25 +822,39 @@ export const PersonaFleetPage = () => {
 	                      {researchItems.length > 0
 	                        ? researchItems.slice(0, 3).map((item) => {
 	                          const itemHref = personaFleetResearchHref(r, item);
-	                          return itemHref ? (
-	                            <Link
-	                              key={item.key}
-	                              to={itemHref}
-	                              className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
-	                            >
-	                              {item.title || "nan"}
-	                            </Link>
-	                          ) : (
-	                            <span
-	                              key={item.key}
-	                              className="block truncate font-medium text-foreground"
-	                            >
-	                              {item.title || "nan"}
-	                            </span>
+	                          const loopHref = personaFleetResearchLoopHref(r, item);
+	                          return (
+	                            <div key={item.key} className="space-y-0.5">
+	                              {itemHref ? (
+	                                <Link
+	                                  to={itemHref}
+	                                  className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+	                                >
+	                                  {item.title || "nan"}
+	                                </Link>
+	                              ) : (
+	                                <span
+	                                  className="block truncate font-medium text-foreground"
+	                                >
+	                                  {item.title || "nan"}
+	                                </span>
+	                              )}
+	                              {!itemHref && loopHref && (
+	                                <div className="mt-0.5">
+	                                  <Link
+	                                    to={loopHref}
+	                                    className="inline-flex items-center text-[10px] text-muted-foreground hover:text-primary underline underline-offset-2"
+	                                  >
+	                                    {t("mgmt.fleet.viewResearchLoop")} →
+	                                  </Link>
+	                                </div>
+	                              )}
+	                            </div>
 	                          );
 	                        })
-	                        : (
-	                          researchHref ? (
+	                        : (() => {
+	                          const loopHref = personaFleetResearchLoopHref(r);
+	                          return researchHref ? (
 	                            <Link
 	                              to={researchHref}
 	                              className={fieldLinkClass("block text-muted-foreground hover:text-primary")}
@@ -846,9 +862,19 @@ export const PersonaFleetPage = () => {
 	                              nan
 	                            </Link>
 	                          ) : (
-	                            <span className="block text-muted-foreground">nan</span>
-	                          )
-	                        )}
+	                            <div className="space-y-1">
+	                              <span className="block text-muted-foreground">nan</span>
+	                              {loopHref && (
+	                                <Link
+	                                  to={loopHref}
+	                                  className="inline-flex items-center text-[10px] text-muted-foreground hover:text-primary underline underline-offset-2"
+	                                >
+	                                  {t("mgmt.fleet.viewResearchLoop")} →
+	                                </Link>
+	                              )}
+	                            </div>
+	                          );
+	                        })()}
 	                    </div>
 	                    {(frameworkSummary || artifactLabel) && (
 	                    <div className="mt-0.5 max-w-[360px] truncate text-xs text-muted-foreground">
