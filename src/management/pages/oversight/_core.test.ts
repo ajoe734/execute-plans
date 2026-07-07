@@ -199,7 +199,7 @@ describe("PersonaFleetPage deep links", () => {
       },
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBeNull();
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-paper-alpha");
   });
 
   it("routes OODA stages through canonical targets", () => {
