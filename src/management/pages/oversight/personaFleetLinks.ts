@@ -534,6 +534,31 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
   return personaId ? `/management/performance-attribution?dimension=persona&persona=${personaId}` : null;
 }
 
+export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | null {
+  const canonical = firstCanonicalHref(rowLinkRecords(r), [
+    "rank",
+    "rankHref",
+    "rank_href",
+    "league",
+    "leagueHref",
+    "league_href",
+    "personaLeague",
+    "persona_league",
+    "personaLeagueHref",
+    "persona_league_href",
+    "ranking",
+    "rankingHref",
+    "ranking_href",
+  ], (href) => (
+    href.startsWith("/management/persona-league")
+    || href.startsWith("/management/quarterly-ranking")
+    || href.startsWith("/management/ranking")
+  ));
+  if (canonical) return canonical;
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/persona-league?persona=${personaId}` : null;
+}
+
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "mutation",

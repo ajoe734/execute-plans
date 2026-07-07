@@ -74,6 +74,7 @@ import {
   personaFleetOnboardingHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
+  personaFleetRankHref,
   personaFleetResearchHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
@@ -596,6 +597,7 @@ export const PersonaFleetPage = () => {
               const researchHref = personaFleetResearchHref(r, primaryResearch);
               const dataSourcesHref = sourceBadges.length > 0 ? personaFleetDataSourcesHref(r) : null;
               const performanceHref = personaFleetPerformanceHref(r);
+              const rankHref = personaFleetRankHref(r);
               const mutationHref = personaFleetMutationHref(r);
               const humanGateHref = personaFleetHumanGateHref(r);
               const onboardingHref = personaFleetOnboardingHref(r);
@@ -692,9 +694,19 @@ export const PersonaFleetPage = () => {
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[120px]">
 	                    {leagueRank ? (
-	                      <div className="font-medium text-foreground">
-	                        {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
-	                      </div>
+	                      rankHref ? (
+	                        <Link
+	                          to={rankHref}
+	                          aria-label={`${r.personaId} persona league ranking`}
+	                          className={fieldLinkClass("font-medium text-foreground hover:text-primary")}
+	                        >
+	                          {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
+	                        </Link>
+	                      ) : (
+	                        <div className="font-medium text-foreground">
+	                          {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
+	                        </div>
+	                      )
 	                    ) : (
 	                      <span className="text-muted-foreground">—</span>
 	                    )}
@@ -704,18 +716,9 @@ export const PersonaFleetPage = () => {
 	                      </div>
 	                    )}
 	                    {(r.reviewType || r.reviewStatus) && (
-	                      humanGateHref ? (
-	                        <Link
-	                          to={humanGateHref}
-	                          className={fieldLinkClass("mt-1 block text-xs text-muted-foreground hover:text-primary")}
-	                        >
-	                          {formatToken(r.reviewType || r.reviewStatus)}
-	                        </Link>
-	                      ) : (
-	                        <span className="mt-1 block text-xs text-muted-foreground">
-	                          {formatToken(r.reviewType || r.reviewStatus)}
-	                        </span>
-	                      )
+	                      <span className="mt-1 block text-xs text-muted-foreground">
+	                        {formatToken(r.reviewType || r.reviewStatus)}
+	                      </span>
 	                    )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[240px]">

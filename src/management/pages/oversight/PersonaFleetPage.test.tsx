@@ -310,13 +310,15 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
+      "href",
+      "/management/persona-league?persona=persona-live-paper-alpha",
+    );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
     expect(screen.getByText("paper_running")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "paper to live" })).toHaveAttribute(
-      "href",
-      "/management/human-inbox/promotion_review%3Areview-paper-alpha",
-    );
+    expect(screen.getByText("paper to live")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "paper to live" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review human gate for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
       "/management/human-inbox/promotion_review%3Areview-paper-alpha",
