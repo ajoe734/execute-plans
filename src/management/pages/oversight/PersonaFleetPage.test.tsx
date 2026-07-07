@@ -304,10 +304,7 @@ describe("PersonaFleetPage", () => {
 
     expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
-      "href",
-      "/management/capital?pool=paper-ledger-persona-live-paper-alpha",
-    );
+    expect(screen.queryByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toBeNull();
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(

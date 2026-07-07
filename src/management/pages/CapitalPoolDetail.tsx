@@ -3,10 +3,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bff, runActionSafe, mgmt } from "@/lib/bff-v1";
+import { getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
+import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { Edit, Inbox, ShieldAlert } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -76,15 +77,33 @@ export const CapitalPoolDetail = () => {
         );
         const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
 
-        const [allStrategies, allRebalances, allApprovals, allAudit] = await Promise.all([
+        const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
           bff.strategies.list().catch((): Strategy[] => []),
           bff.rebalances.list().catch((): Rebalance[] => []),
           bff.approvals.list().catch((): ApprovalRequest[] => []),
           bff.audit.list().catch((): AuditEvent[] => []),
+          mgmt.personaFleet.get().catch(() => [] as unknown[]),
         ]);
         if (cancelled) return;
 
-        setStrats(allStrategies.filter((s) => poolIds.has(s.capitalPoolId)));
+        const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
+        const rawPool = pool as Record<string, unknown>;
+        const boundStrats = allStrategies.filter((s) => {
+          if (poolIds.has(s.capitalPoolId)) return true;
+          const isPaper =
+            rawPool.capitalMode === "paper" ||
+            rawPool.capital_mode === "paper" ||
+            rawPool.capitalScope === "paper" ||
+            rawPool.capital_scope === "paper" ||
+            (id || "").startsWith("paper-ledger-") ||
+            (id || "").startsWith("pool-crypto-paper");
+          if (isPaper) {
+            return s.personaIds.some((pId) => boundPersonaIds.has(pId));
+          }
+          return false;
+        });
+
+        setStrats(boundStrats);
         setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
         setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
         setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));

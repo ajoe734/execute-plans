@@ -597,7 +597,26 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
   return personaId ? `/management/evolution-journal?persona=${personaId}` : null;
 }
 
+function isPaperRow(r: ManagementPersonaFleetRow): boolean {
+  const raw = r as Record<string, unknown>;
+  return [
+    raw["capitalMode"],
+    raw["capital_mode"],
+    (raw["capitalPool"] as Record<string, unknown> | undefined)?.["mode"],
+    (raw["capital_pool"] as Record<string, unknown> | undefined)?.["mode"],
+    raw["capitalScope"],
+    raw["capital_scope"],
+  ].some((mode) => {
+    if (typeof mode !== "string") return false;
+    const lower = mode.trim().toLowerCase();
+    return lower === "paper" || lower === "paper_running" || lower === "paper_challenger";
+  });
+}
+
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
+  if (isPaperRow(r)) {
+    return null;
+  }
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "capital",
     "capitalHref",
@@ -615,6 +634,7 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
   const id = capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
+
 
 export function personaFleetHumanGateHref(r: ManagementPersonaFleetRow): string | null {
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
