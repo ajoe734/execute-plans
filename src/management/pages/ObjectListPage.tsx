@@ -14,6 +14,7 @@ import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff/types";
+import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
 import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
@@ -65,6 +66,11 @@ export function ObjectListPage<T extends BaseObject>({
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
+  const liveStatus = useLiveStatusSnapshot();
+  const strictFallbackBlocked = degradation.strictFallbackBlocked || liveStatus.typedError;
+  const degradedDescription = degradation.degraded && strictFallbackBlocked
+    ? `strict typed error · ${degradation.reason || liveStatus.fallbackReason || "live BFF unavailable"} · seed fallback blocked`
+    : degradation.reason;
   const focusedRows = focusId
     ? rows.filter((row) => (focusMatch ? focusMatch(row, focusId) : row.id === focusId))
     : rows;
@@ -199,7 +205,7 @@ export function ObjectListPage<T extends BaseObject>({
                 : emptyState?.title ?? t("common.noResults")
             }
             description={
-              degradation.reason ||
+              degradedDescription ||
               emptyState?.description ||
               t("common.awaitingDataDesc", {
                 defaultValue:

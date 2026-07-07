@@ -2472,6 +2472,9 @@ export default {
       bottom3: "Bottom 3",
       biggestUp: "Biggest up",
       biggestDown: "Biggest down",
+      focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching league row(s)",
+      focusMissingPersonaFmt: "No Persona League row found for {{persona}}.",
+      showAllPersonas: "Show all personas",
       presets: {
         overall: "Overall",
         pnl: "PnL",

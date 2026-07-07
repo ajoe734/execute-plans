@@ -27,13 +27,35 @@ function isUsableToken(value: unknown): value is string {
 function normalizeManagementHref(value: unknown): string | null {
   if (!isUsableToken(value)) return null;
   const href = value.trim();
-  if (href.startsWith("/management/") || href === "/management") return href;
-  if (href.startsWith("management/")) return `/${href}`;
-  if (href.startsWith("/bff/management/")) return href.replace(/^\/bff/, "");
-  if (href.startsWith("bff/management/")) return `/${href.replace(/^bff\//, "")}`;
+  if (href.startsWith("/management/") || href === "/management") return normalizeRetiredPromotionHref(href);
+  if (href.startsWith("management/")) return normalizeRetiredPromotionHref(`/${href}`);
+  if (href.startsWith("/bff/management/")) return normalizeRetiredPromotionHref(href.replace(/^\/bff/, ""));
+  if (href.startsWith("bff/management/")) return normalizeRetiredPromotionHref(`/${href.replace(/^bff\//, "")}`);
   if (href.startsWith("/personas/")) return `/management${href}`;
   if (href.startsWith("personas/")) return `/management/${href}`;
   return null;
+}
+
+function normalizeRetiredPromotionHref(href: string): string {
+  if (href.startsWith("/management/persona-league")) {
+    return promotionAllocationHref(href, "real-ranking");
+  }
+  if (href.startsWith("/management/quarterly-ranking")) {
+    return promotionAllocationHref(href, "paper-candidates");
+  }
+  if (href === "/management/rebalances" || href.startsWith("/management/rebalances?")) {
+    return promotionAllocationHref(href, "quarterly-capital");
+  }
+  return href;
+}
+
+function promotionAllocationHref(href: string, tab: string): string {
+  const [beforeHash, hash = ""] = href.split("#", 2);
+  const [, query = ""] = beforeHash.split("?", 2);
+  const params = new URLSearchParams(query);
+  if (!params.has("tab")) params.set("tab", tab);
+  const suffix = params.toString();
+  return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 function sourceProviderKey(source?: ManagementDataSource): string | null {
@@ -532,6 +554,30 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
   if (canonical) return canonical;
   const personaId = encodedPersonaId(r);
   return personaId ? `/management/performance-attribution?dimension=persona&persona=${personaId}` : null;
+}
+
+export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | null {
+  const canonical = firstCanonicalHref(rowLinkRecords(r), [
+    "rank",
+    "rankHref",
+    "rank_href",
+    "league",
+    "leagueHref",
+    "league_href",
+    "personaLeague",
+    "persona_league",
+    "personaLeagueHref",
+    "persona_league_href",
+    "ranking",
+    "rankingHref",
+    "ranking_href",
+  ], (href) => (
+    href.startsWith("/management/promotion-allocation")
+    || href.startsWith("/management/ranking")
+  ));
+  if (canonical) return canonical;
+  const personaId = encodedPersonaId(r);
+  return personaId ? `/management/promotion-allocation?tab=real-ranking&persona=${personaId}` : null;
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {

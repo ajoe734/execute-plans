@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -30,12 +30,12 @@ vi.mock("@/lib/v5/management/rankingGovernance", async (importOriginal) => {
 
 void i18n.changeLanguage("en-US");
 
-function renderWithRoutes(initialEntry: string, element: ReactElement) {
+function renderWithRoutes(initialEntry: string, element: ReactElement, routePath = initialEntry.split("?")[0]) {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path={initialEntry} element={element} />
+          <Route path={routePath} element={element} />
           <Route path="/management/human-inbox/:id" element={<div>Human Inbox detail route</div>} />
         </Routes>
       </MemoryRouter>
@@ -65,6 +65,21 @@ describe("ranking recommendation submit pages", () => {
     expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
+  });
+
+  it("Persona League honors persona query focus from Fleet rank links", () => {
+    const rows = defaultPersonaLeague();
+    const focused = rows[1];
+    const other = rows[0];
+    mocks.useV5Live.mockReturnValue({ data: [other, focused], loading: false, refresh: vi.fn() });
+
+    renderWithRoutes(`/management/promotion-allocation?tab=real-ranking&persona=${focused.personaId}`, <PersonaLeaguePage />);
+
+    expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 matching league row(s)`)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/promotion-allocation?tab=real-ranking");
+    const table = screen.getByRole("table");
+    expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
+    expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
   });
 
   it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {

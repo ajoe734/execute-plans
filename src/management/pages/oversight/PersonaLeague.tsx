@@ -1,6 +1,6 @@
 // 2026-05-22 PM12-005 — Persona League page.
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +70,8 @@ const governanceDestinationsFromRow = (row: PersonaLeagueRecommendationRow): str
 export const PersonaLeaguePage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const { data } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
   const rows = data ?? EMPTY_PERSONA_LEAGUE_ROWS;
 
@@ -79,6 +81,10 @@ export const PersonaLeaguePage = () => {
   const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
 
   const sorted = useMemo(() => sortByPreset(rows, preset), [rows, preset]);
+  const visibleRows = useMemo(() => {
+    if (!personaFocus) return sorted;
+    return sorted.filter((r) => r.personaId === personaFocus || r.personaName === personaFocus);
+  }, [personaFocus, sorted]);
   const tiers = useMemo(() => tierDistribution(rows), [rows]);
   const movers = useMemo(() => computeTopMovers(rows), [rows]);
   const suspended = rows.filter((r) => r.status === "suspended" || r.tier === "suspended");
@@ -146,6 +152,21 @@ export const PersonaLeaguePage = () => {
         </div>
       </header>
 
+      {personaFocus && (
+        <Card className="p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {visibleRows.length > 0
+                ? t("mgmt.league.focusedPersonaFmt", { persona: personaFocus, count: visibleRows.length })
+                : t("mgmt.league.focusMissingPersonaFmt", { persona: personaFocus })}
+            </p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/promotion-allocation?tab=real-ranking">{t("mgmt.league.showAllPersonas")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* KPI + Tier distribution + Top movers */}
       <div className="grid gap-3 lg:grid-cols-3">
         <Card className="p-3">
@@ -202,11 +223,11 @@ export const PersonaLeaguePage = () => {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r) => (
+            {visibleRows.map((r) => (
               <RowFragment key={r.personaId} r={r} expanded={expanded === r.personaId}
                 onToggle={() => setExpanded(expanded === r.personaId ? null : r.personaId)} />
             ))}
-            {sorted.length === 0 && (
+            {visibleRows.length === 0 && (
               <tr><td className="px-3 py-6 text-center text-muted-foreground" colSpan={11}>{t("mgmt.pulse.noRows")}</td></tr>
             )}
           </tbody>
