@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { intentDisplayRules, type PersonaIntentTrace, type PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 
 const badgeTone = (b: "summary" | "redacted" | "restricted") =>
   b === "summary" ? "bg-status-success/15 text-status-success border-status-success/30" :
@@ -66,10 +67,12 @@ const DebugField = ({ label, value, mono = false }: { label: string; value: unkn
 
 const DebugJson = ({ label, value }: { label: string; value: unknown }) => (
   <div className="mt-4">
-    <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
-    <pre className="mt-2 max-h-[520px] overflow-auto rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
-      {JSON.stringify(value ?? {}, null, 2)}
-    </pre>
+    <div className="text-xs font-medium uppercase text-muted-foreground mb-2">{label}</div>
+    <CodeBlock
+      code={JSON.stringify(value ?? {}, null, 2)}
+      language="json"
+      className="max-h-[520px] overflow-auto"
+    />
   </div>
 );
 
