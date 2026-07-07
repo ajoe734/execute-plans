@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { v5 } from "@/lib/bff-v1";
+import { mgmt, v5 } from "@/lib/bff-v1";
+import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { LoopRunDrawer } from "./LoopRunDrawer";
@@ -40,6 +41,63 @@ const stageDotCls: Record<string, string> = {
   skipped: "bg-muted-foreground/30",
 };
 
+type RawResearchFleetRow = ManagementPersonaFleetRow & {
+  id?: string;
+  persona_id?: string;
+  name?: string;
+  current_work?: string;
+  last_mutation?: string;
+  research_status?: { stage?: string; summary?: string } | null;
+};
+
+function researchFleetPersonaId(row: ManagementPersonaFleetRow): string | undefined {
+  const raw = row as RawResearchFleetRow;
+  const id = row.personaId ?? raw.persona_id ?? raw.id;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function dateFromFleetMutation(value: string | undefined): string {
+  if (value && /^\d{4}-\d{2}-\d{2}/.test(value)) return `${value.slice(0, 10)}T00:00:00Z`;
+  return "1970-01-01T00:00:00Z";
+}
+
+function fallbackResearchRunFromFleet(
+  fleetRows: ManagementPersonaFleetRow[] | undefined,
+  personaFocus: string,
+): LoopRun | null {
+  const focus = personaFocus.trim();
+  if (!focus) return null;
+  const row = (fleetRows ?? []).find((item) => researchFleetPersonaId(item) === focus);
+  if (!row) return null;
+  const raw = row as RawResearchFleetRow;
+  const stage = row.researchStatus?.stage ?? raw.research_status?.stage ?? row.ooda ?? "research";
+  const currentWork = row.currentWork ?? raw.current_work ?? row.researchStatus?.summary ?? raw.research_status?.summary;
+  const when = dateFromFleetMutation(row.lastMutation ?? raw.last_mutation);
+  const blocked = Boolean(row.humanNeeded);
+  return {
+    id: `persona-fleet-research-summary:${focus}`,
+    loopKind: "research",
+    status: blocked ? "blocked" : "running",
+    startedAt: when,
+    updatedAt: when,
+    triggeredBy: focus,
+    subjectKind: "research",
+    subjectName: currentWork ?? row.personaName ?? raw.name ?? focus,
+    currentStageId: "fleet-summary",
+    stages: [{
+      id: "fleet-summary",
+      name: stage,
+      status: blocked ? "blocked" : "running",
+      startedAt: when,
+    }],
+    nextAction: {
+      kind: blocked ? "awaiting_human_decision" : "none",
+      label: row.state ?? stage,
+    },
+    evidence: [],
+  };
+}
+
 export const ResearchLoopPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -47,6 +105,7 @@ export const ResearchLoopPage = () => {
   const personaFocus = params.get("persona")?.trim() ?? "";
   const projectFocus = params.get("project")?.trim() ?? "";
   const runs = useV5Live(() => v5.loops.list("research"));
+  const fleetRows = useV5Live(() => mgmt.personaFleet.get());
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -60,7 +119,12 @@ export const ResearchLoopPage = () => {
     () => filterResearchLoopRunsForFocus(items, { personaFocus, projectFocus }),
     [items, personaFocus, projectFocus],
   );
-  const visibleItems = focus.items;
+  const fleetFallback = useMemo(
+    () => focus.matched || projectFocus ? null : fallbackResearchRunFromFleet(fleetRows.data, personaFocus),
+    [fleetRows.data, focus.matched, personaFocus, projectFocus],
+  );
+  const visibleItems = fleetFallback ? [fleetFallback] : focus.items;
+  const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || projectFocus);
   const activeRun: LoopRun | null = useMemo(
     () => items.find((r) => r.id === activeRunId) ?? null,
@@ -109,10 +173,10 @@ export const ResearchLoopPage = () => {
         </div>
 
         {hasFocus && (
-          <Card className={`p-3 text-sm ${focus.matched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
+          <Card className={`p-3 text-sm ${focusMatched ? "border-primary/30 bg-primary/5" : "border-status-warning/30 bg-status-warning/10"}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-foreground">
-                {focus.matched
+                {focusMatched
                   ? t("v5.loops.research.focusedFmt", { persona: personaFocus || "nan", project: projectFocus || "nan", count: visibleItems.length })
                   : t("v5.loops.research.focusMissingFmt", { persona: personaFocus || "nan", project: projectFocus || "nan" })}
               </span>

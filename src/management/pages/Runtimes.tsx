@@ -7,18 +7,18 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { lists, runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
-import type { RuntimeListItem } from "@/lib/bff-v1";
+import { runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { runtimesWithFleetFallback, type FleetRuntimeRow } from "./runtimeFleetFallback";
 
 const NAN = "nan";
 
 type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs" | "disable_new";
 
-type RuntimeRow = RuntimeListItem & {
+type RuntimeRow = FleetRuntimeRow & {
   bindingId?: string;
   binding_id?: string;
 };
@@ -117,7 +117,7 @@ export const RuntimesPage = () => {
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime")?.trim() ?? "";
   const bindingFocus = searchParams.get("binding")?.trim() ?? "";
-  const { items: rows, refresh, loading } = useLiveListV1<RuntimeRow>(lists.runtimes, ["Runtime"]);
+  const { items: rows, refresh, loading } = useLiveListV1<RuntimeRow>(runtimesWithFleetFallback, ["Runtime", "PersonaFleet"]);
   const [killTarget, setKillTarget] = useState<RuntimeRow | null>(null);
 
   const focusFiltered = useMemo(
@@ -205,7 +205,7 @@ export const RuntimesPage = () => {
             { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{formatUptime(r.uptimePct)}</span> },
             { key: "region", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{textOrNan(r.region)}</span> },
             { key: "act", header: "", cell: (r) => {
-              const canAct = Boolean(actionTargetId(r));
+              const canAct = Boolean(actionTargetId(r)) && !r.fleetDerived;
               return (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

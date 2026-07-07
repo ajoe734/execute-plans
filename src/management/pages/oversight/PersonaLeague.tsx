@@ -1,6 +1,6 @@
 // 2026-05-22 PM12-005 — Persona League page.
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,16 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   sortByPreset, tierDistribution, computeTopMovers,
   PERSONA_LEAGUE_PRESETS,
-  type PersonaLeaguePreset, type PersonaLeagueRow, type LeagueRecommendedAction,
+  type PersonaLeaguePreset, type PersonaLeagueRow,
 } from "@/lib/v5/management/personaLeague";
-import { sendRankingRecommendation } from "@/lib/v5/management/rankingGovernance";
+import {
+  currentPm12QuarterId,
+  isGovernedRankingRecommendationAction,
+  makeRankingRecommendationId,
+  sendRankingRecommendation,
+  type RankingRecommendationAction,
+  type RankingRecommendationSubmitResult,
+} from "@/lib/v5/management/rankingGovernance";
 
 const fmtUsd = (n: number) =>
   Number.isFinite(n)
@@ -39,18 +46,89 @@ const personaManageHref = (row: PersonaLeagueRow): string =>
 
 const EMPTY_PERSONA_LEAGUE_ROWS: PersonaLeagueRow[] = [];
 
+type RecommendationUiState =
+  | { kind: "submitting" }
+  | { kind: "local_only"; result: RankingRecommendationSubmitResult }
+  | { kind: "submitted"; result: RankingRecommendationSubmitResult }
+  | { kind: "error"; message: string };
+
+type PersonaLeagueRecommendationRow = PersonaLeagueRow & {
+  recommendationId?: string;
+  recommendation_id?: string;
+  evidenceRefs?: string[];
+  evidence_refs?: string[];
+  governanceDestinations?: string[];
+  governance_destinations?: string[];
+};
+
+const evidenceRefsFromRow = (row: PersonaLeagueRecommendationRow): string[] =>
+  row.evidenceRefs ?? row.evidence_refs ?? [];
+
+const governanceDestinationsFromRow = (row: PersonaLeagueRecommendationRow): string[] | undefined =>
+  row.governanceDestinations ?? row.governance_destinations;
+
 export const PersonaLeaguePage = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const { data } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
   const rows = data ?? EMPTY_PERSONA_LEAGUE_ROWS;
 
   const [preset, setPreset] = useState<PersonaLeaguePreset>("overall");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
+  const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
 
   const sorted = useMemo(() => sortByPreset(rows, preset), [rows, preset]);
+  const visibleRows = useMemo(() => {
+    if (!personaFocus) return sorted;
+    return sorted.filter((r) => r.personaId === personaFocus || r.personaName === personaFocus);
+  }, [personaFocus, sorted]);
   const tiers = useMemo(() => tierDistribution(rows), [rows]);
   const movers = useMemo(() => computeTopMovers(rows), [rows]);
   const suspended = rows.filter((r) => r.status === "suspended" || r.tier === "suspended");
+
+  const recommendationIdFor = (r: PersonaLeagueRow, action: RankingRecommendationAction): string => {
+    const row = r as PersonaLeagueRecommendationRow;
+    return row.recommendationId ?? row.recommendation_id ?? makeRankingRecommendationId({
+      personaId: r.personaId,
+      personaName: r.personaName,
+      recommendation: action,
+      source: "persona_league",
+      quarter: currentQuarter,
+      evidenceRefs: evidenceRefsFromRow(row),
+    });
+  };
+
+  const submitRecommendation = async (r: PersonaLeagueRow, action: RankingRecommendationAction) => {
+    const row = r as PersonaLeagueRecommendationRow;
+    const recommendationId = recommendationIdFor(r, action);
+    setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "submitting" } }));
+    try {
+      const result = await sendRankingRecommendation({
+        personaId: r.personaId,
+        personaName: r.personaName,
+        recommendation: action,
+        recommendationId,
+        source: "persona_league",
+        quarter: currentQuarter,
+        evidenceRefs: evidenceRefsFromRow(row),
+        governanceDestinations: governanceDestinationsFromRow(row),
+      });
+      if (result.persisted && result.detailHref) {
+        navigate(result.detailHref);
+        return;
+      }
+      setRecommendationState((prev) => ({
+        ...prev,
+        [recommendationId]: { kind: result.persisted ? "submitted" : "local_only", result },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "error", message } }));
+    }
+  };
 
   return (
     <section className="p-6 space-y-6" aria-label={t("mgmt.league.title")}>
@@ -73,6 +151,21 @@ export const PersonaLeaguePage = () => {
           </select>
         </div>
       </header>
+
+      {personaFocus && (
+        <Card className="p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {visibleRows.length > 0
+                ? t("mgmt.league.focusedPersonaFmt", { persona: personaFocus, count: visibleRows.length })
+                : t("mgmt.league.focusMissingPersonaFmt", { persona: personaFocus })}
+            </p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/persona-league">{t("mgmt.league.showAllPersonas")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* KPI + Tier distribution + Top movers */}
       <div className="grid gap-3 lg:grid-cols-3">
@@ -130,11 +223,11 @@ export const PersonaLeaguePage = () => {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r) => (
+            {visibleRows.map((r) => (
               <RowFragment key={r.personaId} r={r} expanded={expanded === r.personaId}
                 onToggle={() => setExpanded(expanded === r.personaId ? null : r.personaId)} />
             ))}
-            {sorted.length === 0 && (
+            {visibleRows.length === 0 && (
               <tr><td className="px-3 py-6 text-center text-muted-foreground" colSpan={11}>{t("mgmt.pulse.noRows")}</td></tr>
             )}
           </tbody>
@@ -174,8 +267,12 @@ export const PersonaLeaguePage = () => {
           <td className="px-3 py-2 font-mono text-status-failed">{fmtPct(r.maxDrawdown)}</td>
           <td className="px-3 py-2 font-mono">{r.humanInterventions}</td>
           <td className="px-3 py-2">
-            {r.recommendedAction && r.recommendedAction !== "no_change" ? (
-              <RecommendationButton personaId={r.personaId} personaName={r.personaName} action={r.recommendedAction} />
+            {isGovernedRankingRecommendationAction(r.recommendedAction) ? (
+              <RecommendationButton
+                action={r.recommendedAction}
+                state={recommendationState[recommendationIdFor(r, r.recommendedAction)]}
+                onSubmit={() => void submitRecommendation(r, r.recommendedAction)}
+              />
             ) : (
               <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
             )}
@@ -206,21 +303,37 @@ export const PersonaLeaguePage = () => {
 };
 
 function RecommendationButton({
-  personaId, personaName, action,
-}: { personaId: string; personaName: string; action: LeagueRecommendedAction }) {
+  action, state, onSubmit,
+}: {
+  action: RankingRecommendationAction;
+  state?: RecommendationUiState;
+  onSubmit: () => void;
+}) {
   const { t } = useTranslation();
+  const busy = state?.kind === "submitting";
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => {
-        const id = sendRankingRecommendation({
-          personaId, personaName, recommendation: action, source: "persona_league",
-        });
-        window.location.assign(`/management/human-inbox/${id}`);
-      }}
-    >
-      {t(`mgmt.league.recommendations.${action}`)} →
-    </Button>
+    <div className="max-w-[240px] space-y-1">
+      <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy}>
+        {busy ? "Submitting…" : `${t(`mgmt.league.recommendations.${action}`)} →`}
+      </Button>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Human review required; liveCapitalMutation=false.
+      </p>
+      {state?.kind === "local_only" && (
+        <p role="status" className="text-[11px] leading-snug text-status-warning">
+          Local only: real writes are disabled; no BFF Human Inbox review was created.
+        </p>
+      )}
+      {state?.kind === "submitted" && (
+        <p role="status" className="text-[11px] leading-snug text-primary">
+          Submitted to BFF; waiting for returned Human Inbox detail.
+        </p>
+      )}
+      {state?.kind === "error" && (
+        <p role="alert" className="text-[11px] leading-snug text-status-failed">
+          Submit failed: {state.message}
+        </p>
+      )}
+    </div>
   );
 }

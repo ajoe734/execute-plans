@@ -12,8 +12,18 @@ const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
 }));
 
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
+}));
+
+vi.mock("sonner", () => ({
+  toast: toastMocks,
 }));
 
 void i18n.changeLanguage("en-US");
@@ -103,6 +113,9 @@ function promotionReviewDetail(): HumanInboxDetail {
 describe("HumanGateDetailPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
+    toastMocks.success.mockReset();
+    toastMocks.warning.mockReset();
+    toastMocks.error.mockReset();
   });
 
   afterEach(() => {
@@ -203,5 +216,50 @@ describe("HumanGateDetailPage", () => {
       );
     });
     expect(refresh).toHaveBeenCalled();
+    expect(toastMocks.success).toHaveBeenCalledWith("Decision recorded: approved");
+  });
+
+  it("shows write-disabled feedback when promotion decision is local-only", async () => {
+    const refresh = vi.fn();
+    vi.spyOn(mgmt.humanInbox, "decidePromotionReview").mockResolvedValue({
+      ok: true,
+      persisted: false,
+      reviewId: "review-persona-paper-1",
+      status: "write_disabled",
+      idempotencyKey: "idk-disabled",
+    });
+    mocks.useV5Live.mockReturnValue({
+      data: promotionReviewDetail(),
+      loading: false,
+      refresh,
+    });
+
+    renderDetail("promotion_review:review-persona-paper-1");
+
+    fireEvent.click(screen.getByRole("button", { name: /Approve Canary/ }));
+
+    await waitFor(() => {
+      expect(toastMocks.warning).toHaveBeenCalledWith("Real writes are disabled. Decision was not sent to the BFF.");
+    });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows error feedback when promotion decision route rejects", async () => {
+    const refresh = vi.fn();
+    vi.spyOn(mgmt.humanInbox, "decidePromotionReview").mockRejectedValue(new Error("HTTP 500"));
+    mocks.useV5Live.mockReturnValue({
+      data: promotionReviewDetail(),
+      loading: false,
+      refresh,
+    });
+
+    renderDetail("promotion_review:review-persona-paper-1");
+
+    fireEvent.click(screen.getByRole("button", { name: /Approve Canary/ }));
+
+    await waitFor(() => {
+      expect(toastMocks.error).toHaveBeenCalledWith("Decision failed: HTTP 500");
+    });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

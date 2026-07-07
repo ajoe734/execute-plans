@@ -35,6 +35,36 @@ export type WorkshopReadinessGate =
   | "full_validation"
   | "trading_room";
 
+export type WorkshopReadinessGateState =
+  | "not_assessed"
+  | "blocked"
+  | "conditional"
+  | "ready"
+  | "stale";
+
+export type WorkshopReadinessRequirementState =
+  | "missing"
+  | "partial"
+  | "satisfied"
+  | "waived"
+  | "stale";
+
+export interface WorkshopReadinessRequirement {
+  requirement_id: string;
+  title: string;
+  hardness: "hard" | "soft";
+  state: WorkshopReadinessRequirementState;
+  summary?: string;
+}
+
+export interface WorkshopReadinessGateEntry {
+  gate: WorkshopReadinessGate;
+  state: WorkshopReadinessGateState;
+  requirements: WorkshopReadinessRequirement[];
+  blocking_requirement_ids?: string[];
+  conditional_assumptions?: string[];
+}
+
 export interface WorkshopEvidenceRef {
   ref_type:
     | "evidence_bundle"
@@ -78,12 +108,23 @@ export interface WorkshopCard {
 }
 
 export interface WorkshopReadinessAssessment {
+  spec_version?: "1.0";
   assessment_id: string;
   workshop_id: string;
-  gate: WorkshopReadinessGate;
-  passed: boolean;
-  blockers: string[];
+  strategy_id?: string;
+  workshop_version_id?: string;
+  strategy_spec_registry_id?: string;
+  assessment_version?: number;
+  gates?: WorkshopReadinessGateEntry[];
+  highest_ready_gate?: WorkshopReadinessGate | null;
+  staleness_reasons?: string[];
+  evidence_refs?: WorkshopEvidenceRef[];
   assessed_at: string;
+  valid_until?: string;
+  // Legacy single-gate compatibility while older test/projection payloads roll off.
+  gate?: WorkshopReadinessGate;
+  passed?: boolean;
+  blockers?: string[];
   assessed_by_persona_id?: string;
 }
 

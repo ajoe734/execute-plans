@@ -111,9 +111,10 @@ test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await page.locator("nav").waitFor({ state: "visible", timeout: 15_000 });
+    const primaryNav = page.locator("nav").first();
+    await primaryNav.waitFor({ state: "attached", timeout: 15_000 });
 
-    const navHrefs = await page.locator("nav a").evaluateAll((links) =>
+    const navHrefs = await primaryNav.locator("a").evaluateAll((links) =>
       links.map((link) => new URL((link as HTMLAnchorElement).href).pathname),
     );
 

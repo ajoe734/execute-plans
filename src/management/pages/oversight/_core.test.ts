@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import {
   personaFleetArtifactHref,
+  personaFleetCapitalHref,
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
@@ -125,6 +126,7 @@ describe("PersonaFleetPage deep links", () => {
       ],
       linkTargets: {
         persona: "/management/personas/persona%2Ftw%20equity",
+        capitalPool: "/management/capital/pool-tw-paper",
         dataSources: "/management/data-sources?persona=persona%2Ftw%20equity",
         research: "/management/experiments/exp-mgmt-qlib-006",
         artifact: "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
@@ -135,6 +137,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona%2Ftw%20equity");
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-tw-paper");
     expect(personaFleetResearchHref(row)).toBe("/management/experiments/exp-mgmt-qlib-006");
     expect(personaFleetArtifactHref(row)).toBe(
       "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
@@ -215,6 +218,59 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
+  it("builds links from slim live persona fleet rows without linkTargets", () => {
+    const row = {
+      id: "persona-20260528-5937dea1",
+      persona_id: "persona-20260528-5937dea1",
+      name: "TW-Index-Arbitrage",
+      ooda: "Decide",
+      runtime_id: "runtime-tw-equity-paper",
+      runtime_binding_id: "runtime-tw-equity-paper",
+      inbox_id: "human_gate_review:approval-rescue-0260528-5937dea1",
+      review: {
+        route: "/bff/management/human-inbox/human_gate_review:approval-rescue-0260528-5937dea1",
+      },
+      links: {
+        detail: "/personas/persona-20260528-5937dea1",
+        runtime: "/management/runtimes/runtime-tw-equity-paper",
+      },
+      research_status: {
+        stage: "management_review_linked",
+        framework: "qlib",
+        frameworks: ["qlib"],
+        framework_count: 3,
+        experiment_id: "exp-mgmt-qlib-006",
+        artifact_id: "qlib-tw-cross-sectional-alpha-model-draft-v1",
+        pending_task_ids: [],
+        can_deploy: false,
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona-20260528-5937dea1");
+    expect(personaFleetResearchHref(row, item)).toBe("/management/experiments/exp-mgmt-qlib-006");
+    expect(personaFleetArtifactHref(row, item)).toBeNull();
+    const shioaji = {
+      providerKey: "shioaji",
+      provider: "Shioaji quote",
+      status: "read_ok",
+    } as NonNullable<ManagementPersonaFleetRow["dataSources"]>[number];
+
+    expect(personaFleetDataSourcesHref(row, shioaji)).toBe(
+      "/management/data-sources?persona=persona-20260528-5937dea1&source=shioaji",
+    );
+    expect(personaFleetHumanGateHref(row)).toBe(
+      "/management/human-inbox?persona=persona-20260528-5937dea1",
+    );
+    expect(personaFleetRuntimeHref(row)).toBe(
+      "/management/runtimes?persona=persona-20260528-5937dea1&runtime=runtime-tw-equity-paper&binding=runtime-tw-equity-paper",
+    );
+    expect(personaFleetOodaHref(row)).toBe(
+      "/management/human-inbox?persona=persona-20260528-5937dea1",
+    );
+  });
+
   it("accepts snake_case canonical link_targets from live rows", () => {
     const row = {
       personaId: "persona-snake-case",
@@ -232,7 +288,41 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBe("/management/data-sources?persona=persona-snake-case");
   });
 
-  it("does not fabricate a research-loop project link when no canonical target exists", () => {
+  it("uses each provider key for data-source chip hrefs instead of the row primary source", () => {
+    const row = {
+      personaId: "persona-20260528-ba7de5a4",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const shioaji = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+    const mops = { providerKey: "mops", provider: "MOPS", status: "public_reference_unavailable" };
+
+    expect(personaFleetDataSourcesHref(row)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4",
+    );
+    expect(personaFleetDataSourcesHref(row, shioaji)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=shioaji",
+    );
+    expect(personaFleetDataSourcesHref(row, mops)).toBe(
+      "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
+    );
+  });
+
+  it("does not use nan or not declared values in synthesized data-source hrefs", () => {
+    const row = {
+      personaId: "not declared",
+      linkTargets: {
+        dataSources: "/management/data-sources?persona=not%20declared&source=mops",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+    const source = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+
+    expect(personaFleetDataSourcesHref(row)).toBeNull();
+    expect(personaFleetDataSourcesHref(row, source)).toBeNull();
+  });
+
+  it("links to research loop focus when no canonical experiment target exists", () => {
     const row = {
       personaId: "persona-crypto",
       currentResearchProjects: [
@@ -247,8 +337,38 @@ describe("PersonaFleetPage deep links", () => {
       ],
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchHref(row)).toBe(
+      "/management/loops/research?persona=persona-crypto&project=research-crypto-paper-001",
+    );
     expect(personaFleetArtifactHref(row)).toBeNull();
+  });
+
+  it("derives stable capital, performance, and mutation links from slim rows", () => {
+    const row = {
+      persona_id: "persona-crypto-paper",
+      capital_pool_id: "pool-crypto-paper",
+      perf_delta: 0.182,
+      last_mutation: "2026-06-03",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-crypto-paper");
+    expect(personaFleetPerformanceHref(row)).toBe(
+      "/management/performance-attribution?dimension=persona&persona=persona-crypto-paper",
+    );
+    expect(personaFleetMutationHref(row)).toBe(
+      "/management/evolution-journal?persona=persona-crypto-paper",
+    );
+  });
+
+  it("derives capital links from paper ledger ids when no capital pool is declared", () => {
+    const row = {
+      persona_id: "persona-paper-ledger",
+      paper_ledger_id: "paper-ledger-persona-paper-ledger",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetCapitalHref(row)).toBe(
+      "/management/capital?pool=paper-ledger-persona-paper-ledger",
+    );
   });
 
   it("uses snake_case live research project fields for detail links and labels", () => {
@@ -309,12 +429,14 @@ describe("PersonaFleetPage deep links", () => {
     });
   });
 
-  it("does not fabricate a persona-scoped research loop when there is no active project target", () => {
+  it("uses a persona-scoped research loop when no active project target exists", () => {
     const row = {
       personaId: "persona-live-without-project",
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchHref(row)).toBe(
+      "/management/loops/research?persona=persona-live-without-project",
+    );
   });
 
   it("does not turn nan values into hrefs or filter keys", () => {
@@ -331,13 +453,15 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBeNull();
   });
 
-  it("keeps performance display unlinkable when no canonical performance target exists", () => {
+  it("links performance display to persona-scoped attribution when no canonical target exists", () => {
     const row = {
       personaId: "persona-with-performance",
       perfDelta: 0.42,
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetPerformanceHref(row)).toBeNull();
+    expect(personaFleetPerformanceHref(row)).toBe(
+      "/management/performance-attribution?dimension=persona&persona=persona-with-performance",
+    );
   });
 
   it("ignores legacy unvalidated links when no canonical link target exists", () => {

@@ -87,6 +87,11 @@ const AUTH_STORAGE_KEYS = {
   legacyTenantId: "pantheon_tenant_id",
   devOidcSession: "pantheon.e2e.devOidcSession",
 };
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function nowStamp() {
   return new Date().toISOString().slice(0, 10);
@@ -321,7 +326,7 @@ function authHeaders(token, tenantId) {
   };
 }
 
-async function fetchJson(url, headers, timeoutMs = 15_000, attempts = 2) {
+async function fetchJson(url, headers, timeoutMs = 15_000, attempts = 4) {
   let lastErr = "";
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -333,12 +338,18 @@ async function fetchJson(url, headers, timeoutMs = 15_000, attempts = 2) {
       } catch {
         body = null;
       }
-      return { status: res.status, body, raw: text.slice(0, 500) };
+      const result = { status: res.status, body, raw: text.slice(0, 500), attempts: attempt };
+      if (!RETRYABLE_HTTP_STATUS.has(res.status) || attempt === attempts) {
+        return result;
+      }
+      lastErr = `status:${res.status}`;
     } catch (err) {
       lastErr = String(err).slice(0, 200);
+      if (attempt === attempts) break;
     }
+    await sleep(Math.min(2_000, 250 * (2 ** (attempt - 1))));
   }
-  return { status: 0, body: null, error: lastErr };
+  return { status: 0, body: null, error: lastErr, attempts };
 }
 
 function firstLiveId(body) {
@@ -384,7 +395,7 @@ async function sessionRbacCheck() {
   checks.push({
     label: "Authenticated /bff/me returns operator identity.",
     status: valid.status >= 200 && valid.status < 300 ? "pass" : "fail",
-    note: `status:${valid.status}`,
+    note: `status:${valid.status}; attempts:${valid.attempts ?? 1}`,
   });
 
   const bogusToken = "op-bogus-session:none";
@@ -393,7 +404,7 @@ async function sessionRbacCheck() {
   checks.push({
     label: "Invalid/no-role token is rejected by /bff/me (401/403).",
     status: invalidMeFailClosed ? "pass" : invalidMe.status === 0 ? "missing" : "fail",
-    note: `status:${invalidMe.status}`,
+    note: `status:${invalidMe.status}; attempts:${invalidMe.attempts ?? 1}`,
   });
 
   const invalidRead = await fetchJson(`${BFF_BASE}/bff/management/shell-summary`, authHeaders(bogusToken, TENANT_ID));
@@ -401,7 +412,7 @@ async function sessionRbacCheck() {
   checks.push({
     label: "Privileged management read is not served under an invalid session (fails closed).",
     status: invalidReadFailClosed ? "pass" : invalidRead.status === 0 ? "missing" : "fail",
-    note: `status:${invalidRead.status}`,
+    note: `status:${invalidRead.status}; attempts:${invalidRead.attempts ?? 1}`,
   });
 
   const overall = checks.every((c) => c.status === "pass") ? "pass" : checks.some((c) => c.status === "fail") ? "fail" : "missing";

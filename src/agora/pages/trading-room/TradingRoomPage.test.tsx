@@ -757,6 +757,70 @@ describe("TradingRoomPage", () => {
     );
   });
 
+  it("loads an explicit strategy route even when the aggregate has no selected strategy", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue({
+      ...MOCK_AGGREGATE,
+      strategies: [],
+      queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+    });
+
+    render(
+      <TradingRoomPage
+        readinessAssessmentId="ready-route-001"
+        readinessGate="trading_room"
+        strategyId="strat-route-001"
+        strategyVersion="reg-route-001"
+      />,
+    );
+
+    await screen.findByTestId("workspace-proposal-preview");
+    expect(screen.getByTestId("strategy-workspace-strat-route-001")).toBeDefined();
+    expect(screen.queryByTestId("trading-room-default-entry")).toBeNull();
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledWith(
+      "strat-route-001",
+      expect.objectContaining({
+        personalizationHints: expect.objectContaining({
+          readinessAssessmentId: "ready-route-001",
+          readinessGate: "trading_room",
+        }),
+        strategyVersion: "reg-route-001",
+        tradingRoomReady: true,
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("does not mark an explicit route as ready when readiness context is blocked", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue({
+      ...MOCK_AGGREGATE,
+      strategies: [],
+      queue_summary: { entry: 0, add: 0, reduce: 0, exit: 0, review: 0 },
+    });
+
+    render(
+      <TradingRoomPage
+        readinessAssessmentId="ready-route-blocked"
+        readinessGate="full_validation"
+        strategyId="strat-route-001"
+        strategyVersion="reg-route-001"
+      />,
+    );
+
+    await screen.findByTestId("workspace-proposal-preview");
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledWith(
+      "strat-route-001",
+      expect.objectContaining({
+        personalizationHints: expect.objectContaining({
+          readinessAssessmentId: "ready-route-blocked",
+          readinessGate: "full_validation",
+        }),
+        strategyVersion: "reg-route-001",
+        tradingRoomReady: false,
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
   it("shows V11 generation progress while proposal generation is pending", async () => {
     vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockReturnValue(new Promise(() => {}));
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
@@ -774,6 +838,17 @@ describe("TradingRoomPage", () => {
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 widgets");
     }
+  });
+
+  it("renders the proposal preview as a native dark Trading Room surface", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    const preview = await screen.findByTestId("workspace-proposal-preview");
+    const firstView = screen.getByTestId("workspace-proposal-view-strategy-overview");
+    const availability = screen.getByTestId("workspace-proposal-data-availability");
+
+    expect(preview).toHaveStyle({ background: "#11151d" });
+    expect(firstView).toHaveStyle({ background: "#222535" });
+    expect(availability).toHaveStyle({ background: "#171b22" });
   });
 
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
@@ -800,6 +875,17 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-view-tabs")).toBeDefined();
     expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
+  });
+
+  it("keeps the accepted workspace shell and widgets on the dark Trading Room surface", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    const shell = await screen.findByTestId("trading-room-workspace-shell");
+    const widget = await screen.findByTestId("workspace-widget-w-status");
+
+    expect(shell).toHaveStyle({ background: "#11151d" });
+    expect(widget).toHaveStyle({ background: "#171b22" });
   });
 
   it("saves drag and resize operations with workspace ETag and idempotency key", async () => {

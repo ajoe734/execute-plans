@@ -11,6 +11,7 @@ export type PinnedHorizontalScrollProps = {
   testId?: string;
   minScrollWidth?: number;
   ariaLabel?: string;
+  showPinnedScrollbar?: boolean;
 };
 
 const DEFAULT_MIN_SCROLL_WIDTH = 1040;
@@ -24,6 +25,7 @@ export function PinnedHorizontalScroll({
   testId,
   minScrollWidth = DEFAULT_MIN_SCROLL_WIDTH,
   ariaLabel = "Table horizontal scroll",
+  showPinnedScrollbar = true,
 }: PinnedHorizontalScrollProps) {
   const pinnedRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -69,13 +71,18 @@ export function PinnedHorizontalScroll({
     <div
       className={cn("relative max-w-full", className)}
       data-management-table-scroll="pinned-horizontal"
+      data-management-table-scroll-mode={showPinnedScrollbar ? "pinned" : "native"}
       data-pinned-horizontal-scroll="true"
       data-testid={testId}
     >
       <div
         ref={viewportRef}
         aria-label={ariaLabel}
-        className={cn("overflow-x-auto overscroll-x-contain", viewportClassName)}
+        className={cn(
+          showPinnedScrollbar && "pinned-horizontal-scroll__native",
+          "overflow-auto overscroll-contain",
+          viewportClassName,
+        )}
         data-management-table-scrollbar="native"
         data-pinned-horizontal-scrollbar="native"
         role="region"
@@ -86,19 +93,21 @@ export function PinnedHorizontalScroll({
           {children}
         </div>
       </div>
-      <div
-        ref={pinnedRef}
-        aria-hidden="true"
-        className={cn(
-          "sticky bottom-0 z-30 h-4 overflow-x-auto overflow-y-hidden border-t border-border bg-card/95 [scrollbar-gutter:stable]",
-          pinnedClassName,
-        )}
-        data-management-table-scrollbar="pinned"
-        data-pinned-horizontal-scrollbar="pinned"
-        onScroll={() => syncScroll(pinnedRef.current, viewportRef.current)}
-      >
-        <div style={{ width: scrollWidth, height: 1 }} />
-      </div>
+      {showPinnedScrollbar && (
+        <div
+          ref={pinnedRef}
+          aria-hidden="true"
+          className={cn(
+            "sticky bottom-0 z-30 h-4 overflow-x-auto overflow-y-hidden border-t border-border bg-card/95 [scrollbar-gutter:stable]",
+            pinnedClassName,
+          )}
+          data-management-table-scrollbar="pinned"
+          data-pinned-horizontal-scrollbar="pinned"
+          onScroll={() => syncScroll(pinnedRef.current, viewportRef.current)}
+        >
+          <div style={{ width: scrollWidth, height: 1 }} />
+        </div>
+      )}
     </div>
   );
 }

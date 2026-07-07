@@ -42,6 +42,7 @@ import {
   refreshSession,
   type MeResponse,
 } from "@/lib/v4/session/me";
+import { normalizeCapitalPool, normalizeCapitalPools } from "@/lib/bff-v1/capitalPools";
 
 const acceptLanguage = (): string => {
   const l = usePlatform.getState().locale;
@@ -118,6 +119,13 @@ async function strictLiveRead<T>(
     liveStatus.reportSuccess();
     return adaptLive(data);
   } catch (err) {
+    if (err instanceof BffError && err.status < 500 && err.status !== 0) {
+      // Real backend reply (e.g. 404 not-found, 4xx validation) — NOT a transport failure.
+      // Do not flip the app to "offline"/fallback; propagate so the caller renders its own
+      // not-found/error state. (Previously any 404 here took the whole console offline, which
+      // then cascaded every other live read to mock seed via withLiveOrMock's offline path.)
+      throw err;
+    }
     const reason = err instanceof Error ? err.message : "live transport failed";
     liveStatus.reportFallback(`strict: ${reason}`);
     if (err instanceof BffError) throw err;
@@ -552,8 +560,8 @@ export const bff = {
     get: (id: string) => liveDetailOrSeed("bff.personas.get", paths.persona(id), seed.personas.find((s) => s.id === id)),
   },
   capitalPools: {
-    list: () => liveListOrSeedNormalized("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools),
-    get: (id: string) => liveDetailOrSeedNormalized("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)),
+    list: () => liveListOrSeed<unknown>("bff.capitalPools.list", paths.capitalPools(), seed.capitalPools).then(normalizeCapitalPools),
+    get: (id: string) => liveDetailOrSeed<unknown>("bff.capitalPools.get", paths.capitalPool(id), seed.capitalPools.find((s) => s.id === id)).then(normalizeCapitalPool),
   },
   rankingFormulas: {
     list: () => liveListOrSeedNormalized("bff.rankingFormulas.list", paths.rankingFormulas(), seed.rankingFormulas),

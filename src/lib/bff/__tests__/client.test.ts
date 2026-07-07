@@ -112,9 +112,13 @@ describe("managementClient — hybrid fallback (live transport failure)", () => 
   const realFetch = globalThis.fetch;
 
   beforeEach(() => {
+    // This block exercises the auto (mock-fallback) path; the product default is now strict
+    // (VITE_BFF_FALLBACK=strict in .env), so pin auto here rather than rely on the default.
+    vi.stubEnv("VITE_BFF_FALLBACK", "auto");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     globalThis.fetch = realFetch;
     liveStatus._reset();
   });
@@ -197,6 +201,66 @@ describe("managementClient — rankingFormulas live detail URL", () => {
     expect(fetchSpy).toHaveBeenCalled();
     const calledUrl = String(fetchSpy.mock.calls[0][0]);
     expect(calledUrl).toContain("/bff/ranking-formulas/rank_1");
+  });
+});
+
+describe("managementClient — capital pool live normalization", () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    liveStatus._reset();
+  });
+
+  it("capitalPools.list normalizes snake_case BFF rows", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        data: [{
+          id: "paper-ledger-persona-20260528-04688755",
+          pool_id: "pool-crypto-paper",
+          name: "Crypto Paper",
+          status: "active",
+          owner_id: "pantheon-dev-browser",
+          currency: "USDT",
+          capital_allocation: 100000,
+          max_drawdown_pct: 6,
+        }],
+        page_info: { total: 1 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const env = await managementClient.capitalPools.list();
+    expect(env.items[0]).toMatchObject({
+      id: "pool-crypto-paper",
+      owner: "pantheon-dev-browser",
+      allocated: 100000,
+      riskBudget: 0.06,
+      state: "deployed",
+    });
+  });
+
+  it("capitalPools.get unwraps data envelopes and normalizes the detail", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        data: {
+          id: "paper-ledger-persona-20260528-04688755",
+          pool_id: "pool-crypto-paper",
+          name: "Crypto Paper",
+          budget: 75000,
+          status: "active",
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const detail = await managementClient.capitalPools.get("pool-crypto-paper");
+    expect(detail).toMatchObject({
+      id: "pool-crypto-paper",
+      allocated: 75000,
+      state: "deployed",
+    });
   });
 });
 

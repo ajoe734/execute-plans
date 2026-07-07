@@ -66,10 +66,18 @@ export interface Persona extends BaseObject {
 }
 
 export interface CapitalPool extends BaseObject {
-  currency: "USD" | "USDT" | "TWD";
+  currency: "USD" | "USDT" | "TWD" | string;
   allocated: number;
   utilized: number;
   riskBudget: number;
+  poolId?: string;
+  pool_id?: string;
+  status?: string;
+  riskPolicyRef?: string;
+  risk_policy_ref?: string;
+  bindings?: Array<Record<string, unknown>>;
+  bindingCount?: number;
+  summary?: string;
 }
 
 export interface RankingFormula extends BaseObject {

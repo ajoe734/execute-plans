@@ -7,9 +7,13 @@ describe("BFF live transport — fallback to mock on failure", () => {
   const realFetch = globalThis.fetch;
 
   beforeEach(() => {
+    // These cases exercise the auto (mock-fallback) path explicitly; the product default is
+    // now strict (VITE_BFF_FALLBACK=strict in .env), so pin auto here rather than rely on it.
+    vi.stubEnv("VITE_BFF_FALLBACK", "auto");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     globalThis.fetch = realFetch;
     liveStatus._reset();
   });
@@ -64,6 +68,25 @@ describe("BFF live transport — fallback to mock on failure", () => {
     expect(out.ok).toBe(true);
     expect(liveStatus.get().effective).toBe("live");
     expect(liveStatus.get().lastError).toBeUndefined();
+  });
+
+  it("strict + live + flagged offline: retries live instead of serving mock", async () => {
+    // Once a prior read flips liveStatus offline (effective→mock), a strict live surface must NOT
+    // be masked with mock seed — it re-attempts live so real data (or a typed error) surfaces and
+    // the surface self-heals when the BFF recovers.
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "mock", baseUrl: "https://example.test" });
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    globalThis.fetch = fetchSpy;
+    const out = await withLiveOrMock<{ ok: boolean }>(
+      { method: "GET", path: "/bff/strategies" },
+      async () => ({ ok: false }),
+    );
+    expect(out.ok).toBe(true); // live, not the mock's { ok: false }
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(liveStatus.get().effective).toBe("live");
   });
 
   it("mock mode: never touches fetch", async () => {

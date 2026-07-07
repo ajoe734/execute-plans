@@ -168,7 +168,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
-  it("keeps the Persona Fleet horizontal scrollbar pinned for long row sets", () => {
+  it("renders Persona Fleet as a bounded native table viewport for long row sets", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-live-gold", "Gold Futures Persona"),
@@ -181,8 +181,13 @@ describe("PersonaFleetPage", () => {
 
     const tableScroll = screen.getByTestId("persona-fleet-table-scroll");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
-    expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeTruthy();
-    expect(tableScroll.querySelector("[data-management-table-scrollbar='native']")).toBeTruthy();
+    expect(tableScroll).toHaveAttribute("data-management-table-scroll-mode", "native");
+    expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
+    const native = tableScroll.querySelector("[data-management-table-scrollbar='native']");
+    expect(native).toBeTruthy();
+    expect(native).toHaveClass("max-h-[calc(100vh-220px)]");
+    expect(native).toHaveClass("overflow-auto");
+    expect(native).not.toHaveClass("pinned-horizontal-scroll__native");
     expect(screen.getByRole("table")).toHaveClass("min-w-[1840px]");
   });
 
@@ -259,7 +264,12 @@ describe("PersonaFleetPage", () => {
           humanNeeded: true,
           state: "deployed",
           capitalMode: "paper",
-          capitalPoolId: "cp-paper-alpha",
+          paperLedgerId: "paper-ledger-persona-live-paper-alpha",
+          paperLedger: {
+            id: "paper-ledger-persona-live-paper-alpha",
+            mode: "paper",
+            isolated: true,
+          },
           runtimeId: "rt-paper-alpha",
           runtimeBindingId: "rb-paper-alpha",
           runtimeBinding: {
@@ -292,15 +302,23 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByText("cp-paper-alpha")).toBeInTheDocument();
+    expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
+      "href",
+      "/management/capital?pool=paper-ledger-persona-live-paper-alpha",
+    );
+    expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
+      "href",
+      "/management/persona-league?persona=persona-live-paper-alpha",
+    );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
     expect(screen.getByText("paper_running")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "paper to live" })).toHaveAttribute(
-      "href",
-      "/management/human-inbox/promotion_review%3Areview-paper-alpha",
-    );
+    expect(screen.getByText("paper to live")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "paper to live" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review human gate for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
       "/management/human-inbox/promotion_review%3Areview-paper-alpha",
@@ -361,8 +379,10 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();
     expect(screen.getByText(/vectorbt \/ 2 more frameworks/)).toBeInTheDocument();
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "persona-live-summary performance attribution" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("persona-live-summary performance attribution unavailable")).toHaveTextContent("18.20%");
+    expect(screen.getByRole("link", { name: "persona-live-summary performance attribution" })).toHaveAttribute(
+      "href",
+      "/management/performance-attribution?dimension=persona&persona=persona-live-summary",
+    );
   });
 
   it("does not report a focused persona as missing before live fleet data loads", () => {

@@ -66,6 +66,7 @@ import {
 } from "./personaFleetFilters";
 import {
   personaFleetArtifactHref,
+  personaFleetCapitalHref,
   personaFleetDataSourcesHref,
   personaFleetHumanGateHref,
   personaFleetMutationHref,
@@ -73,6 +74,7 @@ import {
   personaFleetOnboardingHref,
   personaFleetPerformanceHref,
   personaFleetPersonaHref,
+  personaFleetRankHref,
   personaFleetResearchHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
@@ -254,8 +256,16 @@ function displayFleetState(r: ManagementPersonaFleetRow): string {
   return state;
 }
 
-function fleetCapitalPoolId(r: ManagementPersonaFleetRow): string | undefined {
-  const raw = r as ManagementPersonaFleetRow & { capital_pool_id?: string };
+function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as ManagementPersonaFleetRow & {
+    capital_pool_id?: string;
+    paper_ledger_id?: string;
+    paper_ledger?: { id?: string };
+  };
+  const mode = fleetCapitalMode(r);
+  if (mode === "paper") {
+    return r.paperLedgerId ?? raw.paper_ledger_id ?? r.paperLedger?.id ?? raw.paper_ledger?.id;
+  }
   return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
 }
 
@@ -552,10 +562,15 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length > 0 && (
-      <Card>
-        <ManagementTableScroll testId="persona-fleet-table-scroll" minScrollWidth={1840}>
+      <Card className="overflow-hidden">
+        <ManagementTableScroll
+          testId="persona-fleet-table-scroll"
+          minScrollWidth={1840}
+          showPinnedScrollbar={false}
+          viewportClassName="max-h-[calc(100vh-220px)] overflow-auto"
+        >
         <table className="w-full min-w-[1840px] text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
@@ -580,8 +595,9 @@ export const PersonaFleetPage = () => {
               const frameworkSummary = frameworkText(primaryResearch);
               const personaHref = personaFleetPersonaHref(r);
               const researchHref = personaFleetResearchHref(r, primaryResearch);
-              const dataSourcesHref = personaFleetDataSourcesHref(r);
+              const dataSourcesHref = sourceBadges.length > 0 ? personaFleetDataSourcesHref(r) : null;
               const performanceHref = personaFleetPerformanceHref(r);
+              const rankHref = personaFleetRankHref(r);
               const mutationHref = personaFleetMutationHref(r);
               const humanGateHref = personaFleetHumanGateHref(r);
               const onboardingHref = personaFleetOnboardingHref(r);
@@ -597,7 +613,8 @@ export const PersonaFleetPage = () => {
               const artifactLabel = primaryResearch?.artifactId;
               const oodaHref = personaFleetOodaHref(r, primaryResearch);
               const capitalMode = fleetCapitalMode(r);
-              const capitalPoolId = fleetCapitalPoolId(r);
+              const capitalReference = fleetCapitalReference(r);
+              const capitalHref = personaFleetCapitalHref(r);
               const runtimeHealth = fleetRuntimeHealth(r);
               const leagueRank = fleetLeagueRank(r);
               const leagueScore = fleetLeagueScore(r);
@@ -640,34 +657,56 @@ export const PersonaFleetPage = () => {
                   </td>
 	                  <td className="px-3 py-2"><Badge variant="outline">{r.autonomy}</Badge></td>
 	                  <td className="px-3 py-2 min-w-[170px]">
-	                    <div className="flex flex-wrap gap-1">
-	                      <Badge
-	                        variant="outline"
-	                        className={capitalMode === "live"
-	                          ? "border-status-failed/40 text-status-failed"
-	                          : capitalMode === "canary"
-	                          ? "border-status-warning/40 text-status-warning"
-	                          : "border-status-success/40 text-status-success"}
-	                      >
-	                        {formatToken(capitalMode || "none")}
-	                      </Badge>
-	                      {runtimeHealth && (
-	                        <Badge variant="outline" className={statusTone(runtimeHealth)}>
-	                          {formatToken(runtimeHealth)}
+	                      <div className="flex flex-wrap gap-1">
+	                        <Badge
+	                          variant="outline"
+	                          className={capitalMode === "live"
+	                            ? "border-status-failed/40 text-status-failed"
+	                            : capitalMode === "canary"
+	                            ? "border-status-warning/40 text-status-warning"
+	                            : "border-status-success/40 text-status-success"}
+	                        >
+	                          {formatToken(capitalMode || "none")}
 	                        </Badge>
-	                      )}
-	                    </div>
-	                    {capitalPoolId && (
-	                      <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalPoolId}>
-	                        {capitalPoolId}
+	                        {runtimeHealth && (
+	                          <Badge variant="outline" className={statusTone(runtimeHealth)}>
+	                            {formatToken(runtimeHealth)}
+	                          </Badge>
+	                        )}
 	                      </div>
-	                    )}
+	                      {capitalReference && (
+	                        capitalHref ? (
+	                          <Link
+	                            to={capitalHref}
+	                            aria-label={`Open capital for ${r.personaId}`}
+	                            className={fieldLinkClass("mt-1 flex max-w-[210px] items-center gap-1 truncate font-mono text-xs text-muted-foreground hover:text-primary")}
+	                            title={capitalReference}
+	                          >
+	                            <span className="truncate">{capitalReference}</span>
+	                            <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+	                          </Link>
+	                        ) : (
+	                          <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalReference}>
+	                            {capitalReference}
+	                          </div>
+	                        )
+	                      )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[120px]">
 	                    {leagueRank ? (
-	                      <div className="font-medium text-foreground">
-	                        {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
-	                      </div>
+	                      rankHref ? (
+	                        <Link
+	                          to={rankHref}
+	                          aria-label={`${r.personaId} persona league ranking`}
+	                          className={fieldLinkClass("font-medium text-foreground hover:text-primary")}
+	                        >
+	                          {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
+	                        </Link>
+	                      ) : (
+	                        <div className="font-medium text-foreground">
+	                          {t("mgmt.fleet.rankFmt", { rank: leagueRank })}
+	                        </div>
+	                      )
 	                    ) : (
 	                      <span className="text-muted-foreground">—</span>
 	                    )}
@@ -677,18 +716,9 @@ export const PersonaFleetPage = () => {
 	                      </div>
 	                    )}
 	                    {(r.reviewType || r.reviewStatus) && (
-	                      humanGateHref ? (
-	                        <Link
-	                          to={humanGateHref}
-	                          className={fieldLinkClass("mt-1 block text-xs text-muted-foreground hover:text-primary")}
-	                        >
-	                          {formatToken(r.reviewType || r.reviewStatus)}
-	                        </Link>
-	                      ) : (
-	                        <span className="mt-1 block text-xs text-muted-foreground">
-	                          {formatToken(r.reviewType || r.reviewStatus)}
-	                        </span>
-	                      )
+	                      <span className="mt-1 block text-xs text-muted-foreground">
+	                        {formatToken(r.reviewType || r.reviewStatus)}
+	                      </span>
 	                    )}
 	                  </td>
 	                  <td className="px-3 py-2 min-w-[240px]">
@@ -1371,11 +1401,12 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
       <ManagementTableScroll
         className="mt-3"
         viewportClassName="max-h-[640px] overflow-auto"
+        showPinnedScrollbar={false}
         testId="trading-pulse-runtime-table-scroll"
         minScrollWidth={1040}
       >
         <table className="w-full min-w-[1040px] text-left text-xs">
-          <thead className="text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-card text-muted-foreground">
             <tr className="border-b border-border">
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.rowHealth")}</th>
@@ -1496,6 +1527,46 @@ interface EvolutionEntry {
   occurred_at?: string; created_at?: string;
 }
 
+type RawEvolutionFleetRow = ManagementPersonaFleetRow & {
+  id?: string;
+  persona_id?: string;
+  name?: string;
+  current_work?: string;
+  last_mutation?: string;
+};
+
+function evolutionFleetPersonaId(row: ManagementPersonaFleetRow): string | undefined {
+  const raw = row as RawEvolutionFleetRow;
+  const id = row.personaId ?? raw.persona_id ?? raw.id;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function fallbackEvolutionEntryFromFleet(
+  fleetRows: ManagementPersonaFleetRow[] | undefined,
+  personaFocus: string,
+): EvolutionEntry | null {
+  const focus = personaFocus.trim();
+  if (!focus) return null;
+  const row = (fleetRows ?? []).find((item) => evolutionFleetPersonaId(item) === focus);
+  if (!row) return null;
+  const raw = row as RawEvolutionFleetRow;
+  const lastMutation = row.lastMutation ?? raw.last_mutation ?? "nan";
+  const personaName = row.personaName ?? raw.name ?? focus;
+  const currentWork = row.currentWork ?? raw.current_work;
+  return {
+    id: `persona-fleet-summary:${focus}:${lastMutation}`,
+    title: `Persona Fleet mutation summary · ${personaName}`,
+    summary: [currentWork, row.state ? `state ${row.state}` : undefined]
+      .filter(Boolean)
+      .join(" · "),
+    status: row.state ?? "fleet_summary",
+    entryType: "persona_fleet_summary",
+    action_type: lastMutation,
+    target: { type: "Persona", id: focus },
+    occurred_at: lastMutation && lastMutation !== "nan" ? lastMutation : undefined,
+  };
+}
+
 const verdictTone = (v?: string) =>
   v === "improved" || v === "accepted" || v === "approved"
     ? "bg-status-success/15 text-status-success border-status-success/30"
@@ -1509,12 +1580,18 @@ export const EvolutionJournalPage = () => {
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const mutationFocus = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
   const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const rows = useMemo(() => data ?? [], [data]);
   const focus = useMemo(
     () => filterEvolutionJournalRowsForFocus(rows, { personaFocus, mutationFocus }),
     [mutationFocus, personaFocus, rows],
   );
-  const visibleRows = focus.rows;
+  const fleetFallback = useMemo(
+    () => focus.matched || mutationFocus ? null : fallbackEvolutionEntryFromFleet(fleetRows, personaFocus),
+    [fleetRows, focus.matched, mutationFocus, personaFocus],
+  );
+  const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
+  const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || mutationFocus);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
@@ -1529,7 +1606,7 @@ export const EvolutionJournalPage = () => {
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {focus.matched
+              {focusMatched
                 ? t("mgmt.evolution.focusedFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan", count: visibleRows.length })
                 : t("mgmt.evolution.focusMissingFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan" })}
             </span>
@@ -2026,7 +2103,7 @@ const EvidenceExplorerList = () => {
 
   if (!data && loading) {
     return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-loading">
         <header>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
@@ -2037,7 +2114,7 @@ const EvidenceExplorerList = () => {
   }
   if (!data) {
     return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-unavailable">
         <header>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.evidence.unavailableTitle")}</p>
@@ -2049,7 +2126,7 @@ const EvidenceExplorerList = () => {
   const rows = model.items;
 
   return (
-    <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")}>
+    <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
@@ -2062,10 +2139,15 @@ const EvidenceExplorerList = () => {
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
       </dl>
-      <Card>
-        <ManagementTableScroll testId="evidence-explorer-table-scroll" minScrollWidth={1040}>
+      <Card className="overflow-hidden">
+        <ManagementTableScroll
+          testId="evidence-explorer-table-scroll"
+          minScrollWidth={1040}
+          showPinnedScrollbar={false}
+          viewportClassName="max-h-[calc(100vh-240px)] overflow-auto"
+        >
         <table className="w-full min-w-[1040px] text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2">{t("mgmt.evidence.source")}</th>
               <th className="px-3 py-2">{t("mgmt.evidence.credibility")}</th>
@@ -2083,7 +2165,7 @@ const EvidenceExplorerList = () => {
               const linkedObjectHref = e.linkedObjectLink?.routeHref ?? e.linked_object_link?.route_href;
               const linkedObjectUnavailable = e.disabledActionReasons.canOpenLinkedObject ?? e.disabled_action_reasons.canOpenLinkedObject;
               return (
-                <tr key={e.refId} className="border-b border-border/50 align-top">
+                <tr key={e.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
                   <td className="px-3 py-3">
                     {detailHref ? (
                       <Link to={detailHref} className="font-medium text-primary underline-offset-4 hover:underline">
@@ -2154,7 +2236,7 @@ const EvidenceExplorerList = () => {
               );
             })}
             {rows.length === 0 && !loading && (
-              <tr>
+              <tr data-testid="evidence-route-empty">
                 <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
                   {t("mgmt.evidence.noRows")}
                 </td>

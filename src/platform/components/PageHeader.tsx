@@ -23,13 +23,13 @@ export const PageHeader = ({ title, subtitle, actions, hideBreadcrumb }: PageHea
   const resolvedSubtitle = subtitle ?? (route?.subtitleKey ? t(route.subtitleKey) : undefined);
 
   return (
-    <div className="border-b border-border bg-card px-6 py-4 flex items-start justify-between gap-4">
-      <div>
+    <div className="scroll-mt-28 border-b border-border bg-card px-4 py-4 flex flex-col items-start justify-between gap-3 sm:px-6 sm:flex-row sm:gap-4 lg:scroll-mt-20">
+      <div className="min-w-0">
         {!hideBreadcrumb && route && <PageBreadcrumb pathname={pathname} />}
         <h1 className="text-xl font-semibold tracking-tight">{resolvedTitle}</h1>
         {resolvedSubtitle && <p className="text-sm text-muted-foreground mt-0.5">{resolvedSubtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 };
@@ -64,5 +64,5 @@ const PageBreadcrumb = ({ pathname }: { pathname: string }) => {
 };
 
 export const PageBody = ({ children }: { children: ReactNode }) => (
-  <div className="p-6 space-y-6">{children}</div>
+  <div className="min-w-0 space-y-6 overflow-x-hidden p-4 sm:p-6">{children}</div>
 );

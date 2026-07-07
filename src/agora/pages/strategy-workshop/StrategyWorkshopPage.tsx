@@ -14,6 +14,67 @@ import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
 
+export interface TradingRoomReadinessHandoff {
+  strategyId: string;
+  strategyVersion: string;
+  readinessGate: "trading_room";
+  readinessAssessmentId: string;
+  workshopId: string;
+  workshopVersionId?: string;
+  assessedAt?: string;
+}
+
+function readinessHighestGate(
+  readiness: StrategyReadinessAssessment | null,
+): StrategyReadinessAssessment["highest_ready_gate"] | null {
+  if (!readiness) return null;
+  if (readiness.highest_ready_gate) return readiness.highest_ready_gate;
+  return readiness.passed && readiness.gate ? readiness.gate : null;
+}
+
+function readinessText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function tradingRoomHandoffFromReadiness(
+  readiness: StrategyReadinessAssessment | null,
+): TradingRoomReadinessHandoff | null {
+  if (!readiness || readinessHighestGate(readiness) !== "trading_room") return null;
+
+  const strategyId = readinessText(readiness.strategy_id);
+  const strategyVersion = readinessText(readiness.strategy_spec_registry_id);
+  if (!strategyId || !strategyVersion) return null;
+
+  return {
+    assessedAt: readiness.assessed_at,
+    readinessAssessmentId: readiness.assessment_id,
+    readinessGate: "trading_room",
+    strategyId,
+    strategyVersion,
+    workshopId: readiness.workshop_id,
+    workshopVersionId: readinessText(readiness.workshop_version_id) ?? undefined,
+  };
+}
+
+function addToTradingRoomDisabledReason(
+  readiness: StrategyReadinessAssessment | null,
+  handoff: TradingRoomReadinessHandoff | null,
+): string | null {
+  if (!readiness) return "Readiness not yet assessed";
+  const highestGate = readinessHighestGate(readiness);
+  if (highestGate !== "trading_room") {
+    return `Trading Room gate not yet ready (highest: ${highestGate ?? "none"})`;
+  }
+  if (!readinessText(readiness.strategy_id)) {
+    return "Trading Room handoff is missing strategy id";
+  }
+  if (!readinessText(readiness.strategy_spec_registry_id)) {
+    return "Trading Room handoff is missing strategy version";
+  }
+  return handoff ? null : "Trading Room handoff is incomplete";
+}
+
 // ---------------------------------------------------------------------------
 // Card list reducer
 // ---------------------------------------------------------------------------
@@ -101,7 +162,7 @@ function WorkshopListView(): JSX.Element {
 
 interface SessionViewProps {
   workshopId: string;
-  onAddToTradingRoom?: () => void;
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
 }
 
 function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
@@ -268,13 +329,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           }}
         >
           {(() => {
-            const tradingRoomReady = readiness?.highest_ready_gate === "trading_room";
-            const isActive = tradingRoomReady && !!onAddToTradingRoom;
-            const disabledReason = readiness
-              ? tradingRoomReady
-                ? null
-                : `Trading Room gate not yet ready (highest: ${readiness.highest_ready_gate ?? "none"})`
-              : "Readiness not yet assessed";
+            const handoff = tradingRoomHandoffFromReadiness(readiness);
+            const disabledReason = addToTradingRoomDisabledReason(readiness, handoff);
+            const isActive = !!handoff && !!onAddToTradingRoom;
             return (
               <>
                 <button
@@ -282,7 +339,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                   disabled={!isActive}
                   aria-disabled={!isActive}
                   title={disabledReason ?? undefined}
-                  onClick={isActive ? onAddToTradingRoom : undefined}
+                  onClick={isActive ? () => onAddToTradingRoom?.(handoff) : undefined}
                   style={{
                     width: "100%",
                     padding: "7px 12px",
@@ -333,7 +390,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
 interface StrategyWorkshopPageProps {
   workshopId?: string;
-  onAddToTradingRoom?: () => void;
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
 }
 
 export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
