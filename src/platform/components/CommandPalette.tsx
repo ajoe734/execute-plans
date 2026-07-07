@@ -11,7 +11,7 @@ const typeRoute: Record<string, string> = {
   Persona: "/management/personas",
   CapitalPool: "/management/capital-pools",
   RankingFormula: "/management/ranking-formulas",
-  Rebalance: "/management/rebalances",
+  Rebalance: "/management/rebalance",
   Deployment: "/management/deployments",
 };
 

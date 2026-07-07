@@ -8,6 +8,7 @@ import i18n from "@/i18n";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
+import { PromotionAllocationPage } from "./PromotionAllocation";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
 
 const mocks = vi.hoisted(() => ({
@@ -48,6 +49,24 @@ describe("ranking recommendation submit pages", () => {
     mocks.sendRankingRecommendation.mockReset();
   });
 
+  it("Promotion & Allocation is the single governed entry for paper promotion, real ranking, and capital allocation", () => {
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: defaultQuarterlyRanking(), loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
+
+    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
+  });
+
   it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {
     const row = {
       ...defaultPersonaLeague()[0],
@@ -70,7 +89,7 @@ describe("ranking recommendation submit pages", () => {
       governanceDestinations: ["human_inbox", "human_gate_decision"],
     });
 
-    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+    renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
 
     fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
 
@@ -114,7 +133,7 @@ describe("ranking recommendation submit pages", () => {
       governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
     });
 
-    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
 
