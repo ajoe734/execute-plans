@@ -20,6 +20,26 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management", i18nKey: "app.management" },
   { path: "/agora", i18nKey: "app.agora" },
 
+  // Oversight
+  { path: "/management/cockpit", i18nKey: "nav.managementCockpit", parent: "/management" },
+  { path: "/management/persona-fleet", i18nKey: "nav.personaFleet", parent: "/management" },
+  { path: "/management/human-inbox", i18nKey: "nav.humanInbox", parent: "/management" },
+  { path: "/management/trading-pulse", i18nKey: "nav.tradingPulse", parent: "/management" },
+  { path: "/management/evolution-journal", i18nKey: "nav.evolutionJournal", parent: "/management" },
+  { path: "/management/evidence", i18nKey: "nav.evidenceExplorer", parent: "/management" },
+  { path: "/management/persona-intent", i18nKey: "nav.personaIntent", parent: "/management" },
+
+  // Performance & League
+  { path: "/management/portfolio-book", i18nKey: "nav.portfolioBook", parent: "/management" },
+  { path: "/management/performance-attribution", i18nKey: "nav.performanceAttribution", parent: "/management" },
+
+  // Live Readiness
+  { path: "/management/readiness/ep5", i18nKey: "readiness.ep5Title", parent: "/management" },
+  { path: "/management/readiness/broker-live", i18nKey: "nav.brokerLiveReadiness", parent: "/management" },
+  { path: "/management/readiness/capital-binding-live", i18nKey: "nav.capitalLiveReadiness", parent: "/management" },
+  { path: "/management/readiness/bff-ha", i18nKey: "nav.bffHaReadiness", parent: "/management" },
+  { path: "/management/readiness/strict-publish", i18nKey: "nav.strictPublishAudit", parent: "/management" },
+
   // v5 closed-loop OS
   { path: "/management/control-room", i18nKey: "nav.controlRoom", subtitleKey: "v5.controlRoom.subtitle", parent: "/management" },
   { path: "/management/loops", i18nKey: "nav.loops", parent: "/management" },

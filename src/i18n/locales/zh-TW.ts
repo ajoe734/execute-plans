@@ -2078,6 +2078,7 @@ export default {
       sideEffectsOn: "交易副作用開啟",
       sideEffectsOff: "交易副作用關閉",
       governed: "治理中",
+      viewResearchLoop: "查看研究執行",
       loadingLive: "正在載入 live Persona Fleet 資料…",
       liveDataUnavailableTitle: "目前沒有 live Persona Fleet 資料",
       liveDataUnavailableBody: "此頁不顯示 demo、seed 或非正式 Persona Fleet 列。",

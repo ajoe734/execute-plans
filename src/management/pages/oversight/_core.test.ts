@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import type { ManagementPersonaFleetRow, ManagementDataSource } from "@/lib/bff-v1/management";
 import {
   personaFleetArtifactHref,
   personaFleetCapitalHref,
@@ -11,6 +11,7 @@ import {
   personaFleetPersonaHref,
   personaFleetRankHref,
   personaFleetResearchHref,
+  personaFleetResearchLoopHref,
   personaFleetResearchItems,
   personaFleetRuntimeHref,
 } from "./personaFleetLinks";
@@ -198,7 +199,7 @@ describe("PersonaFleetPage deep links", () => {
       },
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-paper-alpha");
+    expect(personaFleetCapitalHref(row)).toBeNull();
   });
 
   it("routes OODA stages through canonical targets", () => {
@@ -337,8 +338,8 @@ describe("PersonaFleetPage deep links", () => {
         dataSources: "/management/data-sources?persona=persona-20260528-ba7de5a4&source=mops",
       },
     } as unknown as ManagementPersonaFleetRow;
-    const shioaji = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
-    const mops = { providerKey: "mops", provider: "MOPS", status: "public_reference_unavailable" };
+    const shioaji = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" } as unknown as ManagementDataSource;
+    const mops = { providerKey: "mops", provider: "MOPS", status: "public_reference_unavailable" } as unknown as ManagementDataSource;
 
     expect(personaFleetDataSourcesHref(row)).toBe(
       "/management/data-sources?persona=persona-20260528-ba7de5a4",
@@ -358,7 +359,7 @@ describe("PersonaFleetPage deep links", () => {
         dataSources: "/management/data-sources?persona=not%20declared&source=mops",
       },
     } as unknown as ManagementPersonaFleetRow;
-    const source = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" };
+    const source = { providerKey: "shioaji", provider: "Shioaji quote", status: "read_ok" } as unknown as ManagementDataSource;
 
     expect(personaFleetDataSourcesHref(row)).toBeNull();
     expect(personaFleetDataSourcesHref(row, source)).toBeNull();
@@ -379,7 +380,8 @@ describe("PersonaFleetPage deep links", () => {
       ],
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBe(
+    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchLoopHref(row)).toBe(
       "/management/loops/research?persona=persona-crypto&project=research-crypto-paper-001",
     );
     expect(personaFleetArtifactHref(row)).toBeNull();
@@ -476,7 +478,8 @@ describe("PersonaFleetPage deep links", () => {
       personaId: "persona-live-without-project",
     } as ManagementPersonaFleetRow;
 
-    expect(personaFleetResearchHref(row)).toBe(
+    expect(personaFleetResearchHref(row)).toBeNull();
+    expect(personaFleetResearchLoopHref(row)).toBe(
       "/management/loops/research?persona=persona-live-without-project",
     );
   });
