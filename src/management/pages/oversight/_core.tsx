@@ -494,8 +494,8 @@ export const PersonaFleetPage = () => {
   const hiddenNonProduction = rows.filter(isNonProductionPersonaFleetRow).length;
 
   return (
-    <section className="p-6 space-y-4" aria-label={t("mgmt.fleet.title")}>
-      <header className="flex items-start justify-between gap-4">
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.fleet.title")}>
+      <header className="flex shrink-0 items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
@@ -562,12 +562,14 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length > 0 && (
-      <Card className="overflow-hidden">
+      <Card className="flex min-h-0 flex-1 overflow-hidden">
         <ManagementTableScroll
+          className="min-h-0 flex-1"
           testId="persona-fleet-table-scroll"
           minScrollWidth={1840}
           showPinnedScrollbar={false}
-          viewportClassName="max-h-[calc(100vh-220px)] overflow-auto"
+          contentClassName="pb-4"
+          viewportClassName="h-full min-h-0 overflow-auto pb-4"
         >
         <table className="w-full min-w-[1840px] text-sm">
           <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -1400,7 +1402,8 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
       </div>
       <ManagementTableScroll
         className="mt-3"
-        viewportClassName="max-h-[640px] overflow-auto"
+        contentClassName="pb-4"
+        viewportClassName="max-h-[640px] overflow-auto pb-4"
         showPinnedScrollbar={false}
         testId="trading-pulse-runtime-table-scroll"
         minScrollWidth={1040}
@@ -2126,25 +2129,27 @@ const EvidenceExplorerList = () => {
   const rows = model.items;
 
   return (
-    <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
-      <header>
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
+      <header className="shrink-0">
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
       </header>
       <EvidenceSurfaceBanner meta={model.meta} primaryKey="management_evidence" />
-      <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <dl className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <EvidenceMetric label={t("mgmt.evidence.total")} value={model.summary.totalEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.traceable")} value={model.summary.traceableEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={model.summary.needsAttentionEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
       </dl>
-      <Card className="overflow-hidden">
+      <Card className="flex min-h-0 flex-1 overflow-hidden">
         <ManagementTableScroll
+          className="min-h-0 flex-1"
           testId="evidence-explorer-table-scroll"
           minScrollWidth={1040}
           showPinnedScrollbar={false}
-          viewportClassName="max-h-[calc(100vh-240px)] overflow-auto"
+          contentClassName="pb-4"
+          viewportClassName="h-full min-h-0 overflow-auto pb-4"
         >
         <table className="w-full min-w-[1040px] text-sm">
           <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">

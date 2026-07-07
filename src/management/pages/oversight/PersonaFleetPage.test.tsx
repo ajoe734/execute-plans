@@ -168,7 +168,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
   });
 
-  it("renders Persona Fleet as a bounded native table viewport for long row sets", () => {
+  it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-live-gold", "Gold Futures Persona"),
@@ -182,11 +182,16 @@ describe("PersonaFleetPage", () => {
     const tableScroll = screen.getByTestId("persona-fleet-table-scroll");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll-mode", "native");
+    expect(tableScroll).toHaveClass("flex-1");
+    expect(tableScroll).toHaveClass("min-h-0");
     expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
     const native = tableScroll.querySelector("[data-management-table-scrollbar='native']");
     expect(native).toBeTruthy();
-    expect(native).toHaveClass("max-h-[calc(100vh-220px)]");
+    expect(native).not.toHaveClass("max-h-[calc(100vh-220px)]");
+    expect(native).toHaveClass("h-full");
+    expect(native).toHaveClass("min-h-0");
     expect(native).toHaveClass("overflow-auto");
+    expect(native).toHaveClass("pb-4");
     expect(native).not.toHaveClass("pinned-horizontal-scroll__native");
     expect(screen.getByRole("table")).toHaveClass("min-w-[1840px]");
   });
