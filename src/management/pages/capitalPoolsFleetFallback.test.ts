@@ -120,7 +120,7 @@ describe("capitalPoolsWithFleetFallback", () => {
     expect(capitalPoolBindingDetail(env.items[1])).not.toContain("paper pool pool-crypto-paper");
   });
 
-  it("does not duplicate a pool that already exists in the capital pool list", async () => {
+  it("keeps paper ledgers primary when multiple personas declare the same paper pool", async () => {
     vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope([
       {
         id: "pool-crypto-paper",
@@ -138,27 +138,57 @@ describe("capitalPoolsWithFleetFallback", () => {
     vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
       {
         personaId: "persona-a",
-        personaName: "Crypto Paper Persona",
+        personaName: "Crypto A",
         capitalMode: "paper",
         paperLedgerId: "paper-ledger-persona-a",
         paperCapitalPoolId: "pool-crypto-paper",
         runtimeId: "runtime-paper-a",
       },
+      {
+        personaId: "persona-b",
+        personaName: "Crypto B",
+        capitalMode: "paper",
+        paperLedgerId: "paper-ledger-persona-b",
+        paperCapitalPoolId: "pool-crypto-paper",
+        runtimeId: "runtime-paper-b",
+      },
     ] as unknown as ManagementPersonaFleetRow[]);
 
     const env = await capitalPoolsWithFleetFallback();
 
-    expect(env.items).toHaveLength(1);
+    expect(env.items.map((item) => item.id)).toEqual([
+      "paper-ledger-persona-a",
+      "paper-ledger-persona-b",
+      "pool-crypto-paper",
+    ]);
     expect(env.items[0]).toMatchObject({
+      id: "paper-ledger-persona-a",
+      personaCount: 1,
+      personaNames: "Crypto A",
+      bindingSummary: "Crypto A",
+      capitalScope: "paper",
+      fleetDerived: true,
+    });
+    expect(env.items[1]).toMatchObject({
+      id: "paper-ledger-persona-b",
+      personaCount: 1,
+      personaNames: "Crypto B",
+      bindingSummary: "Crypto B",
+      capitalScope: "paper",
+      fleetDerived: true,
+    });
+    expect(env.items[2]).toMatchObject({
       id: "pool-crypto-paper",
       name: "Canonical Crypto Pool",
-      personaCount: 1,
-      personaNames: "Crypto Paper Persona",
-      bindingSummary: "Crypto Paper Persona",
+      personaCount: 0,
+      personaNames: "",
+      bindingSummary: "Unbound",
       capitalScope: "paper",
     });
     expect(capitalPoolBindingDetail(env.items[0])).toContain("ledger paper-ledger-persona-a");
-    expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool pool-crypto-paper");
+    expect(capitalPoolBindingDetail(env.items[0])).not.toContain("paper pool pool-crypto-paper");
+    expect(capitalPoolBindingDetail(env.items[1])).toContain("ledger paper-ledger-persona-b");
+    expect(capitalPoolBindingDetail(env.items[1])).not.toContain("paper pool pool-crypto-paper");
   });
 
   it("binds legacy paper capital pool rows by generated pool name", async () => {
@@ -199,8 +229,8 @@ describe("capitalPoolsWithFleetFallback", () => {
       bindingSummary: "Cron Scope Smoke 2",
       capitalScope: "paper",
     });
-    expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool paper-pool-persona-20260704-5d946ca4");
     expect(capitalPoolBindingDetail(env.items[0])).toContain("ledger paper-ledger-persona-20260704-5d946ca4");
+    expect(capitalPoolBindingDetail(env.items[0])).not.toContain("paper pool paper-pool-persona-20260704-5d946ca4");
   });
 
   it("adds paper ledger rows when paper personas do not declare a capital pool", async () => {
@@ -226,6 +256,34 @@ describe("capitalPoolsWithFleetFallback", () => {
       fleetDerived: true,
     });
   });
+
+  it("falls back to an explicit paper pool only when no paper ledger exists", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-shared-paper",
+        personaName: "Shared Paper",
+        owner: "pantheon-dev-browser",
+        capitalMode: "paper",
+        paperCapitalPoolId: "pool-explicit-shared-paper",
+        updatedAt: "2026-06-05T08:27:44Z",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const env = await capitalPoolsWithFleetFallback();
+
+    expect(env.items).toHaveLength(1);
+    expect(env.items[0]).toMatchObject({
+      id: "pool-explicit-shared-paper",
+      name: "Shared Paper paper capital pool",
+      personaCount: 1,
+      personaNames: "Shared Paper",
+      bindingSummary: "Shared Paper",
+      capitalScope: "paper",
+      fleetDerived: true,
+    });
+    expect(capitalPoolBindingDetail(env.items[0])).toContain("paper pool pool-explicit-shared-paper");
+  });
 });
 
 describe("capitalPoolMatchesFocus", () => {
@@ -234,25 +292,8 @@ describe("capitalPoolMatchesFocus", () => {
     vi.mocked(mgmt.personaFleet.get).mockReset();
   });
 
-  it("resolves a deep link by pool id, a bound persona's ledger id, or persona id", async () => {
-    // A persona bound to a shared pool. The persona fleet links to
-    // /management/capital?pool=<per-persona ledger id> (personaFleetCapitalHref falls back to
-    // paper_ledger_id when no capital pool id is declared on the row), so the focus matcher must
-    // resolve that ledger id to this pool rather than showing the "no matching row" banner.
-    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope([
-      {
-        id: "pool-tw-equity-paper",
-        name: "TW Equity paper pool",
-        owner: "pantheon-dev-browser",
-        updatedAt: "2026-06-05T08:00:00Z",
-        state: "approved",
-        risk: "low",
-        currency: "TWD",
-        allocated: Number.NaN,
-        utilized: Number.NaN,
-        riskBudget: Number.NaN,
-      },
-    ]));
+  it("resolves deep links for ledger-derived paper pools", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
     vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
       {
         personaId: "persona-20260528-5937dea1",
@@ -264,15 +305,15 @@ describe("capitalPoolMatchesFocus", () => {
     ] as unknown as ManagementPersonaFleetRow[]);
 
     const env = await capitalPoolsWithFleetFallback();
-    const pool = env.items.find((item) => item.id === "pool-tw-equity-paper");
+    const pool = env.items.find((item) => item.id === "paper-ledger-persona-20260528-5937dea1");
     expect(pool?.personaCount).toBe(1);
     if (!pool) throw new Error("expected enriched pool");
 
-    expect(capitalPoolMatchesFocus(pool, "pool-tw-equity-paper")).toBe(true);
     expect(capitalPoolMatchesFocus(pool, "paper-ledger-persona-20260528-5937dea1")).toBe(true);
     expect(capitalPoolMatchesFocus(pool, "persona-20260528-5937dea1")).toBe(true);
     // Case/whitespace-insensitive, mirroring the pool lookup key normalization.
     expect(capitalPoolMatchesFocus(pool, "  PAPER-LEDGER-PERSONA-20260528-5937DEA1 ")).toBe(true);
+    expect(capitalPoolMatchesFocus(pool, "pool-tw-equity-paper")).toBe(false);
     expect(capitalPoolMatchesFocus(pool, "pool-some-other")).toBe(false);
     expect(capitalPoolMatchesFocus(pool, "")).toBe(false);
   });

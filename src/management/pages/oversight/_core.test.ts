@@ -199,7 +199,7 @@ describe("PersonaFleetPage deep links", () => {
       },
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-paper-alpha");
+    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=paper-ledger-persona-paper-capital");
   });
 
   it("routes OODA stages through canonical targets", () => {
@@ -404,7 +404,7 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("uses paper ledger links for paper rows unless a paper capital pool is explicit", () => {
+  it("uses paper ledger links for paper rows before paper capital pool ids", () => {
     const row = {
       persona_id: "persona-crypto-paper",
       capital_mode: "paper",
@@ -420,7 +420,7 @@ describe("PersonaFleetPage deep links", () => {
       ...row,
       paper_capital_pool_id: "pool-explicit-shared-paper",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-explicit-shared-paper",
+      "/management/capital?pool=paper-ledger-persona-crypto-paper",
     );
 
     expect(personaFleetCapitalHref({
@@ -429,6 +429,14 @@ describe("PersonaFleetPage deep links", () => {
       paper_ledger_id: "paper-ledger-persona-paper-slim",
     } as unknown as ManagementPersonaFleetRow)).toBe(
       "/management/capital?pool=paper-ledger-persona-paper-slim",
+    );
+
+    expect(personaFleetCapitalHref({
+      persona_id: "persona-shared-paper",
+      capital_mode: "paper",
+      paper_capital_pool_id: "pool-explicit-shared-paper",
+    } as unknown as ManagementPersonaFleetRow)).toBe(
+      "/management/capital?pool=pool-explicit-shared-paper",
     );
   });
 

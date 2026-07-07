@@ -270,6 +270,7 @@ describe("PersonaFleetPage", () => {
           state: "deployed",
           capitalMode: "paper",
           capitalPoolId: "pool-paper-alpha",
+          paperCapitalPoolId: "pool-paper-alpha",
           paperLedgerId: "paper-ledger-persona-live-paper-alpha",
           paperLedger: {
             id: "paper-ledger-persona-live-paper-alpha",
