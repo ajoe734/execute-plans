@@ -113,6 +113,8 @@ export const CapitalPoolsList = () => {
       title={t("nav.capitalPools")}
       loader={capitalPoolsWithFleetFallback}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
+      listHref="/management/promotion-allocation?tab=quarterly-capital"
+      rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(row.id)}`}
       nameCell={CapitalPoolNameCell}
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
@@ -198,6 +200,8 @@ export const RankingFormulasList = () => {
       title={t("nav.rankingFormulas")}
       loader={lists.rankingFormulas}
       basePath="/management/ranking/formulas" liveKinds={["RankingFormula"]}
+      listHref="/management/promotion-allocation?tab=formula-policy"
+      rowHref={(row) => `/management/promotion-allocation?tab=formula-policy&formula_id=${encodeURIComponent(row.id)}`}
       createBehavior={{ kind: "redirect", to: "/management/studios/formula", intent: "create" }}
       extraColumns={[
         { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
@@ -214,6 +218,8 @@ export const RebalancesList = () => {
       title={t("nav.rebalances")}
       loader={lists.rebalances}
       basePath="/management/rebalance" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
+      listHref="/management/promotion-allocation?tab=quarterly-capital"
+      rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(row.id)}`}
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },

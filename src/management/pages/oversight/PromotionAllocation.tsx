@@ -3,19 +3,21 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonaLeaguePage } from "./PersonaLeague";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
-import { RebalancesList } from "@/management/pages/Lists";
+import { RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
 
-type PromotionAllocationTab = "paper-candidates" | "real-ranking" | "quarterly-capital";
+type PromotionAllocationTab = "paper-candidates" | "real-ranking" | "quarterly-capital" | "formula-policy";
 
 const TABS: readonly PromotionAllocationTab[] = [
   "paper-candidates",
   "real-ranking",
   "quarterly-capital",
+  "formula-policy",
 ] as const;
 
 function normalizeTab(value: string | null): PromotionAllocationTab {
   if (value === "real-ranking" || value === "league" || value === "persona-league") return "real-ranking";
   if (value === "quarterly-capital" || value === "rebalance" || value === "quarterly-rebalance") return "quarterly-capital";
+  if (value === "formula-policy" || value === "ranking-formulas" || value === "formula") return "formula-policy";
   return "paper-candidates";
 }
 
@@ -54,6 +56,9 @@ export const PromotionAllocationPage = () => {
         </TabsContent>
         <TabsContent value="quarterly-capital" className="m-0">
           <RebalancesList />
+        </TabsContent>
+        <TabsContent value="formula-policy" className="m-0">
+          <RankingFormulasList />
         </TabsContent>
       </Tabs>
     </section>

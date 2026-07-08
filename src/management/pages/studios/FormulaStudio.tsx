@@ -76,7 +76,7 @@ export const FormulaStudio = () => {
         subtitle={t("studios.formulaSubtitle")}
         actions={
           active && (
-            <Button size="sm" variant="outline" onClick={() => nav(`/management/ranking/formulas/${active.id}`)}>
+            <Button size="sm" variant="outline" onClick={() => nav(`/management/promotion-allocation?tab=formula-policy&formula_id=${encodeURIComponent(active.id)}`)}>
               <ExternalLink className="h-4 w-4 mr-1" />{t("actions.view")}
             </Button>
           )

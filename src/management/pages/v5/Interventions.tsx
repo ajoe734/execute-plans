@@ -250,7 +250,7 @@ export const InterventionsPage = () => {
                       <Link to="/management/strategies">
                         <Button size="sm" variant="outline">{t("nav.strategies", { defaultValue: "Strategies" })}</Button>
                       </Link>
-                      <Link to="/management/capital">
+                      <Link to="/management/promotion-allocation?tab=quarterly-capital">
                         <Button size="sm" variant="outline">{t("nav.capital", { defaultValue: "Capital" })}</Button>
                       </Link>
                     </div>

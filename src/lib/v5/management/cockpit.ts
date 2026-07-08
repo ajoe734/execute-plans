@@ -86,7 +86,7 @@ export function composeCockpit(seed: CockpitSeed): CockpitModel {
       { key: "owners", label: "Persona owners", value: seed.personaOwners, href: "/management/personas" },
       { key: "personas", label: "Personas", value: seed.personas.length, href: "/management/persona-fleet" },
       { key: "broker", label: "Broker live", value: seed.brokerReady ? "ready" : "blocked", tone: seed.brokerReady ? "ok" : "bad", href: "/management/readiness/broker-live" },
-      { key: "capital", label: "Capital bound", value: seed.capitalBound ? "ready" : "blocked", tone: seed.capitalBound ? "ok" : "bad", href: "/management/readiness/capital-binding-live" },
+      { key: "capital", label: "Capital bound", value: seed.capitalBound ? "ready" : "blocked", tone: seed.capitalBound ? "ok" : "bad", href: "/management/promotion-allocation?tab=quarterly-capital" },
       { key: "strict", label: "Strict publish", value: seed.strictPublishOk ? "ok" : "blocked", tone: seed.strictPublishOk ? "ok" : "bad", href: "/management/readiness/strict-publish" },
       { key: "bffHa", label: "BFF HA", value: seed.bffHaOk ? "ok" : "degraded", tone: seed.bffHaOk ? "ok" : "warn", href: "/management/readiness/bff-ha" },
     ],

@@ -121,7 +121,7 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.getByText("2330.TW")).toBeInTheDocument();
     expect(screen.getByText("2026-06-01T00:00:00Z to 2026-06-07T00:00:00Z")).toBeInTheDocument();
     for (const link of screen.getAllByRole("link", { name: "pool-tw-paper" })) {
-      expect(link).toHaveAttribute("href", "/management/capital?pool=pool-tw-paper");
+      expect(link).toHaveAttribute("href", "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-tw-paper");
     }
   });
 
@@ -208,7 +208,7 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.getAllByText("runtime-paper-alpha").length).toBeGreaterThan(0);
     expect(screen.getAllByText("strategy-paper-alpha").length).toBeGreaterThan(0);
     for (const link of screen.getAllByRole("link", { name: "pool-paper-alpha" })) {
-      expect(link).toHaveAttribute("href", "/management/capital?pool=pool-paper-alpha");
+      expect(link).toHaveAttribute("href", "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-paper-alpha");
     }
     expect(screen.getByText("pnl=performanceSummary.pnl; pnlPct=perfDelta; drawdown=performanceSummary.maxDrawdown")).toBeInTheDocument();
     expect(screen.getByText("no matching holding row declares this persona/runtime/capital pool")).toBeInTheDocument();

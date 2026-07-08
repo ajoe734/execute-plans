@@ -6,7 +6,7 @@ import { SideNav, type NavGroup } from "@/platform/components/SideNav";
 import { FloatingAgentPanel } from "@/management/components/agent/FloatingAgentPanel";
 import { useT } from "@/platform/hooks";
 import {
-  Boxes, Users, Wallet, ListOrdered, GitBranch,
+  Boxes, Users, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
@@ -44,7 +44,6 @@ export const ManagementLayout = () => {
     { label: t("groups.liveReadiness"), items: [
       { to: "/management/readiness/ep5", label: "EP5 Canary Readiness", icon: ShieldAlert },
       { to: "/management/readiness/broker-live", label: t("nav.brokerLiveReadiness"), icon: ShieldAlert, dedupeKey: "brokerLive" },
-      { to: "/management/readiness/capital-binding-live", label: t("nav.capitalLiveReadiness"), icon: Wallet, dedupeKey: "capitalLive" },
       { to: "/management/readiness/bff-ha", label: t("nav.bffHaReadiness"), icon: Server, dedupeKey: "bffHa" },
       { to: "/management/readiness/strict-publish", label: t("nav.strictPublishAudit"), icon: ShieldCheck, dedupeKey: "strict" },
     ]},
@@ -52,8 +51,6 @@ export const ManagementLayout = () => {
       { to: "/management/strategies", label: t("nav.strategyRegistry"), icon: Boxes },
       { to: "/management/alpha-factory", label: t("nav.alphaFactory"), icon: Factory },
       { to: "/management/personas", label: t("nav.personaRegistry"), icon: Users, dedupeKey: "personas" },
-      { to: "/management/capital", label: t("nav.capital"), icon: Wallet },
-      { to: "/management/ranking", label: t("nav.ranking"), icon: ListOrdered },
       { to: "/management/evolution", label: t("nav.evolution"), icon: GitBranch },
       { to: "/management/artifacts", label: t("nav.artifacts"), icon: Database },
       { to: "/management/lineage", label: t("nav.lineage"), icon: Workflow },
