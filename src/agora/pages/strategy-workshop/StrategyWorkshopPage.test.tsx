@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
-import type { StrategyReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
+import type { WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
@@ -10,6 +10,12 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshopCompleteness: vi.fn().mockResolvedValue(null),
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
+  listWorkshopEvents: vi.fn().mockResolvedValue({ items: [] }),
+  postWorkshopMessage: vi.fn().mockResolvedValue({
+    created_at: "2026-07-08T00:00:00Z",
+    message_id: "msg-001",
+    workshop_id: "ws-abc",
+  }),
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
 }));
 
@@ -40,7 +46,7 @@ const TRADING_ROOM_READY = {
   strategy_spec_registry_id: "reg-001",
   workshop_version_id: "wsv-001",
   workshop_id: "ws-abc",
-} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 const BLOCKED_READINESS = {
   ...TRADING_ROOM_READY,
@@ -49,19 +55,25 @@ const BLOCKED_READINESS = {
   gate: "full_validation",
   highest_ready_gate: "full_validation",
   passed: true,
-} as StrategyReadinessAssessment & { highest_ready_gate: "full_validation" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "full_validation" };
 
 const MISSING_STRATEGY_ID_READINESS = {
   ...TRADING_ROOM_READY,
   assessment_id: "ready-missing-strategy",
   strategy_id: undefined,
-} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 afterEach(cleanup);
 
 describe("StrategyWorkshopPage", () => {
   beforeEach(() => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+    vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
   });
 
   afterEach(() => {
@@ -90,6 +102,58 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage />);
     await screen.findByTestId("workshop-list");
     expect(screen.getByTestId("workshop-list")).toBeDefined();
+  });
+
+  it("auto-selects the newest live workshop and renders the session runtime instead of a raw uuid list", async () => {
+    const rawWorkshopId = "3f6d1a7e-91c9-4c25-90be-c7a3ef9776e6";
+    vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([
+      {
+        spec_version: "1.0",
+        workshop_id: rawWorkshopId,
+        operator_id: "operator-001",
+        status: "open",
+        subject: {
+          kind: "free_form",
+          ref: rawWorkshopId,
+        },
+        created_at: "2026-07-08T00:00:00Z",
+        metadata: { updated_at: "2026-07-08T00:00:00Z" },
+      } as StrategyWorkshop,
+    ]);
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: rawWorkshopId,
+      operator_id: "operator-001",
+      status: "open",
+      subject: {
+        kind: "free_form",
+        ref: rawWorkshopId,
+        title: "Live Strategy Workshop",
+      },
+      created_at: "2026-07-08T00:00:00Z",
+    } as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({
+      items: [
+        {
+          event_id: "event-001",
+          workshop_id: rawWorkshopId,
+          event_type: "workshop.message.accepted",
+          payload: {},
+          occurred_at: "2026-07-08T00:00:00Z",
+        },
+      ],
+    });
+
+    render(<StrategyWorkshopPage />);
+
+    await screen.findByTestId("selected-workshop-runtime");
+    await screen.findByText("Live Strategy Workshop");
+
+    expect(workshopsModule.getWorkshop).toHaveBeenCalledWith(rawWorkshopId);
+    expect(workshopsModule.listWorkshopCards).toHaveBeenCalledWith(rawWorkshopId);
+    expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith(rawWorkshopId);
+    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("Events · 1");
+    expect(screen.queryByText(rawWorkshopId)).toBeNull();
   });
 
   it("renders the session view when workshopId is provided", () => {
