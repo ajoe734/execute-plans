@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DATATABLE_ROW_HEIGHT_PX } from "@/lib/v4/uiBudgets";
 import { PinnedHorizontalScroll } from "@/platform/components/PinnedHorizontalScroll";
+import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: string;
@@ -15,25 +16,32 @@ export interface Column<T> {
 export type DataTableDensity = "comfortable" | "compact" | "dense";
 
 export function DataTable<T extends { id: string }>({
-  rows, columns, onRowClick, empty, density = "comfortable",
+  rows, columns, onRowClick, empty, density = "comfortable", fillViewport = false,
 }: {
   rows: T[];
   columns: Column<T>[];
   onRowClick?: (row: T) => void;
   empty?: string;
   density?: DataTableDensity;
+  fillViewport?: boolean;
 }) {
   const rowH = DATATABLE_ROW_HEIGHT_PX[density];
   const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
   const minScrollWidth = Math.max(720, columns.length * 160);
   return (
-    <Card className="flex min-h-0 overflow-hidden">
+    <Card
+      className={cn("flex min-h-0 overflow-hidden", fillViewport && "flex-1")}
+      data-data-table-layout={fillViewport ? "fill" : "document"}
+    >
       <PinnedHorizontalScroll
         minScrollWidth={minScrollWidth}
         showPinnedScrollbar={false}
-        className="min-h-0 flex-1"
+        className={cn("min-h-0 flex-1", fillViewport && "h-full")}
         contentClassName="pb-4"
-        viewportClassName="max-h-[calc(100dvh-10rem)] overflow-auto pb-4"
+        viewportClassName={cn(
+          "overflow-auto pb-4",
+          fillViewport ? "h-full min-h-0" : "max-h-[calc(100dvh-10rem)]",
+        )}
       >
         <Table className="w-full" style={{ minWidth: minScrollWidth }}>
           <TableHeader className="sticky top-0 z-10 bg-card">
