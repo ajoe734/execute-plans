@@ -154,7 +154,7 @@ export function ObjectListPage<T extends BaseObject>({
   return (
     <>
       <PageHeader title={title} actions={renderCreateAction()} />
-      <PageBody>
+      <PageBody fill>
         {summary && rows.length > 0 && <div className="mb-4">{summary(rows)}</div>}
         {pending > 0 && (
           <button
@@ -219,6 +219,7 @@ export function ObjectListPage<T extends BaseObject>({
             columns={columns}
             empty={t("common.noResults")}
             onRowClick={(r) => navigate(`${basePath}/${encodeURIComponent(r.id)}`)}
+            fillViewport
           />
         )}
       </PageBody>

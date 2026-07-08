@@ -112,4 +112,35 @@ describe("ObjectListPage", () => {
     expect(status).not.toHaveTextContent("strict typed error");
     expect(status).not.toHaveTextContent("seed fallback blocked");
   });
+
+  it("renders registry tables as viewport-filling scroll regions", () => {
+    mocks.useLiveListV1.mockReturnValue({
+      items: [{
+        id: "strategy-1",
+        name: "Strategy One",
+        state: "deployed",
+        risk: "low",
+        owner: "ops",
+        updatedAt: "2026-07-08T00:00:00Z",
+      }],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    const { container } = renderObjectList();
+
+    const pageBody = container.querySelector('[data-page-body-mode="fill"]');
+    expect(pageBody).toHaveClass("flex", "min-h-0", "flex-1", "overflow-hidden");
+
+    const dataTable = container.querySelector('[data-data-table-layout="fill"]');
+    expect(dataTable).toHaveClass("flex-1", "min-h-0", "overflow-hidden");
+
+    const scrollRoot = container.querySelector('[data-management-table-scroll="pinned-horizontal"]');
+    expect(scrollRoot).toHaveClass("h-full", "flex-1", "min-h-0");
+
+    const native = container.querySelector('[data-management-table-scrollbar="native"]');
+    expect(native).toHaveClass("h-full", "min-h-0", "overflow-auto");
+    expect(native).not.toHaveClass("max-h-[calc(100dvh-10rem)]");
+  });
 });

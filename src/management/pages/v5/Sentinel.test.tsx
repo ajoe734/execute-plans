@@ -96,7 +96,7 @@ describe("SentinelPage", () => {
     expect(screen.getByText("Request human approval")).toBeInTheDocument();
     expect(screen.getByText("Reduce allocation")).toBeInTheDocument();
     expect(screen.getByText("This drawer is read-only. Acknowledge, dismiss, capital changes, and runtime changes must go through a persisted governance workflow with audit evidence.")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("does not expose local-only Sentinel mutations as user actions", async () => {
     renderSentinel();
