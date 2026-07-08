@@ -1,16 +1,19 @@
-import React, { useEffect, useReducer, useRef, useCallback, useState } from "react";
+import React, { useEffect, useReducer, useCallback, useState } from "react";
 import {
   listWorkshops,
   getWorkshop,
   getWorkshopCompleteness,
   getWorkshopReadiness,
   listWorkshopCards,
+  listWorkshopEvents,
+  postWorkshopMessage,
   openWorkshopStream,
   type WorkshopCard,
-  type StrategyReadinessAssessment,
+  type WorkshopReadinessAssessment,
+  type WorkshopStreamEvent as WorkshopEvent,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
-import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/types";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
 
@@ -25,8 +28,8 @@ export interface TradingRoomReadinessHandoff {
 }
 
 function readinessHighestGate(
-  readiness: StrategyReadinessAssessment | null,
-): StrategyReadinessAssessment["highest_ready_gate"] | null {
+  readiness: WorkshopReadinessAssessment | null,
+): WorkshopReadinessAssessment["highest_ready_gate"] | null {
   if (!readiness) return null;
   if (readiness.highest_ready_gate) return readiness.highest_ready_gate;
   return readiness.passed && readiness.gate ? readiness.gate : null;
@@ -38,7 +41,7 @@ function readinessText(value: string | null | undefined): string | null {
 }
 
 function tradingRoomHandoffFromReadiness(
-  readiness: StrategyReadinessAssessment | null,
+  readiness: WorkshopReadinessAssessment | null,
 ): TradingRoomReadinessHandoff | null {
   if (!readiness || readinessHighestGate(readiness) !== "trading_room") return null;
 
@@ -58,7 +61,7 @@ function tradingRoomHandoffFromReadiness(
 }
 
 function addToTradingRoomDisabledReason(
-  readiness: StrategyReadinessAssessment | null,
+  readiness: WorkshopReadinessAssessment | null,
   handoff: TradingRoomReadinessHandoff | null,
 ): string | null {
   if (!readiness) return "Readiness not yet assessed";
@@ -115,17 +118,80 @@ function cardReducer(state: CardState, action: CardAction): CardState {
 
 type ListState = "loading" | "empty" | "loaded" | "error";
 
-function WorkshopListView(): JSX.Element {
+type WorkshopListResponse = Awaited<ReturnType<typeof listWorkshops>>;
+
+function workshopsFromResponse(value: WorkshopListResponse | StrategyWorkshop[]): StrategyWorkshop[] {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(value.items) ? value.items : [];
+}
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function workshopTitle(workshop: StrategyWorkshop | null | undefined): string {
+  const metadata = recordFrom(workshop?.metadata);
+  const strategyName = metadata.strategy_name;
+  if (typeof strategyName === "string" && strategyName.trim()) return strategyName;
+  if (workshop?.subject?.title?.trim()) return workshop.subject.title;
+  return "Strategy workshop";
+}
+
+function timestampValue(workshop: StrategyWorkshop): number {
+  const metadata = recordFrom(workshop.metadata);
+  const updatedAt = metadata.updated_at;
+  const value = typeof updatedAt === "string" ? updatedAt : workshop.concluded_at ?? workshop.created_at;
+  const time = Date.parse(String(value ?? ""));
+  return Number.isFinite(time) ? time : 0;
+}
+
+function statusPriority(workshop: StrategyWorkshop): number {
+  if (workshop.status === "open") return 4;
+  if (workshop.status === "in_review") return 3;
+  if (workshop.status === "concluded") return 2;
+  return 1;
+}
+
+function orderWorkshops(workshops: StrategyWorkshop[]): StrategyWorkshop[] {
+  return workshops.slice().sort((a, b) => {
+    const statusDiff = statusPriority(b) - statusPriority(a);
+    if (statusDiff !== 0) return statusDiff;
+    return timestampValue(b) - timestampValue(a);
+  });
+}
+
+function compactTime(workshop: StrategyWorkshop): string {
+  const metadata = recordFrom(workshop.metadata);
+  const updatedAt = typeof metadata.updated_at === "string" ? metadata.updated_at : undefined;
+  const value = updatedAt ?? workshop.concluded_at ?? workshop.created_at;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "time unavailable";
+  return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
+}
+
+interface WorkshopListViewProps {
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+}
+
+function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.Element {
   const [state, setState] = useState<ListState>("loading");
   const [workshops, setWorkshops] = useState<StrategyWorkshop[]>([]);
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     listWorkshops()
-      .then((items) => {
+      .then((response) => {
         if (cancelled) return;
-        setWorkshops(items);
-        setState(items.length === 0 ? "empty" : "loaded");
+        const ordered = orderWorkshops(workshopsFromResponse(response));
+        setWorkshops(ordered);
+        setSelectedWorkshopId((current) => {
+          if (current && ordered.some((workshop) => workshop.workshop_id === current)) return current;
+          return ordered[0]?.workshop_id ?? null;
+        });
+        setState(ordered.length === 0 ? "empty" : "loaded");
       })
       .catch(() => {
         if (!cancelled) setState("error");
@@ -136,21 +202,50 @@ function WorkshopListView(): JSX.Element {
   }, []);
 
   return (
-    <div data-testid="strategy-workshop-page-list">
+    <div className="flex h-full min-h-0 flex-col" data-testid="strategy-workshop-page-list">
       {state === "loading" && (
-        <div data-testid="workshop-list-loading">Loading workshops…</div>
+        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-loading">Loading workshops…</div>
       )}
       {state === "empty" && (
-        <div data-testid="workshop-list-empty">No workshops found.</div>
+        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-empty">No workshops found.</div>
       )}
-      {state === "loaded" && (
-        <ul data-testid="workshop-list">
-          {workshops.map((ws) => (
-            <li key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
-              {ws.workshop_id}
-            </li>
-          ))}
-        </ul>
+      {state === "error" && (
+        <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">Unable to load workshops.</div>
+      )}
+      {state === "loaded" && selectedWorkshopId && (
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(210px,260px)_minmax(0,1fr)]" data-testid="strategy-workshop-live-tab">
+          <aside className="min-h-0 overflow-auto border-r border-slate-200 bg-slate-50 p-3" data-testid="workshop-selector">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Live workshops
+            </div>
+            <div className="grid gap-2" data-testid="workshop-list">
+              {workshops.map((ws) => {
+                const selected = ws.workshop_id === selectedWorkshopId;
+                return (
+                  <button
+                    aria-current={selected ? "page" : undefined}
+                    className={
+                      selected
+                        ? "rounded-md border border-blue-300 bg-blue-50 p-2 text-left"
+                        : "rounded-md border border-slate-200 bg-white p-2 text-left hover:border-slate-300"
+                    }
+                    data-testid={`workshop-item-${ws.workshop_id}`}
+                    data-workshop-id={ws.workshop_id}
+                    key={ws.workshop_id}
+                    onClick={() => setSelectedWorkshopId(ws.workshop_id)}
+                    type="button"
+                  >
+                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws)}</span>
+                    <span className="block text-[11px] text-slate-500">{ws.status} · {compactTime(ws)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+          <section className="min-h-0 overflow-hidden" data-testid="selected-workshop-runtime">
+            <WorkshopSessionView workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
+          </section>
+        </div>
       )}
     </div>
   );
@@ -168,8 +263,11 @@ interface SessionViewProps {
 function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<StrategyCompleteness | null>(null);
-  const [readiness, setReadiness] = useState<StrategyReadinessAssessment | null>(null);
+  const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
+  const [workshopEvents, setWorkshopEvents] = useState<WorkshopEvent[]>([]);
   const [composerValue, setComposerValue] = useState("");
+  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "error">("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
@@ -189,7 +287,10 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       .then((r) => { if (!cancelled && r) setReadiness(r); })
       .catch(() => undefined);
     listWorkshopCards(workshopId)
-      .then((items) => { if (!cancelled) dispatch({ type: "RESET", cards: items }); })
+      .then((cards) => { if (!cancelled) dispatch({ type: "RESET", cards }); })
+      .catch(() => undefined);
+    listWorkshopEvents(workshopId)
+      .then((response) => { if (!cancelled) setWorkshopEvents(response.items ?? []); })
       .catch(() => undefined);
     return () => {
       cancelled = true;
@@ -211,7 +312,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
   const refreshCards = useCallback(() => {
     listWorkshopCards(workshopId)
-      .then((items) => dispatch({ type: "RESET", cards: items }))
+      .then((cards) => dispatch({ type: "RESET", cards }))
+      .catch(() => undefined);
+  }, [workshopId]);
+
+  const refreshEvents = useCallback(() => {
+    listWorkshopEvents(workshopId)
+      .then((response) => setWorkshopEvents(response.items ?? []))
       .catch(() => undefined);
   }, [workshopId]);
 
@@ -238,18 +345,20 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         case "workshop.patch.validated":
         case "workshop.version.created":
           refreshCards();
+          refreshEvents();
           break;
         case "workshop.snapshot":
           refreshCards();
           refreshCompleteness();
           refreshReadiness();
+          refreshEvents();
           break;
         default:
           break;
       }
     });
     return teardown;
-  }, [workshopId, refreshCards, refreshCompleteness, refreshReadiness]);
+  }, [workshopId, refreshCards, refreshCompleteness, refreshEvents, refreshReadiness]);
 
   // Derive the most recent next_question card for the rail
   const nextQuestion =
@@ -261,6 +370,33 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} — `));
   }, []);
 
+  const handleSubmit = useCallback(async () => {
+    const content = composerValue.trim();
+    if (!content || submitState === "submitting") return;
+    setSubmitState("submitting");
+    setSubmitError(null);
+    try {
+      await postWorkshopMessage(workshopId, { content });
+      setComposerValue("");
+      refreshCards();
+      refreshEvents();
+      refreshCompleteness();
+      refreshReadiness();
+      setSubmitState("idle");
+    } catch (error) {
+      setSubmitState("error");
+      setSubmitError(error instanceof Error ? error.message : "Message failed");
+    }
+  }, [
+    composerValue,
+    refreshCards,
+    refreshCompleteness,
+    refreshEvents,
+    refreshReadiness,
+    submitState,
+    workshopId,
+  ]);
+
   return (
     <div
       data-testid="strategy-workshop-page-session"
@@ -268,6 +404,16 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     >
       {/* Left: conversation + composer */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <header
+          className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2"
+          data-testid="strategy-workshop-runtime-header"
+        >
+          <span className="text-sm font-semibold text-slate-900">{workshopTitle(workshop)}</span>
+          <span className="text-xs text-slate-500">{workshop?.status ?? "loading"}</span>
+          <span className="text-xs text-slate-500" data-testid="workshop-event-summary">
+            Events · {workshopEvents.length}
+          </span>
+        </header>
         <div
           data-testid="workshop-conversation"
           style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}
@@ -298,6 +444,20 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             placeholder="Message the workshop servant…"
             style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
           />
+          <button
+            className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:bg-slate-300"
+            data-testid="servant-composer-submit"
+            disabled={!composerValue.trim() || submitState === "submitting"}
+            onClick={handleSubmit}
+            type="button"
+          >
+            {submitState === "submitting" ? "Sending" : "Send"}
+          </button>
+          {submitState === "error" && submitError ? (
+            <div className="mt-1 text-xs text-red-600" data-testid="servant-composer-error">
+              {submitError}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -376,7 +536,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         )}
         {readiness && (
           <div data-testid="workshop-readiness" style={{ display: "none" }}>
-            {readiness.highest_ready_gate ?? "Not ready"}
+            {readinessHighestGate(readiness) === "trading_room" ? "trading_room" : "Not ready"}
           </div>
         )}
       </div>
@@ -397,5 +557,5 @@ export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom }: Strateg
   if (workshopId) {
     return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} />;
   }
-  return <WorkshopListView />;
+  return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }
