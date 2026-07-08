@@ -384,6 +384,13 @@ export async function capitalPoolsWithFleetFallback(): Promise<ListEnvelope<Flee
   };
 }
 
+export async function capitalPoolWithFleetFallback(poolId: string): Promise<FleetCapitalPool | undefined> {
+  const target = lookupKey(poolId);
+  if (!target) return undefined;
+  const env = await capitalPoolsWithFleetFallback();
+  return env.items.find((pool) => capitalPoolMatchesFocus(pool, poolId));
+}
+
 export function getPersonaIdsForPoolId(poolId: string, fleetRows: ManagementPersonaFleetRow[]): Set<string> {
   const target = lookupKey(poolId);
   const result = new Set<string>();
