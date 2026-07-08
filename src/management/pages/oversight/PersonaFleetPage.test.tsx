@@ -149,7 +149,7 @@ describe("PersonaFleetPage", () => {
     );
   });
 
-  it("hides non-production live rows by default", () => {
+  it("shows all personas by default including demo/mock personas", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
         fleetRow("persona-crypto", "Crypto Persona"),
@@ -163,9 +163,9 @@ describe("PersonaFleetPage", () => {
     renderFleet("/management/persona-fleet");
 
     expect(screen.getByText("Gold Futures Persona")).toBeInTheDocument();
-    expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
-    expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
+    expect(screen.getByText("Crypto Persona")).toBeInTheDocument();
+    expect(screen.getByText("Dry Run Probe Persona")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show non-production/i })).not.toBeInTheDocument();
   });
 
   it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
