@@ -1,6 +1,7 @@
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
+import { StrategyPerformancePage } from "@/agora/pages/strategy-performance/StrategyPerformancePage";
 import {
   StrategyWorkshopPage,
   type TradingRoomReadinessHandoff,
@@ -94,11 +95,7 @@ export function AgoraStrategyWorkshopRoute() {
 }
 
 export function AgoraStrategyPerformanceRoute() {
-  return (
-    <div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">
-      策略執行與績效 - 即將推出
-    </div>
-  );
+  return <StrategyPerformancePage />;
 }
 
 export function AgoraFallbackRoute() {
