@@ -3,7 +3,7 @@ import { lists, mgmt } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
 import type { CapitalPool } from "@/lib/bff/types";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
-import { capitalPoolBindingDetail, capitalPoolMatchesFocus, capitalPoolsWithFleetFallback } from "./capitalPoolsFleetFallback";
+import { capitalPoolBindingDetail, capitalPoolMatchesFocus, capitalPoolsWithFleetFallback, capitalPoolWithFleetFallback } from "./capitalPoolsFleetFallback";
 
 vi.mock("@/lib/bff-v1", () => ({
   lists: {
@@ -316,5 +316,32 @@ describe("capitalPoolMatchesFocus", () => {
     expect(capitalPoolMatchesFocus(pool, "pool-tw-equity-paper")).toBe(false);
     expect(capitalPoolMatchesFocus(pool, "pool-some-other")).toBe(false);
     expect(capitalPoolMatchesFocus(pool, "")).toBe(false);
+  });
+
+  it("loads a ledger-derived pool by focus id for detail pages", async () => {
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope());
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-20260528-04688755",
+        personaName: "Crypto-Alt-Hunter",
+        owner: "pantheon-dev-browser",
+        capitalMode: "paper",
+        paperCapitalPoolId: "pool-crypto-paper",
+        paperLedgerId: "paper-ledger-persona-20260528-04688755",
+        runtimeId: "rt-paper-alt-hunter",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const pool = await capitalPoolWithFleetFallback("paper-ledger-persona-20260528-04688755");
+
+    expect(pool).toMatchObject({
+      id: "paper-ledger-persona-20260528-04688755",
+      name: "paper-ledger-persona-20260528-04688755 · 1 persona",
+      personaCount: 1,
+      personaNames: "Crypto-Alt-Hunter",
+      bindingSummary: "Crypto-Alt-Hunter",
+      capitalScope: "paper",
+      fleetDerived: true,
+    });
   });
 });
