@@ -68,7 +68,7 @@ afterEach(cleanup);
 describe("StrategyWorkshopPage", () => {
   beforeEach(() => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
-    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(null as any);
+    vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
