@@ -2367,11 +2367,14 @@ export async function fetchManagementAiConversationList(
   if (!res.ok) return { ok: false, kind: "failure", status: res.status, message: `BFF ${res.status}` };
   let parsed: { data?: unknown; items?: unknown } | undefined;
   try { parsed = body ? JSON.parse(body) as { data?: unknown; items?: unknown } : undefined; } catch { parsed = undefined; }
-  const rawItems = Array.isArray(parsed?.data)
-    ? parsed!.data
-    : Array.isArray(parsed?.items)
-      ? parsed!.items
-      : [];
+  let rawItems: unknown[] = [];
+  if (Array.isArray(parsed?.data)) {
+    rawItems = parsed.data;
+  } else if (parsed?.data && typeof parsed.data === "object" && Array.isArray((parsed.data as Record<string, unknown>).items)) {
+    rawItems = (parsed.data as Record<string, unknown>).items as unknown[];
+  } else if (Array.isArray(parsed?.items)) {
+    rawItems = parsed.items;
+  }
   const conversations: ManagementAiConversationSummary[] = [];
   for (const item of rawItems as Array<Record<string, unknown>>) {
     const sessionId = asString(item.sessionId ?? item.session_id ?? item.id);
