@@ -210,11 +210,12 @@ export async function postWorkshopMessage(
   workshopId: string,
   body: { content: string; metadata?: Record<string, unknown> },
 ): Promise<{ message_id: string; workshop_id: string; created_at: string }> {
-  return bffFetch({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/messages`,
     body,
   });
+  return entityFrom<{ message_id: string; workshop_id: string; created_at: string }>(response);
 }
 
 // ─── Workshop events ───────────────────────────────────────────────────────────
@@ -226,11 +227,12 @@ export async function listWorkshopEvents(
   const query: Record<string, string | number | undefined> = {};
   if (params?.after) query.after = params.after;
   if (params?.limit) query.limit = params.limit;
-  return bffFetch<{ items: WorkshopStreamEvent[] }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`,
     query,
   });
+  return { items: itemsFrom<WorkshopStreamEvent>(body, ["events", "results"]) };
 }
 
 // ─── Completeness ──────────────────────────────────────────────────────────────

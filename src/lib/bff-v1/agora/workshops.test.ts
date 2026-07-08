@@ -5,8 +5,10 @@ import {
   getWorkshopCompleteness,
   getWorkshopReadiness,
   listWorkshopCards,
+  listWorkshopEvents,
   listWorkshops,
   openWorkshopStream,
+  postWorkshopMessage,
   type WorkshopCard,
   type WorkshopStreamEvent,
 } from "./workshops";
@@ -39,6 +41,14 @@ const mockCard: WorkshopCard = {
   title: "Next question",
   payload: { question: "What is the entry rule?" },
   created_at: "2026-06-01T00:00:00Z",
+};
+
+const mockEvent: WorkshopStreamEvent = {
+  event_id: "evt-001",
+  workshop_id: "ws-001",
+  event_type: "workshop.snapshot",
+  payload: {},
+  occurred_at: "2026-06-01T00:00:00Z",
 };
 
 afterEach(() => {
@@ -127,6 +137,39 @@ describe("listWorkshopCards", () => {
     const result = await listWorkshopCards("ws-001");
 
     expect(result).toEqual([mockCard]);
+  });
+});
+
+describe("listWorkshopEvents", () => {
+  it("unwraps live event items to the page object contract", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [mockEvent] } });
+
+    const result = await listWorkshopEvents("ws-001");
+
+    expect(result).toEqual({ items: [mockEvent] });
+  });
+
+  it("accepts event alias envelopes", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: { events: [mockEvent] } });
+
+    const result = await listWorkshopEvents("ws-001");
+
+    expect(result).toEqual({ items: [mockEvent] });
+  });
+});
+
+describe("postWorkshopMessage", () => {
+  it("unwraps a data envelope for created message reads", async () => {
+    const message = {
+      message_id: "msg-001",
+      workshop_id: "ws-001",
+      created_at: "2026-07-08T00:00:00Z",
+    };
+    vi.mocked(bffFetch).mockResolvedValue({ data: message });
+
+    const result = await postWorkshopMessage("ws-001", { content: "Continue" });
+
+    expect(result).toEqual(message);
   });
 });
 
