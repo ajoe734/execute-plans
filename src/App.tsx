@@ -166,6 +166,30 @@ const App = () => (
             <Route path="/auth" element={<AuthRoute />} />
             <Route path="/management/agent" element={<ManagementAgentRedirectRoute />} />
             <Route path="/management/agent/:threadId" element={<ManagementAgentRedirectRoute />} />
+            <Route path="/management/control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
+            <Route path="/management/deployment" element={<DeploymentAliasRedirect />} />
+            <Route path="/management/deployment/:id" element={<DeploymentAliasRedirect />} />
+            <Route path="/management/research" element={<Navigate to="/management/experiments" replace />} />
+            <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
+            <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+            <Route path="/management/persona-league/*" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+            <Route path="/management/quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+            <Route path="/management/quarterly-ranking/*" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+            <Route path="/management/capital" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/capital/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+            <Route path="/management/capital-pools" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/capital-pools/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+            <Route path="/management/ranking" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking/formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking/formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+            <Route path="/management/ranking-formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking-formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+            <Route path="/management/rebalance" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/rebalance/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
+            <Route path="/management/rebalances" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/rebalances/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
 
             <Route element={<PlatformShellRoute />}>
               <Route path="/management" element={<ManagementLayoutRoute />}>

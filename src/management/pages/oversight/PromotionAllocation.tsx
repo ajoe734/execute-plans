@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonaLeaguePage } from "./PersonaLeague";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
-import { RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
+import { CapitalPoolsList, RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
 
 type PromotionAllocationTab = "paper-candidates" | "real-ranking" | "quarterly-capital" | "formula-policy";
 
@@ -54,7 +54,8 @@ export const PromotionAllocationPage = () => {
         <TabsContent value="real-ranking" className="m-0">
           <PersonaLeaguePage />
         </TabsContent>
-        <TabsContent value="quarterly-capital" className="m-0">
+        <TabsContent value="quarterly-capital" className="m-0 space-y-6">
+          <CapitalPoolsList />
           <RebalancesList />
         </TabsContent>
         <TabsContent value="formula-policy" className="m-0">
