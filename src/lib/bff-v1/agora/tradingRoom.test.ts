@@ -19,6 +19,7 @@ import {
   getTradingRoomWorkspace,
   getTradingRoomWorkspaceWithMeta,
   getTradingRoomWorkspaceProposal,
+  getTradingRoomPerformanceAttribution,
   listDecisionEvents,
   listTradingRoomWorkspaceVersions,
   patchTradingRoomWorkspaceLayout,
@@ -369,6 +370,69 @@ describe("Authorization header forwarding", () => {
     setAuthProvider({ getToken: () => "probe-token", getTenantId: () => "probe-tenant" });
     expect(getAuthProvider().getToken()).toBe("probe-token");
     expect(getAuthProvider().getTenantId()).toBe("probe-tenant");
+  });
+});
+
+describe("getTradingRoomPerformanceAttribution", () => {
+  it("reads strategy attribution through the BFF with auth headers and no mutation headers", async () => {
+    setAuthProvider({ getToken: () => "live-token-performance", getTenantId: () => "tenant-performance" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        data: {
+          dimensions: ["strategy"],
+          id: "perf-latest",
+          items: [],
+          period: "latest",
+          summary: {
+            basis: "live_telemetry",
+            dimensions: ["strategy"],
+            holding_count: 0,
+            period: "latest",
+            returned_row_count: 0,
+            row_count: 0,
+            runtime_count: 0,
+            supported_dimensions: ["strategy"],
+            telemetry_runtime_count: 0,
+            total_trades: 0,
+          },
+        },
+        meta: { policy: "read_only_performance_attribution" },
+        page_info: { next_page_token: null, page_size: 25, total: 0 },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const result = await getTradingRoomPerformanceAttribution({ pageSize: 25, period: "latest" }, BASE);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/management/performance-attribution/by-strategy?period=latest&page_size=25`,
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("GET");
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer live-token-performance");
+    expect(headers["X-Tenant-Id"]).toBe("tenant-performance");
+    expect(headers["If-Match"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(headers["X-Request-Id"]).toBeUndefined();
+    expect(result.meta.policy).toBe("read_only_performance_attribution");
+  });
+
+  it("forwards page token and throws typed BffError for attribution errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      bffErrorResponse(503, "BACKEND_UNAVAILABLE", "attribution source unavailable"),
+    );
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      getTradingRoomPerformanceAttribution({ pageSize: 10, pageToken: "cursor-2", period: "30d" }, BASE),
+    ).rejects.toMatchObject({
+      code: "BACKEND_UNAVAILABLE",
+      message: "attribution source unavailable",
+      status: 503,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/management/performance-attribution/by-strategy?period=30d&page_size=10&page_token=cursor-2`,
+    );
   });
 });
 

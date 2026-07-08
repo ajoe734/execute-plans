@@ -2,17 +2,25 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { AgoraLayoutRoute, AgoraStrategyWorkshopRoute } from "./agora";
+import { AgoraLayoutRoute, AgoraStrategyPerformanceRoute, AgoraStrategyWorkshopRoute } from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
 
 const routeMocks = vi.hoisted(() => ({
+  strategyPerformancePage: vi.fn(),
   strategyWorkshopPage: vi.fn(),
 }));
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshop: vi.fn(),
+}));
+
+vi.mock("@/agora/pages/strategy-performance/StrategyPerformancePage", () => ({
+  StrategyPerformancePage: () => {
+    routeMocks.strategyPerformancePage();
+    return <div data-testid="mock-strategy-performance-page">Strategy Performance Page</div>;
+  },
 }));
 
 vi.mock("@/agora/pages/strategy-workshop/StrategyWorkshopPage", () => ({
@@ -63,6 +71,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
   liveStatus._reset();
+  routeMocks.strategyPerformancePage.mockClear();
   routeMocks.strategyWorkshopPage.mockClear();
   vi.restoreAllMocks();
 });
@@ -174,5 +183,14 @@ describe("AgoraStrategyWorkshopRoute", () => {
     expect(location.getAttribute("data-strategy-version")).toBe("reg-001");
     expect(location.getAttribute("data-readiness-gate")).toBe("trading_room");
     expect(location.getAttribute("data-readiness-assessment-id")).toBe("ready-001");
+  });
+});
+
+describe("AgoraStrategyPerformanceRoute", () => {
+  it("renders the live StrategyPerformancePage instead of the old placeholder", () => {
+    render(<AgoraStrategyPerformanceRoute />);
+
+    expect(screen.getByTestId("mock-strategy-performance-page")).toBeDefined();
+    expect(routeMocks.strategyPerformancePage).toHaveBeenCalledOnce();
   });
 });

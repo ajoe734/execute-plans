@@ -76,6 +76,112 @@ export interface TradingRoomAggregate {
   data_cutoff: string;
 }
 
+export type TradingRoomPerformanceAttributionDimension =
+  | "strategy"
+  | "persona"
+  | "pool"
+  | "asset"
+  | "broker"
+  | "runtime"
+  | "regime"
+  | string;
+
+export interface TradingRoomPerformanceAttributionMetrics {
+  runtime_count: number;
+  telemetry_runtime_count: number;
+  holding_count: number;
+  total_pnl?: number | null;
+  unrealized_pnl?: number | null;
+  realized_pnl?: number | null;
+  total_notional?: number | null;
+  total_market_value?: number | null;
+  total_exposure?: number | null;
+  worst_drawdown?: number | null;
+  average_fill_rate?: number | null;
+  average_slippage_bps?: number | null;
+  total_trades: number;
+  latest_telemetry_at?: string | null;
+  pnl_contribution_pct?: number | null;
+  notional_weight?: number | null;
+  [key: string]: unknown;
+}
+
+export interface TradingRoomPerformanceAttributionRow {
+  id: string;
+  dimension: TradingRoomPerformanceAttributionDimension;
+  dimension_key: string;
+  label: string;
+  period: string;
+  rank: number;
+  metrics: TradingRoomPerformanceAttributionMetrics;
+  total_pnl?: number | null;
+  pnl_contribution_pct?: number | null;
+  notional_weight?: number | null;
+  runtime_count: number;
+  holding_count: number;
+  source_refs?: {
+    runtime_ids?: string[];
+    capital_pool_ids?: string[];
+    persona_ids?: string[];
+    strategy_ids?: string[];
+    [key: string]: unknown;
+  };
+  links?: Record<string, string | null | undefined>;
+  [key: string]: unknown;
+}
+
+export interface TradingRoomPerformanceAttributionSummary {
+  period: string;
+  dimensions: string[];
+  supported_dimensions: string[];
+  row_count: number;
+  returned_row_count: number;
+  runtime_count: number;
+  telemetry_runtime_count: number;
+  holding_count: number;
+  total_pnl?: number | null;
+  total_notional?: number | null;
+  total_exposure?: number | null;
+  worst_drawdown?: number | null;
+  average_fill_rate?: number | null;
+  average_slippage_bps?: number | null;
+  total_trades: number;
+  latest_telemetry_at?: string | null;
+  basis: string;
+  [key: string]: unknown;
+}
+
+export interface TradingRoomPerformanceAttributionResponse {
+  data: {
+    id: string;
+    period: string;
+    dimensions: string[];
+    items: TradingRoomPerformanceAttributionRow[];
+    summary: TradingRoomPerformanceAttributionSummary;
+    [key: string]: unknown;
+  };
+  page_info: {
+    next_page_token: string | null;
+    total: number;
+    page_size: number;
+  };
+  meta: {
+    snapshot_at?: string;
+    surfaces?: Record<string, Record<string, unknown>>;
+    composition_sources?: string[];
+    period?: string;
+    dimensions?: string[];
+    policy?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface TradingRoomPerformanceAttributionQuery {
+  period?: string;
+  pageToken?: string;
+  pageSize?: number;
+}
+
 export interface EvidenceRef {
   ref_type:
     | "evidence_bundle"
@@ -666,6 +772,29 @@ export async function listDecisionEvents(
     items: extractDecisionEvents(body),
     etag: res.headers.get("ETag"),
   };
+}
+
+/** Get read-only performance attribution grouped by strategy for the Agora Performance tab. */
+export async function getTradingRoomPerformanceAttribution(
+  query?: TradingRoomPerformanceAttributionQuery,
+  baseUrl?: string,
+): Promise<TradingRoomPerformanceAttributionResponse> {
+  const base = resolvedBase(baseUrl);
+  const qs = new URLSearchParams();
+  qs.set("period", query?.period ?? "latest");
+  qs.set("page_size", String(query?.pageSize ?? 50));
+  if (query?.pageToken) qs.set("page_token", query.pageToken);
+  const url = `${base}/bff/management/performance-attribution/by-strategy?${qs.toString()}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json", ...authHeaders() },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const body = await parseJson(res);
+  return body as TradingRoomPerformanceAttributionResponse;
 }
 
 /** Get a single decision event by ID. */
