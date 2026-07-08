@@ -905,6 +905,28 @@ describe("Management AI conversation list (history index hydration)", () => {
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "GET" });
   });
 
+  it("lists server-side conversations when wrapped in nested data.items object structure", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        id: "management_ai_conversations",
+        items: [
+          { session_id: "mgmt-nl-aaa", title: "nested chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        ]
+      },
+      meta: { count: 1 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(10);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(1);
+    expect(res.conversations[0].sessionId).toBe("mgmt-nl-aaa");
+    expect(res.conversations[0].title).toBe("nested chat");
+  });
+
   it("returns a visible failure when the BFF list endpoint errors", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ detail: "boom" }, 500));
