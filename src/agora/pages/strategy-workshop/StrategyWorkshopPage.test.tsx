@@ -86,6 +86,7 @@ describe("StrategyWorkshopPage", () => {
   });
 
   it("renders the list view when no workshopId is provided", () => {
+    vi.mocked(workshopsModule.listWorkshops).mockReturnValue(new Promise(() => {}));
     render(<StrategyWorkshopPage />);
     expect(screen.getByTestId("strategy-workshop-page-list")).toBeDefined();
   });
@@ -206,7 +207,8 @@ describe("StrategyWorkshopPage", () => {
 
   it("renders the session view when workshopId is provided", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
-    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopEvents).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
@@ -216,7 +218,8 @@ describe("StrategyWorkshopPage", () => {
 
   it("renders the conversation and completeness rail in session view", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
-    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopEvents).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
@@ -227,7 +230,8 @@ describe("StrategyWorkshopPage", () => {
 
   it("renders the servant composer in session view", () => {
     vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
-    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopEvents).mockReturnValue(new Promise(() => {}));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
@@ -327,6 +331,7 @@ describe("StrategyWorkshopPage", () => {
   });
 
   it("calls listWorkshops through the BFF module (not direct fetch)", () => {
+    vi.mocked(workshopsModule.listWorkshops).mockReturnValue(new Promise(() => {}));
     render(<StrategyWorkshopPage />);
     expect(workshopsModule.listWorkshops).toHaveBeenCalled();
   });
