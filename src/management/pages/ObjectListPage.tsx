@@ -26,6 +26,8 @@ interface Props<T extends BaseObject> {
   /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
   loader: () => Promise<ListEnvelope<T>>;
   basePath: string;
+  listHref?: string;
+  rowHref?: (row: T) => string;
   nameCell?: (row: T) => ReactNode;
   extraColumns?: Column<T>[];
   /** Realtime data:{kind} events that should refresh this list. */
@@ -51,7 +53,7 @@ interface Props<T extends BaseObject> {
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, summary,
+  title, loader, basePath, listHref, rowHref, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, summary,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -186,7 +188,7 @@ export function ObjectListPage<T extends BaseObject>({
                   })}
               </span>
               <Button asChild size="sm" variant="outline">
-                <Link to={basePath}>
+                <Link to={listHref ?? basePath}>
                   {t("common.showAllObjects", {
                     label: title,
                     defaultValue: `Show all ${title}`,
@@ -218,7 +220,7 @@ export function ObjectListPage<T extends BaseObject>({
             rows={visibleRows}
             columns={columns}
             empty={t("common.noResults")}
-            onRowClick={(r) => navigate(`${basePath}/${encodeURIComponent(r.id)}`)}
+            onRowClick={(r) => navigate(rowHref ? rowHref(r) : `${basePath}/${encodeURIComponent(r.id)}`)}
             fillViewport
           />
         )}

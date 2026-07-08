@@ -31,12 +31,12 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
 
   // Performance & League
   { path: "/management/portfolio-book", i18nKey: "nav.portfolioBook", parent: "/management" },
+  { path: "/management/promotion-allocation", i18nKey: "nav.promotionAllocation", parent: "/management" },
   { path: "/management/performance-attribution", i18nKey: "nav.performanceAttribution", parent: "/management" },
 
   // Live Readiness
   { path: "/management/readiness/ep5", i18nKey: "readiness.ep5Title", parent: "/management" },
   { path: "/management/readiness/broker-live", i18nKey: "nav.brokerLiveReadiness", parent: "/management" },
-  { path: "/management/readiness/capital-binding-live", i18nKey: "nav.capitalLiveReadiness", parent: "/management" },
   { path: "/management/readiness/bff-ha", i18nKey: "nav.bffHaReadiness", parent: "/management" },
   { path: "/management/readiness/strict-publish", i18nKey: "nav.strictPublishAudit", parent: "/management" },
 
@@ -52,10 +52,6 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   // core management
   { path: "/management/strategies", i18nKey: "nav.strategyRegistry", parent: "/management" },
   { path: "/management/personas", i18nKey: "nav.personaRegistry", parent: "/management" },
-  { path: "/management/capital", i18nKey: "nav.capital", parent: "/management" },
-  { path: "/management/ranking", i18nKey: "nav.ranking", parent: "/management" },
-  { path: "/management/promotion-allocation", i18nKey: "nav.promotionAllocation", parent: "/management" },
-  { path: "/management/rebalance", i18nKey: "nav.rebalance", parent: "/management" },
   { path: "/management/evolution", i18nKey: "nav.evolution", parent: "/management" },
   { path: "/management/alpha-factory", i18nKey: "nav.alphaFactory", parent: "/management" },
 

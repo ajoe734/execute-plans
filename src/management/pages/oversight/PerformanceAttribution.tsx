@@ -371,7 +371,9 @@ function holdingPnl(row: RawPortfolioHolding): number {
 }
 
 function capitalPoolHref(capitalPoolId: string): string | undefined {
-  return capitalPoolId !== NAN ? `/management/capital?pool=${encodeURIComponent(capitalPoolId)}` : undefined;
+  return capitalPoolId !== NAN
+    ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(capitalPoolId)}`
+    : undefined;
 }
 
 function matchingHoldingsForPersona(

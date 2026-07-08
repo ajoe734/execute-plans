@@ -6,18 +6,18 @@ import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { SearchResult } from "@/lib/bff/types";
 
-const typeRoute: Record<string, string> = {
-  Strategy: "/management/strategies",
-  Persona: "/management/personas",
-  CapitalPool: "/management/capital-pools",
-  RankingFormula: "/management/ranking-formulas",
-  Rebalance: "/management/rebalance",
-  Deployment: "/management/deployments",
-  ResearchExperiment: "/management/experiments",
-  Experiment: "/management/experiments",
-  Artifact: "/management/artifacts",
-  Loop: "/management/loops",
-  Oversight: "/management/cockpit",
+const entityRoute: Record<string, (id: string) => string> = {
+  Strategy: (id) => `/management/strategies/${encodeURIComponent(id)}`,
+  Persona: (id) => `/management/personas/${encodeURIComponent(id)}`,
+  CapitalPool: (id) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`,
+  RankingFormula: (id) => `/management/promotion-allocation?tab=formula-policy&formula_id=${encodeURIComponent(id)}`,
+  Rebalance: (id) => `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(id)}`,
+  Deployment: (id) => `/management/deployments/${encodeURIComponent(id)}`,
+  ResearchExperiment: (id) => `/management/experiments/${encodeURIComponent(id)}`,
+  Experiment: (id) => `/management/experiments/${encodeURIComponent(id)}`,
+  Artifact: (id) => `/management/artifacts/${encodeURIComponent(id)}`,
+  Loop: (id) => `/management/loops?run=${encodeURIComponent(id)}`,
+  Oversight: () => "/management/cockpit",
 };
 
 const TYPE_ORDER = [
@@ -76,8 +76,8 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
                       key={r.id}
                       onSelect={() => {
                         onOpenChange(false);
-                        const route = typeRoute[r.type];
-                        if (route) navigate(`${route}/${r.id}`);
+                        const route = entityRoute[r.type];
+                        if (route) navigate(route(r.id));
                       }}
                     >
                       <span className="text-muted-foreground text-mono text-[10px] uppercase mr-3 w-20">{r.id}</span>

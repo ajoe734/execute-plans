@@ -180,11 +180,12 @@ export default {
   },
   promotionAllocation: {
     title: "升級與資金配置",
-    subtitle: "Paper 候選、Real 排名與季度資金配置集中在同一條治理流程。",
+    subtitle: "Paper 候選、Real 排名、公式政策與季度資金配置集中在同一條治理流程。",
     tabs: {
       "paper-candidates": "Paper → Real",
       "real-ranking": "Real 排名",
       "quarterly-capital": "季度資金配置",
+      "formula-policy": "公式政策",
     },
   },
   v5: {

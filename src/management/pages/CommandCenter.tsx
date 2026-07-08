@@ -163,7 +163,7 @@ export const CommandCenter = () => {
                 return (
                   <li key={p.id} className="text-sm">
                     <div className="flex justify-between items-center gap-2">
-                      <button onClick={() => navigate(`/management/capital-pools/${p.id}`)} className="font-medium hover:underline truncate">{p.name}</button>
+                      <button onClick={() => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(p.id)}`)} className="font-medium hover:underline truncate">{p.name}</button>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-mono text-xs text-muted-foreground">{pct}%</span>
                         <RiskBadge level={level} />

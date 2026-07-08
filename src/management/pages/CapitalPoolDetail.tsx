@@ -140,7 +140,7 @@ export const CapitalPoolDetail = () => {
             icon={<Inbox className="h-8 w-8" />}
             title={t("phase13.capital.detail.notFoundTitle")}
             description={description}
-            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/capital") }}
+            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/promotion-allocation?tab=quarterly-capital") }}
           />
         </PageBody>
       </>
@@ -316,7 +316,7 @@ export const CapitalPoolDetail = () => {
             ),
           },
           { value: "rebalance", label: t("nav.rebalance"), content: (
-            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/rebalance/${r.id}`)} columns={[
+            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(r.id)}`)} columns={[
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
               { key: "q", header: "Quarter", cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
               { key: "delta", header: "Δ", cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },

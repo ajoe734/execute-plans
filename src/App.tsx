@@ -8,6 +8,7 @@ import "@/i18n";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { lazyNamedRoute, lazyRoute } from "@/routes/lazyRoute";
+import { LegacyPromotionAllocationRedirect } from "@/routes/management/legacyPromotionAllocationRedirect";
 
 const queryClient = new QueryClient();
 
@@ -58,11 +59,6 @@ const PerformanceAttributionRoute = lazyNamedRoute(
 
 const Ep5CanaryReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "Ep5CanaryReadinessRoute", "EP5 readiness");
 const BrokerLiveReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BrokerLiveReadinessRoute", "Broker live readiness");
-const CapitalBindingLiveReadinessRoute = lazyNamedRoute(
-  () => import("@/routes/management/readiness"),
-  "CapitalBindingLiveReadinessRoute",
-  "Capital binding readiness",
-);
 const BffHaReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BffHaReadinessRoute", "BFF HA readiness");
 const StrictPublishAuditRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "StrictPublishAuditRoute", "Strict publish audit");
 const DataSourceManagementRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "DataSourceManagementRoute", "Data sources");
@@ -80,11 +76,6 @@ const StrategyDetailRoute = lazyNamedRoute(() => import("@/routes/management/reg
 const PersonasListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "PersonasListRoute", "Personas");
 const PersonaDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "PersonaDetailRoute", "Persona detail");
 const PersonaOnboardingRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "PersonaOnboardingRoute", "Persona onboarding");
-const CapitalPoolsListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "CapitalPoolsListRoute", "Capital pools");
-const CapitalPoolDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "CapitalPoolDetailRoute", "Capital pool detail");
-const RankingFormulasListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RankingFormulasListRoute", "Ranking formulas");
-const RankingFormulaDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RankingFormulaDetailRoute", "Ranking formula detail");
-const RebalanceDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "RebalanceDetailRoute", "Rebalance detail");
 const EvolutionListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "EvolutionListRoute", "Evolution");
 const EvolutionDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "EvolutionDetailRoute", "Evolution detail");
 const ResearchListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "ResearchListRoute", "Research");
@@ -119,7 +110,6 @@ const PermissionMatrixRoute = lazyNamedRoute(() => import("@/routes/management/o
 const MemoryGovernanceRoute = lazyNamedRoute(() => import("@/routes/management/operations"), "MemoryGovernanceRoute", "Memory governance");
 const ConsultRulesRoute = lazyNamedRoute(() => import("@/routes/management/operations"), "ConsultRulesRoute", "Consult rules");
 
-const RankingDashboardRoute = lazyNamedRoute(() => import("@/routes/management/phase2"), "RankingDashboardRoute", "Ranking dashboard");
 const KnowledgeInboxRoute = lazyNamedRoute(() => import("@/routes/management/phase2"), "KnowledgeInboxRoute", "Knowledge inbox");
 const PostmortemLibraryRoute = lazyNamedRoute(() => import("@/routes/management/phase2"), "PostmortemLibraryRoute", "Postmortems");
 const LineageExplorerRoute = lazyNamedRoute(() => import("@/routes/management/phase2"), "LineageExplorerRoute", "Lineage");
@@ -145,9 +135,8 @@ function DeploymentAliasRedirect() {
   return <Navigate to={`${target}${search}${hash}`} replace />;
 }
 
-// MGMT-GAP-008 — old detail aliases (capital-pools, ranking-formulas,
-// rebalances, research) used to mount the canonical detail component a
-// second time under the alias path instead of redirecting, per
+// MGMT-GAP-008 — old detail aliases used to mount the canonical detail component
+// a second time under the alias path instead of redirecting, per
 // `DeploymentAliasRedirect` above (the one alias that already did this
 // right). `makeDetailAliasRedirect` generalizes that pattern so bookmarked
 // alias links land on the single canonical render instead of duplicating it.
@@ -162,9 +151,6 @@ function makeDetailAliasRedirect(canonicalListPath: string) {
   };
 }
 
-const CapitalPoolAliasRedirect = makeDetailAliasRedirect("/management/capital");
-const RankingFormulaAliasRedirect = makeDetailAliasRedirect("/management/ranking/formulas");
-const RebalanceAliasRedirect = makeDetailAliasRedirect("/management/rebalance");
 const ResearchAliasRedirect = makeDetailAliasRedirect("/management/experiments");
 
 const App = () => (
@@ -180,6 +166,30 @@ const App = () => (
             <Route path="/auth" element={<AuthRoute />} />
             <Route path="/management/agent" element={<ManagementAgentRedirectRoute />} />
             <Route path="/management/agent/:threadId" element={<ManagementAgentRedirectRoute />} />
+            <Route path="/management/control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
+            <Route path="/management/deployment" element={<DeploymentAliasRedirect />} />
+            <Route path="/management/deployment/:id" element={<DeploymentAliasRedirect />} />
+            <Route path="/management/research" element={<Navigate to="/management/experiments" replace />} />
+            <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
+            <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+            <Route path="/management/persona-league/*" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+            <Route path="/management/quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+            <Route path="/management/quarterly-ranking/*" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+            <Route path="/management/capital" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/capital/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+            <Route path="/management/capital-pools" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/capital-pools/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+            <Route path="/management/ranking" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking/formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking/formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+            <Route path="/management/ranking-formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+            <Route path="/management/ranking-formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+            <Route path="/management/rebalance" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/rebalance/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
+            <Route path="/management/rebalances" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/rebalances/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
 
             <Route element={<PlatformShellRoute />}>
               <Route path="/management" element={<ManagementLayoutRoute />}>
@@ -199,10 +209,10 @@ const App = () => (
                 <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailRoute />} />
 
                 <Route path="broker-live" element={<Navigate to="/management/readiness/broker-live" replace />} />
-                <Route path="capital-live" element={<Navigate to="/management/readiness/capital-binding-live" replace />} />
+                <Route path="capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
                 <Route path="readiness/ep5" element={<Ep5CanaryReadinessRoute />} />
                 <Route path="readiness/broker-live" element={<BrokerLiveReadinessRoute />} />
-                <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessRoute />} />
+                <Route path="readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
                 <Route path="readiness/bff-ha" element={<BffHaReadinessRoute />} />
                 <Route path="readiness/strict-publish" element={<StrictPublishAuditRoute />} />
                 <Route path="data-sources" element={<DataSourceManagementRoute />} />
@@ -214,8 +224,10 @@ const App = () => (
 
                 <Route path="portfolio-book" element={<PortfolioBookRoute />} />
                 <Route path="promotion-allocation" element={<PromotionAllocationRoute />} />
-                <Route path="persona-league" element={<Navigate to="/management/promotion-allocation?tab=real-ranking" replace />} />
-                <Route path="quarterly-ranking" element={<Navigate to="/management/promotion-allocation?tab=paper-candidates" replace />} />
+                <Route path="persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+                <Route path="persona-league/*" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+                <Route path="quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+                <Route path="quarterly-ranking/*" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
                 <Route path="performance-attribution" element={<PerformanceAttributionRoute />} />
 
                 <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
@@ -237,19 +249,19 @@ const App = () => (
                 <Route path="personas" element={<PersonasListRoute />} />
                 <Route path="personas/:id" element={<PersonaDetailRoute />} />
                 <Route path="personas/:id/onboarding" element={<PersonaOnboardingRoute />} />
-                <Route path="capital" element={<CapitalPoolsListRoute />} />
-                <Route path="capital/:id" element={<CapitalPoolDetailRoute />} />
-                <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
-                <Route path="capital-pools/:id" element={<CapitalPoolAliasRedirect />} />
-                <Route path="ranking" element={<RankingDashboardRoute />} />
-                <Route path="ranking/formulas" element={<RankingFormulasListRoute />} />
-                <Route path="ranking/formulas/:id" element={<RankingFormulaDetailRoute />} />
-                <Route path="ranking-formulas" element={<Navigate to="/management/ranking/formulas" replace />} />
-                <Route path="ranking-formulas/:id" element={<RankingFormulaAliasRedirect />} />
-                <Route path="rebalance" element={<Navigate to="/management/promotion-allocation?tab=quarterly-capital" replace />} />
-                <Route path="rebalance/:id" element={<RebalanceDetailRoute />} />
-                <Route path="rebalances" element={<Navigate to="/management/promotion-allocation?tab=quarterly-capital" replace />} />
-                <Route path="rebalances/:id" element={<RebalanceAliasRedirect />} />
+                <Route path="capital" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="capital/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+                <Route path="capital-pools" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="capital-pools/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
+                <Route path="ranking" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+                <Route path="ranking/formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+                <Route path="ranking/formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+                <Route path="ranking-formulas" element={<LegacyPromotionAllocationRedirect tab="formula-policy" />} />
+                <Route path="ranking-formulas/:id" element={<LegacyPromotionAllocationRedirect tab="formula-policy" idParamName="formula_id" />} />
+                <Route path="rebalance" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="rebalance/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
+                <Route path="rebalances" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="rebalances/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="rebalance_id" />} />
                 <Route path="evolution" element={<EvolutionListRoute />} />
                 <Route path="evolution/:id" element={<EvolutionDetailRoute />} />
                 <Route path="experiments" element={<ResearchListRoute />} />

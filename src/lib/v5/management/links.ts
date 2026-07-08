@@ -109,9 +109,9 @@ export function resolveManagementHref(
     case "strategy":
       return safeId ? `/management/strategies/${safeId}` : null;
     case "capital_pool":
-      return safeId ? `/management/capital/${safeId}` : null;
+      return safeId ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${safeId}` : null;
     case "capital_pool_live":
-      return `/management/readiness/capital-binding-live${opts.poolId ? `?pool=${encodeURIComponent(opts.poolId)}` : ""}`;
+      return `/management/promotion-allocation?tab=quarterly-capital${opts.poolId ? `&capital_id=${encodeURIComponent(opts.poolId)}` : ""}`;
     case "approval":
       return safeId ? `/management/governance/${safeId}` : "/management/governance";
     case "human_gate":
@@ -363,7 +363,7 @@ export function buildSentinelResolutionLinks(finding: SentinelFinding): Sentinel
     pushUnique(links, {
       id: `readiness:capital:${poolId}`,
       kind: "readiness",
-      href: `/management/readiness/capital-binding-live?pool=${encodeURIComponent(poolId)}`,
+      href: `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(poolId)}`,
       labelKey: "v5.sentinel.linkOpenCapitalGate",
       label: "Open capital gate",
       priority: 54,
@@ -372,7 +372,7 @@ export function buildSentinelResolutionLinks(finding: SentinelFinding): Sentinel
     pushUnique(links, {
       id: "readiness:capital",
       kind: "readiness",
-      href: "/management/capital",
+      href: "/management/promotion-allocation?tab=quarterly-capital",
       labelKey: "v5.sentinel.linkOpenCapitalRegistry",
       label: "Open capital registry",
       priority: 56,

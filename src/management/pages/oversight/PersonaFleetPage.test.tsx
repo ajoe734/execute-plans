@@ -314,7 +314,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/capital?pool=paper-ledger-persona-live-paper-alpha",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-live-paper-alpha",
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
