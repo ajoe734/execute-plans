@@ -12,6 +12,7 @@ import type { Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Play } from "lucide-react";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface TraceEntry { ts: string; level: "info" | "warn"; msg: string; }
 
@@ -94,7 +95,7 @@ export const SkillSandboxStudio = () => {
             <div className="space-y-1">
               {trace.map((entry, i) => (
                 <div key={i} className="flex items-start gap-2 text-mono text-[11px]">
-                  <span className="text-muted-foreground">{new Date(entry.ts).toLocaleTimeString()}</span>
+                  <span className="text-muted-foreground">{safeDateTime(entry.ts, "time")}</span>
                   <Badge variant="outline" className={`text-[9px] uppercase ${entry.level === "warn" ? "border-status-warning/40 text-status-warning" : "border-border text-muted-foreground"}`}>
                     {entry.level}
                   </Badge>

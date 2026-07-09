@@ -17,11 +17,16 @@ export function useV5Live<T>(loader: () => Promise<T>, deps: unknown[] = []): {
   const refresh = useCallback(() => {
     let alive = true;
     setLoading(true);
-    loaderRef.current().then((d) => {
-      if (alive) { setData(d); setLoading(false); }
-    });
+    loaderRef.current()
+      .then((d) => { if (alive) { setData(d); setLoading(false); } })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error("[useV5Live] loader failed", err);
+        if (alive) setLoading(false);
+      });
     return () => { alive = false; };
   }, []);
+
 
   useEffect(() => {
     const stop = refresh();

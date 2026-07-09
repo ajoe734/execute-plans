@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShieldCheck } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
@@ -249,7 +250,7 @@ const FindingDrawer = ({
               <Field label={t("v5.sentinel.status")} value={<Badge variant="outline" className={statusCls[finding.status]}>{finding.status}</Badge>} />
               <Field label={t("v5.sentinel.confidence")} value={`${(finding.confidence * 100).toFixed(0)}%`} />
               <Field label={t("v5.sentinel.source")} value={finding.source} />
-              <Field label={t("v5.sentinel.detectedAt")} value={new Date(finding.detectedAt).toLocaleString()} />
+              <Field label={t("v5.sentinel.detectedAt")} value={safeDateTime(finding.detectedAt)} />
             </div>
 
             {(finding.blastRadius.strategies?.length || finding.blastRadius.personas?.length) ? (
@@ -405,7 +406,7 @@ const SentinelTimelineView = ({
   );
   const groups = new Map<string, SentinelFinding[]>();
   for (const f of sorted) {
-    const day = new Date(f.detectedAt).toLocaleDateString();
+    const day = safeDateTime(f.detectedAt, "date");
     const arr = groups.get(day) ?? [];
     arr.push(f);
     groups.set(day, arr);

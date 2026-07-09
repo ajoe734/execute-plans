@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 interface Event { id: string; ts: string; kind: string; status: string; owner?: string; }
 
@@ -43,7 +44,7 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
       <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
         {events.map((e) => (
           <div key={e.id} className="flex items-center gap-3 text-xs p-2 rounded-md border border-border">
-            <span className="text-mono text-[10px] text-muted-foreground w-32 shrink-0">{new Date(e.ts).toLocaleTimeString()}</span>
+            <span className="text-mono text-[10px] text-muted-foreground w-32 shrink-0">{safeDateTime(e.ts, "time")}</span>
             <span className="text-mono flex-1 truncate">{e.kind}</span>
             {e.owner && <span className="text-mono text-[10px] text-muted-foreground">{e.owner}</span>}
             <Badge variant="outline" className={`text-[10px] uppercase ${tone(e.status)}`}>{e.status}</Badge>

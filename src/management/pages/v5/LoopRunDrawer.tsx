@@ -17,6 +17,7 @@ import {
 } from "@/lib/v5";
 import { v5 } from "@/lib/bff-v1";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
+import { safeDateTime } from "@/lib/utils";
 
 const stageTone: Record<string, string> = {
   succeeded: "bg-status-success/15 text-status-success border-status-success/30",
@@ -94,7 +95,7 @@ export const LoopRunDrawer = ({ run, onClose, triggerRef }: Props) => {
                 <Badge variant="outline" className={stageTone[run.status] ?? ""}>{run.status}</Badge>
               </div>
               <SheetDescription className="text-xs">
-                {run.loopKind} · {t("v5.col.updated")}: {new Date(run.updatedAt).toLocaleString()} · {t("v5.kpi.timeoutPolicy")}: {V5_TIMEOUT_POLICY_VERSION}
+                {run.loopKind} · {t("v5.col.updated")}: {safeDateTime(run.updatedAt)} · {t("v5.kpi.timeoutPolicy")}: {V5_TIMEOUT_POLICY_VERSION}
               </SheetDescription>
             </SheetHeader>
 
@@ -176,8 +177,8 @@ const StageRow = ({ stage, policy, active }: { stage: LoopStage; policy: { runni
       </div>
       {(stage.startedAt || stage.completedAt) && (
         <div className="mt-1 text-[10px] text-muted-foreground">
-          {stage.startedAt && <>↑ {new Date(stage.startedAt).toLocaleTimeString()}</>}
-          {stage.completedAt && <> · ↓ {new Date(stage.completedAt).toLocaleTimeString()}</>}
+          {stage.startedAt && <>↑ {safeDateTime(stage.startedAt, "time")}</>}
+          {stage.completedAt && <> · ↓ {safeDateTime(stage.completedAt, "time")}</>}
         </div>
       )}
     </li>

@@ -39,7 +39,7 @@ export const ToolDetail = () => {
     if (!id) return;
     bff.tools.get(id).then(setTool);
     bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("tool."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
   if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
@@ -111,7 +111,7 @@ export const ToolDetail = () => {
                   <LifecycleStepper machine={toolMachine} current={machineState} />
                 </Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Category" value={tool.category.toUpperCase()} />
+                  <StatCard label="Category" value={(tool.category ?? "").toUpperCase()} />
                   <StatCard label={t("table.version")} value={tool.version} />
                   <StatCard label="Inputs" value={tool.inputs} />
                   <StatCard label="Used by" value={tool.usedBy} />

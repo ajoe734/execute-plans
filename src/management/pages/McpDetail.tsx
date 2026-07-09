@@ -89,7 +89,7 @@ export const McpServerDetail = () => {
                 <LifecycleStepper machine={mcpServerMachine} current={machineState} i18nPrefix="lifecycle.mcpServer" />
               </Section>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
+                <StatCard label={t("table.status")} value={(s.health ?? "").toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
                 <StatCard label={t("nav.tools")} value={s.toolCount} />
                 <StatCard label={t("table.region")} value={s.region} />
                 <StatCard label="Envs" value={s.envAllowed.length} />
@@ -98,7 +98,7 @@ export const McpServerDetail = () => {
                 <Field label="URL" value={s.endpoint} mono />
                 <Field label={t("table.env")} value={
                   <div className="flex gap-1 mt-1">
-                    {s.envAllowed.map((e) => (
+                    {(s.envAllowed ?? []).map((e) => (
                       <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
                     ))}
                   </div>
@@ -118,10 +118,10 @@ export const McpServerDetail = () => {
                 { key: "scope", header: t("section.permissions"), cell: (r) => <span className={`text-xs uppercase tracking-wider ${scopeTone(r.scope)}`}>{r.scope}</span> },
                 { key: "envs", header: "Granted Envs", cell: (r) => (
                   <div className="flex gap-1">
-                    {r.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
+                    {(r.envGrants ?? []).map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
                   </div>
                 )},
-                { key: "calls", header: "Calls 24h", cell: (r) => <span className="text-mono text-xs">{r.callsLast24h.toLocaleString()}</span> },
+                { key: "calls", header: "Calls 24h", cell: (r) => <span className="text-mono text-xs">{(r.callsLast24h ?? 0).toLocaleString()}</span> },
                 { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
               ]}
               empty="No tools registered on this server."
@@ -135,7 +135,7 @@ export const McpServerDetail = () => {
           content: (
             <Section title={t("detail.section.runtimeHealth")}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label={t("table.status")} value={s.health.toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
+                <StatCard label={t("table.status")} value={(s.health ?? "").toUpperCase()} tone={s.health === "warning" ? "warning" : s.health === "failed" ? "danger" : "success"} />
                 <StatCard label="Uptime" value="99.9%" tone="success" />
                 <StatCard label="P95 latency" value="42 ms" />
                 <StatCard label={t("table.region")} value={s.region} />
@@ -148,7 +148,7 @@ export const McpServerDetail = () => {
           content: (
             <Section title={t("detail.section.allowedEnvs")}>
               <div className="flex gap-1">
-                {s.envAllowed.map((e) => (
+                {(s.envAllowed ?? []).map((e) => (
                   <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>
                 ))}
               </div>
@@ -221,8 +221,8 @@ export const McpToolDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("section.permissions")} value={tool.scope.toUpperCase()} tone={tool.scope === "destructive" ? "danger" : tool.scope === "write" ? "warning" : "success"} />
-                  <StatCard label="Calls 24h" value={tool.callsLast24h.toLocaleString()} />
+                  <StatCard label={t("section.permissions")} value={(tool.scope ?? "").toUpperCase()} tone={tool.scope === "destructive" ? "danger" : tool.scope === "write" ? "warning" : "success"} />
+                  <StatCard label="Calls 24h" value={(tool.callsLast24h ?? 0).toLocaleString()} />
                   <StatCard label="Envs" value={tool.envGrants.length} />
                   <StatCard label={t("table.state")} value={tool.state} />
                 </div>
@@ -237,7 +237,7 @@ export const McpToolDetail = () => {
                   } />
                   <Field label={t("table.env")} value={
                     <div className="flex gap-1 mt-1">
-                      {tool.envGrants.map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
+                      {(tool.envGrants ?? []).map((e) => <Badge key={e} variant="outline" className={`text-[10px] uppercase ${envBadge(e)}`}>{e}</Badge>)}
                     </div>
                   } />
                 </Section>
@@ -245,7 +245,7 @@ export const McpToolDetail = () => {
             ),
           },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={[
-            { id: "au_mt_1", actor: tool.owner, action: "mcp_tool.invoke", target: tool.id, ts: new Date(Date.now() - 1200_000).toISOString(), memo: `${tool.callsLast24h.toLocaleString()} calls in last 24h` },
+            { id: "au_mt_1", actor: tool.owner, action: "mcp_tool.invoke", target: tool.id, ts: new Date(Date.now() - 1200_000).toISOString(), memo: `${(tool.callsLast24h ?? 0).toLocaleString()} calls in last 24h` },
             { id: "au_mt_2", actor: "ops", action: "mcp_tool.grant_env", target: tool.id, ts: new Date(Date.now() - 86400_000).toISOString(), memo: `Granted: ${tool.envGrants.join(", ")}` },
           ]} /> },
         ]}

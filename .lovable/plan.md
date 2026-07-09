@@ -1,110 +1,55 @@
 ## 目標
+Management AI 聊天視窗：在 A 對話送出後可立刻切到 B 對話繼續送，A 的請求不會被取消；A 回覆回來時自動寫入該 thread cache + sidebar 排序更新；點回 A 看得到回覆。
 
-由 FE 端直接把 B 組 backport 規格寫進 spec 檔（不再等 Planner），並輸出**現階段完整版規格快照** `.lovable/spec/current/`，作為唯一最新對外 SoT。同步整合 A/C/D 狀態進單一 audit 表。
+## 變更檔案
+`src/management/components/agent/AgentPanelBody.tsx` (僅此一檔)
 
-## 為什麼可以由 FE 直接做
+## 主要改動
 
-- B1/B2/B3 的內容都已在 `.lovable/feedback/2026-05-09-addendum/FE_Blueprint_Gap_Missing_Spec_Addendum_2026-05-09.md` 被 Planner APPROVED
-- FE 端 TS artifacts 早已實作（`errorCodes.ts` 26 條、`bff-v1/dto.ts` `ActionCommandStatus` + `EVIDENCE_CAPABILITY_MAP`、`bff-v1/sse/payloads.ts` `ApprovalEvent`/`AskEvent`）
-- 只剩把這些「碼即規格」回灌到 markdown / OpenAPI YAML / AsyncAPI markdown
+### 1. State / Ref 重構
+- 移除 `pending: boolean` → 新增 `pendingSessions: Record<string, true>` state。
+- 移除 `abortRef: useRef<AbortController | null>` → 新增 `inflightRef: useRef<Map<string, AbortController>>`。
+- 新增 `turnsRef: useRef<ChatTurn[]>` 並用 `useEffect` 與 `turns` 同步，供 submit 完成後讀最新值。
+- 衍生：`const pending = sessionId ? !!pendingSessions[sessionId] : false;`（active session 才禁用送出，沿用既有 `pending` 用法）。
 
-## 變更清單
+### 2. 切換對話 / 開新對話 — 不再 abort
+- `loadSession`：拿掉 `abortInflight("switch")`。如果切到的 session 還在 inflight，顯示 notice「此對話仍在等待 BFF 回覆…」。
+- `startNewConversation`：拿掉 `abortInflight("new")`。背景請求繼續跑。
+- `abortInflight` helper 整個移除；`deleteSession` 改為：若該 sid 還在 inflight，個別 abort + 從 map 移除 + 從 pendingSessions 移除。
 
-### 1. Pack D markdown backport（normative spec）
+### 3. `submit()` 改寫
+- key 用 `localSessionId`（cli_ 或現有 sid）。
+- `inflightRef.current.set(localSessionId, controller)` + `setPendingSessions(p => ({ ...p, [localSessionId]: true }))`。
+- 新 helper `appendTurnTo(sid, turn)`：
+  - 若 `activeSessionRef.current === sid`：用 `turnsRef.current` 為 base，`setTurns(next)` + `saveTurnsCache`。
+  - 否則：讀 `loadTurnsCache(sid)` 為 base，`saveTurnsCache` 寫回（不動 view state）。
+- 結果處理：
+  - **不再**用 `activeSessionRef.current !== requestBucket` 丟棄結果。
+  - assistant turn 一律 `appendTurnTo(reconciledSid, turn)`。
+  - `setTraceId` / `setDegraded` 只在仍為 active session 時呼叫。
+  - `upsertSessionIndex(reconciledSid, titleSeed)` 永遠呼叫，讓 sidebar 排到最上。
+- finally：從 `inflightRef` + `pendingSessions` 移除；只在仍 active 時才 re-focus input。
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md`**
-- D21 ErrorCode master：列出 26 條 canonical（補 RESOURCE_NOT_FOUND / APPROVAL_REQUIRED / CONFIRM_TOKEN_REVOKED）
-- §3.1 ErrorEnvelope 範例對齊 26 條
+### 4. Sidebar — 每 row pending spinner
+- `sessions.map` row 內，若 `pendingSessions[s.id]` 為 true，在 title 右側顯示 `<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />`。
+- 既有「整個側欄 cursor-progress」改為「只有 active session pending 才 cursor-progress」。
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_SSE_Event_Contract.md`**
-- §1 SseEventEnvelope：`correlationId: string`（required，不再 optional）
-- §2 channel 清單加 `approval` / `ask`（first-class）
-- §3 ApprovalEvent 4 子型別（created / stage.changed / decided / sla.escalated）
-- §4 AskEvent 6 子型別（session.started / message.delta / tool.called / message.completed / session.completed / session.failed）
+### 5. 送出按鈕 / 輸入框 disabled
+- 維持 `disabled={pending}`（pending 已綁定到 active session），所以 B 對話的 inflight 不會擋 A 的輸入。
 
-**`.lovable/spec/v4/pack-d/Pantheon_Pack_D_Permission_Contract.md`**
-- 新增 §EvidenceKind Capability Map：19 canonical + 3 legacy alias 對應 capability（依 addendum §B3.6 表）
+### 6. Unmount cleanup
+- 新增 `useEffect(() => () => { inflightRef.current.forEach(c => c.abort()); inflightRef.current.clear(); }, [])`，避免元件卸載仍 fetch。
 
-### 2. OpenAPI / AsyncAPI 回灌
+### 7. 文案
+- 移除「切換對話時取消了上一則進行中的請求。」notice 文字。
+- 新增 `loadSession` notice：「此對話仍在等待 BFF 回覆，請稍候。」（只在切到的 session pending 時顯示）。
 
-**`.lovable/feedback/2026-05-07-final/Pantheon_BFF_OpenAPI_3_1.yaml`**
-- `components.schemas.ActionCommandStatus`：named enum [accepted, queued, completed]
-- 所有 inline `enum: [accepted, queued, completed]` 改 `$ref`
-- `components.schemas.ErrorCode`：26 條 enum
+## 不動
+- BFF 契約、`askManagementAi`、degraded callout、provider pill、attachments、resync 邏輯、localStorage schema。
 
-**`.lovable/feedback/2026-05-07-final/Pantheon_BFF_AsyncAPI_SSE.md`**
-- envelope `correlationId` required
-- channels.approval / channels.ask 章節 + payload schema
-- EvidenceKind 19+3 章節 + 提示 backend SHOULD NOT 發 legacy alias
-
-### 3. 現階段完整版規格快照（新目錄）
-
-**`.lovable/spec/current/INDEX.md`** — 唯一最新入口，列：
-- normative 層：v4 + Pack D（含本次 backport）
-- 升級層：v5 SA + SD
-- BFF Contract：2026-05-07 Final（含本次 backport）
-- 已 supersede：v3、v2、v1
-
-**`.lovable/spec/current/Pantheon_Spec_Current_2026-05-10.md`** — 單檔 consolidated：
-- §1 Source-of-truth 樹狀清單 + 衝突優先序
-- §2 Entity / Status / Transition 全集（從 Pack D StateMachine_Contract 摘要）
-- §3 BFF Contract 摘要（Final + ActionCommandStatus + 26 ErrorCode）
-- §4 SSE Contract 摘要（correlationId required、20 channels、ApprovalEvent/AskEvent）
-- §5 Permission Contract 摘要（12 role × entity × action + EvidenceKind capability map）
-- §6 v5 升級層摘要（IA / Loop / Sentinel / HIQ）
-- §7 已 LANDED 的全部 spec gap（233 + G 系列 + Stage 2 + 2026-05-09 Addendum）
-- §8 剩餘工作三類：A 後端 / B 已由本次 backport 收掉 / D optional
-
-### 4. 整合 audit（取代散落文件）
-
-**`.lovable/audits/fe-spec-status-2026-05-10.md`** — 單表狀態總覽
-- A 組：5 個 P0 backend checklist + live probe HTTP code 對照
-- B 組：全部 ✅ RESOLVED_BY_FE_BACKPORT_2026-05-10（指向本次改動）
-- C 組：全部 ✅ LANDED（C1–C5）
-- D 組：D1–D4 LANDED + 列剩餘可深化方向
-- spec-conflict-G：G01/G05/G06/G07/G09/G12/G13/G14 全 LANDED
-- H 版 backlog：H1/H2/H3 全 FE CLOSED
-
-**`.lovable/audits/INDEX.md`** 加入口：`- [FE × Spec Status 2026-05-10] — 唯一最新整合狀態表`
-
-`.lovable/audits/fe-blueprint-gap-2026-05-09.md` 頂端加 `> Superseded by fe-spec-status-2026-05-10.md`
-
-### 5. Memory 更新
-
-`mem://index.md` Core 加一行：
-> **2026-05-10 spec backport LANDED**：B1/B2/B3 已由 FE 直接落地至 Pack D markdown + OpenAPI + AsyncAPI；現階段完整規格快照於 `.lovable/spec/current/`。
-
-新增 `mem://reference/current-spec` — 指向 `.lovable/spec/current/INDEX.md`
-
-### 6. FE artifact 註記回收
-
-- `src/lib/v4/errorCodes.ts` 頂端 `FE_READY — Pack D D21 markdown backport pending` → 改為 `LANDED 2026-05-10 — Pack D D21 markdown 已對齊 26 條`
-- `src/lib/bff-v1/dto.ts` ActionCommandStatus / EvidenceKind 對應註記同步更新
-- `src/lib/bff-v1/sse/payloads.ts` correlationId 註記更新
-
-## 不做
-
-- 不改 src/ 任何 runtime 邏輯（只改註解）
-- 不改 Pack D 其它條目的 normative 內容（只 backport B 組）
-- 不改 v5 SA/SD（屬升級層，不在 backport 範圍）
-- 不刪除舊 audit / feedback 歷史（保留歸檔）
-- 不開新 spec 決策（一切引用既有 Planner APPROVED disposition）
-
-## 驗收
-
-完成後：
-1. `grep RESOURCE_NOT_FOUND .lovable/spec/v4/pack-d/Pantheon_Pack_D_BFF_API_Contract.md` 命中
-2. AsyncAPI 含 `approval` / `ask` channel 章節
-3. OpenAPI 有 `components.schemas.ActionCommandStatus`
-4. `.lovable/spec/current/INDEX.md` 存在且引用所有 backport 後的檔案
-5. `fe-spec-status-2026-05-10.md` B 組標 RESOLVED
-6. 366 tests green（無 src/ 邏輯變動，預期不影響）
-
-## 預估規模
-
-- Pack D 3 檔：各加 30–80 行
-- OpenAPI YAML：~40 行
-- AsyncAPI markdown：~120 行
-- `spec/current/` 2 檔：INDEX 30 行、consolidated ~600 行
-- audit 1 檔：~250 行
-- 共約 1100 行 markdown / YAML 增減；0 行 src/ 邏輯變動
+## 驗證步驟
+1. 對話 A 送出 → 立刻點側欄 B → B 可立刻輸入並送出，A 不被中斷。
+2. 側欄 A、B row 各自顯示 spinner。
+3. A 回覆回來 → 側欄 A spinner 消失、A row 置頂；點回 A 看到 assistant 訊息，無 cancel notice。
+4. 重整 → A、B 訊息都還在（從 localStorage cache）。
+5. `bun x vitest run` 全綠（既有 366 tests 不應受影響）。

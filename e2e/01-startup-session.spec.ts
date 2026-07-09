@@ -12,7 +12,10 @@
  *   PANTHEON_FE_BASE_URL, FRONTEND_BASE_URL, or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
  *   PANTHEON_BFF_BASE_URL, BFF_BASE_URL, or VITE_BFF_BASE_URL
- *     default: https://pantheon-staging-bff.34.81.225.122.sslip.io
+ *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
+ *   PANTHEON_BROWSER_BFF_BASE_URL
+ *     optional browser-observed BFF base, usually the frontend origin when
+ *     the repo dev server proxies /bff to the upstream BFF.
  *   BFF_AUTH_TOKEN
  *     optional; when omitted the dev stub token is used.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
@@ -20,13 +23,14 @@
  */
 
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
-  "https://pantheon-staging-bff.34.81.225.122.sslip.io";
+  "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
 const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
+const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -34,30 +38,59 @@ const SERVING_MOCK_BANNER =
 type JsonRecord = Record<string, unknown>;
 
 function frontendUrl(path = "/"): string {
-  const base =
+  return urlFromBase(frontendBaseUrl(), path);
+}
+
+function frontendBaseUrl(): string {
+  return (
     process.env.PANTHEON_FE_BASE_URL ||
     process.env.FRONTEND_BASE_URL ||
     process.env.PLAYWRIGHT_BASE_URL ||
-    DEFAULT_FRONTEND_BASE_URL;
+    DEFAULT_FRONTEND_BASE_URL
+  );
+}
+
+function urlFromBase(base: string, path = "/"): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+function sseOriginUrl(path = "/"): string {
+  const base =
+    process.env.PANTHEON_SSE_ORIGIN_URL ||
+    frontendBaseUrl();
+  return urlFromBase(base, path);
+}
+
 function bffUrl(path: string): string {
+  return `${bffBaseUrl().replace(/\/$/, "")}${path}`;
+}
+
+function browserBffUrl(path: string): string {
+  const base = process.env.PANTHEON_BROWSER_BFF_BASE_URL || bffBaseUrl();
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+function bffBaseUrl(): string {
   const base =
     process.env.PANTHEON_BFF_BASE_URL ||
     process.env.BFF_BASE_URL ||
     process.env.VITE_BFF_BASE_URL ||
     DEFAULT_BFF_BASE_URL;
-  return `${base.replace(/\/$/, "")}${path}`;
+  return base;
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 }
 
 function strictFallbackMode(): string {
   return process.env.VITE_BFF_FALLBACK || process.env.BFF_FALLBACK || "strict";
+}
+
+function sseOpenTimeoutMs(): number {
+  const value = Number(process.env.PANTHEON_SSE_OPEN_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_SSE_OPEN_TIMEOUT_MS;
 }
 
 async function installRuntimeFallbackOverride(
@@ -115,6 +148,21 @@ async function bodyText(page: import("@playwright/test").Page): Promise<string> 
   return page.locator("body").innerText({ timeout: 10_000 });
 }
 
+async function requestMeWithTransientRetry(
+  request: APIRequestContext,
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; body: string }> {
+  let last = { status: 0, body: "" };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await request.get(url, { headers, timeout: 10_000 });
+    last = { status: response.status(), body: await response.text() };
+    if (![502, 503, 504].includes(last.status)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+  }
+  return last;
+}
+
 test.describe("F01 startup session", () => {
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
@@ -129,13 +177,10 @@ test.describe("F01 startup session", () => {
       headers["X-Tenant-Id"] = tenantId;
     }
 
-    const response = await request.get(bffUrl("/bff/me"), {
-      headers,
-      timeout: 10_000,
-    });
+    const response = await requestMeWithTransientRetry(request, bffUrl("/bff/me"), headers);
 
-    expect(response.status(), await response.text()).toBe(200);
-    const payload = recordAt(await response.json(), "MeResponse");
+    expect(response.status, response.body).toBe(200);
+    const payload = recordAt(JSON.parse(response.body), "MeResponse");
     const data = recordAt(payload.data, "MeResponse.data");
     const meta = recordAt(payload.meta, "MeResponse.meta");
 
@@ -215,12 +260,13 @@ test.describe("F01 startup session", () => {
   });
 
   test("opens the browser-native SSE EventSource stream", async ({ page }) => {
-    const streamUrl = bffUrl("/bff/events/stream?channel=system");
+    const streamUrl = browserBffUrl("/bff/events/stream?channel=system");
+    const openTimeoutMs = sseOpenTimeoutMs();
 
-    await page.goto(frontendUrl("/"), { waitUntil: "domcontentloaded" });
+    await page.goto(sseOriginUrl("/"), { waitUntil: "domcontentloaded" });
 
     const opened = await page.evaluate(
-      ({ url }) =>
+      ({ url, timeoutMs }) =>
         new Promise<{
           readyState: number;
           openState: number;
@@ -232,7 +278,7 @@ test.describe("F01 startup session", () => {
               const state = eventSource.readyState;
               eventSource.close();
               reject(new Error(`EventSource did not open; readyState=${state}`));
-            }, 10_000);
+            }, timeoutMs);
 
             eventSource.onopen = () => {
               window.clearTimeout(timeout);
@@ -266,7 +312,7 @@ test.describe("F01 startup session", () => {
             };
           },
         ),
-      { url: streamUrl },
+      { url: streamUrl, timeoutMs: openTimeoutMs },
     );
 
     expect(opened.readyState).toBe(opened.openState);

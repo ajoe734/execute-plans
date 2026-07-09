@@ -13,6 +13,7 @@ import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 const statusBadgeCls: Record<string, string> = {
   running: "bg-status-running/15 text-status-running border-status-running/30",
@@ -131,7 +132,7 @@ export const OptimizationLoopPage = () => {
                         ? <Link to={approvalHref(approvalEv.id)} className="text-mono text-xs hover:underline" aria-label={`Open approval ${approvalEv.id}`}>{approvalEv.id}</Link>
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</td>
                   </tr>
                 );
               })}

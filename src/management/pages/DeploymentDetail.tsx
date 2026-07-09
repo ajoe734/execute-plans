@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -43,7 +44,7 @@ export const DeploymentDetail = () => {
     bff.deployments.get(id).then(setD);
     bff.runtimes.list().then(setRuntimes);
     bff.approvals.list().then(setApprovals);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("deployment."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment."))));
   }, [id]);
   if (!d) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
@@ -53,7 +54,7 @@ export const DeploymentDetail = () => {
     <>
       <ObjectDetailLayout
         object={d}
-        subtitle={`${d.target.toUpperCase()} · ${d.version}`}
+        subtitle={`${(d.target ?? "").toUpperCase()} · ${d.version ?? ""}`}
         actions={
           <>
             {!isLive && (
@@ -84,10 +85,10 @@ export const DeploymentDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("table.target")} value={d.target.toUpperCase()} tone={targetTone(d.target)} />
+                  <StatCard label={t("table.target")} value={(d.target ?? "—").toUpperCase()} tone={targetTone(d.target ?? "")} />
                   <StatCard label={t("table.version")} value={d.version} />
                   <StatCard label="Previous" value={d.previousVersion ?? "—"} />
-                  <StatCard label="Promoted" value={d.promotedAt ? new Date(d.promotedAt).toLocaleString() : "—"} />
+                  <StatCard label="Promoted" value={d.promotedAt ? safeDateTime(d.promotedAt) : "—"} />
                 </div>
                 <Section title={t("detail.section.linkedObjects")}>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -120,7 +121,11 @@ export const DeploymentDetail = () => {
             );
           })() },
           { value: "approvals", label: t("nav.approvals"), content: (() => {
-            const filtered = approvals.filter((a) => a.subject.includes(d.version) || a.kind.includes("deploy"));
+            // Live approval rows may omit subject/kind; guard so a real payload
+            // doesn't crash the deployment detail page.
+            const filtered = approvals.filter(
+              (a) => (a.subject ?? "").includes(d.version ?? "") || (a.kind ?? "").includes("deploy"),
+            );
             return (
               <DataTable rows={filtered} columns={[
                 { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
@@ -199,7 +204,7 @@ export const DeploymentDetail = () => {
             <Button variant="outline" onClick={() => setScheduleOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
               await mutations.scheduleDeployment(d.id, new Date(scheduleAt).toISOString(), `scheduled by user`);
-              toast.success(t("deployment.schedule.toast", { when: new Date(scheduleAt).toLocaleString() }));
+              toast.success(t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }));
               setScheduleOpen(false);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>

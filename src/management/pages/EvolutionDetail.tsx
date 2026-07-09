@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -55,7 +56,7 @@ export const EvolutionDetail = () => {
     if (!id) return;
     bff.evolution.get(id).then(setE);
     bff.research.list().then(setExperiments);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("evolution."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution."))));
     bff.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
     bff.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
   }, [id]);
@@ -84,7 +85,7 @@ export const EvolutionDetail = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label="Generation" value={`G${e.generation}`} />
                   <StatCard label="Population" value={e.population.toString()} />
-                  <StatCard label="Best Fitness" value={e.bestFitness.toFixed(3)} tone="success" />
+                  <StatCard label="Best Fitness" value={(e.bestFitness ?? 0).toFixed(3)} tone="success" />
                   <StatCard label="Progress" value={`${(e.progress * 100).toFixed(0)}%`} />
                 </div>
                 <Section title={t("detail.section.generationProgress")}>
@@ -138,7 +139,7 @@ export const EvolutionDetail = () => {
                     <li key={c.id} className="flex items-center gap-3 text-mono text-xs">
                       <Badge variant="outline" className="text-[10px]">{c.id}</Badge>
                       <span className="flex-1">{c.expr}</span>
-                      <span className="text-muted-foreground">{new Date(c.ts).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground">{safeDateTime(c.ts, "date")}</span>
                     </li>
                   ))}
                 </ul>
@@ -188,7 +189,7 @@ export const EvolutionDetail = () => {
             <DataTable rows={experiments} onRowClick={(r) => nav(`/management/experiments/${r.id}`)} columns={[
               { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-              { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {r.metricValue.toFixed(3)}</span> },
+              { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
               { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "concluded" ? "success" : r.status === "running" ? "running" : "pending"} /> },
             ]} empty={t("empty.noResults")} />
           ) },

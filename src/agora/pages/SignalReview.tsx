@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,7 +112,7 @@ export const SignalReview = () => {
                     </button>
                   </div>
                   <div className="text-right text-mono text-xs text-muted-foreground">
-                    {new Date(active.generatedAt).toLocaleString()}
+                    {safeDateTime(active.generatedAt)}
                   </div>
                 </div>
 

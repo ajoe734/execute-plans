@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
 import { useT } from "@/platform/hooks";
+import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
-import { Pause, Edit, Beaker, Play, Lock } from "lucide-react";
+import { Pause, Edit, Beaker, Play, Lock, Archive } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -13,6 +15,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { EntityCreateDrawer } from "../components/write/EntityCreateDrawer";
 import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
 import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
 import { ActivityMonitor } from "../components/detail/ActivityMonitor";
@@ -25,6 +28,7 @@ import { PersonaPolicyViolationsTab } from "../components/detail/PersonaPolicyVi
 import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTab";
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
+import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
@@ -44,6 +48,11 @@ export const PersonaDetail = () => {
   const [routed, setRouted] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const { can } = usePermissions();
+  const canEdit = can("edit");
+  const canRetire = can("archive");
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +116,9 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
-            <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
+            <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => setEditOpen(true)} title={canEdit ? undefined : t("permission.requireAction", { action: "edit" })}>
+              <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
+            </Button>
             <Button size="sm" variant="outline" onClick={async () => { await testPersonaPrompt(p.id, "manual test"); toast.success(t("persona.ops.testToast", { name: p.name })); }}>
               <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
             </Button>
@@ -120,6 +131,15 @@ export const PersonaDetail = () => {
             <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
               <Pause className="h-4 w-4 mr-1" />{t("actions.suspend")}
             </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!canRetire}
+              onClick={() => setRetireOpen(true)}
+              title={canRetire ? t("persona.ops.retireHint", { defaultValue: "封存後進入 retired 終態，保留稽核軌跡；不可物理刪除。" }) : t("permission.requireAction", { action: "archive" })}
+            >
+              <Archive className="h-4 w-4 mr-1" />{t("actions.retire")}
+            </Button>
           </>
         }
         tabs={[
@@ -127,6 +147,7 @@ export const PersonaDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <Section>
+                <PersonaReadinessCard personaId={p.id} persona={p} personaName={p.name} className="mb-4" />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label={t("table.type")} value={p.archetype} />
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
@@ -189,7 +210,7 @@ export const PersonaDetail = () => {
             value: "audit", label: t("nav.audit"),
             content: (
               <DataTable rows={audit} columns={[
-                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
                 { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
                 { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
               ]} empty={t("empty.noResults")} />
@@ -208,6 +229,35 @@ export const PersonaDetail = () => {
         target={{ type: "Persona", id: p.id, name: p.name }}
         risk="high"
         onConfirm={async (memo, token) => { await runPersonaAction(p.id, "suspend", { memo, confirmToken: token }); toast.success(t("toast.saved")); }}
+      />
+
+      <EntityCreateDrawer
+        entity="persona"
+        mode="edit"
+        editingId={p.id}
+        initialData={p as unknown as Record<string, unknown>}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onCreated={(updated) => {
+          setP((prev) => prev ? { ...prev, ...(updated as Partial<Persona>) } : prev);
+          toast.success(t("toast.saved"));
+        }}
+      />
+
+      <HighRiskConfirm
+        open={retireOpen}
+        onOpenChange={setRetireOpen}
+        title={t("persona.ops.retireTitle", { name: p.name, defaultValue: `Retire persona — ${p.name}` })}
+        description={t("persona.ops.retireDesc", { defaultValue: "Persona 將進入 retired 終態，從預設列表移除，但保留審計軌跡 7 年。Persona 為審計實體，無法物理刪除；若需替換請使用 Fork from Retired。" })}
+        actionId="persona.retire"
+        confirmEntity={{ type: "persona", id: p.id }}
+        target={{ type: "Persona", id: p.id, name: p.name }}
+        risk="high"
+        onConfirm={async (memo, token) => {
+          await runPersonaAction(p.id, "retire", { memo, confirmToken: token });
+          toast.success(t("toast.saved"));
+          navigate("/management/personas");
+        }}
       />
     </>
   );

@@ -70,7 +70,6 @@ export const paths = {
   evolutionProgram: (id: string) => `${BASE}/evolution-programs/${enc(id)}`,
   evolutionProgramRuns: (id: string) => `${BASE}/evolution-programs/${enc(id)}/runs`,
   evolutionProgramCandidates: (id: string) => `${BASE}/evolution-programs/${enc(id)}/candidates`,
-  evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
 
   // ---- Jobs / Approvals / Incidents ----
   jobs: () => `${BASE}/jobs`,
@@ -140,10 +139,64 @@ export const paths = {
   v5InterventionDecision: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
   v5ExecutionPersonaHealth: () => `${BASE}/v5/execution/persona-health`,
 
-  // ---- Management OODA packet read surface ----
-  oodaPackets: () => `${BASE}/ooda/packets`,
-  oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
-  strategyOodaPackets: (id: string) => `${BASE}/strategies/${enc(id)}/ooda`,
-  runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
-  evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
+  // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
+  // Mock providers continue returning seeds; live providers hit these.
+  mgmtCockpit: () => `${BASE}/management/cockpit`,
+  // Console-gap endpoints (2026-06-15): dedicated read surfaces for pages that
+  // previously had no backend. See docs/04/pantheon_bff_console_gap_2026-06-15.
+  knowledgeInbox: () => `${BASE}/knowledge`,
+  workflowTemplates: () => `${BASE}/workflows`,
+  hookRegistry: () => `${BASE}/hooks`,
+  mgmtPersonaFleet: () => `${BASE}/management/fleet`,
+  mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
+  mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
+  mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
+  mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
+  mgmtEvolutionJournal: () => `${BASE}/management/evolution-journal`,
+  mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
+  mgmtPersonaIntent: () => `${BASE}/management/persona-intent`,
+  mgmtReadinessEp5: () => `${BASE}/management/readiness/ep5`,
+  mgmtReadinessBrokerLive: () => `${BASE}/management/readiness/broker-live`,
+  mgmtReadinessCapitalBinding: () => `${BASE}/management/readiness/capital-binding-live`,
+  mgmtReadinessBffHa: () => `${BASE}/management/readiness/bff-ha`,
+  mgmtReadinessStrictPublish: () => `${BASE}/management/readiness/strict-publish`,
+
+  // ---- 2026-06-03 — Management AI runtime (OpenClaw gateway adapter / Codex). ----
+  // FE submits prompts here; never to /bff/agora/ask.
+  managementNlAsk: () => `${BASE}/management/nl/ask`,
+  // SSE token-streaming variant (progressive rendering).
+  managementNlAskStream: () => `${BASE}/management/nl/ask/stream`,
+  managementAiConversation: (sessionId: string, traceId?: string) =>
+    `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+  assistantMode: () => `${BASE}/assistant/mode`,
+  assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
+  assistantProviderReauthStatus: (sessionId: string, provider?: string) =>
+    `${BASE}/assistant/provider/reauth/${enc(sessionId)}${provider ? `?provider=${enc(provider)}` : ""}`,
+  assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
+  assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
+  assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
+  assistantRepairWorktreePrepare: () => `${BASE}/assistant/repair-worktrees/prepare`,
+  assistantDevDocsGenerate: () => `${BASE}/assistant/dev-docs/generate`,
+  assistantDevDocsPacket: (packetId: string) => `${BASE}/assistant/dev-docs/${enc(packetId)}`,
+  assistantDevBridgeTaskPacket: () => `${BASE}/assistant/dev-bridge/task-packet`,
+
+
+  // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
+  mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
+  mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
+  mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
+  mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
+  mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
+  mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
+  mgmtQuarterlyRanking: (quarter?: string) =>
+    `${BASE}/management/quarterly-ranking${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
+  mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
+    `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtPerformanceAttribution: (dimension?: string, period?: string) => {
+    const qs: string[] = [];
+    if (dimension) qs.push(`dimension=${enc(dimension)}`);
+    if (period) qs.push(`period=${enc(period)}`);
+    return `${BASE}/management/performance-attribution${qs.length ? `?${qs.join("&")}` : ""}`;
+  },
 } as const;

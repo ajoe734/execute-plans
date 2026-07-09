@@ -1,4 +1,4 @@
-# Pantheon Frontend (Lovable)
+# Pantheon Frontend (`execute-plans`)
 
 Pantheon 是一個雙產品（**Management Console** + **Agora Workbench**）的內部營運與研究操作介面。
 目前支援 mock 與 Pantheon BFF live 模式；`VITE_BFF_FALLBACK=auto` 是 dev/hybrid fallback，
@@ -18,22 +18,65 @@ npm run build        # production build
 npm run lint         # lint
 ```
 
-## Lovable / Pantheon BFF 串接
+## Pantheon Dev FE / BFF 串接
 
-這個 repo 是新的 Lovable app（execute-plans），不是舊的 `front-ai-trading-system`
-專案。三個常用 env 範本：
+這個 repo 是 Pantheon 目前的前端系統，不是舊的
+`front-ai-trading-system` 專案。Dev frontend 不再以 Lovable publish 狀態作為
+host 或驗收來源；請從 Pantheon dev 環境服務 `execute-plans` build。
+
+### Branch / deploy policy
+
+`main` 是這個 repo 作為 Lovable 專案時留下的歷史整合線。現在 dev frontend
+改由 Pantheon-owned dev 環境部署後，日常開發規範如下：
+
+- `dev`：日常 frontend integration branch，也是 Pantheon dev FE deployment
+  的來源。
+- feature / repair / Codex task branches：PR target 預設為 `dev`。
+- `main`：只在明確 promotion、stable cut 或一次性 repo bootstrap 時使用。
+- 不再用 Lovable publish 狀態判斷 dev 是否完成；必須以 `execute-plans`
+  commit、Pantheon dev FE deployment、direct browser/BFF integration gate 為準。
+
+宣稱「已 publish 到 dev」前，至少要能指出：
+
+- `execute-plans` commit 已在 `dev`。
+- `Pantheon FE-BFF Integration Gate` 已對該 commit 通過。
+- `Pantheon Dev FE Deploy` 已在 VM self-hosted runner 對該 commit 通過。
+- dev FE host 的 `/deployment.json` 回報同一個 commit。
+- direct browser/BFF probe 已通過 deployed `execute-plans` frontend +
+  Pantheon dev BFF。
+
+目前 dev FE / BFF 目標：
+
+- FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
+- BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+
+Dev FE 是這台 Pantheon dev VM 上的 Caddy static site：
+
+- Caddy root: `/var/www/pantheon-dev-fe`
+- release store: `/var/www/pantheon-dev-fe-releases`
+- deploy script: `scripts/deploy-dev-vm.sh`
+- deploy workflow: `.github/workflows/pantheon-dev-fe-deploy.yml`
+- runbook: `docs/deployment/pantheon-dev-fe-vm.md`
+
+部署流程是 gate-first：`dev` push 先跑 `Pantheon FE-BFF Integration Gate`，
+成功後 `Pantheon Dev FE Deploy` 的 `workflow_run` 才會在 VM self-hosted
+runner（labels: `pantheon-dev-vm`, `execute-plans-deploy`）部署同一個 SHA。
+手動部署可用 workflow_dispatch 指定 ref，但仍應選已通過 integration gate 的
+commit。
+
+常用 env 範本：
 
 - `.env.example`：預設 mock，本地無後端時使用。
 - `.env.dev.example`：shared dev BFF，`live + auto` fallback。
 - `.env.development.example`：lupin dev BFF，`live + auto` fallback。
 - `.env.staging-live.example`：staging-live BFF，`live + strict`，驗證時不得靜默 mock。
 
-Lovable shared dev hosting 請設定：
+Pantheon dev frontend build 請設定：
 
 ```env
 VITE_BFF_MODE=live
-VITE_BFF_BASE_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io
-VITE_BFF_FALLBACK=auto
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
@@ -54,9 +97,17 @@ Auth/session access is explicit:
 - Browser cookie session：live fetch 使用 `credentials: "include"`。
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
-- Optional Lovable dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
+- Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
   dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
+  Pantheon-owned dev Management AI control-mode smoke 需要 operator/admin +
+  MFA + `assistant.kernel.*` capability；目前 dev FE 使用
+  `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
+
+Management AI SA/SD dispatch is BFF-owned. The frontend calls
+`POST /bff/assistant/dev-docs/generate` and lets the supervisor drain the dev
+bridge inbox. `Supervisor` is not a dispatchable reviewer identity; frontend
+SA/SD packets should use real worker names such as `Codex` and `Claude`.
 
 Route-by-route live/fallback behavior:
 
@@ -202,12 +253,18 @@ export $(grep -v '^#' .env.integration | xargs)
 npm run test:contract        # vitest contract-drift
 npm run probe:bff:routes     # 匿名 BFF route probe，輸出 .lovable/audits/
 npm run probe:bff:auth       # 需 PANTHEON_BFF_SMOKE_BEARER_TOKEN
+npm run probe:bff:writes     # live dry-run write probe；預設跳過 create 類 valid writes
+npm run validate:mgmt-live:deep # RBAC token matrix / operator race / long SSE reconnect
 npm run probe:browser        # hosted bundle BFF probe
 npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
 ```
 
-CI workflow: `.github/workflows/pantheon-integration-gate.yml`（`workflow_dispatch`，需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；`PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
+CI workflow: `.github/workflows/pantheon-integration-gate.yml`（PR、`dev`/`main`
+push、`workflow_dispatch`；需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
+完整 RBAC / two-man race 證據需再設定 `PANTHEON_BFF_RBAC_TOKENS_JSON` 或各角色 token
+secret，以及 `PANTHEON_BFF_OPERATOR_A_TOKEN` / `PANTHEON_BFF_OPERATOR_B_TOKEN`；
+`PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。
 證據輸出在 `.lovable/audits/`，Sprint A baseline 在 `.lovable/audits/baseline/`。
 
 ## 相關文件

@@ -13,7 +13,8 @@ const liveSnapshot: LiveStatusSnapshot = {
   configuredMode: "hybrid",
   transportMode: "hybrid",
   usingSeed: false,
-  seedFallbackArmed: true,
+  fallbackStandby: true,
+  seedFallbackArmed: false,
   typedError: false,
   fellBack: false,
 };

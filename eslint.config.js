@@ -5,7 +5,11 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // Ignore the Pantheon contract bundle: CI checks out the pantheon repo into
+  // ./pantheon-contract for contract-drift validation, and that repo vendors a
+  // runtime mirror of execute-plans. Linting that foreign checkout surfaced
+  // errors from code this repo does not own and broke `npm run lint` in the gate.
+  { ignores: ["dist", "pantheon-contract", "pantheon-contract/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -41,6 +45,7 @@ export default tseslint.config(
           ],
         },
       ],
+
     },
   },
   {
@@ -54,4 +59,24 @@ export default tseslint.config(
     ],
     rules: { "no-restricted-imports": "off" },
   },
+  {
+    // 2026-06-03 — Management AI runtime path MUST go through Pantheon BFF,
+    // never through Agora Ask compatibility paths.
+    files: ["src/management/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/bff/agora", "@/lib/bff/agora.*"],
+              message:
+                "Management AI must not import Agora Ask client. Use @/lib/bff-v1/managementAi instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
+

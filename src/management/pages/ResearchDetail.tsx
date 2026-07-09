@@ -24,7 +24,7 @@ export const ResearchDetail = () => {
   useEffect(() => {
     if (!id) return;
     bff.research.get(id).then(setX);
-    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action.startsWith("research."))));
+    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
   }, [id]);
 
   if (!x) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -54,8 +54,8 @@ export const ResearchDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("table.status")} value={x.status.toUpperCase()} />
-                  <StatCard label={x.metric} value={x.metricValue.toFixed(3)} tone="success" />
+                  <StatCard label={t("table.status")} value={(x.status ?? "").toUpperCase()} />
+                  <StatCard label={x.metric} value={(x.metricValue ?? 0).toFixed(3)} tone="success" />
                   <StatCard label={t("table.owner")} value={x.owner} />
                   <StatCard label="Artifact" value={x.artifactId ?? "—"} />
                 </div>
@@ -70,8 +70,8 @@ export const ResearchDetail = () => {
             content: (
               <DataTable rows={folds} columns={[
                 { key: "fold", header: "Fold", cell: (r) => <span className="text-mono text-xs">#{r.fold}</span> },
-                { key: "metric", header: x.metric, cell: (r) => <span className="text-mono text-xs">{r.metric.toFixed(3)}</span> },
-                { key: "samples", header: "Samples", cell: (r) => <span className="text-mono text-xs">{r.samples.toLocaleString()}</span> },
+                { key: "metric", header: x.metric, cell: (r) => <span className="text-mono text-xs">{(r.metric ?? 0).toFixed(3)}</span> },
+                { key: "samples", header: "Samples", cell: (r) => <span className="text-mono text-xs">{(r.samples ?? 0).toLocaleString()}</span> },
               ]} />
             ),
           },

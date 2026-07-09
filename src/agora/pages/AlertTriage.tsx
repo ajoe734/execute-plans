@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,7 @@ export const AlertTriage = () => {
                       <span className="text-mono text-[10px] text-muted-foreground">{a.source}</span>
                     </div>
                     <div className="text-sm font-medium">{a.title}</div>
-                    <div className="text-mono text-[10px] text-muted-foreground mt-1">{new Date(a.openedAt).toLocaleString()}</div>
+                    <div className="text-mono text-[10px] text-muted-foreground mt-1">{safeDateTime(a.openedAt)}</div>
                   </Card>
                 ))}
                 {open.length === 0 && <Card className="p-4 text-center text-xs text-muted-foreground">{t("agora.alertTriage.allClear")}</Card>}

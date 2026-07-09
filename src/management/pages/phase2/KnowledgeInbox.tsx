@@ -1,6 +1,8 @@
 // Knowledge Inbox — Spec Part 3 §19.6.
 // Insight triage queue, can be promoted to Artifact / Postmortem.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { paths, withLiveOrMock } from "@/lib/bff-v1";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { safeDateTime } from "@/lib/utils";
 
 interface Insight {
   id: string;
@@ -28,8 +31,23 @@ const SEED: Insight[] = [
 
 export const KnowledgeInboxPage = () => {
   const t = useT();
-  const [items, setItems] = useState(SEED);
-  const [active, setActive] = useState<Insight | null>(SEED[0]);
+  // Live-wire GET /bff/knowledge. Real items render when present; until the
+  // backend carries data the curated SEED is kept so the page is never blank.
+  const { data: live } = useV5Live(
+    () => withLiveOrMock<Insight[]>(
+      { method: "GET", path: paths.knowledgeInbox() },
+      async () => SEED,
+      (resp: { items?: Insight[] }) => (resp?.items?.length ? resp.items : SEED),
+    ),
+    [],
+  );
+  const [items, setItems] = useState<Insight[]>(SEED);
+  const [active, setActive] = useState<Insight | null>(SEED[0] ?? null);
+  useEffect(() => {
+    if (!live) return;
+    setItems(live);
+    setActive((prev) => prev ?? live[0] ?? null);
+  }, [live]);
 
   const dismiss = (id: string) => {
     setItems((xs) => xs.filter((x) => x.id !== id));
@@ -71,7 +89,7 @@ export const KnowledgeInboxPage = () => {
                 <div className="flex items-center gap-2"><RiskBadge level={active.risk} /><Badge variant="outline">{active.kind}</Badge><span className="text-mono text-xs text-muted-foreground">{active.id}</span></div>
                 <h2 className="text-lg font-semibold">{active.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{active.body}</p>
-                <div className="text-xs text-muted-foreground text-mono">{active.source} · {new Date(active.ts).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground text-mono">{active.source} · {safeDateTime(active.ts)}</div>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                   <Button size="sm" onClick={() => promote("Artifact")}>{t("knowledge.promoteArtifact")}</Button>
                   <Button size="sm" variant="outline" onClick={() => promote("Postmortem")}>{t("knowledge.promotePostmortem")}</Button>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -166,7 +167,7 @@ export const MemoryReview = () => {
                 <p className="text-sm leading-relaxed bg-muted/40 rounded-md p-3">{active.evidence}</p>
 
                 <div className="text-mono text-xs text-muted-foreground mt-3">
-                  {t("memoryReview.fromSource", { src: active.source, ts: new Date(active.capturedAt).toLocaleString() })}
+                  {t("memoryReview.fromSource", { src: active.source, ts: safeDateTime(active.capturedAt) })}
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-5">

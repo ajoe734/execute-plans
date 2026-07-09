@@ -9,6 +9,7 @@ import type { Artifact } from "@/lib/bff/types";
 import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { safeDateTime } from "@/lib/utils";
 
 interface VersionEntry {
   version: string;
@@ -47,7 +48,7 @@ export const ArtifactRollbackPanel = ({ artifact }: { artifact: Artifact }) => {
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-mono text-sm">{v.version}</span>
                 {v.active && <Badge variant="outline" className="text-[10px] uppercase">{t("artifact.rollback.active")}</Badge>}
-                <span className="text-xs text-muted-foreground">{new Date(v.promotedAt).toLocaleDateString()}</span>
+                <span className="text-xs text-muted-foreground">{safeDateTime(v.promotedAt, "date")}</span>
               </div>
               {!v.active && (
                 <Button size="sm" variant="outline" onClick={() => setTarget(v)}>

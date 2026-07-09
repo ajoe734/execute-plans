@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useV5Live } from "./useV5Live";
 import type { InterventionItem } from "@/lib/v5";
 import type { InterventionDecision } from "@/lib/v5/enums";
+import { safeDateTime } from "@/lib/utils";
 
 const sevCls: Record<string, string> = {
   critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
@@ -220,11 +221,31 @@ export const InterventionsPage = () => {
                   <td className="px-3 py-2 cursor-pointer" onClick={() => setActive(it)}><Badge variant="outline" className={sevCls[it.severity]}>{it.severity}</Badge></td>
                   <td className="px-3 py-2 text-xs cursor-pointer" onClick={() => setActive(it)}>{it.recommendedDecision ?? "—"}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{it.requiredRoles.join(", ")}</td>
-                  <td className="px-3 py-2 text-right text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{new Date(it.updatedAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-xs text-muted-foreground cursor-pointer" onClick={() => setActive(it)}>{safeDateTime(it.updatedAt)}</td>
                 </tr>
               ))}
               {visible.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">{t("v5.empty")}</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6">
+                  <div className="mx-auto max-w-2xl rounded-md border border-dashed bg-muted/20 p-6 text-center">
+                    <div className="text-sm font-semibold text-foreground">
+                      {t("v5.interventions.empty.title", { defaultValue: "目前沒有待處理的介入" })}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("v5.interventions.empty.desc", { defaultValue: "此頁只負責簽核 / 駁回 Persona 與 Strategy 觸發的高風險動作。要新增、修改、刪除實體（Persona、Strategy、Capital Pool…）請改去 Advanced Registry。" })}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <Link to="/management/personas">
+                        <Button size="sm" variant="default">{t("v5.interventions.empty.gotoPersonas", { defaultValue: "前往 Persona Registry" })}</Button>
+                      </Link>
+                      <Link to="/management/strategies">
+                        <Button size="sm" variant="outline">{t("nav.strategies", { defaultValue: "Strategies" })}</Button>
+                      </Link>
+                      <Link to="/management/capital">
+                        <Button size="sm" variant="outline">{t("nav.capital", { defaultValue: "Capital" })}</Button>
+                      </Link>
+                    </div>
+                  </div>
+                </td></tr>
               )}
             </tbody>
           </table>
@@ -276,7 +297,7 @@ const InterventionDrawer = ({
             <Field label={t("v5.interventions.recommended")} value={item.recommendedDecision ?? "—"} />
             <Field label={t("v5.interventions.roles")} value={item.requiredRoles.join(", ") || "—"} />
             <Field label={t("v5.interventions.modifyAllowed")} value={item.modifyAllowed ? "yes" : "no"} />
-            <Field label={t("v5.col.updated")} value={new Date(item.updatedAt).toLocaleString()} />
+            <Field label={t("v5.col.updated")} value={safeDateTime(item.updatedAt)} />
           </div>
 
           {sourceLink && (

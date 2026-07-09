@@ -1,16 +1,17 @@
 # Pantheon Frontend Build Spec — Index
 
-Last updated: 2026-05-06 (v5 SA+SD intake)
+Last updated: 2026-05-20 (Management One Ring Oversight 改版規格進場)
 
 ## Normative order (highest priority first)
 
+0. **`.lovable/spec/management-2026-05-20/`** — Management 改版規格 (2026-05-20 v1)。**Management Console IA / 一線監控頁 / NL Console / write-path hardening** 的最新對外 SoT，僅覆蓋 Management 範圍；DTO / status enum / permission / SSE 仍以 Pack D 為準。實作計畫見 `.lovable/plan.md` + `.lovable/audits/mgmt-revamp-2026-05-20-plan.md`。
 1. **`.lovable/spec/v5/`** — v5 SA + SD (2026-05-06). **IA / Loop view-model / Sentinel / HIQ 升級層**。Pack D blockers + Pack E conflicts 已解決，可進入分階段落地。
 2. **`.lovable/spec/v4/` + `v4/pack-d/`** — v4 FULL + Pack C (2026-05-05-C) + Pack D (2026-05-06). **Normative type / status enum / permission / BFF / SSE / session / UI contract source of truth.**
 3. `.lovable/spec/v3/` — v3 FULL + Part 10 Medium/Low remediation (2026-05-05-B)
 4. `.lovable/spec/v2/` — v2 FULL + Part 9 High remediation (2026-05-05-A)
 5. `.lovable/spec/` (this folder) — original Parts 1–8 base spec
 
-When implementing IA / Loop / Sentinel / HIQ 概念，prefer v5；status enum / DTO / permission 仍以 v4 為準。fall back to v3/v2/v1 only when both v4 and v5 are silent.
+When implementing IA / Loop / Sentinel / HIQ 概念，prefer v5；Management 第一層 IA 採 2026-05-20 改版；status enum / DTO / permission 仍以 v4 為準。fall back to v3/v2/v1 only when both v4 and v5 are silent.
 
 ## v5 (newest, IA + Loop layer)
 

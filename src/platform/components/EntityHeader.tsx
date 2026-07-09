@@ -11,6 +11,7 @@ import { RiskBadge } from "./RiskBadge";
 import { useT } from "@/platform/hooks";
 import type { BaseObject } from "@/lib/bff/types";
 import { resolveEntity, lineageHref, decisionsHref, auditHref } from "@/lib/entityLinks";
+import { safeDateTime } from "@/lib/utils";
 
 interface Props {
   object: Pick<BaseObject, "id" | "name" | "owner" | "updatedAt" | "state" | "risk" | "labelKey">;
@@ -50,7 +51,7 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
               {t("common.owner")}: <span className="text-mono text-foreground/80">{object.owner}</span>
             </span>
             <span>
-              {t("common.updated")}: <span className="text-mono text-foreground/80">{new Date(object.updatedAt).toLocaleString()}</span>
+              {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
             </span>
           </div>
         </div>

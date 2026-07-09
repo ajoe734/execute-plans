@@ -18,7 +18,7 @@ import type { AddressInfo } from "node:net";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
-const CONTROL_ROOM_PATH = "/management/control-room";
+const CONTROL_ROOM_PATH = "/management/cockpit";
 const ENTITY_LIST_PATH = "/management/strategies";
 const SENTINEL_PATH = "/management/sentinel";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
@@ -369,6 +369,62 @@ const CONTROL_ROOM_RESPONSE = {
   },
 };
 
+const COCKPIT_RESPONSE = {
+  strip: {
+    fields: [
+      { key: "autonomy", label: "Autonomy", value: "supervised", tone: "ok", href: "/management/governance" },
+      { key: "humanPending", label: "Human pending", value: 2, tone: "warn", href: "/management/human-inbox" },
+      { key: "critical", label: "Critical findings", value: 12, tone: "bad", href: "/management/sentinel" },
+      { key: "owners", label: "Persona owners", value: 10, href: "/management/personas" },
+      { key: "personas", label: "Personas", value: 10, href: "/management/persona-fleet" },
+      { key: "broker", label: "Broker live", value: "ready", tone: "ok", href: "/management/readiness/broker-live" },
+      { key: "capital", label: "Capital bound", value: "paper", tone: "warn", href: "/management/readiness/capital-binding-live" },
+      { key: "strict", label: "Strict publish", value: "ok", tone: "ok", href: "/management/readiness/strict-publish" },
+      { key: "bffHa", label: "BFF HA", value: "ok", tone: "ok", href: "/management/readiness/bff-ha" },
+    ],
+  },
+  loopFlow: {
+    nodes: [
+      { id: "f18-research-observe", label: "F18 Research Observe", loop: "research", severity: "ok", href: "/management/loops/research" },
+      { id: "f18-research-decide", label: "F18 Research Decide", loop: "research", severity: "warn", href: "/management/loops/research" },
+      { id: "f18-execution-act", label: "F18 Execution Act", loop: "execution", severity: "warn", href: "/management/loops/execution" },
+      { id: "f18-execution-learn", label: "F18 Execution Learn", loop: "execution", severity: "ok", href: "/management/loops/execution" },
+      { id: "f18-optimization-act", label: "F18 Optimization Act", loop: "optimization", severity: "ok", href: "/management/loops/optimization" },
+    ],
+    edges: [
+      { from: "f18-research-observe", to: "f18-research-decide", severity: "ok" },
+      { from: "f18-research-decide", to: "f18-execution-act", severity: "warn" },
+      { from: "f18-execution-act", to: "f18-execution-learn", severity: "warn" },
+      { from: "f18-execution-learn", to: "f18-optimization-act", severity: "ok" },
+    ],
+  },
+  matrix: {
+    personas: ["persona-f18-1", "persona-f18-2"],
+    phases: ["Observe", "Orient", "Decide", "Act", "Learn"],
+    cells: ["persona-f18-1", "persona-f18-2"].flatMap((personaId) =>
+      ["Observe", "Orient", "Decide", "Act", "Learn"].map((phase) => ({
+        personaId,
+        phase,
+        state: personaId === "persona-f18-1" && phase === "Act" ? "alerting" : phase === "Decide" ? "active" : "idle",
+        href: `/management/personas/${personaId}`,
+      })),
+    ),
+  },
+  anomalies: [
+    {
+      id: "anom-f18-sentinel-001",
+      severity: "critical",
+      domain: "runtime",
+      title: "F18 Sentinel Finding 001",
+      why: "Synthetic F18 stability finding is still open.",
+      recommendedAction: "Open Sentinel and review remediation.",
+      detectedAt: nowIso(),
+      subjectId: "finding-f18-001",
+      links: { manageHref: "/management/sentinel?finding=finding-f18-001" },
+    },
+  ],
+};
+
 const PERSONA_HEALTH_RESPONSE = {
   items: Array.from({ length: 10 }, (_, index) => ({
     id: `persona-f18-${index + 1}`,
@@ -477,6 +533,10 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
     counters.controlRoom += 1;
     await fulfillJson(route, CONTROL_ROOM_RESPONSE);
   });
+  await page.route(/\/bff\/management\/cockpit(?:\?.*)?$/, async (route) => {
+    counters.controlRoom += 1;
+    await fulfillJson(route, { data: COCKPIT_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
   await page.route(/\/bff\/v5\/loop-runs(?:\?.*)?$/, async (route) => {
     counters.loopRuns += 1;
     await fulfillJson(route, { items: LOOP_RUNS, meta: { snapshot_at: nowIso() } });
@@ -552,6 +612,12 @@ async function installEventSourceRedirect(page: Page, baseUrl: string): Promise<
     },
     { redirectedBaseUrl: baseUrl },
   );
+}
+
+async function installStrictFallbackRuntime(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
+  });
 }
 
 function collectPageFailures(page: Page): string[] {
@@ -665,6 +731,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     await harness.start();
     try {
       await installEventSourceRedirect(page, harness.baseUrl);
+      await installStrictFallbackRuntime(page);
       const counters = routeCounters();
       const failures = collectPageFailures(page);
       await installPerfRoutes(page, counters);
@@ -672,7 +739,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       const loadMs = await gotoAndWaitForText(
         page,
         CONTROL_ROOM_PATH,
-        [/control room/i, /F18 Sentinel Finding 001/i, /F18 .* loop/i],
+        [/Pathreon Management/i, /F18 Sentinel Finding 001/i, /F18 Execution Act/i],
         "Control Room",
       );
       recordBudget(testInfo, {

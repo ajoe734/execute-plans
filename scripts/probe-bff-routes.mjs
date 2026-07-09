@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const BASE = process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io";
+const BASE = process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const AUTH_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
 const mode = process.argv.includes("--authenticated") ? "authenticated" : "anonymous";
@@ -16,7 +16,7 @@ const routes = [
   ["GET", "/bff/me"],
   ["POST", "/bff/auth/refresh"],
   ["POST", "/bff/logout"],
-  ["POST", "/bff/actions/strategies/strategy-dev/promote"],
+  ["POST", "/bff/actions/strategy/strategy-dev/promote"],
   ["GET", "/bff/strategies"],
   ["GET", "/bff/strategies/strategy-dev"],
   ["GET", "/bff/personas"],
@@ -48,7 +48,10 @@ const routes = [
   ["GET", "/bff/agora/inbox"],
   ["GET", "/bff/agora/journal"],
   ["GET", "/bff/agora/postmortems"],
-  ["GET", "/bff/agora/ask/sessions"],
+  // /bff/agora/ask/sessions intentionally removed (2026-06-03): Management AI
+  // no longer uses Agora Ask. Agora-only probe lives in scripts/check-agora-boundary.ts.
+  ["POST", "/bff/management/nl/ask"],
+
   ["GET", "/bff/v5/loop-runs"],
   ["GET", "/bff/v5/sentinel/findings"],
   ["GET", "/bff/v5/interventions"],
@@ -58,6 +61,9 @@ const routes = [
 
 function bodyFor(method, route) {
   if (method === "GET") return undefined;
+  if (route === "/bff/management/nl/ask") {
+    return JSON.stringify({ question: "probe", focus: "all", context: "probe-script" });
+  }
   if (route.includes("/decide")) return JSON.stringify({ decision: "defer", memo: "route probe noop" });
   if (route.includes("/acknowledge")) return JSON.stringify({ memo: "route probe noop" });
   if (route.includes("/import-tools")) return JSON.stringify({ schemaJson: { probe: true }, memo: "route probe noop" });
@@ -65,6 +71,7 @@ function bodyFor(method, route) {
   if (route.includes("/actions/")) return JSON.stringify({ memo: "route probe noop", expectedVersion: 1 });
   return JSON.stringify({});
 }
+
 
 async function probe(method, route) {
   const headers = {

@@ -21,6 +21,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
 import { PolicyValidatorPanel } from "@/management/components/governance/PolicyValidatorPanel";
+import { safeDateTime } from "@/lib/utils";
 
 type StageDecision = { stageName: string; decision: "approve" | "reject" };
 
@@ -95,7 +96,7 @@ export const GovernanceReview = () => {
             </div>
             <Field label={t("governance.kind")} value={req.kind} mono />
             <Field label={t("governance.requester")} value={req.requester} mono />
-            <Field label={t("governance.created")} value={new Date(req.createdAt).toLocaleString()} mono />
+            <Field label={t("governance.created")} value={safeDateTime(req.createdAt)} mono />
             {req.stages && req.stages.length > 0 ? (
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.stages")}</div>

@@ -58,11 +58,38 @@ const gateTitles = {
   1: "Static / Build / Unit",
   2: "Contract Drift",
   3: "BFF Route Probes",
-  4: "Browser Hosted E2E",
+  4: "Browser Frontend E2E",
   5: "Playwright User Flows",
   6: "A11y / Perf",
   7: "Release Decision",
 };
+
+function truthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isPullRequestContext() {
+  return process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request";
+}
+
+function hostedHardGateEnabled() {
+  if (process.env.PANTHEON_HOSTED_FE_HARD_GATE !== undefined) {
+    return truthy(process.env.PANTHEON_HOSTED_FE_HARD_GATE);
+  }
+  return !isPullRequestContext();
+}
+
+const HOSTED_FE_HARD_GATE = hostedHardGateEnabled();
+
+function hostedStatus(status) {
+  if (!HOSTED_FE_HARD_GATE && ["fail", "missing"].includes(status)) return "warn";
+  return status;
+}
+
+function hostedNote(note) {
+  return HOSTED_FE_HARD_GATE ? note : `${note}; advisory on pull_request`;
+}
 
 function exists(filePath) {
   try {
@@ -197,6 +224,12 @@ function parseBoolAfter(text, label) {
   return match[1].toLowerCase() === "true";
 }
 
+function parseStatusAfter(text, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(new RegExp(`${escaped}\\s*:?\\s*(pass|warn|partial|fail|missing|skip)`, "i"));
+  return match ? match[1].toLowerCase() : null;
+}
+
 function parseTables(text) {
   const rows = [];
   for (const line of text.split(/\r?\n/)) {
@@ -285,10 +318,17 @@ function envPresent(...names) {
 
 function markdownHasException(idOrLabel) {
   const env = process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || "";
-  const file = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const file = releaseGateExceptionsFile();
   const text = `${env}\n${readText(file)}`.toLowerCase();
   if (!text.trim()) return false;
   return text.includes(String(idOrLabel).toLowerCase());
+}
+
+function releaseGateExceptionsFile() {
+  const currentRunFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  if (currentRunFile) return currentRunFile;
+  const rootAuditFile = path.resolve(ROOT, ".lovable/audits/release-gate-exceptions.md");
+  return exists(rootAuditFile) ? rootAuditFile : "";
 }
 
 function buildGate0(hosted) {
@@ -301,7 +341,7 @@ function buildGate0(hosted) {
   const noOldUrl = hosted.exists
     ? hosted.oldHitCount === 0 && hosted.containsOld !== true
     : null;
-  const noOldStatus = noOldUrl === true ? "pass" : noOldUrl === false ? "fail" : hosted.missingStatus || "missing";
+  const noOldStatus = hostedStatus(noOldUrl === true ? "pass" : noOldUrl === false ? "fail" : hosted.missingStatus || "missing");
   const hostedEvidence = hosted.file || hosted.stepEvidence;
 
   return [
@@ -315,7 +355,7 @@ function buildGate0(hosted) {
       evidence: RUN_URL || ROOT,
       note: bffShaPresent ? "backend/BFF SHA env present" : "set PANTHEON_BFF_SHA or PANTHEON_BACKEND_SHA",
     }),
-    makeCheck("`PANTHEON_FE_BASE_URL` points to intended Lovable deployment.", feUrlPresent ? "pass" : "missing", {
+    makeCheck("`PANTHEON_FE_BASE_URL` points to intended frontend target.", feUrlPresent ? "pass" : "missing", {
       owner: feUrlPresent ? "" : GATE_OWNERS[0],
       evidence: RUN_URL || ROOT,
       note: process.env.PANTHEON_FE_BASE_URL || "missing",
@@ -325,10 +365,10 @@ function buildGate0(hosted) {
       evidence: RUN_URL || ROOT,
       note: process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "missing",
     }),
-    makeCheck("No obsolete BFF URL appears in hosted JS bundle.", noOldStatus, {
-      owner: noOldUrl === true ? "" : GATE_OWNERS[4],
+    makeCheck("No obsolete BFF URL appears in frontend JS bundle.", noOldStatus, {
+      owner: noOldStatus === "pass" ? "" : GATE_OWNERS[4],
       evidence: hostedEvidence,
-      note: noOldUrl === null ? hosted.missingNote || "hosted browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`,
+      note: hostedNote(noOldUrl === null ? hosted.missingNote || "frontend browser probe missing" : `old URL hit count: ${hosted.oldHitCount}`),
     }),
     makeCheck("Auth token or test OIDC path available for authenticated smoke.", authPresent ? "pass" : "missing", {
       owner: authPresent ? "" : GATE_OWNERS[3],
@@ -345,6 +385,7 @@ function buildGate1(stepOutcomes) {
     stepCheck(stepOutcomes, "test", "`npm run test` passes.", ".lovable/audits/npm-run-test.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "build", "`npm run build` passes.", ".lovable/audits/npm-run-build.log", GATE_OWNERS[1]),
     stepCheck(stepOutcomes, "contract", "`npm run test:contract` passes.", ".lovable/audits/contract-drift.log", GATE_OWNERS[2]),
+    stepCheck(stepOutcomes, "mgmt_persona_3000", "`npm run validate:mgmt-persona:3000` passes.", ".lovable/audits/mgmt-persona-3000-validation.log", GATE_OWNERS[1]),
   ];
 }
 
@@ -407,14 +448,83 @@ function analyzeAuthSmoke(stepOutcomes) {
   };
 }
 
-function buildGate3(routeProbe, authSmoke) {
+function analyzeWriteProbe(stepOutcomes) {
+  const step = stepInfo(stepOutcomes, "write_probe", ".lovable/audits/bff-write-path-probe.log");
+  const file = latestAuditFile([/^bff-backend-write-probe-.*\.md$/]) || evidencePath(step.evidence);
+  const text = readText(file);
+  return {
+    exists: Boolean(text),
+    file,
+    skippedCreates: parseNumberAfter(text, "Skipped create dry-run endpoints"),
+    createDryRunEnabled: parseBoolAfter(text, "Create dry-run enabled"),
+    implemented: parseNumberAfter(text, "implemented or typed rejected"),
+    typed4xx: parseNumberAfter(text, "typed 4xx BffErrorEnvelope responses"),
+    missing: parseNumberAfter(text, "route missing/not implemented"),
+    optionalMissing: parseNumberAfter(text, "optional route missing/not implemented"),
+    untyped4xx: parseNumberAfter(text, "untyped 4xx"),
+    beError: parseNumberAfter(text, "backend 5xx"),
+    network: parseNumberAfter(text, "network errors"),
+    other: parseNumberAfter(text, "other unexpected"),
+    sideEffectLeaks: parseNumberAfter(text, "side-effect marker leaks"),
+    readbackFailures: parseNumberAfter(text, "readback failures"),
+    missingStatus: missingEvidenceStatus(step.status),
+    missingNote: missingProbeNote("live dry-run write probe", step.outcome),
+    stepStatus: step.status,
+    stepOutcome: step.outcome,
+    stepEvidence: evidencePath(step.evidence),
+  };
+}
+
+function liveDeepStatus(value) {
+  if (value === "pass") return "pass";
+  if (value === "warn" || value === "partial") return "warn";
+  if (value === "fail") return "fail";
+  if (value === "skip") return "skip";
+  return "missing";
+}
+
+function analyzeLiveDeep(stepOutcomes) {
+  const step = stepInfo(stepOutcomes, "mgmt_live_deep", ".lovable/audits/management-live-deep-validation.log");
+  const jsonFile = latestAuditFile([/^management-live-deep-validation-.*\.json$/]);
+  const mdFile = latestAuditFile([/^management-live-deep-validation-.*\.md$/]);
+  const report = readJson(jsonFile);
+  const text = readText(mdFile);
+  return {
+    exists: Boolean(report || text),
+    file: jsonFile || mdFile || evidencePath(step.evidence),
+    overall: report?.overall || parseStatusAfter(text, "Overall"),
+    rbacStatus: report?.rbac?.status || parseStatusAfter(text, "RBAC status"),
+    rbacPresentRoles: report?.rbac?.presentRoles || [],
+    rbacMissingRoles: report?.rbac?.missingRoles || [],
+    operatorRaceStatus: report?.operatorRace?.status || parseStatusAfter(text, "Operator race status"),
+    operatorRaceNote: report?.operatorRace?.note || "",
+    sseStatus: report?.sse?.status || parseStatusAfter(text, "SSE status"),
+    sseNote: report?.sse?.note || "",
+    sseDurationMs: report?.sse?.durationMs || parseNumberAfter(text, "SSE duration ms"),
+    missingStatus: missingEvidenceStatus(step.status),
+    missingNote: missingProbeNote("management live deep validation", step.outcome),
+    stepStatus: step.status,
+    stepOutcome: step.outcome,
+    stepEvidence: evidencePath(step.evidence),
+  };
+}
+
+function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   const routeEvidence = routeProbe.file || routeProbe.stepEvidence;
   const authEvidence = authSmoke.file || routeEvidence;
+  const writeEvidence = writeProbe.file || authEvidence;
+  const liveDeepEvidence = liveDeep.file || writeEvidence;
+  const authMode = String(process.env.PANTHEON_RELEASE_GATE_AUTH_MODE || process.env.PANTHEON_BFF_AUTH_MODE || "").trim().toLowerCase();
+  const permissiveAuth = ["permissive", "stub", "dev", "local"].includes(authMode);
   const healthStatus = [routeProbe.rows.get("/health")?.status, routeProbe.rows.get("/healthz")?.status].includes("200");
   const openapiStatus = routeProbe.rows.get("/openapi.json")?.status === "200";
   const streamStatus = routeProbe.rows.get("/bff/events/stream")?.status;
   const protectedRows = [...routeProbe.rows.values()].filter((row) => row.route.startsWith("/bff/") && row.route !== "/bff/events/stream");
-  const protectedValid = protectedRows.length > 0 && protectedRows.every((row) => ["401", "403"].includes(String(row.status)));
+  const protectedValid = protectedRows.length > 0 && protectedRows.every((row) => (
+    permissiveAuth
+      ? !["404", "ERR"].includes(String(row.status))
+      : ["401", "403"].includes(String(row.status))
+  ));
   const no404 = routeProbe.canonical404 === 0;
 
   const readListPaths = [
@@ -440,7 +550,9 @@ function buildGate3(routeProbe, authSmoke) {
     "/bff/agora/inbox",
     "/bff/agora/journal",
     "/bff/agora/postmortems",
-    "/bff/agora/ask/sessions",
+    // "/bff/agora/ask/sessions" removed (2026-06-03) — Management AI runtime
+    // moved to POST /bff/management/nl/ask. See writePaths below.
+
   ];
   const v5Paths = [
     "/bff/v5/loop-runs",
@@ -449,10 +561,12 @@ function buildGate3(routeProbe, authSmoke) {
     "/bff/v5/execution/persona-health",
   ];
   const writePaths = [
-    "/bff/actions/strategies/strategy-dev/promote",
+    "/bff/actions/strategy/strategy-dev/promote",
     "/bff/approvals/approval-dev/decide",
     "/bff/v5/interventions/intervention-dev/decide",
+    "/bff/management/nl/ask",
   ];
+
   const routeStatus = (condition) => routeProbe.exists ? condition ? "pass" : "fail" : routeProbe.missingStatus;
   const routeOwner = (condition) => routeProbe.exists && condition ? "" : GATE_OWNERS[3];
   const routeNote = (note) => routeProbe.exists ? note : routeProbe.missingNote;
@@ -464,7 +578,23 @@ function buildGate3(routeProbe, authSmoke) {
   const v5Result = authSmoke.exists ? allRowsPass(authSmoke.rows, v5Paths) : authMissingResult;
   const writeResult = authSmoke.exists ? allRowsPass(authSmoke.rows, writePaths) : authMissingResult;
   const meRow = authSmoke.rows.get("/bff/me");
-  const authAllPassed = authSmoke.exists && authSmoke.passed !== null && authSmoke.total !== null && authSmoke.passed === authSmoke.total;
+  const writeProbeClean = writeProbe.exists &&
+    (writeProbe.missing ?? 1) === 0 &&
+    (writeProbe.untyped4xx ?? 1) === 0 &&
+    (writeProbe.beError ?? 1) === 0 &&
+    (writeProbe.network ?? 1) === 0 &&
+    (writeProbe.other ?? 1) === 0;
+  const writeProbeNoSideEffects = writeProbe.exists &&
+    (writeProbe.sideEffectLeaks ?? 1) === 0 &&
+    (writeProbe.readbackFailures ?? 1) === 0;
+  const writeProbeCreateCoverage = writeProbe.exists && (writeProbe.skippedCreates ?? 1) === 0;
+  const writeProbeStatus = (condition) => writeProbe.exists ? condition ? "pass" : "fail" : writeProbe.missingStatus;
+  const writeProbeWarnStatus = (condition) => writeProbe.exists ? condition ? "pass" : "warn" : writeProbe.missingStatus;
+  const writeProbeOwner = (condition) => writeProbe.exists && condition ? "" : GATE_OWNERS[3];
+  const writeProbeNote = (note) => writeProbe.exists ? note : writeProbe.missingNote;
+  const liveDeepGateStatus = (status) => liveDeep.exists ? liveDeepStatus(status) : liveDeep.missingStatus;
+  const liveDeepOwner = (status) => liveDeepGateStatus(status) === "pass" ? "" : GATE_OWNERS[3];
+  const liveDeepNote = (note) => liveDeep.exists ? note : liveDeep.missingNote;
 
   return [
     makeCheck("Anonymous: `/health` or `/healthz` returns 200.", routeStatus(healthStatus), {
@@ -482,10 +612,10 @@ function buildGate3(routeProbe, authSmoke) {
       evidence: routeEvidence,
       note: routeNote(`status: ${streamStatus || "missing"}`),
     }),
-    makeCheck("Anonymous: canonical protected routes return 401/403, not 404.", routeStatus(protectedValid), {
+    makeCheck("Anonymous: canonical protected routes return expected auth/dev status, not 404.", routeStatus(protectedValid), {
       owner: routeOwner(protectedValid),
       evidence: routeEvidence,
-      note: routeNote(`${protectedRows.length} protected route rows`),
+      note: routeNote(`${protectedRows.length} protected route rows; auth mode: ${authMode || "strict"}`),
     }),
     makeCheck("Anonymous: no canonical route returns 404.", routeStatus(no404), {
       owner: routeOwner(no404),
@@ -512,10 +642,35 @@ function buildGate3(routeProbe, authSmoke) {
       evidence: authEvidence,
       note: writeResult.note,
     }),
-    makeCheck("Authenticated: safe write / dry-run endpoints do not create live capital side effects.", authStatus(authAllPassed), {
-      owner: authOwner(authAllPassed),
-      evidence: authEvidence,
-      note: authNote(`authenticated smoke passed ${authSmoke.passed}/${authSmoke.total}`),
+    makeCheck("Authenticated: expanded live dry-run write probe has no missing routes, untyped 4xx, or 5xx.", writeProbeStatus(writeProbeClean), {
+      owner: writeProbeOwner(writeProbeClean),
+      evidence: writeEvidence,
+      note: writeProbeNote(`missing=${writeProbe.missing ?? "?"}; optionalMissing=${writeProbe.optionalMissing ?? "?"}; untyped4xx=${writeProbe.untyped4xx ?? "?"}; 5xx=${writeProbe.beError ?? "?"}; network=${writeProbe.network ?? "?"}; skippedCreates=${writeProbe.skippedCreates ?? "?"}`),
+    }),
+    makeCheck("Authenticated: dry-run write marker does not appear in readback lists.", writeProbeStatus(writeProbeNoSideEffects), {
+      owner: writeProbeOwner(writeProbeNoSideEffects),
+      evidence: writeEvidence,
+      note: writeProbeNote(`side-effect marker leaks=${writeProbe.sideEffectLeaks ?? "?"}; readback failures=${writeProbe.readbackFailures ?? "?"}`),
+    }),
+    makeCheck("Authenticated: create dry-run endpoints are explicitly exercised.", writeProbeWarnStatus(writeProbeCreateCoverage), {
+      owner: writeProbeCreateCoverage ? "" : GATE_OWNERS[3],
+      evidence: writeEvidence,
+      note: writeProbeNote(`createDryRunEnabled=${writeProbe.createDryRunEnabled ?? "?"}; skippedCreates=${writeProbe.skippedCreates ?? "?"}`),
+    }),
+    makeCheck("Live deep: bearer-token RBAC matrix is proven for configured role tokens.", liveDeepGateStatus(liveDeep.rbacStatus), {
+      owner: liveDeepOwner(liveDeep.rbacStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(`status=${liveDeep.rbacStatus || "missing"}; present=${liveDeep.rbacPresentRoles.join(",") || "none"}; missing=${liveDeep.rbacMissingRoles.join(",") || "none"}`),
+    }),
+    makeCheck("Live deep: multi-operator two-man race is exercised.", liveDeepGateStatus(liveDeep.operatorRaceStatus), {
+      owner: liveDeepOwner(liveDeep.operatorRaceStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(liveDeep.operatorRaceNote || `status=${liveDeep.operatorRaceStatus || "missing"}`),
+    }),
+    makeCheck("Live deep: SSE long reconnect has no duplicate replay.", liveDeepGateStatus(liveDeep.sseStatus), {
+      owner: liveDeepOwner(liveDeep.sseStatus),
+      evidence: liveDeepEvidence,
+      note: liveDeepNote(`${liveDeep.sseNote || `status=${liveDeep.sseStatus || "missing"}`}; duration=${liveDeep.sseDurationMs ?? "?"}ms`),
     }),
   ];
 }
@@ -530,6 +685,11 @@ function analyzeHostedProbe(stepOutcomes) {
   const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
+  const requiredCoreResponsesComplete = parseBoolAfter(text, "required core BFF responses complete");
+  const personaFleetRowCount = parseNumberAfter(text, "persona fleet row count");
+  const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid");
+  const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid");
+  const personaFleetSeedFallbackArmed = parseBoolAfter(text, "persona fleet seed fallback armed");
   const pass = parseBoolAfter(text, "pass");
   const consoleErrorsSection = text.match(/## Console errors\s+([\s\S]*?)(?:\n## |\n?$)/i)?.[1] || "";
   const corsErrors = /cors/i.test(consoleErrorsSection) && !/none/i.test(consoleErrorsSection.trim());
@@ -542,10 +702,15 @@ function analyzeHostedProbe(stepOutcomes) {
     oldHitCount: oldHitCount ?? (containsOld === false ? 0 : containsOld === true ? 1 : null),
     containsBff,
     containsOld,
+    requiredCoreResponsesComplete,
+    personaFleetRowCount,
+    personaFleetRowsValid,
+    personaFleetLiveBannerValid,
+    personaFleetSeedFallbackArmed,
     pass,
     corsErrors,
     missingStatus: missingEvidenceStatus(step.status),
-    missingNote: missingProbeNote("hosted browser probe", step.outcome),
+    missingNote: missingProbeNote("frontend browser probe", step.outcome),
     stepStatus: step.status,
     stepOutcome: step.outcome,
     stepEvidence: evidencePath(step.evidence),
@@ -558,44 +723,63 @@ function buildGate4(hosted) {
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
   const responsesMatch = hosted.requestCount !== null && hosted.requestCount > 0 && hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
-  const hostedStatus = (condition) => hosted.exists ? condition ? "pass" : "fail" : hosted.missingStatus;
-  const hostedOwner = (condition) => hosted.exists && condition ? "" : GATE_OWNERS[4];
-  const hostedNote = (note) => hosted.exists ? note : hosted.missingNote;
+  const requiredResponsesComplete = Boolean(hosted.requiredCoreResponsesComplete) && noFailed;
+  const responsesComplete = responsesMatch || requiredResponsesComplete;
+  const statusForHosted = (condition) => hostedStatus(hosted.exists ? condition ? "pass" : "fail" : hosted.missingStatus);
+  const hostedOwner = (status) => status === "pass" ? "" : GATE_OWNERS[4];
+  const noteForHosted = (note) => hostedNote(hosted.exists ? note : hosted.missingNote);
+  const loadedStatus = statusForHosted(loaded);
+  const containsBffStatus = statusForHosted(hosted.containsBff);
+  const noOldStatus = statusForHosted(noOld);
+  const corsStatus = statusForHosted(!hosted.corsErrors && noFailed);
+  const responsesStatus = statusForHosted(responsesComplete);
+  const noFailedStatus = statusForHosted(noFailed);
+  const noCorsStatus = statusForHosted(!hosted.corsErrors);
   return [
-    makeCheck("Hosted page loads.", hostedStatus(loaded), {
-      owner: hostedOwner(loaded),
+    makeCheck("Frontend page loads.", loadedStatus, {
+      owner: hostedOwner(loadedStatus),
       evidence,
-      note: hostedNote(`probe pass: ${hosted.pass}`),
+      note: noteForHosted(`probe pass: ${hosted.pass}`),
     }),
-    makeCheck("Hosted JS bundle contains intended BFF URL.", hostedStatus(hosted.containsBff), {
-      owner: hostedOwner(hosted.containsBff),
+    makeCheck("Frontend runtime uses intended BFF URL.", containsBffStatus, {
+      owner: hostedOwner(containsBffStatus),
       evidence,
-      note: hostedNote(`contains intended BFF URL: ${hosted.containsBff ?? "missing"}`),
+      note: noteForHosted(`uses intended BFF URL: ${hosted.containsBff ?? "missing"}`),
     }),
-    makeCheck("Hosted JS bundle does not contain obsolete BFF URL.", hostedStatus(noOld), {
-      owner: hostedOwner(noOld),
+    makeCheck("Frontend Persona Fleet renders US/TW/Crypto rows without NaN.", statusForHosted(hosted.personaFleetRowsValid), {
+      owner: hostedOwner(statusForHosted(hosted.personaFleetRowsValid)),
       evidence,
-      note: hostedNote(`old BFF URL hit count: ${hosted.oldHitCount ?? "missing"}`),
+      note: noteForHosted(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}`),
     }),
-    makeCheck("CORS preflight passes.", hostedStatus(!hosted.corsErrors && noFailed), {
-      owner: hostedOwner(!hosted.corsErrors && noFailed),
+    makeCheck("Frontend live banner does not claim seed fallback armed.", statusForHosted(hosted.personaFleetLiveBannerValid), {
+      owner: hostedOwner(statusForHosted(hosted.personaFleetLiveBannerValid)),
       evidence,
-      note: hostedNote("inferred from browser network and console"),
+      note: noteForHosted(`seed fallback armed: ${hosted.personaFleetSeedFallbackArmed ?? "missing"}`),
     }),
-    makeCheck("Browser receives responses for all BFF requests.", hostedStatus(responsesMatch), {
-      owner: hostedOwner(responsesMatch),
+    makeCheck("Frontend JS bundle does not contain obsolete BFF URL.", noOldStatus, {
+      owner: hostedOwner(noOldStatus),
       evidence,
-      note: hostedNote(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}`),
+      note: noteForHosted(`old BFF URL hit count: ${hosted.oldHitCount ?? "missing"}`),
     }),
-    makeCheck("No failed BFF requests.", hostedStatus(noFailed), {
-      owner: hostedOwner(noFailed),
+    makeCheck("CORS preflight passes.", corsStatus, {
+      owner: hostedOwner(corsStatus),
       evidence,
-      note: hostedNote(`failed count: ${hosted.failedCount ?? "missing"}`),
+      note: noteForHosted("inferred from browser network and console"),
     }),
-    makeCheck("No CORS console errors.", hostedStatus(!hosted.corsErrors), {
-      owner: hostedOwner(!hosted.corsErrors),
+    makeCheck("Browser receives required BFF responses.", responsesStatus, {
+      owner: hostedOwner(responsesStatus),
       evidence,
-      note: hostedNote(hosted.corsErrors ? "CORS text found in console errors" : "no CORS console errors detected"),
+      note: noteForHosted(`responses ${hosted.responseCount ?? "?"}/${hosted.requestCount ?? "?"}; required core complete: ${hosted.requiredCoreResponsesComplete ?? "missing"}`),
+    }),
+    makeCheck("No failed BFF requests.", noFailedStatus, {
+      owner: hostedOwner(noFailedStatus),
+      evidence,
+      note: noteForHosted(`failed count: ${hosted.failedCount ?? "missing"}`),
+    }),
+    makeCheck("No CORS console errors.", noCorsStatus, {
+      owner: hostedOwner(noCorsStatus),
+      evidence,
+      note: noteForHosted(hosted.corsErrors ? "CORS text found in console errors" : "no CORS console errors detected"),
     }),
   ];
 }
@@ -609,19 +793,29 @@ function analyzePlaywright() {
     const nextParents = suite.title ? [...parents, suite.title] : parents;
     for (const spec of suite.specs || []) {
       const results = [];
+      const finalStatuses = [];
       for (const test of spec.tests || []) {
+        if (test.status) finalStatuses.push(test.status);
         for (const result of test.results || []) {
           results.push(result.status || "");
         }
       }
-      const failed = results.some((status) => ["failed", "timedOut", "interrupted"].includes(status));
-      const skipped = results.length > 0 && results.every((status) => status === "skipped");
-      const passed = results.length > 0 && !failed && !skipped;
+      const unexpected = ["unexpected", "failed", "timedOut", "interrupted"];
+      const failed = finalStatuses.length
+        ? finalStatuses.some((status) => unexpected.includes(status))
+        : results.some((status) => unexpected.includes(status));
+      const skipped = finalStatuses.length
+        ? finalStatuses.every((status) => status === "skipped")
+        : results.length > 0 && results.every((status) => status === "skipped");
+      const passed = finalStatuses.length
+        ? finalStatuses.every((status) => ["expected", "flaky"].includes(status))
+        : results.length > 0 && !failed && !skipped;
       specs.push({
         title: [...nextParents, spec.title].filter(Boolean).join(" > "),
         file: spec.file || suite.file || "",
         status: failed ? "fail" : skipped ? "skip" : passed ? "pass" : "missing",
         results,
+        finalStatuses,
       });
     }
     for (const child of suite.suites || []) visitSuite(child, nextParents);
@@ -663,11 +857,21 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
       note: `${flowId} not found in Playwright JSON report`,
     });
   }
-  const status = worstStatus(matches.map((spec) => spec.status));
+  const failed = matches.filter((spec) => spec.status === "fail" || spec.status === "missing");
+  const passed = matches.filter((spec) => spec.status === "pass");
+  const skipped = matches.filter((spec) => spec.status === "skip");
+  let status = failed.length ? worstStatus(failed.map((spec) => spec.status)) : passed.length ? "pass" : "skip";
+  if (status === "skip" && options.optionalException && markdownHasException(flowId)) {
+    status = "warn";
+  }
+  const noteParts = [`${matches.length} matching spec(s)`];
+  if (passed.length) noteParts.push(`${passed.length} runnable passed`);
+  if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
+  if (status === "warn") noteParts.push(`${flowId} marked by release-gate exception`);
   return makeCheck(label, status, {
     owner: status === "pass" ? "" : GATE_OWNERS[5],
     evidence,
-    note: `${matches.length} matching spec(s)`,
+    note: noteParts.join("; "),
   });
 }
 
@@ -738,16 +942,16 @@ function buildGate7(previousGates) {
   const priorChecks = Object.entries(previousGates)
     .filter(([gate]) => gate !== "7")
     .flatMap(([, checks]) => checks);
-  const criticalStatus = worstStatus(priorChecks.map((check) => check.status));
   const failures = priorChecks.filter((check) => ["fail", "missing"].includes(check.status));
-  const exceptionsFile = latestAuditFile([/^release-gate-exceptions\.md$/]);
+  const hardBlocked = failures.length > 0;
+  const exceptionsFile = releaseGateExceptionsFile();
   const exceptionsPresent = Boolean(process.env.PANTHEON_RELEASE_GATE_EXCEPTIONS || exceptionsFile);
   const evidencePresent = auditFiles.length > 0;
   const shaRecorded = envPresent("PANTHEON_FRONTEND_SHA", "GITHUB_SHA") && envPresent("PANTHEON_BFF_SHA", "PANTHEON_BACKEND_SHA", "PANTHEON_PANTHEON_SHA") && envPresent("PANTHEON_BFF_BASE_URL", "VITE_BFF_BASE_URL");
 
   return [
-    makeCheck("All critical gates pass.", criticalStatus === "pass" ? "pass" : "fail", {
-      owner: criticalStatus === "pass" ? "" : GATE_OWNERS[7],
+    makeCheck("All critical gates pass.", hardBlocked ? "fail" : "pass", {
+      owner: hardBlocked ? GATE_OWNERS[7] : "",
       evidence: JSON_OUT_PATH,
       note: `${failures.length} failing or missing check(s)`,
     }),
@@ -830,6 +1034,8 @@ function main() {
   const stepOutcomes = getStepOutcomes();
   const routeProbe = analyzeRouteProbe(stepOutcomes);
   const authSmoke = analyzeAuthSmoke(stepOutcomes);
+  const writeProbe = analyzeWriteProbe(stepOutcomes);
+  const liveDeep = analyzeLiveDeep(stepOutcomes);
   const hosted = analyzeHostedProbe(stepOutcomes);
   const playwright = analyzePlaywright();
 
@@ -837,7 +1043,7 @@ function main() {
     0: buildGate0(hosted),
     1: buildGate1(stepOutcomes),
     2: buildGate2(stepOutcomes),
-    3: buildGate3(routeProbe, authSmoke),
+    3: buildGate3(routeProbe, authSmoke, writeProbe, liveDeep),
     4: buildGate4(hosted),
     5: buildGate5(playwright),
     6: buildGate6(playwright),

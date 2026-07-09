@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { AllocationLimit } from "@/lib/bff/types";
@@ -67,7 +68,7 @@ export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
           { key: "ref", header: t("phase13.capital.limits.scopeRef"), cell: (r) => <span className="text-mono text-xs">{r.scopeRef}</span> },
           { key: "cap", header: t("phase13.capital.limits.cap"), cell: (r) => <span className="text-mono text-xs">{(r.cap * 100).toFixed(0)}%</span> },
           { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.updatedBy}</span> },
-          { key: "ts", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{new Date(r.updatedAt).toLocaleString()}</span> },
+          { key: "ts", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span> },
         ]}
         empty={t("empty.none")}
       />

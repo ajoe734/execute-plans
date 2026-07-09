@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useParams } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
 import type { AuditEvent, Channel } from "@/lib/bff/types";
@@ -19,7 +20,7 @@ export const ChannelDetail = () => {
   useEffect(() => {
     if (!id) return;
     bff.channels.get(id).then(setC);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action.startsWith("channel."))));
+    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
   }, [id]);
 
   const recent = c ? Array.from({ length: 6 }).map((_, i) => ({
@@ -33,7 +34,7 @@ export const ChannelDetail = () => {
   return (
     <ObjectDetailLayout
       object={c}
-      subtitle={`${c.kind.toUpperCase()} · ${c.subscribers} subscribers`}
+      subtitle={`${(c.kind ?? "").toUpperCase()} · ${c.subscribers ?? 0} subscribers`}
       actions={
         <Button size="sm" variant="outline" onClick={() => toast.success("Test message sent")}>
           <Send className="h-4 w-4 mr-1" />Send test
@@ -45,7 +46,7 @@ export const ChannelDetail = () => {
           content: (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Kind" value={c.kind.toUpperCase()} />
+                <StatCard label="Kind" value={(c.kind ?? "—").toUpperCase()} />
                 <StatCard label="Subscribers" value={c.subscribers} />
                 <StatCard label={t("table.owner")} value={c.owner} />
                 <StatCard label={t("table.state")} value={c.state} />
@@ -59,7 +60,7 @@ export const ChannelDetail = () => {
         },
         { value: "history", label: t("section.history"), content: (
           <DataTable rows={recent} columns={[
-            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{new Date(r.ts).toLocaleString()}</span> },
+            { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
             { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
             { key: "sev", header: t("table.severity"), cell: (r) => <span className="text-mono text-xs uppercase">{r.severity}</span> },
           ]} empty={t("empty.none")} />

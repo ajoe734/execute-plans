@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,9 +8,12 @@ import "@/i18n";
 import { PlatformShell } from "@/platform/PlatformShell";
 import { ManagementLayout } from "@/management/ManagementLayout";
 import { AgoraLayout } from "@/agora/AgoraLayout";
-import { ManagementOverview } from "@/management/pages/Overview";
+import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
+import { StrategyWorkshopPage } from "@/agora/pages/StrategyWorkshopPage";
+import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";
+import PersonaOnboarding from "@/management/pages/PersonaOnboarding";
 import { CapitalPoolDetail } from "@/management/pages/CapitalPoolDetail";
 import { RankingFormulaDetail } from "@/management/pages/RankingFormulaDetail";
 import { RebalanceDetail } from "@/management/pages/RebalanceDetail";
@@ -69,24 +72,68 @@ import { RankingDashboardPage } from "@/management/pages/phase2/RankingDashboard
 import { WorkflowTemplatesPage } from "@/management/pages/phase2/WorkflowTemplates";
 import { HookCronManagerPage } from "@/management/pages/phase2/HookCronManager";
 import { AlphaFactoryBoardPage } from "@/management/pages/phase2/AlphaFactoryBoard";
-import { StudiosOverview } from "@/management/pages/studios/StudiosOverview";
-import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
-import { FitnessFormulaStudio } from "@/management/pages/studios/FitnessFormulaStudio";
-import { EvolutionStudio } from "@/management/pages/studios/EvolutionStudio";
-import { AllocationStudio } from "@/management/pages/studios/AllocationStudio";
-import { RebalanceOpsStudio } from "@/management/pages/studios/RebalanceOpsStudio";
-import { CapitalStudio } from "@/management/pages/studios/CapitalStudio";
-import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { LoopsPage } from "@/management/pages/v5/V5Pages";
-import { ControlRoomPage } from "@/management/pages/v5/ControlRoom";
+// Studios: only the two cross-entity/sandbox tools that have no equivalent on the
+// per-entity detail pages are kept (FormulaStudio A/B-compare+backtest, SkillSandbox
+// test harness). The per-entity studios were removed — operate on the detail page.
+import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
+import { SkillSandboxStudio } from "@/management/pages/studios/SkillSandboxStudio";
 import { ExecutionLoopPage } from "@/management/pages/v5/ExecutionLoop";
 import { OptimizationLoopPage } from "@/management/pages/v5/OptimizationLoop";
 import { ResearchLoopPage } from "@/management/pages/v5/ResearchLoop";
 import { SentinelPage } from "@/management/pages/v5/Sentinel";
 import { InterventionsPage } from "@/management/pages/v5/Interventions";
+// 2026-05-20 Management revamp — One Ring Oversight IA (stubs from M1; replaced in M2+).
+import {
+  OneRingCockpitPage,
+  PersonaFleetPage,
+  HumanInboxPage,
+  TradingPulsePage,
+  EvolutionJournalPage,
+  EvidenceExplorerPage,
+  EvidencePacketDetailPage,
+  PersonaIntentTracesPage,
+  PersonaIntentTraceDetailPage,
+  BrokerLiveReadinessPage,
+  CapitalBindingLiveReadinessPage,
+  BffHaReadinessPage,
+  StrictPublishAuditPage,
+  DataSourceManagementPage,
+  Ep5CanaryReadinessPage,
+  HumanGateDetailPage,
+} from "@/management/pages/oversight/_stubs";
+// 2026-05-22 PM-12 — Performance & League pages.
+import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
+import { PersonaLeaguePage } from "@/management/pages/oversight/PersonaLeague";
+import { QuarterlyRankingPage } from "@/management/pages/oversight/QuarterlyRanking";
+import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
+import { ManagementAgentRedirect } from "@/management/pages/agent/ManagementAgentRedirect";
+import AuthPage from "@/pages/Auth";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import NotFound from "./pages/NotFound";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
+
+function TradingRoomRoute() {
+  const navigate = useNavigate();
+  const { strategyId } = useParams<{ strategyId?: string }>();
+  const [searchParams] = useSearchParams();
+  const strategyVersion = searchParams.get("strategyVersion") ?? undefined;
+  const suffix = strategyVersion ? `?strategyVersion=${encodeURIComponent(strategyVersion)}` : "";
+
+  return (
+    <TradingRoomPage
+      onBackToWorkshop={() => navigate("/agora/strategy-workshop")}
+      onStrategySelect={(nextStrategyId) =>
+        navigate(nextStrategyId ? `/agora/trading-room/${encodeURIComponent(nextStrategyId)}${suffix}` : "/agora/trading-room")
+      }
+      strategyId={strategyId}
+      strategyVersion={strategyVersion}
+    />
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -94,14 +141,57 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AuthProvider>
+        <ErrorBoundary scope="App">
         <Routes>
+
           <Route path="/" element={<Navigate to="/management" replace />} />
+          <Route path="/auth" element={<AuthPage />} />
+          {/* TEST MODE: legacy /management/agent paths now redirect and open the floating panel. */}
+          <Route path="/management/agent" element={<ManagementAgentRedirect />} />
+          <Route path="/management/agent/:threadId" element={<ManagementAgentRedirect />} />
 
           <Route element={<PlatformShell />}>
             {/* Management Console */}
             <Route path="/management" element={<ManagementLayout />}>
-              <Route index element={<ControlRoomPage />} />
-              <Route path="control-room" element={<ControlRoomPage />} />
+              {/* 2026-05-20 PM-1 — Pathreon Management Cockpit is the canonical landing. */}
+              <Route index element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="cockpit" element={<OneRingCockpitPage />} />
+              {/* Console consolidation (2026-06-15): Cockpit is the single canonical
+                  management console. Control Room / Command Center / Overview / One Ring
+                  all redirect here. Loop-level detail lives under /loops, /sentinel,
+                  /interventions. */}
+              <Route path="control-room" element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="one-ring" element={<Navigate to="/management/cockpit" replace />} />
+
+              <Route path="persona-fleet" element={<PersonaFleetPage />} />
+              <Route path="human-inbox" element={<HumanInboxPage />} />
+              <Route path="human-inbox/:id" element={<HumanGateDetailPage />} />
+              <Route path="trading-pulse" element={<TradingPulsePage />} />
+              <Route path="evolution-journal" element={<EvolutionJournalPage />} />
+              <Route path="evidence" element={<EvidenceExplorerPage />} />
+              <Route path="evidence/:id" element={<EvidencePacketDetailPage />} />
+              <Route path="persona-intent" element={<PersonaIntentTracesPage />} />
+              <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailPage />} />
+              <Route path="broker-live" element={<Navigate to="/management/readiness/broker-live" replace />} />
+              <Route path="capital-live" element={<Navigate to="/management/readiness/capital-binding-live" replace />} />
+              <Route path="readiness/ep5" element={<Ep5CanaryReadinessPage />} />
+              <Route path="readiness/broker-live" element={<BrokerLiveReadinessPage />} />
+              <Route path="readiness/capital-binding-live" element={<CapitalBindingLiveReadinessPage />} />
+              <Route path="readiness/bff-ha" element={<BffHaReadinessPage />} />
+              <Route path="readiness/strict-publish" element={<StrictPublishAuditPage />} />
+              <Route path="data-sources" element={<DataSourceManagementPage />} />
+              <Route path="system/bff-ha" element={<Navigate to="/management/readiness/bff-ha" replace />} />
+              <Route path="system/strict-publish" element={<Navigate to="/management/readiness/strict-publish" replace />} />
+              {/* ask page retired — redundant with the floating agent panel */}
+              <Route path="ask" element={<Navigate to="/management/cockpit" replace />} />
+              {/* PM-12 — Performance & League */}
+              <Route path="portfolio-book" element={<PortfolioBookPage />} />
+              <Route path="persona-league" element={<PersonaLeaguePage />} />
+              <Route path="quarterly-ranking" element={<QuarterlyRankingPage />} />
+              <Route path="performance-attribution" element={<PerformanceAttributionPage />} />
+              {/* Legacy alias kept for ops review bookmarks → Cockpit. */}
+              <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="loops" element={<LoopsPage />} />
               <Route path="loops/execution" element={<ExecutionLoopPage />} />
               <Route path="loops/optimization" element={<OptimizationLoopPage />} />
@@ -109,16 +199,17 @@ const App = () => (
               <Route path="loops/:kind" element={<LoopsPage />} />
               <Route path="sentinel" element={<SentinelPage />} />
               <Route path="interventions" element={<InterventionsPage />} />
-              <Route path="overview" element={<Navigate to="/management/control-room" replace />} />
-              <Route path="overview-legacy" element={<ManagementOverview />} />
-              {/* Pack E E7 (Q23) — command-center is now an alias for Control Room. */}
-              <Route path="command-center" element={<Navigate to="/management/control-room" replace />} />
+              <Route path="overview" element={<Navigate to="/management/cockpit" replace />} />
+              <Route path="overview-legacy" element={<Navigate to="/management/cockpit" replace />} />
+              {/* command-center folded into the single Cockpit console. */}
+              <Route path="command-center" element={<Navigate to="/management/cockpit" replace />} />
               <Route path="risk-center" element={<Navigate to="/management/risk" replace />} />
               <Route path="risk" element={<RiskCenter />} />
               <Route path="strategies" element={<StrategiesList />} />
               <Route path="strategies/:id" element={<StrategyDetail />} />
               <Route path="personas" element={<PersonasList />} />
               <Route path="personas/:id" element={<PersonaDetail />} />
+              <Route path="personas/:id/onboarding" element={<PersonaOnboarding />} />
               <Route path="capital" element={<CapitalPoolsList />} />
               <Route path="capital/:id" element={<CapitalPoolDetail />} />
               <Route path="capital-pools" element={<Navigate to="/management/capital" replace />} />
@@ -174,14 +265,20 @@ const App = () => (
               <Route path="skills/:id" element={<SkillDetail />} />
               <Route path="channels" element={<ChannelsList />} />
               <Route path="channels/:id" element={<ChannelDetail />} />
-              <Route path="studios" element={<StudiosOverview />} />
+              {/* 2026-06-15 cleanup — per-entity Studios removed (operate on the
+                  detail page). Kept: the two tools with no detail-page equivalent. */}
               <Route path="studios/formula" element={<FormulaStudio />} />
-              <Route path="studios/fitness" element={<FitnessFormulaStudio />} />
-              <Route path="studios/evolution" element={<EvolutionStudio />} />
-              <Route path="studios/allocation" element={<AllocationStudio />} />
-              <Route path="studios/rebalance-ops" element={<RebalanceOpsStudio />} />
-              <Route path="studios/capital" element={<CapitalStudio />} />
               <Route path="studios/skill-sandbox" element={<SkillSandboxStudio />} />
+            </Route>
+
+            {/* TradingDesk — three-tab shell (trading-room, strategy-workshop, strategy-performance).
+                Separate from AgoraLayout so it renders its own CommandBar/TabBar/ServantDrawer/BottomStrip. */}
+            <Route path="/agora" element={<TradingDeskLayout />}>
+              <Route path="trading-room" element={<TradingRoomRoute />} />
+              <Route path="trading-room/:strategyId" element={<TradingRoomRoute />} />
+              <Route path="strategy-workshop" element={<StrategyWorkshopPage />} />
+              <Route path="strategy-workshop/:workshopId" element={<StrategyWorkshopPage />} />
+              <Route path="strategy-performance" element={<div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-400">策略執行與績效 — 即將推出</div>} />
             </Route>
 
             {/* Agora Workbench */}
@@ -212,12 +309,16 @@ const App = () => (
               <Route path="channels" element={<AgoraChannels />} />
             </Route>
 
-            <Route path="/qa" element={<QAChecklist />} />
+            {/* Dev-only QA harness — not mounted in production builds. */}
+            {import.meta.env.DEV && <Route path="/qa" element={<QAChecklist />} />}
             <Route path="/audits" element={<AuditViewer />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ErrorBoundary>
+        </AuthProvider>
+
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

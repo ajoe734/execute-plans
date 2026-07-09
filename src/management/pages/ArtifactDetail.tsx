@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
@@ -29,7 +30,7 @@ export const ArtifactDetail = () => {
     if (!id) return;
     bff.artifacts.get(id).then(setA);
     bff.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
-    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action.startsWith("artifact."))));
+    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact."))));
   }, [id]);
 
   if (!a) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -53,9 +54,9 @@ export const ArtifactDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Kind" value={a.kind.toUpperCase()} />
+                  <StatCard label="Kind" value={(a.kind ?? "").toUpperCase()} />
                   <StatCard label={t("table.version")} value={a.version} />
-                  <StatCard label="Size" value={`${a.sizeMb.toLocaleString()} MB`} />
+                  <StatCard label="Size" value={`${(a.sizeMb ?? 0).toLocaleString()} MB`} />
                   <StatCard label={t("table.owner")} value={a.owner} />
                 </div>
                 <Section title={t("detail.section.hash")}>
@@ -106,7 +107,7 @@ export const ArtifactDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <Field label="Format" value={a.kind === "model" ? "ONNX" : a.kind === "dataset" ? "Parquet" : a.kind === "container" ? "OCI" : "PDF"} mono />
-                  <Field label={t("table.created")} value={new Date(a.updatedAt).toLocaleDateString()} mono />
+                  <Field label={t("table.created")} value={safeDateTime(a.updatedAt, "date")} mono />
                   <Field label="License" value="Internal" mono />
                 </div>
               </Section>

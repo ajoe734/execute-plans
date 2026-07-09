@@ -8,6 +8,7 @@ import { Wifi, WifiOff, Activity, Plug, PlugZap } from "lucide-react";
 import { useLiveStatus, useRealtimeStatus } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
 
 export const RealtimeStatusBadge = () => {
   const t = useT();
@@ -106,7 +107,7 @@ export const RealtimeStatusBadge = () => {
             <div className="p-4 text-sm text-muted-foreground text-center">{t("empty.noResults")}</div>
           ) : recentSlice.map((e, i) => (
             <div key={i} className="px-3 py-1.5 border-b border-border/40 last:border-0 text-xs flex items-center gap-2">
-              <span className="text-mono text-muted-foreground">{new Date(e.ts).toLocaleTimeString()}</span>
+              <span className="text-mono text-muted-foreground">{safeDateTime(e.ts, "time")}</span>
               <span className="text-mono uppercase tracking-wider text-status-running">{e.topic}</span>
               <span className="truncate text-muted-foreground flex-1">{summarize(e.payload)}</span>
             </div>
