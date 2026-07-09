@@ -329,7 +329,7 @@ describe("PersonaFleetPage", () => {
       refresh: vi.fn(),
     });
 
-    renderFleet("/management/persona-fleet");
+    renderFleet("/management/persona-fleet?tab=non-production");
 
     expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
     expect(screen.queryByText("pool-paper-alpha")).not.toBeInTheDocument();
