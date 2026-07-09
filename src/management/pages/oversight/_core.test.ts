@@ -199,17 +199,17 @@ describe("PersonaFleetPage deep links", () => {
       },
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-paper-alpha");
+    expect(personaFleetCapitalHref(row)).toBe("/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-paper-capital");
   });
 
-  it("normalizes retired capital targets into capital detail context", () => {
+  it("normalizes retired capital targets into Promotion & Allocation capital context", () => {
     expect(personaFleetCapitalHref({
       personaId: "persona-old-capital-path",
       linkTargets: {
         capitalPool: "/management/capital/pool-tw-paper",
       },
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-tw-paper",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-tw-paper",
     );
 
     expect(personaFleetCapitalHref({
@@ -218,7 +218,7 @@ describe("PersonaFleetPage deep links", () => {
         capitalPool: "/management/capital?pool=pool-from-query",
       },
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-from-query",
+      "/management/promotion-allocation?pool=pool-from-query&tab=quarterly-capital&capital_id=pool-from-query",
     );
   });
 
@@ -415,7 +415,7 @@ describe("PersonaFleetPage deep links", () => {
       last_mutation: "2026-06-03",
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/capital?pool=pool-crypto-paper");
+    expect(personaFleetCapitalHref(row)).toBe("/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-crypto-paper");
     expect(personaFleetPerformanceHref(row)).toBe(
       "/management/performance-attribution?dimension=persona&persona=persona-crypto-paper",
     );
@@ -424,7 +424,7 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("uses paper capital pool ids before paper ledger links for paper rows", () => {
+  it("uses paper ledger links for paper rows before paper capital pool ids", () => {
     const row = {
       persona_id: "persona-crypto-paper",
       capital_mode: "paper",
@@ -433,14 +433,14 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetCapitalHref(row)).toBe(
-      "/management/capital?pool=pool-crypto-paper",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-crypto-paper",
     );
 
     expect(personaFleetCapitalHref({
       ...row,
       paper_capital_pool_id: "pool-explicit-shared-paper",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-explicit-shared-paper",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-crypto-paper",
     );
 
     expect(personaFleetCapitalHref({
@@ -448,7 +448,7 @@ describe("PersonaFleetPage deep links", () => {
       capital_pool_id: "pool-crypto-paper",
       paper_ledger_id: "paper-ledger-persona-paper-slim",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-crypto-paper",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-paper-slim",
     );
 
     expect(personaFleetCapitalHref({
@@ -456,7 +456,7 @@ describe("PersonaFleetPage deep links", () => {
       capital_mode: "paper",
       paper_capital_pool_id: "pool-explicit-shared-paper",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/capital?pool=pool-explicit-shared-paper",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-explicit-shared-paper",
     );
   });
 
@@ -467,7 +467,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetCapitalHref(row)).toBe(
-      "/management/capital?pool=paper-ledger-persona-paper-ledger",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=paper-ledger-persona-paper-ledger",
     );
   });
 
