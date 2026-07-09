@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -148,7 +148,6 @@ describe("PersonaFleetPage", () => {
       "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
   });
-
   it("hides non-production live rows by default", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
@@ -165,7 +164,30 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("Gold Futures Persona")).toBeInTheDocument();
     expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show non-production (2)" })).toBeInTheDocument();
+
+    const nonProdTab = screen.getByRole("tab", { name: "non-production (2)" });
+    expect(nonProdTab).toBeInTheDocument();
+  });
+
+  it("shows non-production rows when the tab query param is set", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-crypto", "Crypto Persona"),
+        fleetRow("dry-run-write-probe-persona", "Dry Run Probe Persona"),
+        fleetRow("persona-live-gold", "Gold Futures Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?tab=non-production");
+
+    expect(screen.getByText("Crypto Persona")).toBeInTheDocument();
+    expect(screen.getByText("Dry Run Probe Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Gold Futures Persona")).not.toBeInTheDocument();
+
+    const prodTab = screen.getByRole("tab", { name: "Production (1)" });
+    expect(prodTab).toBeInTheDocument();
   });
 
   it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {

@@ -11,6 +11,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import type { QuarterlyRankingFormula, QuarterlyRankingRow, QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
@@ -482,19 +483,51 @@ function personaFleetPrimaryAction(
 
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
   const rows = useMemo(() => data ?? [], [data]);
 
   const [showRetired, setShowRetired] = useState(false);
-  const [showNonProduction, setShowNonProduction] = useState(false);
+
+  const productionCount = useMemo(() => {
+    return rows.filter((r) => {
+      if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
+      return !isNonProductionPersonaFleetRow(r);
+    }).length;
+  }, [rows, showRetired]);
+
+  const nonProductionCount = useMemo(() => {
+    return rows.filter((r) => {
+      if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
+      return isNonProductionPersonaFleetRow(r);
+    }).length;
+  }, [rows, showRetired]);
+
+  const tabParam = searchParams.get("tab")?.trim().toLowerCase();
+  const currentTab = useMemo(() => {
+    if (tabParam === "non-production" || tabParam === "nonproduction") {
+      return "non-production";
+    }
+    if (tabParam === "production") {
+      return "production";
+    }
+    return productionCount > 0 ? "production" : "non-production";
+  }, [tabParam, productionCount]);
+
+  const setActiveTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab);
+    setSearchParams(next, { replace: true });
+  };
 
   const filtered = useMemo(() => rows.filter((r) => {
     if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
-    if (!showNonProduction && isNonProductionPersonaFleetRow(r)) return false;
+    const isNP = isNonProductionPersonaFleetRow(r);
+    if (currentTab === "production" && isNP) return false;
+    if (currentTab === "non-production" && !isNP) return false;
     return true;
-  }), [rows, showRetired, showNonProduction]);
+  }), [rows, showRetired, currentTab]);
 
   const visibleRows = useMemo(() => {
     if (!personaFocus) return filtered;
@@ -504,15 +537,30 @@ export const PersonaFleetPage = () => {
   const hasPersonaFocusMatch = !personaFocus || visibleRows.length > 0;
 
   const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
-  const hiddenNonProduction = rows.filter(isNonProductionPersonaFleetRow).length;
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.fleet.title")}>
-      <header className="flex shrink-0 items-start justify-between gap-4">
+      <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
         </div>
+      </header>
+      <div className="flex shrink-0 items-center justify-between">
+        <Tabs
+          value={currentTab}
+          onValueChange={(val) => setActiveTab(val as "production" | "non-production")}
+          className="w-auto"
+        >
+          <TabsList className="grid w-[400px] grid-cols-2">
+            <TabsTrigger value="production">
+              {t("mgmt.fleet.production")} ({productionCount})
+            </TabsTrigger>
+            <TabsTrigger value="non-production">
+              {t("mgmt.fleet.nonProduction")} ({nonProductionCount})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="flex items-center gap-2 text-xs">
           <Button
             size="sm"
@@ -524,18 +572,8 @@ export const PersonaFleetPage = () => {
               ? t("mgmt.fleet.filter.hideRetired")
               : t("mgmt.fleet.filter.showRetiredFmt", { count: hiddenRetired })}
           </Button>
-          <Button
-            size="sm"
-            variant={showNonProduction ? "default" : "outline"}
-            onClick={() => setShowNonProduction((v) => !v)}
-            aria-pressed={showNonProduction}
-          >
-            {showNonProduction
-              ? t("mgmt.fleet.filter.hideNonProduction")
-              : t("mgmt.fleet.filter.showNonProductionFmt", { count: hiddenNonProduction })}
-          </Button>
         </div>
-      </header>
+      </div>
       {personaFocus && (
         <Card className={"p-3 text-sm " + (isPersonaFocusLoading || hasPersonaFocusMatch
           ? "border-primary/30 bg-primary/5"

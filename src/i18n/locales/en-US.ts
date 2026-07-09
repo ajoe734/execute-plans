@@ -2123,12 +2123,13 @@ export default {
         viewPersonaAriaFmt: "View persona {{persona}}",
       },
       nonProduction: "non-production",
+      production: "Production",
       filter: {
         showRetiredFmt: "Show retired ({{count}})",
         hideRetired: "Hide retired",
         showNonProductionFmt: "Show non-production ({{count}})",
         hideNonProduction: "Hide non-production",
-        allFilteredHint: "No personas match current filters. Toggle the buttons above to show retired or non-production personas.",
+        allFilteredHint: "No personas match current filters. Switch tabs or show retired personas.",
       },
     },
     inbox: {
