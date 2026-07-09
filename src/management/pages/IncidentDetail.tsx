@@ -241,7 +241,7 @@ export const IncidentDetail = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedCapital")}</div>
               <div className="flex flex-wrap gap-2">
                 {affectedCapitalIds.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : affectedCapitalIds.map((cid) => (
-                  <Button key={cid} size="sm" variant="outline" onClick={() => navigate(`/management/capital/${cid}`)}>{cid}</Button>
+                  <Button key={cid} size="sm" variant="outline" onClick={() => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(cid)}`)}>{cid}</Button>
                 ))}
               </div>
             </Card>

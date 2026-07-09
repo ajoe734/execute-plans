@@ -2,6 +2,30 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
+const QUIET_ME_RESPONSE = {
+  data: {
+    user: {
+      id: "op-route-ia",
+      displayName: "Route IA Operator",
+      email: "route-ia@pantheon.local",
+    },
+    tenant: {
+      id: "tenant-route-ia",
+      name: "Route IA",
+      tz: "UTC",
+      locale: "zh-TW",
+      baseCurrency: "USD",
+    },
+    roles: ["ops", "viewer"],
+    capabilities: ["management.read", "registry.read"],
+    env: "dev",
+    featureFlags: { routeIa: true },
+    serverTime: "2026-05-13T14:10:00Z",
+    sessionExpiresAt: "2026-05-13T22:10:00Z",
+    permissionsVersion: "route-ia-v1",
+  },
+};
+
 function frontendUrl(path = "/"): string {
   const base =
     process.env.PANTHEON_FE_BASE_URL ||
@@ -28,8 +52,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 async function installQuietBffRoutes(page: Page) {
   await page.route(/^https?:\/\/[^/]+\/bff\//, async (route) => {
     const request = route.request();
+    const path = new URL(request.url()).pathname;
     if (request.method() === "OPTIONS") {
       await route.fulfill({ status: 204 });
+      return;
+    }
+    if (path === "/bff/me") {
+      await fulfillJson(route, QUIET_ME_RESPONSE);
       return;
     }
     await fulfillJson(route, {
@@ -67,18 +96,18 @@ test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
       // detail component a second time instead of redirecting.
       {
         from: "/management/capital-pools/pool-9?tab=risk",
-        pathname: "/management/capital/pool-9",
-        search: "?tab=risk",
+        pathname: "/management/promotion-allocation",
+        search: "?tab=quarterly-capital&capital_id=pool-9",
       },
       {
         from: "/management/ranking-formulas/rf-9",
-        pathname: "/management/ranking/formulas/rf-9",
-        search: "",
+        pathname: "/management/promotion-allocation",
+        search: "?tab=formula-policy&formula_id=rf-9",
       },
       {
         from: "/management/rebalances/rb-9?tab=lines",
-        pathname: "/management/rebalance/rb-9",
-        search: "?tab=lines",
+        pathname: "/management/promotion-allocation",
+        search: "?tab=quarterly-capital&rebalance_id=rb-9",
       },
       {
         from: "/management/research/exp-9",

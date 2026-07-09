@@ -64,6 +64,7 @@ describe("ranking recommendation submit pages", () => {
     expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Formula policy" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
   });
 

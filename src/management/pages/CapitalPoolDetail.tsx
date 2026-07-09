@@ -4,7 +4,7 @@ import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { bff, runActionSafe, mgmt } from "@/lib/bff-v1";
-import { getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
+import { capitalPoolWithFleetFallback, getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
@@ -64,10 +64,17 @@ export const CapitalPoolDetail = () => {
       setAudit([]);
 
       try {
-        const pool = await bff.capitalPools.get(id);
+        let pool: CapitalPool | undefined;
+        let detailError: string | undefined;
+        try {
+          pool = await bff.capitalPools.get(id);
+        } catch (err) {
+          detailError = err instanceof Error ? err.message : String(err);
+        }
+        pool ??= await capitalPoolWithFleetFallback(id);
         if (cancelled) return;
         if (!pool) {
-          setError("not-found");
+          setError(detailError ?? "not-found");
           return;
         }
 
@@ -122,11 +129,9 @@ export const CapitalPoolDetail = () => {
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!c) {
-    const description = id?.startsWith("paper-ledger-persona-")
-      ? t("phase13.capital.detail.paperLedgerId", { id })
-      : error && !["missing-id", "not-found"].includes(error)
-        ? t("phase13.capital.detail.notFoundWithError", { id, error })
-        : t("phase13.capital.detail.notFoundDescription", { id: id ?? "" });
+    const description = error && !["missing-id", "not-found"].includes(error)
+      ? t("phase13.capital.detail.notFoundWithError", { id, error })
+      : t("phase13.capital.detail.notFoundDescription", { id: id ?? "" });
     return (
       <>
         <PageHeader title={t("nav.capitalPools")} />
@@ -135,7 +140,7 @@ export const CapitalPoolDetail = () => {
             icon={<Inbox className="h-8 w-8" />}
             title={t("phase13.capital.detail.notFoundTitle")}
             description={description}
-            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/capital") }}
+            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/promotion-allocation?tab=quarterly-capital") }}
           />
         </PageBody>
       </>
@@ -311,7 +316,7 @@ export const CapitalPoolDetail = () => {
             ),
           },
           { value: "rebalance", label: t("nav.rebalance"), content: (
-            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/rebalance/${r.id}`)} columns={[
+            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(r.id)}`)} columns={[
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
               { key: "q", header: "Quarter", cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
               { key: "delta", header: "Δ", cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },

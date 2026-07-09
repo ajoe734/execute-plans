@@ -35,6 +35,8 @@ const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|fallback data|hybrid fallback active|seed fallback active|資料來源：seed/i;
 const CRASH_TEXT =
   /application error|cannot read properties|undefined is not|uncaught|traceback|typeerror|referenceerror/i;
+const ROUTE_CHUNK_ERROR_TEXT =
+  /畫面渲染失敗（[^）]*route chunk）|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -490,6 +492,10 @@ const ME_RESPONSE = {
   data: {
     tenant: {
       id: "tenant-fe-gate",
+      name: "FE Gate Tenant",
+      tz: "UTC",
+      locale: "zh-TW",
+      baseCurrency: "USD",
       default_id: "tenant-fe-gate",
       allowed_ids: ["tenant-fe-gate"],
       scope: "tenant",
@@ -504,6 +510,8 @@ const ME_RESPONSE = {
     },
     user: {
       id: "op-fe-gate",
+      displayName: "FE Gate Operator",
+      email: "op-fe-gate@pantheon.local",
       operator_id: "op-fe-gate",
       display_name: "FE Gate Operator",
       roles: ["operator", "reviewer", "approver"],
@@ -526,8 +534,15 @@ const ME_RESPONSE = {
       capabilities: ["runtime.read", "registry.read"],
       mfa_verified: true,
     },
-    roles: ["operator", "reviewer", "approver"],
+    roles: ["ops", "viewer"],
     capabilities: ["runtime.read", "registry.read"],
+    env: "dev",
+    featureFlags: {
+      sessionAuthMe: true,
+    },
+    serverTime: SNAPSHOT_AT,
+    sessionExpiresAt: "2026-05-13T22:10:00Z",
+    permissionsVersion: "fe-gate-b06-v1",
     session: {
       id: "session-fe-gate-b06",
       authenticated: true,
@@ -839,24 +854,39 @@ function escapeRegExp(value: string): string {
 }
 
 async function gotoRegistry(page: Page, registry: RegistryFixture): Promise<void> {
-  await page.goto(frontendUrl(registry.managementPath), {
-    waitUntil: "domcontentloaded",
-    timeout: 30_000,
-  });
-  await page.locator("#root").waitFor({ state: "attached", timeout: 15_000 });
   const expectedText = new RegExp(escapeRegExp(registry.label), "i");
-  await expect
-    .poll(
-      async () => {
-        const text = await bodyText(page);
-        return expectedText.test(text);
-      },
-      {
-        message: `${registry.managementPath} should render ${registry.label}`,
-        timeout: 20_000,
-      },
-    )
-    .toBe(true);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await page.goto(frontendUrl(registry.managementPath), {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await page.locator("#root").waitFor({ state: "attached", timeout: 15_000 });
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const text = await bodyText(page);
+            return expectedText.test(text);
+          },
+          {
+            message: `${registry.managementPath} should render ${registry.label}`,
+            timeout: 20_000,
+          },
+        )
+        .toBe(true);
+      return;
+    } catch (error) {
+      lastError = error;
+      const text = await bodyText(page).catch(() => "");
+      if (!ROUTE_CHUNK_ERROR_TEXT.test(text) || attempt === 2) {
+        throw error;
+      }
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => undefined);
+    }
+  }
+  throw lastError;
 }
 
 async function fetchJsonInBrowser(

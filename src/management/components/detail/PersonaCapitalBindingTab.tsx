@@ -26,7 +26,7 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
       <p className="text-xs text-muted-foreground">{t("phase13.persona.capital.hint")}</p>
       <DataTable
         rows={rows}
-        onRowClick={(r) => nav(`/management/capital-pools/${r.id}`)}
+        onRowClick={(r) => nav(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
         columns={[
           { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
           { key: "currency", header: "Currency", cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },

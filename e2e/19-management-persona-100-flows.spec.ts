@@ -750,10 +750,29 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
     return {
       status: 200,
       body: envelope({
+        user: {
+          id: "op-mgmt100",
+          displayName: "MGMT100 Operator",
+          email: "op-mgmt100@pantheon.local",
+        },
+        tenant: {
+          id: "tenant-mgmt100",
+          name: "MGMT100 Tenant",
+          tz: "UTC",
+          locale: "zh-TW",
+          baseCurrency: "USD",
+        },
+        roles: ["ops", "viewer"],
+        capabilities: ["persona.view", "persona.manage", "risk.read"],
+        env: "dev",
+        featureFlags: { managementPersona100: true },
+        serverTime: SNAPSHOT_AT,
+        sessionExpiresAt: "2026-05-13T22:10:00Z",
+        permissionsVersion: "mgmt100-v1",
         environment: { name: "playwright", strict_auth: false },
         permissions: ["persona.view", "persona.manage", "risk.read"],
         tenant_id: "tenant-mgmt100",
-        user: { id: "op-mgmt100", roles: ["operator", "reviewer", "approver"] },
+        current_user: { id: "op-mgmt100", roles: ["operator", "reviewer", "approver"] },
       }, path),
     };
   }
@@ -927,7 +946,53 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
     return { status: 202, body: envelope({ persona_id: PERSONA_ID, prompt: (body as JsonRecord | undefined)?.prompt ?? "" }, path) };
   }
   if (pathname === "/bff/capital-pools") {
-    return { status: 200, body: envelope([{ id: CAPITAL_POOL_ID, name: "MGMT100 Core Pool", status: "active" }], path) };
+    return {
+      status: 200,
+      body: envelope([{
+        id: CAPITAL_POOL_ID,
+        name: "MGMT100 Core Pool",
+        owner: "operator-mgmt100",
+        risk: "medium",
+        state: "deployed",
+        status: "active",
+        updatedAt: SNAPSHOT_AT,
+        allocated: 1_000_000,
+        currency: "USD",
+        riskBudget: 0.04,
+        utilized: 420_000,
+      }], path),
+    };
+  }
+  if (pathname === "/bff/rebalances") {
+    return {
+      status: 200,
+      body: envelope([{
+        id: "rebalance-mgmt100-q2",
+        name: "MGMT100 Q2 Rebalance",
+        owner: "operator-mgmt100",
+        quarter: "2026-Q2",
+        risk: "medium",
+        state: "review",
+        targetPoolId: CAPITAL_POOL_ID,
+        proposedDelta: 0.06,
+        updatedAt: SNAPSHOT_AT,
+      }], path),
+    };
+  }
+  if (pathname === "/bff/ranking-formulas") {
+    return {
+      status: 200,
+      body: envelope([{
+        id: quarterlyFormula.formulaId,
+        name: "MGMT100 Ranking Formula",
+        owner: "operator-mgmt100",
+        risk: "low",
+        state: "deployed",
+        updatedAt: SNAPSHOT_AT,
+        expression: "0.25*pnl + 0.15*drawdown + 0.15*execution",
+        appliedTo: 2,
+      }], path),
+    };
   }
   if (pathname === "/bff/runtimes") {
     return { status: 200, body: envelope([runtimeRow], path) };
@@ -1051,11 +1116,11 @@ const uiFlows: UiFlow[] = [
   { id: "ui-010-portfolio-book", type: "ui", category: "display", path: "/management/portfolio-book", endpoint: "/bff/management/portfolio-book" },
   { id: "ui-011-quarterly-ranking", type: "ui", category: "display", path: "/management/quarterly-ranking", endpoint: "/bff/management/quarterly-ranking" },
   { id: "ui-012-performance-attribution", type: "ui", category: "display", path: "/management/performance-attribution", endpoint: "/bff/management/performance-attribution" },
-  { id: "ui-013-readiness-ep5", type: "ui", category: "monitor", path: "/management/readiness/ep5", endpoint: "/bff/management/readiness/ep5" },
-  { id: "ui-014-readiness-broker", type: "ui", category: "monitor", path: "/management/readiness/broker-live", endpoint: "/bff/management/readiness/broker-live" },
-  { id: "ui-015-readiness-capital", type: "ui", category: "monitor", path: "/management/readiness/capital-binding-live", endpoint: "/bff/management/readiness/capital-binding-live" },
-  { id: "ui-016-readiness-bff-ha", type: "ui", category: "monitor", path: "/management/readiness/bff-ha", endpoint: "/bff/management/readiness/bff-ha" },
-  { id: "ui-017-readiness-strict", type: "ui", category: "monitor", path: "/management/readiness/strict-publish", endpoint: "/bff/management/readiness/strict-publish" },
+  { id: "ui-013-promotion-paper", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=paper-candidates", endpoint: "/bff/management/quarterly-ranking" },
+  { id: "ui-014-promotion-real", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=real-ranking", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
+  { id: "ui-015-quarterly-capital", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=quarterly-capital", endpoint: "/bff/capital-pools", text: "MGMT100 Core Pool" },
+  { id: "ui-016-formula-policy", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=formula-policy", endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
+  { id: "ui-017-formula-policy-detail", type: "ui", category: "monitor", path: `/management/promotion-allocation?tab=formula-policy&formula_id=${quarterlyFormula.formulaId}`, endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
   { id: "ui-018-deployment-alias", type: "ui", category: "monitor", path: "/management/deployment", endpoint: "/bff/deployments" },
   { id: "ui-019-execution-loop", type: "ui", category: "monitor", path: "/management/loops/execution", endpoint: "/bff/v5/loop-runs" },
   { id: "ui-020-sentinel", type: "ui", category: "monitor", path: "/management/sentinel", endpoint: "/bff/v5/sentinel/findings" },

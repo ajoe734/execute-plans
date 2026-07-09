@@ -390,7 +390,7 @@ const investigationTargets = (finding: SentinelFinding): InvestigationTarget[] =
   };
   push("strategy", finding.blastRadius.strategies, (id) => `/management/strategies/${encodeURIComponent(id)}`);
   push("persona", finding.blastRadius.personas, (id) => `/management/persona-fleet?persona=${encodeURIComponent(id)}`);
-  push("pool", finding.blastRadius.pools, (id) => `/management/capital/${encodeURIComponent(id)}`);
+  push("pool", finding.blastRadius.pools, (id) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`);
   push("deployment", finding.blastRadius.deployments, () => undefined);
   return targets;
 };

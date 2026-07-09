@@ -188,11 +188,12 @@ export default {
 
   promotionAllocation: {
     title: "Promotion & Allocation",
-    subtitle: "Paper candidates, real rankings, and quarterly capital allocation in one governed workflow.",
+    subtitle: "Paper candidates, real rankings, formula policy, and quarterly capital allocation in one governed workflow.",
     tabs: {
       "paper-candidates": "Paper → Real",
       "real-ranking": "Real ranking",
       "quarterly-capital": "Quarterly allocation",
+      "formula-policy": "Formula policy",
     },
   },
 

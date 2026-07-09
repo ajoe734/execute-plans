@@ -108,7 +108,7 @@ export const OptimizationLoopPage = () => {
                       <tr key={r.id} className="relative z-10 scroll-mt-56 border-t border-border md:scroll-mt-28">
                         <td className="px-3 py-2">
                           {r.subjectId
-                            ? <Link to={`/management/rebalance/${r.subjectId}`} className="font-medium hover:underline">{r.subjectName ?? r.id}</Link>
+                        ? <Link to={`/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(r.subjectId)}`} className="font-medium hover:underline">{r.subjectName ?? r.id}</Link>
                             : <span className="font-medium">{r.subjectName ?? r.id}</span>}
                           <div className="text-xs text-muted-foreground">{r.triggeredBy}</div>
                         </td>
