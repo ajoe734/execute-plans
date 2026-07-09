@@ -38,7 +38,7 @@ export function isNonProductionPersonaFleetRow(row: ManagementPersonaFleetRow): 
 
   const raw = row as ManagementPersonaFleetRow & { capital_mode?: string; capital_pool?: { mode?: string } };
   const capMode = String(row.capitalMode ?? raw.capital_mode ?? row.capitalPool?.mode ?? raw.capital_pool?.mode ?? "").trim().toLowerCase();
-  if (capMode === "paper") return true;
+  if (capMode && capMode !== "live" && capMode !== "canary") return true;
 
   return nonProductionTokens(row).some((token) =>
     NON_PRODUCTION_PATTERNS.some((pattern) => pattern.test(token)),
