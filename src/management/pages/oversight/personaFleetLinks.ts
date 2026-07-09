@@ -759,6 +759,11 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 }
 
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
+  if (isPaperCapitalRow(r)) {
+    const id = paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r);
+    return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
+  }
+
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "capital",
     "capitalHref",
@@ -777,9 +782,7 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
       : "/management/promotion-allocation?tab=quarterly-capital";
   }
   if (canonical?.startsWith("/management/capital")) return normalizeRetiredPromotionHref(canonical);
-  const id = isPaperCapitalRow(r)
-    ? paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r)
-    : capitalPoolId(r) ?? paperLedgerId(r);
+  const id = capitalPoolId(r) ?? paperLedgerId(r);
   return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
 }
 
