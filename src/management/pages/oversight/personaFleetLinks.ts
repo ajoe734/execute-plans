@@ -79,9 +79,13 @@ function normalizeRetiredPromotionHref(href: string): string {
     );
   }
   if (href.startsWith("/management/capital") || href.startsWith("/management/capital-pools")) {
-    const id = detailIdFromRetiredHref(href, ["/management/capital-pools", "/management/capital"])
-      ?? queryIdFromHref(href, ["capital_id", "capitalPoolId", "capital_pool_id", "pool_id", "pool", "id"]);
-    return id ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
+    return promotionAllocationHref(
+      href,
+      "quarterly-capital",
+      "capital_id",
+      detailIdFromRetiredHref(href, ["/management/capital-pools", "/management/capital"])
+        ?? queryIdFromHref(href, ["capital_id", "capitalPoolId", "capital_pool_id", "pool_id", "pool", "id"]),
+    );
   }
   if (href.startsWith("/management/ranking") || href.startsWith("/management/ranking-formulas")) {
     return promotionAllocationHref(
@@ -755,6 +759,11 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 }
 
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
+  if (isPaperCapitalRow(r)) {
+    const id = paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r);
+    return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
+  }
+
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "capital",
     "capitalHref",
@@ -768,13 +777,13 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
   if (promotionCapital) return promotionCapital;
   if (canonical?.startsWith("/management/capital/")) {
     const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
-    return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
+    return isUsableToken(id)
+      ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`
+      : "/management/promotion-allocation?tab=quarterly-capital";
   }
-  if (canonical?.startsWith("/management/capital")) return canonical;
-  const id = isPaperCapitalRow(r)
-    ? paperCapitalPoolId(r) ?? capitalPoolId(r) ?? paperLedgerId(r)
-    : capitalPoolId(r) ?? paperLedgerId(r);
-  return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
+  if (canonical?.startsWith("/management/capital")) return normalizeRetiredPromotionHref(canonical);
+  const id = capitalPoolId(r) ?? paperLedgerId(r);
+  return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
 }
 
 
