@@ -509,11 +509,8 @@ export const PersonaFleetPage = () => {
     if (tabParam === "non-production" || tabParam === "nonproduction") {
       return "non-production";
     }
-    if (tabParam === "production") {
-      return "production";
-    }
-    return productionCount > 0 ? "production" : "non-production";
-  }, [tabParam, productionCount]);
+    return "production";
+  }, [tabParam]);
 
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
