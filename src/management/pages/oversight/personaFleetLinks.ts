@@ -760,8 +760,8 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
   if (isPaperCapitalRow(r)) {
-    const id = paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r);
-    return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
+    const personaId = encodedPersonaId(r);
+    return personaId ? `/management/promotion-allocation?tab=paper-candidates&persona=${personaId}` : null;
   }
 
   const canonical = firstCanonicalHref(rowLinkRecords(r), [

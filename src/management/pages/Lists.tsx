@@ -111,7 +111,13 @@ export const CapitalPoolsList = () => {
   return (
     <ObjectListPage<FleetCapitalPool>
       title={t("nav.capitalPools")}
-      loader={capitalPoolsWithFleetFallback}
+      loader={async () => {
+        const env = await capitalPoolsWithFleetFallback();
+        return {
+          ...env,
+          items: env.items.filter((item) => item.capitalScope !== "paper"),
+        };
+      }}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       listHref="/management/promotion-allocation?tab=quarterly-capital"
       rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(row.id)}`}
