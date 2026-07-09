@@ -591,8 +591,15 @@ export const PersonaFleetPage = () => {
         </Card>
       )}
       {visibleRows.length === 0 && rows.length > 0 && !personaFocus && (
-        <Card className="p-4 text-sm text-muted-foreground">
-          {t("mgmt.fleet.filter.allFilteredHint")}
+        <Card className="p-4 text-sm">
+          {currentTab === "production" ? (
+            <>
+              <div className="font-medium text-foreground">{t("mgmt.fleet.liveDataUnavailableTitle")}</div>
+              <p className="mt-1 text-muted-foreground">{t("mgmt.fleet.liveDataUnavailableBody")}</p>
+            </>
+          ) : (
+            <span className="text-muted-foreground">{t("mgmt.fleet.filter.allFilteredHint")}</span>
+          )}
         </Card>
       )}
       {loading && rows.length === 0 && (
