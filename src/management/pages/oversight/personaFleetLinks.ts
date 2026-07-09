@@ -79,13 +79,9 @@ function normalizeRetiredPromotionHref(href: string): string {
     );
   }
   if (href.startsWith("/management/capital") || href.startsWith("/management/capital-pools")) {
-    return promotionAllocationHref(
-      href,
-      "quarterly-capital",
-      "capital_id",
-      detailIdFromRetiredHref(href, ["/management/capital-pools", "/management/capital"])
-        ?? queryIdFromHref(href, ["capital_id", "capitalPoolId", "capital_pool_id", "pool_id", "pool", "id"]),
-    );
+    const id = detailIdFromRetiredHref(href, ["/management/capital-pools", "/management/capital"])
+      ?? queryIdFromHref(href, ["capital_id", "capitalPoolId", "capital_pool_id", "pool_id", "pool", "id"]);
+    return id ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
   }
   if (href.startsWith("/management/ranking") || href.startsWith("/management/ranking-formulas")) {
     return promotionAllocationHref(
@@ -772,15 +768,13 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
   if (promotionCapital) return promotionCapital;
   if (canonical?.startsWith("/management/capital/")) {
     const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
-    return isUsableToken(id)
-      ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`
-      : "/management/promotion-allocation?tab=quarterly-capital";
+    return isUsableToken(id) ? `/management/capital?pool=${encodeURIComponent(id)}` : "/management/capital";
   }
-  if (canonical?.startsWith("/management/capital")) return normalizeRetiredPromotionHref(canonical);
+  if (canonical?.startsWith("/management/capital")) return canonical;
   const id = isPaperCapitalRow(r)
-    ? paperLedgerId(r) ?? paperCapitalPoolId(r) ?? capitalPoolId(r)
+    ? paperCapitalPoolId(r) ?? capitalPoolId(r) ?? paperLedgerId(r)
     : capitalPoolId(r) ?? paperLedgerId(r);
-  return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
+  return id ? `/management/capital?pool=${encodeURIComponent(id)}` : null;
 }
 
 
