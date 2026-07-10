@@ -58,7 +58,7 @@ const MOCK_FLEET_ROWS = [
     personaId: "persona-formal-mut",
     personaName: "Formal Persona",
     owner: "operator-formal",
-    ooda: "learn",
+    ooda: "decide",
     autonomy: "high",
     state: "paper_running",
     perfDelta: 0.123,
@@ -111,6 +111,10 @@ const MOCK_FLEET_ROWS = [
       experimentId: "exp-formal",
       experiment_id: "exp-formal",
       canDeploy: true
+    },
+    review: {
+      inboxId: "dummy-inbox-id",
+      route: "/management/human-inbox"
     },
     linkRecords: []
   },
@@ -233,6 +237,27 @@ const MOCK_EVOLUTION_ITEMS = [
   }
 ];
 
+const MOCK_HUMAN_INBOX_ITEMS = [
+  {
+    id: "readiness_blocker:persona:persona-formal-mut",
+    kind: "readiness_blocker",
+    title: "Readiness Blocker for Formal Persona",
+    summary: "Formal Persona has a pending readiness review.",
+    requiredRole: "operator",
+    consequenceIfApproved: "Approved",
+    consequenceIfRejected: "Rejected",
+    consequenceIfIgnored: "Ignored",
+    canDecide: true,
+    canProceed: true,
+    detailHref: "/management/human-inbox/readiness_blocker:persona:persona-formal-mut",
+    links: {
+      manageHref: "/management/human-inbox/readiness_blocker:persona:persona-formal-mut",
+      recommendedActionHref: "/management/human-inbox/readiness_blocker:persona:persona-formal-mut",
+      evidenceHref: ""
+    }
+  }
+];
+
 async function installMockFixture(page: Page): Promise<void> {
   await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
     const request = route.request();
@@ -302,6 +327,10 @@ async function installMockFixture(page: Page): Promise<void> {
     }
     if (path === "/bff/management/evolution-journal") {
       await fulfillJson(route, envelope(MOCK_EVOLUTION_ITEMS, path));
+      return;
+    }
+    if (path === "/bff/management/human-inbox") {
+      await fulfillJson(route, envelope(MOCK_HUMAN_INBOX_ITEMS, path));
       return;
     }
     if (path === "/bff/management/data-sources") {
@@ -380,14 +409,14 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     console.log("Navigating back to Persona Fleet...");
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded" });
 
-    // Link 2: OODA Badge (OODA maps to Mutation page because ooda stage is learn)
+    // Link 2: OODA Badge (OODA maps to Human Inbox because ooda stage is decide)
     console.log("Clicking OODA badge...");
     const formalRow = page.locator("tr").filter({ hasText: "Formal Persona" });
-    await formalRow.locator('[aria-label="persona-formal-mut OODA learn stage" i]').click();
-    console.log("Expecting URL to match evolution journal focus...");
-    await expect(page).toHaveURL(/\/management\/evolution-journal\?persona=persona-formal-mut/);
+    await formalRow.locator('[aria-label="persona-formal-mut OODA decide stage" i]').click();
+    console.log("Expecting URL to match human inbox focus...");
+    await expect(page).toHaveURL(/\/management\/human-inbox\?persona=persona-formal-mut/);
     console.log("Expecting focus text to be visible...");
-    await expect(page.getByText("已聚焦 Persona: persona-formal-mut · mutation: evo-dec-formal")).toBeVisible();
+    await expect(page.getByText(/已聚焦 Persona.*persona-formal-mut/)).toBeVisible();
     console.log("Capturing screenshot 03...");
     await captureScreenshot(page, "03-target-ooda-stage");
 
