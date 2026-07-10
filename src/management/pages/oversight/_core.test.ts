@@ -420,7 +420,7 @@ describe("PersonaFleetPage deep links", () => {
       "/management/performance-attribution?dimension=persona&persona=persona-crypto-paper",
     );
     expect(personaFleetMutationHref(row)).toBe(
-      "/management/evolution-journal?persona=persona-crypto-paper",
+      "/management/evolution-journal?persona=persona-crypto-paper&source=fleet_summary",
     );
   });
 
@@ -595,5 +595,56 @@ describe("EvolutionJournalPage focus filtering", () => {
 
     expect(focus.matched).toBe(false);
     expect(focus.rows).toEqual([]);
+  });
+});
+
+describe("MGMT-OPS-009 Persona Fleet and Evolution Journal Link Semantics", () => {
+  it("uses formal mutation link when mutation_entry_id or evolution_entry_id is present", () => {
+    const row = {
+      personaId: "persona-20260528-04688755",
+      mutationEntryId: "mutation-review-123",
+      evolutionEntryId: "evo-456",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetMutationHref(row)).toBe(
+      "/management/evolution-journal?persona=persona-20260528-04688755&mutation_review=mutation-review-123"
+    );
+  });
+
+  it("uses fallback-only link for persona-20260528-04688755 when formal ids are absent but last mutation context is useful", () => {
+    const row = {
+      personaId: "persona-20260528-04688755",
+      lastMutation: "2026-06-03",
+      lastMutationKind: "fleet_summary",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetMutationHref(row)).toBe(
+      "/management/evolution-journal?persona=persona-20260528-04688755&source=fleet_summary"
+    );
+  });
+
+  it("suppresses invalid ids (like nan or date format as ID) and avoids emitting them in query params", () => {
+    const row = {
+      personaId: "persona-20260528-04688755",
+      mutationEntryId: "nan",
+      evolutionEntryId: "2026-06-03",
+      lastMutation: "2026-06-03",
+      lastMutationKind: "fleet_summary",
+    } as unknown as ManagementPersonaFleetRow;
+
+    // should fallback to fleet_summary URL rather than emitting invalid mutation_review
+    expect(personaFleetMutationHref(row)).toBe(
+      "/management/evolution-journal?persona=persona-20260528-04688755&source=fleet_summary"
+    );
+  });
+
+  it("returns null for no-data/no-link state", () => {
+    const row = {
+      personaId: "persona-20260528-04688755",
+      lastMutation: "—",
+      lastMutationKind: "unavailable",
+    } as unknown as ManagementPersonaFleetRow;
+
+    expect(personaFleetMutationHref(row)).toBeNull();
   });
 });
