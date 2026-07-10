@@ -3,7 +3,7 @@ import { installOidcDevLogin } from "./helpers/auth";
 import { mkdirSync } from "node:fs";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
-const EVIDENCE_DIR = "/tmp/pantheon-worker-worktrees/pantheon/mgmt-ops-010/docs/04/pantheon_management_console_mutation_evolution_gap_2026-07-10/evidence";
+const EVIDENCE_DIR = "./docs/04/pantheon_management_console_mutation_evolution_gap_2026-07-10/evidence";
 
 function frontendUrl(path = "/"): string {
   const base =
@@ -276,6 +276,30 @@ async function installMockFixture(page: Page): Promise<void> {
       await fulfillJson(route, envelope(MOCK_FLEET_ROWS, path));
       return;
     }
+    if (path.startsWith("/bff/personas/")) {
+      const id = path.substring("/bff/personas/".length);
+      const row = MOCK_FLEET_ROWS.find((r) => r.id === id);
+      if (row) {
+        await fulfillJson(route, { data: { ...row, name: row.personaName } });
+        return;
+      }
+    }
+    if (path.startsWith("/bff/research-experiments/")) {
+      const id = path.substring("/bff/research-experiments/".length);
+      if (id === "exp-formal") {
+        await fulfillJson(route, {
+          data: {
+            id: "exp-formal",
+            name: "Formal Experiment",
+            framework: "dspy",
+            status: "completed",
+            state: "completed",
+            risk: "medium"
+          }
+        });
+        return;
+      }
+    }
     if (path === "/bff/management/evolution-journal") {
       await fulfillJson(route, envelope(MOCK_EVOLUTION_ITEMS, path));
       return;
@@ -347,6 +371,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await page.getByRole("link", { name: "Formal Persona" }).click();
     console.log("Expecting URL to match persona detail path...");
     await expect(page).toHaveURL(/\/management\/personas\/persona-formal-mut/);
+    console.log("Waiting for Persona detail page content to load...");
+    await expect(page.getByRole("heading", { name: "Formal Persona", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 02...");
     await captureScreenshot(page, "02-target-persona-detail");
 
@@ -373,6 +399,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await formalRow.locator('[aria-label="Open capital for persona-formal-mut" i]').click();
     console.log("Expecting URL to match quarterly-capital tab...");
     await expect(page).toHaveURL(/\/management\/promotion-allocation\?tab=quarterly-capital/);
+    console.log("Waiting for Quarterly Capital page content to load...");
+    await expect(page.getByRole("heading", { name: "資金池", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 04...");
     await captureScreenshot(page, "04-target-capital-pool");
 
@@ -384,6 +412,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await formalRow.locator('[aria-label="persona-formal-mut persona league ranking" i]').click();
     console.log("Expecting URL to match real-ranking tab...");
     await expect(page).toHaveURL(/\/management\/promotion-allocation\?tab=real-ranking/);
+    console.log("Waiting for Ranking page content to load...");
+    await expect(page.getByRole("heading", { name: "Persona 聯賽", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 05...");
     await captureScreenshot(page, "05-target-ranking");
 
@@ -395,6 +425,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await formalRow.locator('[aria-label="persona-formal-mut data source kraken" i]').click();
     console.log("Expecting URL to match data sources focus...");
     await expect(page).toHaveURL(/\/management\/data-sources\?persona=persona-formal-mut/);
+    console.log("Waiting for Data source page content to load...");
+    await expect(page.getByRole("heading", { name: "資料源管理", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 06...");
     await captureScreenshot(page, "06-target-data-source");
 
@@ -406,6 +438,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await formalRow.locator('[aria-label="persona-formal-mut research detail" i]').click();
     console.log("Expecting URL to match research detail...");
     await expect(page).toHaveURL(/\/management\/experiments\/exp-formal/);
+    console.log("Waiting for Research project page content to load...");
+    await expect(page.getByRole("heading", { name: "Formal Experiment", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 07...");
     await captureScreenshot(page, "07-target-research-project");
 
@@ -417,6 +451,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await formalRow.locator('[aria-label="persona-formal-mut performance attribution" i]').click();
     console.log("Expecting URL to match performance attribution...");
     await expect(page).toHaveURL(/\/management\/performance-attribution\?dimension=persona/);
+    console.log("Waiting for Performance page content to load...");
+    await expect(page.getByRole("heading", { name: "績效歸因", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 08...");
     await captureScreenshot(page, "08-target-performance");
 
