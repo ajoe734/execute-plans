@@ -37,8 +37,10 @@ export const ManagementLayout = () => {
     // 2026-05-22 PM-12 — Performance & League group.
     { label: t("groups.performanceLeague"), items: [
       { to: "/management/portfolio-book", label: t("nav.portfolioBook"), icon: PieChart },
-      { to: "/management/promotion-allocation", label: t("nav.promotionAllocation"), icon: Trophy },
       { to: "/management/performance-attribution", label: t("nav.performanceAttribution"), icon: BarChart3 },
+      { to: "/management/persona-league", label: t("nav.personaLeague"), icon: Trophy },
+      { to: "/management/quarterly-ranking", label: t("nav.quarterlyRanking"), icon: ClipboardCheck },
+      { to: "/management/promotion-allocation", label: t("nav.promotionAllocation"), icon: PieChart },
     ]},
 
     { label: t("groups.liveReadiness"), items: [

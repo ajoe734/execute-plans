@@ -25,6 +25,7 @@ import { QuarterlyRankingCountdown } from "@/management/components/cockpit/Quart
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
 } from "@/lib/v5/management/humanInbox";
@@ -537,6 +538,7 @@ export const PersonaFleetPage = () => {
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.fleet.title")}>
+      <ManagementOperationsNav />
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
@@ -808,10 +810,10 @@ export const PersonaFleetPage = () => {
 	                              aria-label={`${r.personaId} data sources`}
 	                              className={fieldLinkClass("text-xs text-muted-foreground hover:text-primary")}
 	                            >
-	                              nan
+	                              —
 	                            </Link>
 	                          ) : (
-	                            <span className="text-xs text-muted-foreground">nan</span>
+	                            <span className="text-xs text-muted-foreground">—</span>
 	                          )
 	                        )}
 	                    </div>
@@ -852,7 +854,7 @@ export const PersonaFleetPage = () => {
 	                            ? badgeLinkClass("border-primary/40 text-primary hover:border-primary/60 hover:bg-primary/5")
 	                            : badgeUnavailableClass()}
 	                        >
-	                          {primaryResearch?.stage ? formatToken(primaryResearch.stage) : "nan"}
+	                          {primaryResearch?.stage ? formatToken(primaryResearch.stage) : "—"}
 	                        </Badge>
 	                      </OptionalFleetLink>
 	                      {primaryResearch?.canDeploy === false && (
@@ -873,13 +875,13 @@ export const PersonaFleetPage = () => {
 	                                  to={itemHref}
 	                                  className="block truncate font-medium text-primary underline underline-offset-4 hover:text-primary/80"
 	                                >
-	                                  {item.title || "nan"}
+	                                  {item.title || "—"}
 	                                </Link>
 	                              ) : (
 	                                <span
 	                                  className="block truncate font-medium text-foreground"
 	                                >
-	                                  {item.title || "nan"}
+	                                  {item.title || "—"}
 	                                </span>
 	                              )}
 	                              {!itemHref && loopHref && (
@@ -902,11 +904,11 @@ export const PersonaFleetPage = () => {
 	                              to={researchHref}
 	                              className={fieldLinkClass("block text-muted-foreground hover:text-primary")}
 	                            >
-	                              nan
+	                              —
 	                            </Link>
 	                          ) : (
 	                            <div className="space-y-1">
-	                              <span className="block text-muted-foreground">nan</span>
+	                              <span className="block text-muted-foreground">—</span>
 	                              {loopHref && (
 	                                <Link
 	                                  to={loopHref}
@@ -1106,6 +1108,7 @@ export const HumanInboxPage = () => {
   const hasPersonaFocusMatch = !personaFocus || visibleItems.length > 0;
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
+      <ManagementOperationsNav />
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.title")}</h1>
         <p className="text-sm text-muted-foreground">

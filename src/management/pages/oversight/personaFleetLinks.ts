@@ -65,12 +65,6 @@ function normalizeManagementHref(value: unknown): string | null {
 }
 
 function normalizeRetiredPromotionHref(href: string): string {
-  if (href.startsWith("/management/persona-league")) {
-    return promotionAllocationHref(href, "real-ranking");
-  }
-  if (href.startsWith("/management/quarterly-ranking")) {
-    return promotionAllocationHref(href, "paper-candidates");
-  }
   if (href.startsWith("/management/rebalances") || href.startsWith("/management/rebalance")) {
     return promotionAllocationHref(
       href,
@@ -135,15 +129,6 @@ function promotionAllocationHref(href: string, tab: string, idParamName?: string
   const params = new URLSearchParams(query);
   if (!params.has("tab")) params.set("tab", tab);
   if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-  const suffix = params.toString();
-  return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-}
-
-function promotionAllocationHrefWithTab(href: string, tab: string): string {
-  const [beforeHash, hash = ""] = href.split("#", 2);
-  const [, query = ""] = beforeHash.split("?", 2);
-  const params = new URLSearchParams(query);
-  params.set("tab", tab);
   const suffix = params.toString();
   return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
@@ -419,11 +404,6 @@ function isPaperCapitalRow(r: ManagementPersonaFleetRow): boolean {
   );
 }
 
-function personaPromotionAllocationHref(r: ManagementPersonaFleetRow, tab: string): string | null {
-  const personaId = encodedPersonaId(r);
-  return personaId ? `/management/promotion-allocation?tab=${tab}&persona=${personaId}` : null;
-}
-
 function runtimeId(r: ManagementPersonaFleetRow): string | undefined {
   const raw = r as RawPersonaFleetRow;
   const id = r.runtimeId ?? raw.runtime_id;
@@ -545,7 +525,7 @@ export function personaFleetResearchItems(r: ManagementPersonaFleetRow): Persona
       const artId = artifactId(status, project);
       return {
         key: id ?? expId ?? artId ?? `${r.personaId}-research-${index}`,
-        title: project.title || currentWork(r) || status?.summary || "nan",
+        title: project.title || currentWork(r) || status?.summary || "—",
         stage: project.stage ?? status?.stage,
         status: project.status,
         frameworks: frameworks(status, project),
@@ -566,7 +546,7 @@ export function personaFleetResearchItems(r: ManagementPersonaFleetRow): Persona
   if (!title && !status?.stage && !expId && !artId && frameworks(status).length === 0) return [];
   return [{
     key: expId ?? artId ?? `${r.personaId}-research-status`,
-    title: title ?? "nan",
+    title: title ?? "—",
     stage: status?.stage,
     frameworks: frameworks(status),
     frameworkCount: frameworkCount(status),
@@ -717,7 +697,6 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
 }
 
 export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | null {
-  const tab = isPaperCapitalRow(r) ? "paper-candidates" : "real-ranking";
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "rank",
     "rankHref",
@@ -733,14 +712,15 @@ export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | nul
     "rankingHref",
     "ranking_href",
   ], (href) => (
-    href.startsWith("/management/promotion-allocation")
-    || href.startsWith("/management/ranking")
+    href.startsWith("/management/persona-league")
+    || href.startsWith("/management/quarterly-ranking")
   ));
-  if (canonical?.startsWith("/management/promotion-allocation")) {
-    return promotionAllocationHrefWithTab(canonical, tab);
-  }
-  if (canonical && !isPaperCapitalRow(r)) return canonical;
-  return personaPromotionAllocationHref(r, tab);
+  if (canonical) return canonical;
+  const personaId = encodedPersonaId(r);
+  if (!personaId) return null;
+  return isPaperCapitalRow(r)
+    ? `/management/quarterly-ranking?persona=${personaId}`
+    : `/management/persona-league?persona=${personaId}`;
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {

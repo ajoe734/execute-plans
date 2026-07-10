@@ -1,11 +1,12 @@
 // 2026-05-22 PM12-007 — Quarterly Ranking page.
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -87,9 +88,11 @@ type QuarterlyRecommendationRow = QuarterlyRankingRow & {
 const governanceDestinationsFromRow = (row: QuarterlyRecommendationRow): string[] | undefined =>
   row.governanceDestinations ?? row.governance_destinations;
 
-export const QuarterlyRankingPage = () => {
+export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
   const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
 
@@ -122,8 +125,11 @@ export const QuarterlyRankingPage = () => {
   });
   const f = formula ?? EMPTY_FORMULA;
 
-  const disqualified = ranking.filter((r) => r.eligibility !== "eligible");
-  const eligible = ranking.filter((r) => r.eligibility === "eligible");
+  const focusedRanking = personaFocus
+    ? ranking.filter((row) => row.personaId === personaFocus || row.personaName === personaFocus)
+    : ranking;
+  const disqualified = focusedRanking.filter((r) => r.eligibility !== "eligible");
+  const eligible = focusedRanking.filter((r) => r.eligibility === "eligible");
   const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
   const quarter = ranking.find((row) => row.quarter)?.quarter ?? currentQuarter;
   const cutoffDate = quarterCutoffDate(quarter);
@@ -166,11 +172,27 @@ export const QuarterlyRankingPage = () => {
   };
 
   return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.quarterly.title")}>
+    <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.quarterly.title")}>
+      {!embedded ? <ManagementOperationsNav /> : null}
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.quarterly.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.quarterly.subtitle")}</p>
       </header>
+
+      {personaFocus && (
+        <Card className="p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {focusedRanking.length > 0
+                ? t("mgmt.quarterly.focusedPersonaFmt", { persona: personaFocus, count: focusedRanking.length })
+                : t("mgmt.quarterly.focusMissingPersonaFmt", { persona: personaFocus })}
+            </p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/quarterly-ranking">{t("mgmt.quarterly.showAllPersonas")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Snapshot */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -230,6 +252,14 @@ export const QuarterlyRankingPage = () => {
                 <td className={`px-3 py-2 font-mono ${(r.rankDelta ?? 0) > 0 ? "text-status-success" : (r.rankDelta ?? 0) < 0 ? "text-status-failed" : "text-muted-foreground"}`}>{deltaArrow(r.rankDelta)}</td>
                 <td className="px-3 py-2">
                   <Link to={personaManageHref(r)} className="text-primary hover:underline font-mono">{r.personaName}</Link>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                    <Link to={`/management/persona-fleet?persona=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary">
+                      {t("nav.personaFleet")}
+                    </Link>
+                    <Link to={`/management/performance-attribution?dimension=persona&persona=${encodeURIComponent(r.personaId)}&period=quarter`} className="text-muted-foreground hover:text-primary">
+                      {t("nav.performanceAttribution")}
+                    </Link>
+                  </div>
                 </td>
                 <td className="px-3 py-2"><Badge variant="outline">{r.tier}</Badge></td>
                 <td className="px-3 py-2 font-mono">{fmtNum(r.score, 1)}</td>
@@ -309,28 +339,29 @@ function RecommendationSubmitCell({
   state?: RecommendationUiState;
   onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
   const busy = state?.kind === "submitting";
   return (
     <div className="max-w-[240px] space-y-1">
       <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy}>
-        {busy ? "Submitting…" : `${label} →`}
+        {busy ? t("mgmt.governance.submitting") : `${label} →`}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        Human review required; liveCapitalMutation=false.
+        {t("mgmt.governance.humanReviewRequired")}
       </p>
       {state?.kind === "local_only" && (
         <p role="status" className="text-[11px] leading-snug text-status-warning">
-          Local only: real writes are disabled; no BFF Human Inbox review was created.
+          {t("mgmt.governance.localOnly")}
         </p>
       )}
       {state?.kind === "submitted" && (
         <p role="status" className="text-[11px] leading-snug text-primary">
-          Submitted to BFF; waiting for returned Human Inbox detail.
+          {t("mgmt.governance.submitted")}
         </p>
       )}
       {state?.kind === "error" && (
         <p role="alert" className="text-[11px] leading-snug text-status-failed">
-          Submit failed: {state.message}
+          {t("mgmt.governance.submitFailed", { message: state.message })}
         </p>
       )}
     </div>

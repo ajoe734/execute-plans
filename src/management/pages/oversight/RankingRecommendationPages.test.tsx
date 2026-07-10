@@ -49,7 +49,7 @@ describe("ranking recommendation submit pages", () => {
     mocks.sendRankingRecommendation.mockReset();
   });
 
-  it("Promotion & Allocation is the single governed entry for paper promotion, real ranking, and capital allocation", () => {
+  it("Promotion & Allocation keeps compatibility tabs while ranking pages remain independently routable", () => {
     let liveCall = 0;
     mocks.useV5Live.mockImplementation(() => {
       liveCall += 1;
@@ -74,10 +74,10 @@ describe("ranking recommendation submit pages", () => {
     const other = rows[0];
     mocks.useV5Live.mockReturnValue({ data: [other, focused], loading: false, refresh: vi.fn() });
 
-    renderWithRoutes(`/management/promotion-allocation?tab=real-ranking&persona=${focused.personaId}`, <PersonaLeaguePage />);
+    renderWithRoutes(`/management/persona-league?persona=${focused.personaId}`, <PersonaLeaguePage />);
 
     expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 matching league row(s)`)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/promotion-allocation?tab=real-ranking");
+    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/persona-league");
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("ranking recommendation submit pages", () => {
         }),
       );
     });
-    expect(screen.getByText("Human review required; liveCapitalMutation=false.")).toBeInTheDocument();
-    expect(screen.getByText("Local only: real writes are disabled; no BFF Human Inbox review was created.")).toBeInTheDocument();
+    expect(screen.getByText("Every recommendation requires Human Review; live capital is never changed directly.")).toBeInTheDocument();
+    expect(screen.getByText("Real writes are disabled, so no BFF Human Inbox review was created.")).toBeInTheDocument();
   });
 });
