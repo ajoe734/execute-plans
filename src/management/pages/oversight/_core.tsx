@@ -965,10 +965,12 @@ export const PersonaFleetPage = () => {
                         aria-label={`${r.personaId} mutation history`}
                         className={fieldLinkClass("text-muted-foreground hover:text-primary")}
                       >
-                        {r.lastMutation || "—"}
+                        {r.lastMutationKind === "fleet_summary" ? (r.lastMutationLabel || r.lastMutation || "無正式 mutation") : (r.lastMutationLabel || r.lastMutation || "—")}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">{r.lastMutation || "—"}</span>
+                      <span className="text-muted-foreground">
+                        {r.lastMutationKind === "unavailable" ? "無資料" : (r.lastMutation || "—")}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -1628,24 +1630,39 @@ function fallbackEvolutionEntryFromFleet(
   personaFocus: string,
 ): EvolutionEntry | null {
   const focus = personaFocus.trim();
-  if (!focus) return null;
+  if (!focus || focus === "nan" || focus === "undefined") return null;
   const row = (fleetRows ?? []).find((item) => evolutionFleetPersonaId(item) === focus);
   if (!row) return null;
   const raw = row as RawEvolutionFleetRow;
-  const lastMutation = row.lastMutation ?? raw.last_mutation ?? "nan";
+  const lastMutation = row.lastMutation ?? raw.last_mutation ?? "";
+  const lastMutationAt = row.lastMutationAt ?? raw.last_mutation_at;
+
+  const asOf = lastMutationAt && lastMutationAt !== "nan" ? lastMutationAt : (lastMutation && lastMutation !== "nan" ? lastMutation : "");
+  const cleanAsOf = asOf ? asOf : "none";
   const personaName = row.personaName ?? raw.name ?? focus;
   const currentWork = row.currentWork ?? raw.current_work;
+
+  const stateStr = row.state ? `state: ${row.state}` : "";
+  const confidenceStr = row.mutationConfidence ? `confidence: ${row.mutationConfidence}` : "";
+  const diagnosticsStr = row.mutationDiagnostics && row.mutationDiagnostics.length
+    ? `diagnostics: ${row.mutationDiagnostics.join(" / ")}`
+    : "";
+  const summaryParts = [
+    currentWork,
+    stateStr,
+    confidenceStr,
+    diagnosticsStr
+  ].filter(Boolean).join(" · ");
+
   return {
-    id: `persona-fleet-summary:${focus}:${lastMutation}`,
-    title: `Persona Fleet mutation summary · ${personaName}`,
-    summary: [currentWork, row.state ? `state ${row.state}` : undefined]
-      .filter(Boolean)
-      .join(" · "),
+    id: `persona-fleet-summary:${focus}:${cleanAsOf}`,
+    title: `Persona Fleet status summary · ${personaName}`,
+    summary: summaryParts || "No details available.",
     status: row.state ?? "fleet_summary",
     entryType: "persona_fleet_summary",
-    action_type: lastMutation,
+    action_type: undefined, // 不得把日期顯示成 Action
     target: { type: "Persona", id: focus },
-    occurred_at: lastMutation && lastMutation !== "nan" ? lastMutation : undefined,
+    occurred_at: asOf ? asOf : undefined,
   };
 }
 
@@ -1659,8 +1676,13 @@ const verdictTone = (v?: string) =>
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const mutationFocus = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
+  
+  const personaFocusRaw = searchParams.get("persona")?.trim() ?? "";
+  const personaFocus = personaFocusRaw === "nan" || personaFocusRaw === "undefined" ? "" : personaFocusRaw;
+  
+  const mutationFocusRaw = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
+  const mutationFocus = mutationFocusRaw === "nan" || mutationFocusRaw === "undefined" ? "" : mutationFocusRaw;
+
   const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
   const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const rows = useMemo(() => data ?? [], [data]);
@@ -1675,6 +1697,34 @@ export const EvolutionJournalPage = () => {
   const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
   const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || mutationFocus);
+
+  const isFleetSummary = Boolean(fleetFallback || searchParams.get("source") === "fleet_summary" || searchParams.get("source") === "nan");
+
+  const focusText = (() => {
+    const pText = personaFocus;
+    const mText = mutationFocus;
+    
+    if (isFleetSummary) {
+      return `已聚焦 Persona: ${pText || "—"} · fleet summary fallback · 無正式 mutation id`;
+    }
+    
+    if (focus.matched) {
+      if (pText && mText) {
+        return `已聚焦 Persona: ${pText} · mutation: ${mText} · ${focus.rows.length} 筆正式演化項目`;
+      } else if (pText) {
+        return `已聚焦 Persona: ${pText} · ${focus.rows.length} 筆正式演化項目`;
+      } else if (mText) {
+        return `已聚焦 Mutation: ${mText} · ${focus.rows.length} 筆正式演化項目`;
+      }
+      return `已聚焦 · ${focus.rows.length} 筆正式演化項目`;
+    }
+    
+    const pPart = pText ? `Persona: ${pText}` : "";
+    const mPart = mText ? `mutation: ${mText}` : "";
+    const detailParts = [pPart, mPart].filter(Boolean).join(" · ");
+    return `無匹配項目${detailParts ? ` (${detailParts})` : ""}`;
+  })();
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
       <header>
@@ -1682,15 +1732,13 @@ export const EvolutionJournalPage = () => {
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
       {hasFocus && (
-        <Card className={"p-3 text-sm " + (focus.matched
+        <Card className={"p-3 text-sm " + (focus.matched && !isFleetSummary
           ? "border-primary/30 bg-primary/5"
           : "border-status-warning/30 bg-status-warning/10")}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
-              {focusMatched
-                ? t("mgmt.evolution.focusedFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan", count: visibleRows.length })
-                : t("mgmt.evolution.focusMissingFmt", { persona: personaFocus || "nan", mutation: mutationFocus || "nan" })}
+              {focusText}
             </span>
             <Button asChild size="sm" variant="outline">
               <Link to="/management/evolution-journal">{t("mgmt.evolution.showAll")}</Link>

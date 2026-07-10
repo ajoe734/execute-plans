@@ -14,6 +14,17 @@ import { Play, TerminalSquare, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
 
+interface SandboxResult {
+  status?: string;
+  output?: {
+    summary?: string;
+    tokens_used?: number;
+    execution_time_ms?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 const sampleInput = (skill: Skill | undefined) =>
   skill ? JSON.stringify({ skill: skill.id, input: { query: "Summarize macro outlook for Q3 2026", env: "research" } }, null, 2) : "{}";
 
@@ -27,7 +38,7 @@ export const SkillSandboxStudio = () => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [logs, setLogs] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
-  const [result, setResult] = useState<any | null>(null);
+  const [result, setResult] = useState<SandboxResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -53,13 +64,16 @@ export const SkillSandboxStudio = () => {
           parsedPayload = { inputs: { query: "Summarize macro outlook for Q3 2026" } };
         }
 
-        const response: any = await bffV1.fetch({
+        const response = (await bffV1.fetch({
           method: "POST",
           path: `/bff/skills/${activeId}/sandbox-eval`,
           body: parsedPayload,
-        });
+        })) as { job_id?: string; [key: string]: unknown };
 
         const jobId = response.job_id;
+        if (!jobId) {
+          throw new Error("No job_id returned from sandbox-eval");
+        }
         setActiveJobId(jobId);
         setJobStatus("running");
         setLogs([]);
@@ -67,22 +81,31 @@ export const SkillSandboxStudio = () => {
 
         const pollInterval = setInterval(async () => {
           try {
-            const logResponse: any = await bffV1.fetch({
+            const logResponse = (await bffV1.fetch({
               method: "GET",
               path: `/bff/jobs/${jobId}/logs`,
-            });
+            })) as {
+              logs?: Array<unknown>;
+              status?: string;
+              progress?: unknown;
+              [key: string]: unknown;
+            };
 
             if (logResponse.logs) {
-              setLogs(logResponse.logs.map((log: any) => ({
-                timestamp: log.timestamp || new Date().toISOString(),
-                level: log.level || "INFO",
-                message: typeof log === "string" ? log : log.message || JSON.stringify(log),
-              })));
+              setLogs(logResponse.logs.map((log: unknown) => {
+                const isStr = typeof log === "string";
+                const obj = isStr ? {} : (log as Record<string, unknown>);
+                return {
+                  timestamp: (obj.timestamp as string) || new Date().toISOString(),
+                  level: (obj.level as string) || "INFO",
+                  message: isStr ? log : (obj.message as string) || JSON.stringify(log),
+                };
+              }));
             }
 
             if (logResponse.status === "success" || logResponse.status === "succeeded") {
               setJobStatus("success");
-              setResult(logResponse.progress || { status: "success", output: {} });
+              setResult((logResponse.progress || { status: "success", output: {} }) as SandboxResult);
               clearInterval(pollInterval);
             } else if (logResponse.status === "failed") {
               setJobStatus("failed");
@@ -94,8 +117,8 @@ export const SkillSandboxStudio = () => {
         }, 1000);
 
         setTimeout(() => clearInterval(pollInterval), 30000);
-      } catch (err: any) {
-        toast.error(err.message || "Failed to trigger live sandbox evaluation");
+      } catch (err: unknown) {
+        toast.error(((err as Error)?.message) || "Failed to trigger live sandbox evaluation");
         setJobStatus("idle");
       } finally {
         setIsSubmitting(false);

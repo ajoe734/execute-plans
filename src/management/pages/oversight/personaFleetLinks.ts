@@ -742,6 +742,37 @@ export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | nul
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {
+  const personaId = rowPersonaId(r);
+  if (!personaId || personaId === "nan" || personaId === "undefined") return null;
+
+  const raw = r as RawPersonaFleetRow;
+  const mId = r.mutationEntryId ?? raw.mutation_entry_id;
+  const eId = r.evolutionEntryId ?? raw.evolution_entry_id;
+  const evoHref = r.evolutionHref ?? raw.evolution_href;
+
+  const isValidId = (id: unknown): id is string => {
+    if (typeof id !== "string") return false;
+    const trimmed = id.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (UNAVAILABLE_TOKENS.has(lower)) return false;
+    if (lower === "nan" || lower === "undefined" || lower === "null") return false;
+    // 檢查是否為日期格式 YYYY-MM-DD
+    if (/^\d{4}[-/]\d{2}[-/]\d{2}(?:T|\s|$)/.test(trimmed)) return false;
+    return true;
+  };
+
+  const encodedPersona = encodeURIComponent(personaId);
+
+  // 1. prefer formal mutation_entry_id / evolution_entry_id link targets;
+  if (isValidId(mId)) {
+    return `/management/evolution-journal?persona=${encodedPersona}&mutation_review=${encodeURIComponent(mId)}`;
+  }
+  if (isValidId(eId)) {
+    return `/management/evolution-journal?persona=${encodedPersona}&mutation_review=${encodeURIComponent(eId)}`;
+  }
+
+  // 2. check linkTargets / links for canonical learn/mutation URL
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
     "mutation",
     "mutationHref",
@@ -753,9 +784,32 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
     "learnHref",
     "learn_href",
   ]);
-  if (canonical) return canonical;
-  const personaId = encodedPersonaId(r);
-  return personaId ? `/management/evolution-journal?persona=${personaId}` : null;
+  if (canonical && typeof canonical === "string") {
+    const cleaned = cleanQueryParameters(canonical);
+    if (cleaned && !cleaned.includes("=nan") && !cleaned.includes("=undefined")) {
+      return cleaned;
+    }
+  }
+
+  // 3. use evolutionHref if it is a valid non-nan url
+  if (evoHref && typeof evoHref === "string") {
+    const cleaned = cleanQueryParameters(evoHref);
+    if (cleaned && !cleaned.includes("=nan") && !cleaned.includes("=undefined")) {
+      return cleaned;
+    }
+  }
+
+  // 4. use persona-scoped fallback links only when formal ids are absent
+  // 規格：keep the row hyperlink when fallback context is useful.
+  // 也就是有 lastMutationKind === "fleet_summary" 或是 lastMutationAt 存在且有效
+  const lastAt = r.lastMutationAt ?? raw.last_mutation_at ?? r.lastMutation ?? raw.last_mutation;
+  const isFallbackUseful = (r.lastMutationKind === "fleet_summary") || (lastAt && lastAt.trim() && lastAt.trim() !== "nan" && lastAt.trim() !== "—");
+  if (isFallbackUseful) {
+    return `/management/evolution-journal?persona=${encodedPersona}&source=fleet_summary`;
+  }
+
+  // 5. no useful data -> no link
+  return null;
 }
 
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { bff } from "@/lib/bff-v1";
-import type { RankingFormula } from "@/lib/bff/types";
+import type { RankingFormula, Job } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { FormulaEditor } from "@/management/components/studios/FormulaEditor";
 import { toast } from "sonner";
@@ -28,12 +28,12 @@ export const FormulaStudio = () => {
   const [compareId, setCompareId] = useState<string | undefined>();
   const intent = params.get("intent");
   
-  const [backtestJobs, setBacktestJobs] = useState<any[]>([]);
+  const [backtestJobs, setBacktestJobs] = useState<Job[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadBacktestJobs = () => {
     bff.jobs.list().then((list) => {
-      const filtered = (list || []).filter((j: any) => j.kind === "backtest");
+      const filtered = (list || []).filter((j: Job) => j.kind === "backtest");
       setBacktestJobs(filtered);
     });
   };
