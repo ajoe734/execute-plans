@@ -8,12 +8,14 @@ import type {
 const UNAVAILABLE_TOKENS = new Set([
   "",
   "#",
+  "—",
   "nan",
   "null",
   "undefined",
   "none",
   "n/a",
   "na",
+  "unknown",
   "unavailable",
   "not declared",
   "not_declared",
@@ -803,7 +805,7 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
   // 規格：keep the row hyperlink when fallback context is useful.
   // 也就是有 lastMutationKind === "fleet_summary" 或是 lastMutationAt 存在且有效
   const lastAt = r.lastMutationAt ?? raw.last_mutation_at ?? r.lastMutation ?? raw.last_mutation;
-  const isFallbackUseful = (r.lastMutationKind === "fleet_summary") || (lastAt && lastAt.trim() && lastAt.trim() !== "nan" && lastAt.trim() !== "—");
+  const isFallbackUseful = (r.lastMutationKind === "fleet_summary") || isUsableToken(lastAt);
   if (isFallbackUseful) {
     return `/management/evolution-journal?persona=${encodedPersona}&source=fleet_summary`;
   }
