@@ -161,7 +161,7 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("routes paper persona rank links to the Paper to Real tab", () => {
+  it("routes paper persona rank links to the standalone quarterly ranking", () => {
     const row = {
       personaId: "persona-paper-alpha",
       capitalMode: "paper",
@@ -172,11 +172,11 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetRankHref(row)).toBe(
-      "/management/promotion-allocation?tab=paper-candidates&persona=persona-paper-alpha",
+      "/management/quarterly-ranking?persona=persona-paper-alpha",
     );
   });
 
-  it("keeps live persona rank links on the Real ranking tab", () => {
+  it("routes live persona rank links to the standalone Persona League", () => {
     const row = {
       personaId: "persona-live-alpha",
       capitalMode: "live",
@@ -184,7 +184,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetRankHref(row)).toBe(
-      "/management/promotion-allocation?tab=real-ranking&persona=persona-live-alpha",
+      "/management/persona-league?persona=persona-live-alpha",
     );
   });
 

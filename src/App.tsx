@@ -56,6 +56,16 @@ const PerformanceAttributionRoute = lazyNamedRoute(
   "PerformanceAttributionRoute",
   "Performance attribution",
 );
+const PersonaLeagueRoute = lazyNamedRoute(
+  () => import("@/routes/management/performance"),
+  "PersonaLeagueRoute",
+  "Persona league",
+);
+const QuarterlyRankingRoute = lazyNamedRoute(
+  () => import("@/routes/management/performance"),
+  "QuarterlyRankingRoute",
+  "Quarterly ranking",
+);
 
 const Ep5CanaryReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "Ep5CanaryReadinessRoute", "EP5 readiness");
 const BrokerLiveReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BrokerLiveReadinessRoute", "Broker live readiness");
@@ -173,10 +183,6 @@ const App = () => (
             <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
             <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
             <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
-            <Route path="/management/persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
-            <Route path="/management/persona-league/*" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
-            <Route path="/management/quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
-            <Route path="/management/quarterly-ranking/*" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
             <Route path="/management/capital" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
             <Route path="/management/capital/:id" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" idParamName="capital_id" />} />
             <Route path="/management/capital-pools" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
@@ -224,10 +230,8 @@ const App = () => (
 
                 <Route path="portfolio-book" element={<PortfolioBookRoute />} />
                 <Route path="promotion-allocation" element={<PromotionAllocationRoute />} />
-                <Route path="persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
-                <Route path="persona-league/*" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
-                <Route path="quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
-                <Route path="quarterly-ranking/*" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
+                <Route path="persona-league" element={<PersonaLeagueRoute />} />
+                <Route path="quarterly-ranking" element={<QuarterlyRankingRoute />} />
                 <Route path="performance-attribution" element={<PerformanceAttributionRoute />} />
 
                 <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />

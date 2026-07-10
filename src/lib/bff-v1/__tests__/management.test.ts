@@ -9,7 +9,10 @@ import {
   adaptHumanInboxDetail,
   adaptHumanInboxList,
   adaptManagementPersonaFleet,
+  adaptOperationsReadModel,
   adaptPersonaIntent,
+  adaptPortfolioExposureMonitor,
+  adaptPortfolioHoldingRows,
   defaultTradingPulseModel,
   mgmt,
 } from "@/lib/bff-v1/management";
@@ -50,6 +53,106 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("mgmt façade (PM-Live)", () => {
+  it("normalizes the operations read model confidence envelope", () => {
+    const model = adaptOperationsReadModel({
+      data: {
+        identity: {
+          persona_id: "persona-alpha",
+          runtime_ids: ["runtime-alpha"],
+          paper_ledger_ids: ["paper-alpha"],
+          capital_pool_ids: ["pool-alpha"],
+          sleeve_ids: [],
+          strategy_ids: ["strategy-alpha"],
+          artifact_ids: [],
+          broker_ids: [],
+          period: "30d",
+          as_of: "2026-07-10T00:00:00Z",
+        },
+        data_confidence: "fallback",
+        performance: { pnl: 48000, pnl_pct: 0.182, risk_pct: null },
+        sources: [{ source_name: "persona_fleet", source_status: "ok", source_row_count: 1 }],
+        diagnostics: [{ source_name: "performance_attribution", code: "MISSING_ATTRIBUTION_MATCH", message: "No match" }],
+      },
+    });
+
+    expect(model?.identity.personaId).toBe("persona-alpha");
+    expect(model?.identity.runtimeIds).toEqual(["runtime-alpha"]);
+    expect(model?.dataConfidence).toBe("fallback");
+    expect(model?.performance.pnl).toBe(48000);
+    expect(model?.performance.riskPct).toBeUndefined();
+    expect(model?.diagnostics[0].code).toBe("MISSING_ATTRIBUTION_MATCH");
+  });
+
+  it("normalizes portfolio exposure and holdings from the BFF snake_case envelope", () => {
+    const exposure = adaptPortfolioExposureMonitor({
+      data: {
+        summary: {
+          exposure_count: 1,
+          risk_budget_total: 100,
+          current_exposure_total: 40,
+          available_budget_total: 60,
+          risk_budget_utilization: 0.4,
+          over_budget_count: 0,
+          near_limit_count: 0,
+          unknown_exposure_count: 0,
+          telemetry_runtime_count: 1,
+        },
+        items: [{
+          id: "portfolio-book-exposure-pool-alpha",
+          capital_pool_id: "pool-alpha",
+          name: "Alpha Pool",
+          risk_budget: 100,
+          current_exposure: 40,
+          available_budget: 60,
+          risk_budget_utilization: 0.4,
+          risk_state: "within_budget",
+          runtime_count: 1,
+          active_runtime_count: 1,
+          paper_runtime_count: 1,
+          live_runtime_count: 0,
+          telemetry: { total_pnl: 8 },
+          source_refs: { runtime_ids: ["runtime-alpha"] },
+        }],
+      },
+      meta: { surfaces: { portfolio_book_exposure: { status: "ok" } } },
+    });
+    const holdings = adaptPortfolioHoldingRows({
+      data: {
+        items: [{
+          holding_id: "runtime-alpha:TXF",
+          capital_pool_id: "pool-alpha",
+          persona_id: "persona-alpha",
+          runtime_id: "runtime-alpha",
+          strategy_id: "strategy-alpha",
+          symbol: "TXF",
+          asset_class: "futures",
+          side: "long",
+          quantity: 2,
+          mark_price: 15300,
+          market_value: 30600,
+          unrealized_pnl: 200,
+          last_mark_at: "2026-07-10T00:00:00Z",
+        }],
+      },
+    });
+
+    expect(exposure?.summary.currentExposureTotal).toBe(40);
+    expect(exposure?.items[0]).toMatchObject({
+      capitalPoolId: "pool-alpha",
+      riskState: "within_budget",
+      runtimeIds: ["runtime-alpha"],
+      telemetryAvailable: true,
+    });
+    expect(holdings?.[0]).toMatchObject({
+      holdingId: "runtime-alpha:TXF",
+      capitalPoolId: "pool-alpha",
+      personaId: "persona-alpha",
+      runtimeId: "runtime-alpha",
+      symbol: "TXF",
+      marketValue: 30600,
+    });
+  });
+
   it("cockpit.get falls through to seed in mock/test mode", async () => {
     const out = await mgmt.cockpit.get();
     const expected = composeCockpit(defaultCockpitSeed());
@@ -83,9 +186,12 @@ describe("mgmt façade (PM-Live)", () => {
     expect(await mgmt.portfolioBook.summaryLiveOnly()).toBeUndefined();
     expect(await mgmt.portfolioBook.poolsLiveOnly()).toEqual([]);
     expect(await mgmt.portfolioBook.holdingsLiveOnly()).toEqual([]);
+    expect(await mgmt.portfolioBook.exposureLiveOnly()).toBeUndefined();
     expect(await mgmt.personaLeague.listLiveOnly()).toEqual([]);
     expect(await mgmt.quarterlyRanking.listLiveOnly("2026-Q2")).toEqual([]);
     expect(await mgmt.quarterlyRanking.formulaLiveOnly()).toBeUndefined();
+    expect(await mgmt.performanceAttribution.listLiveOnly("persona", "30d")).toEqual([]);
+    expect(await mgmt.operationsReadModel.getLiveOnly("persona-alpha", "30d")).toBeUndefined();
   });
 
   it("adapts live Trading Pulse aggregate without falling back to legacy rows", () => {

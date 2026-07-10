@@ -47,6 +47,89 @@ import type {
   PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
 } from "@/lib/v5/management/performanceAttribution";
 
+export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
+
+export interface ManagementOperationsReadModel {
+  identity: {
+    personaId: string;
+    personaLabel?: string;
+    stage?: string;
+    runtimeIds: string[];
+    paperLedgerIds: string[];
+    capitalPoolIds: string[];
+    sleeveIds: string[];
+    strategyIds: string[];
+    artifactIds: string[];
+    brokerIds: string[];
+    period: string;
+    asOf: string;
+  };
+  dataConfidence: ManagementDataConfidence;
+  performance: {
+    pnl?: number;
+    pnlPct?: number;
+    drawdownPct?: number;
+    riskPct?: number;
+    sharpe?: number;
+    rank?: number;
+    score?: number;
+    performanceDelta?: number;
+    sourceContribution?: number;
+  };
+  sources: Array<{
+    sourceName: string;
+    sourceStatus: string;
+    sourceFreshness?: string;
+    sourceRowCount?: number;
+    sourceError?: string;
+    coverageRatio?: number;
+  }>;
+  diagnostics: Array<{
+    sourceName: string;
+    code: string;
+    message: string;
+  }>;
+}
+
+export interface ManagementPortfolioExposureItem {
+  id: string;
+  capitalPoolId: string;
+  name: string;
+  status: string;
+  currency?: string;
+  riskBudget?: number;
+  currentExposure?: number;
+  availableBudget?: number;
+  riskBudgetUtilization?: number;
+  riskState: string;
+  pnl?: number;
+  runtimeIds: string[];
+  runtimeCount: number;
+  activeRuntimeCount: number;
+  paperRuntimeCount: number;
+  liveRuntimeCount: number;
+  telemetryAvailable: boolean;
+}
+
+export interface ManagementPortfolioExposureMonitor {
+  summary: {
+    exposureCount: number;
+    riskBudgetTotal?: number;
+    currentExposureTotal?: number;
+    availableBudgetTotal?: number;
+    riskBudgetUtilization?: number;
+    overBudgetCount: number;
+    nearLimitCount: number;
+    unknownExposureCount: number;
+    telemetryRuntimeCount: number;
+    totalPnl?: number;
+    latestTelemetryAt?: string;
+  };
+  items: ManagementPortfolioExposureItem[];
+  dataConfidence: ManagementDataConfidence;
+  sourceIssues: string[];
+}
+
 // ---------- shape guards (extremely defensive) ----------
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -3188,6 +3271,184 @@ function adaptReadiness(raw: unknown): ReadinessPageModel | null {
   return data as unknown as ReadinessPageModel;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => asString(item)).filter(Boolean)
+    : [];
+}
+
+function normalizeDataConfidence(value: unknown): ManagementDataConfidence {
+  const confidence = asString(value).toLowerCase();
+  return ["formal", "partial", "fallback", "degraded", "unavailable"].includes(confidence)
+    ? confidence as ManagementDataConfidence
+    : "unavailable";
+}
+
+export function adaptOperationsReadModel(raw: unknown): ManagementOperationsReadModel | null {
+  const data = unwrap(raw);
+  if (!isObject(data) || !isObject(data.identity) || !isObject(data.performance)) return null;
+  const identity = data.identity;
+  const performance = data.performance;
+  const sources = Array.isArray(data.sources) ? data.sources.filter(isObject) : [];
+  const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics.filter(isObject) : [];
+  const personaId = asString(identity.persona_id ?? identity.personaId);
+  if (!personaId) return null;
+
+  return {
+    identity: {
+      personaId,
+      personaLabel: asString(identity.persona_label ?? identity.personaLabel) || undefined,
+      stage: asString(identity.stage) || undefined,
+      runtimeIds: stringList(identity.runtime_ids ?? identity.runtimeIds),
+      paperLedgerIds: stringList(identity.paper_ledger_ids ?? identity.paperLedgerIds),
+      capitalPoolIds: stringList(identity.capital_pool_ids ?? identity.capitalPoolIds),
+      sleeveIds: stringList(identity.sleeve_ids ?? identity.sleeveIds),
+      strategyIds: stringList(identity.strategy_ids ?? identity.strategyIds),
+      artifactIds: stringList(identity.artifact_ids ?? identity.artifactIds),
+      brokerIds: stringList(identity.broker_ids ?? identity.brokerIds),
+      period: asString(identity.period),
+      asOf: asString(identity.as_of ?? identity.asOf),
+    },
+    dataConfidence: normalizeDataConfidence(data.data_confidence ?? data.dataConfidence),
+    performance: {
+      pnl: optionalFiniteNumber(performance.pnl),
+      pnlPct: optionalFiniteNumber(performance.pnl_pct ?? performance.pnlPct),
+      drawdownPct: optionalFiniteNumber(performance.drawdown_pct ?? performance.drawdownPct),
+      riskPct: optionalFiniteNumber(performance.risk_pct ?? performance.riskPct),
+      sharpe: optionalFiniteNumber(performance.sharpe),
+      rank: optionalFiniteNumber(performance.rank),
+      score: optionalFiniteNumber(performance.score),
+      performanceDelta: optionalFiniteNumber(performance.performance_delta ?? performance.performanceDelta),
+      sourceContribution: optionalFiniteNumber(performance.source_contribution ?? performance.sourceContribution),
+    },
+    sources: sources.map((source) => ({
+      sourceName: asString(source.source_name ?? source.sourceName, "unknown"),
+      sourceStatus: asString(source.source_status ?? source.sourceStatus, "unavailable"),
+      sourceFreshness: asString(source.source_freshness ?? source.sourceFreshness) || undefined,
+      sourceRowCount: optionalFiniteNumber(source.source_row_count ?? source.sourceRowCount),
+      sourceError: asString(source.source_error ?? source.sourceError) || undefined,
+      coverageRatio: optionalFiniteNumber(source.coverage_ratio ?? source.coverageRatio),
+    })),
+    diagnostics: diagnostics.map((diagnostic) => ({
+      sourceName: asString(diagnostic.source_name ?? diagnostic.sourceName, "unknown"),
+      code: asString(diagnostic.code, "UNKNOWN"),
+      message: asString(diagnostic.message),
+    })),
+  };
+}
+
+function requiredNumber(value: unknown): number {
+  return optionalFiniteNumber(value) ?? Number.NaN;
+}
+
+export function adaptPortfolioExposureMonitor(raw: unknown): ManagementPortfolioExposureMonitor | null {
+  const root = isObject(raw) ? raw : {};
+  const data = unwrap(raw);
+  if (!isObject(data) || !isObject(data.summary)) return null;
+  const summary = data.summary;
+  const items = Array.isArray(data.items) ? data.items.filter(isObject) : [];
+  const meta = isObject(root.meta) ? root.meta : {};
+  const surfaces = isObject(meta.surfaces) ? meta.surfaces : {};
+  const sourceIssues = Object.entries(surfaces).flatMap(([name, value]) => {
+    if (!isObject(value)) return [];
+    const status = asString(value.status, "unavailable").toLowerCase();
+    if (["ok", "ready", "healthy"].includes(status)) return [];
+    return [`${name}: ${asString(value.message, status)}`];
+  });
+  const dataConfidence: ManagementDataConfidence = sourceIssues.length > 0
+    ? "partial"
+    : Object.keys(surfaces).length > 0 || items.length > 0
+      ? "formal"
+      : "unavailable";
+
+  return {
+    summary: {
+      exposureCount: requiredNumber(summary.exposure_count ?? summary.exposureCount),
+      riskBudgetTotal: optionalFiniteNumber(summary.risk_budget_total ?? summary.riskBudgetTotal),
+      currentExposureTotal: optionalFiniteNumber(summary.current_exposure_total ?? summary.currentExposureTotal),
+      availableBudgetTotal: optionalFiniteNumber(summary.available_budget_total ?? summary.availableBudgetTotal),
+      riskBudgetUtilization: optionalFiniteNumber(summary.risk_budget_utilization ?? summary.riskBudgetUtilization),
+      overBudgetCount: requiredNumber(summary.over_budget_count ?? summary.overBudgetCount),
+      nearLimitCount: requiredNumber(summary.near_limit_count ?? summary.nearLimitCount),
+      unknownExposureCount: requiredNumber(summary.unknown_exposure_count ?? summary.unknownExposureCount),
+      telemetryRuntimeCount: requiredNumber(summary.telemetry_runtime_count ?? summary.telemetryRuntimeCount),
+      totalPnl: optionalFiniteNumber(summary.total_pnl ?? summary.totalPnl),
+      latestTelemetryAt: asString(summary.latest_telemetry_at ?? summary.latestTelemetryAt) || undefined,
+    },
+    items: items.map((item) => {
+      const sourceRefs = isObject(item.source_refs ?? item.sourceRefs) ? item.source_refs ?? item.sourceRefs : {};
+      const runtimeIds = isObject(sourceRefs) ? stringList(sourceRefs.runtime_ids ?? sourceRefs.runtimeIds) : [];
+      const telemetry = isObject(item.telemetry) ? item.telemetry : {};
+      return {
+        id: asString(item.id, `portfolio-exposure-${asString(item.pool_id ?? item.capital_pool_id)}`),
+        capitalPoolId: asString(item.capital_pool_id ?? item.capitalPoolId ?? item.pool_id),
+        name: asString(item.name ?? item.pool_name, asString(item.capital_pool_id ?? item.pool_id, "Unknown pool")),
+        status: asString(item.status, "unknown"),
+        currency: asString(item.currency) || undefined,
+        riskBudget: optionalFiniteNumber(item.risk_budget ?? item.riskBudget),
+        currentExposure: optionalFiniteNumber(item.current_exposure ?? item.currentExposure ?? item.exposure_amount),
+        availableBudget: optionalFiniteNumber(item.available_budget ?? item.availableBudget),
+        riskBudgetUtilization: optionalFiniteNumber(item.risk_budget_utilization ?? item.riskBudgetUtilization),
+        riskState: asString(item.risk_state ?? item.riskState, "unknown"),
+        pnl: optionalFiniteNumber(item.pnl ?? item.total_pnl),
+        runtimeIds,
+        runtimeCount: requiredNumber(item.runtime_count),
+        activeRuntimeCount: requiredNumber(item.active_runtime_count),
+        paperRuntimeCount: requiredNumber(item.paper_runtime_count),
+        liveRuntimeCount: requiredNumber(item.live_runtime_count),
+        telemetryAvailable: Object.keys(telemetry).length > 0,
+      };
+    }),
+    dataConfidence,
+    sourceIssues,
+  };
+}
+
+export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
+  const data = unwrap(raw);
+  const items = Array.isArray(data)
+    ? data.filter(isObject)
+    : isObject(data) && Array.isArray(data.items)
+      ? data.items.filter(isObject)
+      : null;
+  if (!items) return null;
+
+  return items.map((item, index) => {
+    const runtimeId = asString(item.runtime_id ?? item.runtimeId) || undefined;
+    const capitalPoolId = asString(item.capital_pool_id ?? item.capitalPoolId ?? item.pool_id);
+    return {
+      holdingId: asString(item.holding_id ?? item.holdingId ?? item.id, `holding-${index}`),
+      capitalPoolId,
+      brokerAccountRef: asString(item.broker_account_ref ?? item.brokerAccountRef) || undefined,
+      runtimeId,
+      strategyId: asString(item.strategy_id ?? item.strategyId) || undefined,
+      personaId: asString(item.persona_id ?? item.personaId) || undefined,
+      symbol: asString(item.symbol, "Unknown"),
+      assetClass: asString(item.asset_class ?? item.assetClass, "other") as HoldingRow["assetClass"],
+      side: asString(item.side, "flat") as HoldingRow["side"],
+      quantity: requiredNumber(item.quantity),
+      avgPrice: requiredNumber(item.average_price ?? item.avg_price ?? item.avgPrice),
+      markPrice: requiredNumber(item.mark_price ?? item.markPrice),
+      marketValue: requiredNumber(item.market_value ?? item.marketValue),
+      notional: requiredNumber(item.notional),
+      weightPct: requiredNumber(item.weight_pct ?? item.weightPct ?? item.weight),
+      unrealizedPnl: requiredNumber(item.unrealized_pnl ?? item.unrealizedPnl),
+      realizedPnl: requiredNumber(item.realized_pnl ?? item.realizedPnl),
+      pnlPct: requiredNumber(item.pnl_pct ?? item.pnlPct),
+      exposurePct: requiredNumber(item.exposure_pct ?? item.exposurePct),
+      sector: asString(item.sector) || undefined,
+      region: asString(item.region) || undefined,
+      currency: asString(item.currency),
+      updatedAt: asString(item.last_mark_at ?? item.updated_at ?? item.updatedAt),
+      links: {
+        manageHref: runtimeId
+          ? `/management/runtimes?runtime=${encodeURIComponent(runtimeId)}`
+          : `/management/portfolio-book?capital_pool_id=${encodeURIComponent(capitalPoolId)}`,
+      },
+    };
+  });
+}
+
 // ---------- public mgmt façade ----------
 
 export const mgmt = {
@@ -3424,13 +3685,18 @@ export const mgmt = {
     holdingsLiveOnly: (): Promise<HoldingRow[]> =>
       liveOnlyList<HoldingRow>(
         { method: "GET", path: paths.mgmtPortfolioHoldings() },
-        adaptArrayPassthrough<HoldingRow>,
+        adaptPortfolioHoldingRows,
       ),
     holdings: (seedFn: () => HoldingRow[]): Promise<HoldingRow[]> =>
       withLiveOrMock<HoldingRow[]>(
         { method: "GET", path: paths.mgmtPortfolioHoldings() },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<HoldingRow>, seedFn),
+      ),
+    exposureLiveOnly: (): Promise<ManagementPortfolioExposureMonitor | undefined> =>
+      liveOnlyRead<ManagementPortfolioExposureMonitor>(
+        { method: "GET", path: paths.mgmtPortfolioExposure() },
+        adaptPortfolioExposureMonitor,
       ),
   },
 
@@ -3547,6 +3813,14 @@ export const mgmt = {
   },
 
   performanceAttribution: {
+    listLiveOnly: (
+      dimension?: AttributionDimension,
+      period?: AttributionPeriod,
+    ): Promise<PerformanceAttributionRow[]> =>
+      liveOnlyList<PerformanceAttributionRow>(
+        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) },
+        adaptArrayPassthrough<PerformanceAttributionRow>,
+      ),
     list: (
       dimension: AttributionDimension | undefined,
       period: AttributionPeriod | undefined,
@@ -3556,6 +3830,14 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<PerformanceAttributionRow>, seedFn),
+      ),
+  },
+
+  operationsReadModel: {
+    getLiveOnly: (personaId: string, period?: string): Promise<ManagementOperationsReadModel | undefined> =>
+      liveOnlyRead<ManagementOperationsReadModel>(
+        { method: "GET", path: paths.mgmtOperationsReadModel(personaId, period) },
+        adaptOperationsReadModel,
       ),
   },
 };

@@ -6,8 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import { mgmt } from "@/lib/bff-v1";
-import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import type {
+  ManagementDataConfidence,
+  ManagementOperationsReadModel,
+  ManagementPersonaFleetRow,
+} from "@/lib/bff-v1/management";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { HoldingRow } from "@/lib/v5/management/portfolio";
 import {
@@ -15,15 +20,21 @@ import {
   type AttributionDimension, type AttributionPeriod, type PerformanceAttributionRow,
 } from "@/lib/v5/management/performanceAttribution";
 
-const NAN = "nan";
+const MISSING = "—";
 const fmtUsd = (n: number) =>
   Number.isFinite(n)
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-    : NAN;
-const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : NAN);
-const fmtNum = (n: number) => (Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(n) : NAN);
+    : MISSING;
+const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : MISSING);
 
 const PERIODS: AttributionPeriod[] = ["7d", "30d", "quarter", "ytd"];
+
+const confidenceTone = (confidence: ManagementDataConfidence): string =>
+  confidence === "formal"
+    ? "border-status-success/40 bg-status-success/10 text-status-success"
+    : confidence === "partial" || confidence === "fallback"
+      ? "border-status-warning/40 bg-status-warning/10 text-status-warning"
+      : "border-status-failed/40 bg-status-failed/10 text-status-failed";
 
 type RawLinks = {
   manageHref?: unknown;
@@ -162,12 +173,12 @@ function cleanText(...values: unknown[]): string | undefined {
 
 function cleanDataText(...values: unknown[]): string | undefined {
   const value = cleanText(...values);
-  if (!value || value.toLowerCase() === NAN) return undefined;
+  if (!value || value.toLowerCase() === "nan" || value === MISSING) return undefined;
   return value;
 }
 
 function displayText(...values: unknown[]): string {
-  return cleanDataText(...values) ?? NAN;
+  return cleanDataText(...values) ?? MISSING;
 }
 
 function finiteNumber(...values: unknown[]): number {
@@ -200,8 +211,8 @@ function normalizePerformanceAttributionRow(raw: unknown): AttributionViewRow {
   const r = raw as RawAttributionRow;
   const metrics = r.metrics ?? {};
   const dimension = isAttributionDimension(r.dimension) ? r.dimension : "persona";
-  const key = cleanText(r.key, r.dimensionKey, r.dimension_key, r.label) ?? "nan";
-  const label = cleanText(r.label, key) ?? "nan";
+  const key = cleanDataText(r.key, r.dimensionKey, r.dimension_key, r.label) ?? "unknown";
+  const label = cleanDataText(r.label, key) ?? MISSING;
   const links = r.links ?? {};
   const manageHref = cleanText(links.manageHref, links.manage_href) ?? buildAttributionLinks(dimension, key).manageHref;
 
@@ -295,6 +306,31 @@ function fallbackAttributionRowFromFleet(
   };
 }
 
+function attributionRowFromReadModel(
+  model: ManagementOperationsReadModel | undefined,
+  personaFocus: string,
+): AttributionViewRow | null {
+  if (!model || model.dataConfidence === "unavailable") return null;
+  const focus = personaFocus.trim();
+  if (!focus || model.identity.personaId !== focus) return null;
+  const label = model.identity.personaLabel || focus;
+  const fallbackLabel = model.dataConfidence === "formal"
+    ? label
+    : `${label} · operations summary`;
+  return {
+    dimension: "persona",
+    key: focus,
+    label: fallbackLabel,
+    pnlContribution: model.performance.pnl ?? NaN,
+    pnlContributionPct: model.performance.pnlPct ?? model.performance.performanceDelta ?? NaN,
+    riskContributionPct: model.performance.riskPct ?? NaN,
+    drawdownContributionPct: model.performance.drawdownPct ?? NaN,
+    evidenceRefs: [],
+    links: { manageHref: `/management/persona-fleet?persona=${encodeURIComponent(focus)}` },
+    sourceRefs: { personaIds: [focus] },
+  };
+}
+
 function filterPerformanceRowsForPersona(
   rows: AttributionViewRow[],
   personaFocus: string,
@@ -355,8 +391,8 @@ function holdingWindow(row: RawPortfolioHolding): string {
     row.telemetry?.collectedAt,
     row.telemetry?.collected_at,
   );
-  if (!start && !end) return NAN;
-  return `${start ?? NAN} to ${end ?? NAN}`;
+  if (!start && !end) return MISSING;
+  return `${start ?? MISSING} to ${end ?? MISSING}`;
 }
 
 function holdingPnl(row: RawPortfolioHolding): number {
@@ -371,7 +407,7 @@ function holdingPnl(row: RawPortfolioHolding): number {
 }
 
 function capitalPoolHref(capitalPoolId: string): string | undefined {
-  return capitalPoolId !== NAN
+  return capitalPoolId !== MISSING
     ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(capitalPoolId)}`
     : undefined;
 }
@@ -401,7 +437,7 @@ function sourceRowFromAttribution(
   row: AttributionViewRow,
   personaFocus: string,
   fleetRow: ManagementPersonaFleetRow | undefined,
-  isFleetFallback: boolean,
+  summarySource?: "operations-read-model" | "persona-fleet.performanceSummary",
 ): PerformanceSourceDetailRow {
   const runtimeId = fleetRuntimeId(fleetRow);
   const capitalPoolId = fleetCapitalPoolId(fleetRow);
@@ -409,12 +445,12 @@ function sourceRowFromAttribution(
   const displayCapitalPoolId = displayText(row.dimension === "capital_pool" ? row.key : undefined, capitalPoolId);
   return {
     id: `${row.dimension}-${row.key}-aggregate`,
-    source: isFleetFallback ? "persona-fleet.performanceSummary" : "performance-attribution",
-    sourceHref: isFleetFallback
+    source: summarySource ?? "performance-attribution",
+    sourceHref: summarySource
       ? `/management/persona-fleet?persona=${encodeURIComponent(personaFocus)}`
       : undefined,
-    symbol: row.dimension === "symbol" ? row.key : NAN,
-    holdingWindow: NAN,
+    symbol: row.dimension === "symbol" ? row.key : MISSING,
+    holdingWindow: MISSING,
     runtimeId: displayText(row.dimension === "runtime" ? row.key : undefined, runtimeId),
     capitalPoolId: displayCapitalPoolId,
     capitalPoolHref: capitalPoolHref(displayCapitalPoolId),
@@ -422,9 +458,11 @@ function sourceRowFromAttribution(
     pnlContribution: row.pnlContribution,
     pnlContributionPct: row.pnlContributionPct,
     drawdownContributionPct: row.drawdownContributionPct,
-    basis: isFleetFallback
-      ? "pnl=performanceSummary.pnl; pnlPct=perfDelta; drawdown=performanceSummary.maxDrawdown"
-      : "performance-attribution row",
+    basis: summarySource === "operations-read-model"
+      ? "operations read model summary"
+      : summarySource === "persona-fleet.performanceSummary"
+        ? "Persona Fleet performance summary"
+        : "performance-attribution row",
   };
 }
 
@@ -453,54 +491,38 @@ function sourceRowsFromHoldings(
   });
 }
 
-function missingHoldingSourceRow(
-  personaFocus: string,
-  fleetRow: ManagementPersonaFleetRow | undefined,
-): PerformanceSourceDetailRow {
-  const displayCapitalPoolId = displayText(fleetCapitalPoolId(fleetRow));
-  return {
-    id: `${personaFocus}-missing-holdings`,
-    source: "portfolio-book.holdings",
-    sourceHref: "/management/portfolio-book",
-    symbol: NAN,
-    holdingWindow: NAN,
-    runtimeId: displayText(fleetRuntimeId(fleetRow)),
-    capitalPoolId: displayCapitalPoolId,
-    capitalPoolHref: capitalPoolHref(displayCapitalPoolId),
-    strategyId: displayText(fleetStrategyId(fleetRow)),
-    pnlContribution: NaN,
-    pnlContributionPct: NaN,
-    drawdownContributionPct: NaN,
-    basis: "no matching holding row declares this persona/runtime/capital pool",
-  };
-}
-
 function buildPerformanceSourceDetails(
   rows: AttributionViewRow[],
   personaFocus: string,
   fleetRow: ManagementPersonaFleetRow | undefined,
-  fleetFallback: AttributionViewRow | null,
+  summaryRow: AttributionViewRow | null,
+  summarySource: "operations-read-model" | "persona-fleet.performanceSummary" | undefined,
   holdings: HoldingRow[] | undefined,
 ): PerformanceSourceDetailRow[] {
   if (!personaFocus) return [];
   if (rows.length === 0 && !fleetRow) return [];
-  const details = rows.map((row) => sourceRowFromAttribution(row, personaFocus, fleetRow, row === fleetFallback));
+  const details = rows.map((row) => sourceRowFromAttribution(
+    row,
+    personaFocus,
+    fleetRow,
+    row === summaryRow ? summarySource : undefined,
+  ));
   const matchingHoldings = matchingHoldingsForPersona(holdings, personaFocus, fleetRow);
   const holdingDetails = sourceRowsFromHoldings(matchingHoldings, fleetRow);
-  if (holdingDetails.length > 0) return [...details, ...holdingDetails];
-  return [...details, missingHoldingSourceRow(personaFocus, fleetRow)];
+  return [...details, ...holdingDetails];
 }
 
 export const PerformanceAttributionPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
+  const entityFocus = searchParams.get("entity")?.trim() ?? "";
   const dimension = selectedDimensionFromQuery(searchParams.get("dimension"), personaFocus);
   const periodParam = searchParams.get("period");
   const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "30d";
 
   const { data } = useV5Live(
-    () => mgmt.performanceAttribution.list(
+    () => mgmt.performanceAttribution.listLiveOnly(
       dimension === "all" ? undefined : dimension,
       period,
     ),
@@ -508,28 +530,59 @@ export const PerformanceAttributionPage = () => {
   );
   const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
   const { data: holdings } = useV5Live(() => mgmt.portfolioBook.holdingsLiveOnly(), []);
+  const { data: operationsReadModel, loading: operationsLoading } = useV5Live(
+    () => personaFocus
+      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period)
+      : Promise.resolve(undefined),
+    [personaFocus, period],
+  );
   const allRows = useMemo(() => (data ?? []).map(normalizePerformanceAttributionRow), [data]);
   const dimensionRows = useMemo(() => {
     const filtered = dimension === "all" ? allRows : allRows.filter((r) => r.dimension === dimension);
     return [...filtered].sort((a, b) => (b.pnlContribution || 0) - (a.pnlContribution || 0));
   }, [allRows, dimension]);
+  const scopedDimensionRows = useMemo(
+    () => entityFocus
+      ? dimensionRows.filter((row) => row.key === entityFocus || row.label === entityFocus)
+      : dimensionRows,
+    [dimensionRows, entityFocus],
+  );
   const focus = useMemo(
-    () => filterPerformanceRowsForPersona(dimensionRows, personaFocus),
-    [dimensionRows, personaFocus],
+    () => filterPerformanceRowsForPersona(scopedDimensionRows, personaFocus),
+    [personaFocus, scopedDimensionRows],
   );
   const focusedFleet = useMemo(
     () => focusedFleetRow(fleetRows, personaFocus),
     [fleetRows, personaFocus],
   );
-  const fleetFallback = useMemo(
-    () => focus.matched ? null : fallbackAttributionRowFromFleet(focusedFleet, personaFocus),
-    [focusedFleet, focus.matched, personaFocus],
+  const operationsSummary = useMemo(
+    () => focus.matched ? null : attributionRowFromReadModel(operationsReadModel, personaFocus),
+    [focus.matched, operationsReadModel, personaFocus],
   );
-  const rows = fleetFallback ? [fleetFallback] : focus.rows;
-  const focusMatched = focus.matched || Boolean(fleetFallback);
+  const fleetFallback = useMemo(
+    () => focus.matched || operationsSummary ? null : fallbackAttributionRowFromFleet(focusedFleet, personaFocus),
+    [focusedFleet, focus.matched, operationsSummary, personaFocus],
+  );
+  const summaryRow = operationsSummary ?? fleetFallback;
+  const rows = useMemo(
+    () => summaryRow ? [summaryRow] : focus.rows,
+    [focus.rows, summaryRow],
+  );
+  const dataConfidence: ManagementDataConfidence = focus.matched
+    ? "formal"
+    : operationsSummary && operationsReadModel?.dataConfidence === "formal"
+      ? "partial"
+      : operationsReadModel?.dataConfidence
+      ?? (fleetFallback ? "fallback" : "unavailable");
+  const summarySource = operationsSummary
+    ? "operations-read-model" as const
+    : fleetFallback
+      ? "persona-fleet.performanceSummary" as const
+      : undefined;
+  const focusResolved = focus.matched || Boolean(summaryRow);
   const sourceDetails = useMemo(
-    () => buildPerformanceSourceDetails(rows, personaFocus, focusedFleet, fleetFallback, holdings),
-    [fleetFallback, focusedFleet, holdings, personaFocus, rows],
+    () => buildPerformanceSourceDetails(rows, personaFocus, focusedFleet, summaryRow, summarySource, holdings),
+    [focusedFleet, holdings, personaFocus, rows, summaryRow, summarySource],
   );
   const showAllPersonaHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -543,6 +596,7 @@ export const PerformanceAttributionPage = () => {
     if (nextDimension === "all") next.delete("dimension");
     else next.set("dimension", nextDimension);
     if (nextDimension !== "persona") next.delete("persona");
+    next.delete("entity");
     setSearchParams(next, { replace: true });
   };
 
@@ -554,6 +608,7 @@ export const PerformanceAttributionPage = () => {
 
   return (
     <section className="p-6 space-y-6" aria-label={t("mgmt.attribution.title")}>
+      <ManagementOperationsNav />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.attribution.title")}</h1>
@@ -585,18 +640,71 @@ export const PerformanceAttributionPage = () => {
       </header>
 
       {personaFocus && (
-        <Card className={"p-3 text-sm " + (focusMatched
-          ? "border-primary/30 bg-primary/5"
-          : "border-status-warning/30 bg-status-warning/10")}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-foreground">
-              {focusMatched
-                ? t("mgmt.attribution.focusedPersonaFmt", { persona: personaFocus, count: rows.length })
-                : t("mgmt.attribution.focusMissingPersonaFmt", { persona: personaFocus })}
-            </span>
+        <Card className="p-3 text-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={confidenceTone(dataConfidence)}>
+                  {t(`mgmt.attribution.confidence.${dataConfidence}`)}
+                </Badge>
+                <span className="text-foreground">
+                  {operationsLoading && !focusResolved
+                    ? t("mgmt.attribution.focusLoadingPersonaFmt", { persona: personaFocus })
+                    : dataConfidence === "formal" && focus.matched
+                      ? t("mgmt.attribution.focusedPersonaFmt", { persona: personaFocus, count: rows.length })
+                      : summaryRow
+                        ? t("mgmt.attribution.fallbackPersonaFmt", { persona: personaFocus })
+                        : t("mgmt.attribution.focusMissingPersonaFmt", { persona: personaFocus })}
+                </span>
+              </div>
+              {summaryRow && dataConfidence !== "formal" ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("mgmt.attribution.fallbackWarning")}
+                </p>
+              ) : null}
+              {operationsReadModel?.sources.length ? (
+                <div className="flex flex-wrap gap-2" data-testid="attribution-source-confidence">
+                  {operationsReadModel.sources.map((source) => (
+                    <Badge key={source.sourceName} variant="outline" title={source.sourceError}>
+                      {source.sourceName}: {source.sourceStatus}
+                      {source.sourceRowCount !== undefined ? ` (${source.sourceRowCount})` : ""}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+              {operationsReadModel?.diagnostics.length ? (
+                <ul className="space-y-1 text-xs text-muted-foreground" data-testid="attribution-diagnostics">
+                  {operationsReadModel.diagnostics.map((diagnostic) => (
+                    <li key={`${diagnostic.sourceName}-${diagnostic.code}`}>
+                      <span className="font-medium text-foreground">{diagnostic.code}:</span> {diagnostic.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : fleetFallback ? (
+                <p className="text-xs text-muted-foreground" data-testid="attribution-diagnostics">
+                  {t("mgmt.attribution.fleetFallbackDiagnostic")}
+                </p>
+              ) : null}
+            </div>
             <Button asChild size="sm" variant="outline">
               <Link to={showAllPersonaHref}>{t("mgmt.attribution.showAllPersona")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!personaFocus && entityFocus && (
+        <Card className="p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-foreground">
+              {rows.length > 0
+                ? t("mgmt.attribution.focusedEntityFmt", { entity: entityFocus, count: rows.length })
+                : t("mgmt.attribution.focusMissingEntityFmt", { entity: entityFocus })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/management/performance-attribution?dimension=${dimension}&period=${period}`}>
+                {t("mgmt.attribution.showAllEntities")}
+              </Link>
             </Button>
           </div>
         </Card>

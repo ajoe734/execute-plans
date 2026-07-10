@@ -12,6 +12,7 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPortfolioBook()).toBe("/bff/management/portfolio-book");
     expect(paths.mgmtPortfolioPools()).toBe("/bff/management/portfolio-book/pools");
     expect(paths.mgmtPortfolioHoldings()).toBe("/bff/management/portfolio-book/holdings");
+    expect(paths.mgmtPortfolioExposure()).toBe("/bff/management/portfolio-book/exposure");
   });
   it("persona league", () => {
     expect(paths.mgmtPersonaLeague()).toBe("/bff/management/persona-league");
@@ -29,6 +30,8 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPerformanceAttribution()).toBe("/bff/management/performance-attribution");
     expect(paths.mgmtPerformanceAttribution("persona", "30d"))
       .toBe("/bff/management/performance-attribution?dimension=persona&period=30d");
+    expect(paths.mgmtOperationsReadModel("persona/alpha", "30d"))
+      .toBe("/bff/management/operations-read-model/persona%2Falpha?period=30d");
   });
 });
 

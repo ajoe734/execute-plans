@@ -212,6 +212,7 @@ export const paths = {
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
   mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
   mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
+  mgmtPortfolioExposure: () => `${BASE}/management/portfolio-book/exposure`,
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
   mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
@@ -228,4 +229,6 @@ export const paths = {
     if (period) qs.push(`period=${enc(period)}`);
     return `${BASE}/management/performance-attribution${qs.length ? `?${qs.join("&")}` : ""}`;
   },
+  mgmtOperationsReadModel: (personaId: string, period?: string) =>
+    `${BASE}/management/operations-read-model/${enc(personaId)}${period ? `?period=${enc(period)}` : ""}`,
 } as const;

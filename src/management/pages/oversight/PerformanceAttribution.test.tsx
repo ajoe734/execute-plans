@@ -102,6 +102,29 @@ describe("PerformanceAttributionPage", () => {
         }],
         loading: false,
         refresh: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        data: {
+          identity: {
+            personaId: "persona-tw-equity",
+            personaLabel: "TW Equity Persona",
+            runtimeIds: ["runtime-tw-paper"],
+            paperLedgerIds: [],
+            capitalPoolIds: ["pool-tw-paper"],
+            sleeveIds: [],
+            strategyIds: ["strategy-tw-alpha"],
+            artifactIds: [],
+            brokerIds: [],
+            period: "30d",
+            asOf: "2026-06-07T00:00:00Z",
+          },
+          dataConfidence: "formal",
+          performance: { pnl: 1234, pnlPct: 0.12 },
+          sources: [{ sourceName: "performance_attribution", sourceStatus: "ok", sourceRowCount: 1 }],
+          diagnostics: [],
+        },
+        loading: false,
+        refresh: vi.fn(),
       });
 
     renderPage("/management/performance-attribution?dimension=persona&persona=persona-tw-equity");
@@ -139,7 +162,8 @@ describe("PerformanceAttributionPage", () => {
         refresh: vi.fn(),
       })
       .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
-      .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() });
+      .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
+      .mockReturnValueOnce({ data: undefined, loading: false, refresh: vi.fn() });
 
     renderPage("/management/performance-attribution?dimension=persona&persona=persona-tw-equity");
 
@@ -188,12 +212,43 @@ describe("PerformanceAttributionPage", () => {
         loading: false,
         refresh: vi.fn(),
       })
-      .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() });
+      .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
+      .mockReturnValueOnce({
+        data: {
+          identity: {
+            personaId: "persona-live-paper-alpha",
+            personaLabel: "Paper Alpha",
+            runtimeIds: ["runtime-paper-alpha"],
+            paperLedgerIds: ["ledger-paper-alpha"],
+            capitalPoolIds: ["pool-paper-alpha"],
+            sleeveIds: [],
+            strategyIds: ["strategy-paper-alpha"],
+            artifactIds: [],
+            brokerIds: [],
+            period: "30d",
+            asOf: "2026-06-07T00:00:00Z",
+          },
+          dataConfidence: "fallback",
+          performance: { pnl: 48000, pnlPct: 0.182, drawdownPct: 0.064 },
+          sources: [
+            { sourceName: "performance_attribution", sourceStatus: "unavailable", sourceRowCount: 0 },
+            { sourceName: "portfolio_book_holdings", sourceStatus: "unavailable", sourceRowCount: 0 },
+            { sourceName: "persona_fleet", sourceStatus: "ok", sourceRowCount: 1 },
+          ],
+          diagnostics: [
+            { sourceName: "performance_attribution", code: "MISSING_ATTRIBUTION_MATCH", message: "No formal attribution matched." },
+            { sourceName: "portfolio_book_holdings", code: "MISSING_HOLDINGS_MATCH", message: "No holdings matched." },
+          ],
+        },
+        loading: false,
+        refresh: vi.fn(),
+      });
 
     renderPage("/management/performance-attribution?dimension=persona&persona=persona-live-paper-alpha");
 
-    expect(screen.getByText("Focused persona: persona-live-paper-alpha · 1 matching attribution row(s)")).toBeInTheDocument();
-    expect(screen.getByText("Paper Alpha · Persona Fleet summary")).toBeInTheDocument();
+    expect(screen.getByText("Fallback summary")).toBeInTheDocument();
+    expect(screen.getByText("persona-live-paper-alpha has an operations summary, but no formal performance attribution.")).toBeInTheDocument();
+    expect(screen.getByText("Paper Alpha · operations summary")).toBeInTheDocument();
     expect(screen.getAllByText("$48,000").length).toBeGreaterThan(0);
     expect(screen.getAllByText("18.20%").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Manage →" })).toHaveAttribute(
@@ -201,7 +256,7 @@ describe("PerformanceAttributionPage", () => {
       "/management/persona-fleet?persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("Performance source detail")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "persona-fleet.performanceSummary" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "operations-read-model" })).toHaveAttribute(
       "href",
       "/management/persona-fleet?persona=persona-live-paper-alpha",
     );
@@ -210,8 +265,9 @@ describe("PerformanceAttributionPage", () => {
     for (const link of screen.getAllByRole("link", { name: "pool-paper-alpha" })) {
       expect(link).toHaveAttribute("href", "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-paper-alpha");
     }
-    expect(screen.getByText("pnl=performanceSummary.pnl; pnlPct=perfDelta; drawdown=performanceSummary.maxDrawdown")).toBeInTheDocument();
-    expect(screen.getByText("no matching holding row declares this persona/runtime/capital pool")).toBeInTheDocument();
-    expect(screen.getAllByText("nan").length).toBeGreaterThan(0);
+    expect(screen.getByText("operations read model summary")).toBeInTheDocument();
+    expect(screen.getByText(/MISSING_ATTRIBUTION_MATCH/)).toBeInTheDocument();
+    expect(screen.getByText(/MISSING_HOLDINGS_MATCH/)).toBeInTheDocument();
+    expect(screen.queryByText("nan")).not.toBeInTheDocument();
   });
 });

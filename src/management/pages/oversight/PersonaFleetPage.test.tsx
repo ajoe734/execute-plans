@@ -342,7 +342,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
       "href",
-      "/management/promotion-allocation?tab=paper-candidates&persona=persona-live-paper-alpha",
+      "/management/quarterly-ranking?persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
@@ -403,7 +403,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("1 read unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("1/2 readable")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "persona-live-summary data sources" })).not.toBeInTheDocument();
-    expect(screen.getByText("nan")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "persona-live-summary data source status" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("persona-live-summary research detail")).toHaveTextContent("act");
     expect(screen.getByText("paper broker sandbox readback and funding-rate stress review")).toBeInTheDocument();

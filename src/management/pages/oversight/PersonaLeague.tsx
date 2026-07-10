@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -67,7 +68,7 @@ const evidenceRefsFromRow = (row: PersonaLeagueRecommendationRow): string[] =>
 const governanceDestinationsFromRow = (row: PersonaLeagueRecommendationRow): string[] | undefined =>
   row.governanceDestinations ?? row.governance_destinations;
 
-export const PersonaLeaguePage = () => {
+export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -131,7 +132,8 @@ export const PersonaLeaguePage = () => {
   };
 
   return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.league.title")}>
+    <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.league.title")}>
+      {!embedded ? <ManagementOperationsNav /> : null}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.league.title")}</h1>
@@ -161,7 +163,7 @@ export const PersonaLeaguePage = () => {
                 : t("mgmt.league.focusMissingPersonaFmt", { persona: personaFocus })}
             </p>
             <Button asChild size="sm" variant="outline">
-              <Link to="/management/promotion-allocation?tab=real-ranking">{t("mgmt.league.showAllPersonas")}</Link>
+              <Link to="/management/persona-league">{t("mgmt.league.showAllPersonas")}</Link>
             </Button>
           </div>
         </Card>
@@ -259,6 +261,14 @@ export const PersonaLeaguePage = () => {
           <td className={`px-3 py-2 font-mono ${(r.rankDelta ?? 0) > 0 ? "text-status-success" : (r.rankDelta ?? 0) < 0 ? "text-status-failed" : "text-muted-foreground"}`}>{deltaArrow(r.rankDelta)}</td>
           <td className="px-3 py-2">
             <Link to={personaManageHref(r)} className="text-primary hover:underline font-mono">{r.personaName}</Link>
+            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+              <Link to={`/management/persona-fleet?persona=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary">
+                {t("nav.personaFleet")}
+              </Link>
+              <Link to={`/management/performance-attribution?dimension=persona&persona=${encodeURIComponent(r.personaId)}&period=30d`} className="text-muted-foreground hover:text-primary">
+                {t("nav.performanceAttribution")}
+              </Link>
+            </div>
           </td>
           <td className="px-3 py-2"><Badge variant="outline" className={tierTone(r.tier)}>{r.tier}</Badge></td>
           <td className="px-3 py-2 font-mono">{fmtNum(r.score, 1)}</td>
@@ -294,6 +304,19 @@ export const PersonaLeaguePage = () => {
                   </div>
                 ))}
               </div>
+              {evidenceRefsFromRow(r as PersonaLeagueRecommendationRow).length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {evidenceRefsFromRow(r as PersonaLeagueRecommendationRow).map((evidenceRef) => (
+                    <Link
+                      key={evidenceRef}
+                      to={`/management/evidence/${encodeURIComponent(evidenceRef)}`}
+                      className="font-mono text-xs text-primary hover:underline"
+                    >
+                      {evidenceRef}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
             </td>
           </tr>
         )}
@@ -314,24 +337,24 @@ function RecommendationButton({
   return (
     <div className="max-w-[240px] space-y-1">
       <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy}>
-        {busy ? "Submitting…" : `${t(`mgmt.league.recommendations.${action}`)} →`}
+        {busy ? t("mgmt.governance.submitting") : `${t(`mgmt.league.recommendations.${action}`)} →`}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        Human review required; liveCapitalMutation=false.
+        {t("mgmt.governance.humanReviewRequired")}
       </p>
       {state?.kind === "local_only" && (
         <p role="status" className="text-[11px] leading-snug text-status-warning">
-          Local only: real writes are disabled; no BFF Human Inbox review was created.
+          {t("mgmt.governance.localOnly")}
         </p>
       )}
       {state?.kind === "submitted" && (
         <p role="status" className="text-[11px] leading-snug text-primary">
-          Submitted to BFF; waiting for returned Human Inbox detail.
+          {t("mgmt.governance.submitted")}
         </p>
       )}
       {state?.kind === "error" && (
         <p role="alert" className="text-[11px] leading-snug text-status-failed">
-          Submit failed: {state.message}
+          {t("mgmt.governance.submitFailed", { message: state.message })}
         </p>
       )}
     </div>

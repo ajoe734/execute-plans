@@ -49,10 +49,10 @@ export const PromotionAllocationPage = () => {
         </TabsList>
 
         <TabsContent value="paper-candidates" className="m-0">
-          <QuarterlyRankingPage />
+          <QuarterlyRankingPage embedded />
         </TabsContent>
         <TabsContent value="real-ranking" className="m-0">
-          <PersonaLeaguePage />
+          <PersonaLeaguePage embedded />
         </TabsContent>
         <TabsContent value="quarterly-capital" className="m-0 space-y-6">
           <CapitalPoolsList />
