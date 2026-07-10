@@ -187,6 +187,37 @@ export const ResearchLoopPage = () => {
           </Card>
         )}
 
+        <Card className="p-4 bg-muted/20 border border-border/40 space-y-2 mb-4 text-xs">
+          <h3 className="font-semibold text-foreground flex items-center gap-1.5">
+            <FlaskConical className="h-4 w-4 text-primary" />
+            什麼是研究迴圈 (Research Loop)？
+          </h3>
+          <p className="text-muted-foreground leading-relaxed">
+            每個智慧體 (Persona) 所進行的研究項目在底層皆被建模為一個<strong>研究迴圈 (Research Loop)</strong>。任務會自主經歷以下四個生命週期：
+          </p>
+          <div className="grid gap-2 grid-cols-2 md:grid-cols-4 pt-1">
+            <div className="p-2 rounded bg-background/50 border border-border/20">
+              <span className="font-semibold text-foreground block mb-0.5">1. 設計 (Design)</span>
+              <span className="text-[10px] text-muted-foreground">制定研究方向與策略目標</span>
+            </div>
+            <div className="p-2 rounded bg-background/50 border border-border/20">
+              <span className="font-semibold text-foreground block mb-0.5">2. 收集 (Collect)</span>
+              <span className="text-[10px] text-muted-foreground">運行回測並獲取市場指標</span>
+            </div>
+            <div className="p-2 rounded bg-background/50 border border-border/20">
+              <span className="font-semibold text-foreground block mb-0.5">3. 分析 (Analyze)</span>
+              <span className="text-[10px] text-muted-foreground">產出具體的信號分析與評估</span>
+            </div>
+            <div className="p-2 rounded bg-background/50 border border-border/20">
+              <span className="font-semibold text-foreground block mb-0.5">4. 審核 (Review)</span>
+              <span className="text-[10px] text-muted-foreground">提出報告待人類審查決策</span>
+            </div>
+          </div>
+          <p className="text-muted-foreground leading-relaxed pt-1">
+            當任務狀態顯示為 <span className="text-status-warning font-medium">blocked (卡住)</span> 時，代表智慧體需要您的介入。請<strong>點擊該行任務</strong>，從右側滑出「任務抽屜」，即可點擊 <span className="text-primary font-medium">Advance (前進)</span> 批准該策略推進到下一步（例如沙盒運行或升級）。
+          </p>
+        </Card>
+
         <Card className="p-0">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">{t("v5.loops.research.runs", { defaultValue: "Research runs" })}</h2>
