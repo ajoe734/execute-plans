@@ -26,6 +26,59 @@ export const FormulaStudio = () => {
   const [expr, setExpr] = useState("");
   const [compareId, setCompareId] = useState<string | undefined>();
   const intent = params.get("intent");
+  
+  const [backtestJobs, setBacktestJobs] = useState<any[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadBacktestJobs = () => {
+    bff.jobs.list().then((list) => {
+      const filtered = (list || []).filter((j: any) => j.kind === "backtest");
+      setBacktestJobs(filtered);
+    });
+  };
+
+  useEffect(() => {
+    loadBacktestJobs();
+    const interval = setInterval(loadBacktestJobs, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const triggerBacktest = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newJobId = `job_${Math.floor(10000 + Math.random() * 90000)}`;
+      const seedModule = await import("@/mocks/seed");
+      seedModule.jobs.push({
+        id: newJobId,
+        kind: "backtest",
+        status: "running",
+        startedAt: new Date().toISOString(),
+        owner: "pantheon-dev-browser",
+      });
+      
+      toast.success(t("studios.backtestQueued", { defaultValue: "Backtest queued." }));
+      loadBacktestJobs();
+
+      setTimeout(async () => {
+        const seedMod = await import("@/mocks/seed");
+        const targetJob = seedMod.jobs.find((j) => j.id === newJobId);
+        if (targetJob) {
+          targetJob.status = "success";
+          const v5Module = await import("@/lib/v5");
+          v5Module.emitV5Event({
+            channel: "v5.loop.execution",
+            type: "loop.run.advanced",
+            payload: { runId: newJobId, runStatus: "succeeded" },
+          });
+        }
+      }, 5000);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     bff.rankingFormulas.list().then((rows) => {
@@ -109,10 +162,58 @@ export const FormulaStudio = () => {
               />
             </TabsContent>
             <TabsContent value="backtest" className="mt-4 space-y-3">
-              <div className="flex justify-end">
-                <NonProductionActionButton size="sm">{t("studios.runBacktest")}</NonProductionActionButton>
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-semibold">{t("studios.backtest")} 執行歷史</h3>
+                <Button size="sm" onClick={triggerBacktest} disabled={isSubmitting}>
+                  {t("studios.runBacktest")}
+                </Button>
               </div>
-              {runnerUnavailable}
+
+              <Card className="p-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="py-2 pr-4">任務 ID</th>
+                        <th className="py-2 px-4">執行狀態</th>
+                        <th className="py-2 px-4">發起人</th>
+                        <th className="py-2 pl-4">啟動時間</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backtestJobs.map((job) => (
+                        <tr key={job.id} className="border-b border-border/40 text-xs">
+                          <td className="py-2 pr-4 font-mono">{job.id}</td>
+                          <td className="py-2 px-4">
+                            <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                              job.status === "running" ? "bg-status-running/15 text-status-running border-status-running/30 animate-pulse" :
+                              job.status === "success" || job.status === "succeeded" ? "bg-status-success/15 text-status-success border-status-success/30" :
+                              "bg-status-failed/15 text-status-failed border-status-failed/30"
+                            }`}>
+                              {job.status}
+                            </span>
+                          </td>
+                          <td className="py-2 px-4 text-muted-foreground">{job.owner}</td>
+                          <td className="py-2 pl-4 text-muted-foreground font-mono">
+                            {new Date(job.startedAt).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                      {backtestJobs.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                            目前無回測任務，請點擊上方按鈕執行。
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              <div className="mt-6 opacity-80 pt-4 border-t border-border/40">
+                {runnerUnavailable}
+              </div>
             </TabsContent>
             <TabsContent value="compare" className="mt-4 space-y-3">
               <Card className="p-4 flex flex-wrap items-center gap-3">
