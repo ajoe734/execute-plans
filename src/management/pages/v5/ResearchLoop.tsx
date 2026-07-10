@@ -126,10 +126,12 @@ export const ResearchLoopPage = () => {
   const visibleItems = fleetFallback ? [fleetFallback] : focus.items;
   const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || projectFocus);
-  const activeRun: LoopRun | null = useMemo(
-    () => items.find((r) => r.id === activeRunId) ?? null,
-    [items, activeRunId],
-  );
+  const activeRun: LoopRun | null = useMemo(() => {
+    if (activeRunId && fleetFallback && activeRunId === fleetFallback.id) {
+      return fleetFallback;
+    }
+    return items.find((r) => r.id === activeRunId) ?? null;
+  }, [items, activeRunId, fleetFallback]);
   const restoreRunTriggerFocus = () => {
     const trigger = activeRunTriggerRef.current;
     if (!trigger) return;
