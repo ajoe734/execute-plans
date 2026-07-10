@@ -214,6 +214,14 @@ export interface ManagementPersonaFleetRow {
   perfDelta: number;
   humanNeeded: boolean;
   lastMutation: string;
+  lastMutationLabel?: string;
+  lastMutationAt?: string;
+  lastMutationKind?: "formal_mutation" | "fleet_summary" | "unavailable" | string;
+  mutationEntryId?: string | null;
+  evolutionEntryId?: string | null;
+  evolutionHref?: string | null;
+  mutationConfidence?: "formal" | "fallback" | "unavailable" | string;
+  mutationDiagnostics?: string[];
   state?: "draft" | "active" | "paused" | "deprecated" | "retired" | "archived" | string;
   tags?: string[];
   marketScope?: string[];
@@ -2072,6 +2080,16 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     perfDelta: Number.isFinite(perfDelta) ? perfDelta : 0,
     humanNeeded,
     lastMutation: updated.length >= 10 ? updated.slice(0, 10) : updated,
+    lastMutationLabel: asOptionalString(value.lastMutationLabel ?? value.last_mutation_label),
+    lastMutationAt: asOptionalString(value.lastMutationAt ?? value.last_mutation_at),
+    lastMutationKind: asOptionalString(value.lastMutationKind ?? value.last_mutation_kind),
+    mutationEntryId: value.mutationEntryId !== undefined ? value.mutationEntryId : (value.mutation_entry_id ?? null),
+    evolutionEntryId: value.evolutionEntryId !== undefined ? value.evolutionEntryId : (value.evolution_entry_id ?? null),
+    evolutionHref: asOptionalString(value.evolutionHref ?? value.evolution_href),
+    mutationConfidence: asOptionalString(value.mutationConfidence ?? value.mutation_confidence),
+    mutationDiagnostics: Array.isArray(value.mutationDiagnostics)
+      ? value.mutationDiagnostics.map(String)
+      : (Array.isArray(value.mutation_diagnostics) ? value.mutation_diagnostics.map(String) : undefined),
     state: normalizePersonaFleetLifecycleState(
       value.state ?? value.lifecycleState ?? value.lifecycle_state ?? value.status,
       deploymentStage,
