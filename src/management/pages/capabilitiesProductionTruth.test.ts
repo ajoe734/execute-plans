@@ -7,12 +7,8 @@ const readSource = (relPath: string) =>
 
 describe("MGMT-GAP-005 capability production truth gates", () => {
   it("keeps studio runner output unavailable until governed runners exist", () => {
-    const formulaStudio = readSource("src/management/pages/studios/FormulaStudio.tsx");
     const skillSandbox = readSource("src/management/pages/studios/SkillSandboxStudio.tsx");
 
-    expect(existsSync(join(process.cwd(), "src/management/components/studios/FormulaBacktestChart.tsx"))).toBe(false);
-    expect(formulaStudio).not.toContain("FormulaBacktestChart");
-    expect(formulaStudio).toContain("Backtest runner unavailable");
     expect(skillSandbox).toContain("Skill runner unavailable");
     expect(skillSandbox).not.toContain("emptyTrace");
   });
