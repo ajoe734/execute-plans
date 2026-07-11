@@ -1,8 +1,10 @@
-import { useSearchParams } from "react-router-dom";
+// 2026-07-11 MGMT-PERF-IA-004 - Consolidated Rankings Center - Promotion Allocation redirection stubs
+import { useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PersonaLeaguePage } from "./PersonaLeague";
-import { QuarterlyRankingPage } from "./QuarterlyRanking";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Trophy, ClipboardCheck } from "lucide-react";
 import { RealRankingPanel } from "./RealRankingPanel";
 import { EmergencyActionsPanel } from "./EmergencyActionsPanel";
 import { CapitalPoolsList, RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
@@ -54,11 +56,37 @@ export const PromotionAllocationPage = () => {
         </TabsList>
 
         <TabsContent value="paper-candidates" className="m-0">
-          <QuarterlyRankingPage embedded />
+          <Card className="p-6 border-border/80 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
+            <div className="p-3 bg-primary/10 rounded-full text-primary">
+              <ClipboardCheck className="h-6 w-6" />
+            </div>
+            <div className="space-y-2 max-w-md">
+              <h3 className="text-base font-semibold text-foreground">Quarterly Candidates Evaluation</h3>
+              <p className="text-sm text-muted-foreground">
+                Quarterly candidate evaluation tables are now consolidated and managed in the Rankings Center.
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link to="/management/rankings?tab=quarterly">Go to Rankings Center (Quarterly)</Link>
+            </Button>
+          </Card>
         </TabsContent>
         <TabsContent value="real-ranking" className="m-0 space-y-6">
           <RealRankingPanel />
-          <PersonaLeaguePage embedded />
+          <Card className="p-6 border-border/80 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
+            <div className="p-3 bg-primary/10 rounded-full text-primary">
+              <Trophy className="h-6 w-6" />
+            </div>
+            <div className="space-y-2 max-w-md">
+              <h3 className="text-base font-semibold text-foreground">Rolling Persona League Rankings</h3>
+              <p className="text-sm text-muted-foreground">
+                The continuous rolling ranking system is now consolidated and managed in the Rankings Center.
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link to="/management/rankings?tab=rolling">Go to Rankings Center (Rolling)</Link>
+            </Button>
+          </Card>
         </TabsContent>
         <TabsContent value="quarterly-capital" className="m-0 space-y-6">
           <CapitalPoolsList />
