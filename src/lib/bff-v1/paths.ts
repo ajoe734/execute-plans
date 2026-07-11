@@ -183,7 +183,12 @@ export const paths = {
 
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
-  mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
+  mgmtPortfolioHoldings: (query?: Record<string, string | undefined>) => {
+    const params = Object.entries(query ?? {})
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([key, value]) => `${enc(key)}=${enc(value)}`);
+    return `${BASE}/management/portfolio-book/holdings${params.length ? `?${params.join("&")}` : ""}`;
+  },
   mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,

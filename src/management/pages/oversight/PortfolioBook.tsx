@@ -1,165 +1,63 @@
-// 2026-05-22 PM12-003 — Portfolio Book page.
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
-import {
-  defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings,
-  type HoldingRow, type CapitalPoolSummaryRow, type PortfolioStatus,
-} from "@/lib/v5/management/portfolio";
+import type { PortfolioHoldingFilters, PortfolioHoldingsMonitor } from "@/lib/v5/management/portfolio";
 
-const fmtUsd = (n: number) =>
-  Number.isFinite(n)
-    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-    : "—";
-const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—");
-const fmtNum = (n: number) =>
-  Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n) : "—";
-
-const statusTone = (s: PortfolioStatus) =>
-  s === "ok" ? "bg-status-success/15 text-status-success border-status-success/30" :
-  s === "watch" ? "bg-status-warning/15 text-status-warning border-status-warning/30" :
-  s === "breach" ? "bg-status-failed/15 text-status-failed border-status-failed/30" :
-                   "bg-muted text-muted-foreground border-border";
+const EMPTY_MONITOR: PortfolioHoldingsMonitor = {
+  items: [], incidents: [], surfaceStatus: "unavailable",
+  coverage: { holdingCount: 0, sourceRowCount: 0, runtimeCount: 0, telemetryRuntimeCount: 0, staleRowCount: 0, missingBindingCount: 0, degradedSourceCount: 0, incidentCount: 0 },
+};
+const FILTERS = [
+  ["deployment_stage", "Stage", ["paper", "canary", "live", "unknown"]],
+  ["broker_id", "Broker", []],
+  ["runtime_id", "Runtime", []],
+  ["source_status", "Source status", ["ok", "partial", "degraded", "stale", "unavailable"]],
+  ["stale_telemetry", "Stale telemetry", ["true", "false"]],
+  ["risk_state", "Risk state", ["healthy", "missing_binding", "degraded_source", "stale_telemetry"]],
+] as const;
+const FILTER_MAP: Record<string, keyof PortfolioHoldingFilters> = {
+  deployment_stage: "deploymentStage", broker_id: "brokerId", runtime_id: "runtimeId",
+  source_status: "sourceStatus", stale_telemetry: "staleTelemetry", risk_state: "riskState",
+};
+const money = (value?: number) => value === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+const tone = (value: string) => value === "ok" || value === "healthy" ? "border-status-success/40 text-status-success" : value === "unavailable" || value === "missing_binding" || value === "degraded_source" ? "border-status-failed/40 text-status-failed" : "border-status-warning/40 text-status-warning";
+const scopeLabel = (kind: string, id?: string) => ({ paper_ledger: "Paper ledger", canary_sleeve: "Canary sleeve", live_capital_pool: "Live capital pool", unclassified: "Unknown capital scope" }[kind] ?? "Unknown capital scope") + (id ? ` · ${id}` : "");
 
 export const PortfolioBookPage = () => {
-  const { t } = useTranslation();
-  const seed = useMemo(() => defaultPortfolioBook(), []);
-  const { data: summary } = useV5Live(() => mgmt.portfolioBook.summary(() => seed.summary), []);
-  const { data: pools } = useV5Live(
-    () => mgmt.portfolioBook.pools(() => defaultPortfolioPools()), []);
-  const { data: holdings } = useV5Live(
-    () => mgmt.portfolioBook.holdings(() => defaultPortfolioHoldings()), []);
-  const s = summary ?? seed.summary;
-  const poolRows: CapitalPoolSummaryRow[] = pools ?? seed.pools;
-  const holdingRows: HoldingRow[] = holdings ?? seed.holdings;
+  const [params, setParams] = useSearchParams();
+  const filters = useMemo(() => Object.fromEntries(FILTERS.map(([query]) => [FILTER_MAP[query], params.get(query) || undefined])) as PortfolioHoldingFilters, [params]);
+  const filterKey = params.toString();
+  const { data, loading, refresh } = useV5Live(() => mgmt.portfolioBook.monitor(filters, () => EMPTY_MONITOR), [filterKey]);
+  const monitor = data ?? EMPTY_MONITOR;
+  const setFilter = (key: string, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); setParams(next, { replace: true }); };
+  const incidentsByHolding = new Map(monitor.incidents.map((incident) => [incident.holdingId, incident]));
 
-  const [symbolFilter, setSymbolFilter] = useState("");
-  const filtered = holdingRows.filter((h) =>
-    !symbolFilter || h.symbol.toLowerCase().includes(symbolFilter.toLowerCase()),
-  );
+  return <section className="p-6 space-y-6" aria-label="Portfolio Book">
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-2xl font-semibold">Portfolio Book</h1><p className="text-sm text-muted-foreground">Live holdings, capital scope, and source-confidence monitor.</p></div>
+      <Button variant="outline" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</Button>
+    </header>
 
-  return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.portfolio.title")}>
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mgmt.portfolio.subtitle")}</p>
-      </header>
-
-      {/* Section A: Total Snapshot */}
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center gap-2"><Badge variant="outline" className={tone(monitor.surfaceStatus)}>Source: {monitor.surfaceStatus}</Badge>{monitor.surfaceMessage && <span className="text-sm text-muted-foreground">{monitor.surfaceMessage}</span>}</div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { k: "totalNav", v: fmtUsd(s.totalNav) },
-          { k: "totalCash", v: fmtUsd(s.totalCash) },
-          { k: "grossExposure", v: fmtUsd(s.grossExposure) },
-          { k: "netExposure", v: fmtUsd(s.netExposure) },
-          { k: "leverage", v: `${fmtNum(s.leverage)}×` },
-          { k: "unrealizedPnl", v: fmtUsd(s.unrealizedPnl) },
-          { k: "pnlToday", v: fmtUsd(s.pnlToday) },
-          { k: "pnl30d", v: fmtUsd(s.pnl30d) },
-        ].map((c) => (
-          <Card key={c.k} className="p-3">
-            <div className="text-xs text-muted-foreground">{t(`mgmt.portfolio.${c.k}`)}</div>
-            <div className="text-lg font-mono text-foreground">{c.v}</div>
-          </Card>
-        ))}
+        {[["Holdings", monitor.coverage.holdingCount], ["Source rows", monitor.coverage.sourceRowCount], ["Telemetry runtimes", `${monitor.coverage.telemetryRuntimeCount}/${monitor.coverage.runtimeCount}`], ["Incidents", monitor.coverage.incidentCount], ["Missing bindings", monitor.coverage.missingBindingCount], ["Degraded sources", monitor.coverage.degradedSourceCount], ["Stale rows", monitor.coverage.staleRowCount]].map(([label, value]) => <div key={label} className="rounded border p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="text-xl font-mono">{value}</div></div>)}
       </div>
+    </Card>
 
-      {/* Section B: Capital Pool Summary */}
-      <Card className="overflow-x-auto">
-        <header className="px-4 py-2 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.poolsTitle")}</h2>
-        </header>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
-            <tr>
-              <th className="px-3 py-2">{t("mgmt.portfolio.pool")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.nav")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.leverage")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.utilization")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.pnlToday")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.drawdown")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.status")}</th>
-              <th className="px-3 py-2">{t("mgmt.actions.manage")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {poolRows.map((p) => (
-              <tr key={p.capitalPoolId} className="border-b border-border/50">
-                <td className="px-3 py-2 font-mono">{p.capitalPoolName}</td>
-                <td className="px-3 py-2 font-mono">{fmtUsd(p.nav)}</td>
-                <td className="px-3 py-2 font-mono">{fmtNum(p.leverage)}×</td>
-                <td className="px-3 py-2 font-mono">{fmtPct(p.utilizationPct)}</td>
-                <td className={`px-3 py-2 font-mono ${p.pnlToday < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(p.pnlToday)}</td>
-                <td className="px-3 py-2 font-mono text-status-failed">{fmtPct(p.drawdown)}</td>
-                <td className="px-3 py-2">
-                  <Badge variant="outline" className={statusTone(p.status)}>{p.status}</Badge>
-                </td>
-                <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={p.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+    <Card className="p-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {FILTERS.map(([key, label, options]) => <label key={key} className="space-y-1 text-xs text-muted-foreground">{label}<select aria-label={label} className="block h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground" value={params.get(key) ?? ""} onChange={(event) => setFilter(key, event.target.value)}><option value="">All</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}{options.length === 0 && params.get(key) && <option value={params.get(key)!}>{params.get(key)}</option>}</select></label>)}
+    </div>{filterKey && <Button className="mt-3" variant="ghost" size="sm" onClick={() => setParams({}, { replace: true })}>Clear filters</Button>}</Card>
 
-      {/* Section C: Holdings */}
-      <Card className="overflow-x-auto">
-        <header className="px-4 py-2 border-b border-border flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
-          <Input
-            value={symbolFilter}
-            onChange={(e) => setSymbolFilter(e.target.value)}
-            placeholder={t("mgmt.portfolio.filterSymbol")}
-            className="h-8 w-48"
-            aria-label={t("mgmt.portfolio.filterSymbol")}
-          />
-        </header>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
-            <tr>
-              <th className="px-3 py-2">{t("mgmt.portfolio.symbol")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.assetClass")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.side")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.quantity")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.marketValue")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.weight")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.unrealizedPnl")}</th>
-              <th className="px-3 py-2">{t("mgmt.portfolio.exposure")}</th>
-              <th className="px-3 py-2">{t("mgmt.actions.manage")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((h) => (
-              <tr
-                key={h.holdingId}
-                className={`border-b border-border/50 ${h.exposurePct > 0.4 ? "bg-status-warning/5" : ""} ${h.unrealizedPnl < -50_000 ? "bg-status-failed/5" : ""}`}
-              >
-                <td className="px-3 py-2 font-mono">{h.symbol}</td>
-                <td className="px-3 py-2"><Badge variant="outline">{h.assetClass}</Badge></td>
-                <td className="px-3 py-2"><Badge variant="outline">{h.side}</Badge></td>
-                <td className="px-3 py-2 font-mono">{fmtNum(h.quantity)}</td>
-                <td className="px-3 py-2 font-mono">{fmtUsd(h.marketValue)}</td>
-                <td className="px-3 py-2 font-mono">{fmtPct(h.weightPct)}</td>
-                <td className={`px-3 py-2 font-mono ${h.unrealizedPnl < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(h.unrealizedPnl)}</td>
-                <td className="px-3 py-2 font-mono">{fmtPct(h.exposurePct)}</td>
-                <td className="px-3 py-2">
-                  <Button asChild size="sm" variant="ghost"><Link to={h.links?.manageHref ?? "#"}>{t("mgmt.actions.manage")}</Link></Button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={9}>{t("mgmt.pulse.noRows")}</td></tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
-    </section>
-  );
+    {monitor.incidents.length > 0 && <Card className="border-status-failed/40"><header className="border-b p-4"><h2 className="font-semibold">Source incidents ({monitor.incidents.length})</h2></header><div className="divide-y">{monitor.incidents.map((incident) => <article key={incident.id} className="p-4 space-y-2" data-testid="portfolio-incident"><div className="flex flex-wrap gap-2"><Badge variant="outline" className={tone(incident.severity)}>{incident.severity} severity</Badge><Badge variant="outline">{incident.riskState}</Badge><Badge variant="outline">Source: {incident.sourceStatus}</Badge></div><p className="text-sm">{incident.message}</p><div className="text-xs text-muted-foreground">{incident.sourceIssues.map((issue) => `${issue.code}: ${issue.message}`).join(" · ")}</div>{incident.links.human_review && <Button asChild size="sm" variant="outline"><Link to={incident.links.human_review}>Human Review</Link></Button>}</article>)}</div></Card>}
+
+    <Card className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-b text-left text-xs uppercase text-muted-foreground"><tr>{["Holding", "Stage / capital scope", "Runtime / broker", "Market value", "PnL", "Source confidence", "Risk", "Actions"].map((heading) => <th key={heading} className="px-3 py-2">{heading}</th>)}</tr></thead><tbody>
+      {monitor.items.map((row) => { const incident = incidentsByHolding.get(row.holdingId); return <tr key={row.holdingId} className="border-b align-top" data-testid="portfolio-holding"><td className="px-3 py-3"><div className="font-mono">{row.symbol}</div><div className="text-xs text-muted-foreground">{row.holdingId}</div></td><td className="px-3 py-3"><Badge variant="outline">{row.deploymentStage || "unknown"}</Badge><div className="mt-1 text-xs">{scopeLabel(row.capitalScope.scopeKind, row.capitalScope.scopeId)}</div></td><td className="px-3 py-3 text-xs"><div>{row.runtimeId || "Unknown runtime"}</div><div>{row.brokerId || "Unknown broker"}</div></td><td className="px-3 py-3 font-mono">{money(row.marketValue)}</td><td className="px-3 py-3 font-mono">{money(row.unrealizedPnl)}</td><td className="px-3 py-3"><Badge variant="outline" className={tone(row.sourceStatus)}>{row.sourceStatus}</Badge>{row.telemetryStale && <div className="mt-1 text-xs text-status-warning">Stale telemetry</div>}<div className="mt-1 text-xs text-muted-foreground">{row.sourceIssues.map((issue) => issue.code).join(", ") || "No reported source issue"}</div></td><td className="px-3 py-3"><Badge variant="outline" className={tone(row.riskState)}>{row.riskState}</Badge></td><td className="px-3 py-3"><div className="flex flex-col items-start gap-1">{row.links.persona_fleet && <Link className="text-primary underline" to={row.links.persona_fleet}>Persona Fleet</Link>}{row.links.performance_attribution && <Link className="text-primary underline" to={row.links.performance_attribution}>Attribution</Link>}{(incident?.links.human_review || row.links.human_review) && <Link className="text-primary underline" to={incident?.links.human_review || row.links.human_review}>Human Review</Link>}</div></td></tr>; })}
+      {!loading && monitor.items.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">{monitor.surfaceStatus === "unavailable" ? "Portfolio holdings source is unavailable." : "No holdings match the current filters."}</td></tr>}
+    </tbody></table></Card>
+  </section>;
 };

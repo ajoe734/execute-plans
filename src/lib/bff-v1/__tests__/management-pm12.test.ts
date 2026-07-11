@@ -1,6 +1,7 @@
 // 2026-05-22 PM-12 facade tests.
 import { describe, it, expect } from "vitest";
 import { mgmt } from "@/lib/bff-v1";
+import { adaptPortfolioHoldingsMonitor } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -12,6 +13,10 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPortfolioBook()).toBe("/bff/management/portfolio-book");
     expect(paths.mgmtPortfolioPools()).toBe("/bff/management/portfolio-book/pools");
     expect(paths.mgmtPortfolioHoldings()).toBe("/bff/management/portfolio-book/holdings");
+  });
+  it("portfolio holdings serializes all monitor filters", () => {
+    expect(paths.mgmtPortfolioHoldings({ deployment_stage: "canary", broker_id: "broker a", runtime_id: "rt-1", source_status: "stale", stale_telemetry: "true", risk_state: "stale_telemetry" }))
+      .toBe("/bff/management/portfolio-book/holdings?deployment_stage=canary&broker_id=broker%20a&runtime_id=rt-1&source_status=stale&stale_telemetry=true&risk_state=stale_telemetry");
   });
   it("persona league", () => {
     expect(paths.mgmtPersonaLeague()).toBe("/bff/management/persona-league");
@@ -26,6 +31,28 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPerformanceAttribution()).toBe("/bff/management/performance-attribution");
     expect(paths.mgmtPerformanceAttribution("persona", "30d"))
       .toBe("/bff/management/performance-attribution?dimension=persona&period=30d");
+  });
+});
+
+describe("portfolio holdings live monitor adapter", () => {
+  it("preserves degraded rows, incidents, capital scope, and coverage truth", () => {
+    const items = Array.from({ length: 14 }, (_, index) => ({ holding_id: `h-${index}`, runtime_id: `rt-${index}`, symbol: `SYM${index}`, deployment_stage: index % 4 === 0 ? "paper" : index % 4 === 1 ? "canary" : index % 4 === 2 ? "live" : "unknown", source_status: "degraded", risk_state: "missing_binding", telemetry_stale: false, source_issues: [{ code: "MISSING_PERSONA_BINDING", message: "Binding unavailable" }], capital_scope: { scope_kind: index % 4 === 0 ? "paper_ledger" : index % 4 === 1 ? "canary_sleeve" : index % 4 === 2 ? "live_capital_pool" : "unclassified", scope_id: index % 4 === 3 ? null : `scope-${index}` }, links: { human_review: `/management/human-inbox?holding_id=h-${index}` } }));
+    const incidents = items.map((item) => ({ id: `incident-${item.holding_id}`, severity: "high", message: "Binding unavailable", risk_state: "missing_binding", source_status: "degraded", source_issues: item.source_issues, identity: { portfolio_id: item.holding_id }, links: item.links }));
+    const result = adaptPortfolioHoldingsMonitor({ data: { items, summary: { holding_count: 14, incident_count: 14, source_coverage: { source_row_count: 4, runtime_count: 14, telemetry_runtime_count: 4, stale_row_count: 0, missing_binding_count: 10, degraded_source_count: 14 } } }, meta: { incidents, surfaces: { portfolio_book_holdings: { status: "degraded", message: "row-level coverage incidents" } } } });
+    expect(result?.items).toHaveLength(14);
+    expect(result?.incidents).toHaveLength(14);
+    expect(result?.coverage.missingBindingCount).toBe(10);
+    expect(result?.surfaceStatus).toBe("degraded");
+    expect(result?.items.map((item) => item.capitalScope.scopeKind)).toContain("unclassified");
+    expect(result?.items.every((item) => item.sourceStatus !== "ok")).toBe(true);
+  });
+
+  it("keeps empty, partial, stale, and unavailable source states distinct", () => {
+    for (const status of ["partial", "stale", "unavailable"]) {
+      const result = adaptPortfolioHoldingsMonitor({ data: { items: [], summary: { holding_count: 0, source_coverage: {} } }, meta: { incidents: [], surfaces: { portfolio_book_holdings: { status } } } });
+      expect(result?.surfaceStatus).toBe(status);
+      expect(result?.items).toEqual([]);
+    }
   });
 });
 
