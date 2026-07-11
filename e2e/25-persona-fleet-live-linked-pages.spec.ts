@@ -49,7 +49,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
       waitUntil: "domcontentloaded",
     });
     const nonProductionTab = page.getByRole("tab", { name: /非正式資料|Non-production data/i });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
 
     const fleetTableRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     await expect(fleetTableRow).toBeVisible();
@@ -61,7 +62,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(page.locator("body")).toContainText(PERSONA_ID);
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const oodaLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
       .locator(`[aria-label="${PERSONA_ID} OODA ${fleetRow.ooda} stage" i]`);
     await expect(oodaLink).toHaveAttribute("href", /\/management\/(data-sources|experiments|research-loop|human-inbox|runtimes|evolution-journal)/);
@@ -76,7 +78,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     }
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const rankRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     const rankLink = rankRow.locator(`[aria-label="${PERSONA_ID} persona league ranking"]`);
     await expect(rankLink).toHaveAttribute("href", new RegExp(`/management/(quarterly-ranking|persona-league)\\?persona=${PERSONA_ID}`));
@@ -87,7 +90,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(rankingTable).toContainText("Crypto-Alt-Hunter");
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const focusedFleetRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     const capitalLink = focusedFleetRow.locator(`[aria-label="Open capital for ${PERSONA_ID}"]`);
     await expect(capitalLink).toHaveAttribute("href", /tab=paper-candidates.*persona=/);
@@ -99,7 +103,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const providerKey = fleetRow.data_sources?.[0]?.provider_key ?? fleetRow.data_sources?.[0]?.providerKey;
     expect(providerKey).toBeTruthy();
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const sourceLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
       .locator(`[aria-label="${PERSONA_ID} data source ${providerKey}"]`);
     await sourceLink.click();
@@ -108,14 +113,16 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(page.getByRole("table").first().locator("tbody tr")).toHaveCount(1);
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     await page.locator("tr").filter({ hasText: PERSONA_ID }).first().getByRole("link", { name: /查看研究執行|View research run/i }).click();
     const researchFocus = page.getByText(new RegExp(`Persona.*${PERSONA_ID}`, "i")).first();
     await expect(researchFocus).toBeVisible();
     await expect(researchFocus).not.toContainText(/project\s*[：:]\s*nan/i);
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     await page.locator("tr").filter({ hasText: PERSONA_ID }).first()
       .locator(`[aria-label="${PERSONA_ID} performance attribution"]`).click();
     await expect(page.getByRole("heading", { name: /績效歸因|Performance Attribution/i })).toBeVisible();
@@ -123,7 +130,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(page.getByText(/產生依據|Basis/i).first()).toBeVisible();
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const mutationLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
       .locator(`[aria-label="${PERSONA_ID} mutation history"]`);
     if (fleetRow.last_mutation_kind === "unavailable") {
@@ -142,7 +150,8 @@ test.describe("Persona Fleet live linked-page contract", () => {
     }
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    if (await nonProductionTab.count()) await nonProductionTab.click();
+    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+    await nonProductionTab.click();
     const humanGateLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
       .locator(`[aria-label="${PERSONA_ID} human gate"]`);
     if (await humanGateLink.count()) {

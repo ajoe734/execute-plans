@@ -13,6 +13,7 @@ import {
   adaptPersonaIntent,
   adaptPortfolioExposureMonitor,
   adaptPortfolioHoldingRows,
+  adaptQuarterlyRankingRows,
   defaultTradingPulseModel,
   mgmt,
 } from "@/lib/bff-v1/management";
@@ -53,6 +54,38 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("mgmt façade (PM-Live)", () => {
+  it("normalizes snake_case quarterly ranking rows for Persona focus", () => {
+    const rows = adaptQuarterlyRankingRows({
+      data: {
+        items: [{
+          persona_id: "persona-20260528-04688755",
+          name: "Crypto-Alt-Hunter",
+          rank: 9,
+          overall_score: 53.875,
+          tier: "tier-4",
+          tier_label: "Incubation",
+          eligible: false,
+          exclusion_reason: "No telemetry coverage",
+          quarter: "2026-Q3",
+          metrics: { pnl: null, drawdown: null },
+          components: { risk_score: 77.5, execution_score: 50, activity_score: 30 },
+        }],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-20260528-04688755",
+      personaName: "Crypto-Alt-Hunter",
+      currentRank: 9,
+      score: 53.875,
+      eligibility: "insufficient_data",
+      quarter: "2026-Q3",
+      links: { manageHref: "/management/personas/persona-20260528-04688755" },
+    });
+    expect(Number.isNaN(rows?.[0].pnlQuarter)).toBe(true);
+  });
+
   it("normalizes the operations read model confidence envelope", () => {
     const model = adaptOperationsReadModel({
       data: {

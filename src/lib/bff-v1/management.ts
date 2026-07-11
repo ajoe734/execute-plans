@@ -3158,6 +3158,69 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
+export function adaptQuarterlyRankingRows(raw: unknown): QuarterlyRankingRow[] | null {
+  const items = adaptArrayPassthrough<Record<string, unknown>>(raw);
+  if (!items) return null;
+
+  return items.flatMap((record, index) => {
+    const personaId = asString(record.personaId ?? record.persona_id ?? record.id);
+    if (!personaId) return [];
+
+    const metrics = objectOrEmpty(record.metrics);
+    const components = objectOrEmpty(record.scoreBreakdown ?? record.score_breakdown ?? record.components);
+    const exclusionReason = optionalString(
+      record.disqualificationReason ?? record.disqualification_reason ?? record.exclusion_reason,
+    );
+    const explicitEligibility = asString(record.eligibility).toLowerCase();
+    const eligibility = ["eligible", "insufficient_data", "disqualified"].includes(explicitEligibility)
+      ? explicitEligibility
+      : asBoolean(record.eligible, false)
+        ? "eligible"
+        : exclusionReason?.toLowerCase().includes("telemetry")
+          ? "insufficient_data"
+          : "disqualified";
+    const rawLinks = objectOrEmpty(record.links);
+    const numeric = (value: unknown): number => optionalFiniteNumber(value) ?? Number.NaN;
+
+    return [{
+      ...record,
+      quarter: asString(record.quarter),
+      personaId,
+      personaName: asString(record.personaName ?? record.persona_name ?? record.name, personaId),
+      currentRank: numeric(record.currentRank ?? record.current_rank ?? record.rank ?? index + 1),
+      previousQuarterRank: optionalFiniteNumber(record.previousQuarterRank ?? record.previous_quarter_rank),
+      rankDelta: optionalFiniteNumber(record.rankDelta ?? record.rank_delta),
+      tier: asString(record.tier ?? record.tier_label, "disqualified") as QuarterlyRankingRow["tier"],
+      score: numeric(record.score ?? record.overall_score),
+      scoreBreakdown: {
+        pnlScore: numeric(components.pnlScore ?? components.pnl_score),
+        sharpeScore: numeric(components.sharpeScore ?? components.sharpe_score),
+        drawdownControlScore: numeric(components.drawdownControlScore ?? components.drawdown_control_score ?? components.risk_score),
+        executionQualityScore: numeric(components.executionQualityScore ?? components.execution_quality_score ?? components.execution_score),
+        riskComplianceScore: numeric(components.riskComplianceScore ?? components.risk_compliance_score ?? components.risk_score),
+        improvementScore: numeric(components.improvementScore ?? components.improvement_score ?? components.activity_score),
+        humanInterventionPenalty: numeric(components.humanInterventionPenalty ?? components.human_intervention_penalty),
+        hardPenalty: numeric(components.hardPenalty ?? components.hard_penalty),
+      },
+      pnlQuarter: numeric(record.pnlQuarter ?? record.pnl_quarter ?? metrics.pnl),
+      sharpeQuarter: numeric(record.sharpeQuarter ?? record.sharpe_quarter ?? metrics.sharpe),
+      maxDrawdownQuarter: numeric(record.maxDrawdownQuarter ?? record.max_drawdown_quarter ?? metrics.drawdown),
+      executionQualityScore: numeric(record.executionQualityScore ?? record.execution_quality_score ?? components.execution_score),
+      riskComplianceScore: numeric(record.riskComplianceScore ?? record.risk_compliance_score ?? components.risk_score),
+      improvementScore: numeric(record.improvementScore ?? record.improvement_score ?? components.activity_score),
+      humanInterventionPenalty: numeric(record.humanInterventionPenalty ?? record.human_intervention_penalty),
+      eligibility: eligibility as QuarterlyRankingRow["eligibility"],
+      disqualificationReason: exclusionReason,
+      recommendation: optionalString(record.recommendation) as QuarterlyRankingRow["recommendation"],
+      evidenceRefs: asStringArray(record.evidenceRefs ?? record.evidence_refs),
+      links: {
+        ...rawLinks,
+        manageHref: asString(rawLinks.manageHref ?? rawLinks.manage_href, `/management/personas/${encodeURIComponent(personaId)}`),
+      } as ManagementLinkSet,
+    } as QuarterlyRankingRow];
+  });
+}
+
 // ---------- Persona Intent ----------
 
 const PERSONA_INTENT_VISIBILITIES = new Set(["summary", "redacted", "restricted"]);
@@ -3777,13 +3840,13 @@ export const mgmt = {
     listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
         { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
-        adaptArrayPassthrough<QuarterlyRankingRow>,
+        adaptQuarterlyRankingRows,
       ),
     list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
       withLiveOrMock<QuarterlyRankingRow[]>(
         { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
         async () => seedFn(),
-        safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+        safeAdapt(adaptQuarterlyRankingRows, seedFn),
       ),
     formulaLiveOnly: (): Promise<QuarterlyRankingFormula | undefined> =>
       liveOnlyRead<QuarterlyRankingFormula>(
@@ -3811,12 +3874,12 @@ export const mgmt = {
       withLiveOrMock<QuarterlyRankingRow[]>(
         { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
         async () => seedFn(),
-        safeAdapt(adaptArrayPassthrough<QuarterlyRankingRow>, seedFn),
+        safeAdapt(adaptQuarterlyRankingRows, seedFn),
       ),
     recommendationsLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
         { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) },
-        adaptArrayPassthrough<QuarterlyRankingRow>,
+        adaptQuarterlyRankingRows,
       ),
     submitRecommendation: async (
       input: RankingRecommendationSubmitInput,
