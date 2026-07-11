@@ -510,8 +510,20 @@ export const PersonaFleetPage = () => {
     if (tabParam === "non-production" || tabParam === "nonproduction") {
       return "non-production";
     }
+    if (tabParam === "production") {
+      return "production";
+    }
+    if (personaFocus && rows.length > 0) {
+      const matched = rows.find((r) => r.personaId === personaFocus);
+      if (matched) {
+        return isNonProductionPersonaFleetRow(matched) ? "non-production" : "production";
+      }
+    }
+    if (productionCount === 0 && nonProductionCount > 0) {
+      return "non-production";
+    }
     return "production";
-  }, [tabParam]);
+  }, [tabParam, personaFocus, rows, productionCount, nonProductionCount]);
 
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
