@@ -12,7 +12,17 @@
 // ALIAS_CANONICAL_RULES encodes the alias -> canonical final-path mapping
 // observed in that same crawl (`finalUrl` field), used to assert that known
 // hidden aliases redirect instead of direct-rendering a duplicate component.
+//
+// MGMT-PERF-IA-001: portfolio-book, promotion-allocation, persona-league,
+// quarterly-ranking, and performance-attribution retire from direct nav
+// rendering in favor of the three canonical centers below. This file is a
+// plain-JS mirror (this probe runs under bare `node`, not vite/ts-node) of
+// src/management/navigation/managementRouteManifest.ts — keep both in sync
+// when the route/menu manifest changes.
 export const BASELINE_ROUTES = [
+  { path: "/management/performance", kind: "nav" },
+  { path: "/management/rankings", kind: "nav" },
+  { path: "/management/governance-decisions", kind: "nav" },
   { path: "/management/cockpit", kind: "nav" },
   { path: "/management/persona-fleet", kind: "nav" },
   { path: "/management/human-inbox", kind: "nav" },
@@ -114,11 +124,24 @@ export const BASELINE_ROUTES = [
 export const ALIAS_CANONICAL_RULES = [
   { test: /^\/management\/(control-room|one-ring|overview|command-center)$/, canonical: () => "/management/cockpit" },
   { test: /^\/management\/risk-center$/, canonical: () => "/management/risk" },
-  { test: /^\/management\/capital-pools$/, canonical: () => "/management/capital" },
+  // MGMT-PERF-IA-001 — bare capital is Performance Center's exposure tab;
+  // capital-pools/ranking-formulas/rebalances (and their singular aliases)
+  // are Governance Decisions. Detail (:id) routes intentionally keep their
+  // pre-existing target — MGMT-PERF-IA-006 restores a real canonical detail
+  // page instead of a broad tab redirect.
+  { test: /^\/management\/portfolio-book$/, canonical: () => "/management/performance" },
+  { test: /^\/management\/performance-attribution$/, canonical: () => "/management/performance" },
+  { test: /^\/management\/capital$/, canonical: () => "/management/performance" },
+  { test: /^\/management\/persona-league$/, canonical: () => "/management/rankings" },
+  { test: /^\/management\/quarterly-ranking$/, canonical: () => "/management/rankings" },
+  { test: /^\/management\/capital-pools$/, canonical: () => "/management/governance-decisions" },
   { test: /^\/management\/capital-pools\/([^/]+)$/, canonical: (m) => `/management/capital/${m[1]}` },
-  { test: /^\/management\/ranking-formulas$/, canonical: () => "/management/ranking/formulas" },
+  { test: /^\/management\/ranking$/, canonical: () => "/management/governance-decisions" },
+  { test: /^\/management\/ranking\/formulas$/, canonical: () => "/management/governance-decisions" },
+  { test: /^\/management\/ranking-formulas$/, canonical: () => "/management/governance-decisions" },
   { test: /^\/management\/ranking-formulas\/([^/]+)$/, canonical: (m) => `/management/ranking/formulas/${m[1]}` },
-  { test: /^\/management\/rebalances$/, canonical: () => "/management/rebalance" },
+  { test: /^\/management\/rebalance$/, canonical: () => "/management/governance-decisions" },
+  { test: /^\/management\/rebalances$/, canonical: () => "/management/governance-decisions" },
   { test: /^\/management\/rebalances\/([^/]+)$/, canonical: (m) => `/management/rebalance/${m[1]}` },
   { test: /^\/management\/research$/, canonical: () => "/management/experiments" },
   { test: /^\/management\/research\/([^/]+)$/, canonical: (m) => `/management/experiments/${m[1]}` },

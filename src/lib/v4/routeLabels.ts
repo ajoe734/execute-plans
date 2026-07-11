@@ -29,7 +29,15 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/evidence", i18nKey: "nav.evidenceExplorer", parent: "/management" },
   { path: "/management/persona-intent", i18nKey: "nav.personaIntent", parent: "/management" },
 
-  // Performance & League
+  // MGMT-PERF-IA-001 canonical centers — the entries these three replace
+  // (portfolio-book, promotion-allocation, performance-attribution,
+  // persona-league, quarterly-ranking) are now redirect-only and kept below
+  // for legacy lookups.
+  { path: "/management/performance", i18nKey: "nav.performanceCenter", parent: "/management" },
+  { path: "/management/rankings", i18nKey: "nav.rankingsCenter", parent: "/management" },
+  { path: "/management/governance-decisions", i18nKey: "nav.governanceDecisions", parent: "/management" },
+
+  // Performance & League (legacy — redirect-only, see managementRouteManifest.ts)
   { path: "/management/portfolio-book", i18nKey: "nav.portfolioBook", parent: "/management" },
   { path: "/management/promotion-allocation", i18nKey: "nav.promotionAllocation", parent: "/management" },
   { path: "/management/performance-attribution", i18nKey: "nav.performanceAttribution", parent: "/management" },

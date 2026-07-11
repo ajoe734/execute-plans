@@ -39,7 +39,7 @@ const poolAttributionHref = (poolId: string): string =>
 const personaAttributionHref = (personaId: string): string =>
   `/management/performance-attribution?dimension=persona&persona=${encodeURIComponent(personaId)}&period=30d`;
 
-export const PortfolioBookPage = () => {
+export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } = {}) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const poolFocus = (searchParams.get("capital_pool_id") ?? searchParams.get("pool"))?.trim() ?? "";
@@ -59,8 +59,8 @@ export const PortfolioBookPage = () => {
   });
 
   return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.portfolio.title")}>
-      <ManagementOperationsNav />
+    <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.portfolio.title")}>
+      {!embedded ? <ManagementOperationsNav /> : null}
       <header>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>

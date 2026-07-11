@@ -24,6 +24,7 @@ import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLe
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import {
@@ -200,7 +201,7 @@ export const OneRingCockpitPage = () => {
           <LiveOnlyNotice
             title={t("mgmt.cockpit.totalCapital")}
             body={unavailableBody}
-            action={<Link to="/management/portfolio-book" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+            action={<Link to={canonicalCenterUrl("performance", "overview")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
         <PersonaLeagueSnapshot rows={league ?? []} />
@@ -210,7 +211,7 @@ export const OneRingCockpitPage = () => {
           <LiveOnlyNotice
             title={t("mgmt.cockpit.quarterlyCountdown")}
             body={unavailableBody}
-            action={<Link to="/management/promotion-allocation?tab=paper-candidates" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+            action={<Link to={canonicalCenterUrl("rankings", "quarterly")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
         <DataSourceHealthSnapshot rows={productionFleetRows} />

@@ -153,6 +153,11 @@ export default {
     personaLeague: "Persona 聯賽",
     quarterlyRanking: "季度排名",
     performanceAttribution: "績效歸因",
+    // MGMT-PERF-IA-001 canonical centers.
+    performanceCenter: "績效中心",
+    rankingsCenter: "排名中心",
+    governanceDecisions: "治理決策",
+    llmProviderAuth: "LLM 供應商授權",
 
   },
   groups: {
@@ -176,7 +181,51 @@ export default {
     liveReadiness: "Live 就緒",
     advancedRegistry: "進階登錄",
     performanceLeague: "績效與排名",
+    // MGMT-PERF-IA-001 — TARGET_INFORMATION_ARCHITECTURE.md 側邊欄群組。
+    operationalOverview: "營運總覽",
+    performanceAndRisk: "績效與風險",
+    rankingAndGovernance: "排名與治理",
+    researchAndEvolution: "研究與演化",
+    registryAndLineage: "登錄與血緣",
+    executionOperations: "執行維運",
+    liveReadinessAndSystem: "上線就緒與系統",
 
+  },
+
+  performanceCenter: {
+    title: "績效中心",
+    subtitle: "在單一治理流程中檢視投組曝險、正式歸因與持倉。",
+    tabs: {
+      overview: "總覽",
+      attribution: "歸因",
+      exposure: "曝險與持倉",
+    },
+  },
+  rankingsCenter: {
+    title: "排名中心",
+    subtitle: "滾動式營運比較與季度治理評估快照。",
+    tabs: {
+      rolling: "滾動排名",
+      quarterly: "季度排名",
+    },
+  },
+  governanceDecisions: {
+    title: "治理決策",
+    subtitle: "以不可變的排名證據為基礎的建議、資金配置提案與排名政策。",
+    tabs: {
+      recommendations: "建議",
+      capital: "資金配置",
+      policy: "政策",
+    },
+    recommendationsPending: {
+      title: "建議整合尚未完成",
+      body: "此分頁的建議 → 審核 → 執行憑證流程將於 MGMT-PERF-IA-005 完成前實作。在此之前請使用下方連結。",
+      openGovernanceQueue: "開啟治理佇列",
+      openLegacyPromotionAllocation: "開啟舊版升級與資金配置頁",
+    },
+  },
+  commandPalette: {
+    sections: "區塊導覽",
   },
   promotionAllocation: {
     title: "升級與資金配置",

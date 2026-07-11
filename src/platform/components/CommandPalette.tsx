@@ -5,13 +5,14 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { bff } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { SearchResult } from "@/lib/bff/types";
+import { canonicalCenterUrl, MANAGEMENT_SIDEBAR_GROUPS } from "@/management/navigation/managementRouteManifest";
 
 const entityRoute: Record<string, (id: string) => string> = {
   Strategy: (id) => `/management/strategies/${encodeURIComponent(id)}`,
   Persona: (id) => `/management/personas/${encodeURIComponent(id)}`,
-  CapitalPool: (id) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`,
-  RankingFormula: (id) => `/management/promotion-allocation?tab=formula-policy&formula_id=${encodeURIComponent(id)}`,
-  Rebalance: (id) => `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(id)}`,
+  CapitalPool: (id) => `${canonicalCenterUrl("governance-decisions", "capital")}&capital_id=${encodeURIComponent(id)}`,
+  RankingFormula: (id) => `${canonicalCenterUrl("governance-decisions", "policy")}&formula_id=${encodeURIComponent(id)}`,
+  Rebalance: (id) => `${canonicalCenterUrl("governance-decisions", "capital")}&rebalance_id=${encodeURIComponent(id)}`,
   Deployment: (id) => `/management/deployments/${encodeURIComponent(id)}`,
   ResearchExperiment: (id) => `/management/experiments/${encodeURIComponent(id)}`,
   Experiment: (id) => `/management/experiments/${encodeURIComponent(id)}`,
@@ -19,6 +20,15 @@ const entityRoute: Record<string, (id: string) => string> = {
   Loop: (id) => `/management/loops?run=${encodeURIComponent(id)}`,
   Oversight: () => "/management/cockpit",
 };
+
+// MGMT-PERF-IA-001 — static "jump to" section entries, sourced from the same
+// manifest that drives the sidebar so a canonical center can never appear
+// twice (or under a stale legacy label) in the palette.
+const SECTION_ENTRIES = MANAGEMENT_SIDEBAR_GROUPS.flatMap((group) => group.items).map((item) => ({
+  id: item.id,
+  to: item.to,
+  labelKey: item.labelKey,
+}));
 
 const TYPE_ORDER = [
   "Strategy",
@@ -60,6 +70,13 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
     return TYPE_ORDER.filter((k) => g[k]?.length).map((k) => [k, g[k]] as const);
   }, [results]);
 
+  const matchingSections = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return SECTION_ENTRIES
+      .map((entry) => ({ ...entry, label: t(entry.labelKey) }))
+      .filter((entry) => !needle || entry.label.toLowerCase().includes(needle));
+  }, [q, t]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="p-0 max-w-2xl">
@@ -67,6 +84,22 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
           <CommandInput value={q} onValueChange={setQ} placeholder={t("topbar.search")} />
           <CommandList>
             <CommandEmpty>{t("common.noResults")}</CommandEmpty>
+            {matchingSections.length > 0 && (
+              <CommandGroup heading={t("commandPalette.sections")}>
+                {matchingSections.map((entry) => (
+                  <CommandItem
+                    key={entry.id}
+                    onSelect={() => {
+                      onOpenChange(false);
+                      navigate(entry.to);
+                    }}
+                  >
+                    <span className="flex-1">{entry.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {matchingSections.length > 0 && grouped.length > 0 && <CommandSeparator />}
             {grouped.map(([type, items], idx) => (
               <div key={type}>
                 {idx > 0 && <CommandSeparator />}
