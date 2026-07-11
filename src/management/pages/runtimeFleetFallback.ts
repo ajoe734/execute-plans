@@ -147,7 +147,27 @@ export async function runtimesWithFleetFallback(): Promise<ListEnvelope<FleetRun
     lists.runtimes() as Promise<ListEnvelope<FleetRuntimeRow>>,
     mgmt.personaFleet.get().catch(() => [] as ManagementPersonaFleetRow[]),
   ]);
-  const existingKeys = existingRuntimeKeys(runtimeEnv.items);
+  const enrichedItems = runtimeEnv.items.map((item) => {
+    const matchingFleet = fleetRows.find(
+      (f) =>
+        (item.runtimeId && fleetRuntimeId(f) === item.runtimeId) ||
+        (item.runtime_id && fleetRuntimeId(f) === item.runtime_id) ||
+        (item.bindingId && fleetBindingId(f) === item.bindingId) ||
+        (item.binding_id && fleetBindingId(f) === item.binding_id) ||
+        (item.runtimeBindingId && fleetBindingId(f) === item.runtimeBindingId) ||
+        (item.runtime_binding_id && fleetBindingId(f) === item.runtime_binding_id)
+    );
+    if (matchingFleet && matchingFleet.personaId && matchingFleet.personaId !== item.personaId) {
+      return {
+        ...item,
+        personaId: matchingFleet.personaId,
+        persona_id: matchingFleet.personaId,
+        personaName: usableText(matchingFleet.personaName) || item.personaName,
+      };
+    }
+    return item;
+  });
+  const existingKeys = existingRuntimeKeys(enrichedItems);
   const fallbackRows: FleetRuntimeRow[] = [];
   for (const fleetRow of fleetRows) {
     const row = fleetRowToRuntime(fleetRow);
@@ -161,7 +181,7 @@ export async function runtimesWithFleetFallback(): Promise<ListEnvelope<FleetRun
   }
   return {
     ...runtimeEnv,
-    items: [...fallbackRows, ...runtimeEnv.items],
+    items: [...fallbackRows, ...enrichedItems],
     pageSize: runtimeEnv.pageSize + fallbackRows.length,
     estimatedTotal: typeof runtimeEnv.estimatedTotal === "number" ? runtimeEnv.estimatedTotal + fallbackRows.length : runtimeEnv.estimatedTotal,
   };

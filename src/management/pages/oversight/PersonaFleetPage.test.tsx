@@ -190,6 +190,23 @@ describe("PersonaFleetPage", () => {
     expect(prodTab).toBeInTheDocument();
   });
 
+  it("automatically defaults to non-production tab when focusing on a non-production persona without explicit tab parameter", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-crypto", "Crypto Persona"),
+        fleetRow("persona-live-gold", "Gold Futures Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?persona=persona-crypto");
+
+    expect(screen.getByText("Crypto Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Gold Futures Persona")).not.toBeInTheDocument();
+    expect(screen.getByText("Focused persona: persona-crypto")).toBeInTheDocument();
+  });
+
   it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
     mocks.useV5Live.mockReturnValue({
       data: [

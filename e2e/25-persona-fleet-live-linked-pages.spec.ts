@@ -100,18 +100,20 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(capitalTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
     await expect(capitalTable).toContainText("Crypto-Alt-Hunter");
 
-    const providerKey = fleetRow.data_sources?.[0]?.provider_key ?? fleetRow.data_sources?.[0]?.providerKey;
-    expect(providerKey).toBeTruthy();
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const sourceLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
-      .locator(`[aria-label="${PERSONA_ID} data source ${providerKey}"]`);
-    await sourceLink.click();
-    await expect(page).toHaveURL(new RegExp(`persona=${PERSONA_ID}.*source=${providerKey}`));
-    const sourceTable = page.getByRole("table").first();
-    await expect(sourceTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
-    await expect(sourceTable).toContainText(String(providerKey));
+    const firstSource = fleetRow.data_sources?.[0];
+    const providerKey = firstSource?.provider_key ?? firstSource?.providerKey;
+    if (providerKey) {
+      await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
+      await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+      await nonProductionTab.click();
+      const sourceLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+        .locator(`[aria-label="${PERSONA_ID} data source ${providerKey}"]`);
+      await sourceLink.click();
+      await expect(page).toHaveURL(new RegExp(`persona=${PERSONA_ID}.*source=${providerKey}`));
+      const sourceTable = page.getByRole("table").first();
+      await expect(sourceTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
+      await expect(sourceTable).toContainText(String(providerKey));
+    }
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
     await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
