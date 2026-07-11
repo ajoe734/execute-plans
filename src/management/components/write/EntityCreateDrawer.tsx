@@ -40,6 +40,7 @@ interface Props {
   initialData?: Record<string, unknown>;
   /** Entity id when mode === "edit". */
   editingId?: string;
+  onCreateFailed?: (error: unknown) => void;
 }
 
 type FieldType =
@@ -204,7 +205,7 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
   }
 }
 
-export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode = "create", initialData, editingId }: Props) => {
+export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode = "create", initialData, editingId, onCreateFailed }: Props) => {
   const t = useT();
   const { toast } = useToast();
   const errIdBase = useId();
@@ -283,6 +284,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
       onCreated?.(result.data, result);
       onOpenChange(false);
     } catch (err) {
+      onCreateFailed?.(err);
       toast({
         title: t("errors.UNKNOWN_ERROR"),
         description: err instanceof Error ? err.message : String(err),
@@ -408,7 +410,9 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
           <SheetTitle>
-            {t(mode === "edit" ? "actions.edit" : "actions.create")} — {t(`entityCreate.entity.${entity}`)}
+            {mode === "create" && entity === "persona"
+              ? "Create Paper Persona"
+              : `${t(mode === "edit" ? "actions.edit" : "actions.create")} — ${t(`entityCreate.entity.${entity}`)}`}
           </SheetTitle>
           <SheetDescription className="text-xs">
             {t("entityCreate.footerNote")}
@@ -424,7 +428,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
             {t("actions.cancel")}
           </Button>
           <Button onClick={submit} disabled={cooldownMs > 0 || submitting} aria-describedby={cooldownMs > 0 ? `${errIdBase}-cooldown` : undefined}>
-            {submitting ? t("common.loading") : cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : t(mode === "edit" ? "actions.save" : "actions.create")}
+            {submitting ? t("common.loading") : cooldownMs > 0 ? t("entityCreate.cooldown.button", { s: (cooldownMs / 1000).toFixed(1) }) : mode === "create" && entity === "persona" ? "Create Paper Persona" : t(mode === "edit" ? "actions.save" : "actions.create")}
           </Button>
           {cooldownMs > 0 && (
             <span id={`${errIdBase}-cooldown`} className="sr-only" role="status">
