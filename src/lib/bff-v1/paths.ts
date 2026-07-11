@@ -156,7 +156,14 @@ export const paths = {
   mgmtPermissions: () => `${BASE}/management/permissions`,
   mgmtMemoryGovernance: () => `${BASE}/management/memory-governance`,
   mgmtConsultRules: () => `${BASE}/management/consult-rules`,
-  mgmtPersonaFleet: () => `${BASE}/management/persona-fleet`,
+  mgmtPersonaFleet: (filters: { q?: string; pageSize?: number } = {}) => {
+    const params = new URLSearchParams();
+    const q = filters.q?.trim();
+    if (q) params.set("q", q);
+    if (filters.pageSize !== undefined) params.set("page_size", String(filters.pageSize));
+    const query = params.toString();
+    return `${BASE}/management/persona-fleet${query ? `?${query}` : ""}`;
+  },
   mgmtAllocationPolicyEvaluate: () => `${BASE}/management/allocation-policy/evaluate`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,

@@ -1642,6 +1642,9 @@ describe("mgmt façade (PM-Live)", () => {
   it("management paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
     expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);
+    expect(paths.mgmtPersonaFleet({ q: "persona/live alpha", pageSize: 100 })).toBe(
+      "/bff/management/persona-fleet?q=persona%2Flive+alpha&page_size=100",
+    );
     expect(paths.mgmtHumanInbox()).toMatch(/human-inbox$/);
     expect(paths.mgmtHumanInboxItem("xyz")).toMatch(/human-inbox\/xyz$/);
     expect(paths.mgmtPromotionReviews()).toMatch(/promotion-reviews$/);
