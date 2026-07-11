@@ -164,6 +164,7 @@ export const paths = {
     const query = params.toString();
     return `${BASE}/management/persona-fleet${query ? `?${query}` : ""}`;
   },
+  mgmtAllocationPolicyEvaluate: () => `${BASE}/management/allocation-policy/evaluate`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
   mgmtPromotionReviews: () => `${BASE}/management/promotion-reviews`,

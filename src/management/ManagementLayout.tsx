@@ -13,6 +13,12 @@ export const ManagementLayout = () => {
   // typed manifest (managementRouteManifest.ts), which also drives page
   // titles/breadcrumbs, the command palette, and the hosted route
   // acceptance inventory. Do not hand-edit group membership here.
+  //
+  // PPL-ALLOC-006 folded the standalone persona-league/quarterly-ranking nav
+  // entries into Promotion & Allocation tabs; this manifest already collapses
+  // those (and portfolio-book/performance-attribution/promotion-allocation)
+  // into the Performance Center / Rankings Center / Governance Decisions
+  // canonical-center entries below, so no separate change is needed here.
   const groups: NavGroup[] = MANAGEMENT_SIDEBAR_GROUPS.map((group) => ({
     label: t(group.labelKey),
     items: group.items.map((item) => ({

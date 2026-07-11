@@ -217,6 +217,18 @@ export const RankingFormulasList = () => {
   );
 };
 
+// Rebalance.state (LifecycleState) reused as the PPL-ALLOC-006 workflow
+// vocabulary (recommendation/review/approved/applied) without touching the
+// shared global StatusBadge labels used by every other object list.
+function rebalanceWorkflowLabel(state: Rebalance["state"], t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const key = state === "draft" ? "recommendation"
+    : state === "review" ? "review"
+    : state === "approved" ? "approved"
+    : state === "deployed" ? "applied"
+    : state ?? "unknown";
+  return t(`promotionAllocation.rebalanceWorkflow.${key}`, { defaultValue: key });
+}
+
 export const RebalancesList = () => {
   const t = useT();
   return (
@@ -226,10 +238,13 @@ export const RebalancesList = () => {
       basePath="/management/rebalance" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
       listHref="/management/promotion-allocation?tab=quarterly-capital"
       rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(row.id)}`}
+      focusParam="rebalance_id"
+      focusLabel={t("nav.rebalances")}
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
         { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{pct(r.proposedDelta, 1)}</span> },
+        { key: "workflow", header: t("promotionAllocation.rebalanceWorkflow.header"), cell: (r) => <span className="text-xs font-medium">{rebalanceWorkflowLabel(r.state, t)}</span> },
       ]}
     />
   );
