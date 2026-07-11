@@ -38,6 +38,8 @@ import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
 import type {
   PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
+  PortfolioHoldingFilters, PortfolioHoldingsMonitor, PortfolioHoldingMonitorRow,
+  PortfolioIncident, PortfolioSourceIssue, PortfolioCapitalScopeKind,
 } from "@/lib/v5/management/portfolio";
 import type { LeagueRecommendedAction, PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
 import type {
@@ -3551,6 +3553,106 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
   });
 }
 
+function portfolioSourceIssueList(value: unknown): PortfolioSourceIssue[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isObject).map((issue) => ({
+    code: asString(issue.code, "UNKNOWN_SOURCE_ISSUE"),
+    message: asString(issue.message, asString(issue.code, "Unknown source issue")),
+  }));
+}
+
+function portfolioLinkRecord(value: unknown): Record<string, string> {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0,
+    ),
+  );
+}
+
+const PORTFOLIO_CAPITAL_SCOPE_KINDS: PortfolioCapitalScopeKind[] = [
+  "paper_ledger", "canary_sleeve", "live_capital_pool", "unclassified",
+];
+
+function normalizePortfolioCapitalScopeKind(value: unknown): PortfolioCapitalScopeKind {
+  const kind = asString(value).toLowerCase();
+  return (PORTFOLIO_CAPITAL_SCOPE_KINDS as string[]).includes(kind)
+    ? kind as PortfolioCapitalScopeKind
+    : "unclassified";
+}
+
+function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): PortfolioHoldingMonitorRow {
+  const scope = isObject(item.capital_scope) ? item.capital_scope : {};
+  const instrument = isObject(item.instrument) ? item.instrument : {};
+  return {
+    holdingId: asString(item.holding_id ?? item.id, "unknown-holding"),
+    runtimeId: asString(item.runtime_id) || undefined,
+    personaId: asString(item.persona_id) || undefined,
+    capitalPoolId: asString(item.capital_pool_id) || undefined,
+    brokerId: asString(item.broker_id) || undefined,
+    symbol: asString(item.symbol ?? instrument.symbol, "—"),
+    quantity: optionalFiniteNumber(item.quantity),
+    marketValue: optionalFiniteNumber(item.market_value),
+    unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl),
+    deploymentStage: asString(item.deployment_stage, "unknown"),
+    sourceStatus: asString(item.source_status, "unavailable"),
+    telemetryStale: item.telemetry_stale === true,
+    riskState: asString(item.risk_state, "unknown"),
+    sourceIssues: portfolioSourceIssueList(item.source_issues),
+    capitalScope: {
+      stage: asString(scope.stage ?? item.deployment_stage, "unknown"),
+      scopeKind: normalizePortfolioCapitalScopeKind(scope.scope_kind),
+      scopeId: asString(scope.scope_id) || undefined,
+    },
+    links: portfolioLinkRecord(item.links),
+  };
+}
+
+function adaptPortfolioIncident(raw: unknown): PortfolioIncident | null {
+  if (!isObject(raw)) return null;
+  const identity = isObject(raw.identity) ? raw.identity : {};
+  return {
+    id: asString(raw.id, "unknown-incident"),
+    holdingId: asString(identity.portfolio_id) || undefined,
+    severity: asString(raw.severity, "unknown"),
+    message: asString(raw.message, "Source coverage incident"),
+    riskState: asString(raw.risk_state, "unknown"),
+    sourceStatus: asString(raw.source_status, "unavailable"),
+    sourceIssues: portfolioSourceIssueList(raw.source_issues),
+    links: portfolioLinkRecord(raw.links),
+  };
+}
+
+export function adaptPortfolioHoldingsMonitor(raw: unknown): PortfolioHoldingsMonitor | null {
+  if (!isObject(raw)) return null;
+  const data = isObject(raw.data) ? raw.data : {};
+  if (!Array.isArray(data.items) || !isObject(data.summary)) return null;
+  const summary = data.summary;
+  const coverage = isObject(summary.source_coverage) ? summary.source_coverage : {};
+  const meta = isObject(raw.meta) ? raw.meta : {};
+  const surfaces = isObject(meta.surfaces) ? meta.surfaces : {};
+  const holdingsSurface = isObject(surfaces.portfolio_book_holdings) ? surfaces.portfolio_book_holdings : {};
+
+  return {
+    items: data.items.filter(isObject).map(adaptPortfolioHoldingMonitorRow),
+    incidents: (Array.isArray(meta.incidents) ? meta.incidents : [])
+      .map(adaptPortfolioIncident)
+      .filter((incident): incident is PortfolioIncident => incident !== null),
+    coverage: {
+      holdingCount: requiredNumber(summary.holding_count) || 0,
+      sourceRowCount: requiredNumber(coverage.source_row_count) || 0,
+      runtimeCount: requiredNumber(coverage.runtime_count) || 0,
+      telemetryRuntimeCount: requiredNumber(coverage.telemetry_runtime_count) || 0,
+      staleRowCount: requiredNumber(coverage.stale_row_count) || 0,
+      missingBindingCount: requiredNumber(coverage.missing_binding_count) || 0,
+      degradedSourceCount: requiredNumber(coverage.degraded_source_count) || 0,
+      incidentCount: requiredNumber(summary.incident_count) || 0,
+    },
+    surfaceStatus: asString(holdingsSurface.status, "unavailable"),
+    surfaceMessage: asString(holdingsSurface.message) || undefined,
+  };
+}
+
 // ---------- public mgmt façade ----------
 
 export const mgmt = {
@@ -3643,9 +3745,9 @@ export const mgmt = {
   },
 
   personaFleet: {
-    get: (): Promise<ManagementPersonaFleetRow[]> =>
+    get: (filters: { q?: string; pageSize?: number } = {}): Promise<ManagementPersonaFleetRow[]> =>
       withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
-        { method: "GET", path: paths.mgmtPersonaFleet() },
+        { method: "GET", path: paths.mgmtPersonaFleet(filters) },
         personaFleetDemoFallbackDisabled,
         adaptManagementPersonaFleetLiveOnly,
       ),
@@ -3799,6 +3901,24 @@ export const mgmt = {
       liveOnlyRead<ManagementPortfolioExposureMonitor>(
         { method: "GET", path: paths.mgmtPortfolioExposure() },
         adaptPortfolioExposureMonitor,
+      ),
+    monitorLiveOnly: (filters: PortfolioHoldingFilters): Promise<PortfolioHoldingsMonitor | undefined> =>
+      liveOnlyRead<PortfolioHoldingsMonitor>(
+        {
+          method: "GET",
+          path: paths.mgmtPortfolioHoldings(),
+          query: {
+            deployment_stage: filters.deploymentStage,
+            broker_id: filters.brokerId,
+            runtime_id: filters.runtimeId,
+            source_status: filters.sourceStatus,
+            stale_telemetry: filters.staleTelemetry,
+            risk_state: filters.riskState,
+            capital_pool_id: filters.capitalPoolId,
+            persona_id: filters.personaId,
+          },
+        },
+        adaptPortfolioHoldingsMonitor,
       ),
   },
 

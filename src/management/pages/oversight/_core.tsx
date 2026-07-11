@@ -487,7 +487,10 @@ export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
+  const { data, loading, refresh } = useV5Live(
+    () => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }),
+    [personaFocus],
+  );
   const rows = useMemo(() => data ?? [], [data]);
 
   const [showRetired, setShowRetired] = useState(false);
@@ -511,8 +514,17 @@ export const PersonaFleetPage = () => {
     if (tabParam === "non-production" || tabParam === "nonproduction") {
       return "non-production";
     }
+    if (tabParam === "production") {
+      return "production";
+    }
+    if (personaFocus && rows.length > 0) {
+      const matched = rows.find((r) => r.personaId === personaFocus);
+      if (matched) {
+        return isNonProductionPersonaFleetRow(matched) ? "non-production" : "production";
+      }
+    }
     return "production";
-  }, [tabParam]);
+  }, [tabParam, personaFocus, rows]);
 
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
