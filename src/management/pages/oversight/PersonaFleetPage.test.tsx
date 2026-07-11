@@ -149,6 +149,23 @@ describe("PersonaFleetPage", () => {
     );
   });
 
+  it("honors the canonical persona_id query from Portfolio Book links", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-live-crypto", "Live Crypto Persona"),
+        fleetRow("persona-live-tw-equity", "Live Taiwan Equity Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?persona_id=persona-live-tw-equity");
+
+    expect(screen.getByText("Focused persona: persona-live-tw-equity")).toBeInTheDocument();
+    expect(screen.getByText("Live Taiwan Equity Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Live Crypto Persona")).not.toBeInTheDocument();
+  });
+
   it("propagates focused persona and page size to the live fleet request", () => {
     const get = vi.spyOn(mgmt.personaFleet, "get").mockResolvedValue([]);
     mocks.useV5Live.mockImplementation((loader: () => unknown) => {

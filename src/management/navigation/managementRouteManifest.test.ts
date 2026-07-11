@@ -85,6 +85,24 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
     });
   });
 
+  it("preserves Portfolio workflow snake_case context through canonical redirects", () => {
+    expect(resolveLegacyRedirect(
+      "/management/portfolio-book",
+      "?deployment_stage=paper&runtime_id=rt-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding&persona_id=persona-a&unknown_debug=1",
+    )).toEqual({
+      pathname: "/management/performance",
+      search: "?tab=overview&persona_id=persona-a&deployment_stage=paper&runtime_id=rt-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding",
+    });
+
+    expect(resolveLegacyRedirect(
+      "/management/performance-attribution",
+      "?persona_id=persona-a&runtime_id=rt-1&dimension=persona&unknown_debug=1",
+    )).toEqual({
+      pathname: "/management/performance",
+      search: "?tab=attribution&dimension=persona&persona_id=persona-a&runtime_id=rt-1",
+    });
+  });
+
   it("routes persona-league to the rankings rolling tab with context", () => {
     const resolved = resolveLegacyRedirect("/management/persona-league", "?persona=persona-a&sort=score");
     expect(resolved).toEqual({ pathname: "/management/rankings", search: "?tab=rolling&persona=persona-a&sort=score" });

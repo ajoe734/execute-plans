@@ -262,14 +262,21 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirectRule[] = [
     match: /^\/management\/portfolio-book$/,
     center: "performance",
     tab: "overview",
-    allowedParams: ["capital_pool_id", "pool", "persona", "period"],
+    allowedParams: [
+      "capital_pool_id", "pool", "persona", "persona_id", "period",
+      "deployment_stage", "broker_id", "runtime_id", "source_status",
+      "stale_telemetry", "risk_state",
+    ],
   },
   {
     id: "performance-attribution-to-performance-attribution",
     match: /^\/management\/performance-attribution$/,
     center: "performance",
     tab: "attribution",
-    allowedParams: ["dimension", "persona", "runtime", "strategy", "pool", "entity", "period"],
+    allowedParams: [
+      "dimension", "persona", "persona_id", "runtime", "runtime_id",
+      "strategy", "strategy_id", "pool", "capital_pool_id", "entity", "period",
+    ],
   },
   {
     id: "capital-to-performance-exposure",
