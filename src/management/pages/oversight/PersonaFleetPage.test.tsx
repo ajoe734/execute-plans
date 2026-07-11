@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import { mgmt, type ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { PersonaFleetPage } from "./_core";
 
 const mocks = vi.hoisted(() => ({
@@ -147,6 +147,18 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
+  });
+
+  it("propagates focused persona and page size to the live fleet request", () => {
+    const get = vi.spyOn(mgmt.personaFleet, "get").mockResolvedValue([]);
+    mocks.useV5Live.mockImplementation((loader: () => unknown) => {
+      void loader();
+      return { data: [], loading: false, refresh: vi.fn() };
+    });
+
+    renderFleet("/management/persona-fleet?persona=persona-live-page-two");
+
+    expect(get).toHaveBeenCalledWith({ q: "persona-live-page-two", pageSize: 100 });
   });
   it("hides non-production live rows by default", () => {
     mocks.useV5Live.mockReturnValue({

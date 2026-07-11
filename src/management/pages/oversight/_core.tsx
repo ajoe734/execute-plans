@@ -486,7 +486,10 @@ export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const { data, loading, refresh } = useV5Live(() => mgmt.personaFleet.get(), []);
+  const { data, loading, refresh } = useV5Live(
+    () => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }),
+    [personaFocus],
+  );
   const rows = useMemo(() => data ?? [], [data]);
 
   const [showRetired, setShowRetired] = useState(false);
