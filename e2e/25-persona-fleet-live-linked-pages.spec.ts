@@ -54,7 +54,31 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const fleetTableRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     await expect(fleetTableRow).toBeVisible();
 
-    const rankLink = fleetTableRow.locator(`[aria-label="${PERSONA_ID} persona league ranking"]`);
+    const personaName = String(fleetRow.name ?? fleetRow.persona_name ?? fleetRow.personaName ?? PERSONA_ID);
+    await fleetTableRow.getByRole("link", { name: personaName, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/management/personas/${PERSONA_ID}`));
+    await expect(page.getByRole("heading", { name: personaName, level: 1 })).toBeVisible();
+    await expect(page.locator("body")).toContainText(PERSONA_ID);
+
+    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
+    if (await nonProductionTab.count()) await nonProductionTab.click();
+    const oodaLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+      .locator(`[aria-label="${PERSONA_ID} OODA ${fleetRow.ooda} stage" i]`);
+    await expect(oodaLink).toHaveAttribute("href", /\/management\/(data-sources|experiments|research-loop|human-inbox|runtimes|evolution-journal)/);
+    await oodaLink.click();
+    if (String(fleetRow.ooda).toLowerCase() === "act") {
+      await expect(page).toHaveURL(new RegExp(`/management/runtimes\\?persona=${PERSONA_ID}`));
+      await expect(page.getByRole("heading", { name: /執行環境|Runtimes/i })).toBeVisible();
+      await expect(page.getByText(new RegExp(`Persona.*${PERSONA_ID}.*1`, "i"))).toBeVisible();
+      const runtimeTable = page.getByRole("table").first();
+      await expect(runtimeTable.locator("tbody tr")).toHaveCount(1);
+      await expect(runtimeTable).toContainText(PERSONA_ID);
+    }
+
+    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
+    if (await nonProductionTab.count()) await nonProductionTab.click();
+    const rankRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
+    const rankLink = rankRow.locator(`[aria-label="${PERSONA_ID} persona league ranking"]`);
     await expect(rankLink).toHaveAttribute("href", new RegExp(`/management/(quarterly-ranking|persona-league)\\?persona=${PERSONA_ID}`));
     await rankLink.click();
     await expect(page.getByText(new RegExp(`Persona.*${PERSONA_ID}.*1`, "i"))).toBeVisible();
@@ -115,6 +139,17 @@ test.describe("Persona Fleet live linked-page contract", () => {
       } else {
         await expect(body).toContainText(String(fleetRow.mutation_entry_id));
       }
+    }
+
+    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
+    if (await nonProductionTab.count()) await nonProductionTab.click();
+    const humanGateLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+      .locator(`[aria-label="${PERSONA_ID} human gate"]`);
+    if (await humanGateLink.count()) {
+      await humanGateLink.click();
+      await expect(page.getByRole("heading", { name: /人類收件匣|Human Inbox/i })).toBeVisible();
+      await expect(page.getByText(new RegExp(`Persona.*${PERSONA_ID}.*1`, "i"))).toBeVisible();
+      await expect(page.locator("body")).toContainText(PERSONA_ID);
     }
   });
 });
