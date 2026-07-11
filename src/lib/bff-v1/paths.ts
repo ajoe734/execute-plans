@@ -157,6 +157,7 @@ export const paths = {
   mgmtMemoryGovernance: () => `${BASE}/management/memory-governance`,
   mgmtConsultRules: () => `${BASE}/management/consult-rules`,
   mgmtPersonaFleet: () => `${BASE}/management/persona-fleet`,
+  mgmtAllocationPolicyEvaluate: () => `${BASE}/management/allocation-policy/evaluate`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
   mgmtPromotionReviews: () => `${BASE}/management/promotion-reviews`,

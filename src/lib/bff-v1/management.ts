@@ -216,6 +216,49 @@ export interface ManagementResearchProject {
   linkTargets?: ManagementPersonaFleetLinkTargets;
 }
 
+// PPL-ALLOC-006 — real-allocation policy evaluation (PPL-ALLOC-004 contract).
+// The BFF owns the ranking/caps/exclusion math; the caller only assembles rows
+// from data it already has and never recomputes target weights client-side.
+export interface AllocationPolicyInputRow {
+  personaId: string;
+  stage?: string;
+  tier?: string;
+  capitalScope?: string;
+  capitalPoolId?: string;
+  capitalSleeveId?: string;
+  currentWeight?: number;
+  pnlScore?: number;
+  sharpeScore?: number;
+  drawdownControlScore?: number;
+  executionQualityScore?: number;
+  riskComplianceScore?: number;
+  improvementScore?: number;
+  humanInterventionPenalty?: number;
+  hardPenalty?: number;
+  hardRiskBreach?: boolean;
+  humanReviewBlocked?: boolean;
+  bindingMismatch?: boolean;
+  evidenceRefs?: string[];
+}
+
+export interface AllocationPolicyLine {
+  personaId: string;
+  stage?: string;
+  capitalScope: string;
+  capitalPoolId?: string;
+  capitalSleeveId?: string;
+  currentWeight: number;
+  targetWeight: number;
+  delta: number;
+  rankScore: number;
+  capacityAdjustedScore: number;
+  recommendation: string;
+  capReasons: string[];
+  exclusions: string[];
+  evidenceRefs: string[];
+  requiresHumanApproval: boolean;
+}
+
 export interface ManagementPersonaFleetRowAction {
   actionId: string;
   label?: string;
@@ -322,6 +365,13 @@ export interface ManagementPersonaFleetRow {
   paperLedger?: ManagementPersonaFleetPaperLedger;
   capitalPoolId?: string;
   capitalPool?: ManagementPersonaFleetCapitalPool;
+  /** PPL-ALLOC-006 — real-allocation capital binding (PPL-ALLOC-003 read model). */
+  capitalScope?: "paper_ledger" | "canary_sleeve" | "live_sleeve" | "capital_pool" | "unbound" | string;
+  capitalScopeId?: string;
+  capitalSleeveId?: string;
+  currentWeight?: number;
+  targetWeight?: number;
+  bindingState?: string;
   performanceSummary?: ManagementPersonaFleetPerformanceSummary;
   runtimeBinding?: ManagementPersonaFleetRuntimeBinding;
   runtimeHealth?: Record<string, unknown>;
@@ -2133,6 +2183,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?.map(adaptResearchProject)
     .filter((project): project is ManagementResearchProject => project !== null);
   const capitalPool = objectOrEmpty(value.capitalPool ?? value.capital_pool);
+  const capitalBinding = objectOrEmpty(value.capitalBinding ?? value.capital_binding);
   const performanceSummary = objectOrEmpty(value.performanceSummary ?? value.performance_summary);
   const paperLedger = objectOrEmpty(value.paperLedger ?? value.paper_ledger);
   const runtimeBinding = objectOrEmpty(value.runtimeBinding ?? value.runtime_binding);
@@ -2185,6 +2236,24 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? runtimeBinding.id
     ?? runtimeBinding.runtimeBindingId
     ?? runtimeBinding.runtime_binding_id,
+  );
+  const capitalScope = asOptionalString(
+    value.capitalScope ?? value.capital_scope ?? capitalBinding.capitalScope ?? capitalBinding.capital_scope ?? capitalBinding.scope,
+  );
+  const capitalScopeId = asOptionalString(
+    value.capitalScopeId ?? value.capital_scope_id ?? capitalBinding.capitalScopeId ?? capitalBinding.capital_scope_id ?? capitalBinding.scopeId ?? capitalBinding.scope_id,
+  );
+  const capitalSleeveId = asOptionalString(
+    value.capitalSleeveId ?? value.capital_sleeve_id ?? capitalBinding.capitalSleeveId ?? capitalBinding.capital_sleeve_id,
+  );
+  const currentWeight = optionalFiniteNumber(
+    value.currentWeight ?? value.current_weight ?? capitalBinding.currentWeight ?? capitalBinding.current_weight,
+  );
+  const targetWeight = optionalFiniteNumber(
+    value.targetWeight ?? value.target_weight ?? capitalBinding.targetWeight ?? capitalBinding.target_weight,
+  );
+  const bindingState = asOptionalString(
+    value.bindingState ?? value.binding_state ?? capitalBinding.bindingState ?? capitalBinding.binding_state ?? capitalBinding.state,
   );
   const reviewId = asOptionalString(value.reviewId ?? value.review_id ?? review.id);
   const reviewType = asOptionalString(value.reviewType ?? value.review_type ?? review.type);
@@ -2247,6 +2316,12 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       mode: asOptionalString(capitalPool.mode),
       liveCapitalEnabled: asBoolean(capitalPool.liveCapitalEnabled ?? capitalPool.live_capital_enabled, false),
     } : undefined,
+    capitalScope,
+    capitalScopeId,
+    capitalSleeveId,
+    currentWeight,
+    targetWeight,
+    bindingState,
     performanceSummary: isObject(value.performanceSummary ?? value.performance_summary) ? {
       pnl: optionalFiniteNumber(performanceSummary.pnl),
       sharpe: optionalFiniteNumber(performanceSummary.sharpe),
@@ -2314,6 +2389,62 @@ function adaptManagementPersonaFleetLiveOnly(raw: unknown): ManagementPersonaFle
 
 async function personaFleetDemoFallbackDisabled(): Promise<ManagementPersonaFleetRow[]> {
   throw new Error("Persona Fleet requires live BFF data; demo fallback is disabled.");
+}
+
+function adaptAllocationPolicyLine(value: unknown): AllocationPolicyLine | null {
+  if (!isObject(value)) return null;
+  const personaId = asString(value.personaId ?? value.persona_id);
+  if (!personaId) return null;
+  return {
+    personaId,
+    stage: asOptionalString(value.stage),
+    capitalScope: asString(value.capitalScope ?? value.capital_scope, "real"),
+    capitalPoolId: asOptionalString(value.capitalPoolId ?? value.capital_pool_id),
+    capitalSleeveId: asOptionalString(value.capitalSleeveId ?? value.capital_sleeve_id),
+    currentWeight: asFiniteNumber(value.currentWeight ?? value.current_weight),
+    targetWeight: asFiniteNumber(value.targetWeight ?? value.target_weight),
+    delta: asFiniteNumber(value.delta),
+    rankScore: asFiniteNumber(value.rankScore ?? value.rank_score),
+    capacityAdjustedScore: asFiniteNumber(value.capacityAdjustedScore ?? value.capacity_adjusted_score),
+    recommendation: asString(value.recommendation, "no_positive_action"),
+    capReasons: asStringArray(value.capReasons ?? value.cap_reasons) ?? [],
+    exclusions: asStringArray(value.exclusions) ?? [],
+    evidenceRefs: asStringArray(value.evidenceRefs ?? value.evidence_refs) ?? [],
+    requiresHumanApproval: asBoolean(value.requiresHumanApproval ?? value.requires_human_approval, false),
+  };
+}
+
+function adaptAllocationPolicyLines(raw: unknown): AllocationPolicyLine[] | null {
+  const data = unwrap(raw);
+  const lines = isObject(data) ? data.lines : undefined;
+  if (!Array.isArray(lines)) return null;
+  return lines
+    .map(adaptAllocationPolicyLine)
+    .filter((line): line is AllocationPolicyLine => line !== null);
+}
+
+function allocationPolicyInputRowPayload(row: AllocationPolicyInputRow): Record<string, unknown> {
+  return {
+    persona_id: row.personaId,
+    stage: row.stage,
+    tier: row.tier,
+    capital_scope: row.capitalScope,
+    capital_pool_id: row.capitalPoolId,
+    capital_sleeve_id: row.capitalSleeveId,
+    current_weight: row.currentWeight ?? 0,
+    pnl_score: row.pnlScore ?? 0,
+    sharpe_score: row.sharpeScore ?? 0,
+    drawdown_control_score: row.drawdownControlScore ?? 0,
+    execution_quality_score: row.executionQualityScore ?? 0,
+    risk_compliance_score: row.riskComplianceScore ?? 0,
+    improvement_score: row.improvementScore ?? 0,
+    human_intervention_penalty: row.humanInterventionPenalty ?? 0,
+    hard_penalty: row.hardPenalty ?? 0,
+    hard_risk_breach: row.hardRiskBreach ?? false,
+    human_review_blocked: row.humanReviewBlocked ?? false,
+    binding_mismatch: row.bindingMismatch ?? false,
+    evidence_refs: row.evidenceRefs ?? [],
+  };
 }
 
 // ---------- PM-3 Cockpit ----------
@@ -3649,6 +3780,27 @@ export const mgmt = {
         personaFleetDemoFallbackDisabled,
         adaptManagementPersonaFleetLiveOnly,
       ),
+  },
+
+  // PPL-ALLOC-006 — stage-aware target weights for the Real ranking tab.
+  // Strict-live: the caps/exclusions/target-weight math is server-owned
+  // (PPL-ALLOC-004); there is no seed to fall back to without fabricating policy.
+  allocationPolicy: {
+    evaluate: async (
+      rows: AllocationPolicyInputRow[],
+      opts: { rankingSnapshotId?: string } = {},
+    ): Promise<AllocationPolicyLine[]> => {
+      const raw = await bffFetch<unknown>({
+        method: "POST",
+        path: paths.mgmtAllocationPolicyEvaluate(),
+        body: {
+          ranking_snapshot_id: opts.rankingSnapshotId,
+          rows: rows.map(allocationPolicyInputRowPayload),
+        },
+        mode: "live",
+      });
+      return adaptAllocationPolicyLines(raw) ?? [];
+    },
   },
 
   evolutionJournal: {

@@ -10,7 +10,7 @@ import {
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
-  Compass, Target, Eye, ShieldAlert, Trophy, BarChart3, PieChart,
+  Compass, Target, Eye, ShieldAlert, BarChart3, PieChart,
   KeyRound,
 } from "lucide-react";
 
@@ -35,11 +35,12 @@ export const ManagementLayout = () => {
     ]},
 
     // 2026-05-22 PM-12 — Performance & League group.
+    // PPL-ALLOC-006 — Persona League / Quarterly Ranking are now tabs inside
+    // Promotion & Allocation, not separate nav destinations (avoids exposing
+    // a duplicate standalone workflow page alongside the workbench).
     { label: t("groups.performanceLeague"), items: [
       { to: "/management/portfolio-book", label: t("nav.portfolioBook"), icon: PieChart },
       { to: "/management/performance-attribution", label: t("nav.performanceAttribution"), icon: BarChart3 },
-      { to: "/management/persona-league", label: t("nav.personaLeague"), icon: Trophy },
-      { to: "/management/quarterly-ranking", label: t("nav.quarterlyRanking"), icon: ClipboardCheck },
       { to: "/management/promotion-allocation", label: t("nav.promotionAllocation"), icon: PieChart },
     ]},
 
