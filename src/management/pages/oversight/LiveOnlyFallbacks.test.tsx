@@ -75,6 +75,13 @@ describe("live-only management page fallbacks", () => {
     expect(screen.queryByText("BTCUSD")).not.toBeInTheDocument();
   });
 
+  it("does not render seeded Quarterly Ranking rows", () => {
+    renderPage(<QuarterlyRankingPage />);
+
+    expect(screen.queryByText("Alpha Trader")).not.toBeInTheDocument();
+    expect(screen.queryByText("Risk Guard")).not.toBeInTheDocument();
+  });
+
   it("does not render raw NaN values on the Quarterly Ranking empty state", () => {
     const { container } = renderPage(<QuarterlyRankingPage />);
 

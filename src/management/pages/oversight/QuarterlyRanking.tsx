@@ -87,187 +87,6 @@ function daysUntil(dateText: string): string {
 const personaManageHref = (row: QuarterlyRankingRow): string =>
   row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
 
-// Seed generator that creates some degraded telemetry (null/NaN) rows for robust testing
-function getTestQuarterlyRanking(): QuarterlyRankingRow[] {
-  return [
-    {
-      quarter: "2026-Q3",
-      personaId: "alpha-trader",
-      personaName: "Alpha Trader",
-      currentRank: 1,
-      previousQuarterRank: 2,
-      rankDelta: 1,
-      tier: "S",
-      score: 93.5,
-      scoreBreakdown: {
-        pnlScore: 92, sharpeScore: 90, drawdownControlScore: 95, executionQualityScore: 96,
-        riskComplianceScore: 98, improvementScore: 88, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlQuarter: 890000,
-      sharpeQuarter: 2.65,
-      maxDrawdownQuarter: -0.018,
-      executionQualityScore: 96,
-      riskComplianceScore: 98,
-      improvementScore: 88,
-      humanInterventionPenalty: 0,
-      eligibility: "eligible",
-      recommendation: "promote_to_canary_candidate",
-      evidenceRefs: ["ev-q3-alpha-trader"],
-      links: { primary: { id: "alpha-trader", kind: "persona" } } as any,
-    },
-    {
-      quarter: "2026-Q3",
-      personaId: "risk-guard",
-      personaName: "Risk Guard",
-      currentRank: 2,
-      previousQuarterRank: 1,
-      rankDelta: -1,
-      tier: "S",
-      score: 90.8,
-      scoreBreakdown: {
-        pnlScore: 82, sharpeScore: 88, drawdownControlScore: 96, executionQualityScore: 88,
-        riskComplianceScore: 100, improvementScore: 78, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlQuarter: 540000,
-      sharpeQuarter: 2.45,
-      maxDrawdownQuarter: -0.012,
-      executionQualityScore: 88,
-      riskComplianceScore: 100,
-      improvementScore: 78,
-      humanInterventionPenalty: 0,
-      eligibility: "eligible",
-      recommendation: "increase_research_budget",
-      evidenceRefs: ["ev-q3-risk-guard"],
-      links: { primary: { id: "risk-guard", kind: "persona" } } as any,
-    },
-    {
-      quarter: "2026-Q3",
-      personaId: "fx-scout",
-      personaName: "FX Scout",
-      currentRank: 3,
-      previousQuarterRank: 3,
-      rankDelta: 0,
-      tier: "A",
-      score: 83.5,
-      scoreBreakdown: {
-        pnlScore: 84, sharpeScore: 82, drawdownControlScore: 85, executionQualityScore: 82,
-        riskComplianceScore: 90, improvementScore: 80, interventionPenalty: 2, hardPenalty: 0,
-      },
-      pnlQuarter: 620000,
-      sharpeQuarter: 2.1,
-      maxDrawdownQuarter: -0.024,
-      executionQualityScore: 82,
-      riskComplianceScore: 90,
-      improvementScore: 80,
-      humanInterventionPenalty: 2,
-      eligibility: "eligible",
-      recommendation: "no_change",
-      evidenceRefs: ["ev-q3-fx-scout"],
-      links: { primary: { id: "fx-scout", kind: "persona" } } as any,
-    },
-    {
-      // Mocking degraded / null metric row for validation
-      quarter: "2026-Q3",
-      personaId: "crypto-scout",
-      personaName: "Crypto Scout (Degraded Telemetry)",
-      currentRank: 4,
-      previousQuarterRank: 5,
-      rankDelta: 1,
-      tier: "B",
-      score: 75.2,
-      scoreBreakdown: {
-        pnlScore: 78, sharpeScore: 72, drawdownControlScore: 75, executionQualityScore: 80,
-        riskComplianceScore: 85, improvementScore: 70, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlQuarter: null as any, // Null metric simulation
-      sharpeQuarter: NaN, // Null metric simulation
-      maxDrawdownQuarter: -0.048,
-      executionQualityScore: 80,
-      riskComplianceScore: 85,
-      improvementScore: 70,
-      humanInterventionPenalty: 0,
-      eligibility: "eligible",
-      recommendation: "no_change",
-      evidenceRefs: [],
-      links: { primary: { id: "crypto-scout", kind: "persona" } } as any,
-    },
-    {
-      quarter: "2026-Q3",
-      personaId: "earnings-sniper",
-      personaName: "Earnings Sniper",
-      currentRank: 5,
-      previousQuarterRank: 4,
-      rankDelta: -1,
-      tier: "disqualified",
-      score: 48.0,
-      scoreBreakdown: {
-        pnlScore: 40, sharpeScore: 45, drawdownControlScore: 50, executionQualityScore: 55,
-        riskComplianceScore: 60, improvementScore: 40, interventionPenalty: 8, hardPenalty: 15,
-      },
-      pnlQuarter: -320000,
-      sharpeQuarter: -0.45,
-      maxDrawdownQuarter: -0.095,
-      executionQualityScore: 55,
-      riskComplianceScore: 60,
-      improvementScore: 40,
-      humanInterventionPenalty: 8,
-      eligibility: "disqualified",
-      disqualificationReason: "Unresolved critical incident",
-      recommendation: "suspend_persona",
-      evidenceRefs: ["ev-q3-earnings-sniper"],
-      links: { primary: { id: "earnings-sniper", kind: "persona" } } as any,
-    },
-    {
-      quarter: "2026-Q3",
-      personaId: "new-rookie",
-      personaName: "New Rookie",
-      currentRank: 6,
-      previousQuarterRank: 6,
-      rankDelta: 0,
-      tier: "watch",
-      score: 55.4,
-      scoreBreakdown: {
-        pnlScore: 60, sharpeScore: 55, drawdownControlScore: 58, executionQualityScore: 60,
-        riskComplianceScore: 70, improvementScore: 50, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlQuarter: 45000,
-      sharpeQuarter: 0.85,
-      maxDrawdownQuarter: -0.035,
-      executionQualityScore: 60,
-      riskComplianceScore: 70,
-      improvementScore: 50,
-      humanInterventionPenalty: 0,
-      eligibility: "insufficient_data",
-      disqualificationReason: "Below minTradingDays=45",
-      recommendation: "no_change",
-      evidenceRefs: ["ev-q3-new-rookie"],
-      links: { primary: { id: "new-rookie", kind: "persona" } } as any,
-    },
-  ];
-}
-
-function getTestFormula(): QuarterlyRankingFormula {
-  return {
-    formulaId: "quarterly-default-q3",
-    version: "2.0.0",
-    activeFrom: "2026-07-01",
-    weights: {
-      pnl: 0.25, sharpe: 0.20, drawdownControl: 0.15,
-      executionQuality: 0.15, riskCompliance: 0.15,
-      improvement: 0.05, humanInterventionPenalty: 0.05,
-    },
-    hardPenalties: {
-      riskPolicyViolation: 5,
-      unresolvedCriticalIncident: 10,
-      missingEvidence: 3,
-      capitalBreach: 15,
-    },
-    minDataRequirements: {
-      minTradingDays: 45, minTrades: 200,
-    },
-  };
-}
-
 type RecommendationUiState =
   | { kind: "submitting" }
   | { kind: "local_only"; result: RankingRecommendationSubmitResult }
@@ -298,7 +117,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
 
   // Fetch Live Data
-  const { data: rows } = useV5Live(
+  const { data: rows, loading: rowsLoading } = useV5Live(
     () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter), [currentQuarter],
   );
   const { data: formula } = useV5Live(
@@ -310,16 +129,12 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const isTelemetryDegraded = useFallback || paramSourceConfidence === "degraded";
 
   const rawRanking = useMemo(() => {
-    if (useFallback) {
-      return getTestQuarterlyRanking();
-    }
     return rows ?? [];
-  }, [rows, useFallback]);
+  }, [rows]);
 
   const f = useMemo(() => {
-    if (!formula) return useFallback ? getTestFormula() : EMPTY_FORMULA;
-    return formula;
-  }, [formula, useFallback]);
+    return formula ?? EMPTY_FORMULA;
+  }, [formula]);
 
   // Normalize live rows
   const ranking = useMemo(() => {
@@ -504,6 +319,17 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
           </div>
         </div>
       </Alert>
+
+      {useFallback && !rowsLoading ? (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}
+          </p>
+        </Card>
+      ) : null}
 
       {/* Snapshot Board */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

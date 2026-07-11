@@ -64,131 +64,7 @@ const deltaArrow = (d?: number) =>
 const personaManageHref = (row: PersonaLeagueRow): string =>
   row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
 
-// Seed generator that creates some degraded telemetry (null/NaN) rows for robust testing
-function getTestPersonaLeague(): PersonaLeagueRow[] {
-  return [
-    {
-      personaId: "alpha-trader",
-      personaName: "Alpha Trader",
-      owner: "research-1",
-      currentRank: 1,
-      previousRank: 2,
-      rankDelta: 1,
-      tier: "S",
-      score: 94.2,
-      scoreBreakdown: {
-        pnlScore: 92, sharpeScore: 90, drawdownControlScore: 95, executionQualityScore: 96,
-        riskComplianceScore: 98, improvementScore: 88, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlToday: 12500, pnl7d: 88000, pnl30d: 340000, pnlQuarter: 890000, pnlYtd: 1540000,
-      sharpe: 2.65, maxDrawdown: -0.018, winRate: 0.64, turnover: 1.8, slippageBps: 2.1,
-      fillRatio: 0.99, orderRejectRate: 0.001, riskPolicyViolations: 0, humanInterventions: 0,
-      sentinelFindings: 0, mutationCount: 8, improvedMutations: 6, degradedMutations: 0,
-      status: "active",
-      recommendedAction: "promote_to_canary_candidate",
-      links: { primary: { id: "alpha-trader", kind: "persona" } } as any,
-    },
-    {
-      personaId: "risk-guard",
-      personaName: "Risk Guard",
-      owner: "research-1",
-      currentRank: 2,
-      previousRank: 1,
-      rankDelta: -1,
-      tier: "S",
-      score: 91.5,
-      scoreBreakdown: {
-        pnlScore: 82, sharpeScore: 88, drawdownControlScore: 96, executionQualityScore: 88,
-        riskComplianceScore: 100, improvementScore: 78, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlToday: 4500, pnl7d: 34000, pnl30d: 180000, pnlQuarter: 540000, pnlYtd: 980000,
-      sharpe: 2.45, maxDrawdown: -0.012, winRate: 0.58, turnover: 1.2, slippageBps: 1.8,
-      fillRatio: 0.985, orderRejectRate: 0.002, riskPolicyViolations: 0, humanInterventions: 0,
-      sentinelFindings: 0, mutationCount: 5, improvedMutations: 3, degradedMutations: 1,
-      status: "active",
-      recommendedAction: "increase_research_budget",
-      links: { primary: { id: "risk-guard", kind: "persona" } } as any,
-    },
-    {
-      personaId: "fx-scout",
-      personaName: "FX Scout",
-      owner: "research-2",
-      currentRank: 3,
-      previousRank: 3,
-      rankDelta: 0,
-      tier: "A",
-      score: 84.8,
-      scoreBreakdown: {
-        pnlScore: 84, sharpeScore: 82, drawdownControlScore: 85, executionQualityScore: 82,
-        riskComplianceScore: 90, improvementScore: 80, interventionPenalty: 2, hardPenalty: 0,
-      },
-      pnlToday: 8200, pnl7d: 48000, pnl30d: 210000, pnlQuarter: 620000, pnlYtd: 1100000,
-      sharpe: 2.1, maxDrawdown: -0.024, winRate: 0.61, turnover: 2.2, slippageBps: 3.5,
-      fillRatio: 0.97, orderRejectRate: 0.005, riskPolicyViolations: 1, humanInterventions: 1,
-      sentinelFindings: 1, mutationCount: 12, improvedMutations: 7, degradedMutations: 2,
-      status: "active",
-      recommendedAction: "no_change",
-      links: { primary: { id: "fx-scout", kind: "persona" } } as any,
-    },
-    {
-      // Mocking degraded / null metric row for validation
-      personaId: "crypto-scout",
-      personaName: "Crypto Scout (Degraded Telemetry)",
-      owner: "research-2",
-      currentRank: 4,
-      previousRank: 5,
-      rankDelta: 1,
-      tier: "B",
-      score: 76.5,
-      scoreBreakdown: {
-        pnlScore: 78, sharpeScore: 72, drawdownControlScore: 75, executionQualityScore: 80,
-        riskComplianceScore: 85, improvementScore: 70, interventionPenalty: 0, hardPenalty: 0,
-      },
-      pnlToday: NaN, // Null metric simulation
-      pnl7d: 25000,
-      pnl30d: null as any, // Null metric simulation
-      pnlQuarter: 480000,
-      pnlYtd: 820000,
-      sharpe: null as any, // Null metric simulation
-      maxDrawdown: -0.048,
-      winRate: NaN, // Null metric simulation
-      turnover: 3.8,
-      slippageBps: 8.5,
-      fillRatio: 0.94,
-      orderRejectRate: 0.012,
-      riskPolicyViolations: 2,
-      humanInterventions: 0,
-      sentinelFindings: 3,
-      mutationCount: 18,
-      improvedMutations: 9,
-      degradedMutations: 4,
-      status: "active",
-      recommendedAction: "no_change",
-      links: { primary: { id: "crypto-scout", kind: "persona" } } as any,
-    },
-    {
-      personaId: "earnings-sniper",
-      personaName: "Earnings Sniper",
-      owner: "research-1",
-      currentRank: 5,
-      previousRank: 4,
-      rankDelta: -1,
-      tier: "suspended",
-      score: 52.0,
-      scoreBreakdown: {
-        pnlScore: 40, sharpeScore: 45, drawdownControlScore: 50, executionQualityScore: 55,
-        riskComplianceScore: 60, improvementScore: 40, interventionPenalty: 8, hardPenalty: 15,
-      },
-      pnlToday: -18000, pnl7d: -45000, pnl30d: -120000, pnlQuarter: -320000, pnlYtd: -180000,
-      sharpe: -0.45, maxDrawdown: -0.095, winRate: 0.42, turnover: 4.5, slippageBps: 12.0,
-      fillRatio: 0.91, orderRejectRate: 0.035, riskPolicyViolations: 4, humanInterventions: 8,
-      sentinelFindings: 5, mutationCount: 14, improvedMutations: 2, degradedMutations: 8,
-      status: "suspended",
-      recommendedAction: "suspend_persona",
-      links: { primary: { id: "earnings-sniper", kind: "persona" } } as any,
-    },
-  ];
-}
+
 
 type RecommendationUiState =
   | { kind: "submitting" }
@@ -229,11 +105,8 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   const isTelemetryDegraded = useFallback || paramSourceConfidence === "degraded";
 
   const rows = useMemo(() => {
-    if (useFallback) {
-      return getTestPersonaLeague();
-    }
     return apiData ?? [];
-  }, [apiData, useFallback]);
+  }, [apiData]);
 
   const [preset, setPreset] = useState<PersonaLeaguePreset>("overall");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -402,6 +275,17 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           </div>
         </div>
       </Alert>
+
+      {useFallback && !apiLoading ? (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}
+          </p>
+        </Card>
+      ) : null}
 
       {/* Telemetry & Evidence Dashboard */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
