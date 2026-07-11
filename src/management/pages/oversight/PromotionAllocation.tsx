@@ -4,19 +4,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonaLeaguePage } from "./PersonaLeague";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
 import { CapitalPoolsList, RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
+import { RealAllocationPanel } from "./RealAllocationPanel";
+import { RebalanceProposalWorkbench } from "./RebalanceProposalWorkbench";
+import { EmergencyActionsPanel } from "./EmergencyActionsPanel";
 
-type PromotionAllocationTab = "paper-candidates" | "real-ranking" | "quarterly-capital" | "formula-policy";
+type PromotionAllocationTab =
+  | "paper-candidates"
+  | "real-ranking"
+  | "quarterly-capital"
+  | "emergency-actions"
+  | "formula-policy";
 
 const TABS: readonly PromotionAllocationTab[] = [
   "paper-candidates",
   "real-ranking",
   "quarterly-capital",
+  "emergency-actions",
   "formula-policy",
 ] as const;
 
 function normalizeTab(value: string | null): PromotionAllocationTab {
   if (value === "real-ranking" || value === "league" || value === "persona-league") return "real-ranking";
   if (value === "quarterly-capital" || value === "rebalance" || value === "quarterly-rebalance") return "quarterly-capital";
+  if (value === "emergency-actions" || value === "emergency" || value === "containment") return "emergency-actions";
   if (value === "formula-policy" || value === "ranking-formulas" || value === "formula") return "formula-policy";
   return "paper-candidates";
 }
@@ -51,12 +61,17 @@ export const PromotionAllocationPage = () => {
         <TabsContent value="paper-candidates" className="m-0">
           <QuarterlyRankingPage embedded />
         </TabsContent>
-        <TabsContent value="real-ranking" className="m-0">
+        <TabsContent value="real-ranking" className="m-0 space-y-6">
           <PersonaLeaguePage embedded />
+          <RealAllocationPanel />
         </TabsContent>
         <TabsContent value="quarterly-capital" className="m-0 space-y-6">
           <CapitalPoolsList />
+          <RebalanceProposalWorkbench />
           <RebalancesList />
+        </TabsContent>
+        <TabsContent value="emergency-actions" className="m-0">
+          <EmergencyActionsPanel />
         </TabsContent>
         <TabsContent value="formula-policy" className="m-0">
           <RankingFormulasList />

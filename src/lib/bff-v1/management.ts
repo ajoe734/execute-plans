@@ -46,6 +46,13 @@ import type {
 import type {
   PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
 } from "@/lib/v5/management/performanceAttribution";
+// PPL-ALLOC-006 imports
+import {
+  adaptRealAllocationLines, type AllocationPolicyInputRow, type RealAllocationLine,
+} from "@/lib/v5/management/realAllocation";
+import {
+  adaptRebalanceProposal, adaptRebalanceProposals, type RebalanceProposal, type RebalanceProposalLine,
+} from "@/lib/v5/management/rebalanceProposals";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -317,6 +324,16 @@ export interface ManagementPersonaFleetRow {
   runtimeBindingId?: string;
   deploymentStage?: string;
   capitalMode?: string;
+  /** PPL-ALLOC-003 capital-binding projection: "paper" | "canary" | "live" | "none". */
+  stage?: string;
+  /** PPL-ALLOC-003: "paper_ledger" | "canary_sleeve" | "live_sleeve" | "capital_pool" | "unbound". */
+  capitalScope?: string;
+  capitalScopeId?: string;
+  capitalSleeveId?: string;
+  currentWeight?: number;
+  targetWeight?: number;
+  /** PPL-ALLOC-003: "active" | "isolated" | "missing" | other binding status values. */
+  bindingState?: string;
   paperLedgerId?: string;
   paperCapitalPoolId?: string;
   paperLedger?: ManagementPersonaFleetPaperLedger;
@@ -2186,6 +2203,13 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     ?? runtimeBinding.runtimeBindingId
     ?? runtimeBinding.runtime_binding_id,
   );
+  const stage = asOptionalString(value.stage);
+  const capitalScope = asOptionalString(value.capitalScope ?? value.capital_scope);
+  const capitalScopeId = asOptionalString(value.capitalScopeId ?? value.capital_scope_id);
+  const capitalSleeveId = asOptionalString(value.capitalSleeveId ?? value.capital_sleeve_id);
+  const currentWeight = optionalFiniteNumber(value.currentWeight ?? value.current_weight);
+  const targetWeight = optionalFiniteNumber(value.targetWeight ?? value.target_weight);
+  const bindingState = asOptionalString(value.bindingState ?? value.binding_state);
   const reviewId = asOptionalString(value.reviewId ?? value.review_id ?? review.id);
   const reviewType = asOptionalString(value.reviewType ?? value.review_type ?? review.type);
   const reviewStatus = asOptionalString(value.reviewStatus ?? value.review_status ?? review.status);
@@ -2233,6 +2257,13 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     runtimeBindingId,
     deploymentStage,
     capitalMode,
+    stage,
+    capitalScope,
+    capitalScopeId,
+    capitalSleeveId,
+    currentWeight,
+    targetWeight,
+    bindingState,
     paperLedgerId,
     paperCapitalPoolId,
     paperLedger: paperLedgerId ? {
@@ -2386,6 +2417,55 @@ export interface RankingRecommendationSubmitResult {
   replayed?: boolean;
   liveCapitalMutation: false;
   governanceDestinations: string[];
+}
+
+// ---------- PPL-ALLOC-006 Real allocation policy + rebalance proposals ----------
+
+export const rebalanceProposalDetailHref = (rebalanceId: string): string =>
+  `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(rebalanceId)}`;
+
+export interface RebalanceProposalCreateInput {
+  capitalPoolId: string;
+  rankingSnapshotId?: string;
+  lines: RebalanceProposalLine[];
+  simulation?: Record<string, unknown>;
+  constraints?: Record<string, unknown>;
+  rollbackTarget?: Record<string, unknown>;
+  approvalRef?: string;
+  reason?: string;
+  emergency?: boolean;
+}
+
+export interface RebalanceProposalCreateResult {
+  ok: true;
+  persisted: boolean;
+  status: string;
+  idempotencyKey: string;
+  rebalanceId?: string;
+  detailHref?: string;
+}
+
+function rebalanceProposalCreatePayload(input: RebalanceProposalCreateInput): Record<string, unknown> {
+  return {
+    capital_pool_id: input.capitalPoolId,
+    ranking_snapshot_id: input.rankingSnapshotId,
+    lines: input.lines.map((line) => ({
+      persona_id: line.personaId,
+      stage: line.stage,
+      capital_scope: line.capitalScope,
+      current_weight: line.currentWeight,
+      target_weight: line.targetWeight,
+      delta: line.delta,
+      cap_reasons: line.capReasons,
+      evidence_refs: line.evidenceRefs,
+    })),
+    simulation: input.simulation ?? {},
+    constraints: input.constraints ?? {},
+    rollback_target: input.rollbackTarget ?? {},
+    approval_ref: input.approvalRef,
+    reason: input.reason,
+    emergency: input.emergency ?? false,
+  };
 }
 
 const asOptionalString = (raw: unknown): string | undefined => {
@@ -3649,6 +3729,66 @@ export const mgmt = {
         personaFleetDemoFallbackDisabled,
         adaptManagementPersonaFleetLiveOnly,
       ),
+  },
+
+  // PPL-ALLOC-006 — stage-aware real allocation policy preview. Compute-only:
+  // never mutates a capital binding, so it is strict-live/no-seed like Human
+  // Inbox rather than write-gated like a command.
+  allocationPolicy: {
+    evaluateLiveOnly: (
+      rows: AllocationPolicyInputRow[],
+      rankingSnapshotId?: string,
+    ): Promise<RealAllocationLine[] | undefined> =>
+      liveOnlyRead<RealAllocationLine[]>(
+        {
+          method: "POST",
+          path: paths.mgmtAllocationPolicyEvaluate(),
+          body: { rows, ranking_snapshot_id: rankingSnapshotId },
+        },
+        adaptRealAllocationLines,
+      ),
+  },
+
+  // PPL-ALLOC-006 — rebalance proposals (quarterly + emergency containment).
+  rebalanceProposals: {
+    listLiveOnly: (poolId?: string): Promise<RebalanceProposal[]> =>
+      liveOnlyList<RebalanceProposal>(
+        { method: "GET", path: paths.rebalances(), query: poolId ? { pool_id: poolId } : undefined },
+        adaptRebalanceProposals,
+      ),
+    getLiveOnly: (id: string): Promise<RebalanceProposal | undefined> =>
+      liveOnlyRead<RebalanceProposal>(
+        { method: "GET", path: paths.rebalance(id) },
+        adaptRebalanceProposal,
+      ),
+    create: async (
+      input: RebalanceProposalCreateInput,
+      opts: { idempotencyKey?: string } = {},
+    ): Promise<RebalanceProposalCreateResult> => {
+      const idempotencyKey = opts.idempotencyKey ?? mintIdempotencyKey();
+      const writeAllowed = await liveWriteGated();
+      if (!writeAllowed) {
+        return { ok: true, persisted: false, status: "write_disabled", idempotencyKey };
+      }
+      const raw = await bffFetch<unknown>({
+        method: "POST",
+        path: paths.rebalances(),
+        body: rebalanceProposalCreatePayload(input),
+        idempotencyKey,
+        mode: "live",
+      });
+      const record = isObject(raw) ? raw : {};
+      const rebalanceId = asOptionalString(record.rebalance_id ?? record.rebalanceId);
+      const status = asOptionalString(record.status) ?? "submitted";
+      return {
+        ok: true,
+        persisted: true,
+        status,
+        idempotencyKey,
+        rebalanceId,
+        detailHref: rebalanceId ? rebalanceProposalDetailHref(rebalanceId) : undefined,
+      };
+    },
   },
 
   evolutionJournal: {

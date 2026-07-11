@@ -231,4 +231,7 @@ export const paths = {
   },
   mgmtOperationsReadModel: (personaId: string, period?: string) =>
     `${BASE}/management/operations-read-model/${enc(personaId)}${period ? `?period=${enc(period)}` : ""}`,
+
+  // ---- 2026-07-07 PPL-ALLOC-006 — real allocation policy + rebalance proposals. ----
+  mgmtAllocationPolicyEvaluate: () => `${BASE}/management/allocation-policy/evaluate`,
 } as const;
