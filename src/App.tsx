@@ -56,16 +56,6 @@ const PerformanceAttributionRoute = lazyNamedRoute(
   "PerformanceAttributionRoute",
   "Performance attribution",
 );
-const PersonaLeagueRoute = lazyNamedRoute(
-  () => import("@/routes/management/performance"),
-  "PersonaLeagueRoute",
-  "Persona league",
-);
-const QuarterlyRankingRoute = lazyNamedRoute(
-  () => import("@/routes/management/performance"),
-  "QuarterlyRankingRoute",
-  "Quarterly ranking",
-);
 
 const Ep5CanaryReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "Ep5CanaryReadinessRoute", "EP5 readiness");
 const BrokerLiveReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BrokerLiveReadinessRoute", "Broker live readiness");
@@ -230,8 +220,10 @@ const App = () => (
 
                 <Route path="portfolio-book" element={<PortfolioBookRoute />} />
                 <Route path="promotion-allocation" element={<PromotionAllocationRoute />} />
-                <Route path="persona-league" element={<PersonaLeagueRoute />} />
-                <Route path="quarterly-ranking" element={<QuarterlyRankingRoute />} />
+                {/* PPL-ALLOC-006 — real ranking/paper candidates now live only as
+                    Promotion & Allocation tabs; these are redirects, not pages. */}
+                <Route path="persona-league" element={<LegacyPromotionAllocationRedirect tab="real-ranking" />} />
+                <Route path="quarterly-ranking" element={<LegacyPromotionAllocationRedirect tab="paper-candidates" />} />
                 <Route path="performance-attribution" element={<PerformanceAttributionRoute />} />
 
                 <Route path="control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />

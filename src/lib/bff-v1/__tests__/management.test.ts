@@ -1123,6 +1123,72 @@ describe("mgmt façade (PM-Live)", () => {
     await expect(mgmt.personaFleet.get()).rejects.toThrow("demo fallback is disabled");
   });
 
+  // PPL-ALLOC-006 — allocationPolicy.evaluate posts the caller's rows to the
+  // PPL-ALLOC-004 policy endpoint and adapts the returned lines; it never
+  // computes target weights or cap reasons itself.
+  it("posts allocation-policy rows and adapts the returned target-weight lines", async () => {
+    let requestUrl = "";
+    let requestBody: Record<string, unknown> = {};
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      requestUrl = String(input);
+      requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return jsonResponse({
+        data: {
+          ranking_snapshot_id: "snap-2026-q3",
+          lines: [{
+            persona_id: "persona-canary-alpha",
+            stage: "canary_running",
+            capital_scope: "real",
+            capital_sleeve_id: "sleeve-canary-01",
+            current_weight: 0.03,
+            target_weight: 0.05,
+            delta: 0.02,
+            rank_score: 0.42,
+            capacity_adjusted_score: 0.42,
+            recommendation: "canary_to_live_review",
+            cap_reasons: ["canary_cap"],
+            exclusions: [],
+            evidence_refs: ["evidence:canary-alpha-q3"],
+            requires_human_approval: true,
+          }],
+          applied: false,
+        },
+      });
+    });
+
+    const lines = await mgmt.allocationPolicy.evaluate([{
+      personaId: "persona-canary-alpha",
+      stage: "canary_running",
+      capitalScope: "real",
+      capitalSleeveId: "sleeve-canary-01",
+      currentWeight: 0.03,
+      pnlScore: 80,
+    }], { rankingSnapshotId: "snap-2026-q3" });
+
+    expect(requestUrl).toMatch(/management\/allocation-policy\/evaluate$/);
+    expect(requestBody).toMatchObject({
+      ranking_snapshot_id: "snap-2026-q3",
+      rows: [expect.objectContaining({ persona_id: "persona-canary-alpha", current_weight: 0.03, pnl_score: 80 })],
+    });
+    expect(lines).toEqual([{
+      personaId: "persona-canary-alpha",
+      stage: "canary_running",
+      capitalScope: "real",
+      capitalPoolId: undefined,
+      capitalSleeveId: "sleeve-canary-01",
+      currentWeight: 0.03,
+      targetWeight: 0.05,
+      delta: 0.02,
+      rankScore: 0.42,
+      capacityAdjustedScore: 0.42,
+      recommendation: "canary_to_live_review",
+      capReasons: ["canary_cap"],
+      exclusions: [],
+      evidenceRefs: ["evidence:canary-alpha-q3"],
+      requiresHumanApproval: true,
+    }]);
+  });
+
   it("adapts Pathreon management fleet envelopes into UI-safe rows", () => {
     const rows = adaptManagementPersonaFleet({
       data: {
@@ -1320,6 +1386,71 @@ describe("mgmt façade (PM-Live)", () => {
       canDeploy: false,
     });
     expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
+  });
+
+  // PPL-ALLOC-006 — PPL-ALLOC-003 read model adds current/target weight,
+  // capital sleeve, and binding state to the persona-fleet row; the fleet
+  // adapter must surface them so the Real ranking tab can render them.
+  it("adapts real-allocation capital binding fields from flat snake_case keys", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        persona_fleet: [{
+          persona_id: "persona-canary-alpha",
+          persona_name: "Canary Alpha",
+          owner: "pathreon-management",
+          deployment_stage: "canary_running",
+          capital_mode: "canary",
+          capital_scope: "canary_sleeve",
+          capital_scope_id: "sleeve-canary-01",
+          capital_sleeve_id: "sleeve-canary-01",
+          current_weight: 0.03,
+          target_weight: 0.04,
+          binding_state: "bound",
+          updated_at: "2026-07-11T00:00:00Z",
+          status: "active",
+        }],
+      },
+    });
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-canary-alpha",
+      capitalScope: "canary_sleeve",
+      capitalScopeId: "sleeve-canary-01",
+      capitalSleeveId: "sleeve-canary-01",
+      currentWeight: 0.03,
+      targetWeight: 0.04,
+      bindingState: "bound",
+    });
+  });
+
+  it("adapts real-allocation capital binding fields from the nested capital_binding object", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        persona_fleet: [{
+          persona_id: "persona-live-beta",
+          persona_name: "Live Beta",
+          owner: "pathreon-management",
+          deployment_stage: "live_running",
+          capital_mode: "live",
+          capital_binding: {
+            capital_scope: "live_sleeve",
+            capital_sleeve_id: "sleeve-live-02",
+            current_weight: 0.12,
+            target_weight: 0.15,
+            binding_state: "bound",
+          },
+          updated_at: "2026-07-11T00:00:00Z",
+          status: "active",
+        }],
+      },
+    });
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-live-beta",
+      capitalScope: "live_sleeve",
+      capitalSleeveId: "sleeve-live-02",
+      currentWeight: 0.12,
+      targetWeight: 0.15,
+      bindingState: "bound",
+    });
   });
 
   it("normalizes legacy deployed fleet rows to paper-running when live capital is absent", () => {

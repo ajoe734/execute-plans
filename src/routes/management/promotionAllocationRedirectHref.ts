@@ -2,6 +2,7 @@ export type PromotionAllocationWorkbenchTab =
   | "paper-candidates"
   | "real-ranking"
   | "quarterly-capital"
+  | "emergency-actions"
   | "formula-policy";
 
 export interface PromotionAllocationRedirectInput {
