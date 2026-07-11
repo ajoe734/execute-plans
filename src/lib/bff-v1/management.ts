@@ -113,6 +113,13 @@ export interface ManagementPortfolioExposureItem {
   telemetryAvailable: boolean;
 }
 
+export interface PortfolioExposureFilters {
+  capitalPoolId?: string;
+  personaId?: string;
+  runtimeId?: string;
+  period?: string;
+}
+
 export interface ManagementPortfolioExposureMonitor {
   summary: {
     exposureCount: number;
@@ -4049,9 +4056,18 @@ export const mgmt = {
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<HoldingRow>, seedFn),
       ),
-    exposureLiveOnly: (): Promise<ManagementPortfolioExposureMonitor | undefined> =>
+    exposureLiveOnly: (filters: PortfolioExposureFilters = {}): Promise<ManagementPortfolioExposureMonitor | undefined> =>
       liveOnlyRead<ManagementPortfolioExposureMonitor>(
-        { method: "GET", path: paths.mgmtPortfolioExposure() },
+        {
+          method: "GET",
+          path: paths.mgmtPortfolioExposure(),
+          query: {
+            capital_pool_id: filters.capitalPoolId,
+            persona_id: filters.personaId,
+            runtime_id: filters.runtimeId,
+            period: filters.period,
+          },
+        },
         adaptPortfolioExposureMonitor,
       ),
     monitorLiveOnly: (filters: PortfolioHoldingFilters): Promise<PortfolioHoldingsMonitor | undefined> =>
