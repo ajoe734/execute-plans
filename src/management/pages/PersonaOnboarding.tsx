@@ -1,4 +1,4 @@
-// Persona Onboarding Wizard — 5-step orchestrator.
+// Persona Setup Repair — completion wizard for incomplete paper bundles only.
 // Spec: docs/04/pantheon_persona_onboarding_wizard_2026-05-28/PERSONA_ONBOARDING_WIZARD_SPEC.md §7
 //
 // Every stage call goes through `withWriteFallback` so any 404/405/501 from the BFF
@@ -134,8 +134,8 @@ export default function PersonaOnboarding() {
     <section className="p-6 max-w-3xl mx-auto space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{t("persona.onboarding.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("persona.onboarding.subtitle")}</p>
+          <h1 className="text-2xl font-semibold">Paper Persona Setup Repair</h1>
+          <p className="text-sm text-muted-foreground">Complete only the failed or missing setup steps for this paper persona.</p>
           <p className="text-xs text-muted-foreground mt-1">
             {persona?.name ?? id} · {t("persona.onboarding.stepProgress", { current: step, total: 5 })}
           </p>

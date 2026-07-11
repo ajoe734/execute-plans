@@ -1,6 +1,5 @@
 import { createPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import { writeOverlay } from "@/lib/bff/writeOverlay";
-import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
 
@@ -20,20 +19,6 @@ export interface CreateEntityResult {
   error?: { status?: number; code?: string; message?: string };
 }
 
-const NOT_IMPL_STATUSES = new Set([404, 405, 501]);
-const NOT_IMPL_CODES = new Set(["NOT_IMPLEMENTED", "RESOURCE_NOT_FOUND", "METHOD_NOT_ALLOWED", "ROUTE_NOT_FOUND"]);
-
-function isNotImplementedish(err: unknown): { yes: boolean; status?: number; code?: string; message?: string } {
-  if (!err || typeof err !== "object") return { yes: false };
-  const e = err as { status?: number; code?: string; message?: string; error?: { code?: string; message?: string } };
-  const status = e.status;
-  const code = e.code ?? e.error?.code;
-  const message = e.message ?? e.error?.message;
-  if (status && NOT_IMPL_STATUSES.has(status)) return { yes: true, status, code, message };
-  if (code && NOT_IMPL_CODES.has(code)) return { yes: true, status, code, message };
-  return { yes: false, status, code, message };
-}
-
 export async function createEntityFromInput<K extends CreatableEntity>(
   entity: K,
   input: CreateInputMap[K],
@@ -43,37 +28,13 @@ export async function createEntityFromInput<K extends CreatableEntity>(
 
   if (entity === "persona") {
     const personaInput = input as CreateInputMap["persona"];
-    try {
-      const data = await createPersona({
-        ...built,
-        description: personaInput.description,
-        memo: personaInput.memo,
-        initialMode: personaInput.initialMode ?? "paper",
-        executionMode: "paper",
-        capitalMode: "paper",
-        deploymentStage: "paper",
-        liveCapitalEnabled: false,
-        orderSideEffectsAllowed: false,
-        capitalSideEffectsAllowed: false,
-      }, { idempotencyKey: opts.idempotencyKey });
-      return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
-    } catch (err) {
-      const m = isNotImplementedish(err);
-      if (!m.yes) {
-        // Real error: bubble up so drawer can show typed envelope.
-        throw err;
-      }
-      // BFF write degraded → overlay fallback (mirrors other entities).
-      writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
-      try { liveStatus.recordWriteDegraded("/bff/personas", m.code ?? `HTTP ${m.status}`); } catch { /* ignore */ }
-      return {
-        entity,
-        data: built,
-        persistence: "overlay",
-        degraded: true,
-        error: { status: m.status, code: m.code, message: m.message ?? "persona BFF write degraded — saved locally (30min)" },
-      };
-    }
+    const data = await createPersona({
+      ...built,
+      description: personaInput.description,
+      memo: personaInput.memo,
+      initialMode: personaInput.initialMode,
+    }, { idempotencyKey: opts.idempotencyKey });
+    return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
   }
 
   writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
