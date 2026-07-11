@@ -32,7 +32,7 @@ export async function createEntityFromInput<K extends CreatableEntity>(
       ...built,
       description: personaInput.description,
       memo: personaInput.memo,
-      initialMode: personaInput.initialMode,
+      initialMode: personaInput.initialMode ?? "paper",
     }, { idempotencyKey: opts.idempotencyKey });
     return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
   }
