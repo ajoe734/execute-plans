@@ -22,7 +22,8 @@ import type { PersonaIntentTrace } from "@/lib/v5/management/personaIntent";
 import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
 import type {
-  PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
+  PortfolioSummary, CapitalPoolSummaryRow, HoldingRow, PortfolioHoldingFilters,
+  PortfolioHoldingsMonitor, PortfolioHoldingMonitorRow, PortfolioIncident,
 } from "@/lib/v5/management/portfolio";
 import type { PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
 import type {
@@ -42,6 +43,57 @@ const unwrap = (raw: unknown): unknown =>
 
 const asArray = <T>(raw: unknown): T[] | null =>
   Array.isArray(raw) ? (raw as T[]) : null;
+
+const asNumber = (value: unknown): number | undefined => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+const asRecord = (value: unknown): Record<string, unknown> => isObject(value) ? value : {};
+const stringRecord = (value: unknown): Record<string, string> => Object.fromEntries(
+  Object.entries(asRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+);
+
+export function adaptPortfolioHoldingsMonitor(raw: unknown): PortfolioHoldingsMonitor | null {
+  if (!isObject(raw)) return null;
+  const data = asRecord(raw.data);
+  if (!Array.isArray(data.items) || !isObject(data.summary)) return null;
+  const summary = data.summary;
+  const meta = asRecord(raw.meta);
+  const surfaces = asRecord(meta.surfaces);
+  const surface = asRecord(surfaces.portfolio_book_holdings);
+  const issueList = (value: unknown) => Array.isArray(value) ? value.map((issue) => ({
+    code: String(asRecord(issue).code ?? "UNKNOWN_SOURCE_ISSUE"),
+    message: String(asRecord(issue).message ?? asRecord(issue).code ?? "Unknown source issue"),
+  })) : [];
+  const items: PortfolioHoldingMonitorRow[] = data.items.map((value) => {
+    const row = asRecord(value);
+    const scope = asRecord(row.capital_scope);
+    return {
+      holdingId: String(row.holding_id ?? "unknown-holding"), runtimeId: String(row.runtime_id ?? "") || undefined,
+      personaId: String(row.persona_id ?? "") || undefined, capitalPoolId: String(row.capital_pool_id ?? "") || undefined,
+      brokerId: String(row.broker_id ?? "") || undefined, symbol: String(row.symbol ?? "—"),
+      quantity: asNumber(row.quantity), marketValue: asNumber(row.market_value), unrealizedPnl: asNumber(row.unrealized_pnl),
+      deploymentStage: String(row.deployment_stage ?? "unknown"), sourceStatus: String(row.source_status ?? "unavailable"),
+      telemetryStale: row.telemetry_stale === true, riskState: String(row.risk_state ?? "unknown"),
+      sourceIssues: issueList(row.source_issues),
+      capitalScope: { stage: String(scope.stage ?? row.deployment_stage ?? "unknown"), scopeKind: String(scope.scope_kind ?? "unclassified") as PortfolioHoldingMonitorRow["capitalScope"]["scopeKind"], scopeId: String(scope.scope_id ?? "") || undefined },
+      links: stringRecord(row.links),
+    };
+  });
+  const incidents: PortfolioIncident[] = (Array.isArray(meta.incidents) ? meta.incidents : []).map((value) => {
+    const incident = asRecord(value); const identity = asRecord(incident.identity);
+    return { id: String(incident.id ?? "unknown-incident"), holdingId: String(identity.portfolio_id ?? "") || undefined,
+      severity: String(incident.severity ?? "unknown"), message: String(incident.message ?? "Source coverage incident"),
+      riskState: String(incident.risk_state ?? "unknown"), sourceStatus: String(incident.source_status ?? "unavailable"),
+      sourceIssues: issueList(incident.source_issues), links: stringRecord(incident.links) };
+  });
+  const coverage = asRecord(summary.source_coverage);
+  return { items, incidents, surfaceStatus: String(surface.status ?? "unavailable"), surfaceMessage: String(surface.message ?? "") || undefined,
+    coverage: { holdingCount: Number(summary.holding_count ?? items.length), sourceRowCount: Number(coverage.source_row_count ?? 0),
+      runtimeCount: Number(coverage.runtime_count ?? 0), telemetryRuntimeCount: Number(coverage.telemetry_runtime_count ?? 0),
+      staleRowCount: Number(coverage.stale_row_count ?? 0), missingBindingCount: Number(coverage.missing_binding_count ?? 0),
+      degradedSourceCount: Number(coverage.degraded_source_count ?? 0), incidentCount: Number(summary.incident_count ?? incidents.length) } };
+}
 
 export type ManagementOodaStage = "Observe" | "Orient" | "Decide" | "Act";
 export type ManagementAutonomyMode = "manual" | "supervised" | "autonomous";
@@ -618,6 +670,11 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtPortfolioHoldings() },
         async () => seedFn(),
         safeAdapt(adaptArrayPassthrough<HoldingRow>, seedFn),
+      ),
+    monitor: (filters: PortfolioHoldingFilters, seedFn: () => PortfolioHoldingsMonitor): Promise<PortfolioHoldingsMonitor> =>
+      withLiveOrMock<PortfolioHoldingsMonitor>(
+        { method: "GET", path: paths.mgmtPortfolioHoldings({ deployment_stage: filters.deploymentStage, broker_id: filters.brokerId, runtime_id: filters.runtimeId, source_status: filters.sourceStatus, stale_telemetry: filters.staleTelemetry, risk_state: filters.riskState }) },
+        async () => seedFn(), safeAdapt(adaptPortfolioHoldingsMonitor, seedFn),
       ),
   },
 
