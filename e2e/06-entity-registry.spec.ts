@@ -210,7 +210,10 @@ const REGISTRIES: RegistryFixture[] = [
   makeRegistry({
     key: "capital-pools",
     label: "B06 Core Capital Pool",
-    managementPath: "/management/capital",
+    // MGMT-PERF-IA-001: bare /management/capital now redirects to the
+    // Performance Center exposure tab (ROUTE_MIGRATION_MATRIX.md); the
+    // capital-pools list itself lives on Governance Decisions' capital tab.
+    managementPath: "/management/governance-decisions?tab=capital",
     listPath: "/bff/capital-pools",
     surface: "capital_pools",
     entityType: "capital-pool",
@@ -296,7 +299,9 @@ const REGISTRIES: RegistryFixture[] = [
   makeRegistry({
     key: "rebalances",
     label: "B06 Rebalance Plan",
-    managementPath: "/management/rebalance",
+    // MGMT-PERF-IA-001: bare /management/rebalance now redirects to
+    // Governance Decisions' capital tab (ROUTE_MIGRATION_MATRIX.md).
+    managementPath: "/management/governance-decisions?tab=capital",
     listPath: "/bff/rebalances",
     surface: "rebalances",
     entityType: "rebalance",

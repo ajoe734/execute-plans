@@ -512,7 +512,7 @@ function buildPerformanceSourceDetails(
   return [...details, ...holdingDetails];
 }
 
-export const PerformanceAttributionPage = () => {
+export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: boolean } = {}) => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
@@ -607,8 +607,8 @@ export const PerformanceAttributionPage = () => {
   };
 
   return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.attribution.title")}>
-      <ManagementOperationsNav />
+    <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.attribution.title")}>
+      {!embedded ? <ManagementOperationsNav /> : null}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.attribution.title")}</h1>

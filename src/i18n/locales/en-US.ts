@@ -161,6 +161,11 @@ export default {
     personaLeague: "Persona League",
     quarterlyRanking: "Quarterly Ranking",
     performanceAttribution: "Performance Attribution",
+    // MGMT-PERF-IA-001 canonical centers.
+    performanceCenter: "Performance Center",
+    rankingsCenter: "Rankings Center",
+    governanceDecisions: "Governance Decisions",
+    llmProviderAuth: "LLM Provider Auth",
 
   },
   groups: {
@@ -184,6 +189,50 @@ export default {
     liveReadiness: "Live Readiness",
     advancedRegistry: "Advanced Registry",
     performanceLeague: "Performance & League",
+    // MGMT-PERF-IA-001 — TARGET_INFORMATION_ARCHITECTURE.md sidebar groups.
+    operationalOverview: "Operational Overview",
+    performanceAndRisk: "Performance & Risk",
+    rankingAndGovernance: "Ranking & Governance",
+    researchAndEvolution: "Research & Evolution",
+    registryAndLineage: "Registry & Lineage",
+    executionOperations: "Execution Operations",
+    liveReadinessAndSystem: "Live Readiness & System",
+  },
+
+  performanceCenter: {
+    title: "Performance Center",
+    subtitle: "Portfolio exposure, formal attribution, and holdings in one governed workflow.",
+    tabs: {
+      overview: "Overview",
+      attribution: "Attribution",
+      exposure: "Exposure & Holdings",
+    },
+  },
+  rankingsCenter: {
+    title: "Rankings Center",
+    subtitle: "Rolling operational comparison and quarterly governance evaluation snapshots.",
+    tabs: {
+      rolling: "Rolling",
+      quarterly: "Quarterly",
+    },
+  },
+  governanceDecisions: {
+    title: "Governance Decisions",
+    subtitle: "Recommendations, capital proposals, and ranking policy consuming immutable ranking evidence.",
+    tabs: {
+      recommendations: "Recommendations",
+      capital: "Capital",
+      policy: "Policy",
+    },
+    recommendationsPending: {
+      title: "Recommendations consolidation pending",
+      body: "A dedicated recommendation → review → apply-receipt lifecycle for this tab lands with MGMT-PERF-IA-005. Until then, use the links below.",
+      openGovernanceQueue: "Open Governance Queue",
+      openLegacyPromotionAllocation: "Open legacy Promotion & Allocation",
+    },
+  },
+  commandPalette: {
+    sections: "Sections",
   },
 
   promotionAllocation: {

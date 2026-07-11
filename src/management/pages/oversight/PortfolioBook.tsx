@@ -84,7 +84,7 @@ const CAPITAL_SCOPE_LABEL: Record<string, string> = {
 const scopeLabel = (kind: string, id?: string) =>
   `${CAPITAL_SCOPE_LABEL[kind] ?? CAPITAL_SCOPE_LABEL.unclassified}${id ? ` · ${id}` : ""}`;
 
-export const PortfolioBookPage = () => {
+export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } = {}) => {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
 
@@ -114,8 +114,8 @@ export const PortfolioBookPage = () => {
   const incidentsByHolding = new Map(monitor.incidents.map((incident) => [incident.holdingId, incident]));
 
   return (
-    <section className="p-6 space-y-6" aria-label={t("mgmt.portfolio.title")}>
-      <ManagementOperationsNav />
+    <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.portfolio.title")}>
+      {!embedded ? <ManagementOperationsNav /> : null}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>
