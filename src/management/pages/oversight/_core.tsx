@@ -519,11 +519,8 @@ export const PersonaFleetPage = () => {
         return isNonProductionPersonaFleetRow(matched) ? "non-production" : "production";
       }
     }
-    if (productionCount === 0 && nonProductionCount > 0) {
-      return "non-production";
-    }
     return "production";
-  }, [tabParam, personaFocus, rows, productionCount, nonProductionCount]);
+  }, [tabParam, personaFocus, rows]);
 
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
