@@ -103,6 +103,31 @@ describe("HumanInboxPage", () => {
     );
   });
 
+  it("preserves Portfolio Book target context without hiding the live queue", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        readinessBlockerItem("persona-crypto", "Crypto Persona"),
+        readinessBlockerItem("persona-tw-equity", "Taiwan Equity Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderInbox(
+      "/management/human-inbox?persona_id=persona-tw-equity&runtime_id=runtime-tw-paper&target_type=portfolio_holding&target_id=runtime-tw-paper%3Aartifact-tw-v1",
+    );
+
+    expect(screen.getByText(/Target context:/)).toHaveTextContent(
+      "portfolio_holding: runtime-tw-paper:artifact-tw-v1",
+    );
+    expect(screen.getByText(/Target context:/)).toHaveTextContent("persona: persona-tw-equity");
+    expect(screen.getByText(/Target context:/)).toHaveTextContent("runtime: runtime-tw-paper");
+    expect(screen.getByText(/Target context:/)).toHaveTextContent("showing live queue");
+    expect(screen.getByText("Persona needs review: Taiwan Equity Persona")).toBeInTheDocument();
+    expect(screen.getByText("Persona needs review: Crypto Persona")).toBeInTheDocument();
+    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
+  });
+
   it("does not report a focused persona as missing before live inbox data loads", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,

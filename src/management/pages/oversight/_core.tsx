@@ -486,7 +486,7 @@ function personaFleetPrimaryAction(
 export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const { data, loading, refresh } = useV5Live(
     () => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }),
     [personaFocus],
@@ -1098,27 +1098,48 @@ export const PersonaFleetPage = () => {
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const personaFocus = searchParams.get("persona")?.trim() ?? "";
+  const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
+  const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
+  const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
+  const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
   const { data, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
   const sorted = useMemo(
     () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
   );
-  const visibleItems = useMemo(() => {
-    if (!personaFocus) return sorted;
-    const encodedFocus = encodeURIComponent(personaFocus);
+  const hasTargetContext = Boolean(targetFocus || runtimeFocus);
+  const focusTokens = useMemo(
+    () => (hasTargetContext
+      ? [targetFocus, runtimeFocus].filter(Boolean)
+      : [personaFocus].filter(Boolean)),
+    [hasTargetContext, personaFocus, runtimeFocus, targetFocus],
+  );
+  const matchingItems = useMemo(() => {
+    if (focusTokens.length === 0) return sorted;
     return sorted.filter((it) => [
       it.id,
       it.title,
       it.summary,
+      it.personaId,
+      it.sourceId,
+      it.reviewId,
       it.detailHref,
       it.links?.manageHref,
       it.links?.recommendedActionHref,
       it.links?.evidenceHref,
-    ].some((value) => value?.includes(personaFocus) || value?.includes(encodedFocus)));
-  }, [personaFocus, sorted]);
-  const isPersonaFocusLoading = Boolean(personaFocus && loading && data === undefined);
-  const hasPersonaFocusMatch = !personaFocus || visibleItems.length > 0;
+    ].some((value) => focusTokens.some((token) => {
+      const encoded = encodeURIComponent(token);
+      return value?.includes(token) || value?.includes(encoded);
+    })));
+  }, [focusTokens, sorted]);
+  const visibleItems = hasTargetContext && matchingItems.length === 0 ? sorted : matchingItems;
+  const isPersonaFocusLoading = Boolean(personaFocus && !hasTargetContext && loading && data === undefined);
+  const hasPersonaFocusMatch = !personaFocus || matchingItems.length > 0;
+  const targetContextParts = [
+    targetTypeFocus && targetFocus ? `${targetTypeFocus}: ${targetFocus}` : targetFocus,
+    personaFocus ? `persona: ${personaFocus}` : "",
+    runtimeFocus ? `runtime: ${runtimeFocus}` : "",
+  ].filter(Boolean);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
       <ManagementOperationsNav />
@@ -1128,7 +1149,22 @@ export const HumanInboxPage = () => {
           {t("mgmt.inbox.subtitleFmt", { count: HUMAN_INBOX_KINDS.length })}
         </p>
       </header>
-      {personaFocus && (
+      {hasTargetContext && (
+        <Card className="border-primary/30 bg-primary/5 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              Target context: {targetContextParts.join(" · ")}
+              {matchingItems.length > 0
+                ? ` · ${matchingItems.length} matching inbox item(s)`
+                : " · no direct inbox item matched; showing live queue"}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+      {personaFocus && !hasTargetContext && (
         <Card className={"p-3 text-sm " + (isPersonaFocusLoading || hasPersonaFocusMatch
           ? "border-primary/30 bg-primary/5"
           : "border-status-warning/30 bg-status-warning/10")}

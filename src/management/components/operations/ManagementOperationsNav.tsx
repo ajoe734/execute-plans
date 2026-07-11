@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 // legacy-path redirect hop.
 const OPERATIONS_LINKS = [
   { to: "/management/persona-fleet", labelKey: "nav.personaFleet", icon: Users },
-  { to: "/management/portfolio-book", labelKey: "nav.portfolioBook", icon: PieChart },
-  { to: "/management/performance-attribution", labelKey: "nav.performanceAttribution", icon: BarChart3 },
+  { to: "/management/performance?tab=overview", labelKey: "nav.portfolioBook", icon: PieChart },
+  { to: "/management/performance?tab=attribution", labelKey: "nav.performanceAttribution", icon: BarChart3 },
   { to: "/management/promotion-allocation?tab=real-ranking", labelKey: "nav.personaLeague", icon: Trophy },
   { to: "/management/promotion-allocation?tab=paper-candidates", labelKey: "nav.quarterlyRanking", icon: ClipboardCheck },
   { to: "/management/human-inbox", labelKey: "nav.humanInbox", icon: ClipboardCheck },
