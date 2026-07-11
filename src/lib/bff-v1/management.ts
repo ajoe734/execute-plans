@@ -2057,6 +2057,45 @@ function normalizePersonaFleetLifecycleState(
   return state;
 }
 
+const INVALID_MUTATION_REFERENCE_TOKENS = new Set([
+  "",
+  "n/a",
+  "na",
+  "nan",
+  "none",
+  "null",
+  "undefined",
+]);
+const DATE_MUTATION_REFERENCE = /^\d{4}[-/]\d{2}[-/]\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/;
+
+function normalizeMutationReference(value: unknown): string | null {
+  const candidate = asOptionalString(value)?.trim();
+  if (!candidate || INVALID_MUTATION_REFERENCE_TOKENS.has(candidate.toLowerCase())) return null;
+  return DATE_MUTATION_REFERENCE.test(candidate) ? null : candidate;
+}
+
+function normalizeEvolutionHref(value: unknown): string | null {
+  const href = asOptionalString(value)?.trim();
+  if (!href) return null;
+  try {
+    const url = new URL(href, "https://pantheon.invalid");
+    if (url.origin !== "https://pantheon.invalid" || url.pathname !== "/management/evolution-journal") {
+      return null;
+    }
+    const persona = url.searchParams.get("persona");
+    if (persona && INVALID_MUTATION_REFERENCE_TOKENS.has(persona.trim().toLowerCase())) return null;
+    for (const key of ["mutation_review", "decision", "item"]) {
+      const candidate = url.searchParams.get(key);
+      if (candidate !== null && normalizeMutationReference(candidate) === null) return null;
+    }
+    const source = url.searchParams.get("source");
+    if (source && INVALID_MUTATION_REFERENCE_TOKENS.has(source.trim().toLowerCase())) return null;
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
 function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null {
   if (!isObject(value)) return null;
   const metrics = isObject(value.metrics) ? value.metrics : {};
@@ -2166,9 +2205,9 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     lastMutationLabel: asOptionalString(value.lastMutationLabel ?? value.last_mutation_label),
     lastMutationAt: asOptionalString(value.lastMutationAt ?? value.last_mutation_at),
     lastMutationKind: asOptionalString(value.lastMutationKind ?? value.last_mutation_kind),
-    mutationEntryId: value.mutationEntryId !== undefined ? value.mutationEntryId : (value.mutation_entry_id ?? null),
-    evolutionEntryId: value.evolutionEntryId !== undefined ? value.evolutionEntryId : (value.evolution_entry_id ?? null),
-    evolutionHref: asOptionalString(value.evolutionHref ?? value.evolution_href),
+    mutationEntryId: normalizeMutationReference(value.mutationEntryId ?? value.mutation_entry_id),
+    evolutionEntryId: normalizeMutationReference(value.evolutionEntryId ?? value.evolution_entry_id),
+    evolutionHref: normalizeEvolutionHref(value.evolutionHref ?? value.evolution_href),
     mutationConfidence: asOptionalString(value.mutationConfidence ?? value.mutation_confidence),
     mutationDiagnostics: Array.isArray(value.mutationDiagnostics)
       ? value.mutationDiagnostics.map(String)

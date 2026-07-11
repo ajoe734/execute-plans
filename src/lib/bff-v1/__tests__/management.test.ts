@@ -1450,6 +1450,31 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("normalizes invalid mutation identities before they reach Fleet link builders", () => {
+    const rows = adaptManagementPersonaFleet({
+      data: {
+        items: [{
+          id: "persona-20260528-04688755",
+          name: "Crypto-Alt-Hunter",
+          owner: "pantheon-dev-browser",
+          last_mutation: "2026-06-03",
+          last_mutation_kind: "fleet_summary",
+          mutation_entry_id: "NaN",
+          evolution_entry_id: "2026-06-03",
+          evolution_href: "/management/evolution-journal?persona=persona-20260528-04688755&mutation_review=NaN",
+        }],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      personaId: "persona-20260528-04688755",
+      mutationEntryId: null,
+      evolutionEntryId: null,
+      evolutionHref: null,
+    });
+  });
+
   it("management paths exist on paths catalog", () => {
     expect(paths.mgmtCockpit()).toMatch(/management\/cockpit$/);
     expect(paths.mgmtPersonaFleet()).toMatch(/management\/persona-fleet$/);

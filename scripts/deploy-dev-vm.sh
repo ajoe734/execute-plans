@@ -177,6 +177,11 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
+
+  echo "=== run Persona Fleet live linked-page contract ==="
+  PANTHEON_FE_BASE_URL="${FE_HOST}" \
+  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+  npx playwright test e2e/25-persona-fleet-live-linked-pages.spec.ts --project=chromium
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF

@@ -179,8 +179,12 @@ export const ResearchLoopPage = () => {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-foreground">
                 {focusMatched
-                  ? t("v5.loops.research.focusedFmt", { persona: personaFocus || "nan", project: projectFocus || "nan", count: visibleItems.length })
-                  : t("v5.loops.research.focusMissingFmt", { persona: personaFocus || "nan", project: projectFocus || "nan" })}
+                  ? projectFocus
+                    ? t("v5.loops.research.focusedFmt", { persona: personaFocus || "nan", project: projectFocus, count: visibleItems.length })
+                    : t("v5.loops.research.focusedPersonaFmt", { persona: personaFocus || "nan", count: visibleItems.length })
+                  : projectFocus
+                    ? t("v5.loops.research.focusMissingFmt", { persona: personaFocus || "nan", project: projectFocus })
+                    : t("v5.loops.research.focusMissingPersonaFmt", { persona: personaFocus || "nan" })}
               </span>
               <Button asChild size="sm" variant="outline">
                 <Link to="/management/loops/research">{t("v5.loops.research.showAll", { defaultValue: "Show all research runs" })}</Link>

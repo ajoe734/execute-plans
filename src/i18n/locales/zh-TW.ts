@@ -236,7 +236,9 @@ export default {
         emptyTitle: "無研究迴圈",
         emptyDesc: "目前 focus 沒有匹配的執行。",
         focusedFmt: "已聚焦 Persona：{{persona}} · project：{{project}} · {{count}} 筆匹配研究執行",
+        focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆匹配研究執行",
         focusMissingFmt: "沒有研究執行宣告 persona {{persona}} / project {{project}}。",
+        focusMissingPersonaFmt: "沒有研究執行宣告 persona {{persona}}。",
         showAll: "顯示全部研究執行",
       },
       execution: {
