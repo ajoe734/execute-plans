@@ -30,6 +30,13 @@ function evolutionEntryText(e: EvolutionJournalEntry): string {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+export function normalizeEvolutionFocusToken(value: string | null, rejectDate = false): string {
+  const candidate = value?.trim() ?? "";
+  if (!candidate || ["nan", "undefined", "null", "none", "n/a", "na"].includes(candidate.toLowerCase())) return "";
+  if (rejectDate && /^\d{4}[-/]\d{2}[-/]\d{2}(?:[ T]|$)/.test(candidate)) return "";
+  return candidate;
+}
+
 export function filterEvolutionJournalRowsForFocus<T extends EvolutionJournalEntry>(
   rows: T[],
   focus: { personaFocus?: string; mutationFocus?: string },

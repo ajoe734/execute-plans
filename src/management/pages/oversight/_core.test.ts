@@ -17,7 +17,7 @@ import {
 } from "./personaFleetLinks";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
-import { filterEvolutionJournalRowsForFocus } from "./evolutionJournalFocus";
+import { filterEvolutionJournalRowsForFocus, normalizeEvolutionFocusToken } from "./evolutionJournalFocus";
 
 describe("PersonaFleetPage data source badges", () => {
   it("prioritizes readable providers and keeps every declared source visible", () => {
@@ -676,6 +676,13 @@ describe("PersonaFleetPage deep links", () => {
 });
 
 describe("EvolutionJournalPage focus filtering", () => {
+  it("normalizes unavailable and date-shaped mutation query values case-insensitively", () => {
+    expect(normalizeEvolutionFocusToken("NaN", true)).toBe("");
+    expect(normalizeEvolutionFocusToken("UNDEFINED", true)).toBe("");
+    expect(normalizeEvolutionFocusToken("2026-06-03", true)).toBe("");
+    expect(normalizeEvolutionFocusToken("evo-dec-formal", true)).toBe("evo-dec-formal");
+  });
+
   it("does not fall back to global evolution items when persona focus misses", () => {
     type EvolutionEntry = Parameters<typeof filterEvolutionJournalRowsForFocus>[0][number];
     const rows: EvolutionEntry[] = [{

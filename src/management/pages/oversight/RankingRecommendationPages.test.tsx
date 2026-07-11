@@ -68,6 +68,30 @@ describe("ranking recommendation submit pages", () => {
     expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
   });
 
+  it("Paper candidate tab preserves Fleet persona focus and scopes the ranking row", () => {
+    const rows = defaultQuarterlyRanking();
+    const focused = rows[1];
+    const other = rows[0];
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: [other, focused], loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    renderWithRoutes(
+      `/management/promotion-allocation?tab=paper-candidates&persona=${focused.personaId}`,
+      <PromotionAllocationPage />,
+    );
+
+    expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 quarterly ranking row(s)`)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Paper → Real" })).toHaveAttribute("aria-selected", "true");
+    const table = screen.getByRole("table");
+    expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
+    expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
+  });
+
   it("Persona League honors persona query focus from Fleet rank links", () => {
     const rows = defaultPersonaLeague();
     const focused = rows[1];
@@ -81,6 +105,36 @@ describe("ranking recommendation submit pages", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
+  });
+
+  it("Quarterly Ranking keeps an ineligible focused Persona in the ranking table", () => {
+    const focused = {
+      ...defaultQuarterlyRanking()[0],
+      personaId: "persona-20260528-04688755",
+      personaName: "Crypto-Alt-Hunter",
+      currentRank: 9,
+      score: 53.875,
+      eligibility: "insufficient_data" as const,
+      disqualificationReason: "No telemetry coverage",
+    };
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: [focused], loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    renderWithRoutes(
+      `/management/quarterly-ranking?persona=${focused.personaId}`,
+      <QuarterlyRankingPage />,
+    );
+
+    expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 quarterly ranking row(s)`)).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Crypto-Alt-Hunter")).toBeInTheDocument();
+    expect(within(table).getByText("#9")).toBeInTheDocument();
+    expect(within(table).getByText(/insufficient data/i)).toBeInTheDocument();
   });
 
   it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {

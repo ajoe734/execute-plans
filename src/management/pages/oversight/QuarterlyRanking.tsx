@@ -129,7 +129,6 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
     ? ranking.filter((row) => row.personaId === personaFocus || row.personaName === personaFocus)
     : ranking;
   const disqualified = focusedRanking.filter((r) => r.eligibility !== "eligible");
-  const eligible = focusedRanking.filter((r) => r.eligibility === "eligible");
   const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
   const quarter = ranking.find((row) => row.quarter)?.quarter ?? currentQuarter;
   const cutoffDate = quarterCutoffDate(quarter);
@@ -245,7 +244,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
             </tr>
           </thead>
           <tbody>
-            {eligible.map((r) => (
+            {focusedRanking.map((r) => (
               <tr key={r.personaId} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono">#{r.currentRank}</td>
                 <td className="px-3 py-2 font-mono">{r.previousQuarterRank ?? "·"}</td>
@@ -289,7 +288,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                 </td>
               </tr>
             ))}
-            {eligible.length === 0 && (
+            {focusedRanking.length === 0 && (
               <tr><td className="px-3 py-6 text-center text-muted-foreground" colSpan={10}>{t("mgmt.pulse.noRows")}</td></tr>
             )}
           </tbody>

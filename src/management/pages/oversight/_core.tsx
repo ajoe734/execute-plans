@@ -84,7 +84,7 @@ import {
   personaFleetRuntimeHref,
   type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
-import { filterEvolutionJournalRowsForFocus } from "./evolutionJournalFocus";
+import { filterEvolutionJournalRowsForFocus, normalizeEvolutionFocusToken } from "./evolutionJournalFocus";
 import { safeDateTime } from "@/lib/utils";
 import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
@@ -1679,12 +1679,12 @@ const verdictTone = (v?: string) =>
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  
-  const personaFocusRaw = searchParams.get("persona")?.trim() ?? "";
-  const personaFocus = personaFocusRaw === "nan" || personaFocusRaw === "undefined" ? "" : personaFocusRaw;
-  
-  const mutationFocusRaw = searchParams.get("mutation_review")?.trim() ?? searchParams.get("decision")?.trim() ?? searchParams.get("item")?.trim() ?? "";
-  const mutationFocus = mutationFocusRaw === "nan" || mutationFocusRaw === "undefined" ? "" : mutationFocusRaw;
+
+  const personaFocus = normalizeEvolutionFocusToken(searchParams.get("persona"));
+  const mutationFocus = normalizeEvolutionFocusToken(
+    searchParams.get("mutation_review") ?? searchParams.get("decision") ?? searchParams.get("item"),
+    true,
+  );
 
   const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), []);
   const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
@@ -1701,7 +1701,8 @@ export const EvolutionJournalPage = () => {
   const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || mutationFocus);
 
-  const isFleetSummary = Boolean(fleetFallback || searchParams.get("source") === "fleet_summary" || searchParams.get("source") === "nan");
+  const sourceFocus = normalizeEvolutionFocusToken(searchParams.get("source"));
+  const isFleetSummary = Boolean(fleetFallback || sourceFocus === "fleet_summary");
 
   const focusText = (() => {
     const pText = personaFocus;

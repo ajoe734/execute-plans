@@ -439,8 +439,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     // Link 4: Ranking
     console.log("Clicking Ranking link...");
     await formalRow.locator('[aria-label="persona-formal-mut persona league ranking" i]').click();
-    console.log("Expecting URL to match real-ranking tab...");
-    await expect(page).toHaveURL(/\/management\/promotion-allocation\?tab=real-ranking/);
+    console.log("Expecting URL to match focused Persona League...");
+    await expect(page).toHaveURL(/\/management\/persona-league\?persona=persona-formal-mut/);
     console.log("Waiting for Ranking page content to load...");
     await expect(page.getByRole("heading", { name: "Persona 聯賽", level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 05...");

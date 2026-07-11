@@ -245,7 +245,9 @@ export default {
         emptyTitle: "No research loops",
         emptyDesc: "Nothing matches the current focus.",
         focusedFmt: "Focused persona: {{persona}} · project: {{project}} · {{count}} matching research run(s)",
+        focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching research run(s)",
         focusMissingFmt: "No research run declares persona {{persona}} / project {{project}}.",
+        focusMissingPersonaFmt: "No research run declares persona {{persona}}.",
         showAll: "Show all research runs",
       },
       execution: {
