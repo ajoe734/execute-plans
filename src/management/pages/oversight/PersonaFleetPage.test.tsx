@@ -284,6 +284,53 @@ describe("PersonaFleetPage", () => {
     );
   });
 
+  it("renders loop-only research projects as plain titles with an explicit execution link", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-live-loop-only", "Loop Only Persona", {
+          humanNeeded: false,
+          state: "deployed",
+          currentWork: "Loop-only research execution",
+          researchStatus: {
+            stage: "act",
+            frameworks: ["vectorbt"],
+            pendingTaskIds: [],
+            canDeploy: false,
+          },
+          currentResearchProjects: [{
+            projectId: "nan",
+            title: "Loop-only research execution",
+            stage: "act",
+            frameworks: ["vectorbt"],
+            blockedByTaskIds: [],
+            canDeploy: false,
+            linkTargets: {
+              research: "/management/loops/research?persona=persona-live-loop-only&project=nan",
+            },
+          }],
+          linkTargets: {
+            persona: "/management/personas/persona-live-loop-only",
+            dataSources: "/management/data-sources?persona=persona-live-loop-only",
+            orient: "/management/loops/research?persona=persona-live-loop-only&project=nan",
+            performance: "/management/performance-attribution?dimension=persona&persona=persona-live-loop-only",
+            mutation: "/management/evolution-journal?persona=persona-live-loop-only",
+          },
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("Loop-only research execution").closest("a")).toBeNull();
+    expect(screen.queryByRole("link", { name: "persona-live-loop-only research detail" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View research execution/ })).toHaveAttribute(
+      "href",
+      "/management/loops/research?persona=persona-live-loop-only",
+    );
+  });
+
   it("renders paper capital, league rank, and human review context from fleet rows", () => {
     mocks.useV5Live.mockReturnValue({
       data: [

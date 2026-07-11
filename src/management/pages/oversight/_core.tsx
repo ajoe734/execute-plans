@@ -631,7 +631,7 @@ export const PersonaFleetPage = () => {
         <table className="w-full min-w-[1840px] text-sm">
           <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
+              <th className="sticky left-0 z-20 bg-card px-3 py-2 border-r border-border/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)]">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.capital")}</th><th className="px-3 py-2">{t("mgmt.fleet.rank")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="px-3 py-2">{t("mgmt.fleet.research")}</th>
@@ -682,9 +682,9 @@ export const PersonaFleetPage = () => {
               return (
                 <tr
                   key={r.personaId}
-                  className={"border-b border-border/50 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
+                  className={"group border-b border-border/50 hover:bg-muted/30 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
                 >
-                  <td className="px-3 py-2">
+                  <td className={"sticky left-0 z-10 border-r border-border/50 px-3 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] transition-colors " + (focused ? "bg-primary/10 group-hover:bg-primary/15" : "bg-card group-hover:bg-muted/40")}>
                     {personaHref ? (
                       <Link
                         to={personaHref}

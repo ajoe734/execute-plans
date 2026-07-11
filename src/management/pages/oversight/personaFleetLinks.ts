@@ -28,7 +28,8 @@ function isUsableToken(value: unknown): value is string {
 
 export function cleanQueryParameters(href: string): string {
   try {
-    const [pathPart, queryPart] = href.split("?", 2);
+    const [beforeHash, hash = ""] = href.split("#", 2);
+    const [pathPart, queryPart] = beforeHash.split("?", 2);
     if (!queryPart) return href;
     const params = new URLSearchParams(queryPart);
     const keysToDelete: string[] = [];
@@ -41,7 +42,8 @@ export function cleanQueryParameters(href: string): string {
     });
     keysToDelete.forEach((key) => params.delete(key));
     const newQuery = params.toString().replace(/\+/g, "%20");
-    return newQuery ? `${pathPart}?${newQuery}` : pathPart;
+    const cleaned = newQuery ? `${pathPart}?${newQuery}` : pathPart;
+    return hash ? `${cleaned}#${hash}` : cleaned;
   } catch {
     return href;
   }
@@ -330,6 +332,45 @@ function firstCanonicalHref(
   return null;
 }
 
+function pathPartFromHref(href: string): string {
+  return href.split(/[?#]/, 1)[0] ?? "";
+}
+
+function detailIdFromManagementHref(href: string, prefixes: string[]): string | null {
+  const path = pathPartFromHref(href);
+  for (const prefix of prefixes) {
+    if (!path.startsWith(prefix)) continue;
+    const [encodedId = ""] = path.slice(prefix.length).split("/", 1);
+    try {
+      const id = decodeURIComponent(encodedId);
+      return isUsableToken(id) ? id : null;
+    } catch {
+      return isUsableToken(encodedId) ? encodedId : null;
+    }
+  }
+  return null;
+}
+
+function researchDetailIdFromHref(href: string): string | null {
+  return detailIdFromManagementHref(href, [
+    "/management/experiments/",
+    "/management/research/",
+  ]);
+}
+
+function canonicalResearchDetailHref(href: string): string | null {
+  const id = researchDetailIdFromHref(href);
+  return id ? `/management/experiments/${encodeURIComponent(id)}` : null;
+}
+
+function isResearchDetailHref(href: string): boolean {
+  return Boolean(researchDetailIdFromHref(href));
+}
+
+function isResearchLoopHref(href: string): boolean {
+  return pathPartFromHref(href) === "/management/loops/research";
+}
+
 function rowLinkRecords(r: ManagementPersonaFleetRow): Array<RawLinkRecord | undefined> {
   const raw = r as RawPersonaFleetRow;
   return [raw.linkTargets, raw.link_targets, raw.links];
@@ -342,9 +383,9 @@ function sourceLinkRecords(source?: ManagementDataSource): Array<RawLinkRecord |
 
 function researchLinkRecords(item?: PersonaFleetResearchItem, project?: RawResearchProject): Array<RawLinkRecord | undefined> {
   return [
+    item?.href ? { href: item.href } : undefined,
     project?.linkTargets,
     project?.link_targets,
-    item?.href ? { href: item.href } : undefined,
   ];
 }
 
@@ -512,7 +553,22 @@ function researchProjectHref(project?: RawResearchProject): string | null {
     "researchHref",
     "research_href",
     "orient",
-  ]);
+  ], isResearchDetailHref);
+}
+
+function researchProjectForItem(
+  r: ManagementPersonaFleetRow,
+  item?: PersonaFleetResearchItem,
+): RawResearchProject | undefined {
+  if (!item) return firstResearchProject(r);
+  return currentResearchProjects(r).find((project) => {
+    const id = projectId(project);
+    if (item.projectId && id === item.projectId) return true;
+    const expId = project?.experimentId ?? project?.experiment_id;
+    if (item.experimentId && isUsableToken(expId) && expId === item.experimentId) return true;
+    const artId = project?.artifactId ?? project?.artifact_id;
+    return Boolean(item.artifactId && isUsableToken(artId) && artId === item.artifactId);
+  });
 }
 
 export function personaFleetResearchItems(r: ManagementPersonaFleetRow): PersonaFleetResearchItem[] {
@@ -579,10 +635,11 @@ export function personaFleetResearchHref(
   r: ManagementPersonaFleetRow,
   item?: PersonaFleetResearchItem,
 ): string | null {
-  const project = firstResearchProject(r);
+  const project = researchProjectForItem(r, item);
+  const rowRecords = item && currentResearchProjects(r).length > 1 ? [] : rowLinkRecords(r);
   const canonical = firstCanonicalHref([
     ...researchLinkRecords(item, project),
-    ...rowLinkRecords(r),
+    ...rowRecords,
   ], [
     "research",
     "researchProject",
@@ -592,8 +649,8 @@ export function personaFleetResearchHref(
     "orient",
     "orientHref",
     "orient_href",
-  ]);
-  if (canonical && !canonical.includes("/loops/research")) return cleanQueryParameters(canonical);
+  ], isResearchDetailHref);
+  if (canonical) return canonicalResearchDetailHref(canonical);
   const id = item?.experimentId ?? experimentId(researchStatus(r), project);
   if (id && isUsableToken(id)) return `/management/experiments/${encodeURIComponent(id)}`;
   return null;
@@ -603,11 +660,27 @@ export function personaFleetResearchLoopHref(
   r: ManagementPersonaFleetRow,
   item?: PersonaFleetResearchItem,
 ): string | null {
+  const project = researchProjectForItem(r, item);
+  const rowRecords = item && currentResearchProjects(r).length > 1 ? [] : rowLinkRecords(r);
+  const canonical = firstCanonicalHref([
+    ...researchLinkRecords(undefined, project),
+    ...rowRecords,
+  ], [
+    "research",
+    "researchProject",
+    "research_project",
+    "researchHref",
+    "research_href",
+    "orient",
+    "orientHref",
+    "orient_href",
+  ], isResearchLoopHref);
+  if (canonical) return cleanQueryParameters(canonical);
+
   const personaId = encodedPersonaId(r);
   if (!personaId) return null;
-  const project = firstResearchProject(r);
   const projectFocus = item?.projectId ?? projectId(project);
-  const cleanProject = projectFocus && isUsableToken(projectFocus) && projectFocus !== "nan"
+  const cleanProject = projectFocus && isUsableToken(projectFocus)
     ? `&project=${encodeURIComponent(projectFocus)}`
     : "";
   return `/management/loops/research?persona=${personaId}${cleanProject}`;
