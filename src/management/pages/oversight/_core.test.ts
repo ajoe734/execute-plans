@@ -407,6 +407,102 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetArtifactHref(row)).toBeNull();
   });
 
+  it("does not treat non-detail research targets as research title hrefs", () => {
+    const row = {
+      personaId: "persona-detail-scope",
+      currentResearchProjects: [
+        {
+          projectId: "research-project-with-wrong-target",
+          title: "Research project with wrong target",
+          stage: "orient",
+          frameworks: ["qlib"],
+          blockedByTaskIds: [],
+          canDeploy: false,
+        },
+      ],
+      linkTargets: {
+        research: "/management/data-sources?persona=persona-detail-scope",
+        orient: "/management/human-inbox?persona=persona-detail-scope",
+      },
+    } as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(personaFleetResearchHref(row, item)).toBeNull();
+    expect(personaFleetResearchLoopHref(row, item)).toBe(
+      "/management/loops/research?persona=persona-detail-scope&project=research-project-with-wrong-target",
+    );
+  });
+
+  it("keeps loop-only research targets out of title hrefs and removes unavailable query values", () => {
+    const row = {
+      personaId: "persona-loop-only",
+      currentResearchProjects: [
+        {
+          projectId: "nan",
+          title: "Loop-only research execution",
+          stage: "act",
+          frameworks: ["vectorbt"],
+          blockedByTaskIds: [],
+          canDeploy: false,
+          linkTargets: {
+            research: "/management/loops/research?persona=persona-loop-only&project=nan",
+          },
+        },
+      ],
+    } as unknown as ManagementPersonaFleetRow;
+
+    const [item] = personaFleetResearchItems(row);
+
+    expect(personaFleetResearchHref(row, item)).toBeNull();
+    expect(personaFleetResearchLoopHref(row)).toBe(
+      "/management/loops/research?persona=persona-loop-only",
+    );
+    expect(personaFleetResearchLoopHref(row, item)).toBe(
+      "/management/loops/research?persona=persona-loop-only",
+    );
+  });
+
+  it("uses each research project's own detail href instead of the first project href", () => {
+    const row = {
+      personaId: "persona-multi-research",
+      currentResearchProjects: [
+        {
+          projectId: "research-project-alpha",
+          title: "Alpha project",
+          stage: "orient",
+          frameworks: ["qlib"],
+          experimentId: "exp-alpha",
+          blockedByTaskIds: [],
+          canDeploy: true,
+          linkTargets: {
+            research: "/management/experiments/exp-alpha",
+          },
+        },
+        {
+          projectId: "research-project-beta",
+          title: "Beta project",
+          stage: "review",
+          frameworks: ["vectorbt"],
+          experimentId: "exp-beta",
+          blockedByTaskIds: [],
+          canDeploy: false,
+          linkTargets: {
+            research: "/management/research/exp-beta",
+          },
+        },
+      ],
+      linkTargets: {
+        research: "/management/experiments/exp-row-level",
+      },
+    } as unknown as ManagementPersonaFleetRow;
+
+    const [alpha, beta] = personaFleetResearchItems(row);
+
+    expect(personaFleetResearchHref(row, alpha)).toBe("/management/experiments/exp-alpha");
+    expect(personaFleetResearchHref(row, beta)).toBe("/management/experiments/exp-beta");
+  });
+
   it("derives stable capital, performance, and mutation links from slim rows", () => {
     const row = {
       persona_id: "persona-crypto-paper",
