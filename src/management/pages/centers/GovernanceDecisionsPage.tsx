@@ -5,14 +5,21 @@
 //
 // Wave 1 (this task, IA-005) builds the real recommendations queue:
 // `recommendations` now shows the live Human Inbox items that can change
-// ranking-driven capital/promotion state (GovernanceDecisionQueue) plus the
-// immutable target-weight evidence behind them (RealRankingPanel, moved
-// here from the legacy Promotion Allocation page — see PromotionAllocation.tsx).
-// `capital` adds the same queue scoped to capital/access decisions above the
-// existing pool/rebalance lists. Neither tab ever renders an apply/approve
-// control: every decision and its receipt lives on the linked Human Gate
-// detail page (HumanGateDetail.tsx), never here — see the shared-product
-// constraint "no analysis or ranking page directly mutates live state".
+// ranking-driven capital/promotion state (GovernanceDecisionQueue). Per the
+// gap doc decision ("Governance Decisions may show a recommendation's rank
+// snapshot and evidence link, but cannot host a second sortable ranking
+// table" / "references immutable ranking snapshots instead of embedding a
+// live ranking table"), this deliberately does NOT re-embed the legacy
+// Promotion Allocation `real-ranking` panel (a live-computed, server-scored
+// target-weight table — see the now-deleted RealRankingPanel): each queue
+// item's own "View decision receipt" link is the per-recommendation
+// snapshot/evidence reference, and the link below points to the one place
+// that owns the full ranking table (Rankings Center). `capital` adds the
+// same queue scoped to capital/access decisions above the existing
+// pool/rebalance lists. Neither tab ever renders an apply/approve control:
+// every decision and its receipt lives on the linked Human Gate detail page
+// (HumanGateDetail.tsx), never here — see the shared-product constraint "no
+// analysis or ranking page directly mutates live state".
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +29,6 @@ import { Link } from "react-router-dom";
 import { Trophy } from "lucide-react";
 import { CANONICAL_CENTERS, canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { CapitalPoolsList, RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
-import { RealRankingPanel } from "@/management/pages/oversight/RealRankingPanel";
 import { GovernanceDecisionQueue } from "./GovernanceDecisionQueue";
 
 const CENTER = CANONICAL_CENTERS["governance-decisions"];
@@ -41,20 +47,17 @@ const RecommendationsQueueTab = () => {
         titleKey="governanceDecisions.queue.recommendationsTitle"
         subtitleKey="governanceDecisions.queue.recommendationsSubtitle"
       />
-      <Card className="p-3 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{t("governanceDecisions.recommendationsImpact.title")}</h2>
-            <p className="text-xs text-muted-foreground">{t("governanceDecisions.recommendationsImpact.subtitle")}</p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link to={canonicalCenterUrl("rankings", "rolling")}>
-              <Trophy className="mr-1 h-3.5 w-3.5" />
-              {t("governanceDecisions.recommendationsImpact.openRankingsCenter")}
-            </Link>
-          </Button>
+      <Card className="p-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{t("governanceDecisions.recommendationsImpact.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("governanceDecisions.recommendationsImpact.subtitle")}</p>
         </div>
-        <RealRankingPanel />
+        <Button asChild size="sm" variant="outline">
+          <Link to={canonicalCenterUrl("rankings", "rolling")}>
+            <Trophy className="mr-1 h-3.5 w-3.5" />
+            {t("governanceDecisions.recommendationsImpact.openRankingsCenter")}
+          </Link>
+        </Button>
       </Card>
     </div>
   );

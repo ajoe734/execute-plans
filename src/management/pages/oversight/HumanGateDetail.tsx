@@ -74,6 +74,7 @@ export const HumanGateDetailPage = () => {
     item.consequenceIfApproved || item.consequenceIfRejected || item.consequenceIfIgnored,
   );
   const hasSignatures = item.signatures.length > 0;
+  const hasDecisionHistory = item.decisionHistory.length > 0;
   const hasEvidence = item.evidenceRefs.length > 0;
   const personaId = personaIdFromDetail(item.id, item.links?.manageHref);
   const reviewId = item.reviewId ?? (item.id.startsWith("promotion_review:") ? item.id.slice("promotion_review:".length) : "");
@@ -167,6 +168,32 @@ export const HumanGateDetailPage = () => {
               <li key={s.role} className="flex items-center gap-2">
                 <Badge variant="outline">{s.role}</Badge>
                 <span className="text-muted-foreground">{s.signedBy ?? t("mgmt.inbox.pending")}</span>
+                {s.signedAt && (
+                  <span className="text-muted-foreground">{t("mgmt.inbox.signedAtFmt", { at: s.signedAt })}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Apply-receipt trail: every recorded decision on this gate, with who
+          decided, when, and any rationale — the durable evidence that a
+          governed capital/access/promotion action was actually reviewed and
+          applied, not just requested. */}
+      {hasDecisionHistory && (
+        <Card id="decision-history" className="p-4 scroll-mt-24">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("mgmt.inbox.decisionHistory")}</h2>
+          <ul className="mt-2 space-y-2 text-xs">
+            {item.decisionHistory.map((record, index) => (
+              <li key={`${record.decidedAt}-${index}`} className="rounded-md border border-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{record.decision}</Badge>
+                  <span className="text-foreground">
+                    {t("mgmt.inbox.decidedAtFmt", { by: record.decidedBy, at: record.decidedAt })}
+                  </span>
+                </div>
+                {record.note && <p className="mt-1 text-muted-foreground">{record.note}</p>}
               </li>
             ))}
           </ul>

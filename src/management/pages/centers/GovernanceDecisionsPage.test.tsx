@@ -48,13 +48,8 @@ describe("Governance Decisions — recommendations queue", () => {
     mocks.useV5Live.mockReset();
   });
 
-  it("renders the recommendations queue and the recommendation-evidence panel without any full ranking table", () => {
-    let call = 0;
-    mocks.useV5Live.mockImplementation(() => {
-      call += 1;
-      if (call === 1) return { data: [recommendationItem], loading: false, refresh: vi.fn() }; // GovernanceDecisionQueue -> humanInbox.list
-      return { data: [], loading: false, refresh: vi.fn() }; // RealRankingPanel's personaFleet/personaLeague/allocationPolicy calls
-    });
+  it("renders the recommendations queue and a Rankings Center link without any embedded ranking table", () => {
+    mocks.useV5Live.mockReturnValue({ data: [recommendationItem], loading: false, refresh: vi.fn() }); // GovernanceDecisionQueue -> humanInbox.list
 
     renderPage("/management/governance-decisions?tab=recommendations");
 
@@ -64,12 +59,21 @@ describe("Governance Decisions — recommendations queue", () => {
       "href",
       "/management/human-inbox/ranking_recommendation%3Apersona-canary-alpha",
     );
+    expect(screen.getByRole("link", { name: /Open Rankings Center/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/management/rankings"),
+    );
 
-    // Governance Decisions contains no competing full ranking table: no
-    // rank/tier/score columns anywhere on the recommendations tab.
+    // Governance Decisions contains no competing full ranking table: per the
+    // gap-doc decision, this tab must never host a second sortable ranking
+    // table, only per-recommendation evidence links and a link out to
+    // Rankings Center — assert no table element and no rank/tier/target-weight
+    // columns render anywhere on the recommendations tab.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByText("Rank")).not.toBeInTheDocument();
     expect(screen.queryByText("Tier")).not.toBeInTheDocument();
     expect(screen.queryByText("League score")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target weight")).not.toBeInTheDocument();
   });
 
   it("never renders a mutating control on the recommendations queue — every decision links out to Human Inbox", () => {
