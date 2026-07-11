@@ -1,6 +1,6 @@
 # MGMT-OPS-003-GAP-003 Hosted Workflow E2E
 
-Status: pre-deployment verification passed; final hosted rerun pending task PR deployment
+Status: REQUEST_CHANGES
 
 ## Gate
 
@@ -20,23 +20,37 @@ VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict \
 npx playwright test e2e/21-portfolio-workflow-hosted.spec.ts --project=chromium
 ```
 
-## Pre-deployment observation
+## Final hosted observation
 
-- Timestamp: 2026-07-11T15:53Z UTC
-- Result: 2 passed (desktop 1440x1000, mobile 390x844)
+- Timestamp: 2026-07-11T16:06Z UTC
+- Result: 2 failed (desktop 1440x1000, mobile 390x844)
 - Live holdings: 27
 - Row-level incidents: 27
 - Missing bindings: 19
 - Deployment stages present in the live response: paper only
-- Console exceptions: 0
+- Console exceptions: 2 per viewport
 - Failed browser requests: 0
-- Required BFF responses with status >= 400: 0
+- Required BFF responses with status >= 400: 1 per viewport
 - Strict-mode fallback/seed labels: 0
-- Hosted frontend deployment: `30bc432f8a4e095e9947da4f076886828a2bcd58`
-- Hosted frontend deployment run: `29156996097`
+- Frontend task PR: `ajoe734/execute-plans#257`
+- Frontend task merge: `12200de4f5622b24cd844e0b649c26959baa1a55`
+- Hosted frontend deployment: `12200de4f5622b24cd844e0b649c26959baa1a55`
+- Hosted frontend deployment run: `29158992367`
 - Hosted BFF contains GAP-002 merge: `265ca18051c8ff521bc65c7187348215cabfdfc5`
 
-This observation is not final acceptance because the hosted frontend commit
-does not contain the GAP-001 `main` merge `ce8e57ec434d3ec6f34170a6e9e3e8f737ce5197`.
-The final evidence must replace this section after deploying the task merge SHA
-and rerunning the same command.
+## Exact failure
+
+The Portfolio Book, Performance Attribution, and Human Review portions preserve
+the selected holding's persona, runtime, and target IDs. Persona Fleet does not
+meet the hosted contract:
+
+- the page requests `GET /bff/management/fleet` and receives 404;
+- the deployment contract requires `GET /bff/management/persona-fleet`;
+- the browser logs `Failed to load resource: 404` and
+  `[useV5Live] loader failed BffError: Not Found`;
+- deploy run `29158992367` installed the correct bundle but correctly failed its
+  required browser/BFF probe for the same reason.
+
+The task must remain blocked until the Persona Fleet client route is repaired,
+merged, deployed, and this exact desktop/mobile command returns 2 passed with
+zero console exceptions and zero failed required BFF responses.

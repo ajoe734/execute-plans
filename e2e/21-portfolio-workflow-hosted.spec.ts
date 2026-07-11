@@ -87,8 +87,14 @@ for (const viewport of [
       await expect(link).toHaveAttribute("href", href!);
     }
 
-    await row.getByRole("link", { name: "Attribution", exact: true }).click();
+    await row.getByRole("link", { name: "Persona Fleet", exact: true }).click();
     let url = new URL(page.url());
+    expect(url.searchParams.get("persona_id")).toBe(selected!.persona_id);
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await page.goBack({ waitUntil: "domcontentloaded" });
+
+    await row.getByRole("link", { name: "Attribution", exact: true }).click();
+    url = new URL(page.url());
     expect(url.searchParams.get("persona_id")).toBe(selected!.persona_id);
     expect(url.searchParams.get("runtime_id")).toBe(selected!.runtime_id);
     await expect(page.locator("body")).not.toContainText(/formal attribution/i);
