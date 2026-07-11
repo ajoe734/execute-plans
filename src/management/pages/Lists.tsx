@@ -119,13 +119,17 @@ export const CapitalPoolsList = () => {
         };
       }}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
-      listHref="/management/promotion-allocation?tab=quarterly-capital"
-      rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(row.id)}`}
+      listHref="/management/governance-decisions?tab=capital"
+      rowHref={(row) => `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(row.id)}`}
       nameCell={CapitalPoolNameCell}
       focusParam="pool"
       focusLabel={t("nav.capitalPools")}
       focusMatch={capitalPoolMatchesFocus}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
+      emptyState={{
+        title: t("governanceDecisions.capitalEmptyState.title"),
+        description: t("governanceDecisions.capitalEmptyState.description"),
+      }}
       summary={(rows) => {
         const mixedCurrencyLabel = t("phase13.capital.summary.currencies", { count: new Set(rows.map((row) => row.currency || "USD")).size });
         const allocated = currencyBreakdown(rows, (row) => num(row.allocated), mixedCurrencyLabel);
@@ -206,9 +210,13 @@ export const RankingFormulasList = () => {
       title={t("nav.rankingFormulas")}
       loader={lists.rankingFormulas}
       basePath="/management/ranking/formulas" liveKinds={["RankingFormula"]}
-      listHref="/management/promotion-allocation?tab=formula-policy"
-      rowHref={(row) => `/management/promotion-allocation?tab=formula-policy&formula_id=${encodeURIComponent(row.id)}`}
+      listHref="/management/governance-decisions?tab=policy"
+      rowHref={(row) => `/management/governance-decisions?tab=policy&formula_id=${encodeURIComponent(row.id)}`}
       createBehavior={{ kind: "redirect", to: "/management/studios/formula", intent: "create" }}
+      emptyState={{
+        title: t("governanceDecisions.formulaEmptyState.title"),
+        description: t("governanceDecisions.formulaEmptyState.description"),
+      }}
       extraColumns={[
         { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
         { key: "applied", header: t("section.relatedObjects"), cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },
@@ -218,13 +226,18 @@ export const RankingFormulasList = () => {
 };
 
 // Rebalance.state (LifecycleState) reused as the PPL-ALLOC-006 workflow
-// vocabulary (recommendation/review/approved/applied) without touching the
-// shared global StatusBadge labels used by every other object list.
+// vocabulary (recommendation/review/approved/applied), extended to cover
+// paused/retired as blocked/superseded — the full recommendation/review/
+// approval/rejection/expiry/blocked/applied/superseded vocabulary is not all
+// representable by the 6-value LifecycleState, so rejection/expiry are left
+// to the governance decision queue (Human Inbox) rather than fabricated here.
 function rebalanceWorkflowLabel(state: Rebalance["state"], t: (key: string, opts?: Record<string, unknown>) => string): string {
   const key = state === "draft" ? "recommendation"
     : state === "review" ? "review"
     : state === "approved" ? "approved"
     : state === "deployed" ? "applied"
+    : state === "paused" ? "blocked"
+    : state === "retired" ? "superseded"
     : state ?? "unknown";
   return t(`promotionAllocation.rebalanceWorkflow.${key}`, { defaultValue: key });
 }
@@ -236,11 +249,15 @@ export const RebalancesList = () => {
       title={t("nav.rebalances")}
       loader={lists.rebalances}
       basePath="/management/rebalance" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
-      listHref="/management/promotion-allocation?tab=quarterly-capital"
-      rowHref={(row) => `/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(row.id)}`}
+      listHref="/management/governance-decisions?tab=capital"
+      rowHref={(row) => `/management/governance-decisions?tab=capital&rebalance_id=${encodeURIComponent(row.id)}`}
       focusParam="rebalance_id"
       focusLabel={t("nav.rebalances")}
       createBehavior={{ kind: "redirect", to: "/management/loops/optimization", intent: "create" }}
+      emptyState={{
+        title: t("governanceDecisions.rebalanceEmptyState.title"),
+        description: t("governanceDecisions.rebalanceEmptyState.description"),
+      }}
       extraColumns={[
         { key: "q", header: t("table.priority"), cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
         { key: "delta", header: t("section.changeSummary"), cell: (r) => <span className="text-mono text-xs">{pct(r.proposedDelta, 1)}</span> },

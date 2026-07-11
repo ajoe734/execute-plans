@@ -51,17 +51,16 @@ describe("ranking recommendation submit pages", () => {
     mocks.sendRankingRecommendation.mockReset();
   });
 
-  it("Promotion & Allocation keeps compatibility stubs", () => {
+  it("Promotion & Allocation is a legacy shell that links to the canonical centers, not a tabbed workbench", () => {
+    mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
     renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
 
     expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Formula policy" })).toBeInTheDocument();
-
-    // Verify stable placeholders leading to consolidated Rankings Center
-    expect(screen.getByRole("link", { name: "Go to Rankings Center (Quarterly)" })).toBeInTheDocument();
+    // MGMT-PERF-IA-005: every other tab now redirects before this page ever
+    // renders (PromotionAllocationLegacyGate) — no internal tab list survives.
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open Rankings Center/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open Governance Decisions/ })).toBeInTheDocument();
   });
 
   it("Quarterly ranking page is independently routable", () => {
