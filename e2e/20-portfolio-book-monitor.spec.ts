@@ -27,9 +27,36 @@ test("renders every degraded incident and persists all six filters", async ({ pa
   await expect(page.getByText("Source: degraded").first()).toBeVisible();
   await expect(page.getByText("Unknown capital scope").first()).toBeVisible();
   for (const label of ["Stage", "Broker", "Runtime", "Source status", "Stale telemetry", "Risk state"]) await expect(page.getByLabel(label)).not.toHaveValue("");
+  const initialRequestParams = new URL(requests.at(-1)!).searchParams;
+  const initialExpected = {
+    deployment_stage: "canary", broker_id: "broker-1", runtime_id: "runtime-1",
+    source_status: "degraded", stale_telemetry: "false", risk_state: "missing_binding",
+  };
+  for (const [key, value] of Object.entries(initialExpected)) expect(initialRequestParams.get(key)).toBe(value);
+  await page.getByLabel("Stage").selectOption("live");
+  await page.getByLabel("Broker").selectOption("");
+  await page.getByLabel("Runtime").selectOption("");
+  await page.getByLabel("Source status").selectOption("stale");
+  await page.getByLabel("Stale telemetry").selectOption("true");
+  await page.getByLabel("Risk state").selectOption("stale_telemetry");
+  await expect(page).toHaveURL(/deployment_stage=live/);
+  await expect(page).toHaveURL(/source_status=stale/);
+  await expect(page).toHaveURL(/stale_telemetry=true/);
+  await expect(page).toHaveURL(/risk_state=stale_telemetry/);
+  await expect(page).not.toHaveURL(/broker_id=/);
+  await expect(page).not.toHaveURL(/runtime_id=/);
+
   await page.reload();
-  await expect(page.getByLabel("Stage")).toHaveValue("canary");
-  expect(requests.at(-1)).toContain("deployment_stage=canary");
-  expect(requests.at(-1)).toContain("risk_state=missing_binding");
+  const expected = {
+    deployment_stage: "live", source_status: "stale",
+    stale_telemetry: "true", risk_state: "stale_telemetry",
+  };
+  for (const [label, value] of [["Stage", "live"], ["Broker", ""], ["Runtime", ""], ["Source status", "stale"], ["Stale telemetry", "true"], ["Risk state", "stale_telemetry"]]) {
+    await expect(page.getByLabel(label)).toHaveValue(value);
+  }
+  const requestParams = new URL(requests.at(-1)!).searchParams;
+  for (const [key, value] of Object.entries(expected)) expect(requestParams.get(key)).toBe(value);
+  expect(requestParams.has("broker_id")).toBe(false);
+  expect(requestParams.has("runtime_id")).toBe(false);
   await expect(page.getByText(/formal attribution|covered/i)).toHaveCount(0);
 });

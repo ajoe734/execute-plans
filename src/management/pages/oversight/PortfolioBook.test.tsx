@@ -11,10 +11,14 @@ const items = Array.from({ length: 14 }, (_, index) => ({
 }));
 const incidents = items.map((row) => ({ id: `incident-${row.holdingId}`, holdingId: row.holdingId, severity: "high", message: "Binding missing", riskState: "missing_binding", sourceStatus: "degraded", sourceIssues: row.sourceIssues, links: { human_review: `/management/human-inbox?holding_id=${row.holdingId}` } }));
 
-vi.mock("@/management/pages/v5/useV5Live", () => ({ useV5Live: () => ({ loading: false, refresh: vi.fn(), data: { items, incidents, surfaceStatus: "degraded", coverage: { holdingCount: 14, sourceRowCount: 4, runtimeCount: 14, telemetryRuntimeCount: 4, staleRowCount: 0, missingBindingCount: 10, degradedSourceCount: 14, incidentCount: 14 } } }) }));
+const liveState = vi.hoisted(() => ({ data: undefined as unknown }));
+const coverage = { holdingCount: 14, sourceRowCount: 4, runtimeCount: 14, telemetryRuntimeCount: 4, staleRowCount: 0, missingBindingCount: 10, degradedSourceCount: 14, incidentCount: 14 };
+
+vi.mock("@/management/pages/v5/useV5Live", () => ({ useV5Live: () => ({ loading: false, refresh: vi.fn(), data: liveState.data }) }));
 
 describe("PortfolioBookPage monitor", () => {
   it("renders all incidents and distinct capital scope labels without optimistic confidence", () => {
+    liveState.data = { items, incidents, surfaceStatus: "degraded", coverage };
     render(<MemoryRouter initialEntries={["/management/portfolio-book?deployment_stage=paper"]}><PortfolioBookPage /></MemoryRouter>);
     expect(screen.getAllByTestId("portfolio-incident")).toHaveLength(14);
     expect(screen.getAllByText(/Paper ledger/).length).toBeGreaterThan(0);
@@ -23,5 +27,19 @@ describe("PortfolioBookPage monitor", () => {
     expect(screen.getAllByText("Unknown capital scope").length).toBeGreaterThan(0);
     expect(screen.queryByText(/formal attribution|covered/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Stage")).toHaveValue("paper");
+  });
+
+  it.each([
+    ["empty", "ok", "No holdings match the current filters."],
+    ["partial", "partial", "No holdings match the current filters."],
+    ["stale", "stale", "No holdings match the current filters."],
+    ["unavailable", "unavailable", "Portfolio holdings source is unavailable."],
+  ])("renders the %s monitor state independently", (_name, surfaceStatus, emptyMessage) => {
+    liveState.data = { items: [], incidents: [], surfaceStatus, surfaceMessage: `${surfaceStatus} source`, coverage: { ...coverage, holdingCount: 0, incidentCount: 0 } };
+    render(<MemoryRouter initialEntries={["/management/portfolio-book"]}><PortfolioBookPage /></MemoryRouter>);
+    expect(screen.getByText(`Source: ${surfaceStatus}`)).toBeInTheDocument();
+    expect(screen.getByText(`${surfaceStatus} source`)).toBeInTheDocument();
+    expect(screen.getByText(emptyMessage)).toBeInTheDocument();
+    expect(screen.queryByTestId("portfolio-holding")).not.toBeInTheDocument();
   });
 });
