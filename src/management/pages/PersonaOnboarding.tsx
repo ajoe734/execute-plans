@@ -39,15 +39,46 @@ interface StepState {
   payload?: Record<string, unknown>;
 }
 
+type RepairablePersona = Persona & {
+  paperLedgerId?: string;
+  runtimeBindingId?: string;
+};
+
+const FAILED_STEP_TO_WIZARD_STEP: Record<string, StepNum> = {
+  lifecycle: 1,
+  binding: 2,
+  paper_ledger: 2,
+  ledger: 2,
+  deployment_plan: 3,
+  plan: 3,
+  approval: 4,
+  runtime: 5,
+  runtime_binding: 5,
+};
+
+export function repairStepFor(failedStep: string | null): StepNum {
+  if (!failedStep) return 1;
+  return FAILED_STEP_TO_WIZARD_STEP[failedStep.toLowerCase()] ?? 1;
+}
+
+export function isCompletePaperBundle(persona: Persona | undefined): boolean {
+  if (!persona) return false;
+  const bundle = persona as RepairablePersona;
+  return persona.state === "paper_running" && Boolean(bundle.paperLedgerId) && Boolean(bundle.runtimeBindingId);
+}
+
 export default function PersonaOnboarding() {
   const { id = "" } = useParams();
   const t = useT();
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
-  const step = (Math.min(5, Math.max(1, Number(sp.get("step") ?? 1))) as StepNum);
+  const failedStep = sp.get("failed_step");
+  const isExplicitRepair = sp.get("repair") === "1" && Boolean(failedStep);
+  const step = (Math.min(5, Math.max(1, Number(sp.get("step") ?? repairStepFor(failedStep)))) as StepNum);
   const setStep = (n: StepNum) => { sp.set("step", String(n)); setSp(sp, { replace: true }); };
 
   const [persona, setPersona] = useState<Persona | undefined>();
+  const [personaLoaded, setPersonaLoaded] = useState(false);
   const [states, setStates] = useState<Record<StepNum, StepState>>({
     1: { status: "idle" }, 2: { status: "idle" }, 3: { status: "idle" },
     4: { status: "idle" }, 5: { status: "idle" },
@@ -68,7 +99,18 @@ export default function PersonaOnboarding() {
 
   const [pools, setPools] = useState<CapitalPoolOption[]>([]);
 
-  useEffect(() => { if (id) getPersona(id).then(setPersona).catch(() => undefined); }, [id]);
+  useEffect(() => {
+    setPersonaLoaded(false);
+    if (!id) {
+      setPersona(undefined);
+      setPersonaLoaded(true);
+      return;
+    }
+    getPersona(id)
+      .then(setPersona)
+      .catch(() => setPersona(undefined))
+      .finally(() => setPersonaLoaded(true));
+  }, [id]);
   useEffect(() => {
     lists.capitalPools()
       .then((env) => setPools((env.items ?? []) as CapitalPoolOption[]))
@@ -129,6 +171,33 @@ export default function PersonaOnboarding() {
   const allDone = (["1", "2", "3", "4", "5"] as const).every(
     (k) => states[Number(k) as StepNum].status === "done" || states[Number(k) as StepNum].status === "degraded",
   );
+
+  if (!personaLoaded) {
+    return (
+      <section className="p-6 max-w-3xl mx-auto">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading paper persona" />
+      </section>
+    );
+  }
+
+  if (isCompletePaperBundle(persona) && !isExplicitRepair) {
+    return (
+      <section className="p-6 max-w-3xl mx-auto">
+        <Card className="p-5 space-y-3 border-status-success/40 bg-status-success/5">
+          <div className="flex items-center gap-2 text-status-success">
+            <CheckCircle2 className="h-5 w-5" />
+            <h1 className="text-lg font-semibold">Nothing to repair</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This persona already has a running paper ledger and runtime binding. Setup actions are disabled to prevent duplicate resources.
+          </p>
+          <Button size="sm" onClick={() => navigate(`/management/personas/${encodeURIComponent(id)}`)}>
+            View persona
+          </Button>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="p-6 max-w-3xl mx-auto space-y-4">
