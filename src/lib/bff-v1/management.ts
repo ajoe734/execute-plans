@@ -3745,9 +3745,9 @@ export const mgmt = {
   },
 
   personaFleet: {
-    get: (): Promise<ManagementPersonaFleetRow[]> =>
+    get: (filters: { q?: string; pageSize?: number } = {}): Promise<ManagementPersonaFleetRow[]> =>
       withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
-        { method: "GET", path: paths.mgmtPersonaFleet() },
+        { method: "GET", path: paths.mgmtPersonaFleet(filters) },
         personaFleetDemoFallbackDisabled,
         adaptManagementPersonaFleetLiveOnly,
       ),
