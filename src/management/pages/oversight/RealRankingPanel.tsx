@@ -99,9 +99,12 @@ export const RealRankingPanel = () => {
     [eligibleFleetRows, leagueByPersonaId],
   );
 
+  // Key on a full serialization of inputRows, not just personaId/currentWeight/stage:
+  // tier and the score-breakdown fields resolve asynchronously from persona-league and
+  // must trigger re-evaluation once they arrive after persona-fleet.
   const { data: lines, loading: evaluating } = useV5Live(
     () => (inputRows.length > 0 ? mgmt.allocationPolicy.evaluate(inputRows) : Promise.resolve([])),
-    [inputRows.map((r) => `${r.personaId}:${r.currentWeight}:${r.stage}`).join(",")],
+    [JSON.stringify(inputRows)],
   );
 
   const loading = fleetLoading || leagueLoading || evaluating;
