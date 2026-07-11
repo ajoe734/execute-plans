@@ -207,6 +207,23 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("Focused persona: persona-crypto")).toBeInTheDocument();
   });
 
+  it("keeps the production tab selected when only non-production rows exist", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-crypto", "Crypto Persona"),
+        fleetRow("dry-run-write-probe-persona", "Dry Run Probe Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByRole("tab", { name: "Production (0)", selected: true })).toBeInTheDocument();
+    expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
+  });
+
   it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
     mocks.useV5Live.mockReturnValue({
       data: [
