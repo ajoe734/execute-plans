@@ -1,3 +1,4 @@
+// 2026-07-11 MGMT-PERF-IA-004 - Consolidated Rankings Center - Recommendation page tests
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
@@ -10,6 +11,7 @@ import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/manag
 import { PersonaLeaguePage } from "./PersonaLeague";
 import { PromotionAllocationPage } from "./PromotionAllocation";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
+import { RankingsCenterPage } from "../centers/RankingsCenterPage";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -49,7 +51,20 @@ describe("ranking recommendation submit pages", () => {
     mocks.sendRankingRecommendation.mockReset();
   });
 
-  it("Promotion & Allocation keeps compatibility tabs while ranking pages remain independently routable", () => {
+  it("Promotion & Allocation keeps compatibility stubs", () => {
+    renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
+
+    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Formula policy" })).toBeInTheDocument();
+
+    // Verify stable placeholders leading to consolidated Rankings Center
+    expect(screen.getByRole("link", { name: "Go to Rankings Center (Quarterly)" })).toBeInTheDocument();
+  });
+
+  it("Quarterly ranking page is independently routable", () => {
     let liveCall = 0;
     mocks.useV5Live.mockImplementation(() => {
       liveCall += 1;
@@ -58,13 +73,7 @@ describe("ranking recommendation submit pages", () => {
         : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
     });
 
-    renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
-
-    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Formula policy" })).toBeInTheDocument();
+    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
     expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
   });
 
@@ -81,12 +90,12 @@ describe("ranking recommendation submit pages", () => {
     });
 
     renderWithRoutes(
-      `/management/promotion-allocation?tab=paper-candidates&persona=${focused.personaId}`,
-      <PromotionAllocationPage />,
+      `/management/rankings?tab=quarterly&persona=${focused.personaId}`,
+      <RankingsCenterPage />,
+      "/management/rankings"
     );
 
     expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 quarterly ranking row(s)`)).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Paper → Real" })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
@@ -101,7 +110,7 @@ describe("ranking recommendation submit pages", () => {
     renderWithRoutes(`/management/persona-league?persona=${focused.personaId}`, <PersonaLeaguePage />);
 
     expect(screen.getByText(`Focused persona: ${focused.personaId} · 1 matching league row(s)`)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/persona-league");
+    expect(screen.getByRole("link", { name: "Show all personas" })).toHaveAttribute("href", "/management/rankings?tab=rolling");
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
