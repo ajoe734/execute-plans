@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import { withOverlay } from "@/lib/bff/writeOverlay";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
+import { PaperPersonaBundleIncompleteError } from "@/lib/bff-v1/personas";
 
 interface Props<T extends BaseObject> {
   title: string;
@@ -135,7 +136,7 @@ export function ObjectListPage<T extends BaseObject>({
     return (
       <>
         <Button size="sm" onClick={() => setDrawerOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+          <Plus className="h-4 w-4 mr-1" />{createBehavior.entity === "persona" ? "Create Paper Persona" : t("actions.create")}
         </Button>
         <EntityCreateDrawer
           entity={createBehavior.entity}
@@ -146,6 +147,19 @@ export function ObjectListPage<T extends BaseObject>({
               navigate(`${basePath}/${encodeURIComponent(String(created.id))}`);
             } else {
               refresh();
+            }
+          }}
+          onCreateFailed={(error) => {
+            if (createBehavior.entity !== "persona") return;
+            const incomplete = error instanceof PaperPersonaBundleIncompleteError ? error : undefined;
+            const details = error && typeof error === "object" && "details" in error
+              ? (error as { details?: Record<string, unknown> }).details
+              : undefined;
+            const personaId = incomplete?.personaId ?? String(details?.persona_id ?? details?.personaId ?? "");
+            const failedStep = incomplete?.failedStep ?? String(details?.failed_step ?? details?.failedStep ?? "create");
+            if (personaId) {
+              navigate(`${basePath}/${encodeURIComponent(personaId)}/onboarding?repair=1&failed_step=${encodeURIComponent(failedStep)}`);
+              setDrawerOpen(false);
             }
           }}
         />
