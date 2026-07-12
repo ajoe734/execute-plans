@@ -81,6 +81,10 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [allPersonas, setAllPersonas] = useState<any[]>([]);
   const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
   const [varianceAttribution, setVarianceAttribution] = useState<string>("");
+  const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
+  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<any | null>(null);
+  const [checkingRedTeam, setCheckingRedTeam] = useState<boolean>(false);
+  const [redTeamUnavailableReason, setRedTeamUnavailableReason] = useState<string>("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -93,6 +97,67 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!selectedEpisode) {
+      setResolvedWorkshopId(null);
+      setRedTeamEligiblePersona(null);
+      setRedTeamUnavailableReason("");
+      return;
+    }
+    
+    let cancelled = false;
+    const checkEligibility = async () => {
+      setCheckingRedTeam(true);
+      setRedTeamUnavailableReason("");
+      try {
+        const environment = selectedEpisode.environment || "paper";
+        const resolveRes = await interaction.resolveContext({
+          context_refs: [
+            { type: "journal_entry", id: selectedEpisode.trade_episode_id }
+          ],
+          environment: environment as any
+        });
+        
+        if (cancelled) return;
+        const workshopId = resolveRes.data.workshop_id;
+        setResolvedWorkshopId(workshopId);
+        
+        const eligibleRes = await interaction.participants({
+          workshop_id: workshopId,
+          mode: "challenge",
+          environment: environment as any
+        });
+        
+        if (cancelled) return;
+        const redTeam = eligibleRes.data.included.find(
+          (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
+        );
+        setRedTeamEligiblePersona(redTeam || null);
+        
+        if (!redTeam) {
+          const excludedRedTeam = eligibleRes.data.excluded.find(
+            (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
+          );
+          if (excludedRedTeam) {
+            setRedTeamUnavailableReason(excludedRedTeam.reasons.join(", ") || "Ineligible");
+          } else {
+            setRedTeamUnavailableReason("Not found in registry");
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to fetch red team eligibility", err);
+        setRedTeamUnavailableReason(err.message || "Failed to fetch participants");
+      } finally {
+        if (!cancelled) setCheckingRedTeam(false);
+      }
+    };
+    
+    checkEligibility();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEpisode]);
 
   const loadData = async () => {
     setLoading(true);
@@ -192,16 +257,12 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       const mode = type === "red-team" ? "challenge" : "reflect";
       const environment = selectedEpisode.environment || "paper";
       
-      // Resolve/Create the workshop context
-      const resolveRes = await interaction.resolveContext({
+      const workshopId = resolvedWorkshopId || (await interaction.resolveContext({
         context_refs: [
-          { type: "journal_entry", id: selectedEpisode.trade_episode_id },
-          { type: "persona", id: targetPersonaId }
+          { type: "journal_entry", id: selectedEpisode.trade_episode_id }
         ],
         environment: environment as any
-      });
-      
-      const workshopId = resolveRes.data.workshop_id;
+      })).data.workshop_id;
       
       // Now submit the interaction to initialize opinion/debate
       await interaction.submit({
@@ -731,15 +792,22 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                       Original Persona Review
                     </Button>
                     
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700"
-                      onClick={() => handleReflect("red-team", "per_red")}
-                      disabled={submittingCommand}
-                    >
-                      Red Team Review
-                    </Button>
+                    <div className="flex flex-col gap-1 w-full">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
+                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id)}
+                        disabled={submittingCommand || checkingRedTeam || !redTeamEligiblePersona}
+                      >
+                        {checkingRedTeam ? "Checking..." : redTeamEligiblePersona ? "Red Team Review" : "Red Team (Unavailable)"}
+                      </Button>
+                      {!checkingRedTeam && !redTeamEligiblePersona && (
+                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="red-team-unavailable">
+                          {redTeamUnavailableReason ? `Unavailable: ${redTeamUnavailableReason}` : "Unavailable in this environment"}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Alternate Persona Review Row */}
