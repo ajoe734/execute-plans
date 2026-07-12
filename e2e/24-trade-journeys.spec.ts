@@ -13,7 +13,7 @@ const rows = [
 
 async function json(route: Route, body: unknown) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }); }
 async function install(page: Page) {
-  await page.route("**/bff/**", async route => {
+  await page.route(url => url.pathname.startsWith("/bff/"), async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/bff/me") return json(route, {
       data: {
