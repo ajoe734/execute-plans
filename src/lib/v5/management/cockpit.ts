@@ -80,13 +80,13 @@ export interface CockpitSeed {
 export function composeCockpit(seed: CockpitSeed): CockpitModel {
   const strip: SystemStateStripModel = {
     fields: [
-      { key: "autonomy", label: "Autonomy", value: seed.autonomy, tone: seed.autonomy === "manual" ? "warn" : "ok", href: "/management/governance" },
+      { key: "autonomy", label: "Autonomy", value: seed.autonomy, tone: seed.autonomy === "manual" ? "warn" : "ok", href: "/management/governance-decisions?tab=policy" },
       { key: "humanPending", label: "Human pending", value: seed.humanPending, tone: seed.humanPending > 0 ? "warn" : "ok", href: "/management/human-inbox" },
       { key: "critical", label: "Critical findings", value: seed.criticalFindings, tone: seed.criticalFindings > 0 ? "bad" : "ok", href: "/management/sentinel" },
       { key: "owners", label: "Persona owners", value: seed.personaOwners, href: "/management/personas" },
       { key: "personas", label: "Personas", value: seed.personas.length, href: "/management/persona-fleet" },
       { key: "broker", label: "Broker live", value: seed.brokerReady ? "ready" : "blocked", tone: seed.brokerReady ? "ok" : "bad", href: "/management/readiness/broker-live" },
-      { key: "capital", label: "Capital bound", value: seed.capitalBound ? "ready" : "blocked", tone: seed.capitalBound ? "ok" : "bad", href: "/management/promotion-allocation?tab=quarterly-capital" },
+      { key: "capital", label: "Capital bound", value: seed.capitalBound ? "ready" : "blocked", tone: seed.capitalBound ? "ok" : "bad", href: "/management/governance-decisions?tab=capital" },
       { key: "strict", label: "Strict publish", value: seed.strictPublishOk ? "ok" : "blocked", tone: seed.strictPublishOk ? "ok" : "bad", href: "/management/readiness/strict-publish" },
       { key: "bffHa", label: "BFF HA", value: seed.bffHaOk ? "ok" : "degraded", tone: seed.bffHaOk ? "ok" : "warn", href: "/management/readiness/bff-ha" },
     ],

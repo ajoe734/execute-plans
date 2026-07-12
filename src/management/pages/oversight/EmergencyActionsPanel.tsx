@@ -7,7 +7,7 @@
 // broker_disconnect, sentinel) and links out to the governed decision detail
 // — it never promotes a persona or increases capital from this surface.
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +26,15 @@ const kindTone = (kind: HumanInboxKind) =>
 
 export const EmergencyActionsPanel = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const { data: items, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
 
   const containmentItems = useMemo(
     () => (items ?? []).filter((item) => CONTAINMENT_KINDS.includes(item.kind)),
     [items],
   );
+
+  const returnUrl = encodeURIComponent(location.pathname + location.search);
 
   return (
     <Card className="p-3 space-y-3">
@@ -47,7 +50,7 @@ export const EmergencyActionsPanel = () => {
                 <Badge variant="outline" className={kindTone(item.kind)}>{item.kind}</Badge>
                 <span className="text-sm font-medium text-foreground">{item.title}</span>
               </div>
-              <Link to={item.detailHref} className="text-xs text-primary hover:underline">
+              <Link to={`${item.detailHref}?returnUrl=${returnUrl}`} className="text-xs text-primary hover:underline">
                 {t("promotionAllocation.emergencyActions.review")}
               </Link>
             </div>

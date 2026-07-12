@@ -2,8 +2,9 @@
 // Overview · Spec & Parameters · Experiments · Paper-Live · Risk & Alerts ·
 // Incidents · Artifacts · Evolution · Governance · Lineage · Audit
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
@@ -276,6 +277,13 @@ export const StrategyDetail = () => {
                     </tbody>
                   </table>
                 </Card>
+                <div className="flex justify-end mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={canonicalCenterUrl("performance", "attribution", { strategy: s.id })}>
+                      {t("strategyDetail.openFormalAttribution", { defaultValue: "View Formal Attribution" })} →
+                    </Link>
+                  </Button>
+                </div>
               </>
             ),
           },
