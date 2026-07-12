@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { StrategyPerformancePage } from "./StrategyPerformancePage";
 import type {
   TradingDecisionEvent,
@@ -122,7 +123,7 @@ describe("StrategyPerformancePage", () => {
   it("renders live strategy attribution, source health, and no placeholder copy", async () => {
     arrangeLoaded();
 
-    render(<StrategyPerformancePage />);
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Strategy Performance" })).toBeDefined();
     expect(screen.getByText("Breakout Alpha")).toBeDefined();
@@ -158,7 +159,7 @@ describe("StrategyPerformancePage", () => {
       attributionResponse(),
     );
 
-    render(<StrategyPerformancePage />);
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByText("Carry Beta")).toBeDefined();
     expect(screen.getByText("missing attribution")).toBeDefined();
@@ -169,7 +170,7 @@ describe("StrategyPerformancePage", () => {
     tradingRoomMocks.getTradingRoomPerformanceAttribution.mockResolvedValue(attributionResponse());
     tradingRoomMocks.listDecisionEvents.mockResolvedValue({ etag: null, items: [] });
 
-    render(<StrategyPerformancePage />);
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByText("Live performance data unavailable")).toBeDefined();
     expect(screen.getByText("AUTH_REQUIRED")).toBeDefined();

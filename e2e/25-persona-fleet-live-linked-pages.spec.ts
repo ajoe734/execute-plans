@@ -96,11 +96,13 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await nonProductionTab.click();
     const focusedFleetRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     const capitalLink = focusedFleetRow.locator(`[aria-label="Open capital for ${PERSONA_ID}"]`);
-    await expect(capitalLink).toHaveAttribute("href", /tab=paper-candidates.*persona=/);
+    await expect(capitalLink).toHaveAttribute(
+      "href",
+      new RegExp(`/management/rankings\\?tab=quarterly&persona=${PERSONA_ID}`),
+    );
     await capitalLink.click();
-    // MGMT-PERF-IA-001: promotion-allocation?tab=paper-candidates now
-    // redirects to Rankings Center's quarterly tab (ROUTE_MIGRATION_MATRIX.md);
-    // that tab is no longer labeled "Paper -> Real".
+    // MGMT-PERF-IA-001: paper capital links now target Rankings Center's
+    // quarterly tab directly (ROUTE_MIGRATION_MATRIX.md).
     await expect(page.getByRole("tab", { name: /Quarterly|季度排名/i })).toHaveAttribute("aria-selected", "true");
     const capitalTable = page.getByRole("table").first();
     await expect(capitalTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
