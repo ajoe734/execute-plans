@@ -10,6 +10,8 @@ import {
 } from "./WorkshopCardPrimitives";
 import { ConsultResultCard } from "./ConsultResultCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
+import { PersonaOpinionCard } from "./PersonaOpinionCard";
+import { DebateCard } from "./DebateCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 import {
   asRecord,
@@ -526,6 +528,11 @@ function CardBody({ card }: { card: WorkshopCard }) {
       return <VersionCompare payload={payload} />;
     case "readiness_gate":
       return <ReadinessGate payload={payload} />;
+    case "persona_opinion":
+    case "opinion":
+      return <PersonaOpinionCard payload={payload} />;
+    case "debate":
+      return <DebateCard payload={payload} />;
     default:
       return <GenericPayload payload={payload} />;
   }

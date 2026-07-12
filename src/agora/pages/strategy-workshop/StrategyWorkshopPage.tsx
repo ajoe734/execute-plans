@@ -1,4 +1,5 @@
 import React, { useEffect, useReducer, useRef, useCallback, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   listWorkshops,
   getWorkshop,
@@ -6,6 +7,7 @@ import {
   getWorkshopReadiness,
   listWorkshopCards,
   openWorkshopStream,
+  postWorkshopMessage,
   type WorkshopCard,
   type StrategyReadinessAssessment,
   type WorkshopStreamEvent,
@@ -13,6 +15,28 @@ import {
 import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
+import {
+  ArrowLeft,
+  Bot,
+  Layers,
+  AlertTriangle,
+  Send,
+  XCircle,
+  Clock,
+  ShieldAlert,
+  HelpCircle,
+  FileText
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatLabel } from "@/agora/components/workshopCardUtils";
 
 // ---------------------------------------------------------------------------
 // Card list reducer
@@ -61,8 +85,10 @@ function WorkshopListView(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     listWorkshops()
-      .then((items) => {
+      .then((res) => {
         if (cancelled) return;
+        // Handle both raw array and items-envelope responses safely
+        const items = Array.isArray(res) ? res : res?.items || [];
         setWorkshops(items);
         setState(items.length === 0 ? "empty" : "loaded");
       })
@@ -75,22 +101,68 @@ function WorkshopListView(): JSX.Element {
   }, []);
 
   return (
-    <div data-testid="strategy-workshop-page-list">
-      {state === "loading" && (
-        <div data-testid="workshop-list-loading">Loading workshops…</div>
-      )}
-      {state === "empty" && (
-        <div data-testid="workshop-list-empty">No workshops found.</div>
-      )}
-      {state === "loaded" && (
-        <ul data-testid="workshop-list">
-          {workshops.map((ws) => (
-            <li key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
-              {ws.workshop_id}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div data-testid="strategy-workshop-page-list" className="flex flex-col flex-1 p-4 bg-slate-50">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 px-4 bg-white rounded-t-lg shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">策略工坊 (Strategy Workshops)</h2>
+        <span className="text-xs text-slate-400 font-medium">
+          {workshops.length > 0 ? `${workshops.length} 個工坊` : ""}
+        </span>
+      </div>
+
+      <div className="bg-white rounded-b-lg border-x border-b border-slate-200 shadow-sm flex-1 overflow-y-auto">
+        {state === "loading" && (
+          <div data-testid="workshop-list-loading" className="flex items-center justify-center py-20 text-slate-400 gap-2">
+            <span className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
+            Loading workshops…
+          </div>
+        )}
+        {state === "empty" && (
+          <div data-testid="workshop-list-empty" className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+            <Bot className="h-10 w-10 text-slate-300" />
+            <p className="text-sm font-medium">No strategy workshops found.</p>
+          </div>
+        )}
+        {state === "error" && (
+          <div className="flex items-center justify-center py-20 text-red-500 font-medium">
+            Failed to load workshops.
+          </div>
+        )}
+        {state === "loaded" && (
+          <ul data-testid="workshop-list" className="divide-y divide-slate-100">
+            {workshops.map((ws) => (
+              <li key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
+                <a
+                  className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+                  href={`/agora/strategy-workshop/${ws.workshop_id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {ws.subject.title ?? ws.subject.ref}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400 flex items-center gap-2">
+                      <span className="font-mono">ID: {ws.workshop_id.slice(0, 8)}</span>
+                      <span>•</span>
+                      <span>Subject: {ws.subject.kind}</span>
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
+                      ws.status === "open"
+                        ? "bg-green-50 text-green-700 border border-green-100"
+                        : ws.status === "in_review"
+                          ? "bg-amber-50 text-amber-700 border border-amber-100"
+                          : "bg-slate-100 text-slate-500 border border-slate-200",
+                    )}
+                  >
+                    {ws.status}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -110,26 +182,53 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
   const [readiness, setReadiness] = useState<StrategyReadinessAssessment | null>(null);
   const [composerValue, setComposerValue] = useState("");
 
+  // Custom states for PINT-005
+  const [selectedMode, setSelectedMode] = useState<"ask" | "challenge" | "consult" | "propose_action" | "reflect">("ask");
+  const [pickerSelectionType, setPickerSelectionType] = useState<"named" | "recommended" | "committee" | "red-team" | "same-style" | "cross-style">("recommended");
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(["per_quant", "per_macro", "per_risk"]);
+  const [focusedRef, setFocusedRef] = useState<string | null>(null);
+  
+  // Warning/Banner simulator states
+  const [isStale, setIsStale] = useState(false);
+  const [isDegraded, setIsDegraded] = useState(false);
+  const [isDenied, setIsDenied] = useState(false);
+
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
     lastEventId: null,
   });
 
+  const [sendLoading, setSendLoading] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+
   // Initial data load
   useEffect(() => {
     let cancelled = false;
-    getWorkshop(workshopId)
-      .then((ws) => { if (!cancelled) setWorkshop(ws); })
-      .catch(() => undefined);
-    getWorkshopCompleteness(workshopId)
-      .then((c) => { if (!cancelled && c) setCompleteness(c); })
-      .catch(() => undefined);
-    getWorkshopReadiness(workshopId)
-      .then((r) => { if (!cancelled && r) setReadiness(r); })
-      .catch(() => undefined);
-    listWorkshopCards(workshopId)
-      .then((items) => { if (!cancelled) dispatch({ type: "RESET", cards: items }); })
-      .catch(() => undefined);
+    setSessionLoading(true);
+    
+    Promise.all([
+      getWorkshop(workshopId)
+        .then((ws) => { if (!cancelled) setWorkshop(ws); })
+        .catch(() => undefined),
+      getWorkshopCompleteness(workshopId)
+        .then((c) => { if (!cancelled && c) setCompleteness(c); })
+        .catch(() => undefined),
+      getWorkshopReadiness(workshopId)
+        .then((r) => { if (!cancelled && r) setReadiness(r); })
+        .catch(() => undefined),
+      listWorkshopCards(workshopId)
+        .then((res) => { 
+          if (!cancelled) {
+            const items = Array.isArray(res) ? res : res?.items || [];
+            dispatch({ type: "RESET", cards: items }); 
+          }
+        })
+        .catch(() => undefined)
+    ]).finally(() => {
+      if (!cancelled) setSessionLoading(false);
+    });
+
     return () => {
       cancelled = true;
     };
@@ -150,7 +249,10 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
   const refreshCards = useCallback(() => {
     listWorkshopCards(workshopId)
-      .then((items) => dispatch({ type: "RESET", cards: items }))
+      .then((res) => {
+        const items = Array.isArray(res) ? res : res?.items || [];
+        dispatch({ type: "RESET", cards: items });
+      })
       .catch(() => undefined);
   }, [workshopId]);
 
@@ -198,23 +300,132 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
   const handleContinueDiscussion = useCallback((cardId: string) => {
     setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} — `));
+    setFocusedRef(cardId);
   }, []);
+
+  const handleSend = useCallback(
+    async (text: string) => {
+      if (!workshopId || !text.trim() || isDenied) return;
+      setSendLoading(true);
+      setSendError(null);
+      try {
+        await postWorkshopMessage(workshopId, {
+          content: text.trim(),
+          metadata: {
+            mode: selectedMode,
+            participant_persona_ids: selectedParticipants,
+            focused_ref: focusedRef,
+            subject_kind: workshop?.subject?.kind,
+            subject_ref: workshop?.subject?.ref,
+            picker_type: pickerSelectionType,
+          },
+        });
+        setComposerValue("");
+        const [res, comp, r] = await Promise.all([
+          listWorkshopCards(workshopId),
+          getWorkshopCompleteness(workshopId),
+          getWorkshopReadiness(workshopId),
+        ]);
+        const items = Array.isArray(res) ? res : res?.items || [];
+        dispatch({ type: "RESET", cards: items });
+        if (comp) setCompleteness(comp);
+        if (r) setReadiness(r);
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Failed to send message");
+      } finally {
+        setSendLoading(false);
+      }
+    },
+    [workshopId, selectedMode, selectedParticipants, focusedRef, workshop, pickerSelectionType, isDenied]
+  );
 
   return (
     <div
       data-testid="strategy-workshop-page-session"
-      style={{ display: "flex", height: "100%", overflow: "hidden" }}
+      className="flex h-full w-full overflow-hidden bg-slate-50"
     >
       {/* Left: conversation + composer */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200">
+        
+        {/* Session header */}
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 px-4 bg-white z-10">
+          <div className="flex items-center gap-3">
+            <a
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium transition-colors"
+              href="/agora/strategy-workshop"
+            >
+              <ArrowLeft className="h-4 w-4" /> 工坊列表
+            </a>
+            <span className="text-slate-300">|</span>
+            {workshop && (
+              <span className="text-sm font-semibold text-slate-900 truncate">
+                {workshop.subject.title ?? workshop.subject.ref}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
+              workshop?.status === "open"
+                ? "bg-green-50 text-green-700 border border-green-100"
+                : workshop?.status === "in_review"
+                  ? "bg-amber-50 text-amber-700 border border-amber-100"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+            )}>
+              {workshop?.status ?? "Loading"}
+            </span>
+          </div>
+        </div>
+
+        {/* Warning messages if stale/degraded/denied */}
+        {(isStale || isDegraded || isDenied || workshop?.status === "concluded") && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex flex-col gap-1.5 text-xs text-amber-800 shrink-0">
+            {isStale && (
+              <div className="flex items-center gap-1.5" data-testid="warning-stale">
+                <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span><strong>Context Stale:</strong> The underlying strategy or evidence has changed. Reassessment recommended.</span>
+              </div>
+            )}
+            {isDegraded && (
+              <div className="flex items-center gap-1.5" data-testid="warning-degraded">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span><strong>Degraded Mode:</strong> LLM provider latency is high. Cached fallback models are active.</span>
+              </div>
+            )}
+            {isDenied && (
+              <div className="flex items-center gap-1.5 text-red-800 bg-red-50 p-1.5 rounded border border-red-100" data-testid="warning-denied">
+                <ShieldAlert className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                <span><strong>Access Restricted:</strong> Write actions and live consultations are blocked for this user.</span>
+              </div>
+            )}
+            {workshop?.status === "concluded" && (
+              <div className="flex items-center gap-1.5 text-slate-800 bg-slate-50 p-1.5 rounded border border-slate-100">
+                <XCircle className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                <span>This workshop has been concluded. No further messages can be posted.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Conversation flow */}
         <div
           data-testid="workshop-conversation"
-          style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}
+          className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-slate-50/50"
         >
-          {!workshop && (
-            <div data-testid="workshop-session-loading">Loading…</div>
+          {sessionLoading && (
+            <div data-testid="workshop-session-loading" className="flex items-center justify-center py-20 text-slate-400 gap-2">
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
+              Loading session cards…
+            </div>
           )}
-          {cardState.cards
+          {!sessionLoading && cardState.cards.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400 gap-2">
+              <Bot className="h-10 w-10 text-slate-300" />
+              <p className="text-sm font-semibold">No activity cards found</p>
+              <p className="text-xs">Submit a prompt below to start the conversation with the Servant.</p>
+            </div>
+          )}
+          {!sessionLoading && cardState.cards
             .slice()
             .sort((a, b) => a.sequence_no - b.sequence_no)
             .map((card) => (
@@ -226,17 +437,232 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             ))}
         </div>
 
-        <div
-          data-testid="servant-composer"
-          style={{ borderTop: "1px solid #e2e8f0", padding: 12 }}
-        >
-          <input
-            type="text"
-            value={composerValue}
-            onChange={(e) => setComposerValue(e.target.value)}
-            placeholder="Message the workshop servant…"
-            style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
-          />
+        {/* Composer section */}
+        <div data-testid="servant-composer" className="border-t border-slate-200 bg-white p-4 shrink-0 flex flex-col gap-3">
+          
+          {/* Context Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100 shrink-0" data-testid="context-bar">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5 text-slate-400" />
+                <strong>Subject:</strong> {workshop?.subject.kind ?? "none"} ({workshop?.subject.ref ?? "none"})
+              </span>
+              <span className="text-slate-300">•</span>
+              <span>
+                <strong>Strategy Spec:</strong> v1.0
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <strong>Environment:</strong> {((workshop?.metadata?.environment) as string) ?? "paper"}
+              </span>
+              {focusedRef && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
+                    Focused: #{focusedRef}
+                    <button 
+                      onClick={() => setFocusedRef(null)}
+                      className="text-indigo-400 hover:text-indigo-600 ml-1 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-slate-400">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                Latest Cutoff: 2026-07-12
+              </span>
+              <span className="text-slate-300">|</span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setIsStale(!isStale)} 
+                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isStale ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-white text-slate-400 border-slate-200")}
+                  data-testid="toggle-stale-btn"
+                >
+                  Stale
+                </button>
+                <button 
+                  onClick={() => setIsDegraded(!isDegraded)} 
+                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isDegraded ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-white text-slate-400 border-slate-200")}
+                  data-testid="toggle-degraded-btn"
+                >
+                  Degrade
+                </button>
+                <button 
+                  onClick={() => setIsDenied(!isDenied)} 
+                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isDenied ? "bg-red-100 text-red-800 border-red-200" : "bg-white text-slate-400 border-slate-200")}
+                  data-testid="toggle-denied-btn"
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mode Selector & Participant Picker Row */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Mode Selector */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
+                <Select
+                  value={selectedMode}
+                  onValueChange={(val: any) => setSelectedMode(val)}
+                >
+                  <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    <SelectItem value="ask" className="text-xs">Ask (Explain & Analyse)</SelectItem>
+                    <SelectItem value="challenge" className="text-xs">Challenge (Attack assumptions)</SelectItem>
+                    <SelectItem value="consult" className="text-xs">Consult (Multiple Views)</SelectItem>
+                    <SelectItem value="propose_action" className="text-xs">Propose (Candidate Measure)</SelectItem>
+                    <SelectItem value="reflect" className="text-xs">Reflect (Thesis vs Outcome)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Participant Picker */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Participants</label>
+                <Select
+                  value={pickerSelectionType}
+                  onValueChange={(val: any) => {
+                    setPickerSelectionType(val);
+                    if (val === "recommended") setSelectedParticipants(["per_quant", "per_macro", "per_risk"]);
+                    else if (val === "committee") setSelectedParticipants(["per_risk", "per_macro"]);
+                    else if (val === "red-team") setSelectedParticipants(["per_red"]);
+                    else if (val === "same-style") setSelectedParticipants(["per_quant"]);
+                    else if (val === "cross-style") setSelectedParticipants(["per_quant", "per_macro"]);
+                    else if (val === "named") setSelectedParticipants(["per_quant"]);
+                  }}
+                >
+                  <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker">
+                    <SelectValue placeholder="Select panel" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    <SelectItem value="recommended" className="text-xs">Recommended Panel</SelectItem>
+                    <SelectItem value="committee" className="text-xs">Risk Committee</SelectItem>
+                    <SelectItem value="red-team" className="text-xs">Red Team</SelectItem>
+                    <SelectItem value="same-style" className="text-xs">Same-Style Comparison</SelectItem>
+                    <SelectItem value="cross-style" className="text-xs">Cross-Style Comparison</SelectItem>
+                    <SelectItem value="named" className="text-xs">Named Personas (Select)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Explanation box */}
+            <div className="flex-1 min-w-[200px] max-w-[400px] bg-slate-50 border border-slate-100 p-2 rounded text-[11px] text-slate-500 leading-normal" data-testid="eligibility-explanation">
+              {(() => {
+                switch (pickerSelectionType) {
+                  case "recommended":
+                    return "Recommended Panel - Servant selected panel optimized for checking strategy completeness. Eligible.";
+                  case "committee":
+                    return "Risk Committee - Requires Risk Officer and Macro Strategist for capital allocations. Eligible.";
+                  case "red-team":
+                    return "Red Team - Adversary probing of strategy assumptions. Restricted to research/paper environment. Eligible.";
+                  case "same-style":
+                    return "Same-Style Comparison - Contrasts similar archetype models (e.g. Quant-to-Quant) to measure parameter sensitivity. Eligible.";
+                  case "cross-style":
+                    return "Cross-Style Comparison - Matches opposing styles (e.g. Quant vs Macro) to find regime blind spots. Eligible.";
+                  case "named":
+                    return "Named Personas - Check individual personas below to include them in the workshop session.";
+                  default:
+                    return "";
+                }
+              })()}
+            </div>
+          </div>
+
+          {/* Named Persona check boxes when Named is selected */}
+          {pickerSelectionType === "named" && (
+            <div className="flex flex-wrap gap-4 border border-slate-100 bg-slate-50 p-2.5 rounded shrink-0" data-testid="named-checkbox-panel">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={selectedParticipants.includes("per_quant")}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_quant"]);
+                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_quant"));
+                  }}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span title="Deployed. Approved for all strategy scopes. Eligible.">Quant Architect</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={selectedParticipants.includes("per_macro")}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_macro"]);
+                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_macro"));
+                  }}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span title="Deployed. Approved for macro regime analysis. Eligible.">Macro Strategist</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={selectedParticipants.includes("per_risk")}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_risk"]);
+                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_risk"));
+                  }}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span title="Deployed. Approved for all risk assessment. Eligible.">Risk Officer Bot</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-not-allowed">
+                <input 
+                  type="checkbox" 
+                  disabled
+                  checked={false}
+                  className="rounded border-slate-200 text-slate-300 cursor-not-allowed"
+                />
+                <span title="Under Review. Blocked: Restricted to research/paper environments.">Red Team Adversary (Disabled)</span>
+              </label>
+            </div>
+          )}
+
+          {/* Composer Input Area */}
+          <div className="flex gap-2">
+            <textarea
+              className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
+              disabled={sendLoading || isDenied || workshop?.status === "concluded"}
+              placeholder={isDenied ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
+              rows={3}
+              value={composerValue}
+              onChange={(e) => setComposerValue(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied) {
+                  e.preventDefault();
+                  handleSend(composerValue);
+                }
+              }}
+            />
+            <Button
+              className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
+              disabled={sendLoading || isDenied || !composerValue.trim() || workshop?.status === "concluded"}
+              onClick={() => handleSend(composerValue)}
+              type="button"
+            >
+              {sendLoading ? (
+                <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              送出
+            </Button>
+          </div>
+          {sendError && (
+            <p className="text-xs text-red-500 font-semibold">{sendError}</p>
+          )}
         </div>
       </div>
 
@@ -250,6 +676,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           display: "flex",
           flexDirection: "column",
         }}
+        className="shrink-0 bg-slate-50"
       >
         <div style={{ flex: 1, overflow: "auto" }}>
           <StrategyCompletenessRail
@@ -266,6 +693,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             borderTop: "1px solid #e2e8f0",
             flexShrink: 0,
           }}
+          className="bg-white"
         >
           {(() => {
             const tradingRoomReady = readiness?.highest_ready_gate === "trading_room";
