@@ -9,7 +9,7 @@ import { PlatformShell } from "@/platform/PlatformShell";
 import { ManagementLayout } from "@/management/ManagementLayout";
 import { AgoraLayout } from "@/agora/AgoraLayout";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
-import { StrategyWorkshopPage } from "@/agora/pages/StrategyWorkshopPage";
+import { StrategyWorkshopPage } from "@/agora/pages/strategy-workshop/StrategyWorkshopPage";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { StrategyDetail } from "@/management/pages/StrategyDetail";
 import { PersonaDetail } from "@/management/pages/PersonaDetail";

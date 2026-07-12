@@ -20,7 +20,10 @@ export type WorkshopCardType =
   | "consult_result"
   | "version_patch_proposal"
   | "version_compare"
-  | "readiness_gate";
+  | "readiness_gate"
+  | "persona_opinion"
+  | "opinion"
+  | "debate";
 
 export type WorkshopCardStatus =
   | "informational"
