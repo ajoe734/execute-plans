@@ -72,6 +72,8 @@ describe("RuntimesPage", () => {
     expect(screen.getAllByText("nan").length).toBeGreaterThanOrEqual(4);
     expect(screen.queryByText("0ms")).not.toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
+    const journeysLink = screen.getByRole("link", { name: "persona-20260528-5937dea1 trade journeys" });
+    expect(journeysLink).toHaveAttribute("href", "/management/trade-journeys?persona_id=persona-20260528-5937dea1");
   });
 
   it("does not fall back to unrelated runtime rows when focus misses", () => {

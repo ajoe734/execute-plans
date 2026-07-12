@@ -179,6 +179,13 @@ export const StrategyDetail = () => {
                     emptyHint={t("empty.noResults")}
                   />
                 </div>
+                <div className="flex justify-end mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link aria-label={`${s.id} trade journeys`} to={`/management/trade-journeys?strategy_id=${encodeURIComponent(s.id)}`}>
+                      {t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })} →
+                    </Link>
+                  </Button>
+                </div>
               </>
             ),
           },

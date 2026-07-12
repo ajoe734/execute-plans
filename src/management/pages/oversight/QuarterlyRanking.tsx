@@ -546,6 +546,9 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                       <Link to={`/management/performance?tab=attribution&persona=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary transition-colors">
                         • Performance Center
                       </Link>
+                      <Link aria-label={`${r.personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary transition-colors">
+                        • {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                      </Link>
                     </div>
                   </td>
                   <td className="px-3 py-3">

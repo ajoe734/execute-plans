@@ -1232,6 +1232,13 @@ export const HumanInboxPage = () => {
             {it.links?.manageHref && (
               <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.openActionPage")}</Link></Button>
             )}
+            {it.personaId && (
+              <Button asChild size="sm" variant="outline">
+                <Link aria-label={`${it.personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(it.personaId)}`}>
+                  {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                </Link>
+              </Button>
+            )}
             {evidenceHref ? (
               <Button asChild size="sm" variant="outline">
                 <Link to={evidenceHref}>
@@ -1339,6 +1346,11 @@ const rowHealthStatus = (row: ManagementTradingPulseRuntimeRow): string =>
 
 const rowHealthChecks = (row: ManagementTradingPulseRuntimeRow): string[] =>
   pulseStringList(rowHealth(row).degraded_checks ?? rowHealth(row).degradedChecks);
+
+const pulsePersonaId = (row: ManagementTradingPulseRuntimeRow): string | undefined => {
+  const value = row.personaId ?? row.persona_id;
+  return typeof value === "string" && value.trim() ? value : undefined;
+};
 
 const cardMetricCoverage = (card: ManagementTradingPulseCard): Record<string, unknown> =>
   pulseRecord(card.details?.metricCoverage ?? card.details?.metric_coverage);
@@ -1554,16 +1566,18 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.trades")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.baselineStatus")}</th>
               <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.checks")}</th>
-              <th className="py-2 font-medium">{t("mgmt.pulse.updated")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.updated")}</th>
+              <th className="py-2 font-medium">{t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="py-3 text-muted-foreground" colSpan={9}>{t("mgmt.pulse.noRows")}</td>
+                <td className="py-3 text-muted-foreground" colSpan={10}>{t("mgmt.pulse.noRows")}</td>
               </tr>
             ) : rows.map((row) => {
               const checks = rowHealthChecks(row);
+              const personaId = pulsePersonaId(row);
               return (
               <tr key={row.runtimeId || row.runtime_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-3 font-mono text-foreground">{row.runtimeId || row.runtime_id || "—"}</td>
@@ -1589,7 +1603,14 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
                     {shortList(checks)}
                   </span>
                 </td>
-                <td className="py-2 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
+                <td className="py-2 pr-3 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
+                <td className="py-2">
+                  {personaId ? (
+                    <Link aria-label={`${personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(personaId)}`} className="text-primary underline-offset-4 hover:underline">
+                      {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                    </Link>
+                  ) : "—"}
+                </td>
               </tr>
               );
             })}
@@ -2281,6 +2302,8 @@ const EvidenceAuditPanel = ({ events }: { events: ManagementEvidenceAuditEvent[]
 const EvidenceExplorerList = () => {
   const { t } = useTranslation();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const journeyFocus = searchParams.get("journey_id")?.trim() ?? "";
   const { data, loading } = useV5Live(() => mgmt.evidence.overviewLiveOnly(), []);
   useEffect(() => {
     if (!loading) markRoutePrimaryReady(location.pathname);
@@ -2317,6 +2340,20 @@ const EvidenceExplorerList = () => {
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
       </header>
       <EvidenceSurfaceBanner meta={model.meta} primaryKey="management_evidence" />
+      {journeyFocus && (
+        <Card className="shrink-0 border-primary/30 bg-primary/5 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground">
+              {t("mgmt.evidence.journeyContextFmt", { journey: journeyFocus, defaultValue: `Viewing evidence linked from trade journey ${journeyFocus}` })}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link aria-label={`${journeyFocus} back to trade journey`} to={`/management/trade-journeys/${encodeURIComponent(journeyFocus)}`}>
+                {t("mgmt.evidence.backToJourney", { defaultValue: "Back to journey" })}
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      )}
       <dl className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <EvidenceMetric label={t("mgmt.evidence.total")} value={model.summary.totalEvidence} />
         <EvidenceMetric label={t("mgmt.evidence.traceable")} value={model.summary.traceableEvidence} />

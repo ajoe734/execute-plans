@@ -22,6 +22,7 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
 
   // Oversight
   { path: "/management/cockpit", i18nKey: "nav.managementCockpit", parent: "/management" },
+  { path: "/management/trade-journeys", i18nKey: "nav.tradeJourneys", parent: "/management" },
   { path: "/management/persona-fleet", i18nKey: "nav.personaFleet", parent: "/management" },
   { path: "/management/human-inbox", i18nKey: "nav.humanInbox", parent: "/management" },
   { path: "/management/trading-pulse", i18nKey: "nav.tradingPulse", parent: "/management" },

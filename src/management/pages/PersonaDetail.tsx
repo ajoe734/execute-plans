@@ -165,6 +165,13 @@ export const PersonaDetail = () => {
                   <Field label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} mono />
                   <Field label={t("table.owner")} value={p.owner} mono />
                 </div>
+                <div className="flex justify-end pt-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link aria-label={`${p.id} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(p.id)}`}>
+                      {t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })} →
+                    </Link>
+                  </Button>
+                </div>
               </Section>
             ),
           },

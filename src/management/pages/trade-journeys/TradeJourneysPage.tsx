@@ -28,15 +28,25 @@ export function TradeJourneysPage() {
   const [resolving, setResolving] = useState(false);
   const tenant = params.get("tenant_id") || "default";
   const environment = params.get("environment") || "paper";
+  const personaFocus = params.get("persona_id") || undefined;
+  const strategyFocus = params.get("strategy_id") || undefined;
+  const decisionFocus = params.get("decision_id") || undefined;
+  const orderFocus = params.get("order_id") || undefined;
+  const brokerOrderFocus = params.get("broker_order_id") || undefined;
+  const hasFocus = Boolean(personaFocus || strategyFocus || decisionFocus || orderFocus || brokerOrderFocus);
   const cursorHistory = useMemo(() => { try { const value = JSON.parse(params.get("cursor_history") || "[]"); return Array.isArray(value) && value.every(x => typeof x === "string") ? value as string[] : []; } catch { return []; } }, [params]);
   const set = (key: string, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); next.delete("page_token"); next.delete("cursor_history"); setParams(next); };
   const goNext = () => { const token = payload?.page_info.next_page_token; if (!token) return; const next = new URLSearchParams(params); next.set("page_token", token); next.set("cursor_history", JSON.stringify([...cursorHistory, params.get("page_token") || ""])); setParams(next); };
   const goPrevious = () => { if (!cursorHistory.length) return; const history = cursorHistory.slice(0, -1); const token = cursorHistory[cursorHistory.length - 1]; const next = new URLSearchParams(params); if (token) next.set("page_token", token); else next.delete("page_token"); if (history.length) next.set("cursor_history", JSON.stringify(history)); else next.delete("cursor_history"); setParams(next); };
-  const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment]);
+  const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, persona_id: personaFocus, strategy_id: strategyFocus, decision_id: decisionFocus, order_id: orderFocus, broker_order_id: brokerOrderFocus, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment, personaFocus, strategyFocus, decisionFocus, orderFocus, brokerOrderFocus]);
   useEffect(() => { const c = new AbortController(); setError(""); listTradeJourneys(query, c.signal).then(setPayload).catch(e => setError(e.message)); return () => c.abort(); }, [query]);
   const resolve = async () => { const q = params.get("resolve")?.trim(); if (!q) return; setResolving(true); setError(""); try { const { data } = await resolveTradeJourney({ q, tenant_id: tenant, environment }); if (data.journey_ids.length === 1) { const id = data.journey_ids[0]; navigate(`/management/trade-journeys/${encodeURIComponent(id)}?tenant_id=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`); } else if (data.ambiguous || data.journey_ids.length > 1) setError(`Ambiguous identifier: ${data.journey_ids.join(", ")}`); else setError("No journey matched that identifier."); } catch (e) { setError((e as Error).message); } finally { setResolving(false); } };
   return <section className="mx-auto w-full max-w-[1500px] space-y-4 p-4 md:p-6">
     <header><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Execution observability</p><h1 className="text-2xl font-semibold">Trade Journeys</h1><p className="text-sm text-muted-foreground">Canonical signal-to-reconciliation truth. No browser-side domain joins.</p></header>
+    {hasFocus && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+      <span>Focused: {[personaFocus && `persona ${personaFocus}`, strategyFocus && `strategy ${strategyFocus}`, decisionFocus && `decision ${decisionFocus}`, orderFocus && `order ${orderFocus}`, brokerOrderFocus && `broker order ${brokerOrderFocus}`].filter(Boolean).join(" · ")} · {payload?.page_info.total ?? 0} journeys</span>
+      <Link className="text-primary hover:underline" to={`/management/trade-journeys?tenant_id=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`}>Show all journeys</Link>
+    </div>}
     <ReadState meta={payload?.meta} />
     <div className="grid gap-3 rounded-lg border bg-card p-4 lg:grid-cols-[1fr_auto_auto]">
       <label className="relative"><span className="sr-only">Search journeys</span><Search className="absolute left-3 top-3" size={16}/><input className={`${baseInput} w-full pl-9`} value={params.get("q") || ""} onChange={e => set("q", e.target.value)} placeholder="Search symbol, persona or order ID" /></label>

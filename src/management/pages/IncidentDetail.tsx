@@ -219,9 +219,19 @@ export const IncidentDetail = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedStrategies")}</div>
               <div className="flex flex-wrap gap-2">
                 {affectedStrategies.map((s) => (
-                  <Button key={s.id} size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
-                    {s.name} <RiskBadge level={s.risk} />
-                  </Button>
+                  <div key={s.id} className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
+                      {s.name} <RiskBadge level={s.risk} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${s.id} trade journeys`}
+                      onClick={() => navigate(`/management/trade-journeys?strategy_id=${encodeURIComponent(s.id)}`)}
+                    >
+                      {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                    </Button>
+                  </div>
                 ))}
                 {affectedStrategies.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
               </div>

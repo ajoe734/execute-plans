@@ -189,6 +189,15 @@ export const RuntimesPage = () => {
                     {runtimeId && runtimeId !== primary && <div className="font-mono text-[11px] text-muted-foreground">{runtimeId}</div>}
                     {bindingId && bindingId !== runtimeId && <div className="font-mono text-[11px] text-muted-foreground">{bindingId}</div>}
                     {personaId && <div className="font-mono text-[11px] text-muted-foreground">{personaId}</div>}
+                    {personaId && (
+                      <Link
+                        aria-label={`${personaId} trade journeys`}
+                        to={`/management/trade-journeys?persona_id=${encodeURIComponent(personaId)}`}
+                        className="mt-0.5 inline-block text-[11px] text-primary hover:underline"
+                      >
+                        {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                      </Link>
+                    )}
                   </div>
                 );
               },

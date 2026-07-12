@@ -24,6 +24,7 @@ export const BASELINE_ROUTES = [
   { path: "/management/rankings", kind: "nav" },
   { path: "/management/governance-decisions", kind: "nav" },
   { path: "/management/cockpit", kind: "nav" },
+  { path: "/management/trade-journeys", kind: "nav" },
   { path: "/management/persona-fleet", kind: "nav" },
   { path: "/management/human-inbox", kind: "nav" },
   { path: "/management/trading-pulse", kind: "nav" },

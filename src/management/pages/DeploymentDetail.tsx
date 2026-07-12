@@ -99,6 +99,11 @@ export const DeploymentDetail = () => {
                       <button className="text-accent hover:underline text-mono" onClick={() => navigate(`/management/artifacts/${d.artifactId}`)}>{d.artifactId}</button>
                     } />
                     <Field label={t("table.owner")} value={d.owner} mono />
+                    <Field label={t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })} value={
+                      d.strategyId
+                        ? <button aria-label={`${d.id} trade journeys`} className="text-accent hover:underline text-mono" onClick={() => navigate(`/management/trade-journeys?strategy_id=${encodeURIComponent(d.strategyId)}`)}>{t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })}</button>
+                        : "—"
+                    } />
                   </div>
                 </Section>
               </>

@@ -48,6 +48,19 @@ describe("Trade Journeys workbench", () => {
     await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("cursor_history"));
   });
 
+  it("forwards persona_id focus from a cross-entry deep link to the BFF query and renders a clearable banner", async () => {
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: rows.slice(0, 1) }, page_info: { total: 1, page_size: 25 }, meta: fresh });
+    renderList("/management/trade-journeys?tenant_id=t1&persona_id=persona-a");
+    await screen.findByText("happy-1");
+    expect(api.listTradeJourneys).toHaveBeenCalledWith(
+      expect.objectContaining({ persona_id: "persona-a", tenant_id: "t1" }),
+      expect.anything(),
+    );
+    expect(screen.getByText(/Focused: persona persona-a/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Show all journeys" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("persona_id"));
+  });
+
   it("announces degraded, incomplete, stale, and missing-stage truth", async () => {
     const meta = { ...fresh, read_state: "degraded" as const, warnings: ["ledger unavailable"] };
     vi.mocked(api.getTradeJourney).mockResolvedValue({ data: { ...rows[4], read_state: "partial", completeness: { missing_stages: ["ledger_booking"] }, stages: { reconciliation: { status: "mismatch" } }, revision: 3 }, meta });
