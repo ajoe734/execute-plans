@@ -32,3 +32,5 @@ export * from "./agora/types";
 export * from "./agora/governance";
 // 2026-07-11 Persona Trade Journal.
 export * from "./tradeJournal";
+// 2026-07-12 Agora Interactions.
+export * from "./agora/interaction";

@@ -229,6 +229,11 @@ export const paths = {
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
 
+  // ---- 2026-07-12 Agora Interactions ----
+  agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,
+  agoraInteractionsEligible: () => `${BASE}/agora/interactions/participants:eligible`,
+  agoraInteractionsSubmit: () => `${BASE}/agora/interactions`,
+
   // ---- 2026-07-12 OODA Packets & Evolution Reviews ----
   oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
   oodaPackets: () => `${BASE}/ooda/packets`,
