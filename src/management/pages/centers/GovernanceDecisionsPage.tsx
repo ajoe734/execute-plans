@@ -1,21 +1,35 @@
-// MGMT-PERF-IA-001 — canonical Governance Decisions shell.
+// MGMT-PERF-IA-001/005 — canonical Governance Decisions shell.
 //
-// Wave 0: mounts the existing capital-pool/rebalance and ranking-formula
-// list components (previously Promotion Allocation's `quarterly-capital`
-// and `formula-policy` tabs) as the `capital` and `policy` tabs. The
-// `recommendations` tab has no existing 1:1 component — Promotion
-// Allocation never had a distinct recommendations surface, so this task
-// does not fabricate one. It links to the still-live legacy Promotion
-// Allocation ranking tabs and the generic Governance Queue as an interim
-// path until MGMT-PERF-IA-005 builds the real recommendation ->
-// review -> apply-receipt lifecycle.
-import { Link, useSearchParams } from "react-router-dom";
+// Wave 0 (IA-001) mounted the existing capital-pool/rebalance and
+// ranking-formula list components as the `capital` and `policy` tabs.
+//
+// Wave 1 (this task, IA-005) builds the real recommendations queue:
+// `recommendations` now shows the live Human Inbox items that can change
+// ranking-driven capital/promotion state (GovernanceDecisionQueue). Per the
+// gap doc decision ("Governance Decisions may show a recommendation's rank
+// snapshot and evidence link, but cannot host a second sortable ranking
+// table" / "references immutable ranking snapshots instead of embedding a
+// live ranking table"), this deliberately does NOT re-embed the legacy
+// Promotion Allocation `real-ranking` panel (a live-computed, server-scored
+// target-weight table — see the now-deleted RealRankingPanel): each queue
+// item's own "View decision receipt" link is the per-recommendation
+// snapshot/evidence reference, and the link below points to the one place
+// that owns the full ranking table (Rankings Center). `capital` adds the
+// same queue scoped to capital/access decisions above the existing
+// pool/rebalance lists. Neither tab ever renders an apply/approve control:
+// every decision and its receipt lives on the linked Human Gate detail page
+// (HumanGateDetail.tsx), never here — see the shared-product constraint "no
+// analysis or ranking page directly mutates live state".
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
+import { Link } from "react-router-dom";
+import { Trophy } from "lucide-react";
+import { CANONICAL_CENTERS, canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { CapitalPoolsList, RankingFormulasList, RebalancesList } from "@/management/pages/Lists";
+import { GovernanceDecisionQueue } from "./GovernanceDecisionQueue";
 
 const CENTER = CANONICAL_CENTERS["governance-decisions"];
 const TAB_IDS = CENTER.tabs.map((tab) => tab.id);
@@ -24,23 +38,42 @@ function normalizeTab(value: string | null): string {
   return value && (TAB_IDS as string[]).includes(value) ? value : CENTER.defaultTab;
 }
 
-const RecommendationsPendingNotice = () => {
+const RecommendationsQueueTab = () => {
   const { t } = useTranslation();
   return (
-    <Card className="p-4 space-y-3">
-      <h2 className="text-sm font-semibold text-foreground">{t("governanceDecisions.recommendationsPending.title")}</h2>
-      <p className="text-sm text-muted-foreground">{t("governanceDecisions.recommendationsPending.body")}</p>
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-6">
+      <GovernanceDecisionQueue
+        kinds={["ranking_recommendation", "promotion_review"]}
+        titleKey="governanceDecisions.queue.recommendationsTitle"
+        subtitleKey="governanceDecisions.queue.recommendationsSubtitle"
+      />
+      <Card className="p-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{t("governanceDecisions.recommendationsImpact.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("governanceDecisions.recommendationsImpact.subtitle")}</p>
+        </div>
         <Button asChild size="sm" variant="outline">
-          <Link to="/management/governance">{t("governanceDecisions.recommendationsPending.openGovernanceQueue")}</Link>
+          <Link to={canonicalCenterUrl("rankings", "rolling")}>
+            <Trophy className="mr-1 h-3.5 w-3.5" />
+            {t("governanceDecisions.recommendationsImpact.openRankingsCenter")}
+          </Link>
         </Button>
-        <Button asChild size="sm" variant="outline">
-          <Link to="/management/promotion-allocation">{t("governanceDecisions.recommendationsPending.openLegacyPromotionAllocation")}</Link>
-        </Button>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 };
+
+const CapitalTab = () => (
+  <div className="space-y-6">
+    <GovernanceDecisionQueue
+      kinds={["capital_breach", "policy_violation", "rollback_request"]}
+      titleKey="governanceDecisions.queue.capitalTitle"
+      subtitleKey="governanceDecisions.queue.capitalSubtitle"
+    />
+    <CapitalPoolsList />
+    <RebalancesList />
+  </div>
+);
 
 export const GovernanceDecisionsPage = () => {
   const { t } = useTranslation();
@@ -70,11 +103,10 @@ export const GovernanceDecisionsPage = () => {
         </TabsList>
 
         <TabsContent value="recommendations" className="m-0">
-          <RecommendationsPendingNotice />
+          <RecommendationsQueueTab />
         </TabsContent>
-        <TabsContent value="capital" className="m-0 space-y-6">
-          <CapitalPoolsList />
-          <RebalancesList />
+        <TabsContent value="capital" className="m-0">
+          <CapitalTab />
         </TabsContent>
         <TabsContent value="policy" className="m-0">
           <RankingFormulasList />

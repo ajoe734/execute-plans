@@ -244,6 +244,24 @@ describe("HumanGateDetailPage", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("renders the decision-history apply-receipt trail with reviewer and timestamp", () => {
+    const detail: HumanInboxDetail = {
+      ...promotionReviewDetail(),
+      signatures: [{ role: "approver", signedBy: "ops-lead@pantheon", signedAt: "2026-07-11T15:00:00Z" }],
+      decisionHistory: [
+        { decidedAt: "2026-07-11T15:00:00Z", decidedBy: "ops-lead@pantheon", decision: "approve", note: "Paper evidence passed risk and cost gates." },
+      ],
+    };
+    mocks.useV5Live.mockReturnValue({ data: detail, loading: false, refresh: vi.fn() });
+
+    renderDetail("promotion_review:review-persona-paper-1");
+
+    expect(screen.getByText("Decision history")).toBeInTheDocument();
+    expect(screen.getByText("by ops-lead@pantheon · 2026-07-11T15:00:00Z")).toBeInTheDocument();
+    expect(screen.getByText("Paper evidence passed risk and cost gates.")).toBeInTheDocument();
+    expect(screen.getByText("signed 2026-07-11T15:00:00Z")).toBeInTheDocument();
+  });
+
   it("shows error feedback when promotion decision route rejects", async () => {
     const refresh = vi.fn();
     vi.spyOn(mgmt.humanInbox, "decidePromotionReview").mockRejectedValue(new Error("HTTP 500"));

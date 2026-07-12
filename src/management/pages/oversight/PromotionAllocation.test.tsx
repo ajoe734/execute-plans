@@ -1,12 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { PromotionAllocationPage } from "./PromotionAllocation";
-import type { ManagementPersonaFleetRow, AllocationPolicyLine } from "@/lib/bff-v1/management";
-import type { PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
 import type { HumanInboxItem } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
@@ -31,103 +29,37 @@ function renderPage(initialEntry: string) {
   );
 }
 
-const fleetRow: ManagementPersonaFleetRow = {
-  personaId: "persona-canary-alpha",
-  personaName: "Canary Alpha",
-  owner: "research-1",
-  ooda: "Orient",
-  autonomy: "supervised",
-  perfDelta: 0.01,
-  humanNeeded: false,
-  lastMutation: "2026-07-01",
-  deploymentStage: "canary_running",
-  capitalMode: "canary",
-  capitalScope: "canary_sleeve",
-  capitalSleeveId: "sleeve-canary-01",
-  currentWeight: 0.03,
-  bindingState: "bound",
-};
-
-const leagueRow: PersonaLeagueRow = {
-  personaId: "persona-canary-alpha",
-  personaName: "Canary Alpha",
-  currentRank: 1,
-  tier: "S",
-  score: 92,
-  scoreBreakdown: {
-    pnlScore: 80, sharpeScore: 75, drawdownControlScore: 70, executionQualityScore: 85,
-    riskComplianceScore: 90, improvementScore: 60, interventionPenalty: 2, hardPenalty: 0,
-  },
-  pnlToday: 1000, pnl7d: 5000, pnl30d: 20000, pnlQuarter: 60000, pnlYtd: 100000,
-  sharpe: 2.1, maxDrawdown: -0.03, winRate: 0.6, turnover: 1.2, slippageBps: 2,
-  fillRatio: 0.98, orderRejectRate: 0.002, riskPolicyViolations: 0, humanInterventions: 0,
-  sentinelFindings: 0, mutationCount: 4, improvedMutations: 3, degradedMutations: 1,
-  status: "active",
-  links: { manageHref: "/management/personas/persona-canary-alpha" },
-};
-
-const increaseLine: AllocationPolicyLine = {
-  personaId: "persona-canary-alpha",
-  stage: "canary_running",
-  capitalScope: "real",
-  capitalSleeveId: "sleeve-canary-01",
-  currentWeight: 0.03,
-  targetWeight: 0.05,
-  delta: 0.02,
-  rankScore: 0.42,
-  capacityAdjustedScore: 0.42,
-  recommendation: "canary_to_live_review",
-  capReasons: ["canary_cap"],
-  exclusions: [],
-  evidenceRefs: [],
-  requiresHumanApproval: true,
-};
-
-describe("Promotion & Allocation workbench", () => {
+describe("Promotion & Allocation legacy shell", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
   });
 
-  it("exposes Emergency actions alongside the other PPL-ALLOC-006 tabs", () => {
+  it("is a legacy shell with no internal tabs, no embedded ranking table, and links to the canonical centers", () => {
     mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
     renderPage("/management/promotion-allocation");
 
-    expect(screen.getByRole("tab", { name: "Paper → Real" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Real ranking" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Quarterly allocation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Emergency actions" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Formula policy" })).toBeInTheDocument();
-  });
+    // MGMT-PERF-IA-005: every other tab (paper-candidates/real-ranking/
+    // quarterly-capital/formula-policy) now redirects to a canonical center
+    // before this page ever renders (PromotionAllocationLegacyGate) — no
+    // internal <Tabs> and no embedded RealRankingPanel/CapitalPoolsList/
+    // RankingFormulasList table survives here.
+    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Real allocation target weights")).not.toBeInTheDocument();
 
-  it("normalizes legacy aliases (league, emergency) onto the canonical tab ids", () => {
-    mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
-    renderPage("/management/promotion-allocation?tab=league");
-    expect(screen.getByRole("tab", { name: "Real ranking" })).toHaveAttribute("aria-selected", "true");
-  });
-
-  it("Real ranking shows a capital increase as requiring approval, never as applied", () => {
-    let call = 0;
-    mocks.useV5Live.mockImplementation(() => {
-      call += 1;
-      if (call === 1) return { data: [fleetRow], loading: false, refresh: vi.fn() }; // personaFleet.get
-      if (call === 2) return { data: [leagueRow], loading: false, refresh: vi.fn() }; // personaLeague.rankingsLiveOnly
-      if (call === 3) return { data: [increaseLine], loading: false, refresh: vi.fn() }; // allocationPolicy.evaluate
-      return { data: [leagueRow], loading: false, refresh: vi.fn() }; // embedded PersonaLeaguePage
-    });
-
-    renderPage("/management/promotion-allocation?tab=real-ranking");
-
-    expect(screen.getByText("3.00%")).toBeInTheDocument(); // current weight
-    expect(screen.getByText("5.00%")).toBeInTheDocument(); // target weight
-    expect(screen.getByText("Requires human approval")).toBeInTheDocument();
-    expect(screen.getByText("canary_cap")).toBeInTheDocument();
-    expect(screen.queryByText(/^Applied$/)).not.toBeInTheDocument();
-  });
-
-  it("Real ranking shows no eligible rows without fabricating a target weight", () => {
-    mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
-    renderPage("/management/promotion-allocation?tab=real-ranking");
-    expect(screen.getByText("No canary/live personas are eligible for real allocation yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open Performance Center/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/management/performance"),
+    );
+    expect(screen.getByRole("link", { name: /Open Rankings Center/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/management/rankings"),
+    );
+    expect(screen.getByRole("link", { name: /Open Governance Decisions/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/management/governance-decisions"),
+    );
   });
 
   it("Emergency actions is read-only, links out, and never offers to promote or increase capital", () => {
