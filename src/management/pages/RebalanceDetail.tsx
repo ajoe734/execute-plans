@@ -6,8 +6,10 @@ import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
-import { Download, Send } from "lucide-react";
+import { Download, Send, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
+import { EmptyState } from "@/components/ui/empty-state";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
@@ -40,6 +42,7 @@ export const RebalanceDetail = () => {
   const navigate = useNavigate();
   const { can } = usePermissions();
   const [r, setR] = useState<Rebalance | undefined>();
+  const [loading, setLoading] = useState(true);
   const [pool, setPool] = useState<CapitalPool | undefined>();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -49,14 +52,21 @@ export const RebalanceDetail = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
 
   useEffect(() => {
-    if (!id) return;
-    bff.rebalances.get(id).then((rb) => {
-      setR(rb);
-      if (rb) {
-        setMachineState(mapState(rb.state));
-        bff.capitalPools.get(rb.targetPoolId).then(setPool);
-      }
-    });
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    bff.rebalances.get(id)
+      .then((rb) => {
+        setR(rb);
+        if (rb) {
+          setMachineState(mapState(rb.state));
+          bff.capitalPools.get(rb.targetPoolId).then(setPool);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
     bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
     bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
     bff.strategies.list().then(setStrategies);
@@ -67,7 +77,22 @@ export const RebalanceDetail = () => {
     [machineState, can, r],
   );
 
-  if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!r) {
+    return (
+      <>
+        <PageHeader title={t("nav.rebalance", { defaultValue: "Rebalance" })} />
+        <PageBody>
+          <EmptyState
+            icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={t("rebalance.detail.notFoundTitle", { defaultValue: "Rebalance Not Found" })}
+            description={t("rebalance.detail.notFoundDescription", { id: id ?? "", defaultValue: `Rebalance detail for ID ${id} is not available in the live contract.` })}
+            cta={{ label: t("governanceDecisions.backToList", { defaultValue: "Back to Governance Decisions" }), onClick: () => navigate("/management/governance-decisions?tab=capital") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
   const lines = r.lines ?? [];
 
   return (

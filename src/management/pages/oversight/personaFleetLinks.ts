@@ -129,21 +129,55 @@ function promotionAllocationHref(href: string, tab: string, idParamName?: string
   const [beforeHash, hash = ""] = href.split("#", 2);
   const [, query = ""] = beforeHash.split("?", 2);
   const params = new URLSearchParams(query);
-  if (!params.has("tab")) params.set("tab", tab);
+  const targetTab = params.get("tab") || tab;
+
+  if (targetTab === "emergency-actions" || targetTab === "emergency" || targetTab === "containment") {
+    params.set("tab", targetTab);
+    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
+    const suffix = params.toString();
+    return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+
+  if (targetTab === "real-ranking" || targetTab === "league" || targetTab === "persona-league") {
+    params.set("tab", "rolling");
+    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
+    const suffix = params.toString();
+    return `/management/rankings${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+  if (targetTab === "paper-candidates") {
+    params.set("tab", "quarterly");
+    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
+    const suffix = params.toString();
+    return `/management/rankings${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+  if (targetTab === "quarterly-capital" || targetTab === "rebalance" || targetTab === "quarterly-rebalance") {
+    params.set("tab", "capital");
+    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
+    const suffix = params.toString();
+    return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+  if (targetTab === "formula-policy" || targetTab === "ranking-formulas" || targetTab === "formula") {
+    params.set("tab", "policy");
+    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
+    const suffix = params.toString();
+    return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  }
+
+  params.set("tab", targetTab);
   if (idParamName && isUsableToken(id)) params.set(idParamName, id);
   const suffix = params.toString();
-  return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 function promotionAllocationCapitalHref(href: string): string | null {
-  if (!href.startsWith("/management/promotion-allocation")) return null;
+  if (!href.startsWith("/management/promotion-allocation") && !href.startsWith("/management/governance-decisions")) return null;
   const [beforeHash, hash = ""] = href.split("#", 2);
   const [, query = ""] = beforeHash.split("?", 2);
   const params = new URLSearchParams(query);
   if (!isUsableToken(params.get("capital_id"))) return null;
-  params.set("tab", "quarterly-capital");
+  params.set("tab", "capital");
   const suffix = params.toString();
-  return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
+  return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 function sourceProviderKey(source?: ManagementDataSource): string | null {
@@ -764,9 +798,16 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
     "performanceHref",
     "performance_href",
   ]);
-  if (canonical) return canonical;
+  if (canonical) {
+    if (canonical.startsWith("/management/performance-attribution")) {
+      const rest = canonical.slice("/management/performance-attribution".length);
+      const prefix = "/management/performance?tab=attribution";
+      return rest.startsWith("?") ? `${prefix}&${rest.slice(1)}` : `${prefix}${rest}`;
+    }
+    return canonical;
+  }
   const personaId = encodedPersonaId(r);
-  return personaId ? `/management/performance-attribution?dimension=persona&persona=${personaId}` : null;
+  return personaId ? `/management/performance?tab=attribution&dimension=persona&persona=${personaId}` : null;
 }
 
 export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | null {
@@ -787,13 +828,22 @@ export function personaFleetRankHref(r: ManagementPersonaFleetRow): string | nul
   ], (href) => (
     href.startsWith("/management/persona-league")
     || href.startsWith("/management/quarterly-ranking")
+    || href.startsWith("/management/rankings")
   ));
-  if (canonical) return canonical;
+  if (canonical) {
+    if (canonical.startsWith("/management/persona-league")) {
+      return canonical.replace("/management/persona-league", "/management/rankings?tab=rolling");
+    }
+    if (canonical.startsWith("/management/quarterly-ranking")) {
+      return canonical.replace("/management/quarterly-ranking", "/management/rankings?tab=quarterly");
+    }
+    return canonical;
+  }
   const personaId = encodedPersonaId(r);
   if (!personaId) return null;
   return isPaperCapitalRow(r)
-    ? `/management/quarterly-ranking?persona=${personaId}`
-    : `/management/persona-league?persona=${personaId}`;
+    ? `/management/rankings?tab=quarterly&persona=${personaId}`
+    : `/management/rankings?tab=rolling&persona=${personaId}`;
 }
 
 export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string | null {
@@ -870,7 +920,7 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
   if (isPaperCapitalRow(r)) {
     const personaId = encodedPersonaId(r);
-    return personaId ? `/management/promotion-allocation?tab=paper-candidates&persona=${personaId}` : null;
+    return personaId ? `/management/rankings?tab=quarterly&persona=${personaId}` : null;
   }
 
   const canonical = firstCanonicalHref(rowLinkRecords(r), [
@@ -887,12 +937,12 @@ export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | 
   if (canonical?.startsWith("/management/capital/")) {
     const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
     return isUsableToken(id)
-      ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}`
-      : "/management/promotion-allocation?tab=quarterly-capital";
+      ? `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(id)}`
+      : "/management/governance-decisions?tab=capital";
   }
   if (canonical?.startsWith("/management/capital")) return normalizeRetiredPromotionHref(canonical);
   const id = capitalPoolId(r) ?? paperLedgerId(r);
-  return id ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(id)}` : null;
+  return id ? `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(id)}` : null;
 }
 
 

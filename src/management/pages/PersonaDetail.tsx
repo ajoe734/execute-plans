@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
@@ -190,10 +191,19 @@ export const PersonaDetail = () => {
           {
             value: "performance", label: t("section.performance"),
             content: (
-              <div className="grid grid-cols-3 gap-4">
-                <StatCard label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
-                <StatCard label={t("nav.strategies")} value={p.routedStrategies} />
-                <StatCard label={t("section.activity")} value="—" />
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <StatCard label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
+                  <StatCard label={t("nav.strategies")} value={p.routedStrategies} />
+                  <StatCard label={t("section.activity")} value="—" />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={canonicalCenterUrl("performance", "overview", { persona: p.id })}>
+                      {t("detail.performance.openPerformanceCenter", { defaultValue: "Open Performance Center" })} →
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ),
           },

@@ -140,7 +140,7 @@ export const CapitalPoolDetail = () => {
             icon={<Inbox className="h-8 w-8" />}
             title={t("phase13.capital.detail.notFoundTitle")}
             description={description}
-            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/promotion-allocation?tab=quarterly-capital") }}
+            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/governance-decisions?tab=capital") }}
           />
         </PageBody>
       </>

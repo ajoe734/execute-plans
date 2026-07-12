@@ -109,11 +109,11 @@ export function resolveManagementHref(
     case "strategy":
       return safeId ? `/management/strategies/${safeId}` : null;
     case "capital_pool":
-      return safeId ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${safeId}` : null;
+      return safeId ? `/management/governance-decisions?tab=capital&capital_id=${safeId}` : null;
     case "capital_pool_live":
-      return `/management/promotion-allocation?tab=quarterly-capital${opts.poolId ? `&capital_id=${encodeURIComponent(opts.poolId)}` : ""}`;
+      return `/management/governance-decisions?tab=capital${opts.poolId ? `&capital_id=${encodeURIComponent(opts.poolId)}` : ""}`;
     case "approval":
-      return safeId ? `/management/governance/${safeId}` : "/management/governance";
+      return safeId ? `/management/governance-decisions?tab=recommendations&item=${safeId}` : "/management/governance-decisions?tab=recommendations";
     case "human_gate":
       return safeId ? `/management/human-inbox/${safeId}` : "/management/human-inbox";
     case "deployment":
@@ -241,7 +241,7 @@ function sourceHrefForEvidence(ref: EvidenceRef): SentinelResolutionLink | null 
       return {
         id: `source:approval:${ref.id}`,
         kind: "decision",
-        href: `/management/governance/${encoded}`,
+        href: `/management/governance-decisions?tab=recommendations&item=${encoded}`,
         labelKey: "v5.sentinel.linkOpenApproval",
         label: "Open approval",
         priority: 40,
@@ -250,7 +250,7 @@ function sourceHrefForEvidence(ref: EvidenceRef): SentinelResolutionLink | null 
       return {
         id: `source:policy:${ref.id}`,
         kind: "decision",
-        href: `/management/governance/policies/${encoded}`,
+        href: `/management/governance-decisions?tab=policy&formula_id=${encoded}`,
         labelKey: "v5.sentinel.linkOpenPolicy",
         label: "Open policy",
         priority: 42,
@@ -363,7 +363,7 @@ export function buildSentinelResolutionLinks(finding: SentinelFinding): Sentinel
     pushUnique(links, {
       id: `readiness:capital:${poolId}`,
       kind: "readiness",
-      href: `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(poolId)}`,
+      href: `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(poolId)}`,
       labelKey: "v5.sentinel.linkOpenCapitalGate",
       label: "Open capital gate",
       priority: 54,
@@ -372,7 +372,7 @@ export function buildSentinelResolutionLinks(finding: SentinelFinding): Sentinel
     pushUnique(links, {
       id: "readiness:capital",
       kind: "readiness",
-      href: "/management/promotion-allocation?tab=quarterly-capital",
+      href: "/management/governance-decisions?tab=capital",
       labelKey: "v5.sentinel.linkOpenCapitalRegistry",
       label: "Open capital registry",
       priority: 56,

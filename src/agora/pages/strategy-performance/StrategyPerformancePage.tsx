@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { Activity, AlertTriangle, Database, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import {
   getTradingRoom,
@@ -311,11 +313,22 @@ function StrategyPerformanceLoaded({
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[#f0ece4]">Strategy Performance</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-[#f0ece4]">Strategy Performance</h1>
+            <span className="rounded bg-[#1e293b] border border-[#334155] px-1.5 py-0.5 text-[10px] text-[#94a3b8] uppercase tracking-wide">
+              Execution Scope (Real-Time Feeds)
+            </span>
+          </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8c96a6]">
             <span>Period: {summary.period || data.attribution.data.period}</span>
             <span>Policy: {data.attribution.meta.policy ?? "not reported"}</span>
             <span>Snapshot: {formatDateTime(latestTelemetry)}</span>
+            <span className="text-[#3b82f6]">
+              For official accounting, see the{" "}
+              <Link to={canonicalCenterUrl("performance")} className="underline hover:text-[#60a5fa]">
+                Performance Center
+              </Link>
+            </span>
           </div>
         </div>
         <button
@@ -408,7 +421,19 @@ function StrategyPerformanceLoaded({
               {rows.map((row) => (
                 <tr className="border-b border-[#2a2e38]/70 last:border-0" key={row.id}>
                   <td className="px-3 py-3 align-top">
-                    <div className="font-medium text-[#f0ece4]">{row.title}</div>
+                    <div className="font-medium text-[#f0ece4] flex items-center gap-2">
+                      {row.title}
+                      <Link
+                        to={canonicalCenterUrl("performance", "attribution", {
+                          strategy: row.strategyId,
+                          period: summary.period || data.attribution.data.period,
+                        })}
+                        className="text-[10px] text-[#3b82f6] hover:underline animate-pulse-subtle"
+                        title="View formal attribution in Performance Center"
+                      >
+                        [Attribution →]
+                      </Link>
+                    </div>
                     <div className="mt-1 max-w-[260px] truncate text-xs text-[#8c96a6]">{row.strategyId}</div>
                   </td>
                   <td className="px-3 py-3 align-top">

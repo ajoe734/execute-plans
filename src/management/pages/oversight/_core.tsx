@@ -1097,6 +1097,7 @@ export const PersonaFleetPage = () => {
 
 export const HumanInboxPage = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
@@ -1225,7 +1226,11 @@ export const HumanInboxPage = () => {
             {/* Live BFF inbox items lack the FE-composed detailHref/links; guard
                 so a degraded/real payload renders instead of crashing the page. */}
             {it.detailHref && (
-              <Button asChild size="sm" variant="outline"><Link to={it.detailHref}>{t("mgmt.actions.openDetail")}</Link></Button>
+              <Button asChild size="sm" variant="outline">
+                <Link to={`${it.detailHref}?returnUrl=${encodeURIComponent(location.pathname + location.search)}`}>
+                  {t("mgmt.actions.openDetail")}
+                </Link>
+              </Button>
             )}
             {it.links?.manageHref && (
               <Button asChild size="sm" variant="outline"><Link to={it.links.manageHref}>{t("mgmt.actions.openActionPage")}</Link></Button>

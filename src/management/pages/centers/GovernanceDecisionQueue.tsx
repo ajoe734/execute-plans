@@ -7,7 +7,7 @@
 // anything itself. The linked Human Gate detail page owns the actual
 // decision history / receipt (HumanInboxDecisionRecord).
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,12 +35,15 @@ interface GovernanceDecisionQueueProps {
 
 export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: GovernanceDecisionQueueProps) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const { data: items, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
 
   const queueItems = useMemo(
     () => (items ?? []).filter((item: HumanInboxItem) => kinds.includes(item.kind)),
     [items, kinds],
   );
+
+  const returnUrl = encodeURIComponent(location.pathname + location.search);
 
   return (
     <Card className="p-3 space-y-3">
@@ -60,7 +63,7 @@ export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: Govern
                   </Badge>
                   <span className="text-sm font-medium text-foreground">{item.title}</span>
                 </div>
-                <Link to={item.detailHref} className="text-xs text-primary hover:underline">
+                <Link to={`${item.detailHref}?returnUrl=${returnUrl}`} className="text-xs text-primary hover:underline">
                   {t("governanceDecisions.queue.viewReceipt")}
                 </Link>
               </div>

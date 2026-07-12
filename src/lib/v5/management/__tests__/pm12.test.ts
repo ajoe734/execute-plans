@@ -30,7 +30,7 @@ describe("PM12 portfolio", () => {
   });
   it("default book has valid links on every row", () => {
     const b = defaultPortfolioBook();
-    expect(b.pools.every((p) => p.links.manageHref.startsWith("/management/promotion-allocation?tab=quarterly-capital"))).toBe(true);
+    expect(b.pools.every((p) => p.links.manageHref.startsWith("/management/governance-decisions?tab=capital"))).toBe(true);
     expect(b.holdings.every((h) => h.links.manageHref.startsWith("/management/"))).toBe(true);
   });
 });

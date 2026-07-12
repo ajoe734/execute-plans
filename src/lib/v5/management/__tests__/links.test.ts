@@ -10,10 +10,10 @@ describe("resolveManagementHref — PM-2 deep link rules", () => {
   const cases: Array<[ManagementHrefKind, string | undefined, string | null, Parameters<typeof resolveManagementHref>[2]?]> = [
     ["persona", "alpha-trader", "/management/personas/alpha-trader"],
     ["strategy", "s/01", "/management/strategies/s%2F01"],
-    ["capital_pool", "cap-1", "/management/promotion-allocation?tab=quarterly-capital&capital_id=cap-1"],
-    ["capital_pool_live", undefined, "/management/promotion-allocation?tab=quarterly-capital&capital_id=cap-1", { poolId: "cap-1" }],
-    ["approval", "g-77", "/management/governance/g-77"],
-    ["approval", undefined, "/management/governance"],
+    ["capital_pool", "cap-1", "/management/governance-decisions?tab=capital&capital_id=cap-1"],
+    ["capital_pool_live", undefined, "/management/governance-decisions?tab=capital&capital_id=cap-1", { poolId: "cap-1" }],
+    ["approval", "g-77", "/management/governance-decisions?tab=recommendations&item=g-77"],
+    ["approval", undefined, "/management/governance-decisions?tab=recommendations"],
     ["human_gate", "gate-1", "/management/human-inbox/gate-1"],
     ["human_gate", undefined, "/management/human-inbox"],
     ["deployment", "dep-9", "/management/deployments/dep-9"],
@@ -95,6 +95,6 @@ describe("buildSentinelResolutionLinks", () => {
     expect(byLabel.get("Open incident")).toBe("/management/incidents/inc-123");
     expect(byLabel.get("Open strategy")).toBe("/management/strategies/tw-momentum");
     expect(byLabel.get("Open persona readiness")).toBe("/management/persona-fleet?persona=persona-tw-equity");
-    expect(byLabel.get("Open capital gate")).toBe("/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-tw-alpha");
+    expect(byLabel.get("Open capital gate")).toBe("/management/governance-decisions?tab=capital&capital_id=pool-tw-alpha");
   });
 });

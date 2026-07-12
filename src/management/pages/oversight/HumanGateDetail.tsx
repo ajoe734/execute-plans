@@ -1,7 +1,7 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
 
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,8 @@ export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
   const { data, loading, refresh } = useV5Live(() => mgmt.humanInbox.get(id), [id]);
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl") ?? "/management/human-inbox";
   const [rationale, setRationale] = useState("");
   const [submittingDecision, setSubmittingDecision] = useState<PromotionReviewDecisionValue | null>(null);
   const item = data;
@@ -44,7 +46,7 @@ export const HumanGateDetailPage = () => {
             <p className="text-sm text-muted-foreground">{id}</p>
           </div>
           <Button asChild variant="outline" size="sm">
-            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+            <Link to={returnUrl}>{t("mgmt.inbox.backToInbox")}</Link>
           </Button>
         </header>
       </section>
@@ -60,7 +62,7 @@ export const HumanGateDetailPage = () => {
             <p className="text-sm text-muted-foreground">{id}</p>
           </div>
           <Button asChild variant="outline" size="sm">
-            <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+            <Link to={returnUrl}>{t("mgmt.inbox.backToInbox")}</Link>
           </Button>
         </header>
         <Card className="p-4 text-sm text-muted-foreground">
@@ -119,7 +121,7 @@ export const HumanGateDetailPage = () => {
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link to="/management/human-inbox">{t("mgmt.inbox.backToInbox")}</Link>
+          <Link to={returnUrl}>{t("mgmt.inbox.backToInbox")}</Link>
         </Button>
       </header>
 
