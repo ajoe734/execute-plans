@@ -52,6 +52,13 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
     }
   });
 
+  it("assigns redirect-expiry ownership to every compatibility alias", () => {
+    for (const rule of LEGACY_REDIRECTS) {
+      expect(rule.owner).toBe("management-frontend");
+      expect(rule.reviewAfter).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
   it("resolving a legacy redirect twice terminates (second resolution is a no-op)", () => {
     const sampleLegacyPaths = [
       "/management/portfolio-book",

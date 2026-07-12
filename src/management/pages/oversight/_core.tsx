@@ -26,7 +26,6 @@ import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSo
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
-import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
 } from "@/lib/v5/management/humanInbox";
@@ -551,7 +550,6 @@ export const PersonaFleetPage = () => {
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.fleet.title")}>
-      <ManagementOperationsNav />
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.fleet.title")}</h1>
@@ -1143,7 +1141,6 @@ export const HumanInboxPage = () => {
   ].filter(Boolean);
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
-      <ManagementOperationsNav />
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.title")}</h1>
         <p className="text-sm text-muted-foreground">

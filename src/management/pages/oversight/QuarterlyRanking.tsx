@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
-import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -294,7 +293,6 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
 
   return (
     <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.quarterly.title")}>
-      {!embedded ? <ManagementOperationsNav /> : null}
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.quarterly.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.quarterly.subtitle")}</p>

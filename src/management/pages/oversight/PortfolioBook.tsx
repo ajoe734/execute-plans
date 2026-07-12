@@ -10,7 +10,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
-import { ManagementOperationsNav } from "@/management/components/operations/ManagementOperationsNav";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { PortfolioHoldingFilters, PortfolioHoldingsMonitor } from "@/lib/v5/management/portfolio";
@@ -115,7 +114,6 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
 
   return (
     <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.portfolio.title")}>
-      {!embedded ? <ManagementOperationsNav /> : null}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>
