@@ -97,6 +97,6 @@ describe("Trade Journeys workbench", () => {
     await screen.findByText("happy-1");
     const backLink = screen.getByRole("link", { name: /Back to Strategy strat-1/ });
     expect(backLink).toHaveAttribute("href", "/management/strategies/strat-1");
-    expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute("href", "/management/trade-journeys?tenant_id=t1&environment=paper");
+    expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute("href", "/management/trade-journeys?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fstrategies%2Fstrat-1&return_label=Strategy+strat-1");
   });
 });
