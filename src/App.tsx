@@ -51,6 +51,8 @@ const EvidencePacketDetailRoute = lazyNamedRoute(
   "EvidencePacketDetailRoute",
   "Evidence packet detail",
 );
+const TradeJourneysRoute = lazyNamedRoute(() => import("@/routes/management/tradeJourneys"), "TradeJourneysRoute", "Trade journeys");
+const TradeJourneyDetailRoute = lazyNamedRoute(() => import("@/routes/management/tradeJourneys"), "TradeJourneyDetailRoute", "Trade journey detail");
 
 // MGMT-PERF-IA-001 — portfolio-book, promotion-allocation, persona-league,
 // performance-attribution, and quarterly-ranking no longer mount their own
@@ -214,6 +216,8 @@ const App = () => (
                 <Route path="evolution-journal" element={<EvolutionJournalRoute />} />
                 <Route path="evidence" element={<EvidenceExplorerRoute />} />
                 <Route path="evidence/:id" element={<EvidencePacketDetailRoute />} />
+                <Route path="trade-journeys" element={<TradeJourneysRoute />} />
+                <Route path="trade-journeys/:journeyId" element={<TradeJourneyDetailRoute />} />
                 <Route path="persona-intent" element={<PersonaIntentTracesRoute />} />
                 <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailRoute />} />
 
