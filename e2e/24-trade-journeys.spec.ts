@@ -15,6 +15,19 @@ async function json(route: Route, body: unknown) { await route.fulfill({ status:
 async function install(page: Page) {
   await page.route("**/bff/**", async route => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/bff/me") return json(route, {
+      data: {
+        user: { id: "trade-journey-operator", displayName: "Trade Journey Operator", email: "trade-journey@pantheon.local" },
+        tenant: { id: "tenant-a", name: "Trade Journey", tz: "UTC", locale: "en-US", baseCurrency: "USD" },
+        roles: ["ops", "viewer"],
+        capabilities: ["management.read", "execution.read"],
+        env: "dev",
+        featureFlags: { tradeJourneys: true },
+        serverTime: snapshot,
+        sessionExpiresAt: "2026-07-13T12:00:00Z",
+        permissionsVersion: "trade-journey-v1",
+      },
+    });
     if (url.pathname === "/bff/management/trade-journeys") return json(route, { data: { items: rows }, page_info: { total: 5, page_size: 25 }, meta });
     if (url.pathname.includes("/timeline")) return json(route, { data: { items: [{ event_id: "event-1", stage: "reconciliation", stage_status: "mismatch", occurred_at: snapshot }] }, page_info: { total: 1, page_size: 100 }, meta });
     if (url.pathname.includes("/evidence")) return json(route, { data: { receipt_id: "receipt-1" }, meta });
