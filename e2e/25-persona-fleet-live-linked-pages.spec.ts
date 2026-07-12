@@ -82,7 +82,10 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await nonProductionTab.click();
     const rankRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
     const rankLink = rankRow.locator(`[aria-label="${PERSONA_ID} persona league ranking"]`);
-    await expect(rankLink).toHaveAttribute("href", new RegExp(`/management/(quarterly-ranking|persona-league)\\?persona=${PERSONA_ID}`));
+    await expect(rankLink).toHaveAttribute(
+      "href",
+      new RegExp(`/management/rankings\\?tab=quarterly&persona=${PERSONA_ID}`),
+    );
     await rankLink.click();
     const rankingTable = page.getByRole("table").first();
     await expect(rankingTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
