@@ -2280,6 +2280,8 @@ export default {
       focusLoadingPersonaFmt: "Loading inbox items for {{persona}}…",
       focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching inbox item(s)",
       focusMissingPersonaFmt: "No inbox item found for {{persona}}.",
+      openForPersona: "Open Human Inbox",
+      backToPersona: "Back to Persona Detail",
       showAllItems: "Show all inbox items",
       emptyBody: "No live inbox items are available.",
       focusEmptyBodyFmt: "No live inbox items are available for {{persona}}.",

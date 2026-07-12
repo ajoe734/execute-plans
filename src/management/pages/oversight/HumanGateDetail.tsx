@@ -14,7 +14,7 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { PromotionReviewDecisionValue } from "@/lib/bff-v1/management";
 
-function personaIdFromDetail(itemId: string, manageHref?: string): string | undefined {
+export function personaIdFromDetail(itemId: string, manageHref?: string): string | undefined {
   const decodedId = decodeURIComponent(itemId);
   const fromId = decodedId.match(/persona:([^/?#]+)/)?.[1];
   if (fromId) return fromId;
@@ -133,7 +133,16 @@ export const HumanGateDetailPage = () => {
           </div>
           <div>
             <dt className="text-muted-foreground">Persona</dt>
-            <dd className="font-mono text-foreground">{personaId ?? "nan"}</dd>
+            <dd className="font-mono text-foreground">
+              {personaId ? (
+                <Link
+                  to={`/management/personas/${encodeURIComponent(personaId)}`}
+                  className="text-primary underline underline-offset-4 hover:text-primary/80"
+                >
+                  {personaId}
+                </Link>
+              ) : "nan"}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Summary</dt>
