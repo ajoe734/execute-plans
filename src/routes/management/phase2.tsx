@@ -3,7 +3,6 @@ export { LineageExplorerPage as LineageExplorerRoute } from "@/management/pages/
 export { KnowledgeInboxPage as KnowledgeInboxRoute } from "@/management/pages/phase2/KnowledgeInbox";
 export { PostmortemLibraryPage as PostmortemLibraryRoute } from "@/management/pages/phase2/PostmortemLibrary";
 export { GovernanceQueuePage as GovernanceQueuePhase2Route } from "@/management/pages/phase2/GovernanceQueue";
-export { RankingDashboardPage as RankingDashboardRoute } from "@/management/pages/phase2/RankingDashboard";
 export { WorkflowTemplatesPage as WorkflowTemplatesRoute } from "@/management/pages/phase2/WorkflowTemplates";
 export { HookCronManagerPage as HookCronManagerRoute } from "@/management/pages/phase2/HookCronManager";
 export { AlphaFactoryBoardPage as AlphaFactoryRoute } from "@/management/pages/phase2/AlphaFactoryBoard";
