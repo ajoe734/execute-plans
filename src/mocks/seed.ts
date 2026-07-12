@@ -852,3 +852,317 @@ export const searchableObjects = () => [
   ...researchExperiments.map((s) => ({ id: s.id, type: "Research", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
   ...artifacts.map((s) => ({ id: s.id, type: "Artifact", name: s.name, state: s.state, owner: s.owner, risk: s.risk, updatedAt: s.updatedAt })),
 ];
+
+// ---- Persona Trade Journal Mock Data ----
+export const tradeEpisodes: any[] = [
+  {
+    trade_episode_id: "ep-complete-paper-long",
+    persona_id: "per_quant",
+    environment: "paper",
+    strategy_id: "strategy-winner-branch",
+    artifact_id: "model-v11",
+    artifact_version: "1.11.0",
+    runtime_binding_id: "run-binding-paper-1",
+    capital_pool_id: "cp_alpha",
+    instrument_id: "2330.TW",
+    side: "long",
+    status: "reflected",
+    opened_at: ago(2),
+    closed_at: ago(1),
+    entry_actor: "per_quant",
+    exit_actor: "per_quant",
+    exit_reason: "Take profit target reached",
+    requested_qty: 10000,
+    filled_qty: 10000,
+    remaining_qty: 0,
+    vwap: 950.0,
+    fees: 150.0,
+    slippage: 20.0,
+    rejects: 0,
+    realized_pnl: 150000.0,
+    unrealized_pnl: 0.0,
+    return: 0.015,
+    mae: -5.0,
+    mfe: 25.0,
+    holding_duration: 86400,
+    benchmark_delta: 0.005,
+    thesis: "TSMC Q3 earnings anticipation, strong demand for 3nm wafer fabrication.",
+    expected_catalyst: "Earnings call scheduled on July 16",
+    invalidation_conditions: "Close below 930.TW",
+    time_horizon: "1 week",
+    confidence: 0.85,
+    source_confidence: "canonical_refs",
+    reflection_summary: "Accurate entry and sizing. Risk limits maintained. Take profit was executed cleanly.",
+    coverage: {
+      execution: { state: "complete", missing_refs: [], as_of: ago(1), source_system: "runtime_telemetry" },
+      valuation: { state: "complete", missing_refs: [], as_of: ago(1), source_system: "attribution" },
+      rationale: { state: "complete", missing_refs: [], as_of: ago(2), source_system: "decision_journal" },
+      reflection: { state: "complete", missing_refs: [], as_of: ago(1), source_system: "persona_reflection" }
+    },
+    timeline: [
+      { event_id: "evt-1", event_type: "proposed", occurred_at: ago(2.1), actor: "per_quant", details: { message: "Persona proposed trade thesis and entry sizing" } },
+      { event_id: "evt-2", event_type: "approved", occurred_at: ago(2.05), actor: "approver", details: { message: "Human gate approved the thesis" } },
+      { event_id: "evt-3", event_type: "submitted", occurred_at: ago(2), actor: "per_quant", details: { order_id: "ord-1", qty: 10000, price: 950 } },
+      { event_id: "evt-4", event_type: "partially_filled", occurred_at: ago(1.9), details: { fill_id: "f-1", qty: 4000, price: 949.5 } },
+      { event_id: "evt-5", event_type: "open", occurred_at: ago(1.8), details: { fill_id: "f-2", qty: 6000, price: 950.3 } },
+      { event_id: "evt-6", event_type: "closed", occurred_at: ago(1), actor: "per_quant", details: { message: "Closed episode, exposure returned to zero" } }
+    ]
+  },
+  {
+    trade_episode_id: "ep-missing-refs",
+    persona_id: "per_quant",
+    environment: "paper",
+    strategy_id: "strategy-winner-branch",
+    artifact_id: "model-v11",
+    instrument_id: "2454.TW",
+    side: "long",
+    status: "open",
+    opened_at: ago(1.5),
+    requested_qty: 5000,
+    filled_qty: 2000,
+    remaining_qty: 3000,
+    vwap: 1380.0,
+    fees: 80.0,
+    slippage: 10.0,
+    rejects: 1,
+    realized_pnl: 0.0,
+    unrealized_pnl: 12000.0,
+    return: 0.008,
+    mae: -12.0,
+    mfe: 18.0,
+    confidence: 0.72,
+    source_confidence: "partial_refs",
+    coverage: {
+      execution: { state: "partial", missing_refs: ["fill_telemetry_missing"], as_of: ago(1), source_system: "runtime_telemetry" },
+      valuation: { state: "complete", missing_refs: [], as_of: ago(1), source_system: "attribution" },
+      rationale: { state: "partial", missing_refs: ["rationale_thesis_ref", "risk_limit_snapshot"], as_of: ago(1.5), source_system: "decision_journal" },
+      reflection: { state: "unavailable", missing_refs: ["reflection_pending"], as_of: ago(1), source_system: "persona_reflection" }
+    },
+    timeline: [
+      { event_id: "evt-201", event_type: "proposed", occurred_at: ago(1.5), actor: "per_quant", details: { message: "Proposed entry with partial metadata" } },
+      { event_id: "evt-202", event_type: "submitted", occurred_at: ago(1.4), details: { order_id: "ord-2", qty: 5000 } }
+    ]
+  },
+  {
+    trade_episode_id: "ep-force-closed",
+    persona_id: "per_quant",
+    environment: "paper",
+    strategy_id: "strategy-winner-branch",
+    artifact_id: "model-v11",
+    instrument_id: "2317.TW",
+    side: "short",
+    status: "force_closed",
+    opened_at: ago(5),
+    closed_at: ago(4),
+    entry_actor: "per_quant",
+    exit_actor: "risk_manager",
+    exit_reason: "Drawdown limit reached - Risk Liquidation triggered",
+    requested_qty: 30000,
+    filled_qty: 30000,
+    remaining_qty: 0,
+    vwap: 210.0,
+    fees: 400.0,
+    slippage: 80.0,
+    rejects: 0,
+    realized_pnl: -240000.0,
+    unrealized_pnl: 0.0,
+    return: -0.038,
+    mae: -45.0,
+    mfe: 5.0,
+    holding_duration: 36000,
+    thesis: "Short bias due to macro tech slowdown.",
+    source_confidence: "canonical_refs",
+    coverage: {
+      execution: { state: "complete", missing_refs: [], as_of: ago(4), source_system: "runtime_telemetry" },
+      valuation: { state: "complete", missing_refs: [], as_of: ago(4), source_system: "attribution" },
+      rationale: { state: "complete", missing_refs: [], as_of: ago(5), source_system: "decision_journal" },
+      reflection: { state: "complete", missing_refs: [], as_of: ago(3), source_system: "persona_reflection" }
+    },
+    timeline: [
+      { event_id: "evt-301", event_type: "proposed", occurred_at: ago(5.1), actor: "per_quant", details: { message: "Short trade proposal" } },
+      { event_id: "evt-302", event_type: "submitted", occurred_at: ago(5), details: { order_id: "ord-3", qty: 30000 } },
+      { event_id: "evt-303", event_type: "force_closed", occurred_at: ago(4), actor: "risk_manager", details: { message: "Risk Liquidation triggered force close due to drawdown breach" } }
+    ]
+  },
+  {
+    trade_episode_id: "ep-pending-reflection",
+    persona_id: "per_quant",
+    environment: "paper",
+    strategy_id: "strategy-winner-branch",
+    instrument_id: "2382.TW",
+    side: "long",
+    status: "reflection_pending",
+    opened_at: ago(3),
+    closed_at: ago(2),
+    requested_qty: 15000,
+    filled_qty: 15000,
+    remaining_qty: 0,
+    vwap: 280.0,
+    fees: 180.0,
+    slippage: 15.0,
+    realized_pnl: 45000.0,
+    unrealized_pnl: 0.0,
+    return: 0.012,
+    mae: -2.0,
+    mfe: 14.0,
+    source_confidence: "canonical_refs",
+    coverage: {
+      execution: { state: "complete", missing_refs: [], as_of: ago(2), source_system: "runtime_telemetry" },
+      valuation: { state: "complete", missing_refs: [], as_of: ago(2), source_system: "attribution" },
+      rationale: { state: "complete", missing_refs: [], as_of: ago(3), source_system: "decision_journal" },
+      reflection: { state: "unavailable", missing_refs: ["reflection_pending"], as_of: ago(2), source_system: "persona_reflection" }
+    },
+    timeline: [
+      { event_id: "evt-401", event_type: "proposed", occurred_at: ago(3), details: { message: "Proposed long trade on Quanta Computer" } },
+      { event_id: "evt-402", event_type: "closed", occurred_at: ago(2), details: { message: "Closed out, waiting for reflection trigger" } }
+    ]
+  },
+  {
+    trade_episode_id: "ep-failed-reflection",
+    persona_id: "per_quant",
+    environment: "paper",
+    strategy_id: "strategy-winner-branch",
+    instrument_id: "2603.TW",
+    side: "long",
+    status: "reflection_failed",
+    opened_at: ago(6),
+    closed_at: ago(5),
+    requested_qty: 8000,
+    filled_qty: 8000,
+    vwap: 190.0,
+    fees: 120.0,
+    slippage: 5.0,
+    realized_pnl: -8000.0,
+    unrealized_pnl: 0.0,
+    return: -0.005,
+    source_confidence: "canonical_refs",
+    coverage: {
+      execution: { state: "complete", missing_refs: [], as_of: ago(5), source_system: "runtime_telemetry" },
+      valuation: { state: "complete", missing_refs: [], as_of: ago(5), source_system: "attribution" },
+      rationale: { state: "complete", missing_refs: [], as_of: ago(6), source_system: "decision_journal" },
+      reflection: { state: "degraded", missing_refs: ["reflection_api_failed"], as_of: ago(4), source_system: "persona_reflection" }
+    },
+    timeline: [
+      { event_id: "evt-501", event_type: "proposed", occurred_at: ago(6) },
+      { event_id: "evt-502", event_type: "closed", occurred_at: ago(5) }
+    ]
+  }
+];
+
+export const tradeReflections: any[] = [
+  {
+    reflection_id: "ref-complete-paper-long",
+    trade_episode_id: "ep-complete-paper-long",
+    persona_id: "per_quant",
+    reflection_version: 1,
+    trigger: "episode_closed",
+    facts_snapshot_ref: "doc-facts-complete-paper-long",
+    facts_snapshot_hash: "a1b2c3d4e5f6",
+    expected_vs_actual: {
+      thesis: "Expected strong Q3 earnings driver (Actual: Confirmed strong numbers, stock rallied 3.2% post-earnings)",
+      entry_quality: "High quality entry close to the daily VWAP support",
+      exit_quality: "Good exit timing, captured 85% of the post-earnings peak swing",
+      sizing: "Homogenous 5% portfolio allocation",
+      timing: "Held for 24h as planned",
+      risk_adherence: "Fully compliant with stop-loss and invalidation metrics"
+    },
+    counterfactuals: [
+      {
+        action: "Holding for 3 more days instead of taking immediate profit",
+        impact: "Would have increased drawdown by 1.8% as stock consolidated",
+        assumption: "Assuming immediate consolidation after post-earnings peak"
+      }
+    ],
+    attribution: "Process and market driven. Strong earnings catalyst was correctly analyzed, and execution did not suffer significant slippage.",
+    mistakes: [],
+    what_worked: [
+      "Catalyst timing was highly accurate",
+      "VWAP limit order executed with minimal slippage"
+    ],
+    unknowns: [
+      "Macro interest rate announcement impact was uncertain but did not affect the stock directly"
+    ],
+    followups: [
+      "Verify if similar Q3 earnings plays have high success rates across the hardware sector"
+    ],
+    lesson_candidates: [
+      {
+        id: "les-complete-paper-long-1",
+        scope: "routing_rules",
+        proposed_change: "Increase priority of hardware-focused alpha models during quarterly earnings weeks",
+        supporting_episode_ids: ["ep-complete-paper-long"],
+        confidence: 0.88,
+        expiry: ago(-30)
+      }
+    ],
+    model: "claude-3-5-sonnet",
+    provider: "anthropic",
+    prompt_version: "2026-07-01-v2",
+    generated_at: ago(0.9),
+    review_state: "proposed"
+  },
+  {
+    reflection_id: "ref-force-closed",
+    trade_episode_id: "ep-force-closed",
+    persona_id: "per_quant",
+    reflection_version: 1,
+    trigger: "episode_closed",
+    facts_snapshot_ref: "doc-facts-force-closed",
+    facts_snapshot_hash: "f6e5d4c3b2a1",
+    expected_vs_actual: {
+      thesis: "Short bias due to macro tech slowdown (Actual: Stock rallied against market trend due to custom server contract leak)",
+      entry_quality: "Poor. Shorted at support instead of resistance",
+      sizing: "Over-allocated (15% portfolio size, violating rules)",
+      risk_adherence: "Failed. Initial stop-loss ignored; risk manager had to force close"
+    },
+    counterfactuals: [
+      {
+        action: "Adhering to initial 3% sizing limit",
+        impact: "Loss would be reduced by 80%",
+        assumption: "Standard risk parameters"
+      }
+    ],
+    attribution: "Execution and sizing mistake. Overconfidence in macro bias led to sizing violations and manual stop override.",
+    mistakes: [
+      "Ignored portfolio concentration limit of 5%",
+      "Manually widened stop-loss during adverse move"
+    ],
+    what_worked: [],
+    unknowns: [
+      "Information leakage on server contract"
+    ],
+    followups: [
+      "Enforce hard-coded maximum allocation bounds at the execution router level"
+    ],
+    lesson_candidates: [
+      {
+        id: "les-force-closed-1",
+        scope: "risk_limit",
+        proposed_change: "Strictly lock the portfolio sizing for short positions to maximum 3% with no operator override",
+        supporting_episode_ids: ["ep-force-closed"],
+        confidence: 0.95
+      }
+    ],
+    model: "claude-3-5-sonnet",
+    provider: "anthropic",
+    prompt_version: "2026-07-01-v2",
+    generated_at: ago(3.9),
+    review_state: "pending_review"
+  }
+];
+
+export const tradePatterns: any[] = [
+  {
+    pattern_id: "pat-earnings-overconfidence",
+    persona_id: "per_quant",
+    environment: "paper",
+    name: "Earnings catalyst sizing drift",
+    description: "Trend showing larger position sizes and widened stops during quarterly earnings announcements.",
+    sample_size: 14,
+    confidence: 0.82,
+    mistake_taxonomy: "sizing_drift",
+    occurrences: ["ep-force-closed", "ep-failed-reflection"],
+    recommendation: "Hard limit size to 5% during earnings weeks."
+  }
+];
+
