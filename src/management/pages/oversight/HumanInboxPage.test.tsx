@@ -101,6 +101,10 @@ describe("HumanInboxPage", () => {
       "href",
       "/management/human-inbox",
     );
+    expect(screen.getByRole("link", { name: "Back to Persona Detail" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-tw-equity",
+    );
   });
 
   it("preserves Portfolio Book target context without hiding the live queue", () => {

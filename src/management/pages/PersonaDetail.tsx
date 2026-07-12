@@ -9,7 +9,7 @@ import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
-import { Pause, Edit, Beaker, Play, Lock, Archive } from "lucide-react";
+import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -33,6 +33,9 @@ import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
+
+export const personaHumanInboxUrl = (personaId: string) =>
+  `/management/human-inbox?persona=${encodeURIComponent(personaId)}`;
 
 export const PersonaDetail = () => {
   const { id } = useParams();
@@ -112,6 +115,11 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
+            <Button asChild size="sm" variant="outline">
+              <Link to={personaHumanInboxUrl(p.id)}>
+                <Inbox className="h-4 w-4 mr-1" />{t("mgmt.inbox.openForPersona")}
+              </Link>
+            </Button>
             <NonProductionActionButton size="sm" variant="outline">
               <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
             </NonProductionActionButton>
