@@ -204,4 +204,28 @@ export const paths = {
     if (period) qs.push(`period=${enc(period)}`);
     return `${BASE}/management/performance-attribution${qs.length ? `?${qs.join("&")}` : ""}`;
   },
+
+  // ---- 2026-07-11 Persona Trade Journal ----
+  tradeJournal: (personaId: string, query?: Record<string, string | number | undefined>) => {
+    const params = Object.entries(query ?? {})
+      .filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "")
+      .map(([key, value]) => `${enc(key)}=${enc(value)}`);
+    return `${BASE}/personas/${enc(personaId)}/trade-journal${params.length ? `?${params.join("&")}` : ""}`;
+  },
+  tradeJournalDetail: (personaId: string, episodeId: string, environment?: string) =>
+    `${BASE}/personas/${enc(personaId)}/trade-journal/${enc(episodeId)}${environment ? `?environment=${enc(environment)}` : ""}`,
+  tradeReflections: (personaId: string, query?: Record<string, string | number | undefined>) => {
+    const params = Object.entries(query ?? {})
+      .filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "")
+      .map(([key, value]) => `${enc(key)}=${enc(value)}`);
+    return `${BASE}/personas/${enc(personaId)}/trade-reflections${params.length ? `?${params.join("&")}` : ""}`;
+  },
+  tradePatterns: (personaId: string, environment?: string) =>
+    `${BASE}/personas/${enc(personaId)}/trade-patterns${environment ? `?environment=${enc(environment)}` : ""}`,
+  tradeJournalReflectionRetry: (personaId: string, episodeId: string) =>
+    `${BASE}/personas/${enc(personaId)}/trade-journal/${enc(episodeId)}/reflection:retry`,
+  tradeLessonSubmitReview: (personaId: string, lessonId: string) =>
+    `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:submit-review`,
+  tradeLessonDecide: (personaId: string, lessonId: string) =>
+    `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
 } as const;
