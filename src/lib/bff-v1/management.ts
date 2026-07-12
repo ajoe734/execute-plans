@@ -13,6 +13,7 @@
 
 import { withLiveOrMock } from "./liveTransport";
 import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { paths } from "./paths";
 import { bffFetch, type BffRequest } from "./client";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
@@ -3799,12 +3800,18 @@ export const mgmt = {
   },
 
   humanInbox: {
-    list: (): Promise<HumanInboxItem[]> =>
-      withStrictLiveOrMock<HumanInboxItem[], unknown>(
+    list: (): Promise<HumanInboxItem[]> => {
+      // Human Inbox is a strict-live surface. Revalidate it independently when
+      // entering the page so a transient failure from a previously visited
+      // surface cannot leave a stale fail-closed banner over a successful
+      // inbox response. A failure from this request reports fallback again.
+      liveStatus.retry();
+      return withStrictLiveOrMock<HumanInboxItem[], unknown>(
         { method: "GET", path: paths.mgmtHumanInbox() },
         async () => emptyHumanInbox(),
         (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
-      ),
+      );
+    },
     get: (id: string): Promise<HumanInboxDetail | undefined> =>
       withStrictLiveOrMock<HumanInboxDetail | undefined, unknown>(
         { method: "GET", path: paths.mgmtHumanInboxItem(id) },
