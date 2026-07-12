@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
 import type { CapitalPool, Strategy } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { useT } from "@/platform/hooks";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 
 export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
   const nav = useNavigate();
+  const location = useLocation();
   const [rows, setRows] = useState<Array<CapitalPool & { boundStrategies: Strategy[] }>>([]);
   useEffect(() => {
     Promise.all([bff.capitalPools.list(), bff.strategies.list()]).then(([pools, strs]) => {
@@ -27,7 +29,7 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{t("phase13.persona.capital.hint")}</p>
         <Button asChild size="sm" variant="outline">
-          <Link aria-label={`${personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(personaId)}`}>
+          <Link aria-label={`${personaId} trade journeys`} to={tradeJourneyHref(location, { personaId }, `Persona ${personaId}`)}>
             {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
           </Link>
         </Button>

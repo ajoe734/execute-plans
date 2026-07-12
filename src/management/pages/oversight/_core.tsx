@@ -25,6 +25,7 @@ import { QuarterlyRankingCountdown } from "@/management/components/cockpit/Quart
 import { DataSourceHealthSnapshot } from "@/management/components/cockpit/DataSourceHealthSnapshot";
 import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawLlmAuthPanel";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
@@ -157,6 +158,7 @@ function quarterlySnapshotFromLive(
 
 export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const { data: model, loading } = useV5Live(() => mgmt.cockpit.getLiveOnly(), []);
   const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summaryLiveOnly(), []);
   const { data: league } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
@@ -181,9 +183,16 @@ export const OneRingCockpitPage = () => {
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.cockpit.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.cockpit.subtitle")}</p>
         </div>
-        <Button size="sm" variant="default" onClick={() => agentPanel.open()}>
-          💬 詢問 AI Management
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link aria-label="cockpit trade journeys" to={tradeJourneyHref(location, {}, t("mgmt.cockpit.title"))}>
+              {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+            </Link>
+          </Button>
+          <Button size="sm" variant="default" onClick={() => agentPanel.open()}>
+            💬 詢問 AI Management
+          </Button>
+        </div>
       </header>
       {!model && (
         <LiveOnlyNotice
@@ -1250,7 +1259,7 @@ export const HumanInboxPage = () => {
             )}
             {it.personaId && (
               <Button asChild size="sm" variant="outline">
-                <Link aria-label={`${it.personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(it.personaId)}`}>
+                <Link aria-label={`${it.personaId} trade journeys`} to={tradeJourneyHref(location, { personaId: it.personaId }, "Human Inbox")}>
                   {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
                 </Link>
               </Button>
@@ -1551,6 +1560,7 @@ const SurfaceBadge = ({ name, surface }: { name: string; surface: ManagementTrad
 
 const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const degradedCount = rows.filter((row) => rowHealthStatus(row) !== "ok").length;
   return (
     <Card className="p-4">
@@ -1622,7 +1632,7 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
                 <td className="py-2 pr-3 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
                 <td className="py-2">
                   {personaId ? (
-                    <Link aria-label={`${personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(personaId)}`} className="text-primary underline-offset-4 hover:underline">
+                    <Link aria-label={`${personaId} trade journeys`} to={tradeJourneyHref(location, { personaId }, "Trading Pulse")} className="text-primary underline-offset-4 hover:underline">
                       {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
                     </Link>
                   ) : "—"}

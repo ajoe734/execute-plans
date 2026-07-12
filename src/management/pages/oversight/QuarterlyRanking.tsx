@@ -1,6 +1,6 @@
 // 2026-07-11 MGMT-PERF-IA-004 - Consolidated Rankings Center - Quarterly tab (Quarterly Ranking)
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
@@ -108,6 +109,7 @@ type SortOrder = "asc" | "desc";
 export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const paramSnapshotId = searchParams.get("snapshot")?.trim() ?? "snap-2026-q3-final";
@@ -546,7 +548,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                       <Link to={`/management/performance?tab=attribution&persona=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary transition-colors">
                         • Performance Center
                       </Link>
-                      <Link aria-label={`${r.personaId} trade journeys`} to={`/management/trade-journeys?persona_id=${encodeURIComponent(r.personaId)}`} className="text-muted-foreground hover:text-primary transition-colors">
+                      <Link aria-label={`${r.personaId} trade journeys`} to={tradeJourneyHref(location, { personaId: r.personaId }, "Rankings Center")} className="text-muted-foreground hover:text-primary transition-colors">
                         • {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
                       </Link>
                     </div>

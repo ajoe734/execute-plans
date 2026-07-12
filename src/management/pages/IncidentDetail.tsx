@@ -2,7 +2,8 @@
 // Sections: summary, timeline, linked alerts, affected scope, root cause hypothesis,
 // actions taken, mitigation, postmortem, training feedback, evolution constraint, audit.
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +32,7 @@ export const IncidentDetail = () => {
   const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const perms = usePermissions();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -227,7 +229,7 @@ export const IncidentDetail = () => {
                       size="sm"
                       variant="ghost"
                       aria-label={`${s.id} trade journeys`}
-                      onClick={() => navigate(`/management/trade-journeys?strategy_id=${encodeURIComponent(s.id)}`)}
+                      onClick={() => navigate(tradeJourneyHref(location, { strategyId: s.id }, `Incident ${id}`))}
                     >
                       {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
                     </Button>

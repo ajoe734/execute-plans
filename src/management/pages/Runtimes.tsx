@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -113,6 +114,7 @@ function filterRuntimeRowsForFocus(
 
 export const RuntimesPage = () => {
   const t = useT();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime")?.trim() ?? "";
@@ -192,7 +194,7 @@ export const RuntimesPage = () => {
                     {personaId && (
                       <Link
                         aria-label={`${personaId} trade journeys`}
-                        to={`/management/trade-journeys?persona_id=${encodeURIComponent(personaId)}`}
+                        to={tradeJourneyHref(location, { personaId }, "Runtimes")}
                         className="mt-0.5 inline-block text-[11px] text-primary hover:underline"
                       >
                         {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}

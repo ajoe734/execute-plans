@@ -1,13 +1,15 @@
 // CapitalPool ↔ Strategy binding matrix (read-only stub for Phase 10).
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Strategy } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 
 export const BindingsMatrix = ({ strategies, poolId }: { strategies: Strategy[]; poolId: string }) => {
   const t = useT();
   const nav = useNavigate();
+  const location = useLocation();
   return (
     <Card className="p-4 space-y-2">
       <div className="text-sm font-semibold">{t("capitalPool.bindings.title")}</div>
@@ -33,7 +35,7 @@ export const BindingsMatrix = ({ strategies, poolId }: { strategies: Strategy[];
             </button>
             <Link
               aria-label={`${s.id} trade journeys`}
-              to={`/management/trade-journeys?strategy_id=${encodeURIComponent(s.id)}`}
+              to={tradeJourneyHref(location, { strategyId: s.id }, `Capital pool ${poolId}`)}
               className="shrink-0 text-[11px] text-primary hover:underline"
             >
               {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}

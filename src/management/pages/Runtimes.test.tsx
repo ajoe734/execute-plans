@@ -73,7 +73,10 @@ describe("RuntimesPage", () => {
     expect(screen.queryByText("0ms")).not.toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
     const journeysLink = screen.getByRole("link", { name: "persona-20260528-5937dea1 trade journeys" });
-    expect(journeysLink).toHaveAttribute("href", "/management/trade-journeys?persona_id=persona-20260528-5937dea1");
+    expect(journeysLink).toHaveAttribute(
+      "href",
+      "/management/trade-journeys?persona_id=persona-20260528-5937dea1&return_to=%2Fmanagement%2Fruntimes%3Fpersona%3Dpersona-20260528-5937dea1%26runtime%3Drt-rescue-0260528-5937dea1%26binding%3Drb-433f2a614995432b9e7a463c882dbefb&return_label=Runtimes",
+    );
   });
 
   it("does not fall back to unrelated runtime rows when focus misses", () => {

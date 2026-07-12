@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime, safePercent } from "@/lib/utils";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +27,7 @@ export const DeploymentDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
+  const location = useLocation();
   const [d, setD] = useState<Deployment | undefined>();
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -101,7 +103,7 @@ export const DeploymentDetail = () => {
                     <Field label={t("table.owner")} value={d.owner} mono />
                     <Field label={t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })} value={
                       d.strategyId
-                        ? <button aria-label={`${d.id} trade journeys`} className="text-accent hover:underline text-mono" onClick={() => navigate(`/management/trade-journeys?strategy_id=${encodeURIComponent(d.strategyId)}`)}>{t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })}</button>
+                        ? <button aria-label={`${d.id} trade journeys`} className="text-accent hover:underline text-mono" onClick={() => navigate(tradeJourneyHref(location, { strategyId: d.strategyId }, `Deployment ${d.id}`))}>{t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })}</button>
                         : "—"
                     } />
                   </div>
