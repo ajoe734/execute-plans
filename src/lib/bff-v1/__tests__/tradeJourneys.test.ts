@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock("../client", () => ({ bffFetch: fetchMock }));
 
-import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney } from "../tradeJourneys";
+import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys } from "../tradeJourneys";
 
 describe("canonical Trade Journey client", () => {
   beforeEach(() => fetchMock.mockReset().mockResolvedValue({ data: {}, meta: {} }));
@@ -29,4 +29,29 @@ describe("canonical Trade Journey client", () => {
     await resolveTradeJourney({ q: "broker-order-1", tenant_id: "tenant-a", environment: "paper" });
     expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({ path: "/bff/management/trade-journeys/resolve", query: { q: "broker-order-1", tenant_id: "tenant-a", environment: "paper" } }));
   });
+});
+
+it("deduplicates revisioned invalidations and marks disconnect stale", () => {
+  class MockEventSource {
+    static instance: MockEventSource;
+    onopen: (() => void) | null = null; onerror: (() => void) | null = null;
+    listeners: Record<string, (event: MessageEvent) => void> = {};
+    constructor(public url: string) { MockEventSource.instance = this; }
+    addEventListener(name: string, listener: EventListener) { this.listeners[name] = listener as (event: MessageEvent) => void; }
+    close = vi.fn();
+  }
+  vi.stubGlobal("EventSource", MockEventSource);
+  const invalidate = vi.fn(), state = vi.fn();
+  const subscription = subscribeTradeJourneys({ tenant_id: "tenant-a", environment: "paper" }, { onInvalidate: invalidate, onState: state });
+  const source = MockEventSource.instance;
+  expect(source.url).toContain("tenant_id=tenant-a");
+  source.onopen?.();
+  const emit = (revision: number, gap = false) => source.listeners.journeys_changed({ data: JSON.stringify({ revision, gap, snapshot_refetch: true }), lastEventId: String(revision) } as MessageEvent);
+  emit(4); emit(4); emit(3); emit(6, true);
+  expect(invalidate).toHaveBeenCalledTimes(2);
+  source.onerror?.();
+  expect(state).toHaveBeenLastCalledWith("stale");
+  subscription.close();
+  expect(source.close).toHaveBeenCalled();
+  vi.unstubAllGlobals();
 });

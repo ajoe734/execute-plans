@@ -78,3 +78,34 @@ export const getTradeJourneyEvidence = (journeyId: string, query: Record<string,
 
 export const resolveTradeJourney = (query: { q: string; tenant_id: string; environment: string }, signal?: AbortSignal) =>
   bffFetch<JourneyDetailEnvelope<JourneyResolveData>>({ method: "GET", path: "/bff/management/trade-journeys/resolve", query, signal });
+
+export type JourneyLiveState = "connecting" | "live" | "stale";
+export interface JourneyLiveSubscription { close(): void }
+
+export function subscribeTradeJourneys(
+  query: { tenant_id: string; environment: string },
+  handlers: { onInvalidate: () => void; onState: (state: JourneyLiveState) => void },
+): JourneyLiveSubscription {
+  if (typeof EventSource === "undefined") {
+    handlers.onState("stale");
+    return { close() {} };
+  }
+  const params = new URLSearchParams(query);
+  const source = new EventSource(`/bff/management/trade-journeys/events?${params}`, { withCredentials: true });
+  let highestRevision = 0;
+  handlers.onState("connecting");
+  source.onopen = () => handlers.onState("live");
+  source.onerror = () => handlers.onState("stale");
+  const receive = (event: MessageEvent) => {
+    try {
+      const payload = JSON.parse(event.data) as { revision?: number; gap?: boolean; snapshot_refetch?: boolean };
+      const revision = Number(payload.revision ?? event.lastEventId);
+      if (!Number.isFinite(revision) || revision <= highestRevision) return;
+      highestRevision = revision;
+      if (payload.snapshot_refetch || payload.gap) handlers.onInvalidate();
+    } catch { handlers.onState("stale"); }
+  };
+  source.addEventListener("journeys_changed", receive);
+  source.addEventListener("snapshot_refetch_required", receive);
+  return { close: () => source.close() };
+}
