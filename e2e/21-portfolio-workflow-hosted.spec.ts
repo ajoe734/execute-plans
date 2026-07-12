@@ -114,7 +114,14 @@ for (const viewport of [
     await expect(page.locator("body")).not.toContainText(/formal attribution/i);
     await page.goBack({ waitUntil: "domcontentloaded" });
 
+    const inboxResponsePromise = page.waitForResponse((response) =>
+      response.url().includes("/bff/management/human-inbox") &&
+      response.request().method() === "GET",
+    );
     await row.getByRole("link", { name: "Human Review", exact: true }).click();
+    const inboxResponse = await inboxResponsePromise;
+    expect(inboxResponse.status(), "Human Inbox required live request status").toBe(200);
+    const inboxPayload = await inboxResponse.json();
     url = new URL(page.url());
     expect(url.pathname).toBe("/management/human-inbox");
     expect(url.searchParams.get("target_id")).toBe(selected!.holding_id);
@@ -125,6 +132,7 @@ for (const viewport of [
 
     await page.screenshot({ path: testInfo.outputPath(`portfolio-human-review-${viewport.name}.png`), fullPage: true });
     await attachJson(testInfo, `live-holdings-${viewport.name}`, browserCaptured);
+    await attachJson(testInfo, `live-human-inbox-${viewport.name}`, inboxPayload);
     await attachJson(testInfo, `browser-failures-${viewport.name}`, failures);
     expect(failures.consoleErrors).toEqual([]);
     expect(failures.failedRequests).toEqual([]);
