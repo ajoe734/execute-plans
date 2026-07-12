@@ -137,7 +137,7 @@ describe("PersonaFleetPage", () => {
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity performance attribution" })).toHaveAttribute(
       "href",
-      "/management/performance-attribution?dimension=persona&persona=persona-live-tw-equity",
+      "/management/performance?tab=attribution&dimension=persona&persona=persona-live-tw-equity",
     );
     expect(screen.getByRole("link", { name: "persona-live-tw-equity mutation history" })).toHaveAttribute(
       "href",
@@ -446,13 +446,13 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/promotion-allocation?tab=paper-candidates&persona=persona-live-paper-alpha",
+      "/management/rankings?tab=quarterly&persona=persona-live-paper-alpha",
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-paper-alpha persona league ranking" })).toHaveAttribute(
       "href",
-      "/management/quarterly-ranking?persona=persona-live-paper-alpha",
+      "/management/rankings?tab=quarterly&persona=persona-live-paper-alpha",
     );
     expect(screen.getByText("score 87.4")).toBeInTheDocument();
     expect(screen.getByText("healthy")).toBeInTheDocument();
@@ -521,7 +521,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText(/artifact-live-summary-v1/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "persona-live-summary performance attribution" })).toHaveAttribute(
       "href",
-      "/management/performance-attribution?dimension=persona&persona=persona-live-summary",
+      "/management/performance?tab=attribution&dimension=persona&persona=persona-live-summary",
     );
   });
 

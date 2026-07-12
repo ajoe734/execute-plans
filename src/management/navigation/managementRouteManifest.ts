@@ -249,6 +249,10 @@ export interface LegacyRedirectRule {
   tab: string;
   /** Query keys forwarded from the legacy URL, if present. */
   allowedParams: readonly string[];
+  /** Team responsible for removing the alias after telemetry reaches zero. */
+  owner?: "management-frontend";
+  /** Review date, not an automatic client-side cutoff. */
+  reviewAfter?: string;
 }
 
 // Route Migration Matrix — docs/04/.../archive/ROUTE_MIGRATION_MATRIX.md
@@ -365,6 +369,17 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirectRule[] = [
     allowedParams: ["formula_id"],
   },
 ];
+
+// Migration aliases are intentionally temporary. Keep expiry ownership beside
+// the executable redirect contract so a route cannot be added without an
+// accountable cleanup date. The shared values are expanded below to avoid
+// repeating policy in every rule declaration.
+for (const rule of LEGACY_REDIRECTS) {
+  Object.assign(rule, {
+    owner: "management-frontend" as const,
+    reviewAfter: "2026-10-01",
+  });
+}
 
 const PROMOTION_ALLOCATION_TAB_TO_RULE: Record<string, string> = {
   "real-ranking": "promotion-allocation-real-ranking-to-rankings-rolling",

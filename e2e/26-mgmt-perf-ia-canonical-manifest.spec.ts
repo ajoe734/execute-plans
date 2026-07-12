@@ -170,6 +170,24 @@ test.describe("MGMT-PERF-IA-001 canonical route, menu, and redirect manifest", (
 
     // No duplicate hrefs anywhere in the primary nav.
     expect(new Set(navHrefs).size).toBe(navHrefs.length);
+    await expect(page.getByTestId("management-operations-nav")).toHaveCount(0);
+  });
+
+  test("compatibility detail aliases terminate on their canonical detail pages", async ({ page }) => {
+    await installQuietBffRoutes(page);
+    const cases = [
+      ["/management/capital-pools/cp_alpha", "/management/capital/cp_alpha"],
+      ["/management/ranking-formulas/rf_001", "/management/ranking/formulas/rf_001"],
+      ["/management/rebalances/rb_q2_2026", "/management/rebalance/rb_q2_2026"],
+    ] as const;
+
+    for (const [from, pathname] of cases) {
+      await page.goto(frontendUrl(from), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe(pathname);
+      await page.waitForTimeout(150);
+      expect(new URL(page.url()).pathname).toBe(pathname);
+      await expect(page.getByTestId("management-operations-nav")).toHaveCount(0);
+    }
   });
 
   test("canonical centers render real tab content on both desktop and mobile viewports", async ({ page }) => {
@@ -188,6 +206,7 @@ test.describe("MGMT-PERF-IA-001 canonical route, menu, and redirect manifest", (
         await page.goto(frontendUrl(path), { waitUntil: "domcontentloaded", timeout: 30_000 });
         await expect(page.locator("h1").first()).toBeVisible();
         await expect(page.getByRole("tablist").first()).toBeVisible();
+        await expect(page.getByTestId("management-operations-nav")).toHaveCount(0);
       }
     }
   });

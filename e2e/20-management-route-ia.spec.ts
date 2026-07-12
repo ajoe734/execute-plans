@@ -96,18 +96,18 @@ test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
       // detail component a second time instead of redirecting.
       {
         from: "/management/capital-pools/pool-9?tab=risk",
-        pathname: "/management/promotion-allocation",
-        search: "?tab=quarterly-capital&capital_id=pool-9",
+        pathname: "/management/capital/pool-9",
+        search: "?tab=risk",
       },
       {
         from: "/management/ranking-formulas/rf-9",
-        pathname: "/management/promotion-allocation",
-        search: "?tab=formula-policy&formula_id=rf-9",
+        pathname: "/management/ranking/formulas/rf-9",
+        search: "",
       },
       {
         from: "/management/rebalances/rb-9?tab=lines",
-        pathname: "/management/promotion-allocation",
-        search: "?tab=quarterly-capital&rebalance_id=rb-9",
+        pathname: "/management/rebalance/rb-9",
+        search: "?tab=lines",
       },
       {
         from: "/management/research/exp-9",
