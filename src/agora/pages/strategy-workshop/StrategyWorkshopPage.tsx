@@ -415,7 +415,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <div className="col-span-1 sm:col-span-2">
                   <strong>Evidence References:</strong>
                   <div className="flex flex-wrap gap-1.5 mt-1" data-testid="consultation-evidence-refs">
-                    {(workshop.metadata.evidence_refs as any[]).map((ref, idx) => (
+                    {(workshop.metadata.evidence_refs as { ref_type: string; ref_id: string }[]).map((ref, idx) => (
                       <span key={idx} className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-700">
                         {ref.ref_type}: {ref.ref_id}
                       </span>
@@ -561,7 +561,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
                 <Select
                   value={selectedMode}
-                  onValueChange={(val: any) => setSelectedMode(val)}
+                  onValueChange={(val: string) => setSelectedMode(val)}
                 >
                   <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
                     <SelectValue placeholder="Select mode" />
@@ -581,7 +581,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Participants</label>
                 <Select
                   value={pickerSelectionType}
-                  onValueChange={(val: any) => {
+                  onValueChange={(val: string) => {
                     setPickerSelectionType(val);
                     if (val === "recommended") setSelectedParticipants(["per_quant", "per_macro", "per_risk"]);
                     else if (val === "committee") setSelectedParticipants(["per_risk", "per_macro"]);

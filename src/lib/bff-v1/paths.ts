@@ -228,4 +228,12 @@ export const paths = {
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:submit-review`,
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
+
+  // ---- 2026-07-12 OODA Packets & Evolution Reviews ----
+  oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
+  oodaPackets: () => `${BASE}/ooda/packets`,
+  strategyOodaPackets: (id: string) => `${BASE}/strategies/${enc(id)}/ooda`,
+  runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
+  evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
+  evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
 } as const;

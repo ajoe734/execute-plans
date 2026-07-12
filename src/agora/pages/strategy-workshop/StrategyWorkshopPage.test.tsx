@@ -13,7 +13,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
-import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+import type { StrategyWorkshop, WorkshopCard } from "@/lib/bff-v1/agora/types";
 
 afterEach(cleanup);
 
@@ -108,7 +108,7 @@ describe("StrategyWorkshopPage", () => {
       status: "open",
       subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
       created_at: "2026-06-01T00:00:00Z",
-    } as any);
+    } as unknown as StrategyWorkshop);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue({ items: [] });
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
@@ -128,7 +128,7 @@ describe("StrategyWorkshopPage", () => {
       status: "open",
       subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
       created_at: "2026-06-01T00:00:00Z",
-    } as any);
+    } as unknown as StrategyWorkshop);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue({ items: [] });
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
@@ -157,7 +157,7 @@ describe("StrategyWorkshopPage", () => {
       status: "open",
       subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
       created_at: "2026-06-01T00:00:00Z",
-    } as any);
+    } as unknown as StrategyWorkshop);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue({
       items: [
         {
@@ -203,7 +203,7 @@ describe("StrategyWorkshopPage", () => {
           created_at: "2026-06-01T00:00:00Z",
         }
       ]
-    } as any);
+    } as unknown as { items: WorkshopCard[] });
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
