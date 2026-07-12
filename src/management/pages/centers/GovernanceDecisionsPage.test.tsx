@@ -57,7 +57,7 @@ describe("Governance Decisions — recommendations queue", () => {
     expect(screen.getByText("Increase canary allocation — Canary Alpha")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View decision receipt/ })).toHaveAttribute(
       "href",
-      "/management/human-inbox/ranking_recommendation%3Apersona-canary-alpha",
+      "/management/human-inbox/ranking_recommendation%3Apersona-canary-alpha?returnUrl=%2Fmanagement%2Fgovernance-decisions%3Ftab%3Drecommendations",
     );
     expect(screen.getByRole("link", { name: /Open Rankings Center/ })).toHaveAttribute(
       "href",
