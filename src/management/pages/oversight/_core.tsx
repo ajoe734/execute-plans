@@ -1156,9 +1156,18 @@ export const HumanInboxPage = () => {
                 ? ` · ${matchingItems.length} matching inbox item(s)`
                 : " · no direct inbox item matched; showing live queue"}
             </span>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {personaFocus && (
+                <Button asChild size="sm" variant="outline">
+                  <Link to={`/management/personas/${encodeURIComponent(personaFocus)}`}>
+                    {t("mgmt.inbox.backToPersona")}
+                  </Link>
+                </Button>
+              )}
+              <Button asChild size="sm" variant="outline">
+                <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
+              </Button>
+            </div>
           </div>
         </Card>
       )}
@@ -1175,9 +1184,16 @@ export const HumanInboxPage = () => {
                 ? t("mgmt.inbox.focusedPersonaFmt", { persona: personaFocus, count: visibleItems.length })
                 : t("mgmt.inbox.focusMissingPersonaFmt", { persona: personaFocus })}
             </span>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link to={`/management/personas/${encodeURIComponent(personaFocus)}`}>
+                  {t("mgmt.inbox.backToPersona")}
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/management/human-inbox">{t("mgmt.inbox.showAllItems")}</Link>
+              </Button>
+            </div>
           </div>
         </Card>
       )}

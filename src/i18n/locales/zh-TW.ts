@@ -2262,6 +2262,8 @@ export default {
       focusLoadingPersonaFmt: "正在載入 {{persona}} 的收件匣項目…",
       focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆待處理項目",
       focusMissingPersonaFmt: "找不到 {{persona}} 的收件匣項目。",
+      openForPersona: "開啟人類收件匣",
+      backToPersona: "返回 Persona 詳情",
       showAllItems: "顯示全部收件匣項目",
       emptyBody: "目前沒有 live 收件匣項目。",
       focusEmptyBodyFmt: "{{persona}} 目前沒有 live 收件匣項目。",
