@@ -200,24 +200,6 @@ const App = () => (
             <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
             <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
             <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
-            {/* MGMT-PERF-IA-001: bare "capital" is Performance Center's exposure
-                tab per ROUTE_MIGRATION_MATRIX.md; capital-pools/rebalance/ranking
-                bare lists are Governance Decisions. MGMT-PERF-IA-007 mounts
-                each canonical detail component and redirects plural aliases. */}
-            <Route path="/management/capital" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/capital/:id" element={<CapitalPoolDetailRoute />} />
-            <Route path="/management/capital-pools" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/capital-pools/:id" element={<ManagementDetailAliasRedirect canonicalBase="/management/capital" />} />
-            <Route path="/management/ranking" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/ranking/formulas" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/ranking/formulas/:id" element={<RankingFormulaDetailRoute />} />
-            <Route path="/management/ranking-formulas" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/ranking-formulas/:id" element={<ManagementDetailAliasRedirect canonicalBase="/management/ranking/formulas" />} />
-            <Route path="/management/rebalance" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/rebalance/:id" element={<RebalanceDetailRoute />} />
-            <Route path="/management/rebalances" element={<ManagementCanonicalRedirect />} />
-            <Route path="/management/rebalances/:id" element={<ManagementDetailAliasRedirect canonicalBase="/management/rebalance" />} />
-
             <Route element={<PlatformShellRoute />}>
               <Route path="/management" element={<ManagementLayoutRoute />}>
                 <Route index element={<Navigate to="/management/cockpit" replace />} />

@@ -101,7 +101,7 @@ test.describe("MGMT-GAP-001 management route and IA cleanup", () => {
       },
       {
         from: "/management/ranking-formulas/rf-9",
-        pathname: "/management/ranking-formula/rf-9",
+        pathname: "/management/ranking/formulas/rf-9",
         search: "",
       },
       {
