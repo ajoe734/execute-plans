@@ -5,6 +5,8 @@ import { actOnGovernedProposal, type GovernedProposal, type ProposalAction } fro
 export interface GovernedProposalCardProps {
   initialProposal: GovernedProposal;
   initialEtag: string;
+  validationResult?: Record<string, unknown>;
+  approvalRefs?: string[];
   onUpdated?: (proposal: GovernedProposal, etag: string) => void;
 }
 
@@ -22,7 +24,7 @@ function actionableError(error: unknown): string {
   return error instanceof Error ? error.message : "The governance service is unavailable. No action was recorded.";
 }
 
-export function GovernedProposalCard({ initialProposal, initialEtag, onUpdated }: GovernedProposalCardProps) {
+export function GovernedProposalCard({ initialProposal, initialEtag, validationResult, approvalRefs = [], onUpdated }: GovernedProposalCardProps) {
   const [proposal, setProposal] = useState(initialProposal);
   const [etag, setEtag] = useState(initialEtag);
   const [editing, setEditing] = useState(false);
@@ -43,6 +45,8 @@ export function GovernedProposalCard({ initialProposal, initialEtag, onUpdated }
       const result = await actOnGovernedProposal(proposal.proposal_id, {
         action, reason: reason.trim() || `${action.replaceAll("_", " ")} requested from proposal review`,
         ...(action === "modify" ? { proposed_value: proposedValue } : {}),
+        ...(action === "validate" ? { validation_result: validationResult } : {}),
+        ...(action === "approve" ? { approval_refs: approvalRefs } : {}),
       }, etag);
       setProposal(result.proposal); setEtag(result.etag); setEditing(false); setReason("");
       onUpdated?.(result.proposal, result.etag);
@@ -81,7 +85,7 @@ export function GovernedProposalCard({ initialProposal, initialEtag, onUpdated }
     {!terminal ? <footer className="space-y-2"><input aria-label="Decision reason" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Reason or decision note" value={reason} onChange={e => setReason(e.target.value)} />
       <div className="flex flex-wrap gap-2">
         {editing ? <button onClick={() => run("modify")} disabled={!!busy} className="rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Save new revision</button> : <button onClick={() => setEditing(true)} className="rounded border px-3 py-2 text-xs">Modify</button>}
-        {(["request_review", "request_research", "validate", "approve", "reject", "defer", "cancel"] as ProposalAction[]).map(action => <button key={action} disabled={!!busy || (action === "approve" && proposal.state !== "validated")} onClick={() => run(action)} className="rounded border border-slate-200 px-3 py-2 text-xs disabled:opacity-40">{action.replaceAll("_", " ")}</button>)}
+        {(["request_review", "request_research", "validate", "approve", "reject", "defer", "cancel"] as ProposalAction[]).map(action => <button key={action} disabled={!!busy || (action === "validate" && !validationResult) || (action === "approve" && (proposal.state !== "validated" || approvalRefs.length === 0))} onClick={() => run(action)} className="rounded border border-slate-200 px-3 py-2 text-xs disabled:opacity-40">{action.replaceAll("_", " ")}</button>)}
       </div></footer> : null}
   </article>;
 }

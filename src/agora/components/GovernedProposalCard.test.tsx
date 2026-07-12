@@ -19,6 +19,15 @@ describe("GovernedProposalCard", () => {
     expect(screen.getByText("Human gate: required")).toBeTruthy();
     expect(screen.getByText(/Conversation and approval do not mean execution/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "validate" })).toBeDisabled();
+  });
+
+  it("forwards authoritative validation and approval artifacts", async () => {
+    const validated = { ...base, state: "validated", validation: { valid: true } };
+    vi.spyOn(api, "actOnGovernedProposal").mockResolvedValue({ proposal: { ...validated, state: "approved", revision: 2 }, etag: '"v2"' });
+    render(<GovernedProposalCard initialProposal={validated} initialEtag={'"v1"'} validationResult={{ valid: true }} approvalRefs={["risk-approval-9"]} />);
+    fireEvent.click(screen.getByRole("button", { name: "approve" }));
+    await waitFor(() => expect(api.actOnGovernedProposal).toHaveBeenCalledWith("prop-1", expect.objectContaining({ action: "approve", approval_refs: ["risk-approval-9"] }), '"v1"'));
   });
 
   it("modify creates a backend revision and updates rendered truth", async () => {
