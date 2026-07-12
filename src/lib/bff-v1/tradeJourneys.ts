@@ -43,6 +43,20 @@ export interface JourneyListEnvelope {
   meta: JourneyMeta;
 }
 
+export interface JourneyTimelineEvent {
+  event_id: string;
+  stage?: string;
+  stage_status?: string;
+  occurred_at?: string;
+  recorded_at?: string;
+  source?: string;
+  [key: string]: unknown;
+}
+
+export interface JourneyTimelineEnvelope extends Omit<JourneyListEnvelope, "data"> {
+  data: { items: JourneyTimelineEvent[] };
+}
+
 export interface JourneyDetailEnvelope<T = JourneyDetail> { data: T; meta: JourneyMeta }
 
 export const listTradeJourneys = (query: Record<string, string | number | undefined>, signal?: AbortSignal) =>
@@ -52,7 +66,7 @@ export const getTradeJourney = (journeyId: string, query: Record<string, string 
   bffFetch<JourneyDetailEnvelope>({ method: "GET", path: `/bff/management/trade-journeys/${encodeURIComponent(journeyId)}`, query, signal });
 
 export const getTradeJourneyTimeline = (journeyId: string, query: Record<string, string | number | undefined>, signal?: AbortSignal) =>
-  bffFetch<JourneyListEnvelope>({ method: "GET", path: `/bff/management/trade-journeys/${encodeURIComponent(journeyId)}/timeline`, query, signal });
+  bffFetch<JourneyTimelineEnvelope>({ method: "GET", path: `/bff/management/trade-journeys/${encodeURIComponent(journeyId)}/timeline`, query, signal });
 
 export const getTradeJourneyEvidence = (journeyId: string, query: Record<string, string | undefined>, signal?: AbortSignal) =>
   bffFetch<JourneyDetailEnvelope<Record<string, unknown>>>({ method: "GET", path: `/bff/management/trade-journeys/${encodeURIComponent(journeyId)}/evidence`, query, signal });
