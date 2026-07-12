@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
@@ -41,6 +42,7 @@ export const PersonaDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
+  const location = useLocation();
   const [p, setP] = useState<Persona | undefined>();
   const [loadState, setLoadState] = useState<PersonaLoadState>("loading");
   const [routed, setRouted] = useState<Strategy[]>([]);
@@ -172,6 +174,13 @@ export const PersonaDetail = () => {
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
                   <Field label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} mono />
                   <Field label={t("table.owner")} value={p.owner} mono />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link aria-label={`${p.id} trade journeys`} to={tradeJourneyHref(location, { personaId: p.id }, `Persona ${p.id}`)}>
+                      {t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })} →
+                    </Link>
+                  </Button>
                 </div>
               </Section>
             ),

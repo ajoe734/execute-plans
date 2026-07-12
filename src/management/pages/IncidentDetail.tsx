@@ -2,7 +2,8 @@
 // Sections: summary, timeline, linked alerts, affected scope, root cause hypothesis,
 // actions taken, mitigation, postmortem, training feedback, evolution constraint, audit.
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +32,7 @@ export const IncidentDetail = () => {
   const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const perms = usePermissions();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -219,9 +221,19 @@ export const IncidentDetail = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedStrategies")}</div>
               <div className="flex flex-wrap gap-2">
                 {affectedStrategies.map((s) => (
-                  <Button key={s.id} size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
-                    {s.name} <RiskBadge level={s.risk} />
-                  </Button>
+                  <div key={s.id} className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
+                      {s.name} <RiskBadge level={s.risk} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${s.id} trade journeys`}
+                      onClick={() => navigate(tradeJourneyHref(location, { strategyId: s.id }, `Incident ${id}`))}
+                    >
+                      {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                    </Button>
+                  </div>
                 ))}
                 {affectedStrategies.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
               </div>

@@ -136,6 +136,7 @@ export default {
     managementCockpit: "管理駕駛艙",
     pathreonManagement: "Pathreon Management",
     askManagement: "詢問 Pathreon Management",
+    tradeJourneys: "交易旅程",
     personaFleet: "Persona 艦隊",
     humanInbox: "人類收件匣",
     tradingPulse: "交易脈動",

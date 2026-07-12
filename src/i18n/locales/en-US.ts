@@ -144,6 +144,7 @@ export default {
     managementCockpit: "Management Cockpit",
     pathreonManagement: "Pathreon Management",
     askManagement: "Ask Pathreon Management",
+    tradeJourneys: "Trade Journeys",
     personaFleet: "Persona Fleet",
     humanInbox: "Human Inbox",
     tradingPulse: "Trading Pulse",

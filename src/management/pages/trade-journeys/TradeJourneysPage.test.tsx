@@ -48,6 +48,31 @@ describe("Trade Journeys workbench", () => {
     await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("cursor_history"));
   });
 
+  it("forwards persona_id focus from a cross-entry deep link to the BFF query and renders a clearable banner", async () => {
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: rows.slice(0, 1) }, page_info: { total: 1, page_size: 25 }, meta: fresh });
+    renderList("/management/trade-journeys?tenant_id=t1&persona_id=persona-a");
+    await screen.findByText("happy-1");
+    expect(api.listTradeJourneys).toHaveBeenCalledWith(
+      expect.objectContaining({ persona_id: "persona-a", tenant_id: "t1" }),
+      expect.anything(),
+    );
+    expect(screen.getByText(/Focused: persona persona-a/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Show all journeys" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("persona_id"));
+  });
+
+  it("renders a real back-to-origin link and forwards return context into the journey detail row link", async () => {
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: rows.slice(0, 1) }, page_info: { total: 1, page_size: 25 }, meta: fresh });
+    renderList("/management/trade-journeys?tenant_id=t1&environment=paper&persona_id=persona-a&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona%20persona-a");
+    const backLink = await screen.findByRole("link", { name: /Back to Persona persona-a/ });
+    expect(backLink).toHaveAttribute("href", "/management/personas/persona-a");
+    const rowLink = screen.getByRole("link", { name: "happy-1" });
+    expect(rowLink).toHaveAttribute(
+      "href",
+      "/management/trade-journeys/happy-1?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+persona-a",
+    );
+  });
+
   it("announces degraded, incomplete, stale, and missing-stage truth", async () => {
     const meta = { ...fresh, read_state: "degraded" as const, warnings: ["ledger unavailable"] };
     vi.mocked(api.getTradeJourney).mockResolvedValue({ data: { ...rows[4], read_state: "partial", completeness: { missing_stages: ["ledger_booking"] }, stages: { reconciliation: { status: "mismatch" } }, revision: 3 }, meta });
@@ -58,5 +83,20 @@ describe("Trade Journeys workbench", () => {
     expect(screen.getByRole("status")).toHaveTextContent("ledger unavailable");
     expect(screen.getByText(/Missing ledger_booking/)).toBeInTheDocument();
     expect(screen.getByLabelText("Journey stages")).toBeInTheDocument();
+  });
+
+  it("offers a real back-to-origin link on the journey detail page when it arrived via a cross-entry return_to", async () => {
+    vi.mocked(api.getTradeJourney).mockResolvedValue({ data: rows[0], meta: fresh });
+    vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta: fresh });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fresh });
+    render(
+      <MemoryRouter initialEntries={["/management/trade-journeys/happy-1?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fstrategies%2Fstrat-1&return_label=Strategy%20strat-1"]}>
+        <Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage/>}/></Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("happy-1");
+    const backLink = screen.getByRole("link", { name: /Back to Strategy strat-1/ });
+    expect(backLink).toHaveAttribute("href", "/management/strategies/strat-1");
+    expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute("href", "/management/trade-journeys?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fstrategies%2Fstrat-1&return_label=Strategy+strat-1");
   });
 });

@@ -2,9 +2,10 @@
 // Overview · Spec & Parameters · Experiments · Paper-Live · Risk & Alerts ·
 // Incidents · Artifacts · Evolution · Governance · Lineage · Audit
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
@@ -44,6 +45,7 @@ export const StrategyDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
+  const location = useLocation();
   const { can } = usePermissions();
   const [s, setS] = useState<Strategy | undefined>();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -178,6 +180,13 @@ export const StrategyDetail = () => {
                     items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${safeDateTime(d.decidedAt, "date")}` }))}
                     emptyHint={t("empty.noResults")}
                   />
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link aria-label={`${s.id} trade journeys`} to={tradeJourneyHref(location, { strategyId: s.id }, `Strategy ${s.id}`)}>
+                      {t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })} →
+                    </Link>
+                  </Button>
                 </div>
               </>
             ),

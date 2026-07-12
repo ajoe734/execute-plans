@@ -15,7 +15,7 @@ import {
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
   BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
   Compass, Target, Eye, ShieldAlert, Trophy, BarChart3,
-  KeyRound,
+  KeyRound, Route,
   type LucideIcon,
 } from "lucide-react";
 
@@ -151,6 +151,7 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
     labelKey: "groups.operationalOverview",
     items: [
       { id: "cockpit", to: "/management/cockpit", labelKey: "nav.managementCockpit", icon: Compass, dedupeKey: "cockpit" },
+      { id: "trade-journeys", to: "/management/trade-journeys", labelKey: "nav.tradeJourneys", icon: Route },
       { id: "persona-fleet", to: "/management/persona-fleet", labelKey: "nav.personaFleet", icon: Users, dedupeKey: "fleet" },
       { id: "human-inbox", to: "/management/human-inbox", labelKey: "nav.humanInbox", icon: Eye, dedupeKey: "humanQueue" },
       { id: "trading-pulse", to: "/management/trading-pulse", labelKey: "nav.tradingPulse", icon: Target },
