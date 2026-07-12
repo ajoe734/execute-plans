@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   acceptTradingRoomWorkspaceProposal,
   createTradingRoomWorkspaceProposal,
@@ -10,6 +11,7 @@ import {
   type TradingDecisionEvent,
   type DecisionChoice,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -244,9 +246,24 @@ interface DecisionEventDetailPanelProps {
 }
 
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
+  const navigate = useNavigate();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
+
+  // Consultation states
+  const [showConsultPanel, setShowConsultPanel] = useState(false);
+  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
+  const [consultQuery, setConsultQuery] = useState("");
+  const [consultLoading, setConsultLoading] = useState(false);
+  const [consultError, setConsultError] = useState<string | null>(null);
+
+  // Modify linkage states
+  const [showModifyLinkage, setShowModifyLinkage] = useState(false);
+  const [modifyProposalId, setModifyProposalId] = useState("");
+  const [modifyProposalRevision, setModifyProposalRevision] = useState("1");
+  const [modifyWorkshopId, setModifyWorkshopId] = useState("");
+  const [modifyRationale, setModifyRationale] = useState("");
 
   const canDecide =
     callState !== "loading" &&
@@ -408,7 +425,14 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   key={choice}
                   data-testid={`decide-${choice}-${ev.decision_event_id}`}
                   disabled={!canDecide}
-                  onClick={() => handleDecide(choice)}
+                  onClick={() => {
+                    if (choice === "modify") {
+                      setShowModifyLinkage(true);
+                      setShowConsultPanel(false);
+                    } else {
+                      handleDecide(choice);
+                    }
+                  }}
                   style={{
                     padding: "3px 10px",
                     fontSize: 12,
@@ -423,6 +447,29 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   {choice.charAt(0).toUpperCase() + choice.slice(1)}
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid={`ask-personas-${ev.decision_event_id}`}
+                onClick={() => {
+                  setShowConsultPanel(!showConsultPanel);
+                  setShowModifyLinkage(false);
+                }}
+                style={{
+                  padding: "3px 10px",
+                  fontSize: 12,
+                  border: "1px solid #6366f1",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  background: "#e0e7ff",
+                  color: "#4f46e5",
+                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4
+                }}
+              >
+                💬 Ask Personas
+              </button>
               {callState === "loading" && (
                 <span data-testid="detail-decision-loading" style={{ fontSize: 12, color: "#94a3b8" }}>
                   Sending…
@@ -436,6 +483,299 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
             </>
           )}
         </div>
+
+        {/* Contextual Consultation Panel */}
+        {showConsultPanel && (
+          <div
+            data-testid={`consult-panel-${ev.decision_event_id}`}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: "#eff6ff",
+              borderRadius: 6,
+              border: "1px solid #bfdbfe",
+              fontSize: 12,
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "#1e3a8a", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>🔍 Consult Personas on Signal ({ev.subject.symbol})</span>
+            </div>
+            
+            {/* Display carried context */}
+            <div style={{ background: "#fff", padding: 8, borderRadius: 4, marginBottom: 8, border: "1px solid #bfdbfe" }}>
+              <div style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>Carried Context:</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div><strong>Event ID:</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
+                <div><strong>Strategy Version:</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
+                <div style={{ gridColumn: "span 2" }}><strong>Risk Snapshot:</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || "Normal"}</div>
+                <div style={{ gridColumn: "span 2" }}><strong>Evidence Refs:</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || "None"}</div>
+              </div>
+            </div>
+
+            {/* Persona Checklist */}
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Select Personas:</span>
+              <div style={{ display: "flex", gap: 12 }}>
+                {[
+                  { id: "per_quant", name: "Quant" },
+                  { id: "per_risk", name: "Risk" },
+                  { id: "per_macro", name: "Macro" },
+                  { id: "per_red", name: "Red Team" }
+                ].map(p => (
+                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedPersonas.includes(p.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPersonas([...selectedPersonas, p.id]);
+                        } else {
+                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
+                        }
+                      }}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Templates */}
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Quick Templates:</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
+                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
+                >
+                  🔴 Red-Team Analysis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
+                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
+                >
+                  ⚠️ Fast Risk Assessment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
+                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
+                >
+                  📊 Option Comparison
+                </button>
+              </div>
+            </div>
+
+            {/* Prompt input */}
+            <div style={{ marginBottom: 8 }}>
+              <textarea
+                placeholder="Ask your question to the selected personas..."
+                value={consultQuery}
+                onChange={(e) => setConsultQuery(e.target.value)}
+                style={{ width: "100%", height: 60, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                disabled={consultLoading || selectedPersonas.length === 0}
+                onClick={async () => {
+                  setConsultLoading(true);
+                  setConsultError(null);
+                  try {
+                    const newWs = await createWorkshop({
+                      subject: {
+                        kind: "candidate_artifact",
+                        ref: ev.decision_event_id,
+                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
+                      },
+                      participant_persona_ids: selectedPersonas,
+                      metadata: {
+                        decision_event_id: ev.decision_event_id,
+                        strategy_id: ev.strategy_id,
+                        strategy_version: ev.strategy_spec_registry_id,
+                        position_snapshot: ev.position_snapshot,
+                        risk_notes: ev.risk_notes,
+                        evidence_refs: ev.evidence_refs,
+                        context_type: "decision_event_consultation",
+                      }
+                    });
+                    
+                    if (consultQuery.trim()) {
+                      await postWorkshopMessage(newWs.workshop_id, {
+                        content: consultQuery.trim(),
+                        metadata: {
+                          mode: "consult",
+                          participant_persona_ids: selectedPersonas,
+                        }
+                      });
+                    }
+
+                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
+                  } catch (err) {
+                    setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
+                  } finally {
+                    setConsultLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "4px 12px",
+                  background: "#4f46e5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
+                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
+                }}
+                data-testid={`consult-panel-submit-${ev.decision_event_id}`}
+              >
+                {consultLoading ? "Launching..." : "🚀 Launch Workshop Consultation"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConsultPanel(false)}
+                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              {consultError && (
+                <span style={{ color: "#dc2626", fontSize: 11 }}>{consultError}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Structured Modify Linkage Panel */}
+        {showModifyLinkage && (
+          <div
+            data-testid={`modify-linkage-panel-${ev.decision_event_id}`}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: "#fffbeb",
+              borderRadius: 6,
+              border: "1px solid #fef3c7",
+              fontSize: 12,
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "#92400e", marginBottom: 8 }}>
+              🛠️ Link Modification Proposal & Consultation
+            </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Proposal ID:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. prop-123"
+                  value={modifyProposalId}
+                  onChange={(e) => setModifyProposalId(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
+                  data-testid={`modify-proposal-id-${ev.decision_event_id}`}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Proposal Revision:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={modifyProposalRevision}
+                  onChange={(e) => setModifyProposalRevision(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
+                  data-testid={`modify-proposal-revision-${ev.decision_event_id}`}
+                />
+              </div>
+              <div style={{ gridColumn: "span 2" }}>
+                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Consultation Workshop ID:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ws-abc (optional)"
+                  value={modifyWorkshopId}
+                  onChange={(e) => setModifyWorkshopId(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
+                  data-testid={`modify-workshop-id-${ev.decision_event_id}`}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Modification Rationale:</label>
+              <textarea
+                placeholder="Explain the changes to sizes, bounds, or limits..."
+                value={modifyRationale}
+                onChange={(e) => setModifyRationale(e.target.value)}
+                style={{ width: "100%", height: 50, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
+                data-testid={`modify-rationale-${ev.decision_event_id}`}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                disabled={callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()}
+                onClick={async () => {
+                  setCallState("loading");
+                  setCallError(null);
+                  try {
+                    await decideOnEvent(
+                      ev.decision_event_id,
+                      {
+                        decision: "modify",
+                        rationale: modifyRationale,
+                        modifications: {
+                          proposal_id: modifyProposalId.trim(),
+                          proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
+                          consultation_workshop_id: modifyWorkshopId.trim() || undefined,
+                        }
+                      },
+                      { ifMatch: etag ?? undefined, idempotencyKey: newUUID(), requestId: newUUID() }
+                    );
+                    setDecidedChoice("modify");
+                    setCallState("success");
+                    setShowModifyLinkage(false);
+                  } catch (err) {
+                    setCallError(err instanceof Error ? err.message : "Modify failed");
+                    setCallState("error");
+                  }
+                }}
+                style={{
+                  padding: "4px 12px",
+                  background: "#d97706",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  cursor: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? "not-allowed" : "pointer",
+                  opacity: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? 0.7 : 1
+                }}
+                data-testid={`modify-linkage-submit-${ev.decision_event_id}`}
+              >
+                Confirm Modification
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowModifyLinkage(false)}
+                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </td>
     </tr>
   );

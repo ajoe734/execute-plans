@@ -1,4 +1,5 @@
 import React, { useEffect, useReducer, useRef, useCallback, useState } from "react";
+import { useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   listWorkshops,
@@ -376,6 +377,55 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             </span>
           </div>
         </div>
+
+        {/* Contextual Consultation Banner */}
+        {workshop?.metadata?.decision_event_id && (
+          <div
+            data-testid="consultation-context-banner"
+            className="bg-indigo-50 border-b border-indigo-200 px-4 py-3 text-xs text-indigo-900 shrink-0 flex flex-col gap-1.5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span className="font-semibold text-sm">Contextual Consultation Active</span>
+              </div>
+              <a
+                href={`/agora/trading-room/${workshop.metadata.strategy_id || ""}`}
+                className="text-indigo-600 hover:text-indigo-800 underline font-medium"
+              >
+                Back to Trading Room
+              </a>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 bg-white/60 p-2.5 rounded border border-indigo-100/50">
+              <div>
+                <strong>Decision Event ID:</strong> <span className="font-mono" data-testid="consultation-event-id">{workshop.metadata.decision_event_id as string}</span>
+              </div>
+              <div>
+                <strong>Strategy Version:</strong> <span className="font-mono" data-testid="consultation-strategy-version">{(workshop.metadata.strategy_version as string) ?? "N/A"}</span>
+              </div>
+              {workshop.metadata.position_snapshot && (
+                <div className="col-span-1 sm:col-span-2">
+                  <strong>Position/Risk Snapshot:</strong>{" "}
+                  <code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-mono block mt-1 overflow-x-auto whitespace-pre" data-testid="consultation-position-snapshot">
+                    {JSON.stringify(workshop.metadata.position_snapshot, null, 2)}
+                  </code>
+                </div>
+              )}
+              {Array.isArray(workshop.metadata.evidence_refs) && (workshop.metadata.evidence_refs.length > 0) && (
+                <div className="col-span-1 sm:col-span-2">
+                  <strong>Evidence References:</strong>
+                  <div className="flex flex-wrap gap-1.5 mt-1" data-testid="consultation-evidence-refs">
+                    {(workshop.metadata.evidence_refs as any[]).map((ref, idx) => (
+                      <span key={idx} className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-700">
+                        {ref.ref_type}: {ref.ref_id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Warning messages if stale/degraded/denied */}
         {(isStale || isDegraded || isDenied || workshop?.status === "concluded") && (
@@ -764,7 +814,9 @@ interface StrategyWorkshopPageProps {
   onAddToTradingRoom?: () => void;
 }
 
-export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
+export function StrategyWorkshopPage({ workshopId: propsWorkshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
+  const { workshopId: routeWorkshopId } = useParams<{ workshopId?: string }>();
+  const workshopId = propsWorkshopId || routeWorkshopId;
   if (workshopId) {
     return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} />;
   }
