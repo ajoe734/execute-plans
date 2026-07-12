@@ -2563,6 +2563,7 @@ export default {
       riskBudgetUtilization: "風險預算使用率",
       overBudgetCount: "超限資金池",
       nearLimitCount: "接近上限",
+      unknownExposureCount: "未知曝險",
       telemetryRuntimeCount: "Telemetry Runtime",
       latestTelemetryAt: "最近 Telemetry",
       riskBudget: "風險預算",
@@ -2578,6 +2579,13 @@ export default {
       updatedAt: "更新時間",
       focusedPoolFmt: "已聚焦資金池：{{pool}}",
       showAllPools: "顯示全部資金池",
+      confidence: {
+        formal: "正式歸因",
+        partial: "部分資料",
+        fallback: "Fallback 摘要",
+        degraded: "資料降級",
+        unavailable: "不可用",
+      },
     },
     league: {
       title: "Persona 聯賽",

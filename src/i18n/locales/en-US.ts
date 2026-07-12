@@ -2582,6 +2582,7 @@ export default {
       riskBudgetUtilization: "Risk budget utilization",
       overBudgetCount: "Pools over budget",
       nearLimitCount: "Pools near limit",
+      unknownExposureCount: "Unknown exposure",
       telemetryRuntimeCount: "Telemetry runtimes",
       latestTelemetryAt: "Latest telemetry",
       riskBudget: "Risk budget",
@@ -2597,6 +2598,13 @@ export default {
       updatedAt: "Updated at",
       focusedPoolFmt: "Focused capital pool: {{pool}}",
       showAllPools: "Show all pools",
+      confidence: {
+        formal: "Formal attribution",
+        partial: "Partial data",
+        fallback: "Fallback summary",
+        degraded: "Degraded data",
+        unavailable: "Unavailable",
+      },
     },
     league: {
       title: "Persona League",

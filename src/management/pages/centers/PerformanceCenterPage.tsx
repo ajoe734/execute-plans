@@ -1,15 +1,15 @@
 // MGMT-PERF-IA-001 — canonical Performance Center shell.
-//
-// Wave 0: mounts the existing, unmodified overview/attribution page
-// components as tabs so the canonical URL is fully functional on merge.
-// MGMT-PERF-IA-003 replaces the `exposure` tab body with a dedicated
-// Exposure & Holdings read model instead of reusing the overview component.
+// MGMT-PERF-IA-003 — the `exposure` tab now mounts a dedicated Exposure &
+// Holdings read model (PortfolioExposurePage) instead of reusing the
+// overview component; overview/attribution keep their existing,
+// unmodified page components since their scope was already consolidated.
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
 import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
+import { PortfolioExposurePage } from "@/management/pages/oversight/PortfolioExposure";
 
 const CENTER = CANONICAL_CENTERS.performance;
 const TAB_IDS = CENTER.tabs.map((tab) => tab.id);
@@ -52,7 +52,7 @@ export const PerformanceCenterPage = () => {
           <PerformanceAttributionPage embedded />
         </TabsContent>
         <TabsContent value="exposure" className="m-0">
-          <PortfolioBookPage embedded />
+          <PortfolioExposurePage embedded />
         </TabsContent>
       </Tabs>
     </section>

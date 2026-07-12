@@ -186,6 +186,28 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("forwards MGMT-PERF-IA-003 exposure filters as query params to the shared BFF contract", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    let requestedUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      requestedUrl = String(input);
+      return jsonResponse({ data: { summary: {}, items: [] }, meta: { surfaces: {} } });
+    });
+
+    await mgmt.portfolioBook.exposureLiveOnly({
+      capitalPoolId: "pool-alpha",
+      personaId: "persona-alpha",
+      runtimeId: "runtime-alpha",
+      period: "30d",
+    });
+
+    expect(requestedUrl).toContain("/management/portfolio-book/exposure?");
+    expect(requestedUrl).toContain("capital_pool_id=pool-alpha");
+    expect(requestedUrl).toContain("persona_id=persona-alpha");
+    expect(requestedUrl).toContain("runtime_id=runtime-alpha");
+    expect(requestedUrl).toContain("period=30d");
+  });
+
   it("cockpit.get falls through to seed in mock/test mode", async () => {
     const out = await mgmt.cockpit.get();
     const expected = composeCockpit(defaultCockpitSeed());
