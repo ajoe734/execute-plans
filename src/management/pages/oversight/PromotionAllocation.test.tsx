@@ -94,7 +94,7 @@ describe("Promotion & Allocation legacy shell", () => {
     expect(screen.queryByText("Unrelated approval")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review →" })).toHaveAttribute(
       "href",
-      "/management/human-inbox/capital_breach%3Apersona-canary-alpha",
+      "/management/human-inbox/capital_breach%3Apersona-canary-alpha?returnUrl=%2Fmanagement%2Fpromotion-allocation%3Ftab%3Demergency-actions",
     );
     expect(screen.getByText(/cannot promote a persona or increase capital/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /promote|increase|freeze|suspend|retire/i })).not.toBeInTheDocument();
