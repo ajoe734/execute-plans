@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, Search } from "lucide-react";
-import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, type JourneyDetailEnvelope, type JourneyListEnvelope, type JourneyMeta, type JourneyRow, type JourneyTimelineEnvelope } from "@/lib/bff-v1/tradeJourneys";
+import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys, type JourneyDetailEnvelope, type JourneyListEnvelope, type JourneyLiveState, type JourneyMeta, type JourneyRow, type JourneyTimelineEnvelope } from "@/lib/bff-v1/tradeJourneys";
 
 const STAGES = ["signal_generation", "trade_decision", "risk_evaluation", "order_submission", "broker_acknowledgement", "fill_management", "ledger_booking", "reconciliation"];
 const VIEWS = [{ label: "Needs attention", value: "attention" }, { label: "Risk rejected", value: "risk_reject" }, { label: "Broker rejected", value: "broker_reject" }, { label: "Partial fills", value: "partial_fill" }, { label: "Recon mismatch", value: "recon_mismatch" }];
@@ -26,6 +26,8 @@ export function TradeJourneysPage() {
   const [payload, setPayload] = useState<JourneyListEnvelope>();
   const [error, setError] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [liveState, setLiveState] = useState<JourneyLiveState>("connecting");
+  const [liveRevision, setLiveRevision] = useState(0);
   const tenant = params.get("tenant_id") || "default";
   const environment = params.get("environment") || "paper";
   const cursorHistory = useMemo(() => { try { const value = JSON.parse(params.get("cursor_history") || "[]"); return Array.isArray(value) && value.every(x => typeof x === "string") ? value as string[] : []; } catch { return []; } }, [params]);
@@ -33,10 +35,11 @@ export function TradeJourneysPage() {
   const goNext = () => { const token = payload?.page_info.next_page_token; if (!token) return; const next = new URLSearchParams(params); next.set("page_token", token); next.set("cursor_history", JSON.stringify([...cursorHistory, params.get("page_token") || ""])); setParams(next); };
   const goPrevious = () => { if (!cursorHistory.length) return; const history = cursorHistory.slice(0, -1); const token = cursorHistory[cursorHistory.length - 1]; const next = new URLSearchParams(params); if (token) next.set("page_token", token); else next.delete("page_token"); if (history.length) next.set("cursor_history", JSON.stringify(history)); else next.delete("cursor_history"); setParams(next); };
   const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment]);
-  useEffect(() => { const c = new AbortController(); setError(""); listTradeJourneys(query, c.signal).then(setPayload).catch(e => setError(e.message)); return () => c.abort(); }, [query]);
+  useEffect(() => { const c = new AbortController(); setError(""); listTradeJourneys(query, c.signal).then(setPayload).catch(e => { if (e?.name !== "AbortError") setError(e.message); }); return () => c.abort(); }, [query, liveRevision]);
+  useEffect(() => subscribeTradeJourneys({ tenant_id: tenant, environment }, { onInvalidate: () => setLiveRevision(value => value + 1), onState: setLiveState }).close, [tenant, environment]);
   const resolve = async () => { const q = params.get("resolve")?.trim(); if (!q) return; setResolving(true); setError(""); try { const { data } = await resolveTradeJourney({ q, tenant_id: tenant, environment }); if (data.journey_ids.length === 1) { const id = data.journey_ids[0]; navigate(`/management/trade-journeys/${encodeURIComponent(id)}?tenant_id=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`); } else if (data.ambiguous || data.journey_ids.length > 1) setError(`Ambiguous identifier: ${data.journey_ids.join(", ")}`); else setError("No journey matched that identifier."); } catch (e) { setError((e as Error).message); } finally { setResolving(false); } };
   return <section className="mx-auto w-full max-w-[1500px] space-y-4 p-4 md:p-6">
-    <header><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Execution observability</p><h1 className="text-2xl font-semibold">Trade Journeys</h1><p className="text-sm text-muted-foreground">Canonical signal-to-reconciliation truth. No browser-side domain joins.</p></header>
+    <header><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Execution observability</p><div className="flex items-center gap-3"><h1 className="text-2xl font-semibold">Trade Journeys</h1><span role="status" className={`rounded-full px-2 py-1 text-xs ${liveState === "live" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700"}`}>{liveState === "live" ? "Live" : liveState === "stale" ? "Live updates stale" : "Connecting"}</span></div><p className="text-sm text-muted-foreground">Canonical signal-to-reconciliation truth. No browser-side domain joins.</p></header>
     <ReadState meta={payload?.meta} />
     <div className="grid gap-3 rounded-lg border bg-card p-4 lg:grid-cols-[1fr_auto_auto]">
       <label className="relative"><span className="sr-only">Search journeys</span><Search className="absolute left-3 top-3" size={16}/><input className={`${baseInput} w-full pl-9`} value={params.get("q") || ""} onChange={e => set("q", e.target.value)} placeholder="Search symbol, persona or order ID" /></label>
