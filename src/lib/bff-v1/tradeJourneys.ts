@@ -4,10 +4,14 @@ export type JourneyReadState = "formal" | "partial" | "degraded" | "unavailable"
 export type JourneyEnvironment = "paper" | "canary" | "live";
 
 export interface JourneyMeta {
+  snapshot_at: string;
   read_state: JourneyReadState;
-  warnings: string[];
-  freshness: { snapshot_at: string; materializer_revision: number; sources: Record<string, unknown> };
+  warnings?: string[];
+  freshness: { materializer_revision: number; rebuild_status?: string; source_watermarks?: Record<string, string> };
 }
+
+export type JourneyFlags = Record<string, boolean>;
+export interface JourneyStage { status?: string; updated_at?: string; owner?: string; block_reason?: string; [key: string]: unknown }
 
 export interface JourneyRow {
   journey_id: string;
@@ -24,14 +28,14 @@ export interface JourneyRow {
   broker_order_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  flags?: string[];
+  flags?: JourneyFlags;
   completeness?: { missing_stages?: string[]; [key: string]: unknown };
   read_state?: JourneyReadState;
   revision?: number;
 }
 
 export interface JourneyDetail extends JourneyRow {
-  stages?: Array<Record<string, unknown>>;
+  stages?: Record<string, JourneyStage>;
   diagnostics?: Array<Record<string, unknown>> | Record<string, unknown>;
   identifiers?: Record<string, unknown>;
   [key: string]: unknown;
@@ -58,6 +62,7 @@ export interface JourneyTimelineEnvelope extends Omit<JourneyListEnvelope, "data
 }
 
 export interface JourneyDetailEnvelope<T = JourneyDetail> { data: T; meta: JourneyMeta }
+export interface JourneyResolveData { ambiguous: boolean; journey_ids: string[]; candidates?: Array<{ identifier_type: string; identifier: string; journey_ids: string[]; match_count: number }> }
 
 export const listTradeJourneys = (query: Record<string, string | number | undefined>, signal?: AbortSignal) =>
   bffFetch<JourneyListEnvelope>({ method: "GET", path: "/bff/management/trade-journeys", query, signal });
@@ -72,4 +77,4 @@ export const getTradeJourneyEvidence = (journeyId: string, query: Record<string,
   bffFetch<JourneyDetailEnvelope<Record<string, unknown>>>({ method: "GET", path: `/bff/management/trade-journeys/${encodeURIComponent(journeyId)}/evidence`, query, signal });
 
 export const resolveTradeJourney = (query: { q: string; tenant_id: string; environment: string }, signal?: AbortSignal) =>
-  bffFetch<JourneyDetailEnvelope<Record<string, unknown>>>({ method: "GET", path: "/bff/management/trade-journeys/resolve", query, signal });
+  bffFetch<JourneyDetailEnvelope<JourneyResolveData>>({ method: "GET", path: "/bff/management/trade-journeys/resolve", query, signal });
