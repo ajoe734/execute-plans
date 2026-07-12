@@ -3883,12 +3883,14 @@ export const mgmt = {
   },
 
   personaFleet: {
-    get: (filters: { q?: string; pageSize?: number } = {}): Promise<ManagementPersonaFleetRow[]> =>
-      withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
+    get: (filters: { q?: string; pageSize?: number } = {}): Promise<ManagementPersonaFleetRow[]> => {
+      liveStatus.retry();
+      return withLiveOrMock<ManagementPersonaFleetRow[], unknown>(
         { method: "GET", path: paths.mgmtPersonaFleet(filters) },
         personaFleetDemoFallbackDisabled,
         adaptManagementPersonaFleetLiveOnly,
-      ),
+      );
+    },
   },
 
   // PPL-ALLOC-006 — stage-aware target weights for the Real ranking tab.

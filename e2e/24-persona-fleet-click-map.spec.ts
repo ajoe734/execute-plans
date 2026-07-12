@@ -442,10 +442,10 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     // Link 4: Ranking
     console.log("Clicking Ranking link...");
     await formalRow.locator('[aria-label="persona-formal-mut persona league ranking" i]').click();
-    console.log("Expecting URL to match focused Persona League...");
-    await expect(page).toHaveURL(/\/management\/persona-league\?persona=persona-formal-mut/);
+    console.log("Expecting URL to match focused Rankings Center rolling tab...");
+    await expect(page).toHaveURL(/\/management\/rankings\?tab=rolling&persona=persona-formal-mut/);
     console.log("Waiting for Ranking page content to load...");
-    await expect(page.getByRole("heading", { name: "Persona 聯賽", level: 1 })).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: /排名中心|Rankings Center/i, level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 05...");
     await captureScreenshot(page, "05-target-ranking");
 
@@ -481,10 +481,10 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     // Link 7: Performance
     console.log("Clicking Performance link...");
     await formalRow.locator('[aria-label="persona-formal-mut performance attribution" i]').click();
-    console.log("Expecting URL to match performance attribution...");
-    await expect(page).toHaveURL(/\/management\/performance-attribution\?dimension=persona/);
+    console.log("Expecting URL to match Performance Center attribution tab...");
+    await expect(page).toHaveURL(/\/management\/performance\?tab=attribution&dimension=persona&persona=persona-formal-mut/);
     console.log("Waiting for Performance page content to load...");
-    await expect(page.getByRole("heading", { name: "績效歸因", level: 1 })).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: /績效中心|Performance Center/i, level: 1 })).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 08...");
     await captureScreenshot(page, "08-target-performance");
 

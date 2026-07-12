@@ -100,7 +100,15 @@ class SsePerfHarness {
     }
     this.openResponses = [];
     await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => (error ? reject(error) : resolve()));
+      const timeout = setTimeout(() => {
+        this.server.closeAllConnections?.();
+        resolve();
+      }, 2_000);
+      this.server.close((error) => {
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
+      });
     });
   }
 

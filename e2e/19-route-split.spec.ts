@@ -13,6 +13,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const SNAPSHOT_AT = "2026-07-01T10:00:00Z";
+const EXPECT_SOURCE_ROUTE_MODULES = process.env.PANTHEON_ROUTE_SPLIT_SOURCE_MODULES === "1";
 
 function frontendUrl(path = "/"): string {
   const base =
@@ -218,6 +219,10 @@ test("direct Evidence navigation loads only the Evidence route cluster", async (
   await expect(page.getByRole("heading", { name: /Evidence Explorer|證據庫/i })).toBeVisible();
   await expect(page.getByText("MGMT-LOAD-004 evidence packet")).toBeVisible();
 
+  test.skip(
+    !EXPECT_SOURCE_ROUTE_MODULES && routeModuleRequests.length === 0,
+    "Hosted/prod builds serve hashed chunks instead of Vite /src route modules.",
+  );
   expect(routeModuleRequests).toContain("/src/routes/management/evidence.tsx");
   expect(routeModuleRequests).not.toContain("/src/routes/management/registry.tsx");
   expect(routeModuleRequests).not.toContain("/src/routes/management/v5.tsx");
@@ -236,6 +241,10 @@ test("management redirect aliases survive lazy route splitting", async ({ page }
 });
 
 test("lazy route chunk fetch failure renders a route error state", async ({ page }) => {
+  test.skip(
+    !EXPECT_SOURCE_ROUTE_MODULES,
+    "This route chunk failure probe targets Vite source modules, not hosted hashed chunks.",
+  );
   await page.route(/\/src\/routes\/management\/evidence\.tsx(?:\?|$)/, (route) => route.abort("failed"));
 
   await page.goto(frontendUrl("/management/evidence"), { waitUntil: "domcontentloaded" });
