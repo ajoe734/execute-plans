@@ -929,6 +929,7 @@ interface StrategyWorkspaceViewProps {
   readinessGate?: string;
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
+  onSwitchStrategy?: () => void;
 }
 
 interface OpenLayoutProposalRequest extends AgoraLayoutProposalRequestDetail {
@@ -948,6 +949,7 @@ function StrategyWorkspaceView({
   readinessGate,
   strategyVersion,
   onBackToWorkshop,
+  onSwitchStrategy,
 }: StrategyWorkspaceViewProps): JSX.Element {
   const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
@@ -1222,6 +1224,9 @@ function StrategyWorkspaceView({
                 "workspace",
               )}
               onWorkspaceChange={setWorkspaceResult}
+              strategy={strategy}
+              onBackToWorkshop={onBackToWorkshop}
+              onSwitchStrategy={onSwitchStrategy}
             />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
@@ -1420,6 +1425,7 @@ export function TradingRoomPage({
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           onBackToWorkshop={onBackToWorkshop}
+          onSwitchStrategy={() => handleStrategySelect(undefined)}
           readinessAssessmentId={readinessAssessmentId}
           readinessGate={readinessGate}
           strategyVersion={strategyVersion}
