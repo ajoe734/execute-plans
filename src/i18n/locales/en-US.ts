@@ -1770,6 +1770,176 @@ export default {
       },
     },
     tradingRoom: {
+      lenses: {
+        chip: {
+          title: "Chip/Large-Holder Positioning",
+          thesis: "Identify symbols where large institutions are accumulating positions while price remains quiet.",
+          rules: {
+            concentration: "Concentration",
+            accumDays: "Accumulation Days",
+            priceDev: "Price Deviation"
+          }
+        },
+        laggard: {
+          title: "Industry Laggard",
+          thesis: "Identify supplier and sector constituents lagging high-momentum peers with active catalysts.",
+          rules: {
+            peerMomentum: "Peer Momentum Diff",
+            revenueExposure: "Revenue Exposure",
+            catalystHorizon: "Catalyst Horizon"
+          }
+        },
+        breakout: {
+          title: "Technical Breakout",
+          thesis: "Monitor critical breakout resistance levels, anchored VWAPs, and setup confirmation.",
+          rules: {
+            distance: "Distance to Level",
+            volumeMultiple: "Volume Multiple",
+            atrRule: "ATR Rule"
+          }
+        },
+        event: {
+          title: "Event Trading",
+          thesis: "Identify expectation mismatches and volatility setups surrounding scheduled catalysts.",
+          rules: {
+            countdown: "Countdown",
+            ivPercentile: "IV Percentile",
+            consensusDev: "Consensus Deviation"
+          }
+        },
+        liquidity: {
+          title: "Large-Flow/Liquidity Execution",
+          thesis: "Assess market impact, spreads, and slippage risk for sizable executions.",
+          rules: {
+            advRatio: "ADV Ratio",
+            slippage: "Slippage Tolerance",
+            spreadLimit: "Spread Limit"
+          }
+        },
+        meta: {
+          candidateLabel: "Candidates: {{count}}",
+          heldLabel: "Monitoring: {{count}}",
+          riskLabel: "Risk: {{state}}",
+          freshnessLabel: "Freshness: {{time}}",
+          candidateShort: "Cand: {{count}}",
+          heldShort: "Mon: {{count}}",
+          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)"
+        },
+        dashboard: {
+          recipeA: {
+            funnelTitle: "Candidate Funnel & Flow",
+            heatmapTitle: "Broker Branch x Date Heatmap",
+            networkTitle: "Same Broker Cross-Branch Network"
+          },
+          recipeB: {
+            hypothesisTitle: "Active Hypothesis",
+            timelineTitle: "Catalyst Event Timeline",
+            scatterTitle: "Sector Relative-Return Scatter",
+            chainTitle: "Supply Chain & Laggards Map"
+          },
+          recipeC: {
+            resistanceTitle: "Breakout Resistance Levels",
+            vwapTitle: "Anchored VWAP Setup",
+            invalidationTitle: "Technical Invalidation Bounds"
+          },
+          recipeD: {
+            eventCalendar: "Scheduled Catalyst Calendar",
+            impliedVolatility: "Implied Volatility (IV) Structure",
+            scenarioTree: "Expectation Gap Scenario Tree"
+          },
+          recipeE: {
+            liquidityDepth: "Liquidity Depth & Order Book",
+            marketImpact: "Execution Slippage Model",
+            utilization: "Capital Allocation Capacity"
+          }
+        }
+      },
+      candidates: {
+        cand_a1: {
+          reason: "Significant accumulation from major institutional broker branches (Morgan Stanley, Goldman Sachs) over the last 7 days. Price remains consolidated within a tight 1.5% range.",
+          concerns: "Minor distribution from minor retail desks, but institutional net flows are highly positive.",
+          nextEvent: "Earnings report in 14 days"
+        },
+        cand_a2: {
+          reason: "Consistent net buy pressure on key custody bank accounts (State Street, BNY Mellon). 5 consecutive days of increasing institutional volume support.",
+          concerns: "High absolute valuation multiples, but growth runway remains intact.",
+          nextEvent: "Product announcement in 5 days"
+        },
+        cand_a3: {
+          reason: "Spike in block trade activity at key VWAP support levels. Order flow shows institutional block size execution.",
+          concerns: "High beta and volatility, macro headwinds in EV sector.",
+          nextEvent: "Production numbers release in 10 days"
+        },
+        cand_a4: {
+          reason: "Large-holder distribution pattern detected on several broker desks. Net retail buyers dominate currently.",
+          concerns: "Severe supply chain constraints, potential near-term peak margin risk.",
+          nextEvent: "Developer conference tomorrow"
+        },
+        cand_b1: {
+          reason: "NVIDIA and TSMC have rallied substantially, while AMD lags by 15.4% over a 20-day horizon despite similar AI product exposure.",
+          concerns: "Lower gross margin profile compared to NVDA; slower product ramp.",
+          nextEvent: "New chip launch in 6 days"
+        },
+        cand_b2: {
+          reason: "Lags the global foundry peer index by 22%. Governed catalysts include upcoming government subsidies and fab progress.",
+          concerns: "High capital expenditures leading to free cash flow headwinds.",
+          nextEvent: "Government fab subsidy signoff in 12 days"
+        },
+        cand_b3: {
+          reason: "Mobile handset chips sector recovery. Lags MediaTek and Apple mobile chip valuation benchmarks by 10.2%.",
+          concerns: "Slow mobile market recovery, high reliance on key client license renewals.",
+          nextEvent: "Mobile chip summit in 10 days"
+        },
+        cand_c1: {
+          reason: "Breakout above $185.00 resistance. Volume is 2.4x the 20-day average. Anchored VWAP from recent swing low holds as support.",
+          concerns: "Potential fake breakout if volume does not persist; overhead macro market resistance.",
+          nextEvent: "Retail sales data tomorrow"
+        },
+        cand_c2: {
+          reason: "Consolidating 1.4% below $178.50 breakout level. Volatility ATR ratio at 0.9 showing squeeze compression.",
+          concerns: "Regulatory antitrust news overhang.",
+          nextEvent: "Court ruling hearing in 7 days"
+        },
+        cand_d1: {
+          reason: "Upcoming earnings call. Implied options volatility is in the 92nd percentile. Scenario tree shows substantial upside on positive guidance.",
+          concerns: "Geopolitical risk premium, high pre-earnings positioning.",
+          nextEvent: "Earnings call in 18 hours"
+        },
+        cand_e1: {
+          reason: "Executing $50M target allocation. Spread is tight at 0.05%, and average daily volume (ADV) can support execution over 2 days with low market impact.",
+          concerns: "Slippage may increase if macro liquidity drops; high correlation to broad indices.",
+          nextEvent: "Index rebalancing in 4 days"
+        },
+        headers: {
+          rank: "Rank",
+          symbol: "Symbol",
+          name: "Name",
+          aiScore: "AI Score",
+          accumDays: "Accum. Days",
+          concentration: "Concentration",
+          priceDev: "Price Dev.",
+          peerGroup: "Peer Group",
+          similarity: "Similarity",
+          priceLag: "Price Lag",
+          catalystHorizon: "Catalyst Horizon",
+          breakoutLevel: "Breakout Level",
+          distancePct: "Distance %",
+          volumeMultiplier: "Volume Multiplier",
+          atrRatio: "ATR Ratio",
+          eventType: "Event Type",
+          countdown: "Countdown",
+          ivPct: "IV %",
+          expectedImpact: "Expected Impact",
+          targetAmount: "Target Amount",
+          advPct: "ADV %",
+          estSlippage: "Est. Slippage",
+          marketImpact: "Market Impact",
+          state: "State",
+          action: "Action",
+          noCandidates: "No candidates in this state. Try changing the lifecycle state filter.",
+          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})"
+        }
+      },
       errors: {
         readForbidden: "You do not have permission or scope to read this Trading Room proposal.",
         proposalNotFound: "This Trading Room proposal or workspace no longer exists. Please regenerate.",
