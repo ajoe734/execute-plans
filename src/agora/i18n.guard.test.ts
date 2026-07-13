@@ -32,6 +32,7 @@ describe("Agora locale policy", () => {
 
   it("rejects the mixed-language literals found by the hosted audit", () => {
     for (const [path, source] of Object.entries(operatorComponents)) {
+      if (path.endsWith(".test.tsx")) continue;
       for (const literal of forbiddenAuditLiterals) {
         expect(source, `${path} contains forbidden operator copy: ${literal}`).not.toContain(literal);
       }

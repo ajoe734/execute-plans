@@ -100,6 +100,7 @@ export interface TradingRoomWidgetSpec {
   whyIncluded: string;
   whyIncludedKey?: string;
   dataSource: string;
+  dataAvailability?: DataAvailabilityStatus;
   query: {
     filters: Record<string, unknown>;
     sort?: Record<string, "asc" | "desc">;
