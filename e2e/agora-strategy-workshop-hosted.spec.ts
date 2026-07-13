@@ -203,9 +203,9 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("workshop-conversation")).toBeVisible();
       await expect(page.getByTestId("completeness-rail")).toBeVisible();
       await expect(page.getByTestId("servant-composer")).toBeVisible();
-      await expect(page.getByTestId("workshop-card-summary")).toContainText(/Cards: \d+/);
-      await expect(page.getByTestId("workshop-event-summary")).toContainText(/Events: \d+/);
-      await expect(page.getByTestId("workshop-readiness-summary")).toContainText(/Readiness:/);
+      await expect(page.getByTestId("workshop-card-summary")).toHaveText(/^(?:Cards: \d+|卡片：\d+)$/);
+      await expect(page.getByTestId("workshop-event-summary")).toHaveText(/^(?:Events: \d+|事件：\d+)$/);
+      await expect(page.getByTestId("workshop-readiness-summary")).toHaveText(/^(?:Readiness: .+|就緒度：.+)$/);
 
       const selectorTexts = await page.locator('[data-testid^="workshop-item-"]').allInnerTexts();
       expect(selectorTexts.length, "visible live workshop selector items").toBeGreaterThan(0);
