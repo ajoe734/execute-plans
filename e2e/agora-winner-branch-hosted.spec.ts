@@ -2,13 +2,14 @@
  * AG-DYNUI-FULL-006 - hosted live Winner Branch gate.
  *
  * This spec exercises the deployed/live BFF contract through the real Agora UI.
- * It does not intercept, replace, or synthesize any Agora BFF response.
+ * It does not intercept, replace, or synthesize any Agora BFF response. Set
+ * AG_DYNUI_FULL_006_HOSTED=1 with an explicit short-lived BFF auth token to run.
  */
 
 import { expect, test, type APIRequestContext, type APIResponse, type Locator, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin } from "./helpers/auth";
+import { installOidcDevLogin, normalizeBearerToken } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE_URL =
@@ -20,16 +21,27 @@ const BFF_BASE_URL =
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
   "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
-const AUTH_TOKEN =
+const RAW_AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   "";
+const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
+const HOSTED_REQUESTED =
+  process.env.AG_DYNUI_FULL_006_HOSTED === "1" ||
+  process.env.PANTHEON_HOSTED_E2E === "1" ||
+  Boolean(AUTH_TOKEN);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
 const LIVE_GET_ATTEMPTS = 3;
 const LIVE_GET_TIMEOUT_MS = 20_000;
 const LIVE_MUTATION_TIMEOUT_MS = 90_000;
 const WINNER_FLOW_TIMEOUT_MS = 420_000;
+
+if (HOSTED_REQUESTED && !AUTH_TOKEN) {
+  throw new Error(
+    "AG-DYNUI-FULL-006 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN",
+  );
+}
 
 const REQUIRED_CARD_TYPES = ["user_strategy_description", "completeness_update", "readiness_gate"];
 const REQUIRED_BFF_PATHS = [
@@ -274,8 +286,8 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 
 test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
   test.skip(
-    !AUTH_TOKEN,
-    "Set a short-lived BFF_AUTH_TOKEN; no privileged hosted fallback token is tracked.",
+    !HOSTED_REQUESTED,
+    "Set AG_DYNUI_FULL_006_HOSTED=1 and an explicit short-lived BFF_AUTH_TOKEN.",
   );
   test.describe.configure({ retries: 0 });
   test.setTimeout(WINNER_FLOW_TIMEOUT_MS);

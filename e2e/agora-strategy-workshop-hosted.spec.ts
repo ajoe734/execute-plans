@@ -2,13 +2,14 @@
  * AG-DYNUI-LIVE-WORKSHOP-FE-013 - hosted live Strategy Workshop tab proof.
  *
  * This spec uses the deployed FE and live BFF. It must not intercept or
- * synthesize Agora workshop responses.
+ * synthesize Agora workshop responses. Supplying both targets opts in and
+ * requires an explicit short-lived BFF auth token.
  */
 
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin } from "./helpers/auth";
+import { installOidcDevLogin, normalizeBearerToken } from "./helpers/auth";
 
 const FE_BASE_URL = trimTrailingSlash(
   process.env.AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL ||
@@ -23,12 +24,20 @@ const BFF_BASE_URL = trimTrailingSlash(
     process.env.VITE_BFF_BASE_URL ||
     "",
 );
-const AUTH_TOKEN =
+const RAW_AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   "";
+const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-dynui-live-tabs-013";
+const HOSTED_REQUESTED = Boolean(FE_BASE_URL && BFF_BASE_URL);
+
+if (HOSTED_REQUESTED && !AUTH_TOKEN) {
+  throw new Error(
+    "AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN",
+  );
+}
 const RAW_UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
 const VIEWPORTS = [
   { name: "desktop", size: { width: 1440, height: 960 } },
@@ -174,8 +183,8 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 
 test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () => {
   test.skip(
-    !FE_BASE_URL || !BFF_BASE_URL || !AUTH_TOKEN,
-    "Set the hosted FE/BFF URLs and a short-lived BFF_AUTH_TOKEN; no privileged fallback token is tracked.",
+    !HOSTED_REQUESTED,
+    "Set the hosted FE and BFF URLs to enable this acceptance probe.",
   );
   test.setTimeout(120_000);
 

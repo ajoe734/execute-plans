@@ -9,7 +9,11 @@
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin } from "./helpers/auth";
+import {
+  installOidcDevLogin,
+  normalizeBearerToken,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE_URL = (
@@ -23,18 +27,32 @@ const BFF_BASE_URL = (
   process.env.VITE_BFF_BASE_URL ||
   "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
 ).replace(/\/+$/, "");
-const AUTH_TOKEN =
+const RAW_AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa";
+  "";
+const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EXPECTED_COMMIT = process.env.AG_UIPOL_006_EXPECTED_COMMIT || "";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-uipol-006";
-const HOSTED_ENABLED = process.env.AG_UIPOL_006_HOSTED === "1" && Boolean(
-  FE_BASE_URL && !/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/iu.test(FE_BASE_URL),
-);
-const LAYOUT_WRITE_ENABLED = HOSTED_ENABLED && process.env.AG_UIPOL_006_LAYOUT_WRITE === "1";
+const HOSTED_REQUESTED = process.env.AG_UIPOL_006_HOSTED === "1";
+const LAYOUT_WRITE_REQUESTED = process.env.AG_UIPOL_006_LAYOUT_WRITE === "1";
+const HOSTED_TARGET = Boolean(FE_BASE_URL) && targetsExternalE2eEnvironment({
+  PANTHEON_FE_BASE_URL: FE_BASE_URL,
+});
+
+if (LAYOUT_WRITE_REQUESTED && !HOSTED_REQUESTED) {
+  throw new Error("AG_UIPOL_006_LAYOUT_WRITE=1 requires AG_UIPOL_006_HOSTED=1");
+}
+if (HOSTED_REQUESTED && !HOSTED_TARGET) {
+  throw new Error("AG_UIPOL_006_HOSTED=1 requires an absolute non-loopback hosted FE URL");
+}
+if ((HOSTED_REQUESTED || LAYOUT_WRITE_REQUESTED) && !AUTH_TOKEN) {
+  throw new Error("AG-UIPOL-006 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN");
+}
+
+const HOSTED_ENABLED = HOSTED_REQUESTED && HOSTED_TARGET;
+const LAYOUT_WRITE_ENABLED = HOSTED_ENABLED && LAYOUT_WRITE_REQUESTED;
 
 const FORBIDDEN_PATHS = [
   /\/bff\/orders?\b/iu,

@@ -81,13 +81,19 @@ function explicitAuthToken(
 
 function isLoopbackTarget(value: string): boolean {
   try {
-    const hostname = new URL(value).hostname.toLowerCase();
-    return hostname === "localhost"
-      || hostname === "::1"
-      || hostname === "0.0.0.0"
-      || hostname.startsWith("127.");
+    const target = new URL(value);
+    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+
+    const hostname = target.hostname.toLowerCase().replace(/\.$/u, "");
+    if (hostname === "localhost" || hostname === "0.0.0.0") return true;
+    if (hostname === "::1" || hostname === "[::1]") return true;
+
+    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u);
+    if (!ipv4) return false;
+    const octets = ipv4.slice(1).map(Number);
+    return octets.every((octet) => octet >= 0 && octet <= 255) && octets[0] === 127;
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -97,6 +103,7 @@ export function targetsExternalE2eEnvironment(
   if (
     env.PANTHEON_HOSTED_E2E === "1"
     || env.FE_INT_GATE_LIVE_BFF === "1"
+    || env.F08_CREATE_INTENT_LIVE_BFF === "1"
     || env.RUN_LIVE_BFF_CONTRACTS === "1"
   ) {
     return true;
