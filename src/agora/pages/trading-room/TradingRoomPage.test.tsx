@@ -1,6 +1,6 @@
 import React from "react";
 import { act } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Layout } from "react-grid-layout";
 
@@ -1051,6 +1051,27 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-view-tabs")).toBeDefined();
     expect(screen.getByTestId("workspace-widget-w-status")).toBeDefined();
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
+  });
+
+  it("requires an explicit view choice when the accepted active view is invalid", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValueOnce({
+      etag: '"workspace-etag-v1"',
+      version: MOCK_VERSION_1,
+      workspace: { ...MOCK_WORKSPACE, activeViewId: "missing-view" },
+    });
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+
+    const chooser = await screen.findByTestId("workspace-view-chooser");
+    expect(screen.queryByTestId("workspace-control-strip")).toBeNull();
+    expect(screen.getByTestId("workspace-request-layout-proposal")).toBeDefined();
+
+    fireEvent.click(within(chooser).getAllByRole("button")[0]);
+
+    expect(await screen.findByTestId("workspace-control-strip")).toBeDefined();
+    expect(screen.getByTestId("workspace-readiness-badge")).toBeDefined();
+    expect(screen.getByTestId("workspace-request-layout-proposal")).toBeDefined();
   });
 
   it("keeps the accepted workspace shell and widgets on the dark Trading Room surface", async () => {
