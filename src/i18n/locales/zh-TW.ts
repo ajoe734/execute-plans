@@ -2193,6 +2193,7 @@ export default {
       title: "Strict 發行稽核",
       subtitle: "Strict 模式發行 bundle hash 與稽核軌跡。",
     },
+    ep5Title: "EP5 Canary 就緒度",
   },
   // 2026-05-22 Pack PM-i18n — Management revamp surface strings.
   mgmt: {

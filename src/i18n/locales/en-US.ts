@@ -2211,6 +2211,7 @@ export default {
       title: "Strict Publish Audit",
       subtitle: "Strict-mode publish bundle hashes and audit trail.",
     },
+    ep5Title: "EP5 Canary Readiness",
   },
   // 2026-05-22 Pack PM-i18n — Management revamp surface strings.
   mgmt: {
