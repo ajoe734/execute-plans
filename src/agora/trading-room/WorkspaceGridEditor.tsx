@@ -61,6 +61,7 @@ type SaveState = "idle" | "saving" | "error";
 export interface WorkspaceGridEditorProps {
   initialEtag?: string | null;
   initialWorkspace: TradingRoomWorkspace;
+  onRequestLayoutProposal?: () => void;
   onWorkspaceChange?: (result: TradingRoomWorkspaceResult) => void;
   strategy?: TradingRoomStrategyEntry;
   onBackToWorkshop?: () => void;
@@ -80,6 +81,12 @@ function cloneWorkspace(workspace: TradingRoomWorkspace): TradingRoomWorkspace {
 
 function sortedViews(workspace: TradingRoomWorkspace) {
   return [...workspace.views].sort((a, b) => a.order - b.order);
+}
+
+function explicitActiveViewId(workspace: TradingRoomWorkspace): string {
+  return workspace.activeViewId && workspace.views.some((view) => view.id === workspace.activeViewId)
+    ? workspace.activeViewId
+    : "";
 }
 
 function layoutFromWidgets(widgets: TradingRoomWidgetSpec[]): Layout[] {
@@ -477,7 +484,7 @@ function parseNewWidgetPrompt(prompt: string, strategyId: string, currentY: numb
   mapping: string;
 } {
   const isReturn = prompt.includes("報酬") || prompt.includes("return") || prompt.includes("5") || prompt.includes("20");
-  
+
   if (isReturn) {
     const spec: TradingRoomWidgetSpec = {
       id: `servant_widget_${Date.now()}`,
@@ -552,6 +559,7 @@ function pendingEventTotal(strategy: TradingRoomStrategyEntry): number {
 export function WorkspaceGridEditor({
   initialEtag,
   initialWorkspace,
+  onRequestLayoutProposal,
   onWorkspaceChange,
   strategy,
   onBackToWorkshop,
@@ -561,7 +569,7 @@ export function WorkspaceGridEditor({
   const [baseWorkspace, setBaseWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [draftWorkspace, setDraftWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [currentEtag, setCurrentEtag] = useState<string | null>(initialEtag ?? null);
-  const [activeViewId, setActiveViewId] = useState(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
+  const [activeViewId, setActiveViewId] = useState(() => explicitActiveViewId(initialWorkspace));
   const [editMode, setEditMode] = useState(false);
   const [pendingOps, setPendingOps] = useState<WorkspaceLayoutOperation[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -572,7 +580,7 @@ export function WorkspaceGridEditor({
   const [versions, setVersions] = useState<TradingRoomDashboardVersion[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [revisionTarget, setRevisionTarget] = useState<{ viewId: string; widgetId: string } | null>(null);
-  
+
   // Custom states for notifications and Ask Servant widget proposals
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [widgetProposal, setWidgetProposal] = useState<{
@@ -586,7 +594,7 @@ export function WorkspaceGridEditor({
     setBaseWorkspace(cloneWorkspace(initialWorkspace));
     setDraftWorkspace(cloneWorkspace(initialWorkspace));
     setCurrentEtag(initialEtag ?? null);
-    setActiveViewId(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
+    setActiveViewId(explicitActiveViewId(initialWorkspace));
     setEditMode(false);
     setPendingOps([]);
     setSaveState("idle");
@@ -613,7 +621,7 @@ export function WorkspaceGridEditor({
   }, [initialWorkspace.id, baseWorkspace.dashboardVersion]);
 
   const views = useMemo(() => sortedViews(draftWorkspace), [draftWorkspace]);
-  const activeView = views.find((view) => view.id === activeViewId) ?? views[0];
+  const activeView = views.find((view) => view.id === activeViewId) ?? null;
   const visibleWidgets = activeView?.widgets.filter((widget) => widget.visible !== false) ?? [];
   const removedWidgets = activeView?.widgets.filter((widget) => widget.visible === false) ?? [];
   const dirty = pendingOps.length > 0;
@@ -927,6 +935,7 @@ export function WorkspaceGridEditor({
   }
 
   function handleAskServant(prompt: string) {
+    if (!activeView) return;
     const currentY = maxViewY(activeView.widgets);
     const parsed = parseNewWidgetPrompt(prompt, draftWorkspace.strategyId, currentY);
     setWidgetProposal({
@@ -937,11 +946,35 @@ export function WorkspaceGridEditor({
     });
   }
 
-  if (!activeView) {
+  if (!views.length) {
     return (
       <div data-testid="trading-room-workspace-empty" style={{ color: COLORS.muted, fontSize: 13, padding: 16 }}>
-        Workspace contains no views.
+        {t("agora.tradingRoom.layoutProposal.noViews")}
       </div>
+    );
+  }
+
+  if (!activeView) {
+    return (
+      <section
+        data-testid="trading-room-workspace-shell"
+        style={{ background: COLORS.panelInset, color: COLORS.text, display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden", padding: 16 }}
+      >
+        <h2 style={{ fontSize: 18, margin: 0 }}>{t("agora.tradingRoom.layoutProposal.chooseView")}</h2>
+        <p style={{ color: COLORS.muted, fontSize: 12 }}>{t("agora.tradingRoom.layoutProposal.chooseViewHint")}</p>
+        <div data-testid="workspace-view-chooser" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {views.map((view) => (
+            <button key={view.id} onClick={() => setActiveViewId(view.id)} style={secondaryButtonStyle} type="button">
+              {agoraCopy(t, view.titleKey, view.title)}
+            </button>
+          ))}
+        </div>
+        {onRequestLayoutProposal ? (
+          <button data-testid="workspace-request-layout-proposal" onClick={onRequestLayoutProposal} style={{ ...primaryButtonStyle, alignSelf: "flex-start", marginTop: 16 }} type="button">
+            {t("agora.tradingRoom.layoutProposal.open")}
+          </button>
+        ) : null}
+      </section>
     );
   }
 
@@ -971,7 +1004,7 @@ export function WorkspaceGridEditor({
             <span style={{ color: COLORS.muted, fontSize: 12 }}>
               ({draftWorkspace.strategyVersion})
             </span>
-            
+
             {/* Status indicators */}
             <span
               data-testid="workspace-readiness-badge"
@@ -987,7 +1020,7 @@ export function WorkspaceGridEditor({
             >
               {strategy?.readiness_state || "READY"}
             </span>
-            
+
             <span
               data-testid="workspace-data-freshness"
               style={{
@@ -1000,7 +1033,7 @@ export function WorkspaceGridEditor({
             >
               ● Data: Complete (10:42)
             </span>
-            
+
             <span
               data-testid="workspace-risk-state"
               style={{
@@ -1013,7 +1046,7 @@ export function WorkspaceGridEditor({
             >
               Risk: Normal
             </span>
-            
+
             <span
               data-testid="workspace-pending-decisions"
               style={{
@@ -1027,7 +1060,6 @@ export function WorkspaceGridEditor({
               {strategy ? pendingEventTotal(strategy) : 0} Pending Decisions
             </span>
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               data-testid="workspace-dashboard-version"
@@ -1089,6 +1121,11 @@ export function WorkspaceGridEditor({
             >
               版本紀錄 (Versions)
             </button>
+            {onRequestLayoutProposal ? (
+              <button data-testid="workspace-request-layout-proposal" onClick={onRequestLayoutProposal} style={secondaryButtonStyle} type="button">
+                {t("agora.tradingRoom.layoutProposal.open")}
+              </button>
+            ) : null}
             <button
               data-testid="workspace-edit-mode-toggle"
               onClick={() => setEditMode((prev) => !prev)}
@@ -1275,7 +1312,7 @@ export function WorkspaceGridEditor({
                   : version.generatedBy === "learned_personalization"
                   ? "AI 個人化 (Learner)"
                   : "交易員 (Trader)";
-                  
+
               const badgeBg =
                 version.generatedBy === "trading_servant"
                   ? "rgba(59, 130, 246, 0.15)"

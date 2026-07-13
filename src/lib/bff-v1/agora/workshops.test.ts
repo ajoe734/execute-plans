@@ -81,6 +81,18 @@ describe("listWorkshops", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("normalizes an absent subject into a safe structural fallback", async () => {
+    const { subject: _subject, ...withoutSubject } = mockWorkshop;
+    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [withoutSubject] } });
+
+    const [result] = await listWorkshops();
+
+    expect(result.subject).toEqual({
+      kind: "free_form",
+      ref: "ws-001",
+    });
+  });
 });
 
 describe("getWorkshop", () => {
@@ -90,6 +102,40 @@ describe("getWorkshop", () => {
     const result = await getWorkshop("ws-001");
 
     expect(result).toEqual(mockWorkshop);
+  });
+
+  it("fills missing subject kind and ref while preserving a valid title", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: {
+        ...mockWorkshop,
+        subject: { title: "  Partial subject title  " },
+      },
+    });
+
+    const result = await getWorkshop("ws-001");
+
+    expect(result.subject).toEqual({
+      kind: "free_form",
+      ref: "ws-001",
+      title: "Partial subject title",
+    });
+  });
+
+  it("preserves valid partial subject identity without inventing a title", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: {
+        ...mockWorkshop,
+        subject: { kind: "strategy_spec", ref: "strategy-v4" },
+      },
+    });
+
+    const result = await getWorkshop("ws-001");
+
+    expect(result.subject).toEqual({
+      kind: "strategy_spec",
+      ref: "strategy-v4",
+    });
+    expect(result.subject.title).toBeUndefined();
   });
 });
 
