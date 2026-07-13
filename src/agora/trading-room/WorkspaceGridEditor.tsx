@@ -649,16 +649,6 @@ export function WorkspaceGridEditor({
     addWidgetSpec(widgetSpec, "add_from_library");
   }
 
-  async function refreshVersions(workspaceId: string) {
-    try {
-      const items = await listTradingRoomWorkspaceVersions(workspaceId);
-      setVersions(items);
-      setVersionError(null);
-    } catch (err) {
-      setVersionError(mutationErrorMessage(err));
-    }
-  }
-
   async function handleSave() {
     if (!dirty) return;
     if (!currentEtag) {
@@ -681,7 +671,6 @@ export function WorkspaceGridEditor({
       setEditMode(false);
       setSaveState("idle");
       onWorkspaceChange?.(result);
-      await refreshVersions(result.workspace.id);
     } catch (err) {
       setError(mutationErrorMessage(err));
       setSaveState("error");
@@ -718,14 +707,13 @@ export function WorkspaceGridEditor({
       setEditMode(false);
       setSaveState("idle");
       onWorkspaceChange?.(result);
-      await refreshVersions(result.workspace.id);
     } catch (err) {
       setError(mutationErrorMessage(err));
       setSaveState("error");
     }
   }
 
-  async function handleRevisionAccepted(result: TradingRoomWorkspaceResult) {
+  function handleRevisionAccepted(result: TradingRoomWorkspaceResult) {
     setBaseWorkspace(cloneWorkspace(result.workspace));
     setDraftWorkspace(cloneWorkspace(result.workspace));
     setCurrentEtag(result.etag);
@@ -735,7 +723,6 @@ export function WorkspaceGridEditor({
     setError(null);
     setRevisionTarget(null);
     onWorkspaceChange?.(result);
-    await refreshVersions(result.workspace.id);
   }
 
   if (!activeView) {

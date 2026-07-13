@@ -29,6 +29,8 @@ const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TEN
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
 const LIVE_GET_ATTEMPTS = 3;
 const LIVE_GET_TIMEOUT_MS = 20_000;
+const LIVE_MUTATION_TIMEOUT_MS = 90_000;
+const WINNER_FLOW_TIMEOUT_MS = 420_000;
 
 const REQUIRED_CARD_TYPES = ["user_strategy_description", "completeness_update", "readiness_gate"];
 const REQUIRED_BFF_PATHS = [
@@ -250,7 +252,7 @@ function isSameOriginEventStream(event: NetworkEvent): boolean {
 
 function assertRequiredNetwork(events: NetworkEvent[]): void {
   const successfulPaths = events
-    .filter((event) => event.status === undefined || (event.status >= 200 && event.status < 300))
+    .filter((event) => event.status !== undefined && event.status >= 200 && event.status < 300)
     .map((event) => event.path);
   for (const required of REQUIRED_BFF_PATHS) {
     expect(
@@ -272,7 +274,8 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 }
 
 test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
-  test.setTimeout(180_000);
+  test.describe.configure({ retries: 0 });
+  test.setTimeout(WINNER_FLOW_TIMEOUT_MS);
 
   test("live readiness cards to Trading Room workspace, widget revision, version history, and rollback", async ({
     page,
@@ -302,7 +305,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       const proposalResponsePromise = page.waitForResponse((response) => {
         const url = new URL(response.url());
         return response.request().method() === "POST" && url.pathname === proposalPath;
-      }, { timeout: 45_000 });
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await addButton.click();
       await expect(page).toHaveURL(new RegExp(`/agora/trading-room/${live.workshop.strategy_id}`), { timeout: 20_000 });
       const proposalResponse = await proposalResponsePromise;
@@ -323,7 +326,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
           ? url.pathname.slice(proposalAcceptPath.length)
           : "";
         return response.request().method() === "POST" && /^[^/]+\/accept$/.test(proposalSuffix);
-      }, { timeout: 45_000 });
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await page.getByTestId("workspace-proposal-accept").click();
       const acceptResponse = await acceptResponsePromise;
       expect(
@@ -343,7 +346,17 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       await page.getByRole("button", { name: "複製 Widget" }).click();
       await expect(page.getByTestId("workspace-unsaved-bar")).toContainText("unsaved", { timeout: 10_000 });
       await screenshot(page, testInfo, "04-live-grid-unsaved", evidenceScreenshots);
+      const layoutResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === "PATCH"
+          && /^\/bff\/agora\/trading-room\/workspaces\/[^/]+\/layout$/.test(url.pathname);
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await page.getByTestId("workspace-save-layout").click();
+      const layoutResponse = await layoutResponsePromise;
+      expect(
+        layoutResponse.ok(),
+        `live workspace layout returned ${layoutResponse.status()} for ${new URL(layoutResponse.url()).pathname}`,
+      ).toBe(true);
       await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v2/, { timeout: 30_000 });
       await screenshot(page, testInfo, "05-live-grid-saved-v2", evidenceScreenshots);
     });
@@ -352,11 +365,31 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       await page.getByTestId(`workspace-widget-${widgetId}`).click();
       await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeVisible({ timeout: 20_000 });
       await page.getByTestId("workspace-widget-revision-input").fill("改成表格並聚焦 readiness gate、dashboard version、evidence coverage");
+      const revisionProposalResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === "POST"
+          && /^\/bff\/agora\/trading-room\/workspaces\/[^/]+\/widgets\/[^/]+\/revision-proposals$/.test(url.pathname);
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await page.getByTestId("workspace-widget-revision-submit").click();
+      const revisionProposalResponse = await revisionProposalResponsePromise;
+      expect(
+        revisionProposalResponse.ok(),
+        `live widget revision proposal returned ${revisionProposalResponse.status()} for ${new URL(revisionProposalResponse.url()).pathname}`,
+      ).toBe(true);
       await expect(page.getByTestId("workspace-widget-before-after-diff")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("workspace-widget-revision-proposal")).toBeVisible({ timeout: 20_000 });
       await screenshot(page, testInfo, "06-live-widget-revision-preview", evidenceScreenshots);
+      const revisionAcceptResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === "POST"
+          && /^\/bff\/agora\/trading-room\/widget-revision-proposals\/[^/]+\/accept$/.test(url.pathname);
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await page.getByTestId("workspace-widget-revision-keep-copy").click();
+      const revisionAcceptResponse = await revisionAcceptResponsePromise;
+      expect(
+        revisionAcceptResponse.ok(),
+        `live widget revision accept returned ${revisionAcceptResponse.status()} for ${new URL(revisionAcceptResponse.url()).pathname}`,
+      ).toBe(true);
       await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeHidden({ timeout: 30_000 });
       await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v3/, { timeout: 30_000 });
       await screenshot(page, testInfo, "07-live-widget-revision-v3", evidenceScreenshots);
@@ -381,7 +414,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
         return response.request().method() === "POST"
           && url.pathname.includes("/bff/agora/trading-room/workspaces/")
           && url.pathname.endsWith(`/versions/${encodeURIComponent(rollbackVersionId as string)}/rollback`);
-      }, { timeout: 45_000 });
+      }, { timeout: LIVE_MUTATION_TIMEOUT_MS });
       await rollbackButton.click({ timeout: 10_000 });
       const rollbackResponse = await rollbackResponsePromise;
       expect(
