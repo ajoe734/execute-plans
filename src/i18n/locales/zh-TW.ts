@@ -1586,6 +1586,25 @@ export default {
       cardLabels: {
         evidence: "證據", progress: "進度", redacted_summary: "遮蔽摘要", attachments: "附件",
         strategy_title: "策略名稱", patch_proposal: "修補提案", causal_chain: "因果鏈",
+        needs_confirmation: "需要確認",
+        consultation: "諮詢",
+        type: "類型",
+        freshness: "新鮮度",
+        participants: "參與者",
+        consensus: "共識",
+        disagreements: "歧異",
+        risk_notes: "風險備註",
+        conditions: "條件限制",
+        evidence_refs: "證據參考",
+        data_requirements: "資料需求",
+        stages: "階段",
+        depends_on: "依賴於",
+        approval: "核准度",
+        no_order_proof: "無下單憑證",
+        objectives: "目標",
+        evaluation_criteria: "評估準則",
+        budget: "預算",
+        assumptions: "假設條件",
         explicit_definitions: "明確定義", servant_inferences: "僕人推論", uncertainties: "不確定性",
         contradictions: "矛盾", proposed_next_actions: "建議後續動作", overall_grade: "整體等級",
         research_ready: "研究就緒", change: "變更", dimension_updates: "維度更新", blockers: "阻擋項目",
@@ -1607,6 +1626,29 @@ export default {
       },
     },
     tradingRoom: {
+      errors: {
+        readForbidden: "目前權限或範圍無法讀取這個操盤室提案。",
+        proposalNotFound: "這個操盤室提案或工作區已不存在，請重新產生。",
+        proposalConflict: "操盤室提案狀態已變更，請重新產生後再套用。",
+        proposalStale: "操盤室狀態已過期，請重新整理後再繼續。",
+        notImplemented: "交易操盤室生成功能尚未在目前 BFF 啟用。",
+        createRevisionForbidden: "目前權限或範圍無法建立這個 Widget revision proposal。",
+        workspaceNotFound: "這個 Workspace、View 或 Widget 已不存在，請重新整理後再試。",
+        workspaceStale: "Workspace 版本已過期，請重新整理後再套用。",
+        proposalInvalid: "Widget revision proposal 未通過驗證。",
+        proposalIncomplete: "BFF 回傳的 Widget revision proposal 格式不完整。",
+      },
+      editor: {
+        adjustLayout: "調整版面",
+        exitAdjust: "離開調整",
+        addWidget: "＋ 新增 Widget",
+        askServant: "交代僕人修改",
+        duplicateWidget: "複製 Widget",
+        removeWidget: "移除 Widget",
+        changeChart: "換一種圖表",
+        restorableWidgets: "可還原 Widget",
+        saveLayoutBeforeRevision: "請先儲存或放棄未儲存的版面調整，再建立 Widget Revision Proposal。",
+      },
       page: {
         loading: "正在載入交易操盤室…",
         loadFailed: "無法載入交易操盤室。",
@@ -1706,6 +1748,136 @@ export default {
         decision_support_only: "此工作區僅供決策支援；不能送單、綁定資金或變更執行環境綁定。",
         statistical_association_only: "關係、資金遷移與事件領先元件僅呈現證據強度與統計關聯。",
         unsafe_personalization_ignored: "不安全的個人化設定已忽略。",
+        inferred_confidence: "部分分支關係與遷移資料使用推定信心。",
+        restricted_relationship_context: "受限的關係圖資料僅作為證據強度背景呈現。",
+        trader_scoped_decision_support: "部位資料範圍僅限目前交易員，且僅供決策支援。",
+      },
+      widgets: {
+        overview_candidate_funnel: {
+          title: "候選漏斗",
+          purpose: "追蹤新進、待處理、監控中、影子模式、已建立部位與已移除的候選標的。",
+          whyIncluded: "V11 檢視 A 需要候選漏斗以提供日級狀態。"
+        },
+        overview_strategy_health: {
+          title: "策略健康度",
+          purpose: "顯示 OOS 穩定度、常態分布、資料狀態與今日風險。",
+          whyIncluded: "V11 需要總覽中的策略健康元件。"
+        },
+        overview_candidate_ranking: {
+          title: "頂尖候選排名",
+          purpose: "依贏家分點分數、信心、期望值（EV）與流動性對候選標的進行排名。",
+          whyIncluded: "V11 檢視 A 需要頂尖候選與期望值背景。"
+        },
+        overview_decision_queue: {
+          title: "裁示佇列",
+          purpose: "列出進場、加碼、減碼、出場及資料不足的裁示。",
+          whyIncluded: "V11 檢視 A 需要待處理裁示佇列。"
+        },
+        entry_candidate_table: {
+          title: "候選排名表",
+          purpose: "顯示候選排名、分數、信心、扣除成本後期望值與進場就緒度。",
+          whyIncluded: "V11 檢視 B 需要主要候選表。"
+        },
+        entry_probability_ev: {
+          title: "機率與期望值散佈圖",
+          purpose: "比較 20 日上行機率、扣除成本後期望值、流動性與信心。",
+          whyIncluded: "V11 檢視 B 需要機率與期望值散佈視圖。"
+        },
+        entry_signal_timeline: {
+          title: "候選訊號時間軸",
+          purpose: "呈現候選訊號、分點變更、價格與事件變更。",
+          whyIncluded: "V11 檢視 B 需要候選訊號時間軸。"
+        },
+        branch_leaderboard: {
+          title: "贏家分點排行榜",
+          purpose: "對贏家分點進行排名並顯示近期可用性。",
+          whyIncluded: "V11 檢視 C 需要贏家分點排行榜。"
+        },
+        branch_score_breakdown: {
+          title: "分數組成拆解",
+          purpose: "拆解獲利能力、一致性、時機選擇、事件領先、關係對齊與懲罰項。",
+          whyIncluded: "V11 檢視 C 需要分數拆解元件。"
+        },
+        branch_profitability_horizon: {
+          title: "歷史不同期間成果比較",
+          purpose: "比較 5 日、20 日、60 日及 120 日的歷史成果。",
+          whyIncluded: "V11 檢視 C 需要期間成果比較。"
+        },
+        branch_stability: {
+          title: "分點穩定度與常態分布檢視",
+          purpose: "觀察分點穩定度與常態分布轉換。",
+          whyIncluded: "V11 檢視 C 需要可靠度與常態分布背景。"
+        },
+        migration_relationship_graph: {
+          title: "關係機率圖",
+          purpose: "顯示關係人與分點配對機率，並附帶支持與反向證據。",
+          whyIncluded: "V11 檢視 D 需要關係機率圖。"
+        },
+        migration_branch_network: {
+          title: "分點群組網路",
+          purpose: "顯示同券商、共同出現、同標的遷移與反向流向。",
+          whyIncluded: "V11 檢視 D 需要分點群組網路。"
+        },
+        migration_sankey: {
+          title: "遷移告警表",
+          purpose: "追蹤分點群組資金遷移與分佈告警。",
+          whyIncluded: "V11 檢視 D 需要遷移告警。"
+        },
+        migration_unified_flow: {
+          title: "統一流向時間軸",
+          purpose: "比較單一分點淨流向、群組調整後淨流向、價格與成交量。",
+          whyIncluded: "V11 檢視 D 需要統一流向時間軸。"
+        },
+        event_lead_distribution: {
+          title: "領先時間分佈",
+          purpose: "顯示從異常交易到事件發生的領先時間分佈。",
+          whyIncluded: "V11 檢視 E 需要領先時間分佈。"
+        },
+        event_lead_timeline: {
+          title: "未來與歷史事件時間軸",
+          purpose: "連結未來三至六個月的異常分點交易與事件。",
+          whyIncluded: "V11 檢視 E 需要事件時間軸。"
+        },
+        event_lead_confidence: {
+          title: "資訊領先信心總覽",
+          purpose: "指出資訊領先代理指標與證據強度。",
+          whyIncluded: "V11 檢視 E 需要信心總覽。"
+        },
+        positions_current_table: {
+          title: "目前部位表",
+          purpose: "顯示部位、成本、未實現損益、進場與目前分數、論點健康度與下一步動作。",
+          whyIncluded: "V11 檢視 F 需要目前部位與下一步動作背景。"
+        },
+        positions_action_queue: {
+          title: "加碼、減碼與出場佇列",
+          purpose: "列出建議動作、觸發條件、調整規模、截止時間與信心。",
+          whyIncluded: "V11 檢視 F 需要加碼、減碼與出場佇列。"
+        },
+        positions_pyramid_plan: {
+          title: "投資組合曝險與相關性",
+          purpose: "呈現部位曝險、群組集中度與相關性風險。",
+          whyIncluded: "V11 檢視 F 需要投資組合曝險與風險背景。"
+        },
+        positions_shadow_comparison: {
+          title: "影子模式替代方案比較",
+          purpose: "比較主要版本與影子模式替代方案。",
+          whyIncluded: "V11 檢視 F 需要影子模式替代方案比較。"
+        },
+        evidence_trace: {
+          title: "證據參考資料",
+          purpose: "顯示策略規則、研究證據與資料截止時間。",
+          whyIncluded: "V11 檢視 G 需要證據參考資料。"
+        },
+        evidence_monitoring_rules: {
+          title: "動態監控規則",
+          purpose: "呈現動態監控門檻與資料新鮮度。",
+          whyIncluded: "V11 檢視 G 需要動態監控規則與資料新鮮度。"
+        },
+        evidence_recent_rule_changes: {
+          title: "近期規則變更",
+          purpose: "顯示近期規則變更及其原因。",
+          whyIncluded: "V11 檢視 G 需要儀表板變更證據背景。"
+        }
       },
       views: {
         strategy_overview: { title: "策略總覽", purpose: "讓交易員在十秒內理解今日策略狀況。", rationale: "彙整候選、策略健康、裁示佇列、事件與資金遷移警示。" },

@@ -1603,7 +1603,26 @@ export default {
       },
       cardLabels: {
         evidence: "Evidence", progress: "Progress", redacted_summary: "Redacted Summary", attachments: "Attachments",
-        strategy_title: "Strategy title", patch_proposal: "Patch proposal", causal_chain: "Causal Chain",
+        strategy_title: "Strategy Title", patch_proposal: "Patch Proposal", causal_chain: "Causal Chain",
+        needs_confirmation: "Needs Confirmation",
+        consultation: "Consultation",
+        type: "Type",
+        freshness: "Freshness",
+        participants: "Participants",
+        consensus: "Consensus",
+        disagreements: "Disagreements",
+        risk_notes: "Risk Notes",
+        conditions: "Conditions",
+        evidence_refs: "Evidence Refs",
+        data_requirements: "Data Requirements",
+        stages: "Stages",
+        depends_on: "Depends on",
+        approval: "Approval",
+        no_order_proof: "No-order proof",
+        objectives: "Objectives",
+        evaluation_criteria: "Evaluation Criteria",
+        budget: "Budget",
+        assumptions: "Assumptions",
         explicit_definitions: "Explicit Definitions", servant_inferences: "Servant Inferences", uncertainties: "Uncertainties",
         contradictions: "Contradictions", proposed_next_actions: "Proposed Next Actions", overall_grade: "Overall grade",
         research_ready: "Research ready", change: "Change", dimension_updates: "Dimension Updates", blockers: "Blockers",
@@ -1625,6 +1644,29 @@ export default {
       },
     },
     tradingRoom: {
+      errors: {
+        readForbidden: "You do not have permission or scope to read this Trading Room proposal.",
+        proposalNotFound: "This Trading Room proposal or workspace no longer exists. Please regenerate.",
+        proposalConflict: "The Trading Room proposal status has changed. Please regenerate before applying.",
+        proposalStale: "The Trading Room state has expired. Please refresh to continue.",
+        notImplemented: "Trading Room generation is not yet enabled on the current BFF.",
+        createRevisionForbidden: "You do not have permission or scope to create this widget revision proposal.",
+        workspaceNotFound: "This Workspace, View, or Widget no longer exists. Please refresh and try again.",
+        workspaceStale: "Workspace version is stale. Please refresh and apply.",
+        proposalInvalid: "Widget revision proposal failed validation.",
+        proposalIncomplete: "The BFF returned an incomplete widget revision proposal format.",
+      },
+      editor: {
+        adjustLayout: "Adjust layout",
+        exitAdjust: "Exit adjust",
+        addWidget: "＋ Add Widget",
+        askServant: "Ask Servant to revise",
+        duplicateWidget: "Duplicate Widget",
+        removeWidget: "Remove Widget",
+        changeChart: "Change Chart Type",
+        restorableWidgets: "Restorable Widgets",
+        saveLayoutBeforeRevision: "Please save or discard layout adjustments before creating a widget revision proposal.",
+      },
       page: {
         loading: "Loading Trading Room…",
         loadFailed: "Failed to load Trading Room.",
@@ -1724,6 +1766,136 @@ export default {
         decision_support_only: "This workspace is decision support only; it cannot route orders, bind capital, or change runtime bindings.",
         statistical_association_only: "Relationship, migration, and event-lead widgets show evidence strength and statistical association only.",
         unsafe_personalization_ignored: "Unsafe personalization hints were ignored.",
+        inferred_confidence: "Some branch relationships and migration data use inferred confidence.",
+        restricted_relationship_context: "Restricted relationship graph data is shown as evidence-strength context only.",
+        trader_scoped_decision_support: "Position data is scoped to the current trader and remains decision-support only.",
+      },
+      widgets: {
+        overview_candidate_funnel: {
+          title: "Candidate Funnel",
+          purpose: "Track new, pending, monitored, Shadow, positioned, and removed candidates.",
+          whyIncluded: "V11 View A requires a candidate funnel for day-level status."
+        },
+        overview_strategy_health: {
+          title: "Strategy Health",
+          purpose: "Show OOS stability, regime, data status, and today's risk.",
+          whyIncluded: "V11 requires a strategy health widget in the overview."
+        },
+        overview_candidate_ranking: {
+          title: "Top Candidate Ranking",
+          purpose: "Rank candidates by Winner Branch Score, confidence, EV, and liquidity.",
+          whyIncluded: "V11 View A requires top candidate and EV context."
+        },
+        overview_decision_queue: {
+          title: "Decision Queue",
+          purpose: "List entry, add, reduce, exit, and insufficient-data decisions.",
+          whyIncluded: "V11 View A requires the pending decision queue."
+        },
+        entry_candidate_table: {
+          title: "Candidate Ranking Table",
+          purpose: "Show candidate rank, score, confidence, after-cost EV, and entry readiness.",
+          whyIncluded: "V11 View B requires the primary candidate table."
+        },
+        entry_probability_ev: {
+          title: "Probability / EV Scatter",
+          purpose: "Compare 20-day upside probability, after-cost EV, liquidity, and confidence.",
+          whyIncluded: "V11 View B requires a probability x EV view."
+        },
+        entry_signal_timeline: {
+          title: "Candidate Signal Timeline",
+          purpose: "Present candidate signals, branch changes, price, and event changes.",
+          whyIncluded: "V11 View B requires a candidate signal timeline."
+        },
+        branch_leaderboard: {
+          title: "Winner Branch Leaderboard",
+          purpose: "Rank winner branches and show recent availability.",
+          whyIncluded: "V11 View C requires a winner branch leaderboard."
+        },
+        branch_score_breakdown: {
+          title: "Score Component Breakdown",
+          purpose: "Break down profitability, consistency, timing, event lead, relationship alignment, and penalties.",
+          whyIncluded: "V11 View C requires the Score Breakdown widget."
+        },
+        branch_profitability_horizon: {
+          title: "Historical Outcome by Horizon",
+          purpose: "Compare historical outcomes over 5, 20, 60, and 120 days.",
+          whyIncluded: "V11 View C requires horizon comparison."
+        },
+        branch_stability: {
+          title: "Branch Stability / Regime View",
+          purpose: "Observe branch stability and regime transitions.",
+          whyIncluded: "V11 View C requires reliability and regime context."
+        },
+        migration_relationship_graph: {
+          title: "Relationship Probability Graph",
+          purpose: "Show related-party and branch match probability with supporting and counter-evidence.",
+          whyIncluded: "V11 View D requires relationship probability graph."
+        },
+        migration_branch_network: {
+          title: "Branch Cluster Network",
+          purpose: "Show same-broker, co-occurrence, same-symbol migration, and reverse flow.",
+          whyIncluded: "V11 View D requires branch cluster network."
+        },
+        migration_sankey: {
+          title: "Migration Alert Table",
+          purpose: "Track branch-cluster capital migration and distribution alerts.",
+          whyIncluded: "V11 View D requires migration alerts."
+        },
+        migration_unified_flow: {
+          title: "Unified Flow Timeline",
+          purpose: "Compare single-branch net flow, cluster-adjusted net flow, price, and volume.",
+          whyIncluded: "V11 View D requires unified flow timeline."
+        },
+        event_lead_distribution: {
+          title: "Lead-Time Distribution",
+          purpose: "Show the lead-time distribution from anomalous trading to events.",
+          whyIncluded: "V11 View E requires lead-time distribution."
+        },
+        event_lead_timeline: {
+          title: "Upcoming / Historical Event Timeline",
+          purpose: "Connect anomalous branch trading to events over the next three to six months.",
+          whyIncluded: "V11 View E requires event timeline."
+        },
+        event_lead_confidence: {
+          title: "Information Lead Confidence Summary",
+          purpose: "Indicate information-lead proxies and evidence strength.",
+          whyIncluded: "V11 View E requires confidence summary."
+        },
+        positions_current_table: {
+          title: "Current Positions Table",
+          purpose: "Show positions, cost, PnL, entry/current score, thesis health, and next action.",
+          whyIncluded: "V11 View F requires current positions and next action context."
+        },
+        positions_action_queue: {
+          title: "Add / Reduce / Exit Queue",
+          purpose: "List recommended actions, triggers, adjustment size, deadlines, and confidence.",
+          whyIncluded: "V11 View F requires add/reduce/exit queue."
+        },
+        positions_pyramid_plan: {
+          title: "Portfolio Exposure & Correlation",
+          purpose: "Present position exposure, cluster concentration, and correlation risk.",
+          whyIncluded: "V11 View F requires portfolio exposure and risk context."
+        },
+        positions_shadow_comparison: {
+          title: "Shadow Alternative Comparison",
+          purpose: "Compare the primary version with its Shadow alternative.",
+          whyIncluded: "V11 View F requires Shadow alternative comparison."
+        },
+        evidence_trace: {
+          title: "Evidence References",
+          purpose: "Show strategy rules, research evidence, and data cutoff.",
+          whyIncluded: "V11 View G requires evidence references."
+        },
+        evidence_monitoring_rules: {
+          title: "Active Monitoring Rules",
+          purpose: "Present active monitoring thresholds and data freshness.",
+          whyIncluded: "V11 View G requires active monitoring rules and data freshness."
+        },
+        evidence_recent_rule_changes: {
+          title: "Recent Rule Changes",
+          purpose: "Show recent rule changes and their reasons.",
+          whyIncluded: "V11 View G requires dashboard change evidence context."
+        }
       },
       views: {
         strategy_overview: { title: "Strategy overview", purpose: "Understand today's strategy state within ten seconds.", rationale: "Summarize candidates, strategy health, decision queues, events, and capital-migration alerts." },

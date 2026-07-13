@@ -30,28 +30,28 @@ interface TradingRoomUiError {
   code?: string;
 }
 
-function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+function tradingRoomErrorMessage(err: BffError, fallback: string, t: TFunction): string {
   switch (err.status) {
     case 403:
-      return "目前權限或範圍無法讀取這個操盤室提案。";
+      return t("agora.tradingRoom.errors.readForbidden");
     case 404:
-      return "這個操盤室提案或工作區已不存在，請重新產生。";
+      return t("agora.tradingRoom.errors.proposalNotFound");
     case 409:
-      return "操盤室提案狀態已變更，請重新產生後再套用。";
+      return t("agora.tradingRoom.errors.proposalConflict");
     case 412:
-      return "操盤室狀態已過期，請重新整理後再繼續。";
+      return t("agora.tradingRoom.errors.proposalStale");
     case 501:
-      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+      return t("agora.tradingRoom.errors.notImplemented");
     default:
       return err.message || fallback;
   }
 }
 
-function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+function toTradingRoomUiError(err: unknown, fallback: string, t: TFunction): TradingRoomUiError {
   if (err instanceof BffError) {
     return {
       code: err.code,
-      message: tradingRoomErrorMessage(err, fallback),
+      message: tradingRoomErrorMessage(err, fallback, t),
       status: err.status,
     };
   }
@@ -986,7 +986,7 @@ function StrategyWorkspaceView({
       })
       .catch((err) => {
         if (cancelled) return;
-        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.", t);
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
           setWorkspaceResult(null);
@@ -1022,7 +1022,7 @@ function StrategyWorkspaceView({
       );
       setWorkspaceResult(nextWorkspace);
     } catch (err) {
-      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.", t);
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
         setWorkspaceResult(null);
@@ -1119,7 +1119,7 @@ function StrategyWorkspaceView({
                   }}
                   type="button"
                 >
-                  重新產生
+                  {t("agora.tradingRoom.proposal.regenerate")}
                 </button>
               </div>
             </div>

@@ -150,28 +150,28 @@ function buildWidgetDiffRows(before: TradingRoomWidgetSpec, after: TradingRoomWi
   return rows.map((row) => ({ ...row, changed: row.before !== row.after }));
 }
 
-function revisionErrorMessage(error: BffError, fallback: string): string {
+function revisionErrorMessage(error: BffError, fallback: string, t: TFunction): string {
   switch (error.status) {
     case 403:
-      return "目前權限或範圍無法建立這個 Widget revision proposal。";
+      return t("agora.tradingRoom.errors.createRevisionForbidden");
     case 404:
-      return "這個 Workspace、View 或 Widget 已不存在，請重新整理後再試。";
+      return t("agora.tradingRoom.errors.workspaceNotFound");
     case 412:
-      return "Workspace 版本已過期，請重新整理後再套用。";
+      return t("agora.tradingRoom.errors.workspaceStale");
     case 422:
-      return error.message || "Widget revision proposal 未通過驗證。";
+      return error.message || t("agora.tradingRoom.errors.proposalInvalid");
     case 502:
-      return "BFF 回傳的 Widget revision proposal 格式不完整。";
+      return t("agora.tradingRoom.errors.proposalIncomplete");
     default:
       return error.message || fallback;
   }
 }
 
-function toRevisionUiError(error: unknown, fallback: string): RevisionUiError {
+function toRevisionUiError(error: unknown, fallback: string, t: TFunction): RevisionUiError {
   if (error instanceof BffError) {
     return {
       code: error.code,
-      message: revisionErrorMessage(error, fallback),
+      message: revisionErrorMessage(error, fallback, t),
       status: error.status,
     };
   }
@@ -410,7 +410,7 @@ export function WorkspaceWidgetRevisionDrawer({
       setProposalEtag(result.etag);
       setState("ready");
     } catch (err) {
-      setError(toRevisionUiError(err, "Widget revision proposal failed."));
+      setError(toRevisionUiError(err, "Widget revision proposal failed.", t));
       setState("error");
     }
   }
@@ -437,7 +437,7 @@ export function WorkspaceWidgetRevisionDrawer({
       await onRevisionAccepted(result);
       onClose();
     } catch (err) {
-      setError(toRevisionUiError(err, "Widget revision acceptance failed."));
+      setError(toRevisionUiError(err, "Widget revision acceptance failed.", t));
       setState("error");
     }
   }

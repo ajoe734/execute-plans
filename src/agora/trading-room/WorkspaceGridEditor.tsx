@@ -160,12 +160,13 @@ function AddWidgetLibrary({
   onAdd: (entry: WidgetRegistryEntry) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const entries = getActiveWidgetTypes()
     .map((widgetType) => getWidgetRegistryEntry(widgetType))
     .filter((entry): entry is WidgetRegistryEntry => Boolean(entry));
   const grouped = entries.reduce<Record<string, WidgetRegistryEntry[]>>((acc, entry) => {
-    const category = entry.category || "custom";
-    acc[category] = [...(acc[category] ?? []), entry];
+    const category = entry.category || "General";
+    acc[category] = [...(acc[category] || []), entry];
     return acc;
   }, {});
 
@@ -177,6 +178,8 @@ function AddWidgetLibrary({
         border: `1px solid ${COLORS.borderStrong}`,
         borderRadius: 8,
         boxShadow: "0 18px 42px rgba(0, 0, 0, 0.42)",
+        display: "flex",
+        flexDirection: "column",
         maxHeight: 420,
         overflow: "auto",
         padding: 12,
@@ -188,7 +191,7 @@ function AddWidgetLibrary({
       }}
     >
       <header style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <strong style={{ color: COLORS.text, fontSize: 13 }}>新增 Widget</strong>
+        <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
         <button aria-label="Close widget library" onClick={onClose} style={plainButtonStyle} type="button">
           ×
         </button>
@@ -349,12 +352,12 @@ function WorkspaceWidgetCard({
                 zIndex: 15,
               }}
             >
-              <button onClick={onRequestRevision} style={menuButtonStyle} type="button">交代僕人修改</button>
-              <button onClick={onDuplicate} style={menuButtonStyle} type="button">複製 Widget</button>
-              <button onClick={onRemove} style={dangerMenuButtonStyle} type="button">移除 Widget</button>
+              <button onClick={onRequestRevision} style={menuButtonStyle} type="button">{t("agora.tradingRoom.editor.askServant")}</button>
+              <button onClick={onDuplicate} style={menuButtonStyle} type="button">{t("agora.tradingRoom.editor.duplicateWidget")}</button>
+              <button onClick={onRemove} style={dangerMenuButtonStyle} type="button">{t("agora.tradingRoom.editor.removeWidget")}</button>
               <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4, paddingTop: 6 }}>
                 <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
-                  換一種圖表
+                  {t("agora.tradingRoom.editor.changeChart")}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {chartKinds.map((kind) => (
@@ -766,7 +769,7 @@ export function WorkspaceGridEditor({
               style={primaryButtonStyle}
               type="button"
             >
-              {editMode ? "離開調整" : "調整版面"}
+              {editMode ? t("agora.tradingRoom.editor.exitAdjust") : t("agora.tradingRoom.editor.adjustLayout")}
             </button>
           </div>
         </div>
@@ -817,7 +820,7 @@ export function WorkspaceGridEditor({
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               <button data-testid="workspace-add-widget-button" onClick={() => setShowAddLibrary((prev) => !prev)} style={secondaryButtonStyle} type="button">
-                ＋ 新增 Widget
+                {t("agora.tradingRoom.editor.addWidget")}
               </button>
               <button data-testid="workspace-save-layout" disabled={!dirty || saveState === "saving"} onClick={handleSave} style={primaryButtonStyle} type="button">
                 {saveState === "saving" ? "Saving..." : "Save as new version"}
@@ -848,7 +851,7 @@ export function WorkspaceGridEditor({
 
         {editMode && removedWidgets.length ? (
           <section data-testid="workspace-restore-library" style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 8, marginBottom: 12, padding: 10 }}>
-            <strong style={{ color: COLORS.text, fontSize: 12 }}>可還原 Widget</strong>
+            <strong style={{ color: COLORS.text, fontSize: 12 }}>{t("agora.tradingRoom.editor.restorableWidgets")}</strong>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {removedWidgets.map((widget) => (
                 <button
@@ -966,7 +969,7 @@ export function WorkspaceGridEditor({
       </div>
       <WorkspaceWidgetRevisionDrawer
         currentEtag={currentEtag}
-        disabledReason={dirty ? "請先儲存或放棄未儲存的版面調整，再建立 Widget Revision Proposal。" : null}
+        disabledReason={dirty ? t("agora.tradingRoom.editor.saveLayoutBeforeRevision") : null}
         onClose={() => setRevisionTarget(null)}
         onRevisionAccepted={handleRevisionAccepted}
         open={Boolean(revisionTarget)}
