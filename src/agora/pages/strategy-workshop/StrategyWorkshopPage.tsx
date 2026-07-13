@@ -9,12 +9,14 @@ import {
   postWorkshopMessage,
   openWorkshopStream,
   type WorkshopCard,
+  type WorkshopCompleteness,
   type StrategyReadinessAssessment,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
-import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
+import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 
 export interface TradingRoomReadinessHandoff {
   strategyId: string;
@@ -267,7 +269,7 @@ interface SessionViewProps {
 
 function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
-  const [completeness, setCompleteness] = useState<StrategyCompleteness | null>(null);
+  const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<StrategyReadinessAssessment | null>(null);
   const [workshopEvents, setWorkshopEvents] = useState<WorkshopStreamEvent[]>([]);
   const [composerValue, setComposerValue] = useState("");
@@ -333,9 +335,11 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       switch (event.event_type) {
         case "workshop.completeness.updated":
           refreshCompleteness();
+          refreshCards();
           break;
         case "workshop.readiness.updated":
           refreshReadiness();
+          refreshCards();
           break;
         case "workshop.servant.response.completed":
         case "research.plan.created":
@@ -370,6 +374,11 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     cardState.cards
       .filter((c) => c.card_type === "next_question")
       .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
+  const completenessCard =
+    cardState.cards
+      .filter((c) => c.card_type === "completeness_update")
+      .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
+  const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
 
   const handleContinueDiscussion = useCallback((cardId: string) => {
     setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} - `));
@@ -486,6 +495,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         <div style={{ flex: 1, overflow: "auto" }}>
           <StrategyCompletenessRail
             completeness={completeness}
+            completenessCard={completenessCard}
             readiness={readiness}
             nextQuestion={nextQuestion}
           />
@@ -540,9 +550,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         </div>
 
         {/* Legacy test-id shims for existing tests */}
-        {completeness && (
+        {displayCompleteness && (
           <div data-testid="completeness-grade" style={{ display: "none" }}>
-            {completeness.overall_grade}
+            {displayCompleteness.overall_grade}
           </div>
         )}
         {readiness && (

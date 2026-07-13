@@ -136,6 +136,25 @@ export interface WorkshopStreamEvent {
   occurred_at: string;
 }
 
+/**
+ * Store-level shape returned by the live completeness endpoint.
+ *
+ * The endpoint predates the canonical StrategyCompleteness DTO and returns the
+ * persisted snapshot fields directly. Keep that contract explicit instead of
+ * asserting that `overall_grade` and `dimensions` are present at runtime.
+ */
+export interface WorkshopCompletenessSnapshot {
+  snapshot_id: string;
+  workshop_id: string;
+  strategy_version_id: string;
+  state_map_json: Record<string, unknown>;
+  blocking_items_json: unknown[];
+  next_question_json?: Record<string, unknown>;
+  created_at: string;
+}
+
+export type WorkshopCompleteness = StrategyCompleteness | WorkshopCompletenessSnapshot;
+
 // ─── Response normalization ──────────────────────────────────────────────────
 
 function recordFrom(value: unknown): Record<string, unknown> {
@@ -239,7 +258,7 @@ export async function listWorkshopEvents(
 
 export async function getWorkshopCompleteness(
   workshopId: string,
-): Promise<StrategyCompleteness | null> {
+): Promise<WorkshopCompleteness | null> {
   try {
     const response = await bffFetch<unknown>({
       method: "GET",
@@ -252,7 +271,7 @@ export async function getWorkshopCompleteness(
     // StrategyCompletenessRail's `completeness.dimensions.length` on every
     // workshop that hasn't been assessed yet.
     if (recordFrom(response).data === null) return null;
-    return entityFrom<StrategyCompleteness>(response);
+    return entityFrom<WorkshopCompleteness>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
       return null;

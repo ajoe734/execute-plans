@@ -2,7 +2,12 @@ import { CheckCircle2, CircleAlert, CircleDashed, ShieldCheck } from "lucide-rea
 
 import { cn } from "@/lib/utils";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
-import type { WorkshopCard, WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
+import type {
+  WorkshopCard,
+  WorkshopCompleteness,
+  WorkshopReadinessAssessment,
+} from "@/lib/bff-v1/agora/workshops";
+import { materializeWorkshopCompleteness } from "./workshopCompletenessDisplay";
 import {
   KeyValueGrid,
   Pill,
@@ -125,16 +130,19 @@ function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
 
 export function StrategyCompletenessRail({
   completeness,
+  completenessCard,
   readiness,
   nextQuestion,
 }: {
-  completeness: StrategyCompleteness | null;
+  completeness: WorkshopCompleteness | null;
+  completenessCard?: WorkshopCard | null;
   readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
   nextQuestion?: WorkshopCard | null;
 }) {
-  const metadata = asRecord(completeness?.metadata);
+  const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
+  const metadata = asRecord(displayCompleteness?.metadata);
 
-  if (!completeness) {
+  if (!displayCompleteness) {
     return (
       <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
         <div className="flex flex-col items-center justify-center gap-2 p-4 text-center" data-testid="completeness-empty">
@@ -146,7 +154,7 @@ export function StrategyCompletenessRail({
     );
   }
 
-  const progress = OVERALL_PROGRESS[completeness.overall_grade];
+  const progress = OVERALL_PROGRESS[displayCompleteness.overall_grade] ?? 0;
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
@@ -154,10 +162,10 @@ export function StrategyCompletenessRail({
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Completeness</span>
           <span
-            className={cn("text-xs font-semibold", OVERALL_TONE[completeness.overall_grade])}
+            className={cn("text-xs font-semibold", OVERALL_TONE[displayCompleteness.overall_grade] ?? "text-slate-500")}
             data-testid="completeness-overall-grade"
           >
-            {formatLabel(completeness.overall_grade)}
+            {formatLabel(displayCompleteness.overall_grade)}
           </span>
         </div>
         <ProgressBar value={progress} label="Overall completeness" />
@@ -165,15 +173,15 @@ export function StrategyCompletenessRail({
 
       <KeyValueGrid
         items={[
-          { label: "Research ready", value: completeness.research_ready },
-          { label: "Assessed by", value: completeness.assessed_by_persona_id },
-          { label: "Assessed at", value: completeness.assessed_at },
+          { label: "Research ready", value: displayCompleteness.research_ready },
+          { label: "Assessed by", value: displayCompleteness.assessed_by_persona_id },
+          { label: "Assessed at", value: displayCompleteness.assessed_at },
         ]}
       />
 
       <Section title="Dimensions">
         <div className="space-y-3">
-          {(completeness.dimensions ?? []).map((dim) => (
+          {displayCompleteness.dimensions.map((dim) => (
             <div
               className="space-y-2 border-l border-slate-200 pl-3"
               data-testid={`completeness-dimension-${dim.dimension}`}
@@ -196,7 +204,7 @@ export function StrategyCompletenessRail({
       </Section>
 
       <Section title="Blockers">
-        <TextList items={completeness.blockers} tone="red" />
+        <TextList items={displayCompleteness.blockers} tone="red" />
       </Section>
 
       <ReadinessPanel readiness={readiness} metadata={metadata} />
