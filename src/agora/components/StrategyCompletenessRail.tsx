@@ -25,16 +25,12 @@ function DimensionIcon({ grade }: { grade: string }) {
   return <CircleAlert className="h-3.5 w-3.5 text-red-500" />;
 }
 
-function dimensionProgress(completeness: StrategyCompleteness): number {
-  const dimensions = completeness.dimensions ?? [];
-  if (!dimensions.length) return 0;
-  const score = dimensions.reduce((sum, dim) => {
-    if (dim.grade === "complete") return sum + 1;
-    if (dim.grade === "partial") return sum + 0.5;
-    return sum;
-  }, 0);
-  return (score / dimensions.length) * 100;
-}
+const OVERALL_PROGRESS: Record<StrategyCompleteness["overall_grade"], number> = {
+  complete: 100,
+  mostly_complete: 75,
+  partial: 50,
+  incomplete: 0,
+};
 
 function ReadinessPanel({
   readiness,
@@ -64,17 +60,24 @@ function ReadinessPanel({
             const gate = stringValue(gateRecord.gate, "unknown");
             const state = stringValue(gateRecord.state);
             const passed = booleanValue(gateRecord.passed);
+            const isReady = passed === true || state === "ready" || state === "passed";
             const stateLabel = state ? formatLabel(state) : passed === undefined ? "Not assessed" : passed ? "Passed" : "Blocked";
             return (
               <div
-                className="space-y-2 border-l border-slate-200 pl-3"
+                className={cn(
+                  "space-y-2 border-l pl-3",
+                  isReady ? "border-green-400 bg-green-50/60 py-2 pr-2" : "border-slate-200",
+                )}
+                data-readiness-state={isReady ? "ready" : "not-ready"}
                 data-testid={`readiness-gate-${gate}`}
                 key={gate}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-xs font-medium text-slate-800">{formatLabel(gate)}</span>
-                  <Pill tone={passed === true || state === "ready" || state === "passed" ? "green" : "amber"}>
+                  <ShieldCheck className={cn("h-3.5 w-3.5", isReady ? "text-green-600" : "text-slate-400")} />
+                  <span className={cn("text-xs font-medium", isReady ? "text-green-900" : "text-slate-800")}>
+                    {formatLabel(gate)}
+                  </span>
+                  <Pill tone={isReady ? "green" : "amber"}>
                     <span data-testid={`readiness-gate-${gate}-state`}>{stateLabel}</span>
                   </Pill>
                 </div>
@@ -143,7 +146,7 @@ export function StrategyCompletenessRail({
     );
   }
 
-  const progress = dimensionProgress(completeness);
+  const progress = OVERALL_PROGRESS[completeness.overall_grade];
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
@@ -157,7 +160,7 @@ export function StrategyCompletenessRail({
             {formatLabel(completeness.overall_grade)}
           </span>
         </div>
-        <ProgressBar value={progress} label="Dimension coverage" />
+        <ProgressBar value={progress} label="Overall completeness" />
       </div>
 
       <KeyValueGrid

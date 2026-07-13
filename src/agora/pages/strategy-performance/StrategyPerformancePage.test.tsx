@@ -165,6 +165,59 @@ describe("StrategyPerformancePage", () => {
     expect(screen.getByText("missing attribution")).toBeDefined();
   });
 
+  it("places the explained Unassigned bucket after named strategies", async () => {
+    const attribution = attributionResponse();
+    attribution.data.items = [
+      {
+        dimension: "strategy",
+        dimension_key: "unassigned",
+        holding_count: 0,
+        id: "row-unassigned",
+        label: "Unassigned",
+        metrics: { total_pnl: 0, total_trades: 6841 },
+        period: "latest",
+        rank: 1,
+        runtime_count: 0,
+      },
+      { ...attribution.data.items[0], rank: 2 },
+    ];
+    arrangeLoaded(baseAggregate, attribution);
+
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    const named = await screen.findByText("Breakout Alpha");
+    const unassigned = screen.getByText("Unassigned");
+    expect(named.compareDocumentPosition(unassigned) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("performance-row-attribution-row-unassigned-description").textContent).toContain(
+      "could not link to a named Trading Room strategy",
+    );
+  });
+
+  it("distinguishes measured zero from values the BFF did not report", async () => {
+    const attribution = attributionResponse();
+    attribution.data.items = [
+      {
+        ...attribution.data.items[0],
+        metrics: {
+          ...attribution.data.items[0].metrics,
+          total_pnl: 0,
+          total_trades: undefined,
+        },
+      },
+    ];
+    arrangeLoaded(baseAggregate, attribution);
+
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findByText("Breakout Alpha");
+    const zero = screen.getByTitle("Measured value: zero");
+    const unreported = screen.getByTitle("No measurement was reported by the BFF");
+    expect(zero.textContent).toBe("$0");
+    expect(zero.getAttribute("data-metric-state")).toBe("measured");
+    expect(unreported.textContent).toBe("not reported");
+    expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
+  });
+
   it("shows the live BFF error state without rendering fallback rows", async () => {
     tradingRoomMocks.getTradingRoom.mockRejectedValue(new Error("AUTH_REQUIRED"));
     tradingRoomMocks.getTradingRoomPerformanceAttribution.mockResolvedValue(attributionResponse());
