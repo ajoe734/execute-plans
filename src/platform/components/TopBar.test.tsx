@@ -15,7 +15,7 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function shellSummaryPayload(status: "ok" | "degraded" | "unavailable") {
+function shellSummaryPayload(status: "ok" | "degraded" | "unavailable", source = "bff_composed") {
   return {
     data: {
       counts: { pending_approvals: 4, open_alerts: 2, running_jobs: 1 },
@@ -25,7 +25,7 @@ function shellSummaryPayload(status: "ok" | "degraded" | "unavailable") {
     meta: {
       snapshot_at: "2026-07-01T00:00:00Z",
       surfaces: {
-        shell_summary: { status, source: "bff_composed" },
+        shell_summary: { status, source },
       },
     },
   };
@@ -110,9 +110,42 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     expect(screen.queryByRole("button", { name: /^Paper$/i })).not.toBeInTheDocument();
   });
 
-  it("shows a degraded badge and still renders shell-summary counts when a source is degraded", async () => {
+  it("badges a degraded-but-live surface (bff_composed) as LIVE (partially degraded), not SNAPSHOT DATA", async () => {
     globalThis.fetch = routedFetch({
-      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("degraded")),
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("degraded", "bff_composed")),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.queryByText("SNAPSHOT DATA")).not.toBeInTheDocument();
+    const badge = screen.getByText("LIVE (PARTIALLY DEGRADED)");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "Degraded surfaces: shell_summary");
+  });
+
+  it("badges a degraded surface sourced from service_client as LIVE (partially degraded) too", async () => {
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("degraded", "service_client")),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("LIVE (PARTIALLY DEGRADED)")).toBeInTheDocument();
+  });
+
+  it("keeps the SNAPSHOT DATA badge for a genuinely snapshot-sourced surface", async () => {
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("degraded", "local_snapshot")),
       "/bff/me": () => jsonResponse(mockMe()),
       "/health": () => jsonResponse({ status: "ok" }),
     });

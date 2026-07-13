@@ -18,7 +18,14 @@ import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
-type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified" | "unavailable";
+type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "live_degraded" | "unverified" | "unavailable";
+
+// Surfaces sourced through these BFF pathways are still live data; when one
+// of them reports degraded/stale it must badge as "LIVE (partially
+// degraded)", never "SNAPSHOT DATA" — that label is reserved for surfaces
+// genuinely backed by a snapshot (local_snapshot/missing/unverifiable, or an
+// unnamed/unknown source we cannot positively confirm is live).
+const LIVE_SURFACE_SOURCES = ["bff_composed", "service_client"];
 
 const CommandPalette = lazy(() =>
   import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
@@ -36,6 +43,7 @@ export const TopBar = () => {
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
   const [dataSource, setDataSource] = useState<TopbarDataSource>(transportSource === "live" ? "checking" : transportSource);
+  const [degradedSurfaces, setDegradedSurfaces] = useState<string[]>([]);
   const dataSourceRef = useRef<TopbarDataSource>(dataSource);
   const pathnameRef = useRef(loc.pathname);
   const countsAreLive = dataSource === "live";
@@ -48,12 +56,13 @@ export const TopBar = () => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
     let cancelDeferredFallback: (() => void) | undefined;
-    const setSource = (next: TopbarDataSource) => {
+    const setSource = (next: TopbarDataSource, surfaces: string[] = []) => {
       dataSourceRef.current = next;
       setDataSource(next);
+      setDegradedSurfaces(surfaces);
     };
-    const clearCounts = (next: TopbarDataSource) => {
-      setSource(next);
+    const clearCounts = (next: TopbarDataSource, surfaces: string[] = []) => {
+      setSource(next, surfaces);
       setCounts({ approvals: 0, alerts: 0, jobs: 0 });
     };
 
@@ -78,9 +87,9 @@ export const TopBar = () => {
           clearCounts("fallback");
           return;
         }
-        const listSource = classifyListSource([a, al]);
+        const { source: listSource, degradedSurfaces: listDegradedSurfaces } = classifyListSource([a, al]);
         if (listSource !== "live") {
-          clearCounts(listSource);
+          clearCounts(listSource, listDegradedSurfaces);
           return;
         }
         const approvals = a.items as Array<{ state?: string }>;
@@ -120,7 +129,12 @@ export const TopBar = () => {
           deferHydrateFromFullLists();
           return;
         }
-        setSource(status === "degraded" ? "degraded" : "live");
+        if (status === "degraded") {
+          const degraded = classifyShellSummarySurfaces(summary.surfaces);
+          setSource(degraded.source, degraded.degradedSurfaces);
+        } else {
+          setSource("live");
+        }
         setCounts({
           approvals: summary.counts.pendingApprovals,
           alerts: summary.counts.openAlerts,
@@ -218,7 +232,11 @@ export const TopBar = () => {
         <IndicatorButton icon={AlertTriangle} count={countsAreLive ? counts.alerts : undefined} muted={!countsAreLive} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={countsAreLive ? counts.jobs : undefined} muted={!countsAreLive} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
         {!countsAreLive && (
-          <Badge variant="outline" className="h-6 px-2 text-[10px] uppercase tracking-wider text-status-warning border-status-warning/30 bg-status-warning/10">
+          <Badge
+            variant="outline"
+            className="h-6 px-2 text-[10px] uppercase tracking-wider text-status-warning border-status-warning/30 bg-status-warning/10"
+            title={degradedSurfaces.length > 0 ? t("topbar.degradedSurfaces", { surfaces: degradedSurfaces.join(", ") }) : undefined}
+          >
             {t(`topbar.dataSource.${dataSource}`)}
           </Badge>
         )}
@@ -286,36 +304,86 @@ const IndicatorButton = ({ icon: Icon, count, tooltip, onClick, spin, muted }: {
   </Button>
 );
 
-function classifyListSource(envelopes: Array<ListEnvelope<unknown>>): TopbarDataSource {
-  let hasUnverified = false;
-  for (const env of envelopes) {
-    const source = classifyEnvelopeSource(env);
-    if (source === "degraded") return "degraded";
-    if (source === "unverified") hasUnverified = true;
-  }
-  return hasUnverified ? "unverified" : "live";
+interface EnvelopeSourceClassification {
+  source: "live" | "live_degraded" | "snapshot" | "unverified";
+  degradedSurfaces: string[];
 }
 
-function classifyEnvelopeSource(env: ListEnvelope<unknown>): TopbarDataSource {
+const ENVELOPE_SOURCE_RANK: Record<EnvelopeSourceClassification["source"], number> = {
+  live: 0,
+  unverified: 1,
+  live_degraded: 2,
+  snapshot: 3,
+};
+
+function classifyListSource(
+  envelopes: Array<ListEnvelope<unknown>>,
+): { source: TopbarDataSource; degradedSurfaces: string[] } {
+  let worst: EnvelopeSourceClassification["source"] = "live";
+  const degradedSurfaces: string[] = [];
+  for (const env of envelopes) {
+    const classified = classifyEnvelopeSource(env);
+    degradedSurfaces.push(...classified.degradedSurfaces);
+    if (ENVELOPE_SOURCE_RANK[classified.source] > ENVELOPE_SOURCE_RANK[worst]) worst = classified.source;
+  }
+  return {
+    source: worst === "snapshot" ? "degraded" : worst,
+    degradedSurfaces: Array.from(new Set(degradedSurfaces)),
+  };
+}
+
+function classifyEnvelopeSource(env: ListEnvelope<unknown>): EnvelopeSourceClassification {
   const meta = asRecord(env.meta);
   const surfaces = asRecord(meta?.surfaces);
-  if (!meta || !surfaces || Object.keys(surfaces).length === 0) return "unverified";
-  if (meta.staleness || meta.degradation) return "degraded";
-  for (const surface of Object.values(surfaces)) {
-    if (!surfaceIsLive(surface)) return "degraded";
+  if (!meta || !surfaces || Object.keys(surfaces).length === 0) return { source: "unverified", degradedSurfaces: [] };
+  // Envelope-wide flag with no per-surface source to check against — cannot
+  // positively confirm a live pathway, so this stays a true snapshot signal.
+  if (meta.staleness || meta.degradation) return { source: "snapshot", degradedSurfaces: Object.keys(surfaces) };
+  let worst: "live" | "live_degraded" | "snapshot" = "live";
+  const degradedSurfaces: string[] = [];
+  for (const [name, surface] of Object.entries(surfaces)) {
+    const cls = classifySurfaceValue(surface);
+    if (cls === "live") continue;
+    degradedSurfaces.push(name);
+    if (cls === "snapshot") worst = "snapshot";
+    else if (worst !== "snapshot") worst = "live_degraded";
   }
-  return "live";
+  return { source: worst, degradedSurfaces };
 }
 
-function surfaceIsLive(surface: unknown): boolean {
-  if (typeof surface === "string") return ["ok", "fresh", "live"].includes(surface.toLowerCase());
+/**
+ * Classifies a single named surface. A `local_snapshot`/`missing`/
+ * `unverifiable` source is always a true snapshot regardless of status. A
+ * surface flagged degraded/stale through a known live pathway
+ * (`bff_composed`/`service_client`) is "live_degraded" — still real data,
+ * just partially degraded. Anything else flagged degraded with an
+ * unspecified/other source falls back to "snapshot": we cannot claim it is
+ * live data without a recognized live source.
+ */
+function classifySurfaceValue(surface: unknown): "live" | "live_degraded" | "snapshot" {
+  if (typeof surface === "string") return ["ok", "fresh", "live"].includes(surface.toLowerCase()) ? "live" : "snapshot";
   const record = asRecord(surface);
-  if (!record) return false;
+  if (!record) return "snapshot";
   const source = String(record.source ?? "").toLowerCase();
-  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return false;
+  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return "snapshot";
   const status = String(record.status ?? record.state ?? "ok").toLowerCase();
-  if (!["ok", "fresh", "live"].includes(status)) return false;
-  return !record.staleness && !record.degradation;
+  const flagged = !["ok", "fresh", "live"].includes(status) || Boolean(record.staleness || record.degradation);
+  if (!flagged) return "live";
+  return LIVE_SURFACE_SOURCES.includes(source) ? "live_degraded" : "snapshot";
+}
+
+function classifyShellSummarySurfaces(
+  surfaces: Record<string, { status: string; source?: string }>,
+): { source: TopbarDataSource; degradedSurfaces: string[] } {
+  const degradedSurfaces: string[] = [];
+  let sawSnapshot = false;
+  for (const [name, surface] of Object.entries(surfaces)) {
+    if (surface.status === "ok") continue;
+    degradedSurfaces.push(name);
+    if (!LIVE_SURFACE_SOURCES.includes((surface.source ?? "").toLowerCase())) sawSnapshot = true;
+  }
+  if (degradedSurfaces.length === 0) return { source: "live", degradedSurfaces: [] };
+  return { source: sawSnapshot ? "degraded" : "live_degraded", degradedSurfaces };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
