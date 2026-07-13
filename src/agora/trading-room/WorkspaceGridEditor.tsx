@@ -1452,6 +1452,7 @@ export function WorkspaceGridEditor({
                   spec={widgetProposal.widgetSpec.chartSpec}
                   widgetType={widgetProposal.widgetSpec.widgetType}
                   dataSource={widgetProposal.widgetSpec.dataSource}
+                  isSampleData={true}
                 />
               </div>
             </div>
