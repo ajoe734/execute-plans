@@ -1689,4 +1689,73 @@ describe("TradingRoomPage", () => {
     fireEvent.click(screen.getByTestId("event-row-evt-001"));
     expect(screen.getByTestId("detail-suggested-action").textContent).toContain("enter");
   });
+
+  // ── AG-UIPOL-007: Multi-Lens Monitoring & Candidate Parity ──────────────────
+
+  it("renders all five strategy lenses in the switcher and shows their titles", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    expect(screen.getByText("籌碼大戶部位建立")).toBeDefined();
+    expect(screen.getByText("產業落後補漲")).toBeDefined();
+    expect(screen.getByText("技術突破")).toBeDefined();
+    expect(screen.getByText("事件交易")).toBeDefined();
+    expect(screen.getByText("大額資金進出")).toBeDefined();
+  });
+
+  it("switches to the selected lens dashboard when clicking a lens card", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to Event Trading Lens
+    const eventTradingLens = screen.getByText("事件交易");
+    fireEvent.click(eventTradingLens);
+    
+    // Check if Event Trading Dashboard is rendered
+    expect(screen.getByTestId("dashboard-recipe-d")).toBeDefined();
+    expect(screen.getByText("Expectation Gap Scenario Tree")).toBeDefined();
+  });
+
+  it("opens the Candidate Review Drawer when a candidate row is clicked, and does not claim real execution", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+    
+    // Click Apple candidate in Chip lens
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    fireEvent.click(appleRow);
+    
+    // Check if drawer is opened with correct details
+    expect(screen.getByTestId("candidate-review-drawer")).toBeDefined();
+    expect(screen.getByTestId("drawer-candidate-symbol").textContent).toBe("AAPL");
+    expect(screen.getByTestId("drawer-candidate-score").textContent).toBe("94");
+    expect(screen.getByTestId("drawer-candidate-reason").textContent).toContain("Significant accumulation");
+    
+    // Verify governed action buttons are present and copy does not claim execution
+    expect(screen.getByTestId("drawer-action-monitor").textContent).toBe("納入監控");
+    expect(screen.getByTestId("drawer-action-shadow").textContent).toBe("送影子追蹤");
+    expect(screen.getByTestId("drawer-action-workspace").textContent).toBe("開啟 Winner Branch 工作區");
+  });
+
+  it("updates candidate state in drawer when state transition action is clicked", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+    
+    // Open Apple candidate drawer
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    fireEvent.click(appleRow);
+    
+    // Current state should be "待討論" (to_discuss)
+    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("待討論");
+    
+    // Click "納入監控" (monitoring)
+    fireEvent.click(screen.getByTestId("drawer-action-monitor"));
+    
+    // State in drawer should update to "納入監控"
+    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
+  });
 });
