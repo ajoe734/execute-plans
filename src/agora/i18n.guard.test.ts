@@ -128,11 +128,18 @@ describe("Agora locale policy", () => {
     expect(Object.keys(zh.agora.performance)).toEqual(Object.keys(en.agora.performance));
     expect(Object.keys(zh.agora.workshop)).toEqual(Object.keys(en.agora.workshop));
 
-    function checkSymmetry(obj1: any, obj2: any, path = "") {
+    function isRecord(value: unknown): value is Record<string, unknown> {
+      return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function checkSymmetry(obj1: unknown, obj2: unknown, path = "") {
       if (typeof obj1 !== typeof obj2) {
         throw new Error(`Type mismatch at ${path}`);
       }
-      if (obj1 && typeof obj1 === "object" && !Array.isArray(obj1)) {
+      if (isRecord(obj1) !== isRecord(obj2)) {
+        throw new Error(`Shape mismatch at ${path}`);
+      }
+      if (isRecord(obj1) && isRecord(obj2)) {
         const keys1 = Object.keys(obj1).sort();
         const keys2 = Object.keys(obj2).sort();
         expect(keys1, `Symmetry keys mismatch at path: ${path}`).toEqual(keys2);
