@@ -836,7 +836,7 @@ describe("TradingRoomPage", () => {
     for (const view of PROPOSAL_VIEWS) {
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 widgets");
+      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 個元件");
     }
   });
 

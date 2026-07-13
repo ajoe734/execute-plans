@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { agoraCopy } from "@/agora/i18n";
+import "@/i18n";
 
 import type {
   TradingRoomViewSpec,
