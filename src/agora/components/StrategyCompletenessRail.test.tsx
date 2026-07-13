@@ -105,6 +105,21 @@ describe("StrategyCompletenessRail", () => {
     );
     const grade = screen.getByTestId("completeness-overall-grade");
     expect(grade.textContent).toBe("Partial");
+    expect(screen.getByText("Overall completeness")).toBeDefined();
+    expect(screen.getByText("50%")).toBeDefined();
+  });
+
+  it("keeps a complete snapshot at 100% when dimension details are omitted", () => {
+    render(
+      <StrategyCompletenessRail
+        completeness={{ ...mockCompleteness, overall_grade: "complete", dimensions: [], research_ready: true }}
+        readiness={null}
+        nextQuestion={null}
+      />
+    );
+
+    expect(screen.getByTestId("completeness-overall-grade").textContent).toBe("Complete");
+    expect(screen.getByText("100%")).toBeDefined();
   });
 
   it("renders all three dimensions with their grades", () => {
@@ -138,6 +153,24 @@ describe("StrategyCompletenessRail", () => {
 
     expect(screen.getByTestId("readiness-gate-preliminary_research-state").textContent).toBe("Conditional");
     expect(screen.getByTestId("readiness-gate-full_validation-state").textContent).toBe("Not assessed");
+  });
+
+  it("renders ready gates as active instead of disabled", () => {
+    render(
+      <StrategyCompletenessRail
+        completeness={mockCompleteness}
+        readiness={{
+          ...mockReadiness,
+          gates: mockReadiness.gates.map((gate) => ({ ...gate, state: "ready" })),
+        }}
+        nextQuestion={null}
+      />
+    );
+
+    const gate = screen.getByTestId("readiness-gate-preliminary_research");
+    expect(gate.getAttribute("data-readiness-state")).toBe("ready");
+    expect(gate.className).toContain("border-green-400");
+    expect(screen.getByText("Preliminary research").className).toContain("text-green-900");
   });
 
   it("renders next question when provided", () => {
