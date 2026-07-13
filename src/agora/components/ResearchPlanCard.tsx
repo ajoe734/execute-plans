@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   KeyValueGrid,
   Pill,
@@ -14,13 +15,14 @@ import {
 } from "./workshopCardUtils";
 
 function DataRequirementList({ items }: { items: unknown }) {
+  const { t } = useTranslation();
   const requirements = recordList(items);
   const scalarRequirements = stringList(items);
 
   if (requirements.length === 0 && scalarRequirements.length === 0) return null;
 
   return (
-    <Section title="Data Requirements">
+    <Section title={t("agora.workshop.cardLabels.data_requirements")}>
       <ul className="space-y-2">
         {requirements.map((requirement, index) => {
           const ref = stringValue(requirement.ref ?? requirement.dataset ?? requirement.source, `requirement-${index + 1}`);
@@ -47,11 +49,12 @@ function DataRequirementList({ items }: { items: unknown }) {
 }
 
 function StageList({ stages }: { stages: unknown }) {
+  const { t } = useTranslation();
   const rows = recordList(stages);
   if (rows.length === 0) return null;
 
   return (
-    <Section title="Stages">
+    <Section title={t("agora.workshop.cardLabels.stages")}>
       <ol className="space-y-2">
         {rows.map((stage, index) => {
           const routing = asRecord(stage.routing);
@@ -73,7 +76,7 @@ function StageList({ stages }: { stages: unknown }) {
               </div>
               {purpose ? <p className="text-xs leading-5 text-slate-600">{purpose}</p> : null}
               {dependencies.length > 0 ? (
-                <p className="text-[11px] text-slate-400">Depends on {dependencies.join(", ")}</p>
+                <p className="text-[11px] text-slate-400">{t("agora.workshop.cardLabels.depends_on")} {dependencies.join(", ")}</p>
               ) : null}
               <TextList items={stage.blocking_reasons} tone="red" />
             </li>
@@ -108,6 +111,7 @@ function ObjectSummary({
 }
 
 export function ResearchPlanCard({ payload }: { payload: UnknownRecord }) {
+  const { t } = useTranslation();
   const approval = asRecord(payload.approval);
   const budget = asRecord(payload.budget);
   const approvalRequirement = stringValue(payload.approval_requirement ?? approval.state);
@@ -116,27 +120,27 @@ export function ResearchPlanCard({ payload }: { payload: UnknownRecord }) {
     <div className="space-y-4">
       <KeyValueGrid
         items={[
-          { label: "Plan", value: payload.plan_id },
-          { label: "Status", value: payload.status },
-          { label: "Approval", value: approvalRequirement },
-          { label: "No-order proof", value: payload.no_order_route_proof },
+          { label: t("agora.workshop.cardLabels.plan"), value: payload.plan_id },
+          { label: t("agora.workshop.cardLabels.status"), value: payload.status },
+          { label: t("agora.workshop.cardLabels.approval"), value: approvalRequirement },
+          { label: t("agora.workshop.cardLabels.no_order_proof"), value: payload.no_order_route_proof },
         ]}
       />
 
-      <Section title="Objectives">
+      <Section title={t("agora.workshop.cardLabels.objectives")}>
         <TextList items={payload.objectives} />
       </Section>
 
       <DataRequirementList items={payload.data_requirements} />
       <StageList stages={payload.stages} />
-      <ObjectSummary title="Evaluation Criteria" value={payload.evaluation_criteria} />
-      <ObjectSummary title="Budget" value={budget} />
+      <ObjectSummary title={t("agora.workshop.cardLabels.evaluation_criteria")} value={payload.evaluation_criteria} />
+      <ObjectSummary title={t("agora.workshop.cardLabels.budget")} value={budget} />
 
-      <Section title="Assumptions">
+      <Section title={t("agora.workshop.cardLabels.assumptions")}>
         <TextList items={payload.assumptions} />
       </Section>
 
-      <Section title="Warnings">
+      <Section title={t("agora.workshop.cardLabels.warnings")}>
         <TextList items={payload.warnings} tone="amber" />
       </Section>
     </div>

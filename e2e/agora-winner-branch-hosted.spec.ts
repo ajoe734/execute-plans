@@ -5,10 +5,11 @@
  * It does not intercept, replace, or synthesize any Agora BFF response.
  */
 
-import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
+import { expect, test, type APIRequestContext, type APIResponse, type Locator, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { installOidcDevLogin } from "./helpers/auth";
+import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE_URL =
   process.env.PANTHEON_FE_BASE_URL ||
@@ -26,6 +27,8 @@ const AUTH_TOKEN =
   "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
+const LIVE_GET_ATTEMPTS = 3;
+const LIVE_GET_TIMEOUT_MS = 20_000;
 
 const REQUIRED_CARD_TYPES = ["user_strategy_description", "completeness_update", "readiness_gate"];
 const REQUIRED_BFF_PATHS = [
@@ -99,12 +102,39 @@ function arrayData(value: unknown): JsonRecord[] {
   return [];
 }
 
+function retryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, attempt * 500));
+}
+
 async function getJson(request: APIRequestContext, path: string): Promise<JsonRecord> {
-  const res = await request.get(`${BFF_BASE_URL}${path}`, {
-    headers: authHeaders(),
-  });
-  expect(res.ok(), `${path} returned ${res.status()}`).toBe(true);
-  return (await res.json()) as JsonRecord;
+  let lastTransportError: unknown;
+  for (let attempt = 1; attempt <= LIVE_GET_ATTEMPTS; attempt += 1) {
+    let res: APIResponse;
+    try {
+      res = await request.get(`${BFF_BASE_URL}${path}`, {
+        headers: authHeaders(),
+        timeout: LIVE_GET_TIMEOUT_MS,
+      });
+    } catch (error) {
+      lastTransportError = error;
+      if (attempt === LIVE_GET_ATTEMPTS) throw error;
+      await retryDelay(attempt);
+      continue;
+    }
+
+    if (res.ok()) return (await res.json()) as JsonRecord;
+
+    const status = res.status();
+    const retryable = status >= 500 && status <= 599;
+    await res.dispose();
+    if (!retryable || attempt === LIVE_GET_ATTEMPTS) {
+      throw new Error(`${path} returned ${status}`);
+    }
+    await retryDelay(attempt);
+  }
+  throw lastTransportError instanceof Error
+    ? lastTransportError
+    : new Error(`${path} failed without a response`);
 }
 
 async function discoverReadyWorkshop(request: APIRequestContext): Promise<{
@@ -195,6 +225,13 @@ async function screenshot(page: Page, testInfo: { project: { name: string } }, n
   paths.push(path);
 }
 
+async function preparePointerAction(button: Locator): Promise<void> {
+  await expect(button).toBeVisible({ timeout: 20_000 });
+  await expect(button).toBeEnabled({ timeout: 20_000 });
+  await button.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
+  await button.click({ timeout: 5_000, trial: true });
+}
+
 function assertNoExecutionLeakage(events: NetworkEvent[], bodyText: string): void {
   for (const event of events) {
     for (const pattern of FORBIDDEN_EXECUTION_PATHS) {
@@ -246,6 +283,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
 
     const live = await discoverReadyWorkshop(request);
 
+    await installQuietEventSource(page);
     await installOidcDevLogin(page, {
       pageBaseUrl: FE_BASE_URL,
       goto: false,
@@ -260,15 +298,38 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       const addButton = page.getByTestId("add-to-trading-room-btn");
       await expect(addButton).toBeEnabled({ timeout: 20_000 });
       await screenshot(page, testInfo, "01-live-ready-workshop", evidenceScreenshots);
+      const proposalPath = `/bff/agora/strategies/${encodeURIComponent(live.workshop.strategy_id)}/trading-room/proposals`;
+      const proposalResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === "POST" && url.pathname === proposalPath;
+      }, { timeout: 45_000 });
       await addButton.click();
       await expect(page).toHaveURL(new RegExp(`/agora/trading-room/${live.workshop.strategy_id}`), { timeout: 20_000 });
+      const proposalResponse = await proposalResponsePromise;
+      expect(
+        proposalResponse.ok(),
+        `live workspace proposal returned ${proposalResponse.status()} for ${proposalPath}`,
+      ).toBe(true);
     });
 
     await test.step("generate and accept a live workspace proposal", async () => {
       await expect(page.getByTestId("workspace-proposal-preview")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("workspace-proposal-personalization")).toBeVisible();
       await screenshot(page, testInfo, "02-live-workspace-proposal", evidenceScreenshots);
+      const proposalAcceptPath = `/bff/agora/strategies/${encodeURIComponent(live.workshop.strategy_id)}/trading-room/proposals/`;
+      const acceptResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        const proposalSuffix = url.pathname.startsWith(proposalAcceptPath)
+          ? url.pathname.slice(proposalAcceptPath.length)
+          : "";
+        return response.request().method() === "POST" && /^[^/]+\/accept$/.test(proposalSuffix);
+      }, { timeout: 45_000 });
       await page.getByTestId("workspace-proposal-accept").click();
+      const acceptResponse = await acceptResponsePromise;
+      expect(
+        acceptResponse.ok(),
+        `live workspace proposal accept returned ${acceptResponse.status()} for ${new URL(acceptResponse.url()).pathname}`,
+      ).toBe(true);
       await expect(page.getByTestId("trading-room-workspace-shell")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v1/, { timeout: 20_000 });
       await screenshot(page, testInfo, "03-live-workspace-accepted", evidenceScreenshots);
@@ -311,8 +372,23 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       const rollbackButton = page.locator('[data-testid^="workspace-rollback-"]:not(:disabled)').first();
       await expect(rollbackButton).toBeVisible({ timeout: 20_000 });
       await screenshot(page, testInfo, "08-live-version-history", evidenceScreenshots);
-      await rollbackButton.click();
-      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v[4-9][0-9]*/, { timeout: 30_000 });
+      const rollbackTestId = await rollbackButton.getAttribute("data-testid");
+      const rollbackVersionId = rollbackTestId?.replace("workspace-rollback-", "");
+      expect(rollbackVersionId, "rollback target version id").toBeTruthy();
+      await preparePointerAction(rollbackButton);
+      const rollbackResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === "POST"
+          && url.pathname.includes("/bff/agora/trading-room/workspaces/")
+          && url.pathname.endsWith(`/versions/${encodeURIComponent(rollbackVersionId as string)}/rollback`);
+      }, { timeout: 45_000 });
+      await rollbackButton.click({ timeout: 10_000 });
+      const rollbackResponse = await rollbackResponsePromise;
+      expect(
+        rollbackResponse.ok(),
+        `live rollback returned ${rollbackResponse.status()} for ${new URL(rollbackResponse.url()).pathname}`,
+      ).toBe(true);
+      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText("Dashboard v4", { timeout: 30_000 });
       await screenshot(page, testInfo, "09-live-rollback-applied", evidenceScreenshots);
     });
 

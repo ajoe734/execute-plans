@@ -1,4 +1,6 @@
 import React, { useEffect, useReducer, useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   listWorkshops,
   getWorkshop,
@@ -64,19 +66,20 @@ function tradingRoomHandoffFromReadiness(
 function addToTradingRoomDisabledReason(
   readiness: StrategyReadinessAssessment | null,
   handoff: TradingRoomReadinessHandoff | null,
+  t: TFunction,
 ): string | null {
-  if (!readiness) return "Readiness not yet assessed";
+  if (!readiness) return t("agora.workshop.readinessNotAssessed");
   const highestGate = readinessHighestGate(readiness);
   if (highestGate !== "trading_room") {
-    return `Trading Room gate not yet ready (highest: ${highestGate ?? "none"})`;
+    return t("agora.workshop.gateNotReady", { gate: highestGate ?? t("agora.workshop.none") });
   }
   if (!readinessText(readiness.strategy_id)) {
-    return "Trading Room handoff is missing strategy id";
+    return t("agora.workshop.missingStrategyId");
   }
   if (!readinessText(readiness.strategy_spec_registry_id)) {
-    return "Trading Room handoff is missing strategy version";
+    return t("agora.workshop.missingStrategyVersion");
   }
-  return handoff ? null : "Trading Room handoff is incomplete";
+  return handoff ? null : t("agora.workshop.incompleteHandoff");
 }
 
 function recordFrom(value: unknown): Record<string, unknown> {
@@ -90,13 +93,13 @@ function metadataString(workshop: StrategyWorkshop | null | undefined, key: stri
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function workshopTitle(workshop: StrategyWorkshop | null | undefined): string {
+function workshopTitle(workshop: StrategyWorkshop | null | undefined, fallback = "Strategy workshop"): string {
   return (
     metadataString(workshop, "strategy_name") ??
     metadataString(workshop, "title") ??
     metadataString(workshop, "display_name") ??
     workshop?.subject?.title?.trim() ??
-    "Strategy workshop"
+    fallback
   );
 }
 
@@ -122,17 +125,18 @@ function orderWorkshops(workshops: StrategyWorkshop[]): StrategyWorkshop[] {
   });
 }
 
-function compactTime(workshop: StrategyWorkshop): string {
+function compactTime(workshop: StrategyWorkshop, unavailable = "time unavailable"): string {
   const updatedAt = metadataString(workshop, "updated_at");
   const value = updatedAt ?? workshop.concluded_at ?? workshop.created_at;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "time unavailable";
+  if (Number.isNaN(date.getTime())) return unavailable;
   return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
 }
 
-function readinessSummary(readiness: StrategyReadinessAssessment | null): string {
-  if (!readiness) return "Readiness: pending";
-  return `Readiness: ${readinessHighestGate(readiness) ?? "none"}`;
+function readinessSummary(readiness: StrategyReadinessAssessment | null, t: TFunction): string {
+  return t("agora.workshop.readiness", {
+    gate: readiness ? readinessHighestGate(readiness) ?? t("agora.workshop.none") : t("agora.workshop.pending"),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +184,7 @@ interface WorkshopListViewProps {
 }
 
 function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.Element {
+  const { t } = useTranslation();
   const [state, setState] = useState<ListState>("loading");
   const [workshops, setWorkshops] = useState<StrategyWorkshop[]>([]);
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
@@ -208,13 +213,13 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="strategy-workshop-page-list">
       {state === "loading" && (
-        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-loading">Loading workshops...</div>
+        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-loading">{t("agora.workshop.loadingList")}</div>
       )}
       {state === "empty" && (
-        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-empty">No workshops found.</div>
+        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-empty">{t("agora.workshop.emptyList")}</div>
       )}
       {state === "error" && (
-        <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">Unable to load workshops.</div>
+        <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">{t("agora.workshop.listError")}</div>
       )}
       {state === "loaded" && selectedWorkshopId && (
         <div
@@ -223,7 +228,7 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
         >
           <aside className="min-h-0 overflow-auto border-r border-slate-200 bg-slate-50 p-3" data-testid="workshop-selector">
             <div className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
-              Live workshops
+              {t("agora.workshop.liveWorkshops")}
             </div>
             <div className="grid gap-2" data-testid="workshop-list">
               {workshops.map((ws) => {
@@ -242,8 +247,8 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
                     onClick={() => setSelectedWorkshopId(ws.workshop_id)}
                     type="button"
                   >
-                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws)}</span>
-                    <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws)}</span>
+                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws, t("agora.workshop.defaultTitle"))}</span>
+                    <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws, t("agora.workshop.timeUnavailable"))}</span>
                   </button>
                 );
               })}
@@ -268,6 +273,7 @@ interface SessionViewProps {
 }
 
 function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
+  const { t } = useTranslation();
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<StrategyReadinessAssessment | null>(null);
@@ -399,7 +405,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       setSubmitState("idle");
     } catch (error) {
       setSubmitState("error");
-      setSubmitError(error instanceof Error ? error.message : "Message failed");
+      setSubmitError(error instanceof Error ? error.message : t("agora.workshop.messageFailed"));
     }
   }, [
     composerValue,
@@ -409,6 +415,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     refreshReadiness,
     submitState,
     workshopId,
+    t,
   ]);
 
   return (
@@ -423,15 +430,15 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2"
           data-testid="strategy-workshop-runtime-header"
         >
-          <span className="text-xs text-slate-500">{workshop?.status ?? "loading"}</span>
+          <span className="text-xs text-slate-500">{workshop?.status ?? t("agora.workshop.loading")}</span>
           <span className="text-xs text-slate-500" data-testid="workshop-readiness-summary">
-            {readinessSummary(readiness)}
+            {readinessSummary(readiness, t)}
           </span>
           <span className="text-xs text-slate-500" data-testid="workshop-card-summary">
-            Cards: {cardState.cards.length}
+            {t("agora.workshop.cards", { count: cardState.cards.length })}
           </span>
           <span className="text-xs text-slate-500" data-testid="workshop-event-summary">
-            Events: {workshopEvents.length}
+            {t("agora.workshop.events", { count: workshopEvents.length })}
           </span>
         </header>
         <div
@@ -439,7 +446,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}
         >
           {!workshop && (
-            <div data-testid="workshop-session-loading">Loading…</div>
+            <div data-testid="workshop-session-loading">{t("agora.workshop.loading")}</div>
           )}
           {cardState.cards
             .slice()
@@ -461,7 +468,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             type="text"
             value={composerValue}
             onChange={(e) => setComposerValue(e.target.value)}
-            placeholder="Message the workshop servant…"
+            placeholder={t("agora.workshop.messagePlaceholder")}
             style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
           />
           <button
@@ -471,7 +478,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             onClick={handleSubmit}
             type="button"
           >
-            {submitState === "submitting" ? "Sending" : "Send"}
+            {submitState === "submitting" ? t("agora.workshop.sending") : t("agora.workshop.send")}
           </button>
           {submitState === "error" && submitError ? (
             <div className="mt-1 text-xs text-red-600" data-testid="servant-composer-error">
@@ -511,7 +518,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         >
           {(() => {
             const handoff = tradingRoomHandoffFromReadiness(readiness);
-            const disabledReason = addToTradingRoomDisabledReason(readiness, handoff);
+            const disabledReason = addToTradingRoomDisabledReason(readiness, handoff, t);
             const isActive = !!handoff && !!onAddToTradingRoom;
             return (
               <>
@@ -534,7 +541,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                     transition: "background 0.15s",
                   }}
                 >
-                  Add to Trading Room
+                  {t("agora.workshop.addToTradingRoom")}
                 </button>
                 {disabledReason && (
                   <div

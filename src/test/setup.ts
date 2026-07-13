@@ -30,3 +30,31 @@ const ep = Element.prototype as unknown as {
 };
 if (!ep.hasPointerCapture) ep.hasPointerCapture = () => false;
 if (!ep.scrollIntoView) ep.scrollIntoView = () => {};
+
+// Polyfill crypto.randomUUID for JSDOM / test environment
+const cryptoShim = {
+  randomUUID: () => {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+};
+
+const gt = globalThis as any;
+if (!gt.crypto) {
+  gt.crypto = cryptoShim;
+} else if (!gt.crypto.randomUUID) {
+  gt.crypto.randomUUID = cryptoShim.randomUUID;
+}
+
+if (typeof window !== "undefined") {
+  const win = window as any;
+  if (!win.crypto) {
+    win.crypto = cryptoShim;
+  } else if (!win.crypto.randomUUID) {
+    win.crypto.randomUUID = cryptoShim.randomUUID;
+  }
+}
+

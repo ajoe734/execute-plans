@@ -32,6 +32,8 @@ import {
   type HumanInboxDetail,
   type HumanInboxItem,
   type HumanInboxKind,
+  type HumanInboxListState,
+  type HumanInboxSurfaceState,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -2474,7 +2476,24 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 
 // ---------- PM-6 Human Inbox ----------
 
-const emptyHumanInbox = (): HumanInboxItem[] => [];
+const unavailableHumanInbox = (): HumanInboxListState => ({
+  items: [],
+  surface: {
+    status: "unavailable",
+    source: "strict_live_not_active",
+    message: "Human Inbox live data is unavailable.",
+  },
+  partial: true,
+});
+const humanInboxBoundedSignal = (): { signal?: AbortSignal; cancel: () => void } => {
+  if (typeof AbortController === "undefined") return { cancel: () => undefined };
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), 8_000);
+  return {
+    signal: controller.signal,
+    cancel: () => globalThis.clearTimeout(timer),
+  };
+};
 const missingHumanInboxDetail = (): HumanInboxDetail | undefined => undefined;
 
 export type PromotionReviewDecisionValue = "approve" | "approve_with_conditions" | "reject";
@@ -2757,9 +2776,52 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxItem[] | null {
   const arr =
     asArray<Record<string, unknown>>(data) ??
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
-  if (!arr) return null;
-  const items = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  return items.length ? items : null;
+  if (!arr || !arr.every(isObject)) return null;
+  const items = arr.map(adaptInboxRecord);
+  return items.every((item): item is HumanInboxItem => item !== null) ? items : null;
+}
+
+const adaptHumanInboxSurface = (raw: unknown): HumanInboxSurfaceState => {
+  if (!isObject(raw)) {
+    return {
+      status: "degraded",
+      source: "missing_surface_metadata",
+      message: "Human Inbox response did not include authoritative surface metadata.",
+    };
+  }
+  const status = asString(raw.status).toLowerCase();
+  const normalizedStatus: HumanInboxSurfaceState["status"] =
+    status === "ok" || status === "degraded" || status === "unavailable"
+      ? status
+      : "degraded";
+  const staleness = isObject(raw.staleness) ? raw.staleness : undefined;
+  const servedFrom = staleness
+    ? asOptionalString(staleness.servedFrom ?? staleness.served_from)
+    : undefined;
+  const lastKnownAt = staleness
+    ? asOptionalString(staleness.lastKnownAt ?? staleness.last_known_at)
+    : undefined;
+  return {
+    status: normalizedStatus,
+    source: asOptionalString(raw.source),
+    message: asOptionalString(raw.message),
+    reason: asOptionalString(raw.reason),
+    staleness: servedFrom || lastKnownAt ? { servedFrom, lastKnownAt } : undefined,
+  };
+};
+
+export function adaptHumanInboxListState(raw: unknown): HumanInboxListState | null {
+  const items = adaptHumanInboxList(raw);
+  if (items === null) return null;
+  const root = isObject(raw) ? raw : {};
+  const meta = isObject(root.meta) ? root.meta : {};
+  const surfaces = isObject(meta.surfaces) ? meta.surfaces : {};
+  return {
+    items,
+    surface: adaptHumanInboxSurface(surfaces.human_inbox),
+    snapshotAt: asOptionalString(meta.snapshotAt ?? meta.snapshot_at),
+    partial: asBoolean(meta.partial, false),
+  };
 }
 export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
@@ -3807,18 +3869,33 @@ export const mgmt = {
   },
 
   humanInbox: {
-    list: (): Promise<HumanInboxItem[]> => {
+    listWithStatus: async (): Promise<HumanInboxListState> => {
       // Human Inbox is a strict-live surface. Revalidate it independently when
       // entering the page so a transient failure from a previously visited
       // surface cannot leave a stale fail-closed banner over a successful
       // inbox response. A failure from this request reports fallback again.
       liveStatus.retry();
-      return withStrictLiveOrMock<HumanInboxItem[], unknown>(
-        { method: "GET", path: paths.mgmtHumanInbox() },
-        async () => emptyHumanInbox(),
-        (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
-      );
+      const bounded = humanInboxBoundedSignal();
+      try {
+        return await withStrictLiveOrMock<HumanInboxListState, unknown>(
+          {
+            method: "GET",
+            path: paths.mgmtHumanInbox(),
+            signal: bounded.signal,
+          },
+          async () => unavailableHumanInbox(),
+          (raw) => {
+            const state = adaptHumanInboxListState(raw);
+            if (!state) throw new Error("Human Inbox response did not contain a valid item list");
+            return state;
+          },
+        );
+      } finally {
+        bounded.cancel();
+      }
     },
+    list: async (): Promise<HumanInboxItem[]> =>
+      (await mgmt.humanInbox.listWithStatus()).items,
     get: (id: string): Promise<HumanInboxDetail | undefined> =>
       withStrictLiveOrMock<HumanInboxDetail | undefined, unknown>(
         { method: "GET", path: paths.mgmtHumanInboxItem(id) },
@@ -4134,9 +4211,9 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
-    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+    listLiveOnly: (quarter?: string, persona?: string): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, persona) },
         adaptQuarterlyRankingRows,
       ),
     list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
