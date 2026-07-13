@@ -27,6 +27,9 @@ import {
 } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1/client";
 
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 // Status color mappings
 const statusBadgeStyles: Record<string, string> = {
   proposed: "bg-blue-500/10 text-blue-500 border-blue-500/20",
@@ -104,8 +107,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         const res = await tradeJournal.patterns(personaId);
         setPatterns(res.data);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load data");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load data"));
       toast.error("BFF Trade Journal Read Failed");
     } finally {
       setLoading(false);
@@ -134,8 +137,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       const updatedDetail = await tradeJournal.get(personaId, selectedEpisode.trade_episode_id);
       setSelectedEpisode(updatedDetail.data);
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit retry command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit retry command"));
     } finally {
       setSubmittingCommand(false);
     }
@@ -161,8 +164,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         setSelectedEpisode(updatedDetail.data);
       }
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit decision command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit decision command"));
     } finally {
       setSubmittingCommand(false);
     }
