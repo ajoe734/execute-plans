@@ -76,7 +76,7 @@ describe("WorkspaceProposalPreview data availability", () => {
     expect(screen.getAllByText("完整")).toHaveLength(2);
     expect(screen.getByText("暫不可用")).toBeTruthy();
     expect(
-      screen.getByText("Data availability: 1 full / 0 partial / 1 missing"),
+      screen.getByText("資料可用性: 1 完整／0 部分可用／1 缺漏"),
     ).toBeTruthy();
   });
 });
