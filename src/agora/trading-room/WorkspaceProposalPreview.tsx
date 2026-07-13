@@ -259,7 +259,7 @@ export function WorkspaceProposalPreview({
     ] as const),
   );
   const personalizationItems = proposal.personalizationApplied.items ?? [];
-  const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
+  const selected = selectedViewId ?? null;
 
   return (
     <div
@@ -374,9 +374,6 @@ export function WorkspaceProposalPreview({
           type="button"
         >
           {t("agora.tradingRoom.proposal.accept")}
-        </button>
-        <button data-testid="workspace-proposal-preview-first" onClick={() => proposal.views[0] && onPreviewView?.(proposal.views[0])} style={secondaryButtonStyle} type="button">
-          {t("agora.tradingRoom.proposal.previewView")}
         </button>
         <button data-testid="workspace-proposal-adjust-layout" onClick={onAdjustLayout} style={secondaryButtonStyle} type="button">
           {t("agora.tradingRoom.proposal.adjustLayout")}

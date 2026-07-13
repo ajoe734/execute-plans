@@ -185,6 +185,38 @@ function itemsFrom<T>(value: unknown, aliases: string[] = []): T[] {
   return [];
 }
 
+const WORKSHOP_SUBJECT_KINDS = new Set<StrategyWorkshop["subject"]["kind"]>([
+  "strategy_spec",
+  "research_plan",
+  "candidate_artifact",
+  "free_form",
+]);
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeWorkshop(value: unknown): StrategyWorkshop {
+  const workshop = recordFrom(value);
+  const workshopId = optionalString(workshop.workshop_id) ?? "";
+  const rawSubject = recordFrom(workshop.subject);
+  const rawKind = optionalString(rawSubject.kind);
+  const kind = rawKind && WORKSHOP_SUBJECT_KINDS.has(rawKind as StrategyWorkshop["subject"]["kind"])
+    ? rawKind as StrategyWorkshop["subject"]["kind"]
+    : "free_form";
+  const ref = optionalString(rawSubject.ref) ?? workshopId;
+  const title = optionalString(rawSubject.title);
+
+  return {
+    ...workshop,
+    subject: {
+      kind,
+      ref,
+      ...(title ? { title } : {}),
+    },
+  } as unknown as StrategyWorkshop;
+}
+
 // ─── Workshop CRUD ─────────────────────────────────────────────────────────────
 
 export async function listWorkshops(params?: {
@@ -201,7 +233,7 @@ export async function listWorkshops(params?: {
     path: "/bff/agora/workshops",
     query,
   });
-  return itemsFrom<StrategyWorkshop>(body, ["workshops", "results"]);
+  return itemsFrom<unknown>(body, ["workshops", "results"]).map(normalizeWorkshop);
 }
 
 export async function createWorkshop(body: {
@@ -214,7 +246,7 @@ export async function createWorkshop(body: {
     path: "/bff/agora/workshops",
     body,
   });
-  return entityFrom<StrategyWorkshop>(response);
+  return normalizeWorkshop(dataFrom(response));
 }
 
 export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop> {
@@ -222,7 +254,7 @@ export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop>
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
   });
-  return entityFrom<StrategyWorkshop>(response);
+  return normalizeWorkshop(dataFrom(response));
 }
 
 // ─── Workshop messages ─────────────────────────────────────────────────────────
@@ -352,7 +384,7 @@ export async function concludeWorkshop(
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/conclude`,
     body: body ?? {},
   });
-  return entityFrom<StrategyWorkshop>(response);
+  return normalizeWorkshop(dataFrom(response));
 }
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────

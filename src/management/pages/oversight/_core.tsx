@@ -1774,6 +1774,7 @@ interface EvolutionEntry {
   // Live BFF shape: /bff/management/evolution-journal aggregate emits
   // mutation_review journal entries with a different field set.
   title?: string; summary?: string; status?: string; entryType?: string;
+  entry_type?: string;
   risk_level?: string; action_type?: string;
   target?: { type?: string; id?: string; version?: string } | null;
   occurred_at?: string; created_at?: string;
@@ -1790,6 +1791,7 @@ type RawEvolutionFleetRow = ManagementPersonaFleetRow & {
   name?: string;
   current_work?: string;
   last_mutation?: string;
+  last_mutation_at?: string;
 };
 
 function evolutionFleetPersonaId(row: ManagementPersonaFleetRow): string | undefined {
@@ -1934,25 +1936,36 @@ export const EvolutionJournalPage = () => {
         // The live aggregate and the legacy mock have different field sets;
         // normalize defensively so neither shape throws (real entries have no
         // numeric before/after — calling .toFixed on those crashed the page).
-        const headline = e.title ?? e.mutation ?? e.id;
-        const status = e.status ?? e.verdict;
-        const action = e.action_type;
-        const risk = e.risk_level;
-        const target = e.target
-          ? [e.target.type, e.target.id].filter(Boolean).join(":") +
-            (e.target.version ? ` (${e.target.version})` : "")
+        const rawHeadline = e.title ?? e.mutation ?? e.id;
+        const headline = rawHeadline && !["nan", "undefined", "null"].includes(rawHeadline.toLowerCase()) ? rawHeadline : "";
+
+        const rawStatus = e.status ?? e.verdict;
+        const status = rawStatus && !["nan", "undefined", "null"].includes(rawStatus.toLowerCase()) ? rawStatus : undefined;
+
+        const action = e.action_type && !["nan", "undefined", "null"].includes(e.action_type.toLowerCase()) ? e.action_type : undefined;
+        const risk = e.risk_level && !["nan", "undefined", "null"].includes(e.risk_level.toLowerCase()) ? e.risk_level : undefined;
+
+        const cleanTargetType = e.target?.type && !["nan", "undefined", "null"].includes(e.target.type.toLowerCase()) ? e.target.type : "";
+        const cleanTargetId = e.target?.id && !["nan", "undefined", "null"].includes(e.target.id.toLowerCase()) ? e.target.id : "";
+        const cleanTargetVersion = e.target?.version && !["nan", "undefined", "null"].includes(e.target.version.toLowerCase()) ? e.target.version : "";
+        const target = e.target && cleanTargetId
+          ? [cleanTargetType, cleanTargetId].filter(Boolean).join(":") +
+            (cleanTargetVersion ? ` (${cleanTargetVersion})` : "")
           : undefined;
+
         const whenRaw = e.occurred_at ?? e.created_at ?? e.landedAt;
-        const when = whenRaw
-          ? (Number.isNaN(new Date(whenRaw).getTime()) ? whenRaw : safeDateTime(whenRaw))
+        const when = whenRaw && !["nan", "undefined", "null"].includes(String(whenRaw).toLowerCase())
+          ? (Number.isNaN(new Date(whenRaw).getTime()) ? String(whenRaw) : safeDateTime(whenRaw))
           : undefined;
+
         const hasMetrics = typeof e.before === "number" && typeof e.after === "number";
         // Formal entries (evolution_decision / mutation_review) carry a real
         // governance lifecycle state in `status`; label it explicitly as
         // approval status instead of relying on the generic status badge,
         // since fleet-summary/postmortem/freeze/rollback entries reuse the
         // same `status` field for unrelated meanings.
-        const isFormalEntry = Boolean(e.entryType && FORMAL_EVOLUTION_ENTRY_TYPES.has(e.entryType));
+        const entryType = e.entry_type ?? e.entryType;
+        const isFormalEntry = Boolean(entryType && FORMAL_EVOLUTION_ENTRY_TYPES.has(entryType));
         const approvalStatus = isFormalEntry ? status : undefined;
         const isFixture = e.origin === "seed";
         return (
