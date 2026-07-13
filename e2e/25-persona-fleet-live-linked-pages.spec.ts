@@ -98,15 +98,15 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const capitalLink = focusedFleetRow.locator(`[aria-label="Open capital for ${PERSONA_ID}"]`);
     await expect(capitalLink).toHaveAttribute(
       "href",
-      new RegExp(`/management/rankings\\?tab=quarterly&persona=${PERSONA_ID}`),
+      new RegExp(
+        `/management/performance\\?tab=overview&persona_id=${PERSONA_ID}&capital_pool_id=paper-ledger-${PERSONA_ID}`,
+      ),
     );
     await capitalLink.click();
-    // MGMT-PERF-IA-001: paper capital links now target Rankings Center's
-    // quarterly tab directly (ROUTE_MIGRATION_MATRIX.md).
-    await expect(page.getByRole("tab", { name: /Quarterly|季度排名/i })).toHaveAttribute("aria-selected", "true");
-    const capitalTable = page.getByRole("table").first();
-    await expect(capitalTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
-    await expect(capitalTable).toContainText("Crypto-Alt-Hunter");
+    // PPL-ALLOC-007: capital identity belongs to Performance Center, while
+    // Rankings remains a readiness/diagnostic destination.
+    await expect(page).toHaveURL(new RegExp(`/management/performance\\?tab=overview&persona_id=${PERSONA_ID}`));
+    await expect(page.getByRole("tab", { name: /Overview|總覽/i })).toHaveAttribute("aria-selected", "true");
 
     const firstSource = fleetRow.data_sources?.[0];
     const providerKey = firstSource?.provider_key ?? firstSource?.providerKey;
