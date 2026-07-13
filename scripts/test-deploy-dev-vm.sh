@@ -55,6 +55,7 @@ if [[ "${1:-}" == "run" && "${2:-}" == "build" ]]; then
   printf '<!doctype html><title>deploy test</title>\n' > dist/index.html
   printf '%s %s\n' "${VITE_BFF_REAL_WRITES:-unset}" "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-unset}" >> "${DEPLOY_TEST_LOG_DIR}/build-flags.log"
   printf '%s\n' "${VITE_BFF_DEV_BEARER_TOKEN:-unset}" >> "${DEPLOY_TEST_LOG_DIR}/browser-token.log"
+  printf '%s %s\n' "${PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN:-absent}" "${WRITE_PROBE_AUTH_TOKEN:-absent}" >> "${DEPLOY_TEST_LOG_DIR}/build-secret-boundary.log"
   exit 0
 fi
 echo "unexpected npm invocation: $*" >&2
@@ -149,8 +150,13 @@ cat > "${MOCK_BIN}/node" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 case "\${1:-}" in
-  scripts/probe-hosted-browser-bff.mjs|scripts/probe-hosted-management-writes.mjs)
+  scripts/probe-hosted-browser-bff.mjs)
     printf '%s\n' "\${1}" >> "\${DEPLOY_TEST_LOG_DIR}/node-probes.log"
+    exit 0
+    ;;
+  scripts/probe-hosted-management-writes.mjs)
+    printf '%s\n' "\${1}" >> "\${DEPLOY_TEST_LOG_DIR}/node-probes.log"
+    printf '%s\n' "\${PANTHEON_BFF_AUTH_TOKEN:-absent}" >> "\${DEPLOY_TEST_LOG_DIR}/write-probe-token.log"
     exit 0
     ;;
 esac
@@ -179,6 +185,7 @@ run_deploy() {
   shift
   rm -f "${case_root}/bff-version-count"
   env -u PANTHEON_DEPLOY_REAL_WRITES -u PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES \
+    -u PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN \
     PATH="${MOCK_BIN}:${PATH}" \
     DEPLOY_TEST_LOG_DIR="${LOG_DIR}" \
     PANTHEON_DEPLOY_ALLOW_DIRTY=true \
@@ -327,9 +334,21 @@ case_root="$(prepare_case explicit-writes)"
 run_deploy "${case_root}" \
   PANTHEON_DEPLOY_SKIP_PROBE=false \
   PANTHEON_DEPLOY_REAL_WRITES=true \
-  PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
+  PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN="signed-short-lived-write-probe-token"
 assert_eq "true true" "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "explicit write build flags"
+assert_eq "absent absent" "$(tail -n 1 "${LOG_DIR}/build-secret-boundary.log")" "write probe credential excluded from build"
 grep -Fxq "scripts/probe-hosted-management-writes.mjs" "${LOG_DIR}/node-probes.log" || fail "explicit write probe did not run"
+assert_eq "signed-short-lived-write-probe-token" "$(tail -n 1 "${LOG_DIR}/write-probe-token.log")" "server-side write probe token"
+
+case_root="$(prepare_case explicit-writes-without-server-credential)"
+if run_deploy "${case_root}" \
+  PANTHEON_DEPLOY_SKIP_PROBE=false \
+  PANTHEON_DEPLOY_REAL_WRITES=true \
+  PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true; then
+  fail "real-write deploy without a server-side probe credential unexpectedly succeeded"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "missing write credential rejection target"
 
 case_root="$(prepare_case writes-without-probe-rejected)"
 if run_deploy "${case_root}" \
@@ -351,5 +370,15 @@ if run_deploy "${case_root}" \
   fail "privileged public bearer unexpectedly reached the frontend build"
 fi
 assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "privileged token rejection target"
+
+case_root="$(prepare_case noncanonical-viewer-token-rejected)"
+if run_deploy "${case_root}" VITE_BFF_DEV_BEARER_TOKEN="another-browser:viewer"; then
+  fail "noncanonical public viewer unexpectedly reached the frontend build"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "noncanonical viewer rejection target"
+
+case_root="$(prepare_case cookie-only-public-build)"
+run_deploy "${case_root}" VITE_BFF_DEV_BEARER_TOKEN=""
+assert_eq "unset" "$(tail -n 1 "${LOG_DIR}/browser-token.log")" "cookie-only empty public token"
 
 echo "OK: deploy safety regression harness passed"

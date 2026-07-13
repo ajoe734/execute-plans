@@ -22,7 +22,7 @@ const AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa";
+  "";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-uipol-002";
 
@@ -65,8 +65,8 @@ async function expectSinglePageScrollOwner(page: Page): Promise<void> {
 
 test.describe("AG-UIPOL-002 hosted standalone Agora shell", () => {
   test.skip(
-    !IS_HOSTED_FE,
-    "Set AG_UIPOL_002_FE_BASE_URL or PANTHEON_FE_BASE_URL to a deployed, non-localhost frontend.",
+    !IS_HOSTED_FE || !AUTH_TOKEN,
+    "Set a hosted FE URL and short-lived BFF_AUTH_TOKEN; no privileged fallback token is tracked.",
   );
   test.setTimeout(120_000);
 

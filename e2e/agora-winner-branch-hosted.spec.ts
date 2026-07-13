@@ -24,7 +24,7 @@ const AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair";
+  "";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
 const LIVE_GET_ATTEMPTS = 3;
@@ -274,6 +274,10 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 }
 
 test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
+  test.skip(
+    !AUTH_TOKEN,
+    "Set a short-lived BFF_AUTH_TOKEN; no privileged hosted fallback token is tracked.",
+  );
   test.describe.configure({ retries: 0 });
   test.setTimeout(WINNER_FLOW_TIMEOUT_MS);
 

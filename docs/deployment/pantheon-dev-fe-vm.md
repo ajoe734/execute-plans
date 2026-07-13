@@ -64,10 +64,15 @@ recommendation and verifies `live_capital_mutation=false`, so it exercises
 persistence without changing capital or runtime state.
 
 `VITE_BFF_DEV_BEARER_TOKEN` is public build input. Automated deployment
-accepts only an empty value or a dev-only `subject:viewer` identity. Operator,
+accepts only an empty value or exactly `pantheon-dev-browser:viewer`. Operator,
 admin, MFA, and `assistant.kernel.*` credentials must be supplied through an
 interactive cookie or browser session storage and are never embedded in the
 static release.
+
+When an operator explicitly enables the real-write qualification path, the
+server-side probe additionally requires `PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN`.
+That short-lived credential is never copied into a `VITE_*` variable or the
+browser bundle; a missing credential fails the deployment before promotion.
 
 Manual deployment is available through `workflow_dispatch` on
 `.github/workflows/pantheon-dev-fe-deploy.yml`. The workflow only accepts the

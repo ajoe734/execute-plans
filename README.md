@@ -107,8 +107,8 @@ Auth/session access is explicit:
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
 - Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 會編入公開 bundle，
-  因此只能留空或使用 dev-only viewer identity（例如
-  `pantheon-dev-browser:viewer`）。operator/admin、MFA 與
+  因此只能留空或使用唯一允許的 dev-only viewer identity
+  `pantheon-dev-browser:viewer`。operator/admin、MFA 與
   `assistant.kernel.*` capability 必須來自互動式 cookie／sessionStorage
   session，不能放進任何 `VITE_*` build variable。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。

@@ -12,7 +12,8 @@ node_modules
 dist
 dist-ssr
 *.local
-.env
+.env*
+!.env*.example
 .lovable/audits/current-run/
 
 # Editor directories and files

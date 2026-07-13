@@ -29,7 +29,10 @@ LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
 # may therefore be empty or a least-privilege viewer identity only. Operators
 # authenticate through an interactive/session credential that is never part of
 # the build environment.
-DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:viewer}"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN-pantheon-dev-browser:viewer}"
+WRITE_PROBE_AUTH_TOKEN="${PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN:-}"
+unset PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN
+export -n WRITE_PROBE_AUTH_TOKEN 2>/dev/null || true
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 RELEASE_IDENTITY_FILE="${PANTHEON_RELEASE_IDENTITY_FILE:-}"
@@ -137,8 +140,13 @@ for boolean_name in REAL_WRITES ALLOW_DEV_STUB_WRITES SKIP_PROBE; do
   fi
 done
 
-if [[ -n "${DEV_BEARER_TOKEN}" && ! "${DEV_BEARER_TOKEN}" =~ ^[A-Za-z0-9._-]+:viewer$ ]]; then
-  echo "Refusing to embed a non-viewer VITE_BFF_DEV_BEARER_TOKEN in the public frontend bundle." >&2
+if [[ -n "${DEV_BEARER_TOKEN}" && "${DEV_BEARER_TOKEN}" != "pantheon-dev-browser:viewer" ]]; then
+  echo "Refusing to embed a non-canonical VITE_BFF_DEV_BEARER_TOKEN in the public frontend bundle." >&2
+  exit 2
+fi
+
+if [[ "${REAL_WRITES}" == "true" && "${SKIP_PROBE}" != "true" && -z "${WRITE_PROBE_AUTH_TOKEN}" ]]; then
+  echo "PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN is required for an explicitly enabled write probe." >&2
   exit 2
 fi
 
@@ -386,8 +394,9 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   if [[ "${REAL_WRITES}" == "true" ]]; then
     echo "=== run explicitly enabled governed management write/read-back probe ==="
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
-    PANTHEON_BFF_AUTH_TOKEN="${DEV_BEARER_TOKEN}" \
+    PANTHEON_BFF_AUTH_TOKEN="${WRITE_PROBE_AUTH_TOKEN}" \
     node scripts/probe-hosted-management-writes.mjs
+    WRITE_PROBE_AUTH_TOKEN=""
   else
     echo "=== skip governed management write/read-back probe (safe write defaults active) ==="
   fi
