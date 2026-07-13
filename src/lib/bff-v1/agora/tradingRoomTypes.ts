@@ -94,8 +94,11 @@ export interface TradingRoomWidgetSpec {
   id: string;
   widgetType: string;
   title: string;
+  titleKey?: string;
   purpose: string;
+  purposeKey?: string;
   whyIncluded: string;
+  whyIncludedKey?: string;
   dataSource: string;
   dataAvailability?: DataAvailabilityStatus;
   query: {
@@ -118,15 +121,20 @@ export interface TradingRoomWidgetSpec {
 
 export interface TradingRoomViewSpec {
   id: string;
+  viewKind?: string;
   title: string;
+  titleKey?: string;
   purpose: string;
+  purposeKey?: string;
   order: number;
   layoutTemplate: string;
   thumbnailRef?: string;
   widgetCount: number;
   rationale?: string;
+  rationaleKey?: string;
   dataAvailability?: DataAvailabilityStatus;
   warnings?: string[];
+  warningCodes?: string[];
   widgets: TradingRoomWidgetSpec[];
 }
 
@@ -135,6 +143,7 @@ export interface DataAvailabilitySummary {
   sources: Array<{
     dataSource: string;
     status: DataAvailabilityStatus;
+    reasonCode?: string;
     reason?: string;
   }>;
 }
@@ -154,9 +163,11 @@ export interface TradingRoomWorkspaceProposal {
   generatedAt: string;
   status: "generating" | "preview" | "accepted" | "cancelled" | "superseded";
   views: TradingRoomViewSpec[];
+  rationaleKey?: string;
   rationale: string;
   dataAvailability: DataAvailabilitySummary;
   warnings: string[];
+  warningCodes?: string[];
   personalizationApplied: PersonalizationSummary;
 }
 

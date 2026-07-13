@@ -25,6 +25,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 }));
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import "@/i18n";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 
 const MOCK_WORKSHOP = {
@@ -216,8 +217,8 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.getWorkshop).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith(rawWorkshopId);
-    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("Cards: 1");
-    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("Events: 1");
+    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("卡片：1");
+    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("事件：1");
     expect(screen.getByTestId("strategy-workshop-runtime-header").textContent).not.toContain(
       "Live Strategy Workshop",
     );
@@ -289,14 +290,14 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
 
-    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("Complete");
+    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("完整");
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
     expect(screen.getByTestId("completeness-grade").textContent).toBe("complete");
     expect(screen.getByText("Strategy completeness updated")).toBeDefined();
-    expect(screen.getByText("Overall grade").nextElementSibling?.textContent).toBe("complete");
+    expect(screen.getByText("整體等級").nextElementSibling?.textContent).toBe("complete");
     expect(
-      screen.getAllByText("Research ready")
+      screen.getAllByText("研究就緒")
         .some((label) => label.nextElementSibling?.textContent === "Yes"),
     ).toBe(true);
   });
@@ -352,7 +353,7 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
-    fireEvent.change(screen.getByPlaceholderText("Message the workshop servant…"), {
+    fireEvent.change(screen.getByPlaceholderText("傳訊息給策略工坊僕人…"), {
       target: { value: "What evidence is missing?" },
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
@@ -418,7 +419,7 @@ describe("StrategyWorkshopPage", () => {
 
     const button = await screen.findByTestId("add-to-trading-room-btn");
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
-    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("missing strategy id");
+    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("缺少策略 ID");
     fireEvent.click(button);
     expect(onAddToTradingRoom).not.toHaveBeenCalled();
   });

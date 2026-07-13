@@ -12,12 +12,14 @@
 
 import type {
   TradingRoomDashboardVersion,
+  TradingRoomViewSpec,
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
   WidgetRevisionProposal,
   WorkspaceLayoutOperation,
 } from "./tradingRoomTypes";
+import { normalizeDataAvailabilityStatus } from "./dataAvailability";
 import {
   BffError,
   normalizeBffErrorEnvelope,
@@ -519,6 +521,49 @@ function extractDetail<T>(value: unknown): T {
   return data as T;
 }
 
+function normalizeWorkspaceProposalWidget(value: unknown): TradingRoomWidgetSpec {
+  const widget = recordFrom(value);
+  const dataAvailability = widget.dataAvailability;
+  return {
+    ...(widget as unknown as TradingRoomWidgetSpec),
+    ...(dataAvailability === undefined
+      ? {}
+      : { dataAvailability: normalizeDataAvailabilityStatus(dataAvailability) }),
+  };
+}
+
+function normalizeWorkspaceProposalView(value: unknown): TradingRoomViewSpec {
+  const view = recordFrom(value);
+  const dataAvailability = view.dataAvailability;
+  return {
+    ...(view as unknown as TradingRoomViewSpec),
+    ...(dataAvailability === undefined
+      ? {}
+      : { dataAvailability: normalizeDataAvailabilityStatus(dataAvailability) }),
+    widgets: arrayFrom(view.widgets).map(normalizeWorkspaceProposalWidget),
+  };
+}
+
+function extractWorkspaceProposal(value: unknown): TradingRoomWorkspaceProposal {
+  const proposal = recordFrom(extractDetail<unknown>(value));
+  const availability = recordFrom(proposal.dataAvailability);
+  return {
+    ...(proposal as unknown as TradingRoomWorkspaceProposal),
+    dataAvailability: {
+      ...(availability as unknown as TradingRoomWorkspaceProposal["dataAvailability"]),
+      status: normalizeDataAvailabilityStatus(availability.status),
+      sources: arrayFrom(availability.sources).map((value) => {
+        const source = recordFrom(value);
+        return {
+          ...(source as unknown as TradingRoomWorkspaceProposal["dataAvailability"]["sources"][number]),
+          status: normalizeDataAvailabilityStatus(source.status),
+        };
+      }),
+    },
+    views: arrayFrom(proposal.views).map(normalizeWorkspaceProposalView),
+  };
+}
+
 function fallbackErrorCode(status: number): ErrorCode {
   if (status === 400 || status === 422) return "VALIDATION_FAILED";
   if (status === 401) return "AUTH_REQUIRED";
@@ -844,7 +889,7 @@ export async function createTradingRoomWorkspaceProposal(
     await throwTypedBffError(res, "POST", url);
   }
   const responseBody = await parseJson(res);
-  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+  return extractWorkspaceProposal(responseBody);
 }
 
 /** Get a previously generated Trading Room workspace proposal. */
@@ -864,7 +909,7 @@ export async function getTradingRoomWorkspaceProposal(
     await throwTypedBffError(res, "GET", url);
   }
   const responseBody = await parseJson(res);
-  return extractDetail<TradingRoomWorkspaceProposal>(responseBody);
+  return extractWorkspaceProposal(responseBody);
 }
 
 /** Accept a preview proposal and materialize the generated workspace shell. */

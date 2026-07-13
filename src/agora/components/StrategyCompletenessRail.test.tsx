@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
+import "@/i18n";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
 import type { WorkshopCard, WorkshopCompletenessSnapshot } from "@/lib/bff-v1/agora/workshops";
 
@@ -104,8 +105,8 @@ describe("StrategyCompletenessRail", () => {
       />
     );
     const grade = screen.getByTestId("completeness-overall-grade");
-    expect(grade.textContent).toBe("Partial");
-    expect(screen.getByText("Overall completeness")).toBeDefined();
+    expect(grade.textContent).toBe("部分完整");
+    expect(screen.getByText("整體完整度")).toBeDefined();
     expect(screen.getByText("50%")).toBeDefined();
   });
 
@@ -154,10 +155,10 @@ describe("StrategyCompletenessRail", () => {
       />
     );
 
-    expect(screen.getByTestId("completeness-overall-grade").textContent).toBe("Complete");
+    expect(screen.getByTestId("completeness-overall-grade").textContent).toBe("完整");
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
-    expect(screen.getByText("Research ready").nextElementSibling?.textContent).toBe("Yes");
+    expect(screen.getByText("研究就緒").nextElementSibling?.textContent).toBe("Yes");
   });
 
   it("renders all three dimensions with their grades", () => {
@@ -172,8 +173,8 @@ describe("StrategyCompletenessRail", () => {
     expect(screen.getByTestId("completeness-dimension-data_dependencies")).toBeDefined();
     expect(screen.getByTestId("completeness-dimension-market_scope")).toBeDefined();
 
-    expect(screen.getByTestId("completeness-dimension-hypothesis-grade").textContent).toBe("Complete");
-    expect(screen.getByTestId("completeness-dimension-data_dependencies-grade").textContent).toBe("Partial");
+    expect(screen.getByTestId("completeness-dimension-hypothesis-grade").textContent).toBe("完整");
+    expect(screen.getByTestId("completeness-dimension-data_dependencies-grade").textContent).toBe("部分完整");
     expect(screen.getByTestId("completeness-dimension-market_scope-grade").textContent).toBe("Missing");
   });
 
@@ -208,7 +209,7 @@ describe("StrategyCompletenessRail", () => {
     const gate = screen.getByTestId("readiness-gate-preliminary_research");
     expect(gate.getAttribute("data-readiness-state")).toBe("ready");
     expect(gate.className).toContain("border-green-400");
-    expect(screen.getByText("Preliminary research").className).toContain("text-green-900");
+    expect(screen.getByText("初步研究").className).toContain("text-green-900");
   });
 
   it("renders next question when provided", () => {

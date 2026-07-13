@@ -39,6 +39,14 @@ permissions:
   issues: write
   pull-requests: write
 
+# Every integration run exercises the same mutable dev BFF. Keep PR and push
+# candidates from overloading that shared live surface. An exact dev push is
+# the release truth, so it supersedes an older PR run; all other runs queue and
+# never cancel that exact-SHA dev gate.
+concurrency:
+  group: pantheon-fe-bff-integration-live
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+
 jobs:
   integration-gate:
     runs-on: ubuntu-latest

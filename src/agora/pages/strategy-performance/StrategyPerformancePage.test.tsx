@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { StrategyPerformancePage } from "./StrategyPerformancePage";
+import "@/i18n";
 import type {
   TradingDecisionEvent,
   TradingRoomAggregate,
@@ -125,12 +126,12 @@ describe("StrategyPerformancePage", () => {
 
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Strategy Performance" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "策略執行與績效" })).toBeDefined();
     expect(screen.getByText("Breakout Alpha")).toBeDefined();
     expect(screen.getAllByText("$1,250").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-4.20%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2/3").length).toBeGreaterThan(0);
-    expect(screen.getByText("live attribution")).toBeDefined();
+    expect(screen.getByText("即時歸因")).toBeDefined();
     expect(screen.getByText("portfolio_book")).toBeDefined();
     expect(screen.getByText(/read_only_performance_attribution/)).toBeDefined();
     expect(screen.queryByText(/coming soon|即將推出/i)).toBeNull();
@@ -162,7 +163,7 @@ describe("StrategyPerformancePage", () => {
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByText("Carry Beta")).toBeDefined();
-    expect(screen.getByText("missing attribution")).toBeDefined();
+    expect(screen.getByText("缺少歸因資料")).toBeDefined();
   });
 
   it("places the explained Unassigned bucket after named strategies", async () => {
@@ -189,7 +190,7 @@ describe("StrategyPerformancePage", () => {
     const unassigned = screen.getByText("Unassigned");
     expect(named.compareDocumentPosition(unassigned) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId("performance-row-attribution-row-unassigned-description").textContent).toContain(
-      "could not link to a named Trading Room strategy",
+      "無法連結至具名交易操盤室策略",
     );
   });
 
@@ -210,11 +211,11 @@ describe("StrategyPerformancePage", () => {
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     await screen.findByText("Breakout Alpha");
-    const zero = screen.getByTitle("Measured value: zero");
-    const unreported = screen.getByTitle("No measurement was reported by the BFF");
+    const zero = screen.getByTitle("已量測：零");
+    const unreported = screen.getByTitle("BFF 未回報量測值");
     expect(zero.textContent).toBe("$0");
     expect(zero.getAttribute("data-metric-state")).toBe("measured");
-    expect(unreported.textContent).toBe("not reported");
+    expect(unreported.textContent).toBe("未回報");
     expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
   });
 
@@ -225,7 +226,7 @@ describe("StrategyPerformancePage", () => {
 
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
-    expect(await screen.findByText("Live performance data unavailable")).toBeDefined();
+    expect(await screen.findByText("無法取得即時績效資料。")).toBeDefined();
     expect(screen.getByText("AUTH_REQUIRED")).toBeDefined();
     await waitFor(() => {
       expect(screen.queryByText("Breakout Alpha")).toBeNull();

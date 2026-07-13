@@ -1126,9 +1126,20 @@ export const HumanInboxPage = () => {
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
-  const { data, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const { data, loading, error, refresh } = useV5Live(
+    () => mgmt.humanInbox.listWithStatus(),
+    [],
+  );
+  const isInitialLoading = loading && data === undefined;
+  const isUnavailable = !loading && data === undefined;
+  const isRefreshing = loading && data !== undefined;
+  const isDegraded = data !== undefined && (
+    data.partial || data.surface.status !== "ok" || error !== undefined
+  );
+  const isAuthoritative = data !== undefined && !loading && error === undefined &&
+    !data.partial && data.surface.status === "ok";
   const sorted = useMemo(
-    () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
+    () => [...(data?.items ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
   );
   const hasTargetContext = Boolean(targetFocus || runtimeFocus);
@@ -1157,8 +1168,11 @@ export const HumanInboxPage = () => {
     })));
   }, [focusTokens, sorted]);
   const visibleItems = hasTargetContext && matchingItems.length === 0 ? sorted : matchingItems;
-  const isPersonaFocusLoading = Boolean(personaFocus && !hasTargetContext && loading && data === undefined);
+  const isPersonaFocusLoading = Boolean(personaFocus && !hasTargetContext && isInitialLoading);
   const hasPersonaFocusMatch = !personaFocus || matchingItems.length > 0;
+  const isPersonaFocusIncomplete = Boolean(
+    personaFocus && !hasTargetContext && !hasPersonaFocusMatch && !isAuthoritative,
+  );
   const targetContextParts = [
     targetTypeFocus && targetFocus ? `${targetTypeFocus}: ${targetFocus}` : targetFocus,
     personaFocus ? `persona: ${personaFocus}` : "",
@@ -1179,7 +1193,9 @@ export const HumanInboxPage = () => {
               Target context: {targetContextParts.join(" · ")}
               {matchingItems.length > 0
                 ? ` · ${matchingItems.length} matching inbox item(s)`
-                : " · no direct inbox item matched; showing live queue"}
+                : isAuthoritative
+                ? " · no direct inbox item matched; showing live queue"
+                : ` · ${t("mgmt.inbox.targetContextIncomplete")}`}
             </span>
             <div className="flex flex-wrap gap-2">
               {personaFocus && (
@@ -1205,6 +1221,8 @@ export const HumanInboxPage = () => {
             <span className="text-foreground">
               {isPersonaFocusLoading
                 ? t("mgmt.inbox.focusLoadingPersonaFmt", { persona: personaFocus })
+                : isPersonaFocusIncomplete
+                ? t("mgmt.inbox.focusUnavailablePersonaFmt", { persona: personaFocus })
                 : hasPersonaFocusMatch
                 ? t("mgmt.inbox.focusedPersonaFmt", { persona: personaFocus, count: visibleItems.length })
                 : t("mgmt.inbox.focusMissingPersonaFmt", { persona: personaFocus })}
@@ -1222,7 +1240,35 @@ export const HumanInboxPage = () => {
           </div>
         </Card>
       )}
-      {!loading && visibleItems.length === 0 && (
+      {isInitialLoading && (
+        <Card className="border-primary/30 bg-primary/5 p-4 text-sm" role="status">
+          {t("mgmt.inbox.loadingBody")}
+        </Card>
+      )}
+      {isUnavailable && (
+        <Card className="border-status-warning/40 bg-status-warning/10 p-4 text-sm" role="alert">
+          <p className="font-medium text-foreground">{t("mgmt.inbox.unavailableTitle")}</p>
+          <p className="mt-1 text-muted-foreground">{t("mgmt.inbox.unavailableBody")}</p>
+          <Button size="sm" variant="outline" className="mt-3" onClick={() => refresh()}>
+            {t("mgmt.inbox.retry")}
+          </Button>
+        </Card>
+      )}
+      {isRefreshing && !isDegraded && (
+        <Card className="border-primary/30 bg-primary/5 p-3 text-sm" role="status">
+          {t("mgmt.inbox.refreshingBody")}
+        </Card>
+      )}
+      {isDegraded && (
+        <Card className="border-status-warning/40 bg-status-warning/10 p-4 text-sm" role="alert">
+          <p className="font-medium text-foreground">{t("mgmt.inbox.degradedTitle")}</p>
+          <p className="mt-1 text-muted-foreground">{t("mgmt.inbox.degradedBody")}</p>
+          <Button size="sm" variant="outline" className="mt-3" onClick={() => refresh()}>
+            {t("mgmt.inbox.retry")}
+          </Button>
+        </Card>
+      )}
+      {isAuthoritative && visibleItems.length === 0 && (
         <Card className="p-4 text-sm text-muted-foreground">
           {personaFocus
             ? t("mgmt.inbox.focusEmptyBodyFmt", { persona: personaFocus })
