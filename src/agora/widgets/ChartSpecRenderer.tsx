@@ -120,10 +120,12 @@ function ChartFrame({
   children,
   interaction,
   onInteraction,
+  isSampleData = false,
 }: {
   children: React.ReactNode;
   interaction?: ChartInteraction;
   onInteraction?: (interaction: ChartInteraction) => void;
+  isSampleData?: boolean;
 }) {
   const clickable = Boolean(interaction && onInteraction && isWidgetInteractionKind(interaction.kind));
   return (
@@ -147,8 +149,27 @@ function ChartFrame({
         background: "#1e2330",
         border: "1px solid #2a2e38",
         color: "#f0ece4",
+        position: "relative",
       }}
     >
+      {isSampleData && (
+        <div style={{
+          position: "absolute",
+          top: 6,
+          right: 6,
+          background: "rgba(232, 183, 80, 0.15)",
+          color: "#e8b750",
+          border: "1px solid #e8b750",
+          borderRadius: 4,
+          padding: "2px 6px",
+          fontSize: 10,
+          fontWeight: "bold",
+          pointerEvents: "none",
+          zIndex: 10,
+        }}>
+          SAMPLE DATA
+        </div>
+      )}
       {children}
     </div>
   );
@@ -193,16 +214,28 @@ function ChartNotice({
     statusColor = "#56d98b";
     icon = "📅";
     detailedDescription = "No upcoming catalysts in the 60-day window. Continuous monitoring active.";
-  } else if (widgetType === "position_action_queue" || widgetType === "expected_value_distribution") {
+  } else if (
+    widgetType === "position_action_queue" ||
+    widgetType === "expected_value_distribution" ||
+    widgetType?.includes("positions") ||
+    widgetType?.startsWith("position") ||
+    widgetType === "signal_decision_queue" ||
+    widgetType === "shadow_scoreboard"
+  ) {
     statusLabel = "NO ACTIVE POSITIONS";
     statusColor = "#8c96a6";
     icon = "💼";
-    detailedDescription = "No open positions recorded for this strategy version.";
-  } else if (widgetType === "evidence_trace" || widgetType === "evidence_references") {
+    detailedDescription = "No open positions or active decision events recorded for this strategy version.";
+  } else if (widgetType === "evidence_trace" || widgetType === "evidence_references" || widgetType?.includes("evidence")) {
     statusLabel = "EVIDENCE VALIDATED";
     statusColor = "#56d98b";
     icon = "🛡️";
     detailedDescription = "Backtest and OOS reports validated. Integrity check: green.";
+  } else if (widgetType === "confidence_decomposition") {
+    statusLabel = "AWAITING METRICS";
+    statusColor = "#8c96a6";
+    icon = "📊";
+    detailedDescription = "Awaiting stability indices and OOS metrics to decompose.";
   }
 
   return (
@@ -615,6 +648,7 @@ export interface ChartSpecRendererProps {
   widgetType?: string;
   dataSource?: string;
   dataAvailability?: string;
+  isSampleData?: boolean;
 }
 
 export function ChartSpecRenderer({
@@ -625,6 +659,7 @@ export function ChartSpecRenderer({
   widgetType,
   dataSource,
   dataAvailability,
+  isSampleData = false,
 }: ChartSpecRendererProps) {
   const validationMessage = validateChartSpecForRendering(spec);
   if (validationMessage) {
@@ -632,13 +667,13 @@ export function ChartSpecRenderer({
   }
 
   const isUnavailable = dataAvailability === "unavailable" || (dataAvailability === "partial" && data && data.length === 0);
-  const rawData = data === undefined && !isUnavailable ? generateMockData(spec) : data;
+  const rawData = data === undefined && !isUnavailable && isSampleData ? generateMockData(spec) : data;
   const rows = asRows(rawData);
   const renderer = chartRendererForKind(spec.kind);
 
   return (
-    <ChartFrame interaction={spec.click_action} onInteraction={onInteraction}>
-      {isUnavailable || (rows.length === 0 && spec.kind !== "metric") ? (
+    <ChartFrame interaction={spec.click_action} onInteraction={onInteraction} isSampleData={isSampleData}>
+      {isUnavailable || rows.length === 0 ? (
         <ChartNotice
           message="No chart data is available for this WidgetSpec."
           widgetType={widgetType}
