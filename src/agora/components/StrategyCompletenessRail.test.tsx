@@ -175,7 +175,7 @@ describe("StrategyCompletenessRail", () => {
 
     expect(screen.getByTestId("completeness-dimension-hypothesis-grade").textContent).toBe("完整");
     expect(screen.getByTestId("completeness-dimension-data_dependencies-grade").textContent).toBe("部分完整");
-    expect(screen.getByTestId("completeness-dimension-market_scope-grade").textContent).toBe("Missing");
+    expect(screen.getByTestId("completeness-dimension-market_scope-grade").textContent).toBe("缺失");
   });
 
   it("renders three readiness gates from readiness data", () => {
