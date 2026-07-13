@@ -509,6 +509,21 @@ const MOCK_VERSION_2: TradingRoomDashboardVersion = {
 
 afterEach(cleanup);
 
+async function openSingleColumnLayoutProposal(): Promise<void> {
+  fireEvent.click(screen.getByTestId("workspace-proposal-adjust-layout"));
+  await screen.findByTestId("workspace-layout-proposal-drawer");
+  fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
+  fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
+  await screen.findByTestId("workspace-layout-proposal-preview");
+}
+
+function expectNoExecutionSideEffects(): void {
+  expect(tradingRoomModule.acceptWidgetRevisionProposal).not.toHaveBeenCalled();
+  expect(tradingRoomModule.createWidgetRevisionProposal).not.toHaveBeenCalled();
+  expect(tradingRoomModule.decideOnEvent).not.toHaveBeenCalled();
+  expect(tradingRoomModule.rollbackTradingRoomWorkspaceVersion).not.toHaveBeenCalled();
+}
+
 describe("TradingRoomPage", () => {
   beforeEach(() => {
     gridCallbacks.onLayoutChange = undefined;
@@ -847,8 +862,9 @@ describe("TradingRoomPage", () => {
     const availability = screen.getByTestId("workspace-proposal-data-availability");
 
     expect(preview).toHaveStyle({ background: "#11151d" });
-    expect(firstView).toHaveStyle({ background: "#222535" });
+    expect(firstView).toHaveStyle({ background: "#171b22" });
     expect(availability).toHaveStyle({ background: "#171b22" });
+    expect(screen.queryByTestId("workspace-proposal-preview-first")).toBeNull();
   });
 
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
@@ -861,6 +877,163 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");
+  });
+
+  it("opens a whole-workspace layout proposal without accepting or patching before Apply", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+
+    await openSingleColumnLayoutProposal();
+
+    for (const view of PROPOSAL_VIEWS) {
+      expect(screen.getByTestId(`workspace-layout-proposal-view-${view.id}-before`)).toBeDefined();
+      expect(screen.getByTestId(`workspace-layout-proposal-view-${view.id}-after`)).toBeDefined();
+    }
+    expect((screen.getByTestId("workspace-layout-proposal-apply") as HTMLButtonElement).disabled).toBe(false);
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
+    expectNoExecutionSideEffects();
+  });
+
+  it("rejects a whole-workspace layout proposal without any workspace mutation", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    await openSingleColumnLayoutProposal();
+
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-reject"));
+
+    await waitFor(() => expect(screen.queryByTestId("workspace-layout-proposal-drawer")).toBeNull());
+    expect(screen.getByTestId("workspace-proposal-preview")).toBeDefined();
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
+    expectNoExecutionSideEffects();
+  });
+
+  it("accepts a preview before applying one safe layout PATCH with the returned ETag", async () => {
+    const mutationOrder: string[] = [];
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockImplementationOnce(async () => {
+      mutationOrder.push("accept");
+      return {
+        etag: '"accepted-workspace-etag-v1"',
+        version: MOCK_VERSION_1,
+        workspace: MOCK_WORKSPACE,
+      };
+    });
+    vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mockImplementationOnce(async () => {
+      mutationOrder.push("patch");
+      return {
+        etag: '"workspace-etag-v2"',
+        version: MOCK_VERSION_2,
+        workspace: MOCK_WORKSPACE_V2,
+      };
+    });
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    await openSingleColumnLayoutProposal();
+
+    expect(mutationOrder).toEqual([]);
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
+
+    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1));
+    expect(mutationOrder).toEqual(["accept", "patch"]);
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledWith(
+      "strat-001",
+      "proposal-001",
+      { expectedStatus: "preview" },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+
+    const [workspaceId, body, options] = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[0];
+    expect(workspaceId).toBe("workspace-001");
+    expect(body.operations).toHaveLength(PROPOSAL_VIEWS.length);
+    expect(body.operations.every((operation) => operation.kind === "resize_widget")).toBe(true);
+    expect(options).toEqual({
+      ifMatch: '"accepted-workspace-etag-v1"',
+      idempotencyKey: expect.any(String),
+    });
+    expect(JSON.stringify({ body, workspaceId })).not.toMatch(/\b(?:broker|order|capital|runtime)\b/iu);
+    expectNoExecutionSideEffects();
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+  });
+
+  it("does not PATCH when pre-accept workspace acceptance fails", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta)
+      .mockRejectedValueOnce(new Error("accept failed before layout PATCH"));
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    await openSingleColumnLayoutProposal();
+
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
+
+    await screen.findByText("accept failed before layout PATCH");
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("trading-room-workspace-shell")).toBeNull();
+    expectNoExecutionSideEffects();
+  });
+
+  it("preserves accepted v1 after a PATCH failure and retries without accepting again", async () => {
+    vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout)
+      .mockRejectedValueOnce(new Error("layout PATCH failed after acceptance"));
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    await openSingleColumnLayoutProposal();
+
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
+
+    await screen.findByText(/layout PATCH failed after acceptance/u);
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v1"));
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
+    await screen.findByTestId("workspace-layout-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
+
+    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(2));
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
+    const retryOptions = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[1][2];
+    expect(retryOptions).toEqual({
+      ifMatch: '"workspace-etag-v1"',
+      idempotencyKey: expect.any(String),
+    });
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+  });
+
+  it("applies an accepted-workspace layout request once with the current ETag", async () => {
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValueOnce({
+      etag: '"current-workspace-etag-v1"',
+      version: MOCK_VERSION_1,
+      workspace: MOCK_WORKSPACE,
+    });
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    await screen.findByTestId("trading-room-workspace-shell");
+    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockClear();
+
+    fireEvent.click(screen.getByTestId("workspace-request-layout-proposal"));
+    await screen.findByTestId("workspace-layout-proposal-drawer");
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
+    await screen.findByTestId("workspace-layout-proposal-preview");
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
+
+    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1));
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
+    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledWith(
+      "workspace-001",
+      expect.objectContaining({ operations: expect.any(Array) }),
+      {
+        ifMatch: '"current-workspace-etag-v1"',
+        idempotencyKey: expect.any(String),
+      },
+    );
+    expectNoExecutionSideEffects();
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
   });
 
   it("accepts the proposal and renders the accepted workspace shell", async () => {
