@@ -1,8 +1,13 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
-import type { StrategyReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
+import type {
+  StrategyReadinessAssessment,
+  WorkshopCard,
+  WorkshopCompletenessSnapshot,
+  WorkshopStreamEvent,
+} from "@/lib/bff-v1/agora/workshops";
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
@@ -63,6 +68,42 @@ const MISSING_STRATEGY_ID_READINESS = {
   assessment_id: "ready-missing-strategy",
   strategy_id: undefined,
 } as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+
+const LIVE_COMPLETENESS_SNAPSHOT: WorkshopCompletenessSnapshot = {
+  snapshot_id: "8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
+  workshop_id: "b888fb96-12b4-46e1-8def-ffe4f29b5ad7",
+  strategy_version_id: "full003-postdeploy-1783268578-f4b6f0-v1",
+  state_map_json: {
+    data_pit: "confirmed",
+    liquidity: "confirmed",
+    entry_signal: "confirmed",
+    universe_rule: "confirmed",
+    position_sizing: "confirmed",
+    risk_constraints: "confirmed",
+    exit_invalidation: "confirmed",
+  },
+  blocking_items_json: [],
+  next_question_json: {},
+  created_at: "2026-07-05 16:22:58+00",
+};
+
+const LIVE_COMPLETENESS_CARD: WorkshopCard = {
+  card_id: "card_completeness_8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
+  card_type: "completeness_update",
+  workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
+  sequence_no: 2,
+  status: "completed",
+  title: "Strategy completeness updated",
+  payload: {
+    overall_grade: "complete",
+    dimension_updates: Object.entries(LIVE_COMPLETENESS_SNAPSHOT.state_map_json).map(
+      ([dimension, current_grade]) => ({ dimension, current_grade }),
+    ),
+    blockers: [],
+    research_ready: true,
+  },
+  created_at: LIVE_COMPLETENESS_SNAPSHOT.created_at,
+};
 
 afterEach(cleanup);
 
@@ -227,6 +268,60 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     expect(screen.getByTestId("workshop-conversation")).toBeDefined();
     expect(screen.getByTestId("completeness-rail")).toBeDefined();
+  });
+
+  it("keeps the hosted raw snapshot rail aligned with its latest completeness card", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
+    });
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(LIVE_COMPLETENESS_SNAPSHOT);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([LIVE_COMPLETENESS_CARD]);
+
+    render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
+
+    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("完整");
+    expect(screen.getByText("100%")).toBeDefined();
+    expect(screen.queryByText("NaN%")).toBeNull();
+    expect(screen.getByTestId("completeness-grade").textContent).toBe("complete");
+    expect(screen.getByText("Strategy completeness updated")).toBeDefined();
+    expect(screen.getByText("整體等級").nextElementSibling?.textContent).toBe("complete");
+    expect(
+      screen.getAllByText("研究就緒")
+        .some((label) => label.nextElementSibling?.textContent === "Yes"),
+    ).toBe(true);
+  });
+
+  it("refreshes the raw snapshot and derived card together after completeness events", async () => {
+    let handleEvent: ((event: WorkshopStreamEvent) => void) | undefined;
+    vi.mocked(workshopsModule.openWorkshopStream).mockImplementation((_workshopId, onEvent) => {
+      handleEvent = onEvent;
+      return () => undefined;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(LIVE_COMPLETENESS_SNAPSHOT);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([LIVE_COMPLETENESS_CARD]);
+
+    render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
+
+    await waitFor(() => expect(handleEvent).toBeDefined());
+    expect(workshopsModule.getWorkshopCompleteness).toHaveBeenCalledTimes(1);
+    expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      handleEvent?.({
+        event_id: "event-completeness-updated-001",
+        event_type: "workshop.completeness.updated",
+        occurred_at: "2026-07-13T12:38:05Z",
+        payload: {},
+        workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
+      });
+    });
+
+    await waitFor(() => {
+      expect(workshopsModule.getWorkshopCompleteness).toHaveBeenCalledTimes(2);
+      expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("renders the servant composer in session view", () => {
