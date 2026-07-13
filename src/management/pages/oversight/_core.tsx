@@ -1275,6 +1275,11 @@ export const HumanInboxPage = () => {
             : t("mgmt.inbox.emptyBody")}
         </Card>
       )}
+      {isDegraded && visibleItems.length === 0 && (
+        <Card className="p-4 text-sm text-status-warning/70 border-status-warning/30 bg-status-warning/5" role="status">
+          {t("mgmt.inbox.degradedEmptyBody", { defaultValue: "No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out." })}
+        </Card>
+      )}
       {visibleItems.map((it) => {
         const evidenceRefs = it.evidenceRefs ?? [];
         const evidenceHref = evidenceRefs.length > 0 && it.detailHref

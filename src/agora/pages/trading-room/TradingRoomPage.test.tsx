@@ -932,6 +932,7 @@ describe("TradingRoomPage", () => {
       ),
     );
     await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
   });
 
   it("removes and restores widgets through layout operations without deleting the widget", async () => {
@@ -1040,6 +1041,8 @@ describe("TradingRoomPage", () => {
         }),
       ),
     );
+    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v3"));
+    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
   });
 
   it("opens widget adjustment drawer from widget click and applies a backend revision proposal", async () => {
@@ -1129,6 +1132,7 @@ describe("TradingRoomPage", () => {
       ),
     );
     await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
+    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("workspace-widget-w-status").textContent).toContain("策略狀態摘要 Revised");
   });
 

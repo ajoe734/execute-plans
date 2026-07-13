@@ -2812,6 +2812,7 @@ export default {
       focusUnavailablePersonaFmt: "Inbox status is incomplete for {{persona}}; absence cannot be confirmed.",
       emptyBody: "No Human Inbox items currently require review.",
       focusEmptyBodyFmt: "No Human Inbox items currently require review for {{persona}}.",
+      degradedEmptyBody: "No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out.",
       promotionDecision: "Promotion decision",
       rationaleLabel: "Rationale",
       approveCanary: "Approve Canary",
