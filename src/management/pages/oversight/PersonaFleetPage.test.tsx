@@ -466,6 +466,32 @@ describe("PersonaFleetPage", () => {
     );
   });
 
+  it("distinguishes a real sleeve from a paper ledger and links it to the persona capital view", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [fleetRow("persona-live-real-alpha", "Real Sleeve Persona", {
+        humanNeeded: false,
+        state: "live_running",
+        capitalMode: "live",
+        capitalScope: "live_sleeve",
+        capitalScopeId: "real-sleeve-persona-alpha",
+        capitalSleeveId: "real-sleeve-persona-alpha",
+        capitalPoolId: "pool-real-alpha",
+      })],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("Real sleeve")).toBeInTheDocument();
+    expect(screen.getByText("real-sleeve-persona-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("pool-real-alpha")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open capital for persona-live-real-alpha" })).toHaveAttribute(
+      "href",
+      "/management/performance?tab=overview&persona_id=persona-live-real-alpha&capital_pool_id=pool-real-alpha",
+    );
+  });
+
   it("does not turn summary-only data source counts into provider chips", () => {
     mocks.useV5Live.mockReturnValue({
       data: [{
