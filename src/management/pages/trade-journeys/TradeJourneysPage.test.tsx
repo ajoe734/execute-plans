@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "@/i18n";
 import { TradeJourneyDetailPage, TradeJourneysPage } from "./TradeJourneysPage";
 import * as api from "@/lib/bff-v1/tradeJourneys";
 
@@ -21,6 +22,10 @@ function Location() { return <output data-testid="location">{useLocation().searc
 function renderList(entry = "/management/trade-journeys?tenant_id=t1") { return render(<MemoryRouter initialEntries={[entry]}><Routes><Route path="/management/trade-journeys" element={<><TradeJourneysPage/><Location/></>}/></Routes></MemoryRouter>); }
 
 describe("Trade Journeys workbench", () => {
+  // Assertions below use the en-US copy; the page itself is fully i18n-keyed
+  // (see TradeJourneysPage.i18n.test.tsx for the zh-TW coverage guard).
+  beforeAll(async () => { await i18n.changeLanguage("en-US"); });
+  afterAll(async () => { await i18n.changeLanguage("zh-TW"); });
   beforeEach(() => vi.clearAllMocks());
 
   it("renders happy, risk reject, broker reject, partial fill, and recon mismatch rows", async () => {
@@ -81,7 +86,7 @@ describe("Trade Journeys workbench", () => {
     render(<MemoryRouter initialEntries={["/management/trade-journeys/recon-1"]}><Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage/>}/></Routes></MemoryRouter>);
     expect(await screen.findByRole("status")).toHaveTextContent("degraded data");
     expect(screen.getByRole("status")).toHaveTextContent("ledger unavailable");
-    expect(screen.getByText(/Missing ledger_booking/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing Ledger booking/)).toBeInTheDocument();
     expect(screen.getByLabelText("Journey stages")).toBeInTheDocument();
   });
 
