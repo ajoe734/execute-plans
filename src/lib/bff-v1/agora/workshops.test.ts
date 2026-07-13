@@ -13,6 +13,7 @@ import {
   type WorkshopStreamEvent,
 } from "./workshops";
 import type { StrategyWorkshop } from "./types";
+import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 
 vi.mock("@/lib/bff-v1/client", () => ({
   bffFetch: vi.fn(),
@@ -106,6 +107,82 @@ describe("getWorkshopCompleteness", () => {
     const result = await getWorkshopCompleteness("ws-001");
 
     expect(result).toBeNull();
+  });
+
+  it("materializes the exact hosted snapshot shape from the same server-derived card grade", async () => {
+    const liveSnapshot = {
+      snapshot_id: "8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
+      workshop_id: "b888fb96-12b4-46e1-8def-ffe4f29b5ad7",
+      strategy_version_id: "full003-postdeploy-1783268578-f4b6f0-v1",
+      state_map_json: {
+        data_pit: "confirmed",
+        liquidity: "confirmed",
+        entry_signal: "confirmed",
+        universe_rule: "confirmed",
+        position_sizing: "confirmed",
+        risk_constraints: "confirmed",
+        exit_invalidation: "confirmed",
+      },
+      blocking_items_json: [],
+      next_question_json: {},
+      created_at: "2026-07-05 16:22:58+00",
+    };
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: liveSnapshot,
+      meta: {
+        snapshot_at: "2026-07-13T12:38:05Z",
+        capability: "agora.workshop.v1",
+        audience: "tenant:pantheon-dev:user:pantheon-dev-browser",
+      },
+    });
+    const completenessCard: WorkshopCard = {
+      spec_version: "1.0",
+      card_id: "card_completeness_8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
+      card_type: "completeness_update",
+      workshop_id: liveSnapshot.workshop_id,
+      sequence_no: 2,
+      workshop_version_id: liveSnapshot.strategy_version_id,
+      strategy_spec_registry_id: "full003-postdeploy-1783268578-f4b6f0",
+      status: "completed",
+      title: "Strategy completeness updated",
+      payload: {
+        overall_grade: "complete",
+        dimension_updates: Object.entries(liveSnapshot.state_map_json).map(([dimension, current_grade]) => ({
+          dimension,
+          prior_grade: "unknown",
+          current_grade,
+          gaps: [],
+          required_actions: [],
+        })),
+        blockers: [],
+        research_ready: true,
+        readiness_gates: ["preliminary_research", "full_validation", "trading_room"],
+        change_since_previous: "latest_snapshot",
+      },
+      created_at: liveSnapshot.created_at,
+    };
+
+    const rawCompleteness = await getWorkshopCompleteness(liveSnapshot.workshop_id);
+    const display = materializeWorkshopCompleteness(rawCompleteness, completenessCard);
+
+    expect(rawCompleteness).toEqual(liveSnapshot);
+    expect(display).toMatchObject({
+      completeness_id: liveSnapshot.snapshot_id,
+      overall_grade: "complete",
+      research_ready: true,
+      strategy_ref: liveSnapshot.strategy_version_id,
+      workshop_id: liveSnapshot.workshop_id,
+    });
+    expect(display?.dimensions).toHaveLength(7);
+    expect(display?.dimensions.every((dimension) => dimension.grade === "complete")).toBe(true);
+    expect(materializeWorkshopCompleteness(rawCompleteness, {
+      ...completenessCard,
+      workshop_version_id: "stale-workshop-version",
+    })).toBeNull();
+    expect(materializeWorkshopCompleteness(rawCompleteness, {
+      ...completenessCard,
+      card_id: "card_completeness_newer-same-version-snapshot",
+    })).toBeNull();
   });
 });
 
