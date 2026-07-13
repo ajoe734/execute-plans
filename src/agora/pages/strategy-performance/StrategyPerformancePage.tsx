@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Link } from "react-router-dom";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { Activity, AlertTriangle, Database, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
@@ -54,25 +56,25 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function formatCurrency(value: unknown): string {
+function formatCurrency(value: unknown, missing = "not reported"): string {
   const number = finiteNumber(value);
-  return number === undefined ? "not reported" : currencyFormatter.format(number);
+  return number === undefined ? missing : currencyFormatter.format(number);
 }
 
-function formatNumber(value: unknown): string {
+function formatNumber(value: unknown, missing = "not reported"): string {
   const number = finiteNumber(value);
-  return number === undefined ? "not reported" : numberFormatter.format(number);
+  return number === undefined ? missing : numberFormatter.format(number);
 }
 
-function formatPercent(value: unknown): string {
+function formatPercent(value: unknown, missing = "not reported"): string {
   const number = finiteNumber(value);
-  if (number === undefined) return "not reported";
+  if (number === undefined) return missing;
   const normalized = Math.abs(number) <= 1 ? number * 100 : number;
   return `${normalized.toFixed(2)}%`;
 }
 
-function formatDateTime(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) return "not reported";
+function formatDateTime(value: unknown, missing = "not reported"): string {
+  if (typeof value !== "string" || !value.trim()) return missing;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString("en-US", {
@@ -132,7 +134,7 @@ function buildRows(
     .filter((row) => !usedAttributionRows.has(row.id))
     .map((row) => ({
       attribution: row,
-      description: "Aggregates telemetry that the BFF could not link to a named Trading Room strategy.",
+      description: "agora.performance.unlinkedTelemetry",
       id: `attribution-${row.id}`,
       kind: "attribution_only" as const,
       sourceState: "attribution_only" as const,
@@ -162,10 +164,10 @@ function sourceHealthRows(meta: TradingRoomPerformanceAttributionResponse["meta"
   return [...surfaceRows, ...compositionRows].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function sourceStateLabel(row: StrategyPerformanceRow): string {
-  if (row.sourceState === "matched") return "live attribution";
-  if (row.sourceState === "attribution_only") return "attribution only";
-  return "missing attribution";
+function sourceStateLabel(row: StrategyPerformanceRow, t: TFunction): string {
+  if (row.sourceState === "matched") return t("agora.performance.liveAttribution");
+  if (row.sourceState === "attribution_only") return t("agora.performance.attributionOnly");
+  return t("agora.performance.missingAttribution");
 }
 
 function sourceStateClass(row: StrategyPerformanceRow): string {
@@ -199,12 +201,13 @@ function MetricValue({
   value: unknown;
   format: (value: unknown) => string;
 }): JSX.Element {
+  const { t } = useTranslation();
   const measured = finiteNumber(value) !== undefined;
   return (
     <span
       className={measured ? "text-[#f0ece4]" : "italic text-[#8c96a6]"}
       data-metric-state={measured ? "measured" : "not-reported"}
-      title={measured ? (finiteNumber(value) === 0 ? "Measured value: zero" : "Measured value") : "No measurement was reported by the BFF"}
+      title={measured ? (finiteNumber(value) === 0 ? t("agora.performance.measuredZero") : t("agora.performance.measured")) : t("agora.performance.notReportedByBff")}
     >
       {format(value)}
     </span>
@@ -234,14 +237,16 @@ function StrategyKpi({
 }
 
 function EmptyPerformanceState(): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border border-[#2a2e38] bg-[#171b22] p-6 text-sm text-[#8c96a6]">
-      No live strategy performance attribution rows are available from the BFF.
+      {t("agora.performance.empty")}
     </div>
   );
 }
 
 export function StrategyPerformancePage(): JSX.Element {
+  const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
@@ -267,19 +272,19 @@ export function StrategyPerformancePage(): JSX.Element {
       .catch((error: unknown) => {
         if (cancelled) return;
         setState({
-          message: error instanceof Error ? error.message : "Live performance data unavailable.",
+          message: error instanceof Error ? error.message : t("agora.performance.unavailable"),
           status: "error",
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, t]);
 
   if (state.status === "loading") {
     return (
       <section className="flex flex-1 items-center justify-center bg-[#101318] p-6 text-sm text-[#8c96a6]">
-        Loading live strategy performance attribution...
+        {t("agora.performance.loading")}
       </section>
     );
   }
@@ -290,7 +295,7 @@ export function StrategyPerformancePage(): JSX.Element {
         <div className="rounded-md border border-rose-400/35 bg-rose-400/10 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-rose-100">
             <AlertTriangle aria-hidden="true" className="h-4 w-4" />
-            Live performance data unavailable
+            {t("agora.performance.unavailable")}
           </div>
           <p className="mt-2 text-sm text-rose-100/85">{state.message}</p>
           <button
@@ -299,7 +304,7 @@ export function StrategyPerformancePage(): JSX.Element {
             type="button"
           >
             <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-            Refresh
+            {t("agora.performance.refresh")}
           </button>
         </div>
       </section>
@@ -316,6 +321,8 @@ function StrategyPerformanceLoaded({
   data: StrategyPerformanceData;
   onRefresh: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
+  const missing = t("agora.performance.notReported");
   const rows = useMemo(
     () => buildRows(data.aggregate.strategies, data.attribution.data.items),
     [data.aggregate.strategies, data.attribution.data.items],
@@ -325,73 +332,73 @@ function StrategyPerformanceLoaded({
   const telemetryCoverage =
     summary.runtime_count > 0
       ? `${summary.telemetry_runtime_count}/${summary.runtime_count}`
-      : "not reported";
+      : missing;
   const latestTelemetry = cleanText(summary.latest_telemetry_at, data.attribution.meta.snapshot_at);
 
   return (
     <section
-      aria-label="Strategy Performance"
+      aria-label={t("agora.performance.title")}
       className="flex flex-1 flex-col gap-4 overflow-auto bg-[#101318] p-4 text-[#f0ece4] md:p-5"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-[#f0ece4]">Strategy Performance</h1>
+            <h1 className="text-xl font-semibold text-[#f0ece4]">{t("agora.performance.title")}</h1>
             <span className="rounded bg-[#1e293b] border border-[#334155] px-1.5 py-0.5 text-[10px] text-[#94a3b8] uppercase tracking-wide">
-              Execution Scope (Real-Time Feeds)
+              {t("agora.performance.executionScope")}
             </span>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8c96a6]">
-            <span>Period: {summary.period || data.attribution.data.period}</span>
-            <span>Policy: {data.attribution.meta.policy ?? "not reported"}</span>
-            <span>Snapshot: {formatDateTime(latestTelemetry)}</span>
+            <span>{t("agora.performance.period", { value: summary.period || data.attribution.data.period })}</span>
+            <span>{t("agora.performance.policy", { value: data.attribution.meta.policy ?? missing })}</span>
+            <span>{t("agora.performance.snapshot", { value: formatDateTime(latestTelemetry, missing) })}</span>
             <span className="text-[#3b82f6]">
-              For official accounting, see the{" "}
+              {t("agora.performance.officialPrefix")}{" "}
               <Link to={canonicalCenterUrl("performance")} className="underline hover:text-[#60a5fa]">
-                Performance Center
+                {t("performanceCenter.title")}
               </Link>
             </span>
           </div>
         </div>
         <button
-          aria-label="Refresh performance attribution"
+          aria-label={t("agora.performance.refreshAttribution")}
           className="inline-flex h-8 items-center gap-2 rounded-md border border-[#2a2e38] px-3 text-xs font-medium text-[#f0ece4] hover:bg-[#171b22]"
           onClick={onRefresh}
           type="button"
         >
           <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-          Refresh
+          {t("agora.performance.refresh")}
         </button>
       </header>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <StrategyKpi
           icon={Activity}
-          label="Strategies"
+          label={t("agora.performance.strategies")}
           tone="text-[#e8b750]"
           value={String(data.aggregate.strategies.length)}
         />
         <StrategyKpi
           icon={TrendingUp}
-          label="Total PnL"
+          label={t("agora.performance.totalPnl")}
           tone="text-emerald-300"
-          value={formatCurrency(summary.total_pnl)}
+          value={formatCurrency(summary.total_pnl, missing)}
         />
         <StrategyKpi
           icon={TrendingDown}
-          label="Worst Drawdown"
+          label={t("agora.performance.worstDrawdown")}
           tone="text-rose-300"
-          value={formatPercent(summary.worst_drawdown)}
+          value={formatPercent(summary.worst_drawdown, missing)}
         />
         <StrategyKpi
           icon={Database}
-          label="Telemetry Runtime Coverage"
+          label={t("agora.performance.telemetryCoverage")}
           tone="text-sky-300"
           value={telemetryCoverage}
         />
         <StrategyKpi
           icon={Activity}
-          label="Decision Events"
+          label={t("agora.performance.decisionEvents")}
           tone="text-violet-300"
           value={String(data.decisionEvents.length)}
         />
@@ -399,9 +406,9 @@ function StrategyPerformanceLoaded({
 
       <section className="rounded-md border border-[#2a2e38] bg-[#171b22] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-[#f0ece4]">BFF Source Health</h2>
+          <h2 className="text-sm font-semibold text-[#f0ece4]">{t("agora.performance.sourceHealth")}</h2>
           <div className="text-xs text-[#8c96a6]">
-            {summary.returned_row_count} returned rows of {summary.row_count} total
+            {t("agora.performance.returnedRows", { returned: summary.returned_row_count, total: summary.row_count })}
           </div>
         </div>
         {sourceRows.length > 0 ? (
@@ -418,7 +425,7 @@ function StrategyPerformanceLoaded({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-[#8c96a6]">No composition source metadata was returned.</p>
+          <p className="mt-3 text-sm text-[#8c96a6]">{t("agora.performance.noSourceMetadata")}</p>
         )}
       </section>
 
@@ -429,14 +436,14 @@ function StrategyPerformanceLoaded({
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="border-b border-[#2a2e38] text-xs uppercase text-[#8c96a6]">
               <tr>
-                <th className="px-3 py-2 font-medium">Strategy</th>
-                <th className="px-3 py-2 font-medium">Monitoring</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.strategy")}</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.monitoring")}</th>
                 <th className="px-3 py-2 font-medium">PnL</th>
-                <th className="px-3 py-2 font-medium">Contribution</th>
-                <th className="px-3 py-2 font-medium">Drawdown</th>
-                <th className="px-3 py-2 font-medium">Trades</th>
-                <th className="px-3 py-2 font-medium">Telemetry</th>
-                <th className="px-3 py-2 font-medium">Source</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.contribution")}</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.drawdown")}</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.trades")}</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.telemetry")}</th>
+                <th className="px-3 py-2 font-medium">{t("agora.performance.source")}</th>
               </tr>
             </thead>
             <tbody>
@@ -451,41 +458,41 @@ function StrategyPerformanceLoaded({
                           period: summary.period || data.attribution.data.period,
                         })}
                         className="text-[10px] text-[#3b82f6] hover:underline animate-pulse-subtle"
-                        title="View formal attribution in Performance Center"
+                        title={t("agora.performance.openFormalAttribution")}
                       >
-                        [Attribution →]
+                        [{t("agora.performance.attribution")} →]
                       </Link>
                     </div>
                     <div className="mt-1 max-w-[260px] truncate text-xs text-[#8c96a6]">{row.strategyId}</div>
                     {row.description ? (
                       <div className="mt-1 max-w-[300px] text-xs leading-4 text-sky-200" data-testid={`performance-row-${row.id}-description`}>
-                        {row.description}
+                        {row.kind === "attribution_only" ? t(row.description) : row.description}
                       </div>
                     ) : null}
                   </td>
                   <td className="px-3 py-3 align-top">
-                    <div className="text-[#f0ece4]">{row.strategy?.monitoring_state ?? "not linked"}</div>
-                    <div className="mt-1 text-xs text-[#8c96a6]">{row.strategy?.readiness_state ?? row.attribution?.dimension ?? "strategy"}</div>
+                    <div className="text-[#f0ece4]">{row.strategy?.monitoring_state ?? t("agora.performance.notLinked")}</div>
+                    <div className="mt-1 text-xs text-[#8c96a6]">{row.strategy?.readiness_state ?? row.attribution?.dimension ?? t("agora.performance.strategy")}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
-                    <MetricValue value={metric(row, "total_pnl")} format={formatCurrency} />
+                    <MetricValue value={metric(row, "total_pnl")} format={(value) => formatCurrency(value, missing)} />
                   </td>
                   <td className="px-3 py-3 align-top text-[#f0ece4]">
-                    {formatPercent(row.attribution?.pnl_contribution_pct ?? metric(row, "pnl_contribution_pct"))}
+                    {formatPercent(row.attribution?.pnl_contribution_pct ?? metric(row, "pnl_contribution_pct"), missing)}
                   </td>
-                  <td className="px-3 py-3 align-top text-[#f0ece4]">{formatPercent(metric(row, "worst_drawdown"))}</td>
+                  <td className="px-3 py-3 align-top text-[#f0ece4]">{formatPercent(metric(row, "worst_drawdown"), missing)}</td>
                   <td className="px-3 py-3 align-top">
-                    <MetricValue value={metric(row, "total_trades")} format={formatNumber} />
+                    <MetricValue value={metric(row, "total_trades")} format={(value) => formatNumber(value, missing)} />
                   </td>
                   <td className="px-3 py-3 align-top">
                     <div className="text-[#f0ece4]">
-                      {formatNumber(metric(row, "telemetry_runtime_count"))}/{formatNumber(metric(row, "runtime_count"))}
+                      {formatNumber(metric(row, "telemetry_runtime_count"), missing)}/{formatNumber(metric(row, "runtime_count"), missing)}
                     </div>
-                    <div className="mt-1 text-xs text-[#8c96a6]">{formatDateTime(metric(row, "latest_telemetry_at"))}</div>
+                    <div className="mt-1 text-xs text-[#8c96a6]">{formatDateTime(metric(row, "latest_telemetry_at"), missing)}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
                     <span className={cn("inline-flex rounded-md border px-2 py-1 text-xs", sourceStateClass(row))}>
-                      {sourceStateLabel(row)}
+                      {sourceStateLabel(row, t)}
                     </span>
                   </td>
                 </tr>

@@ -13,6 +13,10 @@ const operatorComponents = import.meta.glob("./**/*.tsx", {
 
 const forbiddenAuditLiterals = [
   "Trading Servant Proposal",
+  "All Strategies",
+  "Live workshops",
+  "Position Actions",
+  "Strategy Performance",
   "部分可用",
   "資料狀態需確認:",
   "個 View",
@@ -30,6 +34,9 @@ describe("Agora locale policy", () => {
     expect(Object.keys(zh.agora.tradingRoom.views)).toEqual(Object.keys(en.agora.tradingRoom.views));
     expect(Object.keys(zh.agora.tradingRoom.warnings)).toEqual(Object.keys(en.agora.tradingRoom.warnings));
     expect(Object.keys(zh.agora.tradingRoom.reasons)).toEqual(Object.keys(en.agora.tradingRoom.reasons));
+    expect(Object.keys(zh.agora.tradingRoom.page)).toEqual(Object.keys(en.agora.tradingRoom.page));
+    expect(Object.keys(zh.agora.performance)).toEqual(Object.keys(en.agora.performance));
+    expect(Object.keys(zh.agora.workshop)).toEqual(Object.keys(en.agora.workshop));
   });
 
   it("rejects the mixed-language literals found by the hosted audit", () => {

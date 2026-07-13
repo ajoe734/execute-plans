@@ -1,4 +1,5 @@
 import { CheckCircle2, CircleAlert, CircleDashed, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
@@ -39,6 +40,7 @@ function ReadinessPanel({
   readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
   metadata?: Record<string, unknown>;
 }) {
+  const { t } = useTranslation();
   const readinessRecord = asRecord(readiness);
   const explicitGates = recordList(readinessRecord.gates);
   const metadataGates = stringList(metadata?.readiness_gates);
@@ -51,17 +53,23 @@ function ReadinessPanel({
         : metadataGates.map((gate) => ({ gate }));
 
   return (
-    <Section title="Readiness">
+    <Section title={t("agora.workshop.rail.readiness")}>
       <div className="space-y-2" data-testid={gateRows.length === 0 ? "readiness-gates-empty" : undefined}>
         {gateRows.length === 0 ? (
-          <p className="text-xs text-slate-400">Readiness gates have not been assessed.</p>
+          <p className="text-xs text-slate-400">{t("agora.workshop.rail.readinessEmpty")}</p>
         ) : (
           gateRows.map((gateRecord) => {
             const gate = stringValue(gateRecord.gate, "unknown");
             const state = stringValue(gateRecord.state);
             const passed = booleanValue(gateRecord.passed);
             const isReady = passed === true || state === "ready" || state === "passed";
-            const stateLabel = state ? formatLabel(state) : passed === undefined ? "Not assessed" : passed ? "Passed" : "Blocked";
+            const stateLabel = state
+              ? t(`agora.workshop.values.${state}`, { defaultValue: formatLabel(state) })
+              : passed === undefined
+                ? t("agora.workshop.rail.notAssessed")
+                : passed
+                  ? t("agora.workshop.rail.passed")
+                  : t("agora.workshop.rail.blocked");
             return (
               <div
                 className={cn(
@@ -75,7 +83,7 @@ function ReadinessPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <ShieldCheck className={cn("h-3.5 w-3.5", isReady ? "text-green-600" : "text-slate-400")} />
                   <span className={cn("text-xs font-medium", isReady ? "text-green-900" : "text-slate-800")}>
-                    {formatLabel(gate)}
+                    {t(`agora.workshop.values.${gate}`, { defaultValue: formatLabel(gate) })}
                   </span>
                   <Pill tone={isReady ? "green" : "amber"}>
                     <span data-testid={`readiness-gate-${gate}-state`}>{stateLabel}</span>
@@ -95,6 +103,7 @@ function ReadinessPanel({
 }
 
 function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
+  const { t } = useTranslation();
   if (!card || card.card_type !== "next_question") return null;
 
   const payload = asRecord(card.payload);
@@ -105,7 +114,7 @@ function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
   if (!question && !whyNow && !score) return null;
 
   return (
-    <Section title="Next Question">
+    <Section title={t("agora.workshop.rail.nextQuestion")}>
       <div className="space-y-2" data-testid="next-question-section">
         {question ? (
           <p className="text-xs font-medium leading-5 text-slate-700" data-testid="next-question-text">
@@ -132,13 +141,14 @@ export function StrategyCompletenessRail({
   readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
   nextQuestion?: WorkshopCard | null;
 }) {
+  const { t } = useTranslation();
   const metadata = asRecord(completeness?.metadata);
 
   if (!completeness) {
     return (
       <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
         <div className="flex flex-col items-center justify-center gap-2 p-4 text-center" data-testid="completeness-empty">
-          <p className="text-xs text-slate-400">策略完整度尚未評估</p>
+          <p className="text-xs text-slate-400">{t("agora.workshop.rail.completenessEmpty")}</p>
         </div>
         <ReadinessPanel readiness={readiness} metadata={metadata} />
         <NextQuestionPanel card={nextQuestion} />
@@ -152,26 +162,26 @@ export function StrategyCompletenessRail({
     <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase text-slate-500">Completeness</span>
+          <span className="text-xs font-semibold uppercase text-slate-500">{t("agora.workshop.rail.completeness")}</span>
           <span
             className={cn("text-xs font-semibold", OVERALL_TONE[completeness.overall_grade])}
             data-testid="completeness-overall-grade"
           >
-            {formatLabel(completeness.overall_grade)}
+            {t(`agora.workshop.values.${completeness.overall_grade}`, { defaultValue: formatLabel(completeness.overall_grade) })}
           </span>
         </div>
-        <ProgressBar value={progress} label="Overall completeness" />
+        <ProgressBar value={progress} label={t("agora.workshop.rail.overallCompleteness")} />
       </div>
 
       <KeyValueGrid
         items={[
-          { label: "Research ready", value: completeness.research_ready },
-          { label: "Assessed by", value: completeness.assessed_by_persona_id },
-          { label: "Assessed at", value: completeness.assessed_at },
+          { label: t("agora.workshop.rail.researchReady"), value: completeness.research_ready },
+          { label: t("agora.workshop.rail.assessedBy"), value: completeness.assessed_by_persona_id },
+          { label: t("agora.workshop.rail.assessedAt"), value: completeness.assessed_at },
         ]}
       />
 
-      <Section title="Dimensions">
+      <Section title={t("agora.workshop.rail.dimensions")}>
         <div className="space-y-3">
           {(completeness.dimensions ?? []).map((dim) => (
             <div
@@ -182,10 +192,10 @@ export function StrategyCompletenessRail({
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-700">
                   <DimensionIcon grade={dim.grade} />
-                  <span className="truncate">{formatLabel(dim.dimension)}</span>
+                  <span className="truncate">{t(`agora.workshop.values.${dim.dimension}`, { defaultValue: formatLabel(dim.dimension) })}</span>
                 </span>
                 <Pill tone={dim.grade === "complete" ? "green" : dim.grade === "partial" ? "amber" : "red"}>
-                  <span data-testid={`completeness-dimension-${dim.dimension}-grade`}>{formatLabel(dim.grade)}</span>
+                  <span data-testid={`completeness-dimension-${dim.dimension}-grade`}>{t(`agora.workshop.values.${dim.grade}`, { defaultValue: formatLabel(dim.grade) })}</span>
                 </Pill>
               </div>
               <TextList items={dim.gaps} tone="amber" />
@@ -195,7 +205,7 @@ export function StrategyCompletenessRail({
         </div>
       </Section>
 
-      <Section title="Blockers">
+      <Section title={t("agora.workshop.rail.blockers")}>
         <TextList items={completeness.blockers} tone="red" />
       </Section>
 

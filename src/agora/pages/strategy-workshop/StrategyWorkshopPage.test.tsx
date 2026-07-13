@@ -20,6 +20,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 }));
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import "@/i18n";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 
 const MOCK_WORKSHOP = {
@@ -171,8 +172,8 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.getWorkshop).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith(rawWorkshopId);
-    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("Cards: 1");
-    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("Events: 1");
+    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("卡片：1");
+    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("事件：1");
     expect(screen.queryByText(rawWorkshopId)).toBeNull();
   });
 
@@ -247,7 +248,7 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
-    fireEvent.change(screen.getByPlaceholderText("Message the workshop servant…"), {
+    fireEvent.change(screen.getByPlaceholderText("傳訊息給策略工坊僕人…"), {
       target: { value: "What evidence is missing?" },
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
@@ -313,7 +314,7 @@ describe("StrategyWorkshopPage", () => {
 
     const button = await screen.findByTestId("add-to-trading-room-btn");
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
-    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("missing strategy id");
+    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("缺少策略 ID");
     fireEvent.click(button);
     expect(onAddToTradingRoom).not.toHaveBeenCalled();
   });
