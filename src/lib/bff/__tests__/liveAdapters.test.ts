@@ -8,7 +8,6 @@ import { bffV5 } from "@/lib/bff/v5";
 import { BffError } from "@/lib/bff-v1/errors";
 
 const realFetch = globalThis.fetch;
-const realEventSource = globalThis.EventSource;
 
 function resetLiveMode() {
   vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
@@ -126,84 +125,83 @@ describe("BFF live read adapters", () => {
   });
 });
 
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** `keepOpen: true` simulates the real BFF, which holds the connection open
+ *  (heartbeats every ~30s) instead of closing after a frame — closing here
+ *  would make the transport read as a dropped connection and re-trigger the
+ *  reconnect/fallback path. */
+function sseStreamResponse(frames: string[], { status = 200, keepOpen = false } = {}): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const frame of frames) controller.enqueue(encoder.encode(frame));
+        if (!keepOpen) controller.close();
+      },
+    }),
+    { status, headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
 describe("live SSE realtime bridge", () => {
-  class MockEventSource {
-    static instances: MockEventSource[] = [];
-    url: string;
-    withCredentials?: boolean;
-    listeners = new Map<string, Array<(event: unknown) => void>>();
-    closed = false;
-
-    constructor(url: string, init?: EventSourceInit) {
-      this.url = url;
-      this.withCredentials = init?.withCredentials;
-      MockEventSource.instances.push(this);
-    }
-
-    addEventListener(type: string, handler: (event: unknown) => void) {
-      const current = this.listeners.get(type) ?? [];
-      current.push(handler);
-      this.listeners.set(type, current);
-    }
-
-    close() {
-      this.closed = true;
-    }
-
-    emit(type: string, event: unknown = {}) {
-      for (const handler of this.listeners.get(type) ?? []) handler(event);
-    }
-  }
-
   beforeEach(() => {
-    MockEventSource.instances = [];
     resetLiveMode();
-    vi.stubGlobal("EventSource", MockEventSource);
     _resetLiveSse();
   });
 
   afterEach(() => {
     _resetLiveSse();
-    vi.stubGlobal("EventSource", realEventSource);
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     liveStatus._reset();
     vi.restoreAllMocks();
   });
 
-  it("connects EventSource to /bff/events/stream with channels and Last-Event-Id query replay", () => {
-    const close = connectLiveSse({ channels: ["system"], lastEventId: "evt-prev-1" });
+  it("opens /bff/events/stream via authenticated streaming fetch with channels and Last-Event-Id query replay", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(sseStreamResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
 
-    const instance = MockEventSource.instances[0];
-    const url = new URL(instance.url, "https://bff.example.test");
+    const close = connectLiveSse({ channels: ["system"], lastEventId: "evt-prev-1" });
+    await flush();
+
+    const [requestUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const url = new URL(requestUrl, "https://bff.example.test");
     expect(url.pathname).toBe("/bff/events/stream");
     expect(url.searchParams.get("channels")).toBe("system");
     expect(url.searchParams.get("lastEventId")).toBe("evt-prev-1");
-    expect(instance.withCredentials).toBe(true);
+    expect((init.headers as Record<string, string>).Accept).toBe("text/event-stream");
+    expect(init.credentials).toBe("include");
 
     close();
-    expect(instance.closed).toBe(true);
+    expect((init.signal as AbortSignal).aborted).toBe(true);
   });
 
-  it("updates realtime status and bridges live SSE envelopes onto legacy data listeners", () => {
+  it("updates realtime status and bridges live SSE envelopes onto legacy data listeners", async () => {
     const seen: unknown[] = [];
     const off = realtime.on("data", (payload) => seen.push(payload));
+    const envelope = {
+      schemaVersion: 1,
+      id: "evt-live-1",
+      channel: "system",
+      type: "system.heartbeat",
+      occurredAt: "2026-05-09T10:00:00Z",
+      payload: {},
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseStreamResponse(
+        [`id: evt-live-1\nevent: system.heartbeat\ndata: ${JSON.stringify(envelope)}\n\n`],
+        { keepOpen: true },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
     connectLiveSse({ channels: ["system"] });
-    const instance = MockEventSource.instances[0];
+    await flush();
 
-    instance.emit("open");
     expect(realtime.getStatus()).toBe("live");
-
-    instance.emit("message", {
-      data: JSON.stringify({
-        schemaVersion: 1,
-        id: "evt-live-1",
-        channel: "system",
-        type: "system.heartbeat",
-        occurredAt: "2026-05-09T10:00:00Z",
-        payload: {},
-      }),
-    });
-
     expect(realtime.getLastEventId()).toBe("evt-live-1");
     expect(seen[0]).toMatchObject({ kind: "system", channel: "system", type: "system.heartbeat" });
     off();
