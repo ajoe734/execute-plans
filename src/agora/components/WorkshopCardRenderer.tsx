@@ -66,6 +66,30 @@ function ServantReconstruction({ payload, t }: { payload: UnknownRecord; t: TFun
         ]}
       />
 
+      {payload.strategy_core || payload.strategy_core_summary ? (
+        <Section title={t("agora.workshop.cardLabels.strategy_core") || "Understood Strategy Core"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.strategy_core ?? payload.strategy_core_summary)}</p>
+        </Section>
+      ) : null}
+
+      {payload.research_subproblems || payload.subproblems ? (
+        <Section title={t("agora.workshop.cardLabels.research_subproblems") || "Research Subproblems"}>
+          <TextList items={payload.research_subproblems ?? payload.subproblems} />
+        </Section>
+      ) : null}
+
+      {payload.recognized_components || payload.components ? (
+        <Section title={t("agora.workshop.cardLabels.recognized_components") || "Recognized Components"}>
+          <TextList items={payload.recognized_components ?? payload.components} />
+        </Section>
+      ) : null}
+
+      {payload.non_assertable_claims || payload.unasserted_claims ? (
+        <Section title={t("agora.workshop.cardLabels.non_assertable_claims") || "Claims That Cannot Yet Be Asserted"} tone="amber">
+          <TextList items={payload.non_assertable_claims ?? payload.unasserted_claims} tone="amber" />
+        </Section>
+      ) : null}
+
       {causalChain.length > 0 ? (
         <Section title={t("agora.workshop.cardLabels.causal_chain")}>
           <ol className="space-y-3">
@@ -372,6 +396,92 @@ function ResearchResult({ payload, t }: { payload: UnknownRecord; t: TFunction }
         <BackendModeBadge mode={backend.mode ?? payload.backend_mode} />
         <NoOrderRouteBadge value={payload.no_order_route_proof} />
       </div>
+
+      {payload.research_method || payload.methodology ? (
+        <Section title={t("agora.workshop.cardLabels.methodology") || "Research Methodology"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.research_method ?? payload.methodology)}</p>
+        </Section>
+      ) : null}
+
+      {payload.sample_period || payload.sample_size || payload.confidence_level || payload.confidence ? (
+        <KeyValueGrid
+          items={[
+            { label: t("agora.workshop.cardLabels.sample_period") || "Sample Period", value: payload.sample_period ?? payload.sample_size },
+            { label: t("agora.workshop.cardLabels.confidence_level") || "Confidence Level", value: payload.confidence_level ?? payload.confidence },
+          ]}
+        />
+      ) : null}
+
+      {payload.evidence ? (
+        <Section title={t("agora.workshop.cardLabels.evidence") || "Evidence Proofs"}>
+          <TextList items={payload.evidence} />
+        </Section>
+      ) : null}
+
+      {payload.conclusions ? (
+        <Section title={t("agora.workshop.cardLabels.conclusions") || "Research Conclusions"}>
+          <TextList items={payload.conclusions} />
+        </Section>
+      ) : null}
+
+      {payload.caveats ? (
+        <Section title={t("agora.workshop.cardLabels.caveats") || "Caveats & Limitations"} tone="amber">
+          <TextList items={payload.caveats} tone="amber" />
+        </Section>
+      ) : null}
+
+      {/* Winner Branch Details */}
+      {payload.branch_mapping ? (
+        <Section title={t("agora.workshop.cardLabels.branch_mapping") || "Relationship & Branch Mapping"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.branch_mapping)}</p>
+        </Section>
+      ) : null}
+
+      {payload.winner_branch_score || payload.winner_branch_versions ? (
+        <KeyValueGrid
+          items={[
+            { label: t("agora.workshop.cardLabels.winner_branch_score") || "Winner Branch Score", value: payload.winner_branch_score },
+            { label: t("agora.workshop.cardLabels.winner_branch_versions") || "Score Versions", value: payload.winner_branch_versions },
+          ]}
+        />
+      ) : null}
+
+      {payload.branch_migration ? (
+        <Section title={t("agora.workshop.cardLabels.branch_migration") || "Branch Migration Flow"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.branch_migration)}</p>
+        </Section>
+      ) : null}
+
+      {payload.event_lead_analysis ? (
+        <Section title={t("agora.workshop.cardLabels.event_lead_analysis") || "Event Lead Analysis"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.event_lead_analysis)}</p>
+        </Section>
+      ) : null}
+
+      {payload.probability_ev ? (
+        <Section title={t("agora.workshop.cardLabels.probability_ev") || "Probability & Expected Value (EV) Analysis"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.probability_ev)}</p>
+        </Section>
+      ) : null}
+
+      {payload.position_sizing_capacity ? (
+        <Section title={t("agora.workshop.cardLabels.position_sizing_capacity") || "Position Sizing & Capacity Constraints"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.position_sizing_capacity)}</p>
+        </Section>
+      ) : null}
+
+      {payload.literature_analogue || payload.similar_alpha ? (
+        <Section title={t("agora.workshop.cardLabels.literature_analogue") || "Literature & Similar Alpha Analogues"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.literature_analogue ?? payload.similar_alpha)}</p>
+        </Section>
+      ) : null}
+
+      {payload.backtest_robustness ? (
+        <Section title={t("agora.workshop.cardLabels.backtest_robustness") || "Backtest Robustness & Failure Modes"}>
+          <p className="text-xs leading-5 text-slate-700">{stringValue(payload.backtest_robustness)}</p>
+        </Section>
+      ) : null}
+
       <MetricGroups payload={payload} t={t} />
       <FindingList items={payload.findings} t={t} />
       <Section title={t("agora.workshop.cardLabels.warnings")}>
