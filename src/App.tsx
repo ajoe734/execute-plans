@@ -9,7 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { lazyNamedRoute, lazyRoute } from "@/routes/lazyRoute";
 import { LegacyPromotionAllocationRedirect } from "@/routes/management/legacyPromotionAllocationRedirect";
-import { ManagementCanonicalRedirect, PromotionAllocationLegacyGate } from "@/routes/management/managementCanonicalRedirect";
+import { ManagementCanonicalRedirect } from "@/routes/management/managementCanonicalRedirect";
 
 const queryClient = new QueryClient();
 
@@ -74,15 +74,6 @@ const GovernanceDecisionsRoute = lazyNamedRoute(
   "GovernanceDecisionsRoute",
   "Governance decisions",
 );
-// Kept only as the legacy-only render target for promotion-allocation's
-// emergency-actions tab (PromotionAllocationLegacyGate below); every other
-// tab and the bare route redirect to the canonical centers.
-const PromotionAllocationRoute = lazyNamedRoute(
-  () => import("@/routes/management/performance"),
-  "PromotionAllocationRoute",
-  "Promotion allocation",
-);
-
 const Ep5CanaryReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "Ep5CanaryReadinessRoute", "EP5 readiness");
 const BrokerLiveReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BrokerLiveReadinessRoute", "Broker live readiness");
 const BffHaReadinessRoute = lazyNamedRoute(() => import("@/routes/management/readiness"), "BffHaReadinessRoute", "BFF HA readiness");
@@ -241,12 +232,7 @@ const App = () => (
                 <Route path="rankings" element={<RankingsCenterRoute />} />
                 <Route path="governance-decisions" element={<GovernanceDecisionsRoute />} />
                 <Route path="portfolio-book" element={<ManagementCanonicalRedirect />} />
-                {/* PPL-ALLOC-006's emergency-actions tab has no canonical-center
-                    home yet; every other tab (and the bare route) redirects. */}
-                <Route
-                  path="promotion-allocation"
-                  element={<PromotionAllocationLegacyGate legacyPage={<PromotionAllocationRoute />} />}
-                />
+                <Route path="promotion-allocation" element={<ManagementCanonicalRedirect />} />
                 <Route path="persona-league" element={<ManagementCanonicalRedirect />} />
                 <Route path="quarterly-ranking" element={<ManagementCanonicalRedirect />} />
                 <Route path="performance-attribution" element={<ManagementCanonicalRedirect />} />

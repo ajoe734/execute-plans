@@ -2,8 +2,8 @@
 // route manifest (src/management/navigation/managementRouteManifest.ts).
 // Replaces one-off `<Navigate>` routes for every bare legacy alias that the
 // route migration matrix folds into a canonical center + tab.
-import { useEffect, type ReactNode } from "react";
-import { Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { resolveLegacyRedirect } from "@/management/navigation/managementRouteManifest";
 
 export function ManagementCanonicalRedirect() {
@@ -19,19 +19,4 @@ export function ManagementCanonicalRedirect() {
     }));
   }, [pathname, search, target]);
   return <Navigate to={target} replace />;
-}
-
-// PPL-ALLOC-006 added an `emergency-actions` tab to the legacy Promotion &
-// Allocation page after ROUTE_MIGRATION_MATRIX.md was written; that tab has
-// no canonical-center destination yet, so /management/promotion-allocation
-// keeps rendering the legacy page directly for it instead of redirecting.
-// Every other tab (and the bare route) still redirects per the manifest.
-const PROMOTION_ALLOCATION_LEGACY_ONLY_TABS = new Set(["emergency-actions", "emergency", "containment"]);
-
-export function PromotionAllocationLegacyGate({ legacyPage }: { legacyPage: ReactNode }) {
-  const [params] = useSearchParams();
-  if (PROMOTION_ALLOCATION_LEGACY_ONLY_TABS.has(params.get("tab") ?? "")) {
-    return <>{legacyPage}</>;
-  }
-  return <ManagementCanonicalRedirect />;
 }

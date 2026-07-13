@@ -269,7 +269,13 @@ function displayFleetState(r: ManagementPersonaFleetRow): string {
   return state;
 }
 
-function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined {
+type FleetCapitalBinding = {
+  kind: "paper_ledger" | "canary_sleeve" | "real_sleeve" | "capital_pool" | "unbound";
+  label: string;
+  id?: string;
+};
+
+function fleetCapitalBinding(r: ManagementPersonaFleetRow): FleetCapitalBinding {
   const raw = r as ManagementPersonaFleetRow & {
     capital_pool_id?: string;
     paper_capital_pool_id?: string;
@@ -279,8 +285,10 @@ function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined
     paperLedger?: { id?: string };
   };
   const mode = fleetCapitalMode(r);
-  if (mode === "paper") {
-    return r.paperLedgerId
+  const declaredScope = String(r.capitalScope ?? "").trim().toLowerCase();
+  if (mode === "paper" || declaredScope === "paper_ledger") {
+    return { kind: "paper_ledger", label: "Paper ledger", id: r.capitalScopeId
+      ?? r.paperLedgerId
       ?? raw.paper_ledger_id
       ?? r.paperLedger?.id
       ?? raw.paper_ledger?.id
@@ -288,9 +296,16 @@ function fleetCapitalReference(r: ManagementPersonaFleetRow): string | undefined
       ?? raw.paper_capital_pool_id
       ?? raw.legacy_paper_capital_pool_id
       ?? r.capitalPoolId
-      ?? raw.capital_pool_id;
+      ?? raw.capital_pool_id };
   }
-  return r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
+  if (mode === "canary" || declaredScope === "canary_sleeve") {
+    return { kind: "canary_sleeve", label: "Canary sleeve", id: r.capitalScopeId ?? r.capitalSleeveId ?? r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id };
+  }
+  if (mode === "live" || declaredScope === "live_sleeve") {
+    return { kind: "real_sleeve", label: "Real sleeve", id: r.capitalScopeId ?? r.capitalSleeveId ?? r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id };
+  }
+  const id = r.capitalScopeId ?? r.capitalPoolId ?? raw.capital_pool_id ?? r.capitalPool?.id;
+  return id ? { kind: "capital_pool", label: "Capital pool", id } : { kind: "unbound", label: "Unbound" };
 }
 
 function fleetRuntimeHealth(r: ManagementPersonaFleetRow): string | undefined {
@@ -692,7 +707,7 @@ export const PersonaFleetPage = () => {
               const artifactLabel = primaryResearch?.artifactId;
               const oodaHref = personaFleetOodaHref(r, primaryResearch);
               const capitalMode = fleetCapitalMode(r);
-              const capitalReference = fleetCapitalReference(r);
+              const capitalBinding = fleetCapitalBinding(r);
               const capitalHref = personaFleetCapitalHref(r);
               const runtimeHealth = fleetRuntimeHealth(r);
               const leagueRank = fleetLeagueRank(r);
@@ -753,20 +768,21 @@ export const PersonaFleetPage = () => {
 	                          </Badge>
 	                        )}
 	                      </div>
-	                      {capitalReference && (
+	                      <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{capitalBinding.label}</div>
+	                      {capitalBinding.id && (
 	                        capitalHref ? (
 	                          <Link
 	                            to={capitalHref}
 	                            aria-label={`Open capital for ${r.personaId}`}
 	                            className={fieldLinkClass("mt-1 flex max-w-[210px] items-center gap-1 truncate font-mono text-xs text-muted-foreground hover:text-primary")}
-	                            title={capitalReference}
+	                            title={`${capitalBinding.label}: ${capitalBinding.id}`}
 	                          >
-	                            <span className="truncate">{capitalReference}</span>
+	                            <span className="truncate">{capitalBinding.id}</span>
 	                            <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden="true" />
 	                          </Link>
 	                        ) : (
-	                          <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={capitalReference}>
-	                            {capitalReference}
+	                          <div className="mt-1 max-w-[190px] truncate font-mono text-xs text-muted-foreground" title={`${capitalBinding.label}: ${capitalBinding.id}`}>
+	                            {capitalBinding.id}
 	                          </div>
 	                        )
 	                      )}
