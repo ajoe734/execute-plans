@@ -351,7 +351,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main
-          className="flex-1 overflow-auto"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
           data-testid="trading-desk-main"
           id="trading-desk-content"
         >

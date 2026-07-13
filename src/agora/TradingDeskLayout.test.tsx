@@ -80,6 +80,16 @@ describe("TradingDeskLayout", () => {
     expect(screen.getByTestId("trading-desk-main")).toBeDefined();
   });
 
+  it("designates the main content region as the only page-level scroll owner", () => {
+    renderTradingDesk();
+    const shell = screen.getByTestId("trading-desk-shell");
+    const main = screen.getByTestId("trading-desk-main");
+
+    expect(shell.className).toContain("overflow-hidden");
+    expect(main.className).toContain("overflow-y-auto");
+    expect(main.className).toContain("overflow-x-hidden");
+  });
+
   it("toggles the servant drawer open and closed", () => {
     renderTradingDesk();
     expect(screen.queryByTestId("trading-desk-servant-drawer")).toBeNull();
