@@ -73,11 +73,11 @@ function formatPercent(value: unknown, missing = "not reported"): string {
   return `${normalized.toFixed(2)}%`;
 }
 
-function formatDateTime(value: unknown, missing = "not reported"): string {
+function formatDateTime(value: unknown, missing = "not reported", locale = "en-US"): string {
   if (typeof value !== "string" || !value.trim()) return missing;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-US", {
+  return parsed.toLocaleString(locale, {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
@@ -321,7 +321,7 @@ function StrategyPerformanceLoaded({
   data: StrategyPerformanceData;
   onRefresh: () => void;
 }): JSX.Element {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const missing = t("agora.performance.notReported");
   const rows = useMemo(
     () => buildRows(data.aggregate.strategies, data.attribution.data.items),
@@ -351,7 +351,7 @@ function StrategyPerformanceLoaded({
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8c96a6]">
             <span>{t("agora.performance.period", { value: summary.period || data.attribution.data.period })}</span>
             <span>{t("agora.performance.policy", { value: data.attribution.meta.policy ?? missing })}</span>
-            <span>{t("agora.performance.snapshot", { value: formatDateTime(latestTelemetry, missing) })}</span>
+            <span>{t("agora.performance.snapshot", { value: formatDateTime(latestTelemetry, missing, i18n.resolvedLanguage) })}</span>
             <span className="text-[#3b82f6]">
               {t("agora.performance.officialPrefix")}{" "}
               <Link to={canonicalCenterUrl("performance")} className="underline hover:text-[#60a5fa]">
@@ -488,7 +488,7 @@ function StrategyPerformanceLoaded({
                     <div className="text-[#f0ece4]">
                       {formatNumber(metric(row, "telemetry_runtime_count"), missing)}/{formatNumber(metric(row, "runtime_count"), missing)}
                     </div>
-                    <div className="mt-1 text-xs text-[#8c96a6]">{formatDateTime(metric(row, "latest_telemetry_at"), missing)}</div>
+                    <div className="mt-1 text-xs text-[#8c96a6]">{formatDateTime(metric(row, "latest_telemetry_at"), missing, i18n.resolvedLanguage)}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
                     <span className={cn("inline-flex rounded-md border px-2 py-1 text-xs", sourceStateClass(row))}>
