@@ -426,13 +426,14 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     // Link 3: Capital pool
     console.log("Clicking Capital pool link...");
     await formalRow.locator('[aria-label="Open capital for persona-formal-mut" i]').click();
-    console.log("Expecting URL to match Governance Decisions capital tab...");
-    // MGMT-PERF-IA-001: promotion-allocation?tab=quarterly-capital now
-    // redirects to the canonical Governance Decisions capital tab
-    // (ROUTE_MIGRATION_MATRIX.md).
-    await expect(page).toHaveURL(/\/management\/governance-decisions\?tab=capital/);
-    console.log("Waiting for Quarterly Capital page content to load...");
-    await expect(page.getByRole("heading", { name: "資金池", level: 1 })).toBeAttached({ timeout: 15_000 });
+    console.log("Expecting URL to match focused Performance capital overview...");
+    await expect(page).toHaveURL(
+      /\/management\/performance\?tab=overview&persona_id=persona-formal-mut&capital_pool_id=pool-formal/,
+    );
+    console.log("Waiting for Performance Center to load...");
+    await expect(
+      page.getByRole("heading", { name: /績效中心|Performance Center/i, level: 1 }),
+    ).toBeAttached({ timeout: 15_000 });
     console.log("Capturing screenshot 04...");
     await captureScreenshot(page, "04-target-capital-pool");
 

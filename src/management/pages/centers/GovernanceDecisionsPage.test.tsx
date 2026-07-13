@@ -96,6 +96,35 @@ describe("Governance Decisions — recommendations queue", () => {
   });
 });
 
+describe("Governance Decisions — capital queue", () => {
+  beforeEach(() => {
+    mocks.useV5Live.mockReset();
+  });
+
+  it("keeps broker disconnect and sentinel containment items visible after the legacy route redirect", () => {
+    const containmentItems: HumanInboxItem[] = [
+      {
+        ...recommendationItem,
+        id: "broker_disconnect:kraken",
+        kind: "broker_disconnect",
+        title: "Kraken disconnected",
+      },
+      {
+        ...recommendationItem,
+        id: "sentinel:drawdown",
+        kind: "sentinel",
+        title: "Drawdown sentinel fired",
+      },
+    ];
+    mocks.useV5Live.mockReturnValue({ data: containmentItems, loading: false, refresh: vi.fn() });
+
+    renderPage("/management/governance-decisions?tab=capital");
+
+    expect(screen.getByText("Kraken disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Drawdown sentinel fired")).toBeInTheDocument();
+  });
+});
+
 describe("deriveGovernanceDecisionState", () => {
   it("derives blocked from canProceed/blockingReasons regardless of status", () => {
     expect(deriveGovernanceDecisionState({ status: "review", canProceed: false, blockingReasons: ["missing evidence"] }))
