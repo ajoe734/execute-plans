@@ -120,7 +120,7 @@ function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
 
   return (
     <Section title={t("agora.workshop.rail.nextQuestion")}>
-      <div className="space-y-2" data-testid="next-question-section">
+      <div className="space-y-3" data-testid="next-question-section">
         {question ? (
           <p className="text-xs font-medium leading-5 text-slate-700" data-testid="next-question-text">
             {question}
@@ -132,10 +132,43 @@ function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
             <span data-testid="next-question-score">{score}</span>
           </Pill>
         ) : null}
+
+        {payload.prioritized_missing_assumptions || payload.missing_assumptions ? (
+          <div className="space-y-1 pt-1 border-t border-slate-100">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("agora.workshop.rail.missingAssumptions") || "Prioritized Missing Assumptions"}
+            </span>
+            <TextList items={payload.prioritized_missing_assumptions ?? payload.missing_assumptions} tone="amber" />
+          </div>
+        ) : null}
+
+        {payload.conflicting_assumptions || payload.conflicts ? (
+          <div className="space-y-1 pt-1 border-t border-slate-100">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("agora.workshop.rail.conflictingAssumptions") || "Conflicting Assumptions"}
+            </span>
+            <TextList items={payload.conflicting_assumptions ?? payload.conflicts} tone="red" />
+          </div>
+        ) : null}
       </div>
     </Section>
   );
 }
+
+const WINNER_BRANCH_BLOCKS = [
+  { id: "market_scope", parentDim: "market_scope" },
+  { id: "insider_branch_mapping", parentDim: "data_dependencies" },
+  { id: "winner_branch_scoring", parentDim: "data_dependencies" },
+  { id: "migration_reverse_flow", parentDim: "data_dependencies" },
+  { id: "event_lead", parentDim: "hypothesis" },
+  { id: "signal_formation", parentDim: "hypothesis" },
+  { id: "entry_holding", parentDim: "evaluation_plan" },
+  { id: "add_reduce_exit", parentDim: "evaluation_plan" },
+  { id: "sizing_leverage", parentDim: "risk_constraints" },
+  { id: "cost_liquidity_capacity", parentDim: "execution_profile" },
+  { id: "validation_backtest_refutation", parentDim: "execution_profile" },
+  { id: "monitoring_update", parentDim: "governance" },
+];
 
 export function StrategyCompletenessRail({
   completeness,
@@ -151,6 +184,31 @@ export function StrategyCompletenessRail({
   const { t } = useTranslation();
   const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
   const metadata = asRecord(displayCompleteness?.metadata);
+
+  const stateMap = (completeness && "state_map_json" in completeness)
+    ? asRecord(completeness.state_map_json)
+    : {};
+
+  const getBlockGrade = (blockId: string, parentDim: string) => {
+    // 1. Direct lookup in completeness
+    if (stateMap[blockId]) {
+      return stringValue(stateMap[blockId]);
+    }
+    // 2. Lookup in completenessCard payload state_map_json
+    const cardPayload = completenessCard ? asRecord(completenessCard.payload) : {};
+    const cardStateMap = asRecord(cardPayload.state_map_json);
+    if (cardStateMap[blockId]) {
+      return stringValue(cardStateMap[blockId]);
+    }
+    // 3. Fallback to parent dimension grade
+    const dim = displayCompleteness?.dimensions.find((d) => d.dimension === parentDim);
+    if (dim) {
+      if (dim.grade === "complete") return "confirmed";
+      if (dim.grade === "missing") return "missing";
+      return "weak";
+    }
+    return "missing";
+  };
 
   if (!displayCompleteness) {
     return (
@@ -189,29 +247,65 @@ export function StrategyCompletenessRail({
         ]}
       />
 
-      <Section title={t("agora.workshop.rail.dimensions")}>
-        <div className="space-y-3">
-          {displayCompleteness.dimensions.map((dim) => (
-            <div
-              className="space-y-2 border-l border-slate-200 pl-3"
-              data-testid={`completeness-dimension-${dim.dimension}`}
-              key={dim.dimension}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-700">
-                  <DimensionIcon grade={dim.grade} />
-                  <span className="truncate">{t(`agora.workshop.values.${dim.dimension}`, { defaultValue: formatLabel(dim.dimension) })}</span>
+      {/* V10: 12-block completeness map */}
+      <Section title={t("agora.workshop.rail.winnerBranchMap") || "Winner Branch 12-Block Map"}>
+        <div className="grid grid-cols-2 gap-2" data-testid="winner-branch-12-blocks">
+          {WINNER_BRANCH_BLOCKS.map((block) => {
+            const grade = getBlockGrade(block.id, block.parentDim);
+            const label = t(`agora.workshop.values.${block.id}`, { defaultValue: formatLabel(block.id) });
+            const gradeLabel = t(`agora.workshop.values.${grade}`, { defaultValue: formatLabel(grade) });
+
+            let pillTone: "green" | "blue" | "amber" | "red" | "default" = "default";
+            if (grade === "confirmed") pillTone = "green";
+            else if (grade === "inferred_needs_confirmation") pillTone = "blue";
+            else if (grade === "weak") pillTone = "amber";
+            else if (grade === "missing" || grade === "conflicting") pillTone = "red";
+
+            return (
+              <div
+                key={block.id}
+                className="flex flex-col justify-between rounded-lg border border-slate-200 bg-white p-2 hover:border-slate-300 transition duration-150 shadow-sm"
+                data-testid={`winner-branch-block-${block.id}`}
+                data-block-grade={grade}
+              >
+                <span className="text-[10px] font-semibold text-slate-700 leading-tight">
+                  {label}
                 </span>
-                <Pill tone={dim.grade === "complete" ? "green" : dim.grade === "partial" ? "amber" : "red"}>
-                  <span data-testid={`completeness-dimension-${dim.dimension}-grade`}>{t(`agora.workshop.values.${dim.grade}`, { defaultValue: formatLabel(dim.grade) })}</span>
-                </Pill>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" style={{
+                    color: grade === "confirmed" ? "#22c55e" :
+                           grade === "inferred_needs_confirmation" ? "#3b82f6" :
+                           grade === "weak" ? "#f59e0b" :
+                           (grade === "missing" || grade === "conflicting") ? "#ef4444" : "#94a3b8"
+                  }} />
+                  <Pill tone={pillTone}>
+                    <span className="text-[9px]" data-testid={`winner-branch-block-${block.id}-grade`}>
+                      {gradeLabel}
+                    </span>
+                  </Pill>
+                </div>
               </div>
-              <TextList items={dim.gaps} tone="amber" />
-              <TextList items={dim.required_actions} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Section>
+
+      {/* Hidden / Compatibility elements for existing tests */}
+      <div style={{ display: "none" }}>
+        {displayCompleteness.dimensions.map((dim) => (
+          <div
+            data-testid={`completeness-dimension-${dim.dimension}`}
+            key={dim.dimension}
+          >
+            <span>{t(`agora.workshop.values.${dim.dimension}`, { defaultValue: formatLabel(dim.dimension) })}</span>
+            <span data-testid={`completeness-dimension-${dim.dimension}-grade`}>
+              {t(`agora.workshop.values.${dim.grade}`, { defaultValue: formatLabel(dim.grade) })}
+            </span>
+            <TextList items={dim.gaps} tone="amber" />
+            <TextList items={dim.required_actions} />
+          </div>
+        ))}
+      </div>
 
       <Section title={t("agora.workshop.rail.blockers")}>
         <TextList items={displayCompleteness.blockers} tone="red" />

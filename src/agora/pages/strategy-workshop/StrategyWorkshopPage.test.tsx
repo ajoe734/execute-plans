@@ -16,6 +16,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
   listWorkshopEvents: vi.fn().mockResolvedValue({ items: [] }),
+  createWorkshop: vi.fn().mockResolvedValue(null),
   postWorkshopMessage: vi.fn().mockResolvedValue({
     message_id: "msg-001",
     workshop_id: "ws-abc",
@@ -440,5 +441,99 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshops).mockReturnValue(new Promise(() => {}));
     render(<StrategyWorkshopPage />);
     expect(workshopsModule.listWorkshops).toHaveBeenCalled();
+  });
+
+  it("renders the NewWorkshopForm when clicking the New Strategy button and handles creation", async () => {
+    vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([MOCK_WORKSHOP]);
+    vi.mocked(workshopsModule.createWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      workshop_id: "ws-new-created",
+      subject: {
+        kind: "free_form",
+        ref: "user_123",
+        title: "Test Created Strategy",
+      },
+    });
+
+    render(<StrategyWorkshopPage />);
+
+    // Click the "+ New Strategy" button
+    const newBtn = await screen.findByTestId("new-workshop-btn");
+    fireEvent.click(newBtn);
+
+    // Form should be visible
+    expect(screen.getByTestId("new-workshop-form")).toBeDefined();
+
+    // Fill the inputs
+    const nameInput = screen.getByPlaceholderText("例如: 波動度縮減勝出分支突破策略");
+    const descInput = screen.getByPlaceholderText("請詳細描述策略邏輯、交易標的、進出場條件與風險管理方式...");
+
+    fireEvent.change(nameInput, { target: { value: "Test Created Strategy" } });
+    fireEvent.change(descInput, { target: { value: "Detailed professional strategy description here." } });
+
+    // Submit
+    const submitBtn = screen.getByTestId("start-discussion-btn");
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith({
+        subject: {
+          kind: "free_form",
+          ref: expect.stringContaining("user_"),
+          title: "Test Created Strategy",
+        },
+        metadata: {
+          strategy_name: "Test Created Strategy",
+          description: "Detailed professional strategy description here.",
+        },
+      });
+    });
+  });
+
+  it("renders all 12 Winner Branch blocks in the completeness rail", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue({
+      ...LIVE_COMPLETENESS_SNAPSHOT,
+      overall_grade: "complete",
+      state_map_json: {
+        market_scope: "confirmed",
+        insider_branch_mapping: "confirmed",
+        winner_branch_scoring: "confirmed",
+        migration_reverse_flow: "confirmed",
+        event_lead: "confirmed",
+        signal_formation: "confirmed",
+        entry_holding: "confirmed",
+        add_reduce_exit: "confirmed",
+        sizing_leverage: "confirmed",
+        cost_liquidity_capacity: "confirmed",
+        validation_backtest_refutation: "confirmed",
+        monitoring_update: "confirmed",
+      },
+    });
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    // Verify all 12 block elements exist
+    const blockIds = [
+      "market_scope",
+      "insider_branch_mapping",
+      "winner_branch_scoring",
+      "migration_reverse_flow",
+      "event_lead",
+      "signal_formation",
+      "entry_holding",
+      "add_reduce_exit",
+      "sizing_leverage",
+      "cost_liquidity_capacity",
+      "validation_backtest_refutation",
+      "monitoring_update",
+    ];
+
+    for (const id of blockIds) {
+      const blockEl = await screen.findByTestId(`winner-branch-block-${id}`);
+      expect(blockEl).toBeDefined();
+      expect(blockEl.getAttribute("data-block-grade")).toBe("confirmed");
+    }
   });
 });

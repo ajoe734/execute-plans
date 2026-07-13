@@ -10,6 +10,7 @@ import {
   listWorkshopEvents,
   postWorkshopMessage,
   openWorkshopStream,
+  createWorkshop,
   type WorkshopCard,
   type WorkshopCompleteness,
   type StrategyReadinessAssessment,
@@ -177,6 +178,145 @@ function cardReducer(state: CardState, action: CardAction): CardState {
 // Workshop list view
 // ---------------------------------------------------------------------------
 
+interface NewWorkshopFormProps {
+  onCreated: (workshopId: string) => void;
+}
+
+function NewWorkshopForm({ onCreated }: NewWorkshopFormProps): JSX.Element {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const examples = [
+    {
+      name: "Winner Branch Trend Following",
+      desc: "Apply a volatility-scaled trend following strategy on liquid tech stock futures. Entry signal is based on ATR breakout of a 14-day channel. Capital allocation is managed dynamically using inverse volatility to maintain risk parity.",
+    },
+    {
+      name: "Mean Reversion on Major ETFs",
+      desc: "Bollinger Band mean reversion strategy entering when price deviates by more than 2 standard deviations from the 20-day moving average. Position sizing is scaled linearly with deviation amplitude, capped at 10% capital per sleeve.",
+    },
+    {
+      name: "Pairs Trading with Kalman Filter",
+      desc: "Pairs trading strategy on highly correlated commodity futures, calculating a dynamic hedge ratio using a Kalman filter. Exits when the spread converges to the mean or if the hedge ratio drifts past limits.",
+    },
+  ];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !description.trim()) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const ws = await createWorkshop({
+        subject: {
+          kind: "free_form",
+          ref: `user_${Date.now()}`,
+          title: name.trim(),
+        },
+        metadata: {
+          strategy_name: name.trim(),
+          description: description.trim(),
+        },
+      });
+      onCreated(ws.workshop_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create workshop");
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col overflow-auto bg-slate-950 text-slate-100 p-8" data-testid="new-workshop-form">
+      <div className="max-w-2xl mx-auto w-full space-y-8">
+        <div className="border-b border-slate-800 pb-4">
+          <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+            {t("agora.workshop.newStrategyTitle") || "建立新策略工作坊"}
+          </h2>
+          <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+            請輸入策略名稱與專業描述以啟動僕人引導討論與評估。
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+              {t("agora.workshop.strategyNameLabel") || "策略名稱"}
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例如: 波動度縮減勝出分支突破策略"
+              className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none transition-colors duration-200"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+              {t("agora.workshop.strategyDescLabel") || "專業策略描述"}
+            </label>
+            <textarea
+              required
+              rows={6}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="請詳細描述策略邏輯、交易標的、進出場條件與風險管理方式..."
+              className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none transition-colors duration-200 resize-none leading-relaxed"
+            />
+          </div>
+
+          {error && (
+            <div className="text-xs font-semibold text-rose-400 bg-rose-950/30 border border-rose-900/50 rounded-lg p-3" data-testid="new-workshop-error">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim() || !description.trim()}
+              className="rounded-lg bg-blue-600 px-5 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-blue-500 active:bg-blue-700 disabled:bg-slate-900 disabled:text-slate-600 transition-colors duration-200 shadow-lg shadow-blue-500/10 cursor-pointer disabled:cursor-not-allowed"
+              data-testid="start-discussion-btn"
+            >
+              {isSubmitting ? "建立中..." : t("agora.workshop.startDiscussion") || "開始討論"}
+            </button>
+          </div>
+        </form>
+
+        <div className="border-t border-slate-850 pt-8 space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            {t("agora.workshop.examplesTitle") || "專業策略描述範例 (可點擊套用)"}
+          </h3>
+          <div className="grid gap-4">
+            {examples.map((ex, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => {
+                  setName(ex.name);
+                  setDescription(ex.desc);
+                }}
+                className="group rounded-lg border border-slate-900 bg-slate-900/20 p-4 text-left hover:border-slate-800 hover:bg-slate-900/40 transition duration-150"
+              >
+                <span className="block text-xs font-bold text-blue-400 group-hover:text-blue-300 transition-colors">
+                  {ex.name}
+                </span>
+                <span className="mt-2 block text-xs leading-relaxed text-slate-400">
+                  {ex.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ListState = "loading" | "empty" | "loaded" | "error";
 
 interface WorkshopListViewProps {
@@ -198,7 +338,7 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
         setWorkshops(ordered);
         setSelectedWorkshopId((current) => {
           if (current && ordered.some((workshop) => workshop.workshop_id === current)) return current;
-          return ordered[0]?.workshop_id ?? null;
+          return ordered[0]?.workshop_id ?? "new";
         });
         setState(ordered.length === 0 ? "empty" : "loaded");
       })
@@ -215,47 +355,75 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
       {state === "loading" && (
         <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-loading">{t("agora.workshop.loadingList")}</div>
       )}
-      {state === "empty" && (
-        <div className="p-6 text-sm text-slate-500" data-testid="workshop-list-empty">{t("agora.workshop.emptyList")}</div>
-      )}
       {state === "error" && (
         <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">{t("agora.workshop.listError")}</div>
       )}
-      {state === "loaded" && selectedWorkshopId && (
+      {(state === "loaded" || state === "empty") && (
         <div
           className="grid min-h-0 flex-1 grid-cols-[minmax(210px,260px)_minmax(0,1fr)]"
           data-testid="strategy-workshop-live-tab"
         >
           <aside className="min-h-0 overflow-auto border-r border-slate-200 bg-slate-50 p-3" data-testid="workshop-selector">
+            <button
+              data-testid="new-workshop-btn"
+              onClick={() => setSelectedWorkshopId("new")}
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-blue-400 bg-blue-50/50 px-4 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 shadow-sm cursor-pointer"
+            >
+              <span className="text-sm font-bold">+</span>
+              {t("agora.workshop.newStrategy") || "建立新策略"}
+            </button>
             <div className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
               {t("agora.workshop.liveWorkshops")}
             </div>
-            <div className="grid gap-2" data-testid="workshop-list">
-              {workshops.map((ws) => {
-                const selected = ws.workshop_id === selectedWorkshopId;
-                return (
-                  <button
-                    aria-current={selected ? "page" : undefined}
-                    className={
-                      selected
-                        ? "rounded-md border border-blue-300 bg-blue-50 p-2 text-left"
-                        : "rounded-md border border-slate-200 bg-white p-2 text-left hover:border-slate-300"
-                    }
-                    data-testid={`workshop-item-${ws.workshop_id}`}
-                    data-workshop-id={ws.workshop_id}
-                    key={ws.workshop_id}
-                    onClick={() => setSelectedWorkshopId(ws.workshop_id)}
-                    type="button"
-                  >
-                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws, t("agora.workshop.defaultTitle"))}</span>
-                    <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws, t("agora.workshop.timeUnavailable"))}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {workshops.length === 0 ? (
+              <div className="p-6 text-sm text-slate-500 text-center" data-testid="workshop-list-empty">
+                {t("agora.workshop.emptyList")}
+              </div>
+            ) : (
+              <div className="grid gap-2" data-testid="workshop-list">
+                {workshops.map((ws) => {
+                  const selected = ws.workshop_id === selectedWorkshopId;
+                  return (
+                    <button
+                      aria-current={selected ? "page" : undefined}
+                      className={
+                        selected
+                          ? "rounded-md border border-blue-300 bg-blue-50 p-2 text-left"
+                          : "rounded-md border border-slate-200 bg-white p-2 text-left hover:border-slate-300 cursor-pointer"
+                      }
+                      data-testid={`workshop-item-${ws.workshop_id}`}
+                      data-workshop-id={ws.workshop_id}
+                      key={ws.workshop_id}
+                      onClick={() => setSelectedWorkshopId(ws.workshop_id)}
+                      type="button"
+                    >
+                      <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws, t("agora.workshop.defaultTitle"))}</span>
+                      <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws, t("agora.workshop.timeUnavailable"))}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </aside>
           <section className="min-h-0 overflow-hidden" data-testid="selected-workshop-runtime">
-            <WorkshopSessionView workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
+            {selectedWorkshopId === "new" ? (
+              <NewWorkshopForm
+                onCreated={(newId) => {
+                  listWorkshops().then((items) => {
+                    const ordered = orderWorkshops(items);
+                    setWorkshops(ordered);
+                    setSelectedWorkshopId(newId);
+                    setState("loaded");
+                  });
+                }}
+              />
+            ) : selectedWorkshopId ? (
+              <WorkshopSessionView workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
+            ) : (
+              <div className="p-6 text-sm text-slate-500">
+                請從左側選擇一個工作坊或點擊「+ 建立新策略」開始討論。
+              </div>
+            )}
           </section>
         </div>
       )}
