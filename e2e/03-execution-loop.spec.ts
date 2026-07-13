@@ -15,7 +15,7 @@
  *   BFF_BASE_URL or VITE_BFF_BASE_URL
  *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
  *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *     required for the opt-in live BFF contract.
  *   FE_INT_GATE_LIVE_BFF=1 or RUN_LIVE_BFF_CONTRACTS=1
  *     opt in to the live BFF contract probe; fixture-driven UI coverage runs
  *     without a staging dependency.
@@ -26,7 +26,6 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
@@ -299,7 +298,10 @@ function bffUrl(path: string): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
+  if (!token) {
+    throw new Error("Live execution-loop contract requires a short-lived BFF_AUTH_TOKEN");
+  }
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 }
 

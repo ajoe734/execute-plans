@@ -4,6 +4,7 @@ import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "";
+const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer";
 const PERSONA_ID = process.env.PANTHEON_PERSONA_FLEET_AUDIT_ID ?? "persona-20260528-04688755";
 const LIVE_READ_ATTEMPTS = 3;
 const LIVE_RESPONSE_TIMEOUT_MS = 20_000;
@@ -148,15 +149,19 @@ test.describe("Persona Fleet live linked-page contract", () => {
   test.beforeEach(async ({ page }) => {
     await installOidcDevLogin(page, {
       goto: false,
-      roles: ["operator", "reviewer", "approver"],
+      roles: ["viewer"],
       tenantId: "pantheon-dev",
+      token: PUBLIC_VIEWER_TOKEN,
     });
     await installQuietEventSource(page);
   });
 
   test("uses the live BFF contract and keeps every focused target semantically scoped", async ({ page, request }) => {
     test.setTimeout(180_000);
-    const headers = authHeaders({ tenantId: "pantheon-dev" });
+    const headers = authHeaders({
+      tenantId: "pantheon-dev",
+      token: PUBLIC_VIEWER_TOKEN,
+    });
     const fleetPayload = await getJsonWithRetry<LiveListPayload<LiveFleetRow>>(
       request,
       `${BFF_BASE}/bff/management/persona-fleet?page_size=100`,

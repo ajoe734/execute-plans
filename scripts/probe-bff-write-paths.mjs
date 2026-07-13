@@ -14,16 +14,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 
-const BFF_BASE_URL = (
-  process.env.PANTHEON_BFF_BASE_URL ||
-  process.env.VITE_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
+const BFF_BASE_URL = String(
+  process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "",
 ).replace(/\/$/, "");
 const BEARER_TOKEN =
   process.env.PANTHEON_BFF_WRITE_PROBE_BEARER_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.BFF_AUTH_TOKEN ||
-  "pantheon-dev-browser:reviewer";
+  "";
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const ROOT = process.cwd();
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
@@ -33,6 +31,13 @@ const WRITE_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_ATTEMPTS, 3,
 const WRITE_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_TIMEOUT_MS, 20_000, 5_000);
 const READBACK_ATTEMPTS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_ATTEMPTS, 3, 1);
 const READBACK_TIMEOUT_MS = positiveInt(process.env.PANTHEON_WRITE_PROBE_READBACK_TIMEOUT_MS, 15_000, 5_000);
+
+if (!BFF_BASE_URL) {
+  throw new Error("PANTHEON_BFF_BASE_URL is required for this live write probe");
+}
+if (!BEARER_TOKEN) {
+  throw new Error("A short-lived BFF_AUTH_TOKEN is required for this live write probe");
+}
 
 const ENDPOINTS = [
   // P0-D - Entity create

@@ -1,7 +1,7 @@
 export const DEFAULT_FE_OPERATOR_ID = "op-fe-gate";
 export const DEFAULT_FE_TENANT_ID = "tenant-dev";
 export const DEFAULT_FE_AUTH_ROLES = ["operator", "reviewer", "approver"] as const;
-export const DEFAULT_DEV_AUTH_TOKEN = `${DEFAULT_FE_OPERATOR_ID}:${DEFAULT_FE_AUTH_ROLES.join(
+export const LOCAL_FIXTURE_AUTH_TOKEN = `${DEFAULT_FE_OPERATOR_ID}:${DEFAULT_FE_AUTH_ROLES.join(
   ",",
 )}:mfa`;
 
@@ -68,6 +68,59 @@ function defaultEnv(): Record<string, string | undefined> {
   return typeof process === "undefined" ? {} : process.env;
 }
 
+function explicitAuthToken(
+  env: Record<string, string | undefined>,
+  token?: string,
+): string | undefined {
+  return token ?? envValue(env, [
+    "BFF_AUTH_TOKEN",
+    "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+    "PANTHEON_BFF_SMOKE_TOKEN",
+  ]);
+}
+
+function isLoopbackTarget(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "localhost"
+      || hostname === "::1"
+      || hostname === "0.0.0.0"
+      || hostname.startsWith("127.");
+  } catch {
+    return true;
+  }
+}
+
+export function targetsExternalE2eEnvironment(
+  env: Record<string, string | undefined> = defaultEnv(),
+): boolean {
+  if (
+    env.PANTHEON_HOSTED_E2E === "1"
+    || env.FE_INT_GATE_LIVE_BFF === "1"
+    || env.RUN_LIVE_BFF_CONTRACTS === "1"
+  ) {
+    return true;
+  }
+  return [
+    "PANTHEON_FE_BASE_URL",
+    "FRONTEND_BASE_URL",
+    "PLAYWRIGHT_BASE_URL",
+    "PANTHEON_BFF_BASE_URL",
+    "PANTHEON_BROWSER_BFF_BASE_URL",
+    "BFF_BASE_URL",
+    "VITE_BFF_BASE_URL",
+  ].some((key) => {
+    const value = env[key]?.trim();
+    return Boolean(value && !isLoopbackTarget(value));
+  });
+}
+
+function missingExternalCredential(): Error {
+  return new Error(
+    "A short-lived BFF_AUTH_TOKEN is required for hosted or external E2E; tracked fixture credentials are local-only",
+  );
+}
+
 export function normalizeBearerToken(token: string): string {
   const trimmed = token.trim();
   return trimmed.toLowerCase().startsWith("bearer ")
@@ -88,16 +141,10 @@ export function makeDevAuthToken(options: {
 
 export function authToken(options: AuthHeaderOptions = {}): string {
   const env = options.env ?? defaultEnv();
-  return normalizeBearerToken(
-    options.token ??
-      envValue(env, [
-        "BFF_AUTH_TOKEN",
-        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-        "PANTHEON_BFF_SMOKE_TOKEN",
-        "VITE_BFF_DEV_BEARER_TOKEN",
-      ]) ??
-      DEFAULT_DEV_AUTH_TOKEN,
-  );
+  const explicit = explicitAuthToken(env, options.token);
+  if (explicit) return normalizeBearerToken(explicit);
+  if (targetsExternalE2eEnvironment(env)) throw missingExternalCredential();
+  return LOCAL_FIXTURE_AUTH_TOKEN;
 }
 
 export function bearerHeader(token?: string): string {
@@ -143,9 +190,14 @@ export function actorFromAuthorization(value: string | undefined): string {
 
 export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession {
   const roles = options.roles ?? [...DEFAULT_FE_AUTH_ROLES];
-  const token = authToken({
-    token: options.token ?? makeDevAuthToken({ operatorId: options.operatorId, roles }),
-  });
+  const env = defaultEnv();
+  const explicit = explicitAuthToken(env, options.token);
+  if (!explicit && targetsExternalE2eEnvironment(env)) {
+    throw missingExternalCredential();
+  }
+  const token = normalizeBearerToken(
+    explicit ?? makeDevAuthToken({ operatorId: options.operatorId, roles }),
+  );
   return {
     authorization: bearerHeader(token),
     operatorId: (options.operatorId ?? actorFromAuthorization(token)) || DEFAULT_FE_OPERATOR_ID,

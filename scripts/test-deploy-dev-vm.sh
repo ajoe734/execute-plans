@@ -182,7 +182,11 @@ prepare_case() {
 
 run_deploy() {
   local case_root="$1"
+  local -a shell_args=()
   shift
+  if [[ "${DEPLOY_TEST_XTRACE:-false}" == "true" ]]; then
+    shell_args=(-x)
+  fi
   rm -f "${case_root}/bff-version-count"
   env -u PANTHEON_DEPLOY_REAL_WRITES -u PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES \
     -u PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN \
@@ -203,7 +207,7 @@ run_deploy() {
     PANTHEON_RELEASE_GATE_RUN_ID="${GATE_RUN_ID}" \
     DEPLOY_TEST_BFF_COUNT_FILE="${case_root}/bff-version-count" \
     "$@" \
-    bash "${DEPLOY_SCRIPT}"
+    bash "${shell_args[@]}" "${DEPLOY_SCRIPT}"
 }
 
 case_root="$(prepare_case safe-default-success)"
@@ -340,6 +344,17 @@ assert_eq "true true" "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "explicit writ
 assert_eq "absent absent" "$(tail -n 1 "${LOG_DIR}/build-secret-boundary.log")" "write probe credential excluded from build"
 grep -Fxq "scripts/probe-hosted-management-writes.mjs" "${LOG_DIR}/node-probes.log" || fail "explicit write probe did not run"
 assert_eq "signed-short-lived-write-probe-token" "$(tail -n 1 "${LOG_DIR}/write-probe-token.log")" "server-side write probe token"
+
+case_root="$(prepare_case xtrace-does-not-leak-write-credential)"
+xtrace_log="${case_root}/xtrace.log"
+if ! DEPLOY_TEST_XTRACE=true run_deploy "${case_root}" \
+  PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN="xtrace-secret-must-not-appear" \
+  > "${xtrace_log}" 2>&1; then
+  fail "xtrace credential boundary case did not complete"
+fi
+if grep -Fq "xtrace-secret-must-not-appear" "${xtrace_log}"; then
+  fail "write probe credential leaked through shell xtrace"
+fi
 
 case_root="$(prepare_case explicit-writes-without-server-credential)"
 if run_deploy "${case_root}" \

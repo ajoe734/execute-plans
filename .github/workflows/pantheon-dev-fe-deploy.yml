@@ -163,6 +163,64 @@ jobs:
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
 
+      - name: Mint short-lived write-probe credential
+        if: >-
+          ${{
+            steps.candidate.outputs.deploy == 'true' &&
+            github.event_name == 'workflow_dispatch' &&
+            inputs.real_writes
+          }}
+        shell: bash
+        env:
+          PANTHEON_DEV_LOGIN_CLIENT_ID: ${{ secrets.PANTHEON_BFF_DEV_LOGIN_CLIENT_ID }}
+          PANTHEON_DEV_LOGIN_CLIENT_SECRET: ${{ secrets.PANTHEON_BFF_DEV_LOGIN_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [[ -z "${PANTHEON_DEV_LOGIN_CLIENT_ID}" || -z "${PANTHEON_DEV_LOGIN_CLIENT_SECRET}" ]]; then
+            echo "real_writes requires configured dev-login client credentials" >&2
+            exit 1
+          fi
+
+          umask 077
+          payload_file="$(mktemp)"
+          response_file="$(mktemp)"
+          cleanup_login_files() {
+            rm -f "${payload_file}" "${response_file}"
+          }
+          trap cleanup_login_files EXIT
+
+          node <<'NODE' > "${payload_file}"
+          process.stdout.write(JSON.stringify({
+            grant_type: "client_credentials",
+            client_id: process.env.PANTHEON_DEV_LOGIN_CLIENT_ID,
+            client_secret: process.env.PANTHEON_DEV_LOGIN_CLIENT_SECRET,
+          }));
+          NODE
+          curl --fail --silent --show-error \
+            --header 'Content-Type: application/json' \
+            --data-binary "@${payload_file}" \
+            "${PANTHEON_BFF_BASE_URL}/bff/auth/dev-login" > "${response_file}"
+
+          write_probe_token="$(node - "${response_file}" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const token = typeof payload.access_token === "string" ? payload.access_token : "";
+          const expiresIn = Number(payload.expires_in);
+          if (!token || !Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > 3600) {
+            process.exit(1);
+          }
+          process.stdout.write(token);
+          NODE
+          )"
+          if [[ -z "${write_probe_token}" ]]; then
+            echo "dev-login did not issue a bounded short-lived token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${write_probe_token}"
+          printf 'PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN=%s\n' "${write_probe_token}" >> "$GITHUB_ENV"
+          write_probe_token=""
+
       - name: Deploy static build
         id: deploy
         if: steps.candidate.outputs.deploy == 'true'
@@ -173,6 +231,19 @@ jobs:
           PANTHEON_RELEASE_GATE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && steps.manual_gate.outputs.run_id || github.event.workflow_run.id }}
           GITHUB_SHA: ${{ steps.candidate.outputs.sha }}
         run: bash scripts/deploy-dev-vm.sh
+
+      - name: Clear write-probe credential
+        if: >-
+          ${{
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            inputs.real_writes
+          }}
+        shell: bash
+        run: |
+          set +x
+          unset PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN
+          echo 'PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN=' >> "$GITHUB_ENV"
 
       - name: Upload deploy evidence
         if: always() && steps.deploy.outcome != '' && steps.deploy.outcome != 'skipped'

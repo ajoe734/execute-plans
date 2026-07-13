@@ -5,6 +5,9 @@
 # execute-plans self-hosted GitHub Actions runner. It builds the Vite bundle,
 # installs it as an immutable release under /var/www, switches the Caddy root
 # symlink, and then probes the deployed host against the dev BFF.
+if [[ "$-" == *x* ]]; then
+  set +x
+fi
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

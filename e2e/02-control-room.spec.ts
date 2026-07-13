@@ -22,7 +22,6 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer,approver:mfa";
 const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
@@ -75,7 +74,10 @@ function bffUrl(path: string): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
+  if (!token) {
+    throw new Error("Live control-room contract requires a short-lived BFF_AUTH_TOKEN");
+  }
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 }
 

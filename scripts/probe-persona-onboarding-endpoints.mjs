@@ -22,16 +22,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 
-const BFF_BASE_URL = (
-  process.env.PANTHEON_BFF_BASE_URL ||
-  process.env.VITE_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
+const BFF_BASE_URL = String(
+  process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "",
 ).replace(/\/$/, "");
 const BEARER_TOKEN =
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.BFF_AUTH_TOKEN ||
-  "pantheon-dev-browser:reviewer";
+  "";
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
+
+if (!BFF_BASE_URL) {
+  throw new Error("PANTHEON_BFF_BASE_URL is required for this live write probe");
+}
+if (!BEARER_TOKEN) {
+  throw new Error("A short-lived BFF_AUTH_TOKEN is required for this live write probe");
+}
 
 const PERSONA_ID = "persona-dev";
 const POOL_ID = "cp-dev";
