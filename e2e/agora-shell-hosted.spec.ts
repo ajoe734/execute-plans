@@ -15,6 +15,9 @@ const FE_BASE_URL = (
   process.env.FRONTEND_BASE_URL ||
   ""
 ).replace(/\/+$/, "");
+const IS_HOSTED_FE = Boolean(
+  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
+);
 const AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
@@ -61,7 +64,10 @@ async function expectSinglePageScrollOwner(page: Page): Promise<void> {
 }
 
 test.describe("AG-UIPOL-002 hosted standalone Agora shell", () => {
-  test.skip(!FE_BASE_URL, "Set AG_UIPOL_002_FE_BASE_URL or PANTHEON_FE_BASE_URL.");
+  test.skip(
+    !IS_HOSTED_FE,
+    "Set AG_UIPOL_002_FE_BASE_URL or PANTHEON_FE_BASE_URL to a deployed, non-localhost frontend.",
+  );
   test.setTimeout(120_000);
 
   for (const viewport of VIEWPORTS) {
