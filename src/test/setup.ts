@@ -39,10 +39,16 @@ const cryptoShim = {
       const v = c === "x" ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
-  }
+  },
 };
 
-const gt = globalThis as any;
+type CryptoHost = {
+  crypto?: {
+    randomUUID?: typeof cryptoShim.randomUUID;
+  };
+};
+
+const gt = globalThis as unknown as CryptoHost;
 if (!gt.crypto) {
   gt.crypto = cryptoShim;
 } else if (!gt.crypto.randomUUID) {
@@ -50,11 +56,10 @@ if (!gt.crypto) {
 }
 
 if (typeof window !== "undefined") {
-  const win = window as any;
+  const win = window as unknown as CryptoHost;
   if (!win.crypto) {
     win.crypto = cryptoShim;
   } else if (!win.crypto.randomUUID) {
     win.crypto.randomUUID = cryptoShim.randomUUID;
   }
 }
-
