@@ -17,6 +17,7 @@ import { materializeWorkshopCompleteness } from "@/agora/components/workshopComp
 
 vi.mock("@/lib/bff-v1/client", () => ({
   bffFetch: vi.fn(),
+  detectBaseUrl: () => "https://bff.example.test",
 }));
 
 const mockWorkshop: StrategyWorkshop = {
@@ -251,41 +252,45 @@ describe("postWorkshopMessage", () => {
 });
 
 describe("openWorkshopStream", () => {
-  it("returns a React effect cleanup and forwards parsed stream events", () => {
-    const close = vi.fn();
-    const source = { close, onmessage: null as ((message: MessageEvent<string>) => void) | null };
-    const EventSourceMock = vi.fn().mockReturnValue(source);
-    vi.stubGlobal("EventSource", EventSourceMock);
-    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-    const cleanup = openWorkshopStream("ws/001", onEvent);
-
-    expect(EventSourceMock).toHaveBeenCalledWith(
-      "/bff/agora/workshops/ws%2F001/stream",
-      { withCredentials: true },
-    );
-    source.onmessage?.(
-      new MessageEvent("message", {
-        data: JSON.stringify({
-          data: {
-            event_id: "evt-001",
-            workshop_id: "ws/001",
-            event_type: "workshop.snapshot",
-            payload: {},
-            occurred_at: "2026-06-01T00:00:00Z",
-          },
-        }),
-      }),
-    );
-    expect(onEvent).toHaveBeenCalledWith({
+  it("opens the workshop stream via authenticated fetch and forwards parsed stream events", async () => {
+    const streamEvent = {
       event_id: "evt-001",
       workshop_id: "ws/001",
       event_type: "workshop.snapshot",
       payload: {},
       occurred_at: "2026-06-01T00:00:00Z",
-    });
+    };
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(`id: evt-001\nevent: workshop.snapshot\ndata: ${JSON.stringify({ data: streamEvent })}\n\n`),
+          );
+          controller.close();
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "text/event-stream" } },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
+
+    const cleanup = openWorkshopStream("ws/001", onEvent);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://bff.example.test/bff/agora/workshops/ws%2F001/stream");
+    expect((init.headers as Record<string, string>).Accept).toBe("text/event-stream");
+    expect(init.credentials).toBe("include");
+
+    expect(onEvent).toHaveBeenCalledWith(streamEvent);
 
     cleanup();
-    expect(close).toHaveBeenCalled();
+    expect((init.signal as AbortSignal).aborted).toBe(true);
   });
 });
