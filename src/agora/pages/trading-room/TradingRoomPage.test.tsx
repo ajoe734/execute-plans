@@ -21,6 +21,16 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
 }));
 
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams()],
+}));
+
+vi.mock("@/lib/bff-v1/agora/workshops", () => ({
+  createWorkshop: vi.fn().mockResolvedValue({ workshop_id: "ws-new-001" }),
+  postWorkshopMessage: vi.fn().mockResolvedValue({ message_id: "msg-001" }),
+}));
+
 vi.mock("react-grid-layout", async () => {
   const ReactModule = await import("react");
   const MockGridLayout = ({
@@ -70,6 +80,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 
 import { TradingRoomPage } from "./TradingRoomPage";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
+import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -1476,5 +1487,79 @@ describe("TradingRoomPage", () => {
     await screen.findByTestId("event-row-evt-001");
     fireEvent.click(screen.getByTestId("event-row-evt-001"));
     expect(screen.getByTestId("detail-suggested-action").textContent).toContain("enter");
+  });
+
+  it("shows Ask Personas button and opens consultation panel on click", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("event-row-evt-001");
+    fireEvent.click(screen.getByTestId("event-row-evt-001"));
+    
+    const askButton = screen.getByTestId("ask-personas-evt-001");
+    expect(askButton).toBeDefined();
+    
+    // Toggle the panel on
+    fireEvent.click(askButton);
+    const consultPanel = screen.getByTestId("consult-panel-evt-001");
+    expect(consultPanel).toBeDefined();
+    expect(consultPanel.textContent).toContain("evt-001");
+    expect(consultPanel.textContent).toContain("reg-001");
+    
+    // Test Launch Workshop Consultation
+    const launchButton = screen.getByTestId("consult-panel-submit-evt-001");
+    fireEvent.click(launchButton);
+    
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith(expect.objectContaining({
+        subject: expect.objectContaining({
+          kind: "candidate_artifact",
+          ref: "evt-001",
+        }),
+        metadata: expect.objectContaining({
+          decision_event_id: "evt-001",
+          strategy_version: "reg-001",
+        })
+      }));
+    });
+  });
+
+  it("opens modify linkage panel and submits modifications on confirm", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("event-row-evt-001");
+    fireEvent.click(screen.getByTestId("event-row-evt-001"));
+    
+    const modifyButton = screen.getByTestId("decide-modify-evt-001");
+    fireEvent.click(modifyButton);
+    
+    const modifyPanel = screen.getByTestId("modify-linkage-panel-evt-001");
+    expect(modifyPanel).toBeDefined();
+    
+    const propIdInput = screen.getByTestId("modify-proposal-id-evt-001");
+    const propRevInput = screen.getByTestId("modify-proposal-revision-evt-001");
+    const wsIdInput = screen.getByTestId("modify-workshop-id-evt-001");
+    const rationaleInput = screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits...");
+    
+    fireEvent.change(propIdInput, { target: { value: "prop-xyz" } });
+    fireEvent.change(propRevInput, { target: { value: "2" } });
+    fireEvent.change(wsIdInput, { target: { value: "ws-abc" } });
+    fireEvent.change(rationaleInput, { target: { value: "Reduced leverage due to IV increase" } });
+    
+    const submitButton = screen.getByTestId("modify-linkage-submit-evt-001");
+    fireEvent.click(submitButton);
+    
+    await waitFor(() => {
+      expect(tradingRoomModule.decideOnEvent).toHaveBeenCalledWith(
+        "evt-001",
+        expect.objectContaining({
+          decision: "modify",
+          rationale: "Reduced leverage due to IV increase",
+          modifications: {
+            proposal_id: "prop-xyz",
+            proposal_revision: 2,
+            consultation_workshop_id: "ws-abc",
+          }
+        }),
+        expect.any(Object)
+      );
+    });
   });
 });

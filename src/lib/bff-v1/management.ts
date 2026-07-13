@@ -4097,6 +4097,23 @@ export const mgmt = {
         },
         adaptPortfolioHoldingsMonitor,
       ),
+    monitor: (filters: PortfolioHoldingFilters, seedFn: () => PortfolioHoldingsMonitor): Promise<PortfolioHoldingsMonitor> =>
+      withLiveOrMock<PortfolioHoldingsMonitor>(
+        {
+          method: "GET",
+          path: paths.mgmtPortfolioHoldings({
+            deployment_stage: filters.deploymentStage,
+            broker_id: filters.brokerId,
+            runtime_id: filters.runtimeId,
+            source_status: filters.sourceStatus,
+            stale_telemetry: filters.staleTelemetry,
+            risk_state: filters.riskState,
+            capital_pool_id: filters.capitalPoolId,
+            persona_id: filters.personaId,
+          }),
+        },
+        async () => seedFn(), safeAdapt(adaptPortfolioHoldingsMonitor, seedFn),
+      ),
   },
 
   personaLeague: {

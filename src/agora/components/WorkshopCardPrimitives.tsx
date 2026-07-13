@@ -240,25 +240,66 @@ export function NoOrderRouteBadge({ value }: { value?: unknown }) {
 export function CardShell({
   card,
   children,
+  onContinueDiscussion,
 }: {
   card: WorkshopCard;
   children: ReactNode;
+  onContinueDiscussion?: (cardId: string) => void;
 }) {
-  const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description";
   const status = card.status ?? "informational";
+
+  let authorLabel = "Workshop Servant";
+  let bgClass = "mr-auto max-w-[92%] border-slate-200 bg-slate-50/50";
+  let accentBorder = "";
+  let authorBadgeColor = "bg-slate-100 text-slate-700 border-slate-200";
+
+  const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description" || card.persona_id === "human";
+  const isPersona = card.card_type === "persona_opinion" || card.card_type === "opinion" || (card.persona_id !== undefined && card.persona_id !== "servant" && card.persona_id !== "human");
+  const isSynthesis = card.card_type === "consult_result";
+  const isTool = ["research_result", "research_progress", "research_plan_proposal"].includes(card.card_type);
+
+  if (isUser) {
+    authorLabel = "Human (Operator)";
+    bgClass = "ml-auto max-w-[78%] border-blue-200 bg-blue-50/70";
+    authorBadgeColor = "bg-blue-100 text-blue-800 border-blue-200";
+  } else if (isPersona) {
+    authorLabel = `Persona: ${formatLabel(card.persona_id || "Bot")}`;
+    bgClass = "mr-auto max-w-[92%] border-purple-200 bg-purple-50/20";
+    accentBorder = "border-l-4 border-l-purple-500";
+    authorBadgeColor = "bg-purple-100 text-purple-800 border-purple-200";
+  } else if (isSynthesis) {
+    authorLabel = "Committee Synthesis";
+    bgClass = "mr-auto max-w-[92%] border-indigo-200 bg-indigo-50/30";
+    accentBorder = "border-l-4 border-l-indigo-500";
+    authorBadgeColor = "bg-indigo-100 text-indigo-800 border-indigo-200";
+  } else if (isTool) {
+    authorLabel = "Tool Execution";
+    bgClass = "mr-auto max-w-[92%] border-emerald-200 bg-emerald-50/20";
+    accentBorder = "border-l-4 border-l-emerald-500";
+    authorBadgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+  } else {
+    authorLabel = "Workshop Servant";
+    bgClass = "mr-auto max-w-[92%] border-slate-300 bg-slate-50/50";
+    authorBadgeColor = "bg-slate-200 text-slate-800 border-slate-300";
+  }
 
   return (
     <article
       className={cn(
-        "space-y-3 rounded-lg border p-3 text-sm shadow-sm",
-        isUser ? "ml-auto max-w-[78%] border-blue-200 bg-blue-50" : "mr-auto max-w-[92%] bg-white",
-        !isUser && CARD_ACCENT[status],
+        "space-y-3 rounded-lg border p-3 text-sm shadow-sm transition-all duration-200 hover:shadow-md",
+        bgClass,
+        accentBorder,
+        !isUser && !isPersona && !isSynthesis && !isTool && CARD_ACCENT[status],
       )}
+      data-testid={`workshop-card-${card.card_id}`}
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase text-slate-500">
             {cardTypeLabel(card.card_type)}
+          </span>
+          <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", authorBadgeColor)}>
+            {authorLabel}
           </span>
           <StatusPill status={status} />
           <span className="font-mono text-[11px] text-slate-300">#{cardSequence(card)}</span>
@@ -270,6 +311,19 @@ export function CardShell({
       </header>
       {children}
       <EvidenceRefs refs={card.evidence_refs} />
+      {onContinueDiscussion ? (
+        <div className="flex border-t border-slate-100 pt-3">
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700"
+            data-testid={`workshop-card-${card.card_id}-discuss`}
+            onClick={() => onContinueDiscussion(card.card_id)}
+            type="button"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>Ask Servant</span>
+          </button>
+        </div>
+      ) : null}
       <ActionBar actions={card.allowed_actions} />
     </article>
   );

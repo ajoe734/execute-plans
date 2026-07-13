@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ChartSpecV1 } from "@/lib/bff-v1/agora/types";
+import type { ChartSpecV1 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 import { ChartSpecRenderer, validateChartSpecForRendering } from "./ChartSpecRenderer";
 
@@ -108,7 +108,7 @@ describe("ChartSpecRenderer", () => {
     expect(
       validateChartSpecForRendering(
         metricSpec({
-          click_action: { kind: "place_order", params: { symbol: "AAPL" } } as unknown as ChartSpecV1["click_action"],
+          click_action: { kind: "place_order", payload: { symbol: "AAPL" } } as unknown as ChartSpecV1["click_action"],
         }),
       ),
     ).toContain("Interaction is not");
@@ -120,11 +120,11 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         data={[{ label: "Evidence", value: 1 }]}
         onInteraction={onInteraction}
-        spec={metricSpec({ click_action: { kind: "open_evidence", params: { evidence_id: "ev-1" } } })}
+        spec={metricSpec({ click_action: { kind: "open_evidence", payload: { evidence_id: "ev-1" } } })}
       />,
     );
 
     fireEvent.click(screen.getByTestId("chart-spec-renderer"));
-    expect(onInteraction).toHaveBeenCalledWith({ kind: "open_evidence", params: { evidence_id: "ev-1" } });
+    expect(onInteraction).toHaveBeenCalledWith({ kind: "open_evidence", payload: { evidence_id: "ev-1" } });
   });
 });

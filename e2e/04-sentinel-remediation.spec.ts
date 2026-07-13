@@ -170,6 +170,21 @@ async function installB04Routes(page: Page): Promise<RouteCalls> {
       return;
     }
 
+    if (request.method() === "GET" && path === "/bff/events/stream") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        headers: {
+          ...corsHeaders(route),
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+        body: ": fe-int-gate-b04\n\n",
+      });
+      return;
+    }
+
     if (request.method() === "POST") {
       const bodyText = request.postData() ?? "";
       const bodyJson = safeJson(bodyText);
