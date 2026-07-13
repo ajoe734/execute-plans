@@ -13,6 +13,48 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { PromotionReviewDecisionValue } from "@/lib/bff-v1/management";
+import type { HumanInboxItem } from "@/lib/v5/management/humanInbox";
+
+const RISK_CONTAINMENT_ACTION_IDS = new Set([
+  "reduce_capital_access",
+  "freeze_persona",
+  "suspend_persona",
+  "retire_persona",
+]);
+
+interface PromotionApprovalLabelSpec {
+  key:
+    | "mgmt.inbox.approveCanary"
+    | "mgmt.inbox.approveLive"
+    | "mgmt.inbox.approveActionFmt"
+    | "mgmt.inbox.approveRiskContainment"
+    | "mgmt.inbox.approveRecommendation";
+  actionId?: string;
+}
+
+/** Resolve the governed action before choosing copy; unknown reviews stay generic. */
+function promotionApprovalLabelSpec(
+  item: Pick<HumanInboxItem, "reviewKind" | "reviewType" | "actionId">,
+): PromotionApprovalLabelSpec {
+  const reviewSemantic = `${item.reviewKind ?? ""} ${item.reviewType ?? ""}`.trim().toLowerCase();
+  const actionId = item.actionId?.trim().toLowerCase();
+  if (actionId && RISK_CONTAINMENT_ACTION_IDS.has(actionId)) {
+    return { key: "mgmt.inbox.approveActionFmt", actionId };
+  }
+  if (reviewSemantic.includes("to_live")) {
+    return { key: "mgmt.inbox.approveLive" };
+  }
+  if (reviewSemantic.includes("to_canary")) {
+    return { key: "mgmt.inbox.approveCanary" };
+  }
+  if (reviewSemantic.includes("risk_containment")) {
+    return { key: "mgmt.inbox.approveRiskContainment" };
+  }
+  return { key: "mgmt.inbox.approveRecommendation" };
+}
+
+const fallbackActionLabel = (actionId: string): string =>
+  actionId.split("_").filter(Boolean).join(" ");
 
 export function personaIdFromDetail(itemId: string, manageHref?: string): string | undefined {
   const decodedId = decodeURIComponent(itemId);
@@ -81,9 +123,14 @@ export const HumanGateDetailPage = () => {
   const personaId = personaIdFromDetail(item.id, item.links?.manageHref);
   const reviewId = item.reviewId ?? (item.id.startsWith("promotion_review:") ? item.id.slice("promotion_review:".length) : "");
   const isPromotionReview = item.kind === "promotion_review" && Boolean(reviewId);
-  const promotionTargetKey = item.reviewType === "canary_to_live"
-    ? "mgmt.inbox.approveLive"
-    : "mgmt.inbox.approveCanary";
+  const approvalLabelSpec = promotionApprovalLabelSpec(item);
+  const promotionApprovalLabel = approvalLabelSpec.actionId
+    ? t(approvalLabelSpec.key, {
+      action: t(`mgmt.league.recommendations.${approvalLabelSpec.actionId}`, {
+        defaultValue: fallbackActionLabel(approvalLabelSpec.actionId),
+      }),
+    })
+    : t(approvalLabelSpec.key);
   const canApprovePromotion = item.allowedActions?.canApprove ?? item.canDecide;
   const canRejectPromotion = item.allowedActions?.canReject ?? item.canDecide;
   const rationaleValue = rationale.trim();
@@ -241,7 +288,7 @@ export const HumanGateDetailPage = () => {
                 {submittingDecision === "approve"
                   ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                   : <CheckCircle2 className="mr-1 h-4 w-4" />}
-                {t(promotionTargetKey)}
+                {promotionApprovalLabel}
               </Button>
               <Button
                 size="sm"
