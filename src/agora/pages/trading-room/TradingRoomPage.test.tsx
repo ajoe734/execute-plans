@@ -826,7 +826,7 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("trading-room-generation-progress");
     expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("交易僕人正在建立");
-    expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("產生 Views 與 widgets");
+    expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("產生檢視與元件");
   });
 
   it("renders all V11 proposal view thumbnails and widget counts", async () => {
@@ -836,7 +836,7 @@ describe("TradingRoomPage", () => {
     for (const view of PROPOSAL_VIEWS) {
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 widgets");
+      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 個元件");
     }
   });
 
@@ -854,10 +854,10 @@ describe("TradingRoomPage", () => {
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
-    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("Workspace data availability");
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("工作區資料可用性");
     expect(screen.getByTestId("workspace-proposal-data-availability").textContent).not.toContain("winner_branch.related_branch_flow");
-    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain("0 full / 1 partial / 0 missing");
-    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain("1 full / 0 partial / 0 missing");
+    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain("0 完整／1 部分可用／0 缺漏");
+    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain("1 完整／0 部分可用／0 缺漏");
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");
@@ -889,6 +889,17 @@ describe("TradingRoomPage", () => {
 
     expect(shell).toHaveStyle({ background: "#11151d" });
     expect(widget).toHaveStyle({ background: "#171b22" });
+  });
+
+  it("clips the workspace inside a shrinkable flex column so it cannot cover the decision queue", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    const shell = await screen.findByTestId("trading-room-workspace-shell");
+    const column = screen.getByTestId("trading-room-workspace-column");
+
+    expect(shell).toHaveStyle({ minHeight: "0", overflow: "hidden" });
+    expect(column).toHaveStyle({ minHeight: "0", minWidth: "0", overflow: "hidden" });
   });
 
   it("saves drag and resize operations with workspace ETag and idempotency key", async () => {

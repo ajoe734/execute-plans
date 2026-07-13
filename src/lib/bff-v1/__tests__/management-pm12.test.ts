@@ -21,6 +21,8 @@ describe("PM12 paths", () => {
   it("quarterly ranking with quarter qs", () => {
     expect(paths.mgmtQuarterlyRanking()).toBe("/bff/management/quarterly-ranking");
     expect(paths.mgmtQuarterlyRanking("2026-Q2")).toContain("quarter=2026-Q2");
+    expect(paths.mgmtQuarterlyRanking("2026-Q3", "persona/alpha"))
+      .toBe("/bff/management/quarterly-ranking?quarter=2026-Q3&persona=persona%2Falpha");
     expect(paths.mgmtQuarterlyRankingFormula()).toBe("/bff/management/quarterly-ranking/formula");
     expect(paths.mgmtQuarterlyRankingRecommendationSubmit("pm12-rec-1"))
       .toBe("/bff/management/quarterly-ranking/recommendations/pm12-rec-1/submit");

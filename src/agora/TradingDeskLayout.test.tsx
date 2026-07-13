@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { TradingDeskLayout } from "./TradingDeskLayout";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+import "@/i18n";
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshop: vi.fn(),
@@ -58,8 +59,8 @@ describe("TradingDeskLayout", () => {
     renderTradingDesk();
     const tabBar = screen.getByTestId("trading-desk-tab-bar");
     const tabs = Array.from(tabBar.querySelectorAll("button"));
-    const workshopTab = tabs.find((t) => t.textContent?.includes("Strategy Workshop"));
-    if (!workshopTab) throw new Error("Strategy Workshop tab not found");
+    const workshopTab = tabs.find((t) => t.textContent?.includes("策略工坊"));
+    if (!workshopTab) throw new Error("策略工坊頁籤不存在");
     fireEvent.click(workshopTab);
     expect(screen.getByTestId("strategy-workshop-content")).toBeDefined();
   });
@@ -68,8 +69,8 @@ describe("TradingDeskLayout", () => {
     renderTradingDesk();
     const tabBar = screen.getByTestId("trading-desk-tab-bar");
     const tabs = Array.from(tabBar.querySelectorAll("button"));
-    const perfTab = tabs.find((t) => t.textContent?.includes("Performance"));
-    if (!perfTab) throw new Error("Performance tab not found");
+    const perfTab = tabs.find((t) => t.textContent?.includes("策略執行與績效"));
+    if (!perfTab) throw new Error("策略執行與績效頁籤不存在");
     fireEvent.click(perfTab);
     expect(screen.getByTestId("strategy-performance-content")).toBeDefined();
   });
@@ -93,19 +94,19 @@ describe("TradingDeskLayout", () => {
   it("toggles the servant drawer open and closed", () => {
     renderTradingDesk();
     expect(screen.queryByTestId("trading-desk-servant-drawer")).toBeNull();
-    const toggleBtn = screen.getByRole("button", { name: /servant/i });
+    const toggleBtn = screen.getByRole("button", { name: /交易僕人/i });
     fireEvent.click(toggleBtn);
     expect(screen.getByTestId("trading-desk-servant-drawer")).toBeDefined();
     fireEvent.click(toggleBtn);
     expect(screen.queryByTestId("trading-desk-servant-drawer")).toBeNull();
   });
 
-  it("renders the bottom strip with Jobs, Shadow, Journal sections", () => {
+  it("renders the localized bottom strip sections", () => {
     renderTradingDesk();
     const strip = screen.getByTestId("trading-desk-bottom-strip");
-    expect(strip.textContent).toContain("Jobs");
-    expect(strip.textContent).toContain("Shadow");
-    expect(strip.textContent).toContain("Journal");
+    expect(strip.textContent).toContain("工作");
+    expect(strip.textContent).toContain("影子模式");
+    expect(strip.textContent).toContain("日誌");
   });
 
   it("marks active tab with aria-current=page (strategy-workshop)", () => {
@@ -113,7 +114,7 @@ describe("TradingDeskLayout", () => {
     const tabBar = screen.getByTestId("trading-desk-tab-bar");
     const activeEl = tabBar.querySelector('[aria-current="page"]');
     expect(activeEl).not.toBeNull();
-    expect(activeEl?.textContent).toContain("Strategy Workshop");
+    expect(activeEl?.textContent).toContain("策略工坊");
   });
 
   it("marks active tab with aria-current=page (trading-room)", () => {
@@ -121,7 +122,7 @@ describe("TradingDeskLayout", () => {
     const tabBar = screen.getByTestId("trading-desk-tab-bar");
     const activeEl = tabBar.querySelector('[aria-current="page"]');
     expect(activeEl).not.toBeNull();
-    expect(activeEl?.textContent).toContain("Trading Room");
+    expect(activeEl?.textContent).toContain("交易操盤室");
   });
 
   it("renders the full shell container", () => {
@@ -144,7 +145,7 @@ describe("TradingDeskLayout", () => {
   it("renders the servant drawer as a fixed full-width overlay on mobile", () => {
     setViewportWidth(MOBILE_WIDTH);
     renderTradingDesk();
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
     const drawer = screen.getByTestId("trading-desk-servant-drawer");
     expect(drawer.className).toContain("fixed");
     expect(drawer.className).toContain("w-full");
@@ -153,7 +154,7 @@ describe("TradingDeskLayout", () => {
   it("renders the servant drawer as a fixed-width side column on desktop", () => {
     setViewportWidth(DESKTOP_WIDTH);
     renderTradingDesk();
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
     const drawer = screen.getByTestId("trading-desk-servant-drawer");
     expect(drawer.className).not.toContain("fixed");
     expect(drawer.className).toContain("w-80");
@@ -166,9 +167,9 @@ describe("TradingDeskLayout", () => {
 
   it("shows a neutral placeholder in the servant drawer without a workshop id", () => {
     renderTradingDesk("/agora/strategy-workshop");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
     expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
-      "open a strategy workshop session",
+      "請開啟策略工坊工作階段",
     );
   });
 
@@ -185,13 +186,13 @@ describe("TradingDeskLayout", () => {
     vi.mocked(getWorkshop).mockResolvedValue(workshop);
 
     renderTradingDesk("/agora/strategy-workshop", "ws-1");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Momentum draft");
     });
-    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Status: open");
-    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("Messages: 4");
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("狀態：open");
+    expect(screen.getByTestId("servant-drawer-context").textContent).toContain("訊息：4");
     expect(getWorkshop).toHaveBeenCalledWith("ws-1");
   });
 
@@ -199,19 +200,19 @@ describe("TradingDeskLayout", () => {
     vi.mocked(getWorkshop).mockRejectedValue(new Error("boom"));
 
     renderTradingDesk("/agora/strategy-workshop", "ws-2");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toContain("Workshop context unavailable");
+      expect(screen.getByRole("alert").textContent).toContain("無法取得策略工坊情境");
     });
   });
 
   it("only propagates the servant workshop id while on the strategy-workshop tab", async () => {
     renderTradingDesk("/agora/trading-room", "ws-1");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
     expect(getWorkshop).not.toHaveBeenCalled();
     expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
-      "open a strategy workshop session",
+      "請開啟策略工坊工作階段",
     );
   });
 });
