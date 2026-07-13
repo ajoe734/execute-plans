@@ -28,7 +28,11 @@ import {
   type Route,
 } from "@playwright/test";
 
-import { authToken, mutationAuthHeaders } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  authToken,
+  mutationAuthHeaders,
+} from "./helpers/auth";
 import {
   CAPITAL_POOL_DEV_ID,
   CREATE_INTENT_RESOURCE_KEYS,
@@ -61,7 +65,7 @@ const LIVE_AUTH_TOKEN = RUN_LIVE_BFF_CONTRACT
         F08_CREATE_INTENT_LIVE_BFF: process.env.F08_CREATE_INTENT_LIVE_BFF,
       },
     })
-  : undefined;
+  : "";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -132,7 +136,7 @@ function arrayAt(value: unknown, label: string): unknown[] {
 function headersFor(
   resource: CreateIntentResource,
   suffix: string,
-  token?: string,
+  token: string,
 ): Record<string, string> {
   const correlationId = seededCorrelationId(`f08-${resource}-${suffix}`);
   return mutationAuthHeaders({
@@ -568,7 +572,7 @@ async function postCreateIntentsInBrowser(
   valid: boolean,
 ): Promise<BrowserCreateResult[]> {
   const requests = CREATE_INTENTS.map((fixture) => ({
-    headers: headersFor(fixture.resource, suffix),
+    headers: headersFor(fixture.resource, suffix, LOCAL_FIXTURE_AUTH_TOKEN),
     path: frontendUrl(fixture.path),
     payload: valid ? fixture.payload : {},
   }));

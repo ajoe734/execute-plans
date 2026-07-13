@@ -8,7 +8,11 @@
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { installOidcDevLogin, mutationAuthHeaders } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  mutationAuthHeaders,
+} from "./helpers/auth";
 
 const SNAPSHOT_AT = "2026-06-13T00:00:00Z";
 const PERSONA_ID = "persona-mgmt100-risk";
@@ -1220,7 +1224,11 @@ test("runs 100 management/persona/trading interaction flows", async ({ page }) =
 
   const hits: BffHit[] = [];
   await installBffFixture(page, hits);
-  await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"] });
+  await installOidcDevLogin(page, {
+    goto: false,
+    roles: ["operator", "reviewer", "approver"],
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
+  });
 
   const results: Array<{ category: string; id: string; ok: boolean; path: string; status?: number; type: string }> = [];
 
@@ -1268,7 +1276,7 @@ test("runs 100 management/persona/trading interaction flows", async ({ page }) =
       return out;
     },
     {
-      authHeaders: mutationAuthHeaders(),
+      authHeaders: mutationAuthHeaders({ token: LOCAL_FIXTURE_AUTH_TOKEN }),
       flows: fetchFlows.map((flow) => ({
         body: flow.body,
         id: flow.id,

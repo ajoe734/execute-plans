@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   authToken,
+  bearerHeader,
+  devLoginSession,
   targetsExternalE2eEnvironment,
 } from "../../e2e/helpers/auth";
 import {
@@ -12,6 +14,13 @@ import {
 } from "@/config/publicBuildAuth";
 
 const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
+
+function filesRecursively(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory() ? filesRecursively(path) : [path];
+  });
+}
 
 afterEach(() => {
   if (originalToken === undefined) delete process.env.VITE_BFF_DEV_BEARER_TOKEN;
@@ -89,6 +98,39 @@ describe("public frontend build auth boundary", () => {
   });
 
   it.each([
+    "",
+    " ",
+    "\t\n",
+    "Bearer",
+    "Bearer ",
+    " bearer\t",
+    " signed-token",
+    "signed-token ",
+    "signed-token\n",
+    "Bearer  signed-token",
+    "Bearer\tsigned-token",
+    "signed-token\nworkflow-command",
+  ])("rejects blank or Bearer-only explicit credentials before network access (%j)", (token) => {
+    expect(() => authToken({ env: {}, token })).toThrow(/non-blank bearer token/);
+    expect(() => bearerHeader(token)).toThrow(/non-blank bearer token/);
+    expect(() => devLoginSession({ token })).toThrow(/non-blank bearer token/);
+  });
+
+  it("does not silently replace a whitespace credential environment variable with fixture auth", () => {
+    expect(() => authToken({
+      env: {
+        BFF_AUTH_TOKEN: " ",
+        PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9000",
+      },
+    })).toThrow(/non-blank bearer token/);
+  });
+
+  it("accepts one exact Bearer scheme separator and returns the opaque credential", () => {
+    expect(authToken({ env: {}, token: "Bearer signed-token" })).toBe("signed-token");
+    expect(bearerHeader("Bearer signed-token")).toBe("Bearer signed-token");
+  });
+
+  it.each([
     "https://bff.example.test",
     "https://127.attacker.example",
     "https://127.0.0.1.attacker.example",
@@ -120,24 +162,19 @@ describe("public frontend build auth boundary", () => {
     expect(() => authToken({ env })).toThrow(/short-lived BFF_AUTH_TOKEN/);
   });
 
-  it("keeps tracked privileged fallbacks out of every hosted probe path", () => {
-    const hostedE2ePaths = readdirSync("e2e", { withFileTypes: true })
-      .filter((entry) => entry.isFile() && /hosted.*\.spec\.ts$/u.test(entry.name))
-      .map((entry) => `e2e/${entry.name}`);
-    const liveProbePaths = [
-      "e2e/01-startup-session.spec.ts",
-      "e2e/02-control-room.spec.ts",
-      "e2e/03-execution-loop.spec.ts",
-      "e2e/06-entity-registry.spec.ts",
-      "e2e/08-create-intent.spec.ts",
-      "e2e/10-rollback-saga.spec.ts",
-      "e2e/25-persona-fleet-live-linked-pages.spec.ts",
+  it("keeps tracked privileged fallbacks out of every network-capable E2E probe", () => {
+    const allNetworkE2ePaths = filesRecursively("e2e")
+      .filter((file) => /\.spec\.ts$/u.test(file));
+    const hostedE2ePaths = allNetworkE2ePaths.filter((file) =>
+      /hosted.*\.spec\.ts$/u.test(file),
+    );
+    const networkPaths = [
+      ...allNetworkE2ePaths,
       "scripts/accept-management-hosted-production.mjs",
       "scripts/probe-bff-write-paths.mjs",
       "scripts/probe-create-persona-then-fleet.mjs",
       "scripts/probe-persona-onboarding-endpoints.mjs",
     ];
-    const networkPaths = [...new Set([...hostedE2ePaths, ...liveProbePaths])];
     const source = networkPaths
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
@@ -149,7 +186,136 @@ describe("public frontend build auth boundary", () => {
     expect(source).not.toContain("pantheon-dev-browser:reviewer");
     expect(hostedSource).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
     expect(hostedE2ePaths).toContain("e2e/agora-ui-polish-hosted.spec.ts");
+    expect(allNetworkE2ePaths).toContain("e2e/04-sentinel-remediation.spec.ts");
   });
+
+  it("discovers fully intercepted fixtures under external global targets without a secret", () => {
+    const env = {
+      ...process.env,
+      PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+      PANTHEON_FE_BASE_URL: "https://fe.example.test",
+      FRONTEND_BASE_URL: "https://fe.example.test",
+      PLAYWRIGHT_BASE_URL: "https://fe.example.test",
+      PANTHEON_HOSTED_E2E: "",
+      FE_INT_GATE_LIVE_BFF: "",
+      F08_CREATE_INTENT_LIVE_BFF: "",
+      RUN_LIVE_BFF_CONTRACTS: "",
+    };
+    for (const key of [
+      "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+      "PANTHEON_BFF_SMOKE_TOKEN",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      delete env[key];
+    }
+
+    const result = spawnSync(
+      "npx",
+      [
+        "playwright",
+        "test",
+        "e2e/08-create-intent.spec.ts",
+        "e2e/20-portfolio-book-monitor.spec.ts",
+        "e2e/04-sentinel-remediation.spec.ts",
+        "--list",
+        "--reporter=line",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/08-create-intent|20-portfolio-book-monitor/);
+  }, 30_000);
+
+  it("runs the fully intercepted F08 fixture with an external global BFF and no secret", () => {
+    const env = {
+      ...process.env,
+      PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:9",
+      FRONTEND_BASE_URL: "http://127.0.0.1:9",
+      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:9",
+      PANTHEON_HOSTED_E2E: "",
+      FE_INT_GATE_LIVE_BFF: "",
+      F08_CREATE_INTENT_LIVE_BFF: "",
+      RUN_LIVE_BFF_CONTRACTS: "",
+    };
+    for (const key of [
+      "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+      "PANTHEON_BFF_SMOKE_TOKEN",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      delete env[key];
+    }
+
+    const result = spawnSync(
+      "npx",
+      [
+        "playwright",
+        "test",
+        "e2e/08-create-intent.spec.ts",
+        "--project=chromium",
+        "--reporter=line",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/2 passed/);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/1 skipped/);
+  }, 30_000);
+
+  it("does not opt the Agora winner branch into live execution from token presence alone", () => {
+    const env = {
+      ...process.env,
+      AG_DYNUI_FULL_006_HOSTED: "",
+      PANTHEON_HOSTED_E2E: "",
+      PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9",
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:9",
+      BFF_AUTH_TOKEN: "signed_short-lived-token_20260713",
+    };
+    const result = spawnSync(
+      "npx",
+      [
+        "playwright",
+        "test",
+        "e2e/agora-winner-branch-hosted.spec.ts",
+        "--project=chromium",
+        "--reporter=line",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/skipped/i);
+  }, 30_000);
+
+  it("lists the explicitly enabled Agora winner branch when a token is present", () => {
+    const env = {
+      ...process.env,
+      AG_DYNUI_FULL_006_HOSTED: "1",
+      PANTHEON_HOSTED_E2E: "",
+      PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9",
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:9",
+      BFF_AUTH_TOKEN: "signed_short-lived-token_20260713",
+    };
+    const result = spawnSync(
+      "npx",
+      [
+        "playwright",
+        "test",
+        "e2e/agora-winner-branch-hosted.spec.ts",
+        "--project=chromium",
+        "--list",
+        "--reporter=line",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/live readiness cards to Trading Room workspace/);
+  }, 30_000);
 
   it.each([
     {

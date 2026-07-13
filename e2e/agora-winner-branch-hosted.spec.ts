@@ -28,8 +28,7 @@ const RAW_AUTH_TOKEN =
 const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
 const HOSTED_REQUESTED =
   process.env.AG_DYNUI_FULL_006_HOSTED === "1" ||
-  process.env.PANTHEON_HOSTED_E2E === "1" ||
-  Boolean(AUTH_TOKEN);
+  process.env.PANTHEON_HOSTED_E2E === "1";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
 const LIVE_GET_ATTEMPTS = 3;

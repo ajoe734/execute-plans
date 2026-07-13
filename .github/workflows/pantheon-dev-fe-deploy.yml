@@ -202,24 +202,7 @@ jobs:
             --data-binary "@${payload_file}" \
             "${PANTHEON_BFF_BASE_URL}/bff/auth/dev-login" > "${response_file}"
 
-          write_probe_token="$(node - "${response_file}" <<'NODE'
-          const fs = require("node:fs");
-          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          const token = typeof payload.access_token === "string" ? payload.access_token : "";
-          const expiresIn = Number(payload.expires_in);
-          if (!token || !Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > 3600) {
-            process.exit(1);
-          }
-          process.stdout.write(token);
-          NODE
-          )"
-          if [[ -z "${write_probe_token}" ]]; then
-            echo "dev-login did not issue a bounded short-lived token" >&2
-            exit 1
-          fi
-          echo "::add-mask::${write_probe_token}"
-          printf 'PANTHEON_DEPLOY_WRITE_PROBE_AUTH_TOKEN=%s\n' "${write_probe_token}" >> "$GITHUB_ENV"
-          write_probe_token=""
+          node scripts/export-dev-login-token.mjs "${response_file}" "$GITHUB_ENV"
 
       - name: Deploy static build
         id: deploy

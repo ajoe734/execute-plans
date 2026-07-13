@@ -72,11 +72,15 @@ function explicitAuthToken(
   env: Record<string, string | undefined>,
   token?: string,
 ): string | undefined {
-  return token ?? envValue(env, [
+  if (token !== undefined) return token;
+  for (const key of [
     "BFF_AUTH_TOKEN",
     "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
     "PANTHEON_BFF_SMOKE_TOKEN",
-  ]);
+  ]) {
+    if (env[key] !== undefined) return env[key];
+  }
+  return undefined;
 }
 
 function isLoopbackTarget(value: string): boolean {
@@ -129,10 +133,30 @@ function missingExternalCredential(): Error {
 }
 
 export function normalizeBearerToken(token: string): string {
-  const trimmed = token.trim();
-  return trimmed.toLowerCase().startsWith("bearer ")
-    ? trimmed.slice("bearer ".length).trim()
-    : trimmed;
+  const hasControlCharacter = [...token].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
+  if (!token || token !== token.trim() || hasControlCharacter) {
+    throw new Error(
+      "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
+    );
+  }
+  let normalized = token;
+  if (/^bearer(?:\s|$)/iu.test(token)) {
+    if (!/^bearer [^\s]+$/iu.test(token)) {
+      throw new Error(
+        "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
+      );
+    }
+    normalized = token.slice("bearer ".length);
+  }
+  if (!normalized || /\s/u.test(normalized)) {
+    throw new Error(
+      "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
+    );
+  }
+  return normalized;
 }
 
 export function makeDevAuthToken(options: {
@@ -149,7 +173,7 @@ export function makeDevAuthToken(options: {
 export function authToken(options: AuthHeaderOptions = {}): string {
   const env = options.env ?? defaultEnv();
   const explicit = explicitAuthToken(env, options.token);
-  if (explicit) return normalizeBearerToken(explicit);
+  if (explicit !== undefined) return normalizeBearerToken(explicit);
   if (targetsExternalE2eEnvironment(env)) throw missingExternalCredential();
   return LOCAL_FIXTURE_AUTH_TOKEN;
 }
@@ -199,7 +223,7 @@ export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession 
   const roles = options.roles ?? [...DEFAULT_FE_AUTH_ROLES];
   const env = defaultEnv();
   const explicit = explicitAuthToken(env, options.token);
-  if (!explicit && targetsExternalE2eEnvironment(env)) {
+  if (explicit === undefined && targetsExternalE2eEnvironment(env)) {
     throw missingExternalCredential();
   }
   const token = normalizeBearerToken(
