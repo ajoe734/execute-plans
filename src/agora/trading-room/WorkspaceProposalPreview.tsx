@@ -113,18 +113,28 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
 
 function ViewProposalCard({
   selected,
+  sourceStatuses,
   view,
   onPreview,
 }: {
   selected: boolean;
+  sourceStatuses: ReadonlyMap<string, DataAvailabilityStatus>;
   view: TradingRoomViewSpec;
   onPreview?: (view: TradingRoomViewSpec) => void;
 }) {
-  const status = view.dataAvailability ?? "complete";
   const invalidWidgets = view.widgets
     .map((widget) => ({ widget, validation: validateTradingRoomWidgetSpec(widget) }))
     .filter((entry) => !entry.validation.ok);
-  const unavailableWidgets = status === "complete" ? [] : view.widgets.map((widget) => widget.title).slice(0, 3);
+  const widgetAvailability = view.widgets.map((widget) => ({
+    status: widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability ?? "unavailable",
+    widget,
+  }));
+  const counts = widgetAvailability.reduce(
+    (summary, entry) => ({ ...summary, [entry.status]: summary[entry.status] + 1 }),
+    { complete: 0, partial: 0, unavailable: 0 } satisfies Record<DataAvailabilityStatus, number>,
+  );
+  const degradedWidgets = widgetAvailability.filter((entry) => entry.status !== "complete");
+  const availabilitySummary = `${counts.complete} full / ${counts.partial} partial / ${counts.unavailable} missing`;
 
   return (
     <section
@@ -146,7 +156,6 @@ function ViewProposalCard({
           <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, lineHeight: 1.25, margin: 0, overflowWrap: "anywhere" }}>{view.title}</h3>
           <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0", overflowWrap: "anywhere" }}>{view.purpose}</p>
         </div>
-        <StatusPill status={status} />
       </div>
       <div style={{ color: COLORS.muted, display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
         <span data-testid={`workspace-proposal-view-${view.id}-widget-count`}>{view.widgetCount ?? view.widgets.length} widgets</span>
@@ -155,11 +164,25 @@ function ViewProposalCard({
       {view.rationale ? (
         <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: 0 }}>{view.rationale}</p>
       ) : null}
-      {unavailableWidgets.length ? (
-        <div style={{ color: COLORS.warning, fontSize: 12, lineHeight: 1.45, overflowWrap: "anywhere" }} data-testid={`workspace-proposal-view-${view.id}-data-gaps`}>
-          資料狀態需確認: {unavailableWidgets.join("、")}
+      {degradedWidgets.length ? (
+        <details data-testid={`workspace-proposal-view-${view.id}-availability`} style={{ color: COLORS.textSoft, fontSize: 12 }}>
+          <summary style={{ color: COLORS.warning, cursor: "pointer", fontWeight: 700 }}>
+            Data availability: {availabilitySummary}
+          </summary>
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            {degradedWidgets.map(({ status, widget }) => (
+              <div key={widget.id} style={{ alignItems: "center", display: "flex", gap: 8, minWidth: 0 }}>
+                <StatusPill status={status} />
+                <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{widget.title} · {widget.dataSource}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : (
+        <div data-testid={`workspace-proposal-view-${view.id}-availability`} style={{ color: COLORS.good, fontSize: 12, fontWeight: 700 }}>
+          Data availability: {availabilitySummary}
         </div>
-      ) : null}
+      )}
       {view.warnings?.length ? (
         <ul style={{ color: COLORS.warning, fontSize: 12, margin: 0, paddingLeft: 16 }}>
           {view.warnings.map((warning, index) => (
@@ -222,6 +245,9 @@ export function WorkspaceProposalPreview({
   selectedViewId,
 }: WorkspaceProposalPreviewProps) {
   const availability = proposal.dataAvailability.status;
+  const sourceStatuses = new Map(
+    proposal.dataAvailability.sources.map((source) => [source.dataSource, source.status] as const),
+  );
   const personalizationItems = proposal.personalizationApplied.items ?? [];
   const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
 
@@ -271,21 +297,15 @@ export function WorkspaceProposalPreview({
           background: COLORS.panel,
           border: `1px solid ${COLORS.border}`,
           borderRadius: 8,
-          display: "grid",
-          gap: 10,
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+          alignItems: "center",
+          display: "flex",
+          gap: 8,
+          justifyContent: "space-between",
           padding: 12,
         }}
       >
-        {proposal.dataAvailability.sources.map((source) => (
-          <div key={source.dataSource} style={{ minWidth: 0 }}>
-            <div style={{ alignItems: "flex-start", display: "flex", gap: 8, minWidth: 0 }}>
-              <StatusPill status={source.status} />
-              <span style={{ color: COLORS.text, flex: "1 1 auto", fontSize: 12, fontWeight: 700, lineHeight: 1.35, minWidth: 0, overflowWrap: "anywhere" }}>{source.dataSource}</span>
-            </div>
-            {source.reason ? <div style={{ color: COLORS.muted, fontSize: 12, lineHeight: 1.4, marginTop: 4, overflowWrap: "anywhere" }}>{source.reason}</div> : null}
-          </div>
-        ))}
+        <span style={{ color: COLORS.textSoft, fontSize: 12, fontWeight: 700 }}>Workspace data availability</span>
+        <StatusPill status={availability} />
       </section>
 
       {personalizationItems.length ? (
@@ -314,6 +334,7 @@ export function WorkspaceProposalPreview({
             key={view.id}
             onPreview={onPreviewView}
             selected={selected === view.id}
+            sourceStatuses={sourceStatuses}
             view={view}
           />
         ))}

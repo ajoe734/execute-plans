@@ -854,7 +854,10 @@ describe("TradingRoomPage", () => {
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
-    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("winner_branch.related_branch_flow");
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("Workspace data availability");
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).not.toContain("winner_branch.related_branch_flow");
+    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain("0 full / 1 partial / 0 missing");
+    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain("1 full / 0 partial / 0 missing");
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");
