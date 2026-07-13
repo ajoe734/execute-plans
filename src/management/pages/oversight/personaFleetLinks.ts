@@ -918,31 +918,12 @@ export function personaFleetMutationHref(r: ManagementPersonaFleetRow): string |
 }
 
 export function personaFleetCapitalHref(r: ManagementPersonaFleetRow): string | null {
-  if (isPaperCapitalRow(r)) {
-    const personaId = encodedPersonaId(r);
-    return personaId ? `/management/rankings?tab=quarterly&persona=${personaId}` : null;
-  }
-
-  const canonical = firstCanonicalHref(rowLinkRecords(r), [
-    "capital",
-    "capitalHref",
-    "capital_href",
-    "capitalPool",
-    "capital_pool",
-    "capitalPoolHref",
-    "capital_pool_href",
-  ]);
-  const promotionCapital = canonical ? promotionAllocationCapitalHref(canonical) : null;
-  if (promotionCapital) return promotionCapital;
-  if (canonical?.startsWith("/management/capital/")) {
-    const id = decodeURIComponent(canonical.replace(/^\/management\/capital\//, "").split(/[?#]/, 1)[0] ?? "");
-    return isUsableToken(id)
-      ? `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(id)}`
-      : "/management/governance-decisions?tab=capital";
-  }
-  if (canonical?.startsWith("/management/capital")) return normalizeRetiredPromotionHref(canonical);
-  const id = capitalPoolId(r) ?? paperLedgerId(r);
-  return id ? `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(id)}` : null;
+  const personaId = rowPersonaId(r);
+  if (!personaId) return null;
+  const id = isPaperCapitalRow(r) ? paperLedgerId(r) ?? capitalPoolId(r) : capitalPoolId(r);
+  const params = new URLSearchParams({ tab: "overview", persona_id: personaId });
+  if (id) params.set("capital_pool_id", id);
+  return `/management/performance?${params.toString()}`;
 }
 
 

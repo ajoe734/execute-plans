@@ -444,9 +444,10 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("paper-ledger-persona-live-paper-alpha")).toBeInTheDocument();
     expect(screen.queryByText("pool-paper-alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("cp-paper-alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("Paper ledger")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open capital for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
-      "/management/rankings?tab=quarterly&persona=persona-live-paper-alpha",
+      "/management/performance?tab=overview&persona_id=persona-live-paper-alpha&capital_pool_id=paper-ledger-persona-live-paper-alpha",
     );
     expect(screen.queryByText("Open capital")).not.toBeInTheDocument();
     expect(screen.getByText("#3")).toBeInTheDocument();
@@ -462,6 +463,32 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("link", { name: "Review human gate for persona-live-paper-alpha" })).toHaveAttribute(
       "href",
       "/management/human-inbox/promotion_review%3Areview-paper-alpha",
+    );
+  });
+
+  it("distinguishes a real sleeve from a paper ledger and links it to the persona capital view", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [fleetRow("persona-live-real-alpha", "Real Sleeve Persona", {
+        humanNeeded: false,
+        state: "live_running",
+        capitalMode: "live",
+        capitalScope: "live_sleeve",
+        capitalScopeId: "real-sleeve-persona-alpha",
+        capitalSleeveId: "real-sleeve-persona-alpha",
+        capitalPoolId: "pool-real-alpha",
+      })],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    expect(screen.getByText("Real sleeve")).toBeInTheDocument();
+    expect(screen.getByText("real-sleeve-persona-alpha")).toBeInTheDocument();
+    expect(screen.queryByText("pool-real-alpha")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open capital for persona-live-real-alpha" })).toHaveAttribute(
+      "href",
+      "/management/performance?tab=overview&persona_id=persona-live-real-alpha&capital_pool_id=pool-real-alpha",
     );
   });
 

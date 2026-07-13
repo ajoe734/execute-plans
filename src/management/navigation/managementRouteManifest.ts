@@ -393,6 +393,9 @@ const PROMOTION_ALLOCATION_TAB_TO_RULE: Record<string, string> = {
   "formula-policy": "promotion-allocation-formula-policy-to-governance-policy",
   "ranking-formulas": "promotion-allocation-formula-policy-to-governance-policy",
   formula: "promotion-allocation-formula-policy-to-governance-policy",
+  "emergency-actions": "promotion-allocation-quarterly-capital-to-governance-capital",
+  emergency: "promotion-allocation-quarterly-capital-to-governance-capital",
+  containment: "promotion-allocation-quarterly-capital-to-governance-capital",
 };
 
 /** Resolve a legacy pathname+search to its canonical destination, or `null`

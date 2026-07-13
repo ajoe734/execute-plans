@@ -166,6 +166,10 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
       pathname: "/management/governance-decisions",
       search: "?tab=policy&formula_id=rf-1",
     });
+    expect(resolveLegacyRedirect("/management/promotion-allocation", "?tab=emergency-actions&capital_id=pool-a")).toEqual({
+      pathname: "/management/governance-decisions",
+      search: "?tab=capital&capital_id=pool-a",
+    });
     // default (no tab) matches the current PromotionAllocationPage default.
     expect(resolveLegacyRedirect("/management/promotion-allocation", "")).toEqual({
       pathname: "/management/rankings",

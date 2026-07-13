@@ -66,7 +66,7 @@ const RecommendationsQueueTab = () => {
 const CapitalTab = () => (
   <div className="space-y-6">
     <GovernanceDecisionQueue
-      kinds={["capital_breach", "policy_violation", "rollback_request"]}
+      kinds={["capital_breach", "policy_violation", "rollback_request", "broker_disconnect", "sentinel"]}
       titleKey="governanceDecisions.queue.capitalTitle"
       subtitleKey="governanceDecisions.queue.capitalSubtitle"
     />

@@ -139,7 +139,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona%2Ftw%20equity");
-    expect(personaFleetCapitalHref(row)).toBe("/management/governance-decisions?tab=capital&capital_id=pool-tw-paper");
+    expect(personaFleetCapitalHref(row)).toBe("/management/performance?tab=overview&persona_id=persona%2Ftw+equity");
     expect(personaFleetResearchHref(row)).toBe("/management/experiments/exp-mgmt-qlib-006");
     expect(personaFleetArtifactHref(row)).toBe(
       "/management/artifacts/qlib-tw-cross-sectional-alpha-model-draft-v1",
@@ -188,7 +188,7 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("keeps capital links on capital management even when stale link targets point at promotion", () => {
+  it("keeps capital links on persona performance even when stale link targets point at promotion", () => {
     const row = {
       personaId: "persona-paper-capital",
       capitalMode: "paper",
@@ -199,17 +199,19 @@ describe("PersonaFleetPage deep links", () => {
       },
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/rankings?tab=quarterly&persona=persona-paper-capital");
+    expect(personaFleetCapitalHref(row)).toBe(
+      "/management/performance?tab=overview&persona_id=persona-paper-capital&capital_pool_id=paper-ledger-persona-paper-capital",
+    );
   });
 
-  it("normalizes retired capital targets into Promotion & Allocation capital context", () => {
+  it("ignores retired capital targets and keeps persona performance context", () => {
     expect(personaFleetCapitalHref({
       personaId: "persona-old-capital-path",
       linkTargets: {
         capitalPool: "/management/capital/pool-tw-paper",
       },
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/governance-decisions?tab=capital&capital_id=pool-tw-paper",
+      "/management/performance?tab=overview&persona_id=persona-old-capital-path",
     );
 
     expect(personaFleetCapitalHref({
@@ -218,7 +220,7 @@ describe("PersonaFleetPage deep links", () => {
         capitalPool: "/management/capital?pool=pool-from-query",
       },
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/governance-decisions?pool=pool-from-query&tab=capital&capital_id=pool-from-query",
+      "/management/performance?tab=overview&persona_id=persona-old-capital-query",
     );
   });
 
@@ -511,7 +513,9 @@ describe("PersonaFleetPage deep links", () => {
       last_mutation: "2026-06-03",
     } as unknown as ManagementPersonaFleetRow;
 
-    expect(personaFleetCapitalHref(row)).toBe("/management/governance-decisions?tab=capital&capital_id=pool-crypto-paper");
+    expect(personaFleetCapitalHref(row)).toBe(
+      "/management/performance?tab=overview&persona_id=persona-crypto-paper&capital_pool_id=pool-crypto-paper",
+    );
     expect(personaFleetPerformanceHref(row)).toBe(
       "/management/performance?tab=attribution&dimension=persona&persona=persona-crypto-paper",
     );
@@ -520,7 +524,7 @@ describe("PersonaFleetPage deep links", () => {
     );
   });
 
-  it("uses paper candidates tab links for paper rows", () => {
+  it("uses persona performance capital context for paper rows", () => {
     const row = {
       persona_id: "persona-crypto-paper",
       capital_mode: "paper",
@@ -529,14 +533,14 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetCapitalHref(row)).toBe(
-      "/management/rankings?tab=quarterly&persona=persona-crypto-paper",
+      "/management/performance?tab=overview&persona_id=persona-crypto-paper&capital_pool_id=paper-ledger-persona-crypto-paper",
     );
 
     expect(personaFleetCapitalHref({
       ...row,
       paper_capital_pool_id: "pool-explicit-shared-paper",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/rankings?tab=quarterly&persona=persona-crypto-paper",
+      "/management/performance?tab=overview&persona_id=persona-crypto-paper&capital_pool_id=paper-ledger-persona-crypto-paper",
     );
 
     expect(personaFleetCapitalHref({
@@ -544,7 +548,7 @@ describe("PersonaFleetPage deep links", () => {
       capital_pool_id: "pool-crypto-paper",
       paper_ledger_id: "paper-ledger-persona-paper-slim",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/rankings?tab=quarterly&persona=persona-paper-slim",
+      "/management/performance?tab=overview&persona_id=persona-paper-slim&capital_pool_id=paper-ledger-persona-paper-slim",
     );
 
     expect(personaFleetCapitalHref({
@@ -552,7 +556,7 @@ describe("PersonaFleetPage deep links", () => {
       capital_mode: "paper",
       paper_capital_pool_id: "pool-explicit-shared-paper",
     } as unknown as ManagementPersonaFleetRow)).toBe(
-      "/management/rankings?tab=quarterly&persona=persona-shared-paper",
+      "/management/performance?tab=overview&persona_id=persona-shared-paper",
     );
   });
 
@@ -563,7 +567,7 @@ describe("PersonaFleetPage deep links", () => {
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetCapitalHref(row)).toBe(
-      "/management/rankings?tab=quarterly&persona=persona-paper-ledger",
+      "/management/performance?tab=overview&persona_id=persona-paper-ledger&capital_pool_id=paper-ledger-persona-paper-ledger",
     );
   });
 
