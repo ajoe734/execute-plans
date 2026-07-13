@@ -101,6 +101,8 @@ function cn(...inputs: any[]) {
 
 interface StrategyLensDef {
   id: string;
+  titleKey: string;
+  thesisKey: string;
   title: string;
   titleZh: string;
   thesis: string;
@@ -113,12 +115,14 @@ interface StrategyLensDef {
   };
   riskState: "normal" | "watch" | "warning" | "critical";
   freshness: string;
-  rules: { label: string; value: string }[];
+  rules: { labelKey: string; label: string; value: string }[];
 }
 
 const STRATEGY_LENSES: StrategyLensDef[] = [
   {
     id: "lens-A",
+    titleKey: "agora.tradingRoom.lenses.chip.title",
+    thesisKey: "agora.tradingRoom.lenses.chip.thesis",
     title: "Chip/Large-Holder Positioning",
     titleZh: "籌碼大戶部位建立",
     thesis: "Identify symbols where large institutions are accumulating positions while price remains quiet.",
@@ -127,13 +131,15 @@ const STRATEGY_LENSES: StrategyLensDef[] = [
     riskState: "watch",
     freshness: "3m ago",
     rules: [
-      { label: "Concentration", value: "> 15% ADV" },
-      { label: "Accumulation Days", value: "> 5 consecutive days" },
-      { label: "Price Deviation", value: "< 3% from weekly low" },
+      { labelKey: "agora.tradingRoom.lenses.chip.rules.concentration", label: "Concentration", value: "> 15% ADV" },
+      { labelKey: "agora.tradingRoom.lenses.chip.rules.accumDays", label: "Accumulation Days", value: "> 5 consecutive days" },
+      { labelKey: "agora.tradingRoom.lenses.chip.rules.priceDev", label: "Price Deviation", value: "< 3% from weekly low" },
     ]
   },
   {
     id: "lens-B",
+    titleKey: "agora.tradingRoom.lenses.laggard.title",
+    thesisKey: "agora.tradingRoom.lenses.laggard.thesis",
     title: "Industry Laggard",
     titleZh: "產業落後補漲",
     thesis: "Identify supplier and sector constituents lagging high-momentum peers with active catalysts.",
@@ -142,13 +148,15 @@ const STRATEGY_LENSES: StrategyLensDef[] = [
     riskState: "normal",
     freshness: "5m ago",
     rules: [
-      { label: "Peer Momentum Diff", value: "> 12% lag" },
-      { label: "Revenue Exposure", value: "> 25% target sector" },
-      { label: "Catalyst Horizon", value: "< 14 days" },
+      { labelKey: "agora.tradingRoom.lenses.laggard.rules.peerMomentum", label: "Peer Momentum Diff", value: "> 12% lag" },
+      { labelKey: "agora.tradingRoom.lenses.laggard.rules.revenueExposure", label: "Revenue Exposure", value: "> 25% target sector" },
+      { labelKey: "agora.tradingRoom.lenses.laggard.rules.catalystHorizon", label: "Catalyst Horizon", value: "< 14 days" },
     ]
   },
   {
     id: "lens-C",
+    titleKey: "agora.tradingRoom.lenses.breakout.title",
+    thesisKey: "agora.tradingRoom.lenses.breakout.thesis",
     title: "Technical Breakout",
     titleZh: "技術突破",
     thesis: "Monitor critical breakout resistance levels, anchored VWAPs, and setup confirmation.",
@@ -157,13 +165,15 @@ const STRATEGY_LENSES: StrategyLensDef[] = [
     riskState: "warning",
     freshness: "1m ago",
     rules: [
-      { label: "Distance to Level", value: "< 1.5% from resistance" },
-      { label: "Volume Multiple", value: "> 2.0x 20d avg" },
-      { label: "ATR Rule", value: "ATR ratio < 1.2" },
+      { labelKey: "agora.tradingRoom.lenses.breakout.rules.distance", label: "Distance to Level", value: "< 1.5% from resistance" },
+      { labelKey: "agora.tradingRoom.lenses.breakout.rules.volumeMultiple", label: "Volume Multiple", value: "> 2.0x 20d avg" },
+      { labelKey: "agora.tradingRoom.lenses.breakout.rules.atrRule", label: "ATR Rule", value: "ATR ratio < 1.2" },
     ]
   },
   {
     id: "lens-D",
+    titleKey: "agora.tradingRoom.lenses.event.title",
+    thesisKey: "agora.tradingRoom.lenses.event.thesis",
     title: "Event Trading",
     titleZh: "事件交易",
     thesis: "Identify expectation mismatches and volatility setups surrounding scheduled catalysts.",
@@ -172,13 +182,15 @@ const STRATEGY_LENSES: StrategyLensDef[] = [
     riskState: "critical",
     freshness: "30s ago",
     rules: [
-      { label: "Countdown", value: "< 48 hours" },
-      { label: "IV Percentile", value: "> 85%" },
-      { label: "Consensus Deviation", value: "> 1.5 sigma expected" },
+      { labelKey: "agora.tradingRoom.lenses.event.rules.countdown", label: "Countdown", value: "< 48 hours" },
+      { labelKey: "agora.tradingRoom.lenses.event.rules.ivPercentile", label: "IV Percentile", value: "> 85%" },
+      { labelKey: "agora.tradingRoom.lenses.event.rules.consensusDev", label: "Consensus Deviation", value: "> 1.5 sigma expected" },
     ]
   },
   {
     id: "lens-E",
+    titleKey: "agora.tradingRoom.lenses.liquidity.title",
+    thesisKey: "agora.tradingRoom.lenses.liquidity.thesis",
     title: "Large-Flow/Liquidity Execution",
     titleZh: "大額資金進出",
     thesis: "Assess market impact, spreads, and slippage risk for sizable executions.",
@@ -187,9 +199,9 @@ const STRATEGY_LENSES: StrategyLensDef[] = [
     riskState: "normal",
     freshness: "10m ago",
     rules: [
-      { label: "ADV Ratio", value: "> 10% daily volume" },
-      { label: "Slippage Tolerance", value: "< 15 bps expected" },
-      { label: "Spread Limit", value: "< 0.2% bid-ask spread" },
+      { labelKey: "agora.tradingRoom.lenses.liquidity.rules.advRatio", label: "ADV Ratio", value: "> 10% daily volume" },
+      { labelKey: "agora.tradingRoom.lenses.liquidity.rules.slippage", label: "Slippage Tolerance", value: "< 15 bps expected" },
+      { labelKey: "agora.tradingRoom.lenses.liquidity.rules.spreadLimit", label: "Spread Limit", value: "< 0.2% bid-ask spread" },
     ]
   }
 ];
@@ -200,6 +212,7 @@ interface StrategyLensSwitcherProps {
   onSelect: (strategyId: string | undefined) => void;
   activeLensId: string;
   setActiveLensId: (lensId: string) => void;
+  candidates?: CandidateRecord[];
 }
 
 function StrategyLensSwitcher({
@@ -208,6 +221,7 @@ function StrategyLensSwitcher({
   onSelect,
   activeLensId,
   setActiveLensId,
+  candidates,
 }: StrategyLensSwitcherProps): JSX.Element {
   const { t } = useTranslation();
   return (
@@ -236,6 +250,22 @@ function StrategyLensSwitcher({
       >
         {STRATEGY_LENSES.map((lens) => {
           const isSelected = activeLensId === lens.id && activeStrategyId === undefined;
+          
+          // Compute dynamic metrics if candidates list is available
+          const dynamicMetrics = (() => {
+            if (!candidates || candidates.length === 0) return lens.metrics;
+            // Filter by lensId matching this lens card
+            const lensCands = candidates.filter((c) => c.lensId === lens.id);
+            const candidatesCount = lensCands.length;
+            const heldCount = lensCands.filter((c) => c.state === "monitoring" || c.state === "shadow").length;
+            return {
+              candidates: candidatesCount,
+              held: heldCount,
+              nearTrigger: lens.metrics.nearTrigger,
+              exitAlerts: lens.metrics.exitAlerts,
+            };
+          })();
+
           return (
             <div
               key={lens.id}
@@ -254,7 +284,9 @@ function StrategyLensSwitcher({
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: "#f0ece4" }}>{lens.titleZh}</span>
+                <span style={{ fontWeight: 700, fontSize: 13, color: "#f0ece4" }}>
+                  {t(lens.titleKey, { defaultValue: lens.titleZh })}
+                </span>
                 <span
                   style={{
                     padding: "2px 6px",
@@ -282,12 +314,16 @@ function StrategyLensSwitcher({
                 </span>
               </div>
               <div style={{ fontSize: 11, color: "#9aa1ad", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {lens.thesisZh}
+                {t(lens.thesisKey, { defaultValue: lens.thesisZh })}
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11 }}>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <span style={{ color: "#8c96a6" }}>候選: <strong style={{ color: "#f0ece4" }}>{lens.metrics.candidates}</strong></span>
-                  <span style={{ color: "#8c96a6" }}>監控: <strong style={{ color: "#f0ece4" }}>{lens.metrics.held}</strong></span>
+                  <span style={{ color: "#8c96a6" }}>
+                    {t("agora.tradingRoom.lenses.meta.candidateShort", { count: dynamicMetrics.candidates, defaultValue: "候選: " + dynamicMetrics.candidates })}
+                  </span>
+                  <span style={{ color: "#8c96a6" }}>
+                    {t("agora.tradingRoom.lenses.meta.heldShort", { count: dynamicMetrics.held, defaultValue: "監控: " + dynamicMetrics.held })}
+                  </span>
                 </div>
                 <span style={{ color: "#737d8e" }}>{lens.freshness}</span>
               </div>
@@ -1067,26 +1103,26 @@ export const DEFAULT_CANDIDATES: CandidateRecord[] = [
   }
 ];
 
-function getLifecycleLabel(state: string): string {
+function getLifecycleLabel(state: string, t: TFunction): string {
   switch (state) {
     case "all":
-      return "全部候選";
+      return t("agora.tradingRoom.page.states.all", { defaultValue: "全部候選" });
     case "new_candidate":
-      return "新候選";
+      return t("agora.tradingRoom.page.states.new_candidate", { defaultValue: "新候選" });
     case "to_discuss":
-      return "待討論";
+      return t("agora.tradingRoom.page.states.to_discuss", { defaultValue: "待討論" });
     case "deep_research":
-      return "深入研究";
+      return t("agora.tradingRoom.page.states.deep_research", { defaultValue: "深入研究" });
     case "monitoring":
-      return "納入監控";
+      return t("agora.tradingRoom.page.states.monitoring", { defaultValue: "納入監控" });
     case "shadow":
-      return "影子追蹤";
+      return t("agora.tradingRoom.page.states.shadow", { defaultValue: "影子追蹤" });
     case "triggered":
-      return "已觸發";
+      return t("agora.tradingRoom.page.states.triggered", { defaultValue: "已觸發" });
     case "parked":
-      return "暫放觀察";
+      return t("agora.tradingRoom.page.states.parked", { defaultValue: "暫放觀察" });
     case "excluded":
-      return "已剔除";
+      return t("agora.tradingRoom.page.states.excluded", { defaultValue: "已剔除" });
     default:
       return state;
   }
@@ -1097,16 +1133,92 @@ interface CandidateReviewDrawerProps {
   onClose: () => void;
   onUpdateState: (id: string, newState: CandidateRecord["state"]) => void;
   onStrategySelect: (strategyId: string) => void;
+  strategies?: TradingRoomStrategyEntry[];
 }
 
 function CandidateReviewDrawer({
   candidate,
   onClose,
   onUpdateState,
-  onStrategySelect
+  onStrategySelect,
+  strategies,
 }: CandidateReviewDrawerProps) {
+  const { t } = useTranslation();
+  const drawerRef = React.useRef<HTMLDivElement>(null);
+  const closeBtnRef = React.useRef<HTMLButtonElement>(null);
+  const previousFocusRef = React.useRef<HTMLElement | null>(null);
+
+  // Focus trap and Escape key closing behavior
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    if (closeBtnRef.current) {
+      closeBtnRef.current.focus();
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && drawerRef.current) {
+        const focusableElements = drawerRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length === 0) return;
+        const firstElement = focusableElements[0] as HTMLElement;
+        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            lastElement.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            firstElement.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocusRef.current) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, [onClose]);
+
+  // Determine dynamic strategy ID based on strategies list and candidate symbol
+  const matchedStrategyId = (() => {
+    if (!strategies || strategies.length === 0) return "strat-001";
+    
+    // Attempt 1: match by strategy title containing candidate symbol
+    const bySymbol = strategies.find(
+      (s) => s.title.toLowerCase().includes(candidate.symbol.toLowerCase())
+    );
+    if (bySymbol) return bySymbol.strategy_id;
+
+    // Attempt 2: fallback to first ready strategy
+    const readyStrat = strategies.find((s) => s.readiness_state === "ready");
+    if (readyStrat) return readyStrat.strategy_id;
+
+    // Attempt 3: fallback to first strategy in list
+    return strategies[0].strategy_id;
+  })();
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" data-testid="candidate-review-drawer">
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      data-testid="candidate-review-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-label={candidate.symbol}
+      ref={drawerRef}
+    >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
@@ -1118,14 +1230,24 @@ function CandidateReviewDrawer({
             <h2 className="text-base font-bold text-[#e8b750]" data-testid="drawer-candidate-symbol">{candidate.symbol}</h2>
             <p className="text-[11px] text-[#8c96a6]">{candidate.name}</p>
           </div>
-          <button onClick={onClose} className="text-xl text-[#6b7280] hover:text-[#f0ece4] px-2" data-testid="drawer-close-btn">×</button>
+          <button
+            ref={closeBtnRef}
+            onClick={onClose}
+            className="text-xl text-[#6b7280] hover:text-[#f0ece4] px-2 focus:outline-none focus:ring-1 focus:ring-[#e8b750] rounded"
+            data-testid="drawer-close-btn"
+            aria-label="Close"
+          >
+            ×
+          </button>
         </div>
         
         {/* Scrollable details */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Fitness & Status */}
           <div className="bg-[#171b22] p-3 rounded-lg border border-[#2a2e38]">
-            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">Candidate Status</h3>
+            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">
+              {t("agora.tradingRoom.candidates.headers.state", { defaultValue: "Candidate Status" })}
+            </h3>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span className="text-[#c5cad2]">Current State:</span>
               <span className={cn(
@@ -1139,7 +1261,7 @@ function CandidateReviewDrawer({
                 candidate.state === "parked" && "bg-slate-800 text-slate-400",
                 candidate.state === "excluded" && "bg-red-950 text-red-400"
               )} data-testid="drawer-candidate-state">
-                {getLifecycleLabel(candidate.state)}
+                {getLifecycleLabel(candidate.state, t)}
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
@@ -1150,17 +1272,21 @@ function CandidateReviewDrawer({
           
           {/* Why Selected */}
           <div>
-            <h3 className="text-[10px] font-bold text-[#e8b750] uppercase tracking-wider mb-1">僕人選出理由 (Why Selected)</h3>
+            <h3 className="text-[10px] font-bold text-[#e8b750] uppercase tracking-wider mb-1">
+              {t("agora.tradingRoom.candidates.headers.whySelected", { defaultValue: "僕人選出理由 (Why Selected)" })}
+            </h3>
             <p className="text-[#c5cad2] leading-relaxed bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-reason">
-              {candidate.reason}
+              {t(`agora.tradingRoom.candidates.${candidate.id}.reason`, { defaultValue: candidate.reason })}
             </p>
           </div>
           
           {/* Concerns / Counter-Thesis */}
           <div>
-            <h3 className="text-[10px] font-bold text-[#f05c61] uppercase tracking-wider mb-1">疑慮與反方論點 (Concerns)</h3>
+            <h3 className="text-[10px] font-bold text-[#f05c61] uppercase tracking-wider mb-1">
+              {t("agora.tradingRoom.candidates.headers.concerns", { defaultValue: "疑慮與反方論點 (Concerns)" })}
+            </h3>
             <p className="text-[#c5cad2] leading-relaxed bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-concerns">
-              {candidate.concerns}
+              {t(`agora.tradingRoom.candidates.${candidate.id}.concerns`, { defaultValue: candidate.concerns })}
             </p>
           </div>
           
@@ -1168,7 +1294,7 @@ function CandidateReviewDrawer({
           <div>
             <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-1">Next Catalyst Event</h3>
             <p className="text-[#f0ece4] font-semibold bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-event">
-              {candidate.nextEvent}
+              {t(`agora.tradingRoom.candidates.${candidate.id}.nextEvent`, { defaultValue: candidate.nextEvent })}
             </p>
           </div>
           
@@ -1178,7 +1304,7 @@ function CandidateReviewDrawer({
             <div className="space-y-1">
               {candidate.evidence.map((ev, idx) => (
                 <div key={idx} className="bg-[#171b22] p-2 rounded border border-[#2a2e38]/50 flex justify-between items-center">
-                  <span className="text-[#c5cad2]">{ev.label}</span>
+                  <span className="text-[#c5cad2]">{t(`agora.tradingRoom.candidates.${candidate.id}.evidence.${idx}`, { defaultValue: ev.label })}</span>
                   <span className="text-[9px] uppercase bg-[#1a2030] text-[#8c96a6] px-1 rounded">{ev.type}</span>
                 </div>
               ))}
@@ -1192,44 +1318,44 @@ function CandidateReviewDrawer({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => onUpdateState(candidate.id, "monitoring")}
-              className="bg-green-950 text-green-400 hover:bg-green-900 border border-green-800 py-2 rounded font-bold transition-all text-center"
+              className="bg-green-950 text-green-400 hover:bg-green-900 border border-green-800 py-2 rounded font-bold transition-all text-center focus:outline-none focus:ring-1 focus:ring-green-400"
               data-testid="drawer-action-monitor"
             >
-              納入監控
+              {t("agora.tradingRoom.page.states.monitoring", { defaultValue: "納入監控" })}
             </button>
             <button
               onClick={() => onUpdateState(candidate.id, "shadow")}
-              className="bg-teal-950 text-teal-400 hover:bg-teal-900 border border-teal-800 py-2 rounded font-bold transition-all text-center"
+              className="bg-teal-950 text-teal-400 hover:bg-teal-900 border border-teal-800 py-2 rounded font-bold transition-all text-center focus:outline-none focus:ring-1 focus:ring-teal-400"
               data-testid="drawer-action-shadow"
             >
-              送影子追蹤
+              {t("agora.tradingRoom.page.states.shadow", { defaultValue: "送影子追蹤" })}
             </button>
             <button
               onClick={() => onUpdateState(candidate.id, "deep_research")}
-              className="bg-purple-950 text-purple-400 hover:bg-purple-900 border border-purple-800 py-2 rounded font-bold transition-all text-center"
+              className="bg-purple-950 text-purple-400 hover:bg-purple-900 border border-purple-800 py-2 rounded font-bold transition-all text-center focus:outline-none focus:ring-1 focus:ring-purple-400"
               data-testid="drawer-action-research"
             >
-              深入研究
+              {t("agora.tradingRoom.page.states.deep_research", { defaultValue: "深入研究" })}
             </button>
             <button
               onClick={() => onUpdateState(candidate.id, "parked")}
-              className="bg-slate-800 text-slate-300 hover:bg-slate-750 border border-slate-700 py-2 rounded font-bold transition-all text-center"
+              className="bg-slate-800 text-slate-300 hover:bg-slate-750 border border-slate-700 py-2 rounded font-bold transition-all text-center focus:outline-none focus:ring-1 focus:ring-slate-300"
               data-testid="drawer-action-park"
             >
-              暫放觀察
+              {t("agora.tradingRoom.page.states.parked", { defaultValue: "暫放觀察" })}
             </button>
           </div>
           <button
             onClick={() => onUpdateState(candidate.id, "excluded")}
-            className="w-full bg-red-950 text-red-400 hover:bg-red-900 border border-red-900 py-2 rounded font-bold transition-all text-center"
+            className="w-full bg-red-950 text-red-400 hover:bg-red-900 border border-red-900 py-2 rounded font-bold transition-all text-center focus:outline-none focus:ring-1 focus:ring-red-400"
             data-testid="drawer-action-exclude"
           >
-            剔除候選 (Exclude)
+            {t("agora.tradingRoom.page.states.excluded", { defaultValue: "剔除候選 (Exclude)" })}
           </button>
           
           <button
-            onClick={() => onStrategySelect("strat-001")}
-            className="w-full bg-[#e8b750] text-[#111417] hover:bg-[#d6a540] py-2 rounded font-bold transition-all text-center mt-2 text-xs"
+            onClick={() => onStrategySelect(matchedStrategyId)}
+            className="w-full bg-[#e8b750] text-[#111417] hover:bg-[#d6a540] py-2 rounded font-bold transition-all text-center mt-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#111417]"
             data-testid="drawer-action-workspace"
           >
             開啟 Winner Branch 工作區
@@ -1241,26 +1367,29 @@ function CandidateReviewDrawer({
 }
 
 function DashboardRecipeA({ candidates }: { candidates: CandidateRecord[] }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }} data-testid="dashboard-recipe-a">
       {/* Funnel & Concentration */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-3">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Candidate Funnel & Flow</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeA.funnelTitle", { defaultValue: "Candidate Funnel & Flow" })}
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8 }}>
           <div className="bg-[#1b202c] border-l-4 border-blue-400 p-2 rounded" style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>新候選 (New Candidates)</span>
+            <span>{t("agora.tradingRoom.page.states.new_candidate", { defaultValue: "新候選" })}</span>
             <span className="font-mono font-bold text-blue-400">38</span>
           </div>
           <div className="bg-[#1b202c] border-l-4 border-indigo-400 p-2 rounded" style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>待討論 (To Discuss)</span>
+            <span>{t("agora.tradingRoom.page.states.to_discuss", { defaultValue: "待討論" })}</span>
             <span className="font-mono font-bold text-indigo-400">12</span>
           </div>
           <div className="bg-[#1b202c] border-l-4 border-green-400 p-2 rounded" style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>監控中 (Monitoring)</span>
+            <span>{t("agora.tradingRoom.page.states.monitoring", { defaultValue: "監控中" })}</span>
             <span className="font-mono font-bold text-green-400">9</span>
           </div>
           <div className="bg-[#1b202c] border-l-4 border-teal-400 p-2 rounded" style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>影子追蹤 (Shadow)</span>
+            <span>{t("agora.tradingRoom.page.states.shadow", { defaultValue: "影子追蹤" })}</span>
             <span className="font-mono font-bold text-teal-400">4</span>
           </div>
         </div>
@@ -1268,7 +1397,9 @@ function DashboardRecipeA({ candidates }: { candidates: CandidateRecord[] }) {
 
       {/* Branch x Date Heatmap */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Broker Branch x Date Heatmap</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeA.heatmapTitle", { defaultValue: "Broker Branch x Date Heatmap" })}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, paddingTop: 8 }}>
           <div />
           <div className="text-[10px] text-center text-[#8c96a6]">07-09</div>
@@ -1298,7 +1429,9 @@ function DashboardRecipeA({ candidates }: { candidates: CandidateRecord[] }) {
 
       {/* Same Broker Cross-Branch Network */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Same Broker Cross-Branch Network</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeA.networkTitle", { defaultValue: "Same Broker Cross-Branch Network" })}
+        </div>
         <div className="h-28 flex items-center justify-center bg-[#1b202c] rounded border border-[#2a2e38] relative" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg className="w-full h-full p-2" viewBox="0 0 200 80">
             <line x1="30" y1="40" x2="100" y2="20" stroke="rgba(232,183,80,0.3)" strokeWidth="1" />
@@ -1321,12 +1454,15 @@ function DashboardRecipeA({ candidates }: { candidates: CandidateRecord[] }) {
 }
 
 function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4" data-testid="dashboard-recipe-b">
       {/* Thesis Bar */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
         <div>
-          <div className="text-[10px] font-bold text-[#8c96a6] uppercase">Active Hypothesis</div>
+          <div className="text-[10px] font-bold text-[#8c96a6] uppercase">
+            {t("agora.tradingRoom.lenses.dashboard.recipeB.hypothesisTitle", { defaultValue: "Active Hypothesis" })}
+          </div>
           <div className="text-xs text-[#c5cad2] font-semibold mt-0.5">"AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE."</div>
         </div>
         <div style={{ display: "flex", gap: 16, flexShrink: 0 }} className="font-mono text-xs">
@@ -1344,7 +1480,9 @@ function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
         {/* Supplier Map */}
         <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-          <div className="text-xs font-bold text-[#8c96a6] uppercase">Supply Chain Map & Flows</div>
+          <div className="text-xs font-bold text-[#8c96a6] uppercase">
+            {t("agora.tradingRoom.lenses.dashboard.recipeB.chainTitle", { defaultValue: "Supply Chain Map & Flows" })}
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, paddingLeft: 8, paddingRight: 8 }} className="relative">
             <div className="bg-[#1b202c] p-2 rounded border border-[#2a2e38] text-center" style={{ width: 80 }}>
               <div className="text-[9px] text-[#8c96a6]">UPSTREAM</div>
@@ -1365,7 +1503,9 @@ function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
 
         {/* Similarity x Lag Scatter Plot */}
         <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-          <div className="text-xs font-bold text-[#8c96a6] uppercase">Similarity x Price Lag Scatter</div>
+          <div className="text-xs font-bold text-[#8c96a6] uppercase">
+            {t("agora.tradingRoom.lenses.dashboard.recipeB.scatterTitle", { defaultValue: "Similarity x Price Lag Scatter" })}
+          </div>
           <div className="h-28 flex items-center justify-center bg-[#1b202c] rounded border border-[#2a2e38]" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg className="w-full h-full p-2" viewBox="0 0 100 60">
               <line x1="10" y1="50" x2="90" y2="50" stroke="#2a2e38" strokeWidth="0.8" />
@@ -1387,12 +1527,13 @@ function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
 }
 
 function DashboardRecipeC({ candidates }: { candidates: CandidateRecord[] }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }} data-testid="dashboard-recipe-c">
       {/* Candlestick & Level Overlay */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
         <div className="text-xs font-bold text-[#8c96a6] uppercase" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Candlestick & Breakout Levels Overlay</span>
+          <span>{t("agora.tradingRoom.lenses.dashboard.recipeC.resistanceTitle", { defaultValue: "Candlestick & Breakout Levels Overlay" })}</span>
           <span className="font-mono text-green-400">AMZN $186.48 (+0.8%)</span>
         </div>
         <div className="h-32 bg-[#1b202c] rounded border border-[#2a2e38] relative" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1414,7 +1555,9 @@ function DashboardRecipeC({ candidates }: { candidates: CandidateRecord[] }) {
 
       {/* Trade Condition Panel */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-3">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Trade Condition Panel</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeC.invalidationTitle", { defaultValue: "Trade Condition Panel" })}
+        </div>
         <div className="space-y-2 text-xs" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(42,46,56,0.5)", paddingBottom: 4 }}>
             <span className="text-[#8c96a6]">Entry Confirmation:</span>
@@ -1435,12 +1578,13 @@ function DashboardRecipeC({ candidates }: { candidates: CandidateRecord[] }) {
 }
 
 function DashboardRecipeD({ candidates }: { candidates: CandidateRecord[] }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }} data-testid="dashboard-recipe-d">
       {/* Event Countdown & Timeline */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
         <div className="text-xs font-bold text-[#8c96a6] uppercase" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Event Countdown & Timeline</span>
+          <span>{t("agora.tradingRoom.lenses.dashboard.recipeD.eventCalendar", { defaultValue: "Event Countdown & Timeline" })}</span>
           <span className="text-[#f05c61] font-bold font-mono">18h countdown</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8 }}>
@@ -1457,7 +1601,9 @@ function DashboardRecipeD({ candidates }: { candidates: CandidateRecord[] }) {
 
       {/* Expectation Gap Scenario Tree */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Expectation Gap Scenario Tree</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeD.scenarioTree", { defaultValue: "Expectation Gap Scenario Tree" })}
+        </div>
         <div className="h-28 flex items-center justify-center bg-[#1b202c] rounded border border-[#2a2e38]" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg className="w-full h-full p-2" viewBox="0 0 200 80">
             <rect x="10" y="32" width="45" height="16" rx="3" fill="#2a303b" stroke="#e8b750" strokeWidth="1" />
@@ -1476,11 +1622,14 @@ function DashboardRecipeD({ candidates }: { candidates: CandidateRecord[] }) {
 }
 
 function DashboardRecipeE({ candidates }: { candidates: CandidateRecord[] }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }} data-testid="dashboard-recipe-e">
       {/* Capital Intent */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-3">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Capital Intent Details</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeE.utilization", { defaultValue: "Capital Intent Details" })}
+        </div>
         <div className="space-y-2 text-xs" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(42,46,56,0.5)", paddingBottom: 4 }}>
             <span className="text-[#8c96a6]">Target Amount:</span>
@@ -1495,7 +1644,9 @@ function DashboardRecipeE({ candidates }: { candidates: CandidateRecord[] }) {
 
       {/* Slippage Curve Chart */}
       <div className="bg-[#171b22] border border-[#2a2e38] rounded-lg p-3 space-y-2">
-        <div className="text-xs font-bold text-[#8c96a6] uppercase">Slippage Curve Simulator</div>
+        <div className="text-xs font-bold text-[#8c96a6] uppercase">
+          {t("agora.tradingRoom.lenses.dashboard.recipeE.marketImpact", { defaultValue: "Slippage Curve Simulator" })}
+        </div>
         <div className="h-28 flex items-center justify-center bg-[#1b202c] rounded border border-[#2a2e38]" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg className="w-full h-full p-2" viewBox="0 0 100 60">
             <line x1="10" y1="50" x2="90" y2="50" stroke="#2a2e38" strokeWidth="0.8" />
@@ -1525,6 +1676,7 @@ interface TradingRoomDefaultEntryProps {
   events: TradingDecisionEvent[];
   eventsLoading: boolean;
   eventsEtag: string | null;
+  isSampleData?: boolean;
 }
 
 function TradingRoomDefaultEntry({
@@ -1542,6 +1694,7 @@ function TradingRoomDefaultEntry({
   events,
   eventsLoading,
   eventsEtag,
+  isSampleData = false,
 }: TradingRoomDefaultEntryProps): JSX.Element {
   const { t } = useTranslation();
   const strategies = aggregate.strategies;
@@ -1596,22 +1749,28 @@ function TradingRoomDefaultEntry({
           {/* Lens Thesis */}
           <div style={{ padding: 16, borderBottom: "1px solid #2a2e38" }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#e8b750", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              Lens Thesis
+              {t("agora.tradingRoom.lenses.meta.thesisLabel", { defaultValue: "Lens Thesis" })}
             </h3>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: "#f0ece4", marginBottom: 4 }}>{currentLens.titleZh}</h4>
-            <p style={{ fontSize: 12, color: "#8c96a6", lineHeight: 1.4 }}>{currentLens.thesisZh}</p>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: "#f0ece4", marginBottom: 4 }}>
+              {t(currentLens.titleKey, { defaultValue: currentLens.titleZh })}
+            </h4>
+            <p style={{ fontSize: 12, color: "#8c96a6", lineHeight: 1.4 }}>
+              {t(currentLens.thesisKey, { defaultValue: currentLens.thesisZh })}
+            </p>
           </div>
           
           {/* Confirmation Rules */}
           <div style={{ padding: 16, borderBottom: "1px solid #2a2e38" }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#e8b750", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              Confirmation Rules
+              {t("agora.tradingRoom.lenses.meta.rulesLabel", { defaultValue: "Confirmation Rules" })}
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {currentLens.rules.map((t, idx) => (
+              {currentLens.rules.map((rule, idx) => (
                 <div key={idx} style={{ display: "flex", flexDirection: "column", background: "#1b202c", padding: 8, borderRadius: 4, border: "1px solid #2a2e38" }}>
-                  <span style={{ fontSize: 9, color: "#8c96a6", textTransform: "uppercase" }}>{t.label}</span>
-                  <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ece4", fontWeight: 700 }}>{t.value}</span>
+                  <span style={{ fontSize: 9, color: "#8c96a6", textTransform: "uppercase" }}>
+                    {t(rule.labelKey, { defaultValue: rule.label })}
+                  </span>
+                  <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ece4", fontWeight: 700 }}>{rule.value}</span>
                 </div>
               ))}
             </div>
@@ -1620,11 +1779,11 @@ function TradingRoomDefaultEntry({
           {/* Candidate Filters */}
           <div style={{ padding: 16, flex1: 1, overflowY: "auto" }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#e8b750", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              Lifecycle State
+              {t("agora.tradingRoom.candidates.headers.state", { defaultValue: "Lifecycle State" })}
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {(Object.keys(stateCounts) as Array<keyof typeof stateCounts>).map((stateKey) => {
-                const label = getLifecycleLabel(stateKey);
+                const label = getLifecycleLabel(stateKey, t);
                 const count = stateCounts[stateKey];
                 const isActive = candidateFilter === stateKey;
                 return (
@@ -1692,8 +1851,30 @@ function TradingRoomDefaultEntry({
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16, borderBottom: "1px solid #2a2e38" }} className="overscroll-contain">
             <h2 style={{ fontSize: 15, fontWeight: 700, color: "#f0ece4", display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
               <span style={{ color: "#e8b750" }}>✦</span>
-              {currentLens.titleZh} - Monitoring Dashboard
+              {t(currentLens.titleKey, { defaultValue: currentLens.titleZh })} - Monitoring Dashboard
             </h2>
+            
+            {isSampleData && (
+              <div
+                style={{
+                  background: "rgba(232, 183, 80, 0.1)",
+                  border: "1px solid rgba(232, 183, 80, 0.3)",
+                  color: "#e8b750",
+                  padding: "6px 12px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  width: "max-content",
+                }}
+                data-testid="sample-data-warning"
+              >
+                <span>⚠️</span>
+                <span>{t("agora.tradingRoom.lenses.meta.sampleDataBadge", { defaultValue: "SAMPLE DATA ONLY (BFF OFFLINE)" })}</span>
+              </div>
+            )}
             
             {/* Render distinct dashboard layouts */}
             {activeLensId === "lens-A" && <DashboardRecipeA candidates={lensCandidates} />}
@@ -1706,64 +1887,116 @@ function TradingRoomDefaultEntry({
           {/* Dense Candidate Board Table */}
           <div style={{ height: 260, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#171b22" }}>
             <div style={{ padding: "8px 16px", borderBottom: "1px solid #2a2e38", background: "#1a1f29", fontWeight: 700, fontSize: 12, color: "#8c96a6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>CANDIDATE & MONITORING BOARD ({filteredCandidates.length})</span>
-              <span style={{ fontSize: 9, color: "#737d8e", fontFamily: "monospace", textTransform: "uppercase" }}>Lens: {currentLens.title}</span>
+              <span>{t("agora.tradingRoom.candidates.headers.boardTitle", { count: filteredCandidates.length, defaultValue: `CANDIDATE & MONITORING BOARD (${filteredCandidates.length})` })}</span>
+              <span style={{ fontSize: 9, color: "#737d8e", fontFamily: "monospace", textTransform: "uppercase" }}>
+                Lens: {t(currentLens.titleKey, { defaultValue: currentLens.title })}
+              </span>
             </div>
             
             <div style={{ flex: 1, overflow: "auto" }}>
               {filteredCandidates.length === 0 ? (
                 <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "#737d8e" }}>
-                  No candidates in this state. Try changing the lifecycle state filter.
+                  {t("agora.tradingRoom.candidates.headers.noCandidates", { defaultValue: "No candidates in this state. Try changing the lifecycle state filter." })}
                 </div>
               ) : (
                 <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse", fontSize: 12 }} data-testid="candidate-board-table">
                   <thead>
                     <tr style={{ borderBottom: "1px solid #2a2e38", color: "#8c96a6", background: "rgba(20,24,32,0.5)", position: "sticky", top: 0 }}>
-                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center", width: 40 }}>Rank</th>
-                      <th style={{ padding: 8, fontWeight: 600 }}>Symbol</th>
-                      <th style={{ padding: 8, fontWeight: 600 }}>Name</th>
+                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center", width: 40 }}>
+                        {t("agora.tradingRoom.candidates.headers.rank", { defaultValue: "Rank" })}
+                      </th>
+                      <th style={{ padding: 8, fontWeight: 600 }}>
+                        {t("agora.tradingRoom.candidates.headers.symbol", { defaultValue: "Symbol" })}
+                      </th>
+                      <th style={{ padding: 8, fontWeight: 600 }}>
+                        {t("agora.tradingRoom.candidates.headers.name", { defaultValue: "Name" })}
+                      </th>
                       {activeLensId === "lens-A" && (
                         <>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>AI Score</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Accum. Days</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Concentration</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Price Dev.</th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.aiScore", { defaultValue: "AI Score" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.accumDays", { defaultValue: "Accum. Days" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.concentration", { defaultValue: "Concentration" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.priceDev", { defaultValue: "Price Dev." })}
+                          </th>
                         </>
                       )}
                       {activeLensId === "lens-B" && (
                         <>
-                          <th style={{ padding: 8, fontWeight: 600 }}>Peer Group</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Similarity</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Price Lag</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Catalyst Horizon</th>
+                          <th style={{ padding: 8, fontWeight: 600 }}>
+                            {t("agora.tradingRoom.candidates.headers.peerGroup", { defaultValue: "Peer Group" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.similarity", { defaultValue: "Similarity" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.priceLag", { defaultValue: "Price Lag" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.catalystHorizon", { defaultValue: "Catalyst Horizon" })}
+                          </th>
                         </>
                       )}
                       {activeLensId === "lens-C" && (
                         <>
-                          <th style={{ padding: 8, fontWeight: 600 }}>Breakout Level</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Distance %</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Volume Multiplier</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>ATR Ratio</th>
+                          <th style={{ padding: 8, fontWeight: 600 }}>
+                            {t("agora.tradingRoom.candidates.headers.breakoutLevel", { defaultValue: "Breakout Level" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.distancePct", { defaultValue: "Distance %" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.volumeMultiplier", { defaultValue: "Volume Multiplier" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.atrRatio", { defaultValue: "ATR Ratio" })}
+                          </th>
                         </>
                       )}
                       {activeLensId === "lens-D" && (
                         <>
-                          <th style={{ padding: 8, fontWeight: 600 }}>Event Type</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Countdown</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>IV %</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Expected Impact</th>
+                          <th style={{ padding: 8, fontWeight: 600 }}>
+                            {t("agora.tradingRoom.candidates.headers.eventType", { defaultValue: "Event Type" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.countdown", { defaultValue: "Countdown" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.ivPct", { defaultValue: "IV %" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.expectedImpact", { defaultValue: "Expected Impact" })}
+                          </th>
                         </>
                       )}
                       {activeLensId === "lens-E" && (
                         <>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Target Amount</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>ADV %</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Est. Slippage</th>
-                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>Market Impact</th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.targetAmount", { defaultValue: "Target Amount" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.advPct", { defaultValue: "ADV %" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.estSlippage", { defaultValue: "Est. Slippage" })}
+                          </th>
+                          <th style={{ padding: 8, fontWeight: 600, textAlign: "right" }}>
+                            {t("agora.tradingRoom.candidates.headers.marketImpact", { defaultValue: "Market Impact" })}
+                          </th>
                         </>
                       )}
-                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center" }}>State</th>
-                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center" }}>Action</th>
+                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center" }}>
+                        {t("agora.tradingRoom.candidates.headers.state", { defaultValue: "State" })}
+                      </th>
+                      <th style={{ padding: 8, fontWeight: 600, textAlign: "center" }}>
+                        {t("agora.tradingRoom.candidates.headers.action", { defaultValue: "Action" })}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1771,8 +2004,17 @@ function TradingRoomDefaultEntry({
                       <tr
                         key={c.id}
                         onClick={() => setSelectedCandidate(c)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            setSelectedCandidate(c);
+                            e.preventDefault();
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${t("agora.tradingRoom.candidates.headers.action", { defaultValue: "Review" })} ${c.symbol}`}
                         style={{ borderBottom: "1px solid rgba(42,46,56,0.5)", cursor: "pointer" }}
-                        className="hover:bg-[#1a202c] transition-colors"
+                        className="hover:bg-[#1a202c] transition-colors focus:outline-none focus:ring-1 focus:ring-[#e8b750]"
                         data-testid={`candidate-row-${c.symbol}`}
                       >
                         <td style={{ padding: 8, textAlign: "center", color: "#8c96a6", fontFamily: "monospace" }}>{idx + 1}</td>
@@ -1844,7 +2086,7 @@ function TradingRoomDefaultEntry({
                               c.state === "parked" ? "#64748b" :
                               "#ef4444",
                           }}>
-                            {getLifecycleLabel(c.state)}
+                            {getLifecycleLabel(c.state, t)}
                           </span>
                         </td>
                         <td style={{ padding: 8, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
@@ -1861,7 +2103,7 @@ function TradingRoomDefaultEntry({
                             }}
                             data-testid={`review-btn-${c.symbol}`}
                           >
-                            Review
+                            {t("agora.tradingRoom.candidates.headers.action", { defaultValue: "Review" })}
                           </button>
                         </td>
                       </tr>
@@ -1915,6 +2157,7 @@ function TradingRoomDefaultEntry({
             setSelectedCandidate(null);
             onStrategySelect(id);
           }}
+          strategies={strategies}
         />
       )}
     </div>
@@ -2430,6 +2673,64 @@ export function TradingRoomPage({
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateRecord | null>(null);
   const [candidateFilter, setCandidateFilter] = useState<string>("all");
   const [activeStrategyIdOverride, setActiveStrategyIdOverride] = useState<string | null>(null);
+  
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+  const [isSampleData, setIsSampleData] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setCandidatesLoading(true);
+    setCandidatesError(null);
+    setIsSampleData(false);
+
+    import("@/lib/bff-v1/agora/candidatePool")
+      .then(({ listCandidatePoolMembers }) => {
+        return listCandidatePoolMembers(activeLensId);
+      })
+      .then((res) => {
+        if (!active) return;
+        if (res && res.items && res.items.length > 0) {
+          const mapped: CandidateRecord[] = res.items.map((item) => {
+            const staticFallback = DEFAULT_CANDIDATES.find(c => c.symbol === item.title) || DEFAULT_CANDIDATES[0];
+            return {
+              id: item.artifact_id,
+              symbol: item.title || item.strategy_ref || "UNKNOWN",
+              name: item.title || "Unknown Company",
+              state: item.lifecycle_state === "candidate" ? "new_candidate" : (item.lifecycle_state as any),
+              lensId: activeLensId,
+              score: item.sharpe_summary ? Math.round(item.sharpe_summary * 100) : staticFallback.score,
+              reason: staticFallback.reason,
+              concerns: staticFallback.concerns,
+              nextEvent: staticFallback.nextEvent,
+              evidence: staticFallback.evidence,
+              details: staticFallback.details
+            };
+          });
+          setCandidates(mapped);
+          setIsSampleData(false);
+        } else {
+          // Empty items list, fallback to mock data
+          const localCandidates = DEFAULT_CANDIDATES.filter(c => c.lensId === activeLensId);
+          setCandidates(localCandidates);
+          setIsSampleData(true);
+        }
+        setCandidatesLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setCandidatesError(err.message || "BFF Offline");
+        // Fallback to local simulation data
+        const localCandidates = DEFAULT_CANDIDATES.filter(c => c.lensId === activeLensId);
+        setCandidates(localCandidates);
+        setIsSampleData(true);
+        setCandidatesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeLensId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2518,6 +2819,7 @@ export function TradingRoomPage({
         onSelect={handleStrategySelect}
         activeLensId={activeLensId}
         setActiveLensId={setActiveLensId}
+        candidates={candidates}
       />
 
       {effectiveStrategyId ? (
@@ -2550,6 +2852,7 @@ export function TradingRoomPage({
           events={events}
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
+          isSampleData={isSampleData}
         />
       )}
     </div>

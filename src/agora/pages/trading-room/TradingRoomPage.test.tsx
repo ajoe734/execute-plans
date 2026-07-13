@@ -21,6 +21,10 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/bff-v1/agora/candidatePool", () => ({
+  listCandidatePoolMembers: vi.fn().mockImplementation(() => Promise.resolve({ items: [] })),
+}));
+
 vi.mock("react-grid-layout", async () => {
   const ReactModule = await import("react");
   const MockGridLayout = ({
@@ -70,6 +74,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 
 import { TradingRoomPage } from "./TradingRoomPage";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
+import * as candidatePoolModule from "@/lib/bff-v1/agora/candidatePool";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -1712,7 +1717,7 @@ describe("TradingRoomPage", () => {
     
     // Check if Event Trading Dashboard is rendered
     expect(screen.getByTestId("dashboard-recipe-d")).toBeDefined();
-    expect(screen.getByText("Expectation Gap Scenario Tree")).toBeDefined();
+    expect(screen.getByText("預期差情境分析樹")).toBeDefined();
   });
 
   it("opens the Candidate Review Drawer when a candidate row is clicked, and does not claim real execution", async () => {
@@ -1757,5 +1762,101 @@ describe("TradingRoomPage", () => {
     
     // State in drawer should update to "納入監控"
     expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
+  });
+
+  it("renders distinct dashboards and recipes when switching lenses A to E", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+    
+    // We should be on lens-A by default. Check if recipe A elements exist
+    expect(screen.getByTestId("dashboard-recipe-a")).toBeDefined();
+
+    // Switch to lens-B
+    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
+    const lensBCard = within(lenses).getByText("產業落後補漲");
+    fireEvent.click(lensBCard);
+    expect(await screen.findByTestId("dashboard-recipe-b")).toBeDefined();
+
+    // Switch to lens-C
+    const lensCCard = within(lenses).getByText("技術突破");
+    fireEvent.click(lensCCard);
+    expect(await screen.findByTestId("dashboard-recipe-c")).toBeDefined();
+
+    // Switch to lens-D
+    const lensDCard = within(lenses).getByText("事件交易");
+    fireEvent.click(lensDCard);
+    expect(await screen.findByTestId("dashboard-recipe-d")).toBeDefined();
+
+    // Switch to lens-E
+    const lensECard = within(lenses).getByText("大額資金進出");
+    fireEvent.click(lensECard);
+    expect(await screen.findByTestId("dashboard-recipe-e")).toBeDefined();
+  });
+
+  it("renders empty candidate state message when no candidates match active filter", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    // Select state filter '暫放觀察' (parked) which has 0 items initially
+    const sidebar = screen.getByTestId("trading-room-lens-sidebar");
+    const parkedBtn = within(sidebar).getByText("暫放觀察");
+    fireEvent.click(parkedBtn);
+
+    // Verify empty state message
+    expect(await screen.findByText(/此狀態下無候選人/i)).toBeDefined();
+  });
+
+  it("displays sample data warning when BFF candidatePool API fails", async () => {
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockRejectedValueOnce(
+      new Error("Network Error")
+    );
+    
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    // Wait for the sample data warning badge to be displayed
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-data-warning")).toBeDefined();
+      expect(screen.getByTestId("sample-data-warning").textContent).toContain("模擬數據");
+    });
+  });
+
+  it("handles drawer Escape key closing and keyboard focus trap accessibility", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    appleRow.focus();
+    expect(document.activeElement).toBe(appleRow);
+
+    // Open candidate drawer
+    fireEvent.click(appleRow);
+    const drawer = await screen.findByTestId("candidate-review-drawer");
+    expect(drawer).toBeDefined();
+
+    // Expect dialog accessibility attributes
+    expect(drawer.getAttribute("role")).toBe("dialog");
+    expect(drawer.getAttribute("aria-modal")).toBe("true");
+
+    // Close button should get focus automatically
+    const closeBtn = screen.getByTestId("drawer-close-btn");
+    expect(document.activeElement).toBe(closeBtn);
+
+    // Press Escape to close drawer
+    fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("candidate-review-drawer")).toBeNull();
+    });
+
+    // Focus should be restored back to appleRow
+    expect(document.activeElement).toBe(appleRow);
   });
 });

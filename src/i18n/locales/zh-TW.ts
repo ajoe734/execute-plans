@@ -1752,6 +1752,176 @@ export default {
       },
     },
     tradingRoom: {
+      lenses: {
+        chip: {
+          title: "籌碼大戶部位建立",
+          thesis: "找出大戶開始暗中建立部位，但價格尚未反應的標的。",
+          rules: {
+            concentration: "集中度",
+            accumDays: "累積天數",
+            priceDev: "價格偏離度"
+          }
+        },
+        laggard: {
+          title: "產業落後補漲",
+          thesis: "從核心概念股出發，找出供應鏈或同族群中漲幅落後且催化劑將近的標的。",
+          rules: {
+            peerMomentum: "同儕動能差",
+            revenueExposure: "營收曝險度",
+            catalystHorizon: "催化劑時間"
+          }
+        },
+        breakout: {
+          title: "技術突破",
+          thesis: "盯盤接近突破、已突破、或回測支撐的波動度收斂型態標的。",
+          rules: {
+            distance: "距關鍵價位",
+            volumeMultiple: "成交量倍數",
+            atrRule: "ATR 比例"
+          }
+        },
+        event: {
+          title: "事件交易",
+          thesis: "針對即將發布的重大事件（法說、財報、接單等）進行預期差與情境分析。",
+          rules: {
+            countdown: "倒數時間",
+            ivPercentile: "IV 百分位",
+            consensusDev: "共識偏差值"
+          }
+        },
+        liquidity: {
+          title: "大額資金進出",
+          thesis: "規劃與監控大額資金進出場的市場衝擊、流動性深度與執行偏差。",
+          rules: {
+            advRatio: "日均量比率",
+            slippage: "滑點容忍度",
+            spreadLimit: "價差限制"
+          }
+        },
+        meta: {
+          candidateLabel: "候選: {{count}}",
+          heldLabel: "監控: {{count}}",
+          riskLabel: "風險: {{state}}",
+          freshnessLabel: "新鮮度: {{time}}",
+          candidateShort: "候選: {{count}}",
+          heldShort: "監控: {{count}}",
+          sampleDataBadge: "僅限模擬數據 (BFF 離線)"
+        },
+        dashboard: {
+          recipeA: {
+            funnelTitle: "候選池漏斗與流向",
+            heatmapTitle: "券商分點 x 日期熱力圖",
+            networkTitle: "同券商跨分點關聯網路"
+          },
+          recipeB: {
+            hypothesisTitle: "當前核心假設",
+            timelineTitle: "催化劑事件時間軸",
+            scatterTitle: "板塊相對回報散佈圖",
+            chainTitle: "供應鏈與落後補漲地圖"
+          },
+          recipeC: {
+            resistanceTitle: "突破阻力價位",
+            vwapTitle: "錨定 VWAP 設定",
+            invalidationTitle: "技術失效邊界"
+          },
+          recipeD: {
+            eventCalendar: "排定催化劑日曆",
+            impliedVolatility: "隱含波動率 (IV) 結構",
+            scenarioTree: "預期差情境分析樹"
+          },
+          recipeE: {
+            liquidityDepth: "流動性深度與委託書",
+            marketImpact: "執行滑點模型",
+            utilization: "資金分配容量"
+          }
+        }
+      },
+      candidates: {
+        cand_a1: {
+          reason: "過去 7 天主要機構券商分點（摩根士丹利、高盛）顯著累積部位。價格在 1.5% 的狹幅區間內盤整。",
+          concerns: "散戶分點有輕微賣出，但機構淨流入極度正面。",
+          nextEvent: "14 天後公布財報"
+        },
+        cand_a2: {
+          reason: "關鍵託管銀行帳戶（道富銀行、紐約梅隆銀行）持續有淨買入壓力。連續 5 天機構交易量增加支援。",
+          concerns: "絕對估值倍數偏高，但成長軌道依然完好。",
+          nextEvent: "5 天後產品發表會"
+        },
+        cand_a3: {
+          reason: "在關鍵 VWAP 支撐水準的區塊交易活動激增。訂單流顯示機構大額區塊交易執行。",
+          concerns: "Beta 值與波動度較高，電動車產業面臨總體經濟阻力。",
+          nextEvent: "10 天後公布生產數據"
+        },
+        cand_a4: {
+          reason: "在數個券商分點偵測到大戶出貨模式。目前以散戶淨買家為主。",
+          concerns: "嚴重的供應鏈限制，潛在的近期毛利率見頂風險。",
+          nextEvent: "明天開發者大會"
+        },
+        cand_b1: {
+          reason: "NVIDIA 和台積電已大幅上漲，而 AMD 在 20 天的區間內落後 15.4%，儘管有類似的 AI 產品曝險。",
+          concerns: "與 NVDA 相比毛利率較低；產品量產速度較慢。",
+          nextEvent: "6 天後新晶片發表會"
+        },
+        cand_b2: {
+          reason: "落後全球晶圓代工同儕指數 22%。治理催化劑包括即將到來的政府補貼和晶圓廠進度。",
+          concerns: "高資本支出導致自由現金流面臨阻力。",
+          nextEvent: "12 天後政府晶圓廠補貼簽署"
+        },
+        cand_b3: {
+          reason: "手機晶片部門復甦。落後聯發科和蘋果手機晶片估值基準 10.2%。",
+          concerns: "手機市場復甦緩慢，對關鍵客戶授權續約的依賴度高。",
+          nextEvent: "10 天後手機晶片峰會"
+        },
+        cand_c1: {
+          reason: "突破 185.00 美元阻力。交易量是 20 天平均值的 2.4 倍。近期波段低點的錨定 VWAP 支撐有效。",
+          concerns: "如果交易量未能持續，可能為假突破；上方有總體市場阻力。",
+          nextEvent: "明天零售銷售數據"
+        },
+        cand_c2: {
+          reason: "在 178.50 美元突破水準下方 1.4% 處盤整。波動度 ATR 比率在 0.9 顯示擠壓收斂。",
+          concerns: "反托拉斯監管新聞陰影。",
+          nextEvent: "7 天後法院判決聽證會"
+        },
+        cand_d1: {
+          reason: "即將舉行財報電話會議。隱含期權波動率處於第 92 百分位數。情境樹顯示若指引正面將有大幅上漲空間。",
+          concerns: "地緣政治風險溢價，財報前部位偏高。",
+          nextEvent: "18 小時後財報電話會議"
+        },
+        cand_e1: {
+          reason: "執行 5000 萬美元目標配置。價差狹幅在 0.05%，且日均量 (ADV) 能支援在 2天內執行且市場衝擊低。",
+          concerns: "若總體流動性下降，滑點可能會增加；與大盤指數相關性高。",
+          nextEvent: "4 天後指數權重調整"
+        },
+        headers: {
+          rank: "排名",
+          symbol: "代碼",
+          name: "名稱",
+          aiScore: "AI 評分",
+          accumDays: "累積天數",
+          concentration: "集中度",
+          priceDev: "價格偏離",
+          peerGroup: "同儕類組",
+          similarity: "相似度",
+          priceLag: "價格落後",
+          catalystHorizon: "催化劑時間",
+          breakoutLevel: "突破價位",
+          distancePct: "距離 %",
+          volumeMultiplier: "成交量倍數",
+          atrRatio: "ATR 比例",
+          eventType: "事件類型",
+          countdown: "倒數時間",
+          ivPct: "IV %",
+          expectedImpact: "預期影響",
+          targetAmount: "目標金額",
+          advPct: "日均量 %",
+          estSlippage: "預估滑點",
+          marketImpact: "市場衝擊",
+          state: "狀態",
+          action: "操作",
+          noCandidates: "此狀態下無候選人。請嘗試變更生命週期狀態篩選器。",
+          boardTitle: "候選人與監控看板 ({{count}})"
+        }
+      },
       errors: {
         readForbidden: "目前權限或範圍無法讀取這個操盤室提案。",
         proposalNotFound: "這個操盤室提案或工作區已不存在，請重新產生。",
