@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emitV5Event } from "@/lib/v5";
 import { __resetV5LiveCacheForTests, useV5Live } from "./useV5Live";
@@ -14,8 +14,16 @@ function HookProbe({
   loader: () => Promise<TestData>;
   cacheKey: string;
 }) {
-  const { data, loading } = useV5Live(loader, [], { cacheKey });
-  return <div data-testid="state">{loading ? "loading" : `ready:${data?.label ?? "none"}`}</div>;
+  const { data, loading, error, refresh } = useV5Live(loader, [], { cacheKey });
+  return (
+    <div>
+      <div data-testid="state">
+        {loading ? "loading" : error ? `error:${error.message}` : `ready:${data?.label ?? "none"}`}
+      </div>
+      <div data-testid="data">{data?.label ?? "none"}</div>
+      <button type="button" onClick={() => refresh()}>refresh</button>
+    </div>
+  );
 }
 
 describe("useV5Live cache", () => {
@@ -62,5 +70,51 @@ describe("useV5Live cache", () => {
 
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("ready:second"));
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it("exposes an initial loader failure instead of treating missing data as ready", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const loader = vi.fn<[], Promise<TestData>>().mockRejectedValue(new Error("request timed out"));
+
+    render(<HookProbe loader={loader} cacheKey="human-inbox-initial-error" />);
+
+    expect(await screen.findByTestId("state")).toHaveTextContent("error:request timed out");
+    expect(screen.getByTestId("data")).toHaveTextContent("none");
+  });
+
+  it("clears the error after a successful retry", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const loader = vi.fn<[], Promise<TestData>>()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce({ label: "recovered" });
+
+    render(<HookProbe loader={loader} cacheKey="human-inbox-retry" />);
+    expect(await screen.findByTestId("state")).toHaveTextContent("error:temporary failure");
+
+    fireEvent.click(screen.getByRole("button", { name: "refresh" }));
+
+    expect(await screen.findByTestId("state")).toHaveTextContent("ready:recovered");
+    expect(screen.getByTestId("data")).toHaveTextContent("recovered");
+  });
+
+  it("preserves confirmed data when a refresh fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const loader = vi.fn<[], Promise<TestData>>()
+      .mockResolvedValueOnce({ label: "confirmed" })
+      .mockRejectedValueOnce(new Error("refresh timed out"));
+
+    render(<HookProbe loader={loader} cacheKey="human-inbox-refresh-error" />);
+    expect(await screen.findByTestId("state")).toHaveTextContent("ready:confirmed");
+
+    act(() => {
+      emitV5Event({
+        channel: "v5.human-inbox",
+        type: "human-inbox.refresh",
+        payload: {},
+      });
+    });
+
+    expect(await screen.findByTestId("state")).toHaveTextContent("error:refresh timed out");
+    expect(screen.getByTestId("data")).toHaveTextContent("confirmed");
   });
 });
