@@ -32,11 +32,11 @@ const EVENT_KIND_LABEL: Record<string, string> = {
 };
 
 const EVENT_KIND_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  entry: { bg: "#f0fdf4", text: "#15803d", border: "#86efac" },
-  add: { bg: "#eff6ff", text: "#1d4ed8", border: "#93c5fd" },
-  reduce: { bg: "#fefce8", text: "#a16207", border: "#fde047" },
-  exit: { bg: "#fef2f2", text: "#b91c1c", border: "#fca5a5" },
-  review: { bg: "#faf5ff", text: "#7e22ce", border: "#d8b4fe" },
+  entry: { bg: "rgba(21, 128, 61, 0.15)", text: "#4ade80", border: "#22c55e" },
+  add: { bg: "rgba(29, 78, 216, 0.15)", text: "#60a5fa", border: "#3b82f6" },
+  reduce: { bg: "rgba(161, 98, 7, 0.15)", text: "#fbbf24", border: "#f59e0b" },
+  exit: { bg: "rgba(185, 28, 28, 0.15)", text: "#f87171", border: "#ef4444" },
+  review: { bg: "rgba(126, 34, 206, 0.15)", text: "#c084fc", border: "#a855f7" },
 };
 
 const STATE_LABEL: Record<string, string> = {
@@ -50,11 +50,11 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 const SEVERITY_COLOR: Record<string, { bg: string; text: string }> = {
-  info: { bg: "#f0f9ff", text: "#0369a1" },
-  watch: { bg: "#fefce8", text: "#a16207" },
-  warning: { bg: "#fff7ed", text: "#c2410c" },
-  high: { bg: "#fef2f2", text: "#dc2626" },
-  critical: { bg: "#fef2f2", text: "#991b1b" },
+  info: { bg: "rgba(3, 105, 161, 0.15)", text: "#38bdf8" },
+  watch: { bg: "rgba(161, 98, 7, 0.15)", text: "#fbbf24" },
+  warning: { bg: "rgba(194, 65, 12, 0.15)", text: "#fb923c" },
+  high: { bg: "rgba(220, 38, 38, 0.15)", text: "#f87171" },
+  critical: { bg: "rgba(153, 27, 27, 0.25)", text: "#f87171" },
 };
 
 const INVALIDATION_COLOR: Record<string, string> = {
@@ -155,7 +155,7 @@ export function TradeDecisionCard({
       style={{
         border: `1px solid ${kindStyle.border}`,
         borderRadius: 8,
-        background: "#fff",
+        background: "#1e2330",
         display: "flex",
         flexDirection: "column",
         gap: 0,
@@ -182,7 +182,7 @@ export function TradeDecisionCard({
             padding: "2px 8px",
             borderRadius: 4,
             border: `1px solid ${kindStyle.border}`,
-            background: "#fff",
+            background: "#171b22",
             textTransform: "uppercase",
           }}
         >
@@ -190,14 +190,14 @@ export function TradeDecisionCard({
         </span>
 
         <span
-          style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}
+          style={{ fontWeight: 700, fontSize: 15, color: "#f0ece4" }}
           data-testid={`trade-decision-card-symbol-${ev.decision_event_id}`}
         >
           {ev.subject.symbol}
         </span>
 
         {ev.subject.asset_class && (
-          <span style={{ fontSize: 12, color: "#64748b" }}>
+          <span style={{ fontSize: 12, color: "#8c96a6" }}>
             {ev.subject.asset_class}
           </span>
         )}
@@ -210,7 +210,7 @@ export function TradeDecisionCard({
 
         <span
           data-testid={`trade-decision-card-state-${ev.decision_event_id}`}
-          style={{ fontSize: 12, color: "#64748b" }}
+          style={{ fontSize: 12, color: "#8c96a6" }}
         >
           {STATE_LABEL[ev.state] ?? ev.state}
         </span>
@@ -223,10 +223,10 @@ export function TradeDecisionCard({
         {ev.trigger && (
           <div data-testid={`trade-decision-card-trigger-${ev.decision_event_id}`}>
             <SectionHeading label="Trigger" />
-            <div style={{ fontSize: 13, color: "#374151" }}>
+            <div style={{ fontSize: 13, color: "#c4ccda" }}>
               {ev.trigger.summary}
               {ev.trigger.distance_to_trigger != null && (
-                <span style={{ marginLeft: 8, color: "#64748b", fontSize: 12 }}>
+                <span style={{ marginLeft: 8, color: "#8c96a6", fontSize: 12 }}>
                   Distance: {ev.trigger.distance_to_trigger.toFixed(4)}
                 </span>
               )}
@@ -241,15 +241,15 @@ export function TradeDecisionCard({
         >
           <div>
             <SectionHeading label="Confidence (evidence quality)" />
-            <div style={{ fontSize: 13, color: "#0f172a" }}>
+            <div style={{ fontSize: 13, color: "#f0ece4" }}>
               <strong>{(ev.confidence.value * 100).toFixed(0)}%</strong>
-              <span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>
+              <span style={{ fontSize: 12, color: "#8c96a6", marginLeft: 6 }}>
                 {ev.confidence.basis}
               </span>
             </div>
             <div
               data-testid={`trade-decision-card-calibration-${ev.decision_event_id}`}
-              style={{ fontSize: 12, color: "#64748b" }}
+              style={{ fontSize: 12, color: "#8c96a6" }}
             >
               Calibration: {ev.confidence.calibration_state}
             </div>
@@ -263,18 +263,18 @@ export function TradeDecisionCard({
           {/* Probability (distinct from confidence per D4 spec) */}
           <div data-testid={`trade-decision-card-probability-${ev.decision_event_id}`}>
             <SectionHeading label="Probability (outcome forecast)" />
-            <div style={{ fontSize: 13, color: "#0f172a" }}>
+            <div style={{ fontSize: 13, color: "#f0ece4" }}>
               <strong>{(ev.probability.value * 100).toFixed(0)}%</strong>
               {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
                 <span
                   data-testid={`trade-decision-card-probability-ci-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}
+                  style={{ fontSize: 12, color: "#8c96a6", marginLeft: 6 }}
                 >
                   [{(ev.probability.ci_lower * 100).toFixed(0)}%–{(ev.probability.ci_upper * 100).toFixed(0)}%]
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>
+            <div style={{ fontSize: 12, color: "#8c96a6" }}>
               {ev.probability.target_outcome} · {ev.probability.horizon}
             </div>
           </div>
@@ -285,20 +285,20 @@ export function TradeDecisionCard({
           <SectionHeading label={`Expected Value (${ev.expected_value.horizon}, ${ev.expected_value.unit})`} />
           <div style={{ display: "flex", gap: 20, fontSize: 13, flexWrap: "wrap" }}>
             <div>
-              <span style={{ color: "#64748b", fontSize: 12 }}>Gross </span>
-              <span style={{ fontWeight: 500 }}>
+              <span style={{ color: "#8c96a6", fontSize: 12 }}>Gross </span>
+              <span style={{ fontWeight: 500, color: "#f0ece4" }}>
                 {ev.expected_value.gross >= 0 ? "+" : ""}
                 {ev.expected_value.gross.toFixed(4)}
               </span>
             </div>
             <div>
-              <span style={{ color: "#64748b", fontSize: 12 }}>Cost </span>
-              <span style={{ fontWeight: 500 }}>
+              <span style={{ color: "#8c96a6", fontSize: 12 }}>Cost </span>
+              <span style={{ fontWeight: 500, color: "#f0ece4" }}>
                 {ev.expected_value.cost.toFixed(4)}
               </span>
             </div>
             <div>
-              <span style={{ color: "#64748b", fontSize: 12 }}>Net </span>
+              <span style={{ color: "#8c96a6", fontSize: 12 }}>Net </span>
               <span
                 data-testid={`trade-decision-card-ev-net-${ev.decision_event_id}`}
                 style={{
@@ -311,7 +311,7 @@ export function TradeDecisionCard({
               </span>
             </div>
             <div>
-              <span style={{ color: "#64748b", fontSize: 12 }}>Downside </span>
+              <span style={{ color: "#8c96a6", fontSize: 12 }}>Downside </span>
               <span style={{ fontWeight: 500, color: "#dc2626" }}>
                 {ev.expected_value.downside.toFixed(4)}
               </span>
@@ -322,19 +322,19 @@ export function TradeDecisionCard({
         {/* Suggested Action */}
         <div data-testid={`trade-decision-card-suggested-${ev.decision_event_id}`}>
           <SectionHeading label="Suggested Action (non-binding)" />
-          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#f0ece4" }}>
             <span style={{ fontWeight: 600, textTransform: "capitalize" }}>
               {ev.suggested_action}
             </span>
             {ev.suggested_size && (
               <>
                 {ev.suggested_size.size_hint && (
-                  <span style={{ color: "#64748b" }}>
+                  <span style={{ color: "#8c96a6" }}>
                     Size: {ev.suggested_size.size_hint}
                   </span>
                 )}
                 {ev.suggested_size.portfolio_pct != null && (
-                  <span style={{ color: "#64748b" }}>
+                  <span style={{ color: "#8c96a6" }}>
                     {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}% portfolio
                   </span>
                 )}
@@ -361,7 +361,7 @@ export function TradeDecisionCard({
                   >
                     {(r.confidence * 100).toFixed(0)}%
                   </span>
-                  <span style={{ color: "#374151", lineHeight: 1.4 }}>{r.claim}</span>
+                  <span style={{ color: "#c4ccda", lineHeight: 1.4 }}>{r.claim}</span>
                 </div>
               ))}
             </div>
@@ -384,12 +384,13 @@ export function TradeDecisionCard({
                       background: color.bg,
                       fontSize: 12,
                       color: color.text,
+                      border: `1px solid ${color.text}33`,
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>[{rn.severity}]</span>{" "}
                     <span style={{ fontWeight: 500 }}>{rn.domain}:</span> {rn.summary}
                     {rn.mitigation && (
-                      <span style={{ color: "#64748b" }}> — {rn.mitigation}</span>
+                      <span style={{ color: "#8c96a6", marginLeft: 4 }}> — {rn.mitigation}</span>
                     )}
                   </div>
                 );
@@ -404,8 +405,8 @@ export function TradeDecisionCard({
             <SectionHeading label={`Evidence (${ev.evidence_refs.length})`} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {ev.evidence_refs.map((ref, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#475569" }}>
-                  <span style={{ color: "#94a3b8" }}>{ref.ref_type}</span>{" "}
+                <div key={i} style={{ fontSize: 12, color: "#c4ccda" }}>
+                  <span style={{ color: "#8c96a6", fontWeight: 600 }}>{ref.ref_type.toUpperCase()}</span>{" "}
                   {ref.ref_id}
                   {ref.summary ? ` — ${ref.summary}` : null}
                 </div>
@@ -417,14 +418,14 @@ export function TradeDecisionCard({
         {/* Invalidation */}
         <div data-testid={`trade-decision-card-invalidation-${ev.decision_event_id}`}>
           <SectionHeading label="Invalidation" />
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 13, color: "#f0ece4" }}>
             State:{" "}
             <span style={{ fontWeight: 600, color: invalidationColor }}>
-              {ev.invalidation.current_state}
+              {ev.invalidation.current_state.toUpperCase()}
             </span>
           </div>
           {ev.invalidation.conditions.length > 0 && (
-            <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 12, color: "#64748b" }}>
+            <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 12, color: "#8c96a6" }}>
               {ev.invalidation.conditions.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
@@ -436,22 +437,32 @@ export function TradeDecisionCard({
         {ev.position_snapshot && Object.keys(ev.position_snapshot).length > 0 && (
           <div data-testid={`trade-decision-card-position-${ev.decision_event_id}`}>
             <SectionHeading label="Position Snapshot" />
-            <div style={{ fontSize: 12, color: "#475569", fontFamily: "monospace" }}>
+            <pre style={{
+              fontSize: 11,
+              color: "#c4ccda",
+              fontFamily: "monospace",
+              background: "#121620",
+              padding: 8,
+              borderRadius: 4,
+              border: "1px solid #2a2e38",
+              overflow: "auto",
+              margin: 0,
+            }}>
               {JSON.stringify(ev.position_snapshot, null, 2)}
-            </div>
+            </pre>
           </div>
         )}
 
         {/* Data cutoff + no-order-route proof */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {ev.data_cutoff && (
-            <span style={{ fontSize: 11, color: "#94a3b8" }}>
+            <span style={{ fontSize: 11, color: "#8c96a6" }}>
               Data cutoff: {ev.data_cutoff}
             </span>
           )}
           <span
             data-testid={`trade-decision-card-no-order-route-${ev.decision_event_id}`}
-            style={{ fontSize: 11, color: "#22c55e", fontWeight: 500 }}
+            style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}
           >
             {ev.no_order_route_proof}
           </span>
@@ -463,10 +474,10 @@ export function TradeDecisionCard({
           style={{
             padding: "6px 10px",
             borderRadius: 4,
-            background: "#f0f9ff",
-            border: "1px solid #bae6fd",
+            background: "rgba(3, 105, 161, 0.15)",
+            border: "1px solid rgba(3, 105, 161, 0.3)",
             fontSize: 11,
-            color: "#0369a1",
+            color: "#38bdf8",
           }}
         >
           Approve or Modify creates a governed TradingIntent via AG-BE-TR-002.
@@ -481,13 +492,13 @@ export function TradeDecisionCard({
           {callState === "success" ? (
             <span
               data-testid={`trade-decision-card-confirmed-${ev.decision_event_id}`}
-              style={{ fontSize: 12, color: "#16a34a", fontWeight: 500 }}
+              style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}
             >
-              Decision recorded: {decidedChoice}
+              Decision recorded: {decidedChoice?.toUpperCase()}
             </span>
           ) : (
             <>
-              <span style={{ fontSize: 12, color: "#64748b", marginRight: 2 }}>
+              <span style={{ fontSize: 12, color: "#8c96a6", marginRight: 2 }}>
                 Trader decision:
               </span>
               {(["approve", "reject", "defer", "modify"] as DecisionChoice[]).map(
@@ -500,23 +511,23 @@ export function TradeDecisionCard({
                     style={{
                       padding: "4px 12px",
                       fontSize: 12,
-                      border: "1px solid #e2e8f0",
+                      border: choice === "approve" ? "1px solid #22c55e" : choice === "reject" ? "1px solid #ef4444" : "1px solid #2a2e38",
                       borderRadius: 4,
                       cursor: canDecide ? "pointer" : "not-allowed",
                       background:
                         choice === "approve"
-                          ? "#f0fdf4"
+                          ? "rgba(34, 197, 94, 0.15)"
                           : choice === "reject"
-                          ? "#fef2f2"
-                          : "#fff",
+                          ? "rgba(239, 68, 68, 0.15)"
+                          : "#1e2330",
                       color:
                         choice === "approve"
-                          ? "#16a34a"
+                          ? "#4ade80"
                           : choice === "reject"
-                          ? "#dc2626"
-                          : "#475569",
+                          ? "#f87171"
+                          : "#c4ccda",
                       opacity: canDecide ? 1 : 0.5,
-                      fontWeight: choice === "approve" || choice === "reject" ? 500 : 400,
+                      fontWeight: choice === "approve" || choice === "reject" ? 600 : 400,
                     }}
                   >
                     {choice.charAt(0).toUpperCase() + choice.slice(1)}
@@ -526,7 +537,7 @@ export function TradeDecisionCard({
               {callState === "loading" && (
                 <span
                   data-testid={`trade-decision-card-loading-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#94a3b8" }}
+                  style={{ fontSize: 12, color: "#8c96a6" }}
                 >
                   Sending…
                 </span>
@@ -534,7 +545,7 @@ export function TradeDecisionCard({
               {callState === "error" && callError && (
                 <span
                   data-testid={`trade-decision-card-error-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#dc2626" }}
+                  style={{ fontSize: 12, color: "#f87171" }}
                 >
                   {callError}
                 </span>
