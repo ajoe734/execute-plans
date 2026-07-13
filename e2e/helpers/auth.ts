@@ -1,3 +1,5 @@
+import { normalizeBearerToken as normalizeStrictBearerToken } from "../../scripts/lib/bearer-token.mjs";
+
 export const DEFAULT_FE_OPERATOR_ID = "op-fe-gate";
 export const DEFAULT_FE_TENANT_ID = "tenant-dev";
 export const DEFAULT_FE_AUTH_ROLES = ["operator", "reviewer", "approver"] as const;
@@ -47,6 +49,7 @@ export type AuthHeaderOptions = {
 };
 
 export type DevLoginOptions = {
+  env?: Record<string, string | undefined>;
   goto?: string | false;
   operatorId?: string;
   pageBaseUrl?: string;
@@ -101,6 +104,42 @@ function isLoopbackTarget(value: string): boolean {
   }
 }
 
+function effectiveFrontendTarget(
+  options: Pick<DevLoginOptions, "goto" | "pageBaseUrl">,
+  env: Record<string, string | undefined>,
+): string {
+  let configuredTarget = options.pageBaseUrl;
+  if (!configuredTarget) {
+    for (const key of [
+      "PANTHEON_FE_BASE_URL",
+      "FRONTEND_BASE_URL",
+      "PLAYWRIGHT_BASE_URL",
+    ]) {
+      if (env[key] !== undefined && env[key] !== "") {
+        configuredTarget = env[key];
+        break;
+      }
+    }
+  }
+  configuredTarget ??= "http://localhost:5173";
+
+  if (typeof options.goto === "string") {
+    try {
+      return new URL(options.goto, configuredTarget).origin;
+    } catch {
+      return "";
+    }
+  }
+  return configuredTarget;
+}
+
+export function localFixtureFrontendIsLoopback(
+  options: Pick<DevLoginOptions, "goto" | "pageBaseUrl"> = {},
+  env: Record<string, string | undefined> = defaultEnv(),
+): boolean {
+  return isLoopbackTarget(effectiveFrontendTarget(options, env));
+}
+
 export function targetsExternalE2eEnvironment(
   env: Record<string, string | undefined> = defaultEnv(),
 ): boolean {
@@ -132,31 +171,14 @@ function missingExternalCredential(): Error {
   );
 }
 
+function localFixtureExternalFrontend(): Error {
+  return new Error(
+    "LOCAL_FIXTURE_AUTH_TOKEN may be installed only for a proven loopback frontend origin",
+  );
+}
+
 export function normalizeBearerToken(token: string): string {
-  const hasControlCharacter = [...token].some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 31 || codePoint === 127;
-  });
-  if (!token || token !== token.trim() || hasControlCharacter) {
-    throw new Error(
-      "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
-    );
-  }
-  let normalized = token;
-  if (/^bearer(?:\s|$)/iu.test(token)) {
-    if (!/^bearer [^\s]+$/iu.test(token)) {
-      throw new Error(
-        "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
-      );
-    }
-    normalized = token.slice("bearer ".length);
-  }
-  if (!normalized || /\s/u.test(normalized)) {
-    throw new Error(
-      "Explicit BFF credential must contain a non-blank bearer token without whitespace or control characters",
-    );
-  }
-  return normalized;
+  return normalizeStrictBearerToken(token, "Explicit BFF credential");
 }
 
 export function makeDevAuthToken(options: {
@@ -173,7 +195,9 @@ export function makeDevAuthToken(options: {
 export function authToken(options: AuthHeaderOptions = {}): string {
   const env = options.env ?? defaultEnv();
   const explicit = explicitAuthToken(env, options.token);
-  if (explicit !== undefined) return normalizeBearerToken(explicit);
+  if (explicit !== undefined) {
+    return normalizeBearerToken(explicit);
+  }
   if (targetsExternalE2eEnvironment(env)) throw missingExternalCredential();
   return LOCAL_FIXTURE_AUTH_TOKEN;
 }
@@ -221,7 +245,7 @@ export function actorFromAuthorization(value: string | undefined): string {
 
 export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession {
   const roles = options.roles ?? [...DEFAULT_FE_AUTH_ROLES];
-  const env = defaultEnv();
+  const env = options.env ?? defaultEnv();
   const explicit = explicitAuthToken(env, options.token);
   if (explicit === undefined && targetsExternalE2eEnvironment(env)) {
     throw missingExternalCredential();
@@ -229,6 +253,12 @@ export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession 
   const token = normalizeBearerToken(
     explicit ?? makeDevAuthToken({ operatorId: options.operatorId, roles }),
   );
+  if (
+    (explicit === undefined || token === LOCAL_FIXTURE_AUTH_TOKEN)
+    && !localFixtureFrontendIsLoopback(options, env)
+  ) {
+    throw localFixtureExternalFrontend();
+  }
   return {
     authorization: bearerHeader(token),
     operatorId: (options.operatorId ?? actorFromAuthorization(token)) || DEFAULT_FE_OPERATOR_ID,

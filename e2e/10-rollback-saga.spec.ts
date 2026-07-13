@@ -26,6 +26,7 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
+import { bearerHeader } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -153,7 +154,7 @@ function authHeader(): string {
   if (!token) {
     throw new Error("Live rollback-saga contract requires a short-lived BFF_AUTH_TOKEN");
   }
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  return bearerHeader(token);
 }
 
 function isRecord(value: unknown): value is JsonRecord {

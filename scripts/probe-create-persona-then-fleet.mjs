@@ -19,14 +19,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
+import {
+  bearerAuthorization,
+  normalizeOptionalBearerToken,
+} from "./lib/bearer-token.mjs";
 
 const BFF_BASE_URL = String(
   process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "",
 ).replace(/\/$/, "");
-const BEARER_TOKEN =
+const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.BFF_AUTH_TOKEN ||
-  "";
+  "",
+);
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const ROOT = process.cwd();
 
@@ -45,7 +50,7 @@ async function call(method, route, body) {
   const url = new URL(route, BFF_BASE_URL).toString();
   const corr = corrId("probe");
   const headers = {
-    Authorization: `Bearer ${BEARER_TOKEN}`,
+    Authorization: bearerAuthorization(BEARER_TOKEN),
     Accept: "application/json",
     "X-Correlation-Id": corr,
     "X-Request-Id": corr,

@@ -10,13 +10,14 @@ const bffProxyTarget =
   process.env.VITE_BFF_BASE_URL;
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command, mode }) => {
-  if (command === "build") {
-    const loadedEnv = loadEnv(mode, process.cwd(), "VITE_");
-    validatePublicBuildBearerToken(
-      process.env.VITE_BFF_DEV_BEARER_TOKEN ?? loadedEnv.VITE_BFF_DEV_BEARER_TOKEN,
-    );
-  }
+export default defineConfig(({ mode }) => {
+  // VITE_* values are transformed into browser-visible source in both serve
+  // and build modes. Validate while the config is loading so `vite` cannot
+  // bind a development server with a privileged ambient credential either.
+  const loadedEnv = loadEnv(mode, process.cwd(), "VITE_");
+  validatePublicBuildBearerToken(
+    process.env.VITE_BFF_DEV_BEARER_TOKEN ?? loadedEnv.VITE_BFF_DEV_BEARER_TOKEN,
+  );
 
   return {
     server: {

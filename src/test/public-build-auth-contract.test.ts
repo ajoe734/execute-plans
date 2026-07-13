@@ -3,11 +3,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
   authToken,
   bearerHeader,
   devLoginSession,
+  installOidcDevLogin,
   targetsExternalE2eEnvironment,
 } from "../../e2e/helpers/auth";
+import {
+  bearerAuthorization as scriptBearerAuthorization,
+  normalizeBearerToken as normalizeScriptBearerToken,
+} from "../../scripts/lib/bearer-token.mjs";
 import {
   PUBLIC_DEV_VIEWER_BEARER_TOKEN,
   validatePublicBuildBearerToken,
@@ -64,6 +70,39 @@ describe("public frontend build auth boundary", () => {
     );
   });
 
+  it("rejects a privileged token before the standard Vite dev server can bind", () => {
+    const result = spawnSync(
+      "npm",
+      [
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "41739",
+        "--strictPort",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          VITE_BFF_DEV_BEARER_TOKEN:
+            "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+        },
+        timeout: 10_000,
+      },
+    );
+
+    expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /canonical public dev viewer identity/,
+    );
+    expect(`${result.stdout}\n${result.stderr}`).not.toMatch(/Local:\s+http/i);
+  });
+
   it.each([
     " ",
     ` ${PUBLIC_DEV_VIEWER_BEARER_TOKEN}`,
@@ -109,6 +148,8 @@ describe("public frontend build auth boundary", () => {
     "signed-token\n",
     "Bearer  signed-token",
     "Bearer\tsigned-token",
+    "Bearer Bearer",
+    "Bearer Bearer signed-token",
     "signed-token\nworkflow-command",
   ])("rejects blank or Bearer-only explicit credentials before network access (%j)", (token) => {
     expect(() => authToken({ env: {}, token })).toThrow(/non-blank bearer token/);
@@ -128,6 +169,55 @@ describe("public frontend build auth boundary", () => {
   it("accepts one exact Bearer scheme separator and returns the opaque credential", () => {
     expect(authToken({ env: {}, token: "Bearer signed-token" })).toBe("signed-token");
     expect(bearerHeader("Bearer signed-token")).toBe("Bearer signed-token");
+  });
+
+  it("applies the same strict normalization to changed Node live probes", () => {
+    expect(normalizeScriptBearerToken("signed-token")).toBe("signed-token");
+    expect(normalizeScriptBearerToken("Bearer signed-token")).toBe("signed-token");
+    expect(scriptBearerAuthorization("Bearer signed-token")).toBe("Bearer signed-token");
+    for (const rejected of [
+      "",
+      " signed-token",
+      "signed-token ",
+      "signed token",
+      "signed-token\nworkflow-command",
+      "Bearer  signed-token",
+      "Bearer Bearer",
+      "Bearer Bearer signed-token",
+    ]) {
+      expect(() => normalizeScriptBearerToken(rejected)).toThrow(
+        /non-blank bearer token/,
+      );
+      expect(() => scriptBearerAuthorization(rejected)).toThrow(
+        /non-blank bearer token/,
+      );
+    }
+  });
+
+  it("does not let an explicit local fixture token bypass an external frontend origin", async () => {
+    const browserOperations: string[] = [];
+    const page = {
+      addInitScript: async () => { browserOperations.push("addInitScript"); },
+      evaluate: async () => { browserOperations.push("evaluate"); },
+      goto: async () => { browserOperations.push("goto"); },
+    } as unknown as Parameters<typeof installOidcDevLogin>[0];
+
+    await expect(installOidcDevLogin(page, {
+      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+      goto: false,
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    })).rejects.toThrow(/proven loopback frontend origin/);
+    expect(browserOperations).toEqual([]);
+
+    expect(devLoginSession({
+      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+      token: "signed-short-lived-test-token",
+    }).token).toBe("signed-short-lived-test-token");
+    expect(() => devLoginSession({
+      env: {},
+      pageBaseUrl: "https://fe.example.test",
+      roles: ["viewer"],
+    })).toThrow(/proven loopback frontend origin/);
   });
 
   it.each([
@@ -187,7 +277,52 @@ describe("public frontend build auth boundary", () => {
     expect(hostedSource).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
     expect(hostedE2ePaths).toContain("e2e/agora-ui-polish-hosted.spec.ts");
     expect(allNetworkE2ePaths).toContain("e2e/04-sentinel-remediation.spec.ts");
+
+    for (const file of [
+      "scripts/accept-management-hosted-production.mjs",
+      "scripts/probe-bff-write-paths.mjs",
+      "scripts/probe-create-persona-then-fleet.mjs",
+      "scripts/probe-persona-onboarding-endpoints.mjs",
+    ]) {
+      const probeSource = readFileSync(file, "utf8");
+      expect(probeSource).toContain("./lib/bearer-token.mjs");
+      expect(probeSource).not.toMatch(/Authorization:\s*`Bearer \$\{BEARER_TOKEN\}`/u);
+    }
   });
+
+  it("fails the fixture-only portfolio specs before navigation for an external frontend", () => {
+    const env = {
+      ...process.env,
+      PANTHEON_FE_BASE_URL: "https://fe.example.test",
+      FRONTEND_BASE_URL: "https://fe.example.test",
+      PLAYWRIGHT_BASE_URL: "https://fe.example.test",
+      PANTHEON_HOSTED_E2E: "",
+      FE_INT_GATE_LIVE_BFF: "",
+      F08_CREATE_INTENT_LIVE_BFF: "",
+      RUN_LIVE_BFF_CONTRACTS: "",
+    };
+    const result = spawnSync(
+      "npx",
+      [
+        "playwright",
+        "test",
+        "e2e/20-portfolio-book-monitor.spec.ts",
+        "e2e/22-persona-trade-journal.spec.ts",
+        "--project=chromium",
+        "--retries=0",
+        "--reporter=line",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env, timeout: 30_000 },
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
+    expect(result.status).not.toBe(0);
+    expect(output).toMatch(/20-portfolio-book-monitor/);
+    expect(output).toMatch(/22-persona-trade-journal/);
+    expect(output).toMatch(/proven loopback frontend origin/);
+    expect(output).not.toMatch(/ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/);
+  }, 40_000);
 
   it("discovers fully intercepted fixtures under external global targets without a secret", () => {
     const env = {

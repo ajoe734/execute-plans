@@ -32,6 +32,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import {
+  bearerAuthorization,
+  normalizeOptionalBearerToken,
+} from "./lib/bearer-token.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
 // --- argv / env --------------------------------------------------------
@@ -78,9 +82,9 @@ const OPERATOR_ROLES = (process.env.PANTHEON_ACCEPT_OPERATOR_ROLES || "operator,
 // ("tenant-dev") is a fixture-mock-only value for the CI-safe Playwright specs
 // and 403s against the real hosted BFF.
 const TENANT_ID = process.env.PANTHEON_TENANT_ID || "pantheon-dev";
-const BEARER_TOKEN = (
+const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || ""
-).trim();
+);
 
 const AUTH_STORAGE_KEYS = {
   bearerToken: "pantheon.bff.bearerToken",
@@ -322,7 +326,7 @@ async function discoverLiveNav(page) {
 function authHeaders(token, tenantId) {
   return {
     Accept: "application/json",
-    Authorization: `Bearer ${token}`,
+    Authorization: bearerAuthorization(token),
     "X-Tenant-Id": tenantId,
     "X-Request-Id": `mgmt-gap-006-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };

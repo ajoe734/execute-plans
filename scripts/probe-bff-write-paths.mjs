@@ -13,15 +13,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
+import {
+  bearerAuthorization,
+  normalizeOptionalBearerToken,
+} from "./lib/bearer-token.mjs";
 
 const BFF_BASE_URL = String(
   process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "",
 ).replace(/\/$/, "");
-const BEARER_TOKEN =
+const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_WRITE_PROBE_BEARER_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
   process.env.BFF_AUTH_TOKEN ||
-  "";
+  "",
+);
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const ROOT = process.cwd();
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
@@ -187,7 +192,7 @@ function classify(status, json) {
 
 function headersFor(requestId) {
   return {
-    Authorization: `Bearer ${BEARER_TOKEN}`,
+    Authorization: bearerAuthorization(BEARER_TOKEN),
     "Content-Type": "application/json",
     Accept: "application/json",
     "X-Correlation-Id": requestId,
@@ -293,7 +298,7 @@ async function readback(route) {
       const res = await fetch(url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${BEARER_TOKEN}`,
+          Authorization: bearerAuthorization(BEARER_TOKEN),
           Accept: "application/json",
           "X-Request-Id": requestId,
           "X-BFF-Api-Version": "2026-05-07",
