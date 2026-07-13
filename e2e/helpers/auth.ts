@@ -165,7 +165,8 @@ export async function installOidcDevLogin(
   await page.addInitScript(
     ({ keys, session: nextSession, storageMode }) => {
       try {
-        delete (window as any).EventSource;
+        const eventSourceWindow = window as unknown as { EventSource?: typeof EventSource };
+        delete eventSourceWindow.EventSource;
       } catch {
         // ignore
       }
