@@ -211,6 +211,7 @@ describe("HumanInboxPage", () => {
     renderInbox();
 
     expect(screen.getByText("Human Inbox is incomplete")).toBeInTheDocument();
+    expect(screen.getByText("No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out.")).toBeInTheDocument();
     expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
   });
 

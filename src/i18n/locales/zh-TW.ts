@@ -2793,6 +2793,7 @@ export default {
       focusUnavailablePersonaFmt: "{{persona}} 的收件匣狀態不完整，無法確認沒有待處理項目。",
       emptyBody: "目前沒有需要審查的人類收件匣項目。",
       focusEmptyBodyFmt: "{{persona}} 目前沒有需要審查的人類收件匣項目。",
+      degradedEmptyBody: "未載入任何確認的項目。注意：這不代表收件匣為空，因為部分資料來源已逾時。",
       promotionDecision: "升級審核",
       rationaleLabel: "審核理由",
       approveCanary: "批准 Canary",
