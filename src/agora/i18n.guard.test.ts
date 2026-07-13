@@ -35,6 +35,7 @@ describe("Agora locale policy", () => {
     expect(Object.keys(zh.agora.tradingRoom.warnings)).toEqual(Object.keys(en.agora.tradingRoom.warnings));
     expect(Object.keys(zh.agora.tradingRoom.reasons)).toEqual(Object.keys(en.agora.tradingRoom.reasons));
     expect(Object.keys(zh.agora.tradingRoom.page)).toEqual(Object.keys(en.agora.tradingRoom.page));
+    expect(Object.keys(zh.agora.tradingRoom.drawer)).toEqual(Object.keys(en.agora.tradingRoom.drawer));
     expect(Object.keys(zh.agora.performance)).toEqual(Object.keys(en.agora.performance));
     expect(Object.keys(zh.agora.workshop)).toEqual(Object.keys(en.agora.workshop));
   });

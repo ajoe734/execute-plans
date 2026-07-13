@@ -1664,6 +1664,29 @@ export default {
         eventKinds: { entry: "Entry", add: "Add", reduce: "Reduce", exit: "Exit", review: "Review" },
         states: { approaching: "Approaching", triggered: "Triggered", pending_review: "Pending Review", decided: "Decided", expired: "Expired", invalidated: "Invalidated", superseded: "Superseded" },
       },
+      drawer: {
+        title: "Widget Adjustment Drawer", heading: "Ask the Servant to revise this widget", close: "Close widget revision drawer",
+        placeholder: "For example: change this chart to a branch-by-date heatmap…",
+        creating: "Creating proposal…", submit: "Submit request", proposalReady: "The Servant prepared this adjustment", etagReady: "Proposal ETag ready",
+        preview: "Before / After Preview", current: "Current", suggested: "Servant suggestion", applying: "Applying…", apply: "Apply changes",
+        adjustAgain: "Adjust again", keepCopy: "Keep original and add a copy", cancel: "Cancel", noProposal: "No proposal yet",
+        backendDiff: "Backend beforeSpec / proposedSpec field diff", draftDiff: "Draft field diff before proposal",
+        field: "Field", before: "Before", after: "After",
+        quick: {
+          heatmap: "Change to a branch-by-date heatmap", cluster: "Overlay cluster-adjusted flow", recent: "Show the latest 20 days and exclude low volume",
+          sortableTable: "Change to a sortable table", split: "Split relationships and distribution into two charts", eventWindow: "Chart before and after events with material disclosures",
+        },
+        fields: {
+          title: "Title", widgetType: "Widget type", dataSource: "Data source", queryFilters: "Query filters", queryWindow: "Query window",
+          querySort: "Query sort", queryLimit: "Query limit", chartSpec: "Chart spec", interactions: "Interactions", sensitivity: "Sensitivity", placement: "Placement",
+        },
+        context: {
+          workspace: "Workspace", strategy: "Strategy", view: "View", widgetId: "Widget ID", widgetTitle: "Widget title", widgetType: "Widget type",
+          purpose: "Widget purpose", whyIncluded: "Why included", dataSource: "Data source", fields: "Current fields", filters: "Current filters", sort: "Current sort",
+          limit: "Current limit", window: "Current window", chart: "Current chart", interactions: "Available interactions", sensitivity: "Data sensitivity",
+          placement: "Current placement", availability: "Data availability", warnings: "Warnings", evidence: "Related evidence",
+        },
+      },
       proposal: {
         eyebrow: "Trading Servant proposal",
         title: "{{version}} — Trading Room proposal",

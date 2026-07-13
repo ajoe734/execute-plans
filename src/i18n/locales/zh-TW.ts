@@ -1646,6 +1646,29 @@ export default {
         eventKinds: { entry: "進場", add: "加碼", reduce: "減碼", exit: "出場", review: "複核" },
         states: { approaching: "接近觸發", triggered: "已觸發", pending_review: "待複核", decided: "已裁示", expired: "已過期", invalidated: "已失效", superseded: "已取代" },
       },
+      drawer: {
+        title: "元件調整抽屜", heading: "交代僕人修改元件", close: "關閉元件調整抽屜",
+        placeholder: "例如：把這張圖改成分點為列、日期為欄的熱圖…",
+        creating: "正在建立提案…", submit: "交代", proposalReady: "僕人準備這樣調整", etagReady: "提案 ETag 已就緒",
+        preview: "調整前後預覽", current: "目前", suggested: "僕人建議", applying: "套用中…", apply: "套用修改",
+        adjustAgain: "再調整", keepCopy: "保留原圖並新增一張", cancel: "取消", noProposal: "尚未建立提案",
+        backendDiff: "後端 beforeSpec／proposedSpec 欄位差異", draftDiff: "提案建立前的草稿欄位差異",
+        field: "欄位", before: "調整前", after: "調整後",
+        quick: {
+          heatmap: "改成分點為列、日期為欄的熱圖", cluster: "疊加群組調整後流向", recent: "只看最近 20 日並排除低量",
+          sortableTable: "改成可排序表格", split: "拆成關係人與出貨兩張", eventWindow: "畫事件前後並標重大訊息",
+        },
+        fields: {
+          title: "標題", widgetType: "元件類型", dataSource: "資料來源", queryFilters: "查詢篩選", queryWindow: "查詢時間窗口",
+          querySort: "查詢排序", queryLimit: "查詢筆數上限", chartSpec: "圖表規格", interactions: "互動", sensitivity: "敏感度", placement: "版面位置",
+        },
+        context: {
+          workspace: "工作區", strategy: "所屬策略", view: "所屬檢視", widgetId: "元件 ID", widgetTitle: "元件標題", widgetType: "元件類型",
+          purpose: "元件目的", whyIncluded: "納入原因", dataSource: "資料來源", fields: "目前欄位", filters: "目前篩選", sort: "目前排序",
+          limit: "目前筆數上限", window: "目前時間窗口", chart: "目前圖表型態", interactions: "可用互動", sensitivity: "資料敏感度",
+          placement: "目前版面位置", availability: "資料可用性", warnings: "警告", evidence: "相關證據",
+        },
+      },
       proposal: {
         eyebrow: "交易僕人提案",
         title: "{{version}} — 操盤室提案",
