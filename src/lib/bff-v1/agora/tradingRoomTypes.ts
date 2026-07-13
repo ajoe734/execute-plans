@@ -97,6 +97,7 @@ export interface TradingRoomWidgetSpec {
   purpose: string;
   whyIncluded: string;
   dataSource: string;
+  dataAvailability?: DataAvailabilityStatus;
   query: {
     filters: Record<string, unknown>;
     sort?: Record<string, "asc" | "desc">;
