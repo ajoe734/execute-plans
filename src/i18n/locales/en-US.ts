@@ -1486,6 +1486,21 @@ export default {
     rejectDesc: "Reject this request. The requester will be notified and the workflow halts.",
   },
   agora: {
+    shell: {
+      sections: "Agora trading desk sections",
+      servant: {
+        label: "Servant",
+        open: "Open servant drawer",
+        close: "Close servant drawer",
+        drawer: "Servant drawer",
+        empty: "Open a strategy workshop session to load contextual state.",
+        loading: "Loading workshop context…",
+        unavailable: "Workshop context unavailable: {{message}}",
+        status: "Status: {{status}}",
+        messages: "Messages: {{count}}",
+      },
+      bottom: { jobs: "Jobs", shadow: "Shadow", journal: "Journal" },
+    },
     tradingRoom: {
       proposal: {
         eyebrow: "Trading Servant proposal",

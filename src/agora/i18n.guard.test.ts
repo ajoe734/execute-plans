@@ -25,6 +25,8 @@ describe("Agora locale policy", () => {
   });
 
   it("keeps Trading Room proposal catalogs in zh-TW/en-US parity", () => {
+    expect(Object.keys(zh.agora.shell.bottom)).toEqual(Object.keys(en.agora.shell.bottom));
+    expect(Object.keys(zh.agora.shell.servant)).toEqual(Object.keys(en.agora.shell.servant));
     expect(Object.keys(zh.agora.tradingRoom.views)).toEqual(Object.keys(en.agora.tradingRoom.views));
     expect(Object.keys(zh.agora.tradingRoom.warnings)).toEqual(Object.keys(en.agora.tradingRoom.warnings));
     expect(Object.keys(zh.agora.tradingRoom.reasons)).toEqual(Object.keys(en.agora.tradingRoom.reasons));

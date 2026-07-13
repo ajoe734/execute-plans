@@ -1468,6 +1468,21 @@ export default {
     rejectDesc: "駁回此請求，申請人會收到通知，流程中止。",
   },
   agora: {
+    shell: {
+      sections: "Agora 交易台分區",
+      servant: {
+        label: "交易僕人",
+        open: "開啟交易僕人抽屜",
+        close: "關閉交易僕人抽屜",
+        drawer: "交易僕人抽屜",
+        empty: "請開啟策略工坊工作階段，以載入相關情境。",
+        loading: "正在載入策略工坊情境…",
+        unavailable: "無法取得策略工坊情境：{{message}}",
+        status: "狀態：{{status}}",
+        messages: "訊息：{{count}}",
+      },
+      bottom: { jobs: "工作", shadow: "影子模式", journal: "日誌" },
+    },
     tradingRoom: {
       proposal: {
         eyebrow: "交易僕人提案",

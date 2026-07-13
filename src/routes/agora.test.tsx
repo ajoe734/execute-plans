@@ -151,7 +151,7 @@ describe("AgoraLayoutRoute", () => {
     vi.mocked(getWorkshop).mockResolvedValue(workshop);
 
     renderAgoraShell("/agora/strategy-workshop/ws-9");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人/i }));
 
     await waitFor(() => {
       expect(getWorkshop).toHaveBeenCalledWith("ws-9");
