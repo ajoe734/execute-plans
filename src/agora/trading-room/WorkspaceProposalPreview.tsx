@@ -1,15 +1,15 @@
 import React from "react";
 
 import type {
+  DataAvailabilityStatus,
   TradingRoomViewSpec,
   TradingRoomWorkspaceProposal,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
+import { normalizeDataAvailabilityStatus } from "@/lib/bff-v1/agora/dataAvailability";
 import {
   safeWarningText,
   validateTradingRoomWidgetSpec,
 } from "./workspaceValidation";
-
-type DataAvailabilityStatus = "complete" | "partial" | "unavailable";
 
 const STATUS_LABEL: Record<DataAvailabilityStatus, string> = {
   complete: "完整",
@@ -39,7 +39,8 @@ const STATUS_COLOR: Record<DataAvailabilityStatus, { bg: string; fg: string; bor
 };
 
 function StatusPill({ status }: { status: DataAvailabilityStatus }) {
-  const color = STATUS_COLOR[status];
+  const normalizedStatus = normalizeDataAvailabilityStatus(status);
+  const color = STATUS_COLOR[normalizedStatus];
   return (
     <span
       style={{
@@ -57,7 +58,7 @@ function StatusPill({ status }: { status: DataAvailabilityStatus }) {
         whiteSpace: "nowrap",
       }}
     >
-      {STATUS_LABEL[status]}
+      {STATUS_LABEL[normalizedStatus]}
     </span>
   );
 }
@@ -126,7 +127,9 @@ function ViewProposalCard({
     .map((widget) => ({ widget, validation: validateTradingRoomWidgetSpec(widget) }))
     .filter((entry) => !entry.validation.ok);
   const widgetAvailability = view.widgets.map((widget) => ({
-    status: widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability ?? "unavailable",
+    status: normalizeDataAvailabilityStatus(
+      widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability,
+    ),
     widget,
   }));
   const counts = widgetAvailability.reduce(
@@ -244,9 +247,12 @@ export function WorkspaceProposalPreview({
   proposal,
   selectedViewId,
 }: WorkspaceProposalPreviewProps) {
-  const availability = proposal.dataAvailability.status;
+  const availability = normalizeDataAvailabilityStatus(proposal.dataAvailability.status);
   const sourceStatuses = new Map(
-    proposal.dataAvailability.sources.map((source) => [source.dataSource, source.status] as const),
+    proposal.dataAvailability.sources.map((source) => [
+      source.dataSource,
+      normalizeDataAvailabilityStatus(source.status),
+    ] as const),
   );
   const personalizationItems = proposal.personalizationApplied.items ?? [];
   const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
