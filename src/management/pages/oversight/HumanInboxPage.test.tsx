@@ -214,6 +214,56 @@ describe("HumanInboxPage", () => {
     expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
   });
 
+  it("marks a focused degraded response incomplete instead of empty or missing", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: inboxState([], "degraded", true),
+      loading: false,
+      error: undefined,
+      refresh: vi.fn(),
+    });
+
+    renderInbox("/management/human-inbox?persona=persona-tw-equity");
+
+    expect(
+      screen.getByText("Inbox status is incomplete for persona-tw-equity; absence cannot be confirmed."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Human Inbox is incomplete")).toBeInTheDocument();
+    expect(
+      screen.getByText("Some live sources are unavailable or timed out. Showing the items that were confirmed."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText("Human Inbox status unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No Human Inbox items currently require review for persona-tw-equity."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to Persona Detail" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-tw-equity",
+    );
+  });
+
+  it("keeps a focused transport failure distinct from a degraded response", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: false,
+      error: new Error("request timed out"),
+      refresh: vi.fn(),
+    });
+
+    renderInbox("/management/human-inbox?persona=persona-tw-equity");
+
+    expect(
+      screen.getByText("Inbox status is incomplete for persona-tw-equity; absence cannot be confirmed."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Human Inbox status unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Human Inbox is incomplete")).not.toBeInTheDocument();
+    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No Human Inbox items currently require review for persona-tw-equity."),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps confirmed rows visible when a refresh fails", () => {
     mocks.useV5Live.mockReturnValue({
       data: inboxState([

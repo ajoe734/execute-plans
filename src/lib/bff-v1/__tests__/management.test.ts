@@ -583,6 +583,7 @@ describe("mgmt façade (PM-Live)", () => {
       id: "promotion_review:review-persona-paper-1",
       kind: "promotion_review",
       reviewId: "review-persona-paper-1",
+      reviewKind: "promotion_to_canary",
       reviewType: "promotion_to_canary",
       personaId: "persona-paper-1",
       status: "pending",
@@ -600,6 +601,64 @@ describe("mgmt façade (PM-Live)", () => {
       links: {
         manageHref: "/management/persona-fleet?persona=persona-paper-1",
       },
+    });
+  });
+
+  it("derives promotion review semantics from top-level, context, and nested review paths", () => {
+    const out = adaptHumanInboxList({
+      items: [
+        {
+          review_id: "review-top-level",
+          inbox_type: "promotion_review",
+          review_kind: "paper_to_canary_review",
+          action_id: "promote_to_canary_candidate",
+          persona_id: "persona-paper",
+        },
+        {
+          review_id: "review-context",
+          kind: "promotion_review",
+          persona_id: "persona-canary",
+          promotion_context: {
+            review_kind: "canary_to_live_review",
+            action_id: "promote_to_canary_candidate",
+          },
+        },
+        {
+          promotion_review: {
+            review_id: "review-nested-risk",
+            persona_id: "persona-risk",
+            action_id: "reduce_capital_access",
+            promotion_path: {
+              review_kind: "risk_containment_review",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(out).toHaveLength(3);
+    expect(out?.[0]).toMatchObject({
+      id: "promotion_review:review-top-level",
+      kind: "promotion_review",
+      reviewId: "review-top-level",
+      reviewKind: "paper_to_canary_review",
+      reviewType: "paper_to_canary_review",
+      actionId: "promote_to_canary_candidate",
+    });
+    expect(out?.[1]).toMatchObject({
+      id: "promotion_review:review-context",
+      reviewKind: "canary_to_live_review",
+      reviewType: "canary_to_live_review",
+      actionId: "promote_to_canary_candidate",
+    });
+    expect(out?.[2]).toMatchObject({
+      id: "promotion_review:review-nested-risk",
+      kind: "promotion_review",
+      reviewId: "review-nested-risk",
+      personaId: "persona-risk",
+      reviewKind: "risk_containment_review",
+      reviewType: "risk_containment_review",
+      actionId: "reduce_capital_access",
     });
   });
 

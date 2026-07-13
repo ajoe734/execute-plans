@@ -46,7 +46,12 @@ export interface HumanInboxItem {
   sourceId?: string;
   personaId?: string;
   reviewId?: string;
+  /** Canonical governance review semantic (for example paper_to_canary_review). */
+  reviewKind?: string;
+  /** Legacy review semantic retained for older BFF payloads. */
   reviewType?: string;
+  /** Recommendation/action being reviewed (for example reduce_capital_access). */
+  actionId?: string;
   decisionHref?: string;
   allowedActions?: HumanInboxAllowedActions;
   /** Optional blocking reason when canProceed=false. */
