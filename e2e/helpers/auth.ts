@@ -196,7 +196,14 @@ export function authToken(options: AuthHeaderOptions = {}): string {
   const env = options.env ?? defaultEnv();
   const explicit = explicitAuthToken(env, options.token);
   if (explicit !== undefined) {
-    return normalizeBearerToken(explicit);
+    const normalized = normalizeBearerToken(explicit);
+    if (
+      normalized === LOCAL_FIXTURE_AUTH_TOKEN
+      && targetsExternalE2eEnvironment(env)
+    ) {
+      throw missingExternalCredential();
+    }
+    return normalized;
   }
   if (targetsExternalE2eEnvironment(env)) throw missingExternalCredential();
   return LOCAL_FIXTURE_AUTH_TOKEN;

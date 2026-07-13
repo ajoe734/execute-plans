@@ -220,6 +220,13 @@ describe("public frontend build auth boundary", () => {
     })).toThrow(/proven loopback frontend origin/);
   });
 
+  it("rejects an explicit local fixture token for external direct BFF headers", () => {
+    expect(() => authToken({
+      env: { PANTHEON_BFF_BASE_URL: "https://bff.example.test" },
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    })).toThrow(/tracked fixture credentials are local-only/);
+  });
+
   it.each([
     "https://bff.example.test",
     "https://127.attacker.example",

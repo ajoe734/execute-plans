@@ -140,6 +140,12 @@ function headersFor(
 ): Record<string, string> {
   const correlationId = seededCorrelationId(`f08-${resource}-${suffix}`);
   return mutationAuthHeaders({
+    // Fixture requests are sent only to the effective loopback frontend and
+    // are fully intercepted below. Do not let an unrelated external global
+    // BFF setting reclassify this local request or receive its credential.
+    env: token === LOCAL_FIXTURE_AUTH_TOKEN
+      ? { PANTHEON_FE_BASE_URL: frontendUrl("/") }
+      : process.env,
     token,
     extra: {
       "Idempotency-Key": seededIdempotencyKey(resource, suffix),
