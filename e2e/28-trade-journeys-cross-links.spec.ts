@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const snapshot = "2026-07-12T12:00:00Z";
+const sessionExpiresAt = () => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
 const meta = { snapshot_at: snapshot, read_state: "formal", freshness: { materializer_revision: 3, rebuild_status: "ready", source_watermarks: {} } };
 const focusedRow = { journey_id: "journey-persona-a-1", status: "completed", current_stage: "reconciliation", flags: {}, environment: "paper", severity: "info", symbol: "2330", persona_id: "persona-a", updated_at: snapshot };
 const runtimeRow = { id: "rt-a", name: "executor-a", personaId: "persona-a", env: "paper", status: "running" };
@@ -8,6 +9,7 @@ const runtimeRow = { id: "rt-a", name: "executor-a", personaId: "persona-a", env
 async function json(route: Route, body: unknown) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }); }
 
 async function install(page: Page, capturedQueries: URLSearchParams[]) {
+  await page.addInitScript(() => localStorage.setItem("pantheon.locale", "en-US"));
   await page.route(url => url.pathname.startsWith("/bff/"), async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/bff/me") return json(route, {
@@ -19,7 +21,7 @@ async function install(page: Page, capturedQueries: URLSearchParams[]) {
         env: "dev",
         featureFlags: { tradeJourneys: true },
         serverTime: snapshot,
-        sessionExpiresAt: "2026-07-13T12:00:00Z",
+        sessionExpiresAt: sessionExpiresAt(),
         permissionsVersion: "trade-journey-cross-link-v1",
       },
     });

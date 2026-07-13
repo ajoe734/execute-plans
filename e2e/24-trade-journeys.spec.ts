@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const snapshot = "2026-07-12T12:00:00Z";
+const sessionExpiresAt = () => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
 const meta = { snapshot_at: snapshot, read_state: "degraded", warnings: ["ledger projection delayed"], freshness: { materializer_revision: 12, rebuild_status: "ready", source_watermarks: {} } };
 const rows = [
   ["happy-1", "completed", "reconciliation", []],
@@ -13,6 +14,7 @@ const rows = [
 
 async function json(route: Route, body: unknown) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }); }
 async function install(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("pantheon.locale", "en-US"));
   await page.route(url => url.pathname.startsWith("/bff/"), async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/bff/me") return json(route, {
@@ -24,7 +26,7 @@ async function install(page: Page) {
         env: "dev",
         featureFlags: { tradeJourneys: true },
         serverTime: snapshot,
-        sessionExpiresAt: "2026-07-13T12:00:00Z",
+        sessionExpiresAt: sessionExpiresAt(),
         permissionsVersion: "trade-journey-v1",
       },
     });
@@ -43,7 +45,7 @@ test("renders all five outcomes and honest degraded detail", async ({ page }) =>
     for (const row of rows) await expect(page.getByText(row.status)).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "degraded data" })).toBeVisible();
     await page.getByRole("link", { name: "recon-1" }).click();
-    await expect(page.getByText(/Missing ledger_booking/)).toBeVisible();
+    await expect(page.getByText(/Missing Ledger booking/)).toBeVisible();
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
     expect(results.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
 });
