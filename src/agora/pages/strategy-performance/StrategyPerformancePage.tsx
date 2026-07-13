@@ -33,6 +33,7 @@ interface StrategyPerformanceRow {
   title: string;
   strategyId: string;
   sourceState: "matched" | "missing_attribution" | "attribution_only";
+  description?: string;
 }
 
 interface SourceHealthRow {
@@ -131,6 +132,7 @@ function buildRows(
     .filter((row) => !usedAttributionRows.has(row.id))
     .map((row) => ({
       attribution: row,
+      description: "Aggregates telemetry that the BFF could not link to a named Trading Room strategy.",
       id: `attribution-${row.id}`,
       kind: "attribution_only" as const,
       sourceState: "attribution_only" as const,
@@ -139,6 +141,7 @@ function buildRows(
     }));
 
   return [...strategyRows, ...attributionOnlyRows].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "strategy" ? -1 : 1;
     const aRank = a.attribution?.rank ?? Number.MAX_SAFE_INTEGER;
     const bRank = b.attribution?.rank ?? Number.MAX_SAFE_INTEGER;
     return aRank - bRank || a.title.localeCompare(b.title);
@@ -187,6 +190,25 @@ function healthClass(status: string): string {
 
 function metric(row: StrategyPerformanceRow, key: keyof TradingRoomPerformanceAttributionRow["metrics"]): unknown {
   return row.attribution?.metrics?.[key];
+}
+
+function MetricValue({
+  value,
+  format,
+}: {
+  value: unknown;
+  format: (value: unknown) => string;
+}): JSX.Element {
+  const measured = finiteNumber(value) !== undefined;
+  return (
+    <span
+      className={measured ? "text-[#f0ece4]" : "italic text-[#8c96a6]"}
+      data-metric-state={measured ? "measured" : "not-reported"}
+      title={measured ? (finiteNumber(value) === 0 ? "Measured value: zero" : "Measured value") : "No measurement was reported by the BFF"}
+    >
+      {format(value)}
+    </span>
+  );
 }
 
 function StrategyKpi({
@@ -435,17 +457,26 @@ function StrategyPerformanceLoaded({
                       </Link>
                     </div>
                     <div className="mt-1 max-w-[260px] truncate text-xs text-[#8c96a6]">{row.strategyId}</div>
+                    {row.description ? (
+                      <div className="mt-1 max-w-[300px] text-xs leading-4 text-sky-200" data-testid={`performance-row-${row.id}-description`}>
+                        {row.description}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3 align-top">
                     <div className="text-[#f0ece4]">{row.strategy?.monitoring_state ?? "not linked"}</div>
                     <div className="mt-1 text-xs text-[#8c96a6]">{row.strategy?.readiness_state ?? row.attribution?.dimension ?? "strategy"}</div>
                   </td>
-                  <td className="px-3 py-3 align-top text-[#f0ece4]">{formatCurrency(metric(row, "total_pnl"))}</td>
+                  <td className="px-3 py-3 align-top">
+                    <MetricValue value={metric(row, "total_pnl")} format={formatCurrency} />
+                  </td>
                   <td className="px-3 py-3 align-top text-[#f0ece4]">
                     {formatPercent(row.attribution?.pnl_contribution_pct ?? metric(row, "pnl_contribution_pct"))}
                   </td>
                   <td className="px-3 py-3 align-top text-[#f0ece4]">{formatPercent(metric(row, "worst_drawdown"))}</td>
-                  <td className="px-3 py-3 align-top text-[#f0ece4]">{formatNumber(metric(row, "total_trades"))}</td>
+                  <td className="px-3 py-3 align-top">
+                    <MetricValue value={metric(row, "total_trades")} format={formatNumber} />
+                  </td>
                   <td className="px-3 py-3 align-top">
                     <div className="text-[#f0ece4]">
                       {formatNumber(metric(row, "telemetry_runtime_count"))}/{formatNumber(metric(row, "runtime_count"))}
