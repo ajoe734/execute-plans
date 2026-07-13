@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConsultResultCard } from "./ConsultResultCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
+import "@/i18n";
 
 afterEach(cleanup);
 
@@ -43,32 +44,32 @@ describe("ConsultResultCard", () => {
 
   it("renders participant persona refs", () => {
     render(<ConsultResultCard payload={baseCard.payload} />);
-    expect(screen.getByText("Participants")).toBeDefined();
+    expect(screen.getByText("參與者")).toBeDefined();
     expect(screen.getByText("persona-risk-a")).toBeDefined();
     expect(screen.getByText("persona-risk-b")).toBeDefined();
   });
 
   it("renders consensus summary", () => {
     render(<ConsultResultCard payload={baseCard.payload} />);
-    expect(screen.getByText("Consensus")).toBeDefined();
+    expect(screen.getByText("共識")).toBeDefined();
     expect(screen.getByText(/position size cap at 2%/)).toBeDefined();
   });
 
   it("renders disagreements list", () => {
     render(<ConsultResultCard payload={baseCard.payload} />);
-    expect(screen.getByText("Disagreements")).toBeDefined();
+    expect(screen.getByText("歧異")).toBeDefined();
     expect(screen.getByText(/1.5% cap/)).toBeDefined();
   });
 
   it("renders risk notes section", () => {
     render(<ConsultResultCard payload={baseCard.payload} />);
-    expect(screen.getByText("Risk Notes")).toBeDefined();
+    expect(screen.getByText("風險備註")).toBeDefined();
     expect(screen.getByText("Liquidity deteriorates beyond $5M notional in small-cap names")).toBeDefined();
   });
 
   it("renders conditions list", () => {
     render(<ConsultResultCard payload={baseCard.payload} />);
-    expect(screen.getByText("Conditions")).toBeDefined();
+    expect(screen.getByText("條件限制")).toBeDefined();
     expect(screen.getByText("Implement hard stop at -8% drawdown")).toBeDefined();
   });
 
@@ -78,7 +79,7 @@ describe("ConsultResultCard", () => {
       payload: { ...baseCard.payload, disagreements: [] },
     };
     render(<ConsultResultCard payload={card.payload} />);
-    expect(screen.queryByText("Disagreements")).toBeNull();
+    expect(screen.queryByText("歧異")).toBeNull();
   });
 
   it("does not show risk notes section when missing", () => {
@@ -87,7 +88,7 @@ describe("ConsultResultCard", () => {
       payload: { ...baseCard.payload, risk_notes: undefined },
     };
     render(<ConsultResultCard payload={card.payload} />);
-    expect(screen.queryByText("Risk Notes")).toBeNull();
+    expect(screen.queryByText("風險備註")).toBeNull();
   });
 
   it("handles in_progress status", () => {

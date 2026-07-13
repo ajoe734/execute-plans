@@ -57,6 +57,30 @@ export interface HumanInboxItem {
   links: ManagementLinkSet;
 }
 
+export type HumanInboxSurfaceStatus = "ok" | "degraded" | "unavailable";
+
+export interface HumanInboxSurfaceState {
+  status: HumanInboxSurfaceStatus;
+  source?: string;
+  message?: string;
+  reason?: string;
+  staleness?: {
+    servedFrom?: string;
+    lastKnownAt?: string;
+  };
+}
+
+/**
+ * Truth-bearing list state. An empty `items` array is authoritative only when
+ * `surface.status === "ok"` and `partial === false`.
+ */
+export interface HumanInboxListState {
+  items: HumanInboxItem[];
+  surface: HumanInboxSurfaceState;
+  snapshotAt?: string;
+  partial: boolean;
+}
+
 export interface HumanInboxDecisionRecord {
   decidedAt: string;
   decidedBy: string;
