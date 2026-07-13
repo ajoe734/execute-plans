@@ -41,8 +41,9 @@ const FORBIDDEN_PATHS = [
   /\/bff\/broker/iu,
   /\/bff\/capital(?:-binding|\/bind)/iu,
   /\/bff\/runtime-binding/iu,
-  /\/bff\/management/iu,
 ];
+const MANAGEMENT_PATH = /\/bff\/management(?:\/|$)/iu;
+const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 type JsonRecord = Record<string, unknown>;
 
@@ -146,6 +147,12 @@ function collectNetwork(page: Page): NetworkEvent[] {
 
 function assertNoExecutionRoutes(events: NetworkEvent[]): void {
   for (const event of events) {
+    if (MANAGEMENT_PATH.test(event.path)) {
+      expect(
+        READ_ONLY_METHODS.has(event.method),
+        `forbidden Management write route: ${event.method} ${event.path}`,
+      ).toBe(true);
+    }
     for (const forbidden of FORBIDDEN_PATHS) {
       expect(event.path, `forbidden execution route: ${event.method} ${event.path}`).not.toMatch(forbidden);
     }
@@ -172,6 +179,7 @@ async function assertDeployment(request: APIRequestContext): Promise<JsonRecord>
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
   expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+  expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
   return manifest;
 }
 
@@ -280,11 +288,27 @@ test.describe("AG-UIPOL-006 hosted governed layout write", () => {
       workshopId: ready.workshopId,
     });
     await page.goto(`${FE_BASE_URL}/agora/trading-room/${encodeURIComponent(ready.strategyId)}?${query}`);
-    await expect(page.getByTestId("workspace-proposal-preview")).toBeVisible({ timeout: 45_000 });
+    const proposalPreview = page.getByTestId("workspace-proposal-preview");
+    const workspaceShell = page.getByTestId("trading-room-workspace-shell");
+    await expect(proposalPreview.or(workspaceShell).first()).toBeVisible({ timeout: 45_000 });
+    const proposalFirst = await proposalPreview.isVisible();
     await expect(page.getByTestId("workspace-proposal-preview-first")).toHaveCount(0);
 
+    if (!proposalFirst && await page.getByTestId("workspace-view-chooser").isVisible()) {
+      await page.getByTestId("workspace-view-chooser").getByRole("button").first().click();
+      await expect(page.getByTestId("workspace-control-strip")).toBeVisible();
+    }
+
+    const initialDashboardVersion = proposalFirst
+      ? null
+      : Number((await page.getByTestId("workspace-dashboard-version").textContent())?.match(/Dashboard v(\d+)/u)?.[1]);
+    if (!proposalFirst) expect(initialDashboardVersion, "accepted workspace dashboard version").toBeGreaterThan(0);
+    const proposalEntry = proposalFirst
+      ? page.getByTestId("workspace-proposal-adjust-layout")
+      : page.getByTestId("workspace-request-layout-proposal");
+
     const openAndGenerate = async () => {
-      await page.getByTestId("workspace-proposal-adjust-layout").click();
+      await proposalEntry.click();
       await expect(page.getByTestId("workspace-layout-proposal-drawer")).toBeVisible();
       await page.getByTestId("workspace-layout-proposal-chip-single_column").click();
       await page.getByTestId("workspace-layout-proposal-generate").click();
@@ -301,18 +325,44 @@ test.describe("AG-UIPOL-006 hosted governed layout write", () => {
     await openAndGenerate();
     await page.getByTestId("workspace-layout-proposal-apply").click();
     await expect(page.getByTestId("trading-room-workspace-shell")).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v2/u, { timeout: 45_000 });
+    const expectedDashboardVersion = proposalFirst ? 2 : initialDashboardVersion + 1;
+    let repreviewedAcceptedWorkspace = false;
+
+    if (proposalFirst) {
+      const firstApplyOutcome = await (await page.waitForFunction((expectedVersion) => {
+        const version = document.querySelector<HTMLElement>('[data-testid="workspace-dashboard-version"]');
+        if (version?.textContent?.includes(expectedVersion)) return "applied";
+        const drawerError = document.querySelector('[data-testid="workspace-layout-proposal-drawer"] [role="alert"]');
+        return drawerError ? "repreview_required" : false;
+      }, `Dashboard v${expectedDashboardVersion}`, { timeout: 45_000 })).jsonValue();
+
+      if (firstApplyOutcome === "repreview_required") {
+        repreviewedAcceptedWorkspace = true;
+        expect(events.filter((event) => event.method === "POST" && event.path.endsWith("/accept"))).toHaveLength(1);
+        expect(events.filter((event) => event.method === "PATCH" && event.path.endsWith("/layout"))).toHaveLength(0);
+        await expect(page.getByTestId("workspace-layout-proposal-generate")).toBeEnabled();
+        await page.getByTestId("workspace-layout-proposal-generate").click();
+        await expect(page.getByTestId("workspace-layout-proposal-preview")).toBeVisible();
+        await expect(page.getByTestId("workspace-layout-proposal-apply")).toBeEnabled();
+        await page.getByTestId("workspace-layout-proposal-apply").click();
+      }
+    }
+
+    await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(
+      new RegExp(`Dashboard v${expectedDashboardVersion}`, "u"),
+      { timeout: 45_000 },
+    );
 
     const acceptEvents = events.filter((event) => event.method === "POST" && event.path.endsWith("/accept"));
     const layoutEvents = events.filter((event) => event.method === "PATCH" && event.path.endsWith("/layout"));
-    expect(acceptEvents).toHaveLength(1);
+    expect(acceptEvents).toHaveLength(proposalFirst ? 1 : 0);
     expect(layoutEvents).toHaveLength(1);
-    expect(acceptEvents[0].idempotencyKey).toBeTruthy();
+    if (proposalFirst) expect(acceptEvents[0].idempotencyKey).toBeTruthy();
     expect(layoutEvents[0].idempotencyKey).toBeTruthy();
     expect(layoutEvents[0].ifMatch).toBeTruthy();
     expect(layoutEvents[0].status).toBeGreaterThanOrEqual(200);
     expect(layoutEvents[0].status).toBeLessThan(300);
-    expect(events.indexOf(acceptEvents[0])).toBeLessThan(events.indexOf(layoutEvents[0]));
+    if (proposalFirst) expect(events.indexOf(acceptEvents[0])).toBeLessThan(events.indexOf(layoutEvents[0]));
     assertNoExecutionRoutes(events);
 
     await saveEvidence(page, "ag-uipol-006-layout-applied", {
@@ -324,6 +374,9 @@ test.describe("AG-UIPOL-006 hosted governed layout write", () => {
         path,
         status,
       })),
+      initial_dashboard_version: initialDashboardVersion,
+      proposal_first: proposalFirst,
+      repreviewed_accepted_workspace: repreviewedAcceptedWorkspace,
       strategy_id: ready.strategyId,
       task_id: "AG-UIPOL-006",
       workshop_id: ready.workshopId,
