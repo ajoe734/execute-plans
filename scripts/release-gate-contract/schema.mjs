@@ -3,19 +3,32 @@
 // No workflow or deployment script imports this module. It is intentionally a
 // pure, versioned contract that can be promoted separately after review.
 
-export const RELEASE_GATE_SCHEMA_VERSION = 1;
+export const RELEASE_GATE_SCHEMA_VERSION = 2;
 export const RELEASE_GATE_QUALIFICATION_PROFILE =
-  "pantheon-dev-fe-release-evidence-foundation/v1";
+  "pantheon-dev-fe-release-evidence-foundation/v2";
 
-export const RELEASE_GATE_STEP_OUTCOME_SCHEMA_VERSION = 1;
+export const RELEASE_GATE_STEP_OUTCOME_SCHEMA_VERSION = 2;
 export const RELEASE_GATE_STEP_OUTCOME_PROFILE =
-  "pantheon-dev-fe-release-step-outcomes/v1";
+  "pantheon-dev-fe-release-step-outcomes/v2";
 
-export const MANAGEMENT_ACCEPTANCE_SCHEMA_VERSION = 1;
+export const MANAGEMENT_ACCEPTANCE_SCHEMA_VERSION = 2;
 export const MANAGEMENT_ACCEPTANCE_PROFILE =
-  "pantheon-dev-fe-management-acceptance/v1";
+  "pantheon-dev-fe-management-acceptance/v2";
 
+export const RELEASE_GATE_STEP_EVIDENCE_SCHEMA_VERSION = 1;
+export const RELEASE_GATE_STEP_EVIDENCE_PROFILE =
+  "pantheon-dev-fe-release-step-evidence/v1";
+
+export const RELEASE_GATE_PROVENANCE_SCHEMA_VERSION = 1;
+export const RELEASE_GATE_PROVENANCE_PROFILE =
+  "pantheon-dev-fe-release-provenance/v1";
+
+// v2 deliberately includes release_identity. The currently deployed producer
+// already emits that step, while the dormant v1 draft silently expected only
+// the remaining 18 keys. Evidence descriptor migration is still required
+// before activation; v2 rejects legacy string-only evidence fields.
 export const RELEASE_GATE_STEP_OUTCOME_KEYS = Object.freeze([
+  "release_identity",
   "install",
   "lint",
   "test",
@@ -35,6 +48,15 @@ export const RELEASE_GATE_STEP_OUTCOME_KEYS = Object.freeze([
   "pr_preview",
   "e2e",
 ]);
+
+export const RELEASE_GATE_STEP_EVIDENCE_PATHS = Object.freeze(Object.fromEntries(
+  RELEASE_GATE_STEP_OUTCOME_KEYS.map((step) => [
+    step,
+    step === "mgmt_hosted_accept"
+      ? "management-acceptance.json"
+      : `step-evidence/${step}.json`,
+  ]),
+));
 
 const gateDefinitions = [
   {
@@ -181,9 +203,103 @@ export const RELEASE_GATE_SCHEMA = Object.freeze({
 });
 
 export const RELEASE_GATE_CHECK_FIELDS = Object.freeze(["id", "label", "status", "note"]);
+export const RELEASE_GATE_ASSERTION_FIELDS = Object.freeze(["id", "verifier", "observed"]);
+export const RELEASE_GATE_EVIDENCE_DESCRIPTOR_FIELDS = Object.freeze(["path", "sha256", "size"]);
 
 const VALID_CHECK_STATUSES = new Set(["pass", "warn", "skip", "missing", "fail"]);
 const VALID_STEP_OUTCOMES = new Set(["success", "failure", "cancelled", "skipped"]);
+const VALID_ASSERTION_VERIFIERS = new Set([
+  "boolean-true",
+  "zero",
+  "identity-frontend-sha",
+  "identity-backend-sha",
+  "identity-fe-base-url",
+  "identity-bff-base-url",
+]);
+
+const assertionDefinitionEntries = [
+  ["G0-CANDIDATE-SHA", "release_identity", "identity-frontend-sha"],
+  ["G0-BACKEND-RUNTIME-SHA", "release_identity", "identity-backend-sha"],
+  ["G0-LEASED-BFF-STABILITY", "release_identity", "boolean-true"],
+  ["G0-FRONTEND-TARGET", "release_identity", "identity-fe-base-url"],
+  ["G0-BFF-TARGET", "release_identity", "identity-bff-base-url"],
+  ["G0-NO-OBSOLETE-BFF", "browser_probe", "zero"],
+  ["G0-AUTH-INPUT", "auth_smoke", "boolean-true"],
+  ["G1-NPM-CI", "install", "zero"],
+  ["G1-LINT", "lint", "zero"],
+  ["G1-TEST", "test", "zero"],
+  ["G1-BUILD", "build", "zero"],
+  ["G1-BUNDLE-BUDGET", "bundle_budget", "zero"],
+  ["G1-CONTRACT", "contract", "zero"],
+  ["G1-MGMT-PERSONA-3000", "mgmt_persona_3000", "zero"],
+  ["G2-CANONICAL-PATHS", "contract", "boolean-true"],
+  ["G2-ACTION-COMMAND-STATUS", "contract", "boolean-true"],
+  ["G2-ERROR-CODES", "contract", "boolean-true"],
+  ["G2-SSE-CHANNELS", "contract", "boolean-true"],
+  ["G2-EVIDENCE-KINDS", "contract", "boolean-true"],
+  ["G2-CORRELATION-ID", "contract", "boolean-true"],
+  ["G3-ANON-HEALTH", "route_probe", "boolean-true"],
+  ["G3-ANON-OPENAPI", "route_probe", "boolean-true"],
+  ["G3-ANON-SSE", "route_probe", "boolean-true"],
+  ["G3-ANON-PROTECTED", "route_probe", "boolean-true"],
+  ["G3-ANON-NO-404", "route_probe", "boolean-true"],
+  ["G3-AUTH-ME", "auth_smoke", "boolean-true"],
+  ["G3-AUTH-ENTITY-LISTS", "auth_smoke", "boolean-true"],
+  ["G3-AUTH-V5-ENVELOPES", "auth_smoke", "boolean-true"],
+  ["G3-AUTH-WRITE-PRECONDITIONS", "auth_smoke", "boolean-true"],
+  ["G3-DRY-RUN-TYPED", "write_probe", "boolean-true"],
+  ["G3-DRY-RUN-NO-SIDE-EFFECTS", "write_probe", "boolean-true"],
+  ["G3-DRY-RUN-CREATE-COVERAGE", "write_probe", "boolean-true"],
+  ["G3-LIVE-RBAC", "mgmt_live_deep", "boolean-true"],
+  ["G3-LIVE-TWO-MAN-RACE", "mgmt_live_deep", "boolean-true"],
+  ["G3-LIVE-SSE-RECONNECT", "mgmt_live_deep", "boolean-true"],
+  ["G4-PAGE-LOAD", "browser_probe", "boolean-true"],
+  ["G4-BFF-TARGET", "browser_probe", "identity-bff-base-url"],
+  ["G4-PERSONA-FLEET-HONESTY", "browser_probe", "boolean-true"],
+  ["G4-NO-SEED-FALLBACK-BANNER", "browser_probe", "zero"],
+  ["G4-NO-OBSOLETE-BFF", "browser_probe", "zero"],
+  ["G4-CORS-PREFLIGHT", "browser_probe", "boolean-true"],
+  ["G4-BFF-RESPONSES", "browser_probe", "boolean-true"],
+  ["G4-NO-FAILED-BFF", "browser_probe", "zero"],
+  ["G4-NO-CORS-CONSOLE", "browser_probe", "zero"],
+  ...Array.from({ length: 16 }, (_, index) => [
+    `G5-F${String(index + 1).padStart(2, "0")}`,
+    "e2e",
+    "boolean-true",
+  ]),
+  ["G6-AXE", "e2e", "zero"],
+  ["G6-FOCUS", "e2e", "boolean-true"],
+  ["G6-REDUCED-MOTION", "e2e", "boolean-true"],
+  ["G6-PERFORMANCE-BUDGET", "route_load", "boolean-true"],
+  ["G6-SSE-RERENDER", "e2e", "boolean-true"],
+  ["G8-ROUTE-RENDER", "mgmt_hosted_accept", "boolean-true"],
+  ["G8-CANONICAL-REDIRECTS", "mgmt_hosted_accept", "boolean-true"],
+  ["G8-DETAIL-HONESTY", "mgmt_hosted_accept", "boolean-true"],
+  ["G8-NO-SEED-FALLBACK", "mgmt_hosted_accept", "zero"],
+  ["G8-NO-MOCK-SUCCESS", "mgmt_hosted_accept", "zero"],
+  ["G8-NO-CORS", "mgmt_hosted_accept", "zero"],
+  ["G8-NO-RENDER-CRASH", "mgmt_hosted_accept", "zero"],
+  ["G8-SESSION-RBAC", "mgmt_hosted_accept", "boolean-true"],
+  ["G8-LOAD-GATE", "mgmt_hosted_accept", "boolean-true"],
+  ["G8-WRITE-CTA-GOVERNANCE", "mgmt_hosted_accept", "boolean-true"],
+];
+
+const assertionDefinitions = Object.fromEntries(assertionDefinitionEntries.map(
+  ([id, sourceStep, verifier]) => [id, Object.freeze({ id, sourceStep, verifier })],
+));
+
+const nonDerivedCheckIds = frozenGateDefinitions
+  .filter(({ gate }) => gate !== 7)
+  .flatMap(({ checks }) => checks.map(({ id }) => id));
+if (assertionDefinitionEntries.length !== nonDerivedCheckIds.length ||
+    new Set(assertionDefinitionEntries.map(([id]) => id)).size !== nonDerivedCheckIds.length ||
+    nonDerivedCheckIds.some((id) => !assertionDefinitions[id]) ||
+    assertionDefinitionEntries.some(([, step, verifier]) =>
+      !RELEASE_GATE_STEP_OUTCOME_KEYS.includes(step) || !VALID_ASSERTION_VERIFIERS.has(verifier))) {
+  throw new Error("release-gate assertion allowlist does not exactly cover every non-derived check");
+}
+
+export const RELEASE_GATE_ASSERTION_DEFINITIONS = Object.freeze(assertionDefinitions);
 
 export function assertExactObjectFields(value, expectedFields, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -204,6 +320,15 @@ export function releaseGateDefinition(gate) {
   const definition = RELEASE_GATE_SCHEMA.gates[String(gate)];
   if (!definition) throw new Error(`release gate schema has no gate ${gate}`);
   return definition;
+}
+
+export function assertionDefinitionsForStep(step) {
+  if (!RELEASE_GATE_STEP_OUTCOME_KEYS.includes(step)) {
+    throw new Error(`release-gate assertion source step is unknown: ${step}`);
+  }
+  return nonDerivedCheckIds
+    .map((id) => RELEASE_GATE_ASSERTION_DEFINITIONS[id])
+    .filter((definition) => definition.sourceStep === step);
 }
 
 export function assertExactGateCheckSequence(gate, checks) {
@@ -251,15 +376,6 @@ export function assertExactReleaseGateShape(gates) {
   return true;
 }
 
-export function createGateChecks(gate, status, note) {
-  if (!VALID_CHECK_STATUSES.has(status)) throw new Error(`invalid release check status: ${status}`);
-  return releaseGateDefinition(gate).checks.map((check) => ({
-    ...check,
-    status,
-    note: String(note),
-  }));
-}
-
 export function deriveReleaseGateResult(checks) {
   if (!Array.isArray(checks) || checks.length === 0) {
     throw new Error("release gate result requires at least one check");
@@ -279,6 +395,23 @@ export function deriveReleaseGateResult(checks) {
           ? "warn"
           : "skip";
   return { overall, pass: overall === "pass" };
+}
+
+function descriptorInspection(descriptor, expectedPath) {
+  if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) {
+    return "not-object";
+  }
+  const fields = Object.keys(descriptor);
+  if (fields.length !== RELEASE_GATE_EVIDENCE_DESCRIPTOR_FIELDS.length ||
+      !RELEASE_GATE_EVIDENCE_DESCRIPTOR_FIELDS.every((field) => fields.includes(field))) {
+    return "fields";
+  }
+  if (descriptor.path !== expectedPath) return "path";
+  if (!/^[a-f0-9]{64}$/.test(String(descriptor.sha256 || ""))) return "sha256";
+  if (!Number.isSafeInteger(descriptor.size) || descriptor.size < 1 || descriptor.size > 1024 * 1024) {
+    return "size";
+  }
+  return "";
 }
 
 export function inspectReleaseGateStepOutcomes(stepOutcomes) {
@@ -305,9 +438,8 @@ export function inspectReleaseGateStepOutcomes(stepOutcomes) {
     if (!VALID_STEP_OUTCOMES.has(String(entry.outcome || ""))) {
       invalidEntries.push(`${key}:outcome`);
     }
-    if (typeof entry.evidence !== "string" || !entry.evidence.trim()) {
-      invalidEntries.push(`${key}:evidence`);
-    }
+    const evidenceError = descriptorInspection(entry.evidence, RELEASE_GATE_STEP_EVIDENCE_PATHS[key]);
+    if (evidenceError) invalidEntries.push(`${key}:evidence-${evidenceError}`);
   }
 
   return {
