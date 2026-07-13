@@ -34,7 +34,10 @@ export function AgoraLayoutRoute() {
   // `/agora/strategy-workshop/:workshopId` leaf route.
   const { workshopId } = useParams<{ workshopId?: string }>();
   return (
-    <div className="min-h-screen flex flex-col bg-background" data-testid="agora-standalone-shell">
+    <div
+      className="flex h-screen h-dvh min-h-0 flex-col overflow-hidden bg-background"
+      data-testid="agora-standalone-shell"
+    >
       <LiveStatusBanner />
       <TradingDeskLayout workshopId={workshopId} />
     </div>

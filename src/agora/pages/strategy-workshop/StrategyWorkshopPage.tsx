@@ -426,10 +426,10 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       {/* Left: conversation + composer */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <header
+          aria-label={`${workshopTitle(workshop)} status`}
           className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2"
           data-testid="strategy-workshop-runtime-header"
         >
-          <span className="text-sm font-semibold text-slate-900">{workshopTitle(workshop, t("agora.workshop.defaultTitle"))}</span>
           <span className="text-xs text-slate-500">{workshop?.status ?? t("agora.workshop.loading")}</span>
           <span className="text-xs text-slate-500" data-testid="workshop-readiness-summary">
             {readinessSummary(readiness, t)}

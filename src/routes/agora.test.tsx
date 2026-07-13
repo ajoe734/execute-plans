@@ -117,6 +117,9 @@ describe("AgoraLayoutRoute", () => {
     // <header> would mean the Management PlatformShell TopBar leaked in.
     expect(screen.getAllByRole("banner")).toHaveLength(1);
     expect(screen.getByTestId("trading-desk-command-bar")).toBeDefined();
+    const shell = screen.getByTestId("agora-standalone-shell");
+    expect(shell.className).toContain("h-dvh");
+    expect(shell.className).toContain("overflow-hidden");
     // Management-only overlay chrome (notification center, job/handoff drawers) must not leak in.
     expect(screen.queryByLabelText(/notification/i)).toBeNull();
   });

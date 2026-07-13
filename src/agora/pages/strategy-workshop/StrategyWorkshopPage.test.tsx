@@ -208,13 +208,20 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage />);
 
     await screen.findByTestId("selected-workshop-runtime");
-    await screen.findByText("Live Strategy Workshop");
+    await waitFor(() => {
+      expect(screen.getByTestId("strategy-workshop-runtime-header").getAttribute("aria-label")).toBe(
+        "Live Strategy Workshop status",
+      );
+    });
 
     expect(workshopsModule.getWorkshop).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith(rawWorkshopId);
     expect(screen.getByTestId("workshop-card-summary").textContent).toContain("卡片：1");
     expect(screen.getByTestId("workshop-event-summary").textContent).toContain("事件：1");
+    expect(screen.getByTestId("strategy-workshop-runtime-header").textContent).not.toContain(
+      "Live Strategy Workshop",
+    );
     expect(screen.queryByText(rawWorkshopId)).toBeNull();
   });
 
@@ -243,8 +250,11 @@ describe("StrategyWorkshopPage", () => {
 
     await waitFor(() => {
       expect(workshopsModule.getWorkshop).toHaveBeenCalledWith("ws-old");
+      expect(screen.getByTestId("strategy-workshop-runtime-header").getAttribute("aria-label")).toBe(
+        "Older draft status",
+      );
     });
-    await screen.findByText("Older draft");
+    expect(screen.queryByText("Older draft")).toBeNull();
   });
 
   it("renders the session view when workshopId is provided", () => {
