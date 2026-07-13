@@ -23,6 +23,7 @@ ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -77,8 +78,9 @@ echo "=== build strict live dev bundle ==="
 VITE_BFF_MODE=live \
 VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
-VITE_BFF_REAL_WRITES=false \
-VITE_BFF_DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}" \
+VITE_BFF_REAL_WRITES=true \
+VITE_BFF_ALLOW_DEV_STUB_WRITES=true \
+VITE_BFF_DEV_BEARER_TOKEN="${DEV_BEARER_TOKEN}" \
 npm run build
 
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
@@ -103,7 +105,8 @@ const metadata = {
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",
-    VITE_BFF_REAL_WRITES: "false",
+    VITE_BFF_REAL_WRITES: "true",
+    VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
   },
 };
 
@@ -182,6 +185,11 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_FE_BASE_URL="${FE_HOST}" \
   PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
   npx playwright test e2e/25-persona-fleet-live-linked-pages.spec.ts --project=chromium
+
+  echo "=== run governed management write/read-back probe ==="
+  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+  PANTHEON_BFF_AUTH_TOKEN="${DEV_BEARER_TOKEN}" \
+  node scripts/probe-hosted-management-writes.mjs
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
