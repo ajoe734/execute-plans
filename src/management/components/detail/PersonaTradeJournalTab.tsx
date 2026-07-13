@@ -8,11 +8,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { tradeJournal, type TradeEpisodeProjection, type PersonaTradeReflection, type TradePattern } from "@/lib/bff-v1";
+import { tradeJournal, interaction, lists, type TradeEpisodeProjection, type PersonaTradeReflection, type TradePattern } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   ArrowUpRight, 
   Activity, 
@@ -26,9 +26,6 @@ import {
   ChevronRight
 } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1/client";
-
-const errorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error && error.message ? error.message : fallback;
 
 // Status color mappings
 const statusBadgeStyles: Record<string, string> = {
@@ -81,10 +78,86 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [decideReason, setDecideReason] = useState<string>("");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
   const [submittingCommand, setSubmittingCommand] = useState<boolean>(false);
+  const [allPersonas, setAllPersonas] = useState<any[]>([]);
+  const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
+  const [varianceAttribution, setVarianceAttribution] = useState<string>("");
+  const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
+  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<any | null>(null);
+  const [checkingRedTeam, setCheckingRedTeam] = useState<boolean>(false);
+  const [redTeamUnavailableReason, setRedTeamUnavailableReason] = useState<string>("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     setBffMode(bffV1.detectMode());
+    // Load all personas
+    lists.personas()
+      .then((res) => {
+        const items = Array.isArray(res) ? res : res?.items || [];
+        setAllPersonas(items);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!selectedEpisode) {
+      setResolvedWorkshopId(null);
+      setRedTeamEligiblePersona(null);
+      setRedTeamUnavailableReason("");
+      return;
+    }
+    
+    let cancelled = false;
+    const checkEligibility = async () => {
+      setCheckingRedTeam(true);
+      setRedTeamUnavailableReason("");
+      try {
+        const environment = selectedEpisode.environment || "paper";
+        const resolveRes = await interaction.resolveContext({
+          context_refs: [
+            { type: "journal_entry", id: selectedEpisode.trade_episode_id }
+          ],
+          environment: environment as any
+        });
+        
+        if (cancelled) return;
+        const workshopId = resolveRes.data.workshop_id;
+        setResolvedWorkshopId(workshopId);
+        
+        const eligibleRes = await interaction.participants({
+          workshop_id: workshopId,
+          mode: "challenge",
+          environment: environment as any
+        });
+        
+        if (cancelled) return;
+        const redTeam = eligibleRes.data.included.find(
+          (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
+        );
+        setRedTeamEligiblePersona(redTeam || null);
+        
+        if (!redTeam) {
+          const excludedRedTeam = eligibleRes.data.excluded.find(
+            (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
+          );
+          if (excludedRedTeam) {
+            setRedTeamUnavailableReason(excludedRedTeam.reasons.join(", ") || "Ineligible");
+          } else {
+            setRedTeamUnavailableReason("Not found in registry");
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to fetch red team eligibility", err);
+        setRedTeamUnavailableReason(err.message || "Failed to fetch participants");
+      } finally {
+        if (!cancelled) setCheckingRedTeam(false);
+      }
+    };
+    
+    checkEligibility();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEpisode]);
 
   const loadData = async () => {
     setLoading(true);
@@ -107,8 +180,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         const res = await tradeJournal.patterns(personaId);
         setPatterns(res.data);
       }
-    } catch (err: unknown) {
-      setError(errorMessage(err, "Failed to load data"));
+    } catch (err: any) {
+      setError(err.message || "Failed to load data");
       toast.error("BFF Trade Journal Read Failed");
     } finally {
       setLoading(false);
@@ -137,8 +210,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       const updatedDetail = await tradeJournal.get(personaId, selectedEpisode.trade_episode_id);
       setSelectedEpisode(updatedDetail.data);
       loadData();
-    } catch (err: unknown) {
-      toast.error(errorMessage(err, "Failed to submit retry command"));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit retry command");
     } finally {
       setSubmittingCommand(false);
     }
@@ -152,20 +225,63 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
     }
     setSubmittingCommand(true);
     try {
-      const res = await tradeJournal.decideLesson(personaId, selectedCandidateId, decideReason, decideDecision);
+      const res = await tradeJournal.decideLesson(personaId, selectedCandidateId, decideReason, decideDecision, varianceAttribution || undefined);
       toast.success(`Lesson candidate was ${decideDecision}`, {
         description: `Command ID: ${res.data.commandId}`
       });
       setDecideDialogOpen(false);
       setDecideReason("");
+      setVarianceAttribution("");
       // Reload episode if details open
       if (selectedEpisode) {
         const updatedDetail = await tradeJournal.get(personaId, selectedEpisode.trade_episode_id);
         setSelectedEpisode(updatedDetail.data);
       }
       loadData();
-    } catch (err: unknown) {
-      toast.error(errorMessage(err, "Failed to submit decision command"));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit decision command");
+    } finally {
+      setSubmittingCommand(false);
+    }
+  };
+
+  const handleReflect = async (type: "original" | "alternate" | "red-team", targetPersonaId: string) => {
+    if (!selectedEpisode) return;
+    if (!targetPersonaId) {
+      toast.error("Please select a persona to review");
+      return;
+    }
+    
+    setSubmittingCommand(true);
+    try {
+      const mode = type === "red-team" ? "challenge" : "reflect";
+      const environment = selectedEpisode.environment || "paper";
+      
+      const workshopId = resolvedWorkshopId || (await interaction.resolveContext({
+        context_refs: [
+          { type: "journal_entry", id: selectedEpisode.trade_episode_id }
+        ],
+        environment: environment as any
+      })).data.workshop_id;
+      
+      // Now submit the interaction to initialize opinion/debate
+      await interaction.submit({
+        workshop_id: workshopId,
+        mode: mode,
+        environment: environment as any,
+        topic: `Reflection and review for episode ${selectedEpisode.trade_episode_id} by Persona ${targetPersonaId}`,
+        participant_persona_ids: [targetPersonaId],
+        context_refs: [
+          { type: "journal_entry", id: selectedEpisode.trade_episode_id },
+          { type: "persona", id: targetPersonaId }
+        ]
+      });
+
+      toast.success("Workshop resolved successfully, redirecting...");
+      setSelectedEpisode(null); // Close the sheet
+      navigate(`/agora/strategy-workshop/${workshopId}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resolve workshop context");
     } finally {
       setSubmittingCommand(false);
     }
@@ -658,6 +774,71 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                   </div>
                 )}
               </div>
+
+              {/* Contextual Workshop Reflection & Review Actions (PINT-008) */}
+              <div className="space-y-3 pt-3 border-t">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Reflect with Personas (Strategy Workshop)</h3>
+                <div className="flex flex-col gap-3.5 bg-slate-50/50 p-3 rounded-lg border">
+                  
+                  {/* Original & Red-Team Review Row */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="text-xs font-semibold"
+                      onClick={() => handleReflect("original", selectedEpisode.persona_id)}
+                      disabled={submittingCommand}
+                    >
+                      Original Persona Review
+                    </Button>
+                    
+                    <div className="flex flex-col gap-1 w-full">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
+                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id)}
+                        disabled={submittingCommand || checkingRedTeam || !redTeamEligiblePersona}
+                      >
+                        {checkingRedTeam ? "Checking..." : redTeamEligiblePersona ? "Red Team Review" : "Red Team (Unavailable)"}
+                      </Button>
+                      {!checkingRedTeam && !redTeamEligiblePersona && (
+                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="red-team-unavailable">
+                          {redTeamUnavailableReason ? `Unavailable: ${redTeamUnavailableReason}` : "Unavailable in this environment"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Alternate Persona Review Row */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground shrink-0">Alternate Reviewer:</span>
+                    <select
+                      value={selectedAltPersona}
+                      onChange={(e) => setSelectedAltPersona(e.target.value)}
+                      className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background"
+                      disabled={submittingCommand}
+                    >
+                      <option value="">Select Persona...</option>
+                      {allPersonas
+                        .filter(p => p.persona_id !== selectedEpisode.persona_id)
+                        .map(p => (
+                          <option key={p.persona_id} value={p.persona_id}>
+                            {p.display_name || p.name || p.persona_id}
+                          </option>
+                        ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
+                      onClick={() => handleReflect("alternate", selectedAltPersona)}
+                      disabled={!selectedAltPersona || submittingCommand}
+                    >
+                      Review
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </SheetContent>
@@ -708,13 +889,36 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
             <div className="text-xs p-2 bg-muted rounded border font-mono">
               Lesson ID: {selectedCandidateId}
             </div>
-            <label className="text-xs font-medium text-muted-foreground">Auditable Reason:</label>
-            <Textarea
-              placeholder="State why this decision is made (e.g. sample size sufficient, regime mismatch)..."
-              value={decideReason}
-              onChange={(e) => setDecideReason(e.target.value)}
-              className="text-xs"
-            />
+            
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Variance Attribution Category:</label>
+              <select
+                value={varianceAttribution}
+                onChange={(e) => setVarianceAttribution(e.target.value)}
+                className="w-full p-2 text-xs rounded border border-input bg-card text-card-foreground"
+              >
+                <option value="">Select Category...</option>
+                <option value="market_noise">Market Noise</option>
+                <option value="thesis">Thesis</option>
+                <option value="signal_data">Signal/Data</option>
+                <option value="timing">Timing</option>
+                <option value="sizing">Sizing</option>
+                <option value="execution">Execution</option>
+                <option value="risk_policy">Risk Policy</option>
+                <option value="persona_reasoning">Persona Reasoning</option>
+                <option value="human_override">Human Override</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Auditable Reason:</label>
+              <Textarea
+                placeholder="State why this decision is made (e.g. sample size sufficient, regime mismatch)..."
+                value={decideReason}
+                onChange={(e) => setDecideReason(e.target.value)}
+                className="text-xs"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button size="sm" variant="outline" onClick={() => setDecideDialogOpen(false)}>Cancel</Button>

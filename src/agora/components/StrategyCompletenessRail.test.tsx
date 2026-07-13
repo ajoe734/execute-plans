@@ -1,8 +1,9 @@
+import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
-import type { StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
-import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
+import type { WorkshopCard, WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
 
@@ -22,35 +23,12 @@ const mockCompleteness: StrategyCompleteness = {
   assessed_at: "2026-06-22T00:00:00Z",
 } as unknown as StrategyCompleteness;
 
-const mockReadiness = {
-  spec_version: "1.0",
+const mockReadiness: WorkshopReadinessAssessment = {
   assessment_id: "ready_001",
   workshop_id: "ws-001",
-  strategy_id: "strat-001",
-  workshop_version_id: "v-001",
-  strategy_spec_registry_id: "reg-001",
-  assessment_version: 1,
-  gates: [
-    {
-      gate: "preliminary_research",
-      state: "conditional",
-      requirements: [],
-      blocking_requirement_ids: [],
-    },
-    {
-      gate: "full_validation",
-      state: "not_assessed",
-      requirements: [],
-      blocking_requirement_ids: [],
-    },
-    {
-      gate: "trading_room",
-      state: "not_assessed",
-      requirements: [],
-      blocking_requirement_ids: [],
-    },
-  ],
-  highest_ready_gate: null,
+  gate: "preliminary_research",
+  passed: false,
+  blockers: ["PR-03 blocked"],
   assessed_at: "2026-06-22T00:00:00Z",
 };
 
@@ -77,7 +55,6 @@ describe("StrategyCompletenessRail", () => {
       <StrategyCompletenessRail
         completeness={null}
         readiness={null}
-        nextQuestion={null}
       />
     );
     expect(screen.getByTestId("strategy-completeness-rail")).toBeDefined();
@@ -88,7 +65,6 @@ describe("StrategyCompletenessRail", () => {
       <StrategyCompletenessRail
         completeness={null}
         readiness={null}
-        nextQuestion={null}
       />
     );
     expect(screen.getByTestId("completeness-empty")).toBeDefined();
@@ -100,7 +76,6 @@ describe("StrategyCompletenessRail", () => {
       <StrategyCompletenessRail
         completeness={mockCompleteness}
         readiness={null}
-        nextQuestion={null}
       />
     );
     const grade = screen.getByTestId("completeness-overall-grade");
@@ -112,7 +87,6 @@ describe("StrategyCompletenessRail", () => {
       <StrategyCompletenessRail
         completeness={mockCompleteness}
         readiness={null}
-        nextQuestion={null}
       />
     );
     expect(screen.getByTestId("completeness-dimension-hypothesis")).toBeDefined();
@@ -124,20 +98,17 @@ describe("StrategyCompletenessRail", () => {
     expect(screen.getByTestId("completeness-dimension-market_scope-grade").textContent).toBe("Missing");
   });
 
-  it("renders three readiness gates from readiness data", () => {
+  it("renders readiness gate data", () => {
     render(
       <StrategyCompletenessRail
         completeness={null}
         readiness={mockReadiness}
-        nextQuestion={null}
       />
     );
     expect(screen.getByTestId("readiness-gate-preliminary_research")).toBeDefined();
-    expect(screen.getByTestId("readiness-gate-full_validation")).toBeDefined();
-    expect(screen.getByTestId("readiness-gate-trading_room")).toBeDefined();
 
-    expect(screen.getByTestId("readiness-gate-preliminary_research-state").textContent).toBe("Conditional");
-    expect(screen.getByTestId("readiness-gate-full_validation-state").textContent).toBe("Not assessed");
+    expect(screen.getByTestId("readiness-gate-preliminary_research-state").textContent).toBe("Blocked");
+    expect(screen.getByText("PR-03 blocked")).toBeDefined();
   });
 
   it("renders next question when provided", () => {
