@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import GridLayout, { type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -33,6 +34,7 @@ import {
 } from "./workspaceValidation";
 import { chartSpecForKind, chartSpecSummary } from "./workspaceChartSpec";
 import WorkspaceWidgetRevisionDrawer from "./WorkspaceWidgetRevisionDrawer";
+import { agoraCopy } from "@/agora/i18n";
 
 const GRID_COLS = 12;
 const GRID_WIDTH = 1320;
@@ -243,6 +245,7 @@ function WorkspaceWidgetCard({
   onRequestRevision: () => void;
   widget: TradingRoomWidgetSpec;
 }) {
+  const { t } = useTranslation();
   const validation = validateTradingRoomWidgetSpec(widget);
   const entry = getWidgetRegistryEntry(widget.widgetType);
   const chartKinds = entry?.allowed_chart_kinds ?? [...CHART_SPEC_KINDS];
@@ -293,7 +296,7 @@ function WorkspaceWidgetCard({
       >
         <div style={{ minWidth: 0 }}>
           <h3 style={{ color: COLORS.text, fontSize: 13, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {widget.title}
+            {agoraCopy(t, widget.titleKey, widget.title)}
           </h3>
           <div style={{ color: COLORS.muted, fontSize: 11 }}>
             {validation.title} · {formatSensitivityLabel(widget.sensitivity)}
@@ -318,7 +321,7 @@ function WorkspaceWidgetCard({
           </span>
           {editMode ? (
             <button
-              aria-label={`Open widget menu for ${widget.title}`}
+              aria-label={`Open widget menu for ${agoraCopy(t, widget.titleKey, widget.title)}`}
               data-testid={`workspace-widget-menu-${widget.id}`}
               onClick={onMenuToggle}
               style={plainButtonStyle}
@@ -375,7 +378,7 @@ function WorkspaceWidgetCard({
         </div>
       </header>
       <div style={{ color: COLORS.textSoft, display: "grid", fontSize: 11, gap: 3, padding: "8px 10px" }}>
-        <span>{widget.purpose}</span>
+        <span>{agoraCopy(t, widget.purposeKey, widget.purpose)}</span>
         <span>{widget.dataSource}</span>
         <span>{chartSpecSummary(widget.chartSpec)}</span>
       </div>
@@ -397,6 +400,7 @@ export function WorkspaceGridEditor({
   initialWorkspace,
   onWorkspaceChange,
 }: WorkspaceGridEditorProps) {
+  const { t } = useTranslation();
   const [baseWorkspace, setBaseWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [draftWorkspace, setDraftWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [currentEtag, setCurrentEtag] = useState<string | null>(initialEtag ?? null);
@@ -786,7 +790,7 @@ export function WorkspaceGridEditor({
               }}
               type="button"
             >
-              {view.title}
+              {agoraCopy(t, view.titleKey, view.title)}
             </button>
           ))}
         </nav>
@@ -831,7 +835,7 @@ export function WorkspaceGridEditor({
 
       <div data-testid={`workspace-active-view-${activeView.id}`} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 16 }}>
         <div style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong style={{ color: COLORS.text }}>{activeView.title}</strong> · {activeView.purpose}
+          <strong style={{ color: COLORS.text }}>{agoraCopy(t, activeView.titleKey, activeView.title)}</strong> · {agoraCopy(t, activeView.purposeKey, activeView.purpose)}
           {activeView.warnings?.length ? (
             <div style={{ color: COLORS.warning, marginTop: 4 }}>
               {activeView.warnings.map((warning, index) => (
@@ -853,7 +857,7 @@ export function WorkspaceGridEditor({
                   style={chipButtonStyle}
                   type="button"
                 >
-                  {widget.title}
+                  {agoraCopy(t, widget.titleKey, widget.title)}
                 </button>
               ))}
             </div>

@@ -1,4 +1,6 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
+import { agoraCopy } from "@/agora/i18n";
 
 import type {
   TradingRoomViewSpec,
@@ -10,12 +12,6 @@ import {
 } from "./workspaceValidation";
 
 type DataAvailabilityStatus = "complete" | "partial" | "unavailable";
-
-const STATUS_LABEL: Record<DataAvailabilityStatus, string> = {
-  complete: "完整",
-  partial: "部分可用",
-  unavailable: "暫不可用",
-};
 
 const COLORS = {
   accent: "#e8b750",
@@ -39,6 +35,7 @@ const STATUS_COLOR: Record<DataAvailabilityStatus, { bg: string; fg: string; bor
 };
 
 function StatusPill({ status }: { status: DataAvailabilityStatus }) {
+  const { t } = useTranslation();
   const color = STATUS_COLOR[status];
   return (
     <span
@@ -57,16 +54,18 @@ function StatusPill({ status }: { status: DataAvailabilityStatus }) {
         whiteSpace: "nowrap",
       }}
     >
-      {STATUS_LABEL[status]}
+      {t(`agora.tradingRoom.availability.${status}`)}
     </span>
   );
 }
 
 function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
+  const { t } = useTranslation();
+  const title = agoraCopy(t, view.titleKey, view.title);
   const widgets = view.widgets.slice(0, 12);
   return (
     <div
-      aria-label={`${view.title} thumbnail`}
+      aria-label={t("agora.tradingRoom.proposal.thumbnail", { title })}
       data-testid={`workspace-proposal-thumbnail-${view.id}`}
       style={{
         background: COLORS.panelInset,
@@ -90,7 +89,7 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
         return (
           <span
             key={widget.id}
-            title={widget.title}
+            title={agoraCopy(t, widget.titleKey, widget.title)}
             style={{
               background: valid ? "rgba(232, 183, 80, 0.22)" : "rgba(255, 107, 107, 0.2)",
               border: `1px solid ${valid ? "rgba(232, 183, 80, 0.46)" : "rgba(255, 107, 107, 0.48)"}`,
@@ -104,7 +103,7 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
       })}
       {widgets.length === 0 ? (
         <span style={{ alignSelf: "center", color: COLORS.muted, fontSize: 12, gridColumn: "1 / -1", justifySelf: "center" }}>
-          No widgets
+          {t("agora.tradingRoom.proposal.noWidgets")}
         </span>
       ) : null}
     </div>
@@ -120,11 +119,16 @@ function ViewProposalCard({
   view: TradingRoomViewSpec;
   onPreview?: (view: TradingRoomViewSpec) => void;
 }) {
+  const { t } = useTranslation();
   const status = view.dataAvailability ?? "complete";
   const invalidWidgets = view.widgets
     .map((widget) => ({ widget, validation: validateTradingRoomWidgetSpec(widget) }))
     .filter((entry) => !entry.validation.ok);
-  const unavailableWidgets = status === "complete" ? [] : view.widgets.map((widget) => widget.title).slice(0, 3);
+  const unavailableWidgets = status === "complete" ? [] : view.widgets
+    .map((widget) => agoraCopy(t, widget.titleKey, widget.title))
+    .slice(0, 3);
+  const title = agoraCopy(t, view.titleKey, view.title);
+  const purpose = agoraCopy(t, view.purposeKey, view.purpose);
 
   return (
     <section
@@ -143,37 +147,37 @@ function ViewProposalCard({
       <ProposalThumbnail view={view} />
       <div style={{ alignItems: "flex-start", display: "flex", gap: 10, justifyContent: "space-between", minWidth: 0 }}>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, lineHeight: 1.25, margin: 0, overflowWrap: "anywhere" }}>{view.title}</h3>
-          <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0", overflowWrap: "anywhere" }}>{view.purpose}</p>
+          <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, lineHeight: 1.25, margin: 0, overflowWrap: "anywhere" }}>{title}</h3>
+          <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0", overflowWrap: "anywhere" }}>{purpose}</p>
         </div>
         <StatusPill status={status} />
       </div>
       <div style={{ color: COLORS.muted, display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
-        <span data-testid={`workspace-proposal-view-${view.id}-widget-count`}>{view.widgetCount ?? view.widgets.length} widgets</span>
+        <span data-testid={`workspace-proposal-view-${view.id}-widget-count`}>{t("agora.tradingRoom.proposal.widgetCount", { count: view.widgetCount ?? view.widgets.length })}</span>
         <span>{view.layoutTemplate}</span>
       </div>
       {view.rationale ? (
-        <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: 0 }}>{view.rationale}</p>
+        <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: 0 }}>{agoraCopy(t, view.rationaleKey, view.rationale)}</p>
       ) : null}
       {unavailableWidgets.length ? (
         <div style={{ color: COLORS.warning, fontSize: 12, lineHeight: 1.45, overflowWrap: "anywhere" }} data-testid={`workspace-proposal-view-${view.id}-data-gaps`}>
-          資料狀態需確認: {unavailableWidgets.join("、")}
+          {t("agora.tradingRoom.proposal.dataGaps", { widgets: unavailableWidgets.join("、") })}
         </div>
       ) : null}
       {view.warnings?.length ? (
         <ul style={{ color: COLORS.warning, fontSize: 12, margin: 0, paddingLeft: 16 }}>
           {view.warnings.map((warning, index) => (
-            <li key={`${view.id}-warning-${index}`}>{safeWarningText(warning)}</li>
+            <li key={`${view.id}-warning-${index}`}>{agoraCopy(t, view.warningCodes?.[index] ? `agora.tradingRoom.warnings.${view.warningCodes[index]}` : undefined, safeWarningText(warning))}</li>
           ))}
         </ul>
       ) : null}
       {invalidWidgets.length ? (
         <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: COLORS.danger, fontSize: 12 }}>
-          {invalidWidgets.length} widget validation issue{invalidWidgets.length > 1 ? "s" : ""}
+          {t("agora.tradingRoom.proposal.validationIssues", { count: invalidWidgets.length })}
         </div>
       ) : (
         <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: COLORS.good, fontSize: 12 }}>
-          Registry validated
+          {t("agora.tradingRoom.proposal.registryValidated")}
         </div>
       )}
       <button
@@ -192,7 +196,7 @@ function ViewProposalCard({
         }}
         type="button"
       >
-        逐頁預覽
+        {t("agora.tradingRoom.proposal.previewView")}
       </button>
     </section>
   );
@@ -221,6 +225,7 @@ export function WorkspaceProposalPreview({
   proposal,
   selectedViewId,
 }: WorkspaceProposalPreviewProps) {
+  const { t } = useTranslation();
   const availability = proposal.dataAvailability.status;
   const personalizationItems = proposal.personalizationApplied.items ?? [];
   const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
@@ -239,29 +244,29 @@ export function WorkspaceProposalPreview({
     >
       <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", minWidth: 0 }}>
         <div style={{ flex: "1 1 420px", minWidth: 0 }}>
-          <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>Trading Servant Proposal</div>
+          <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>{t("agora.tradingRoom.proposal.eyebrow")}</div>
           <h2 style={{ color: COLORS.text, fontSize: 20, fontWeight: 800, letterSpacing: 0, lineHeight: 1.25, margin: "2px 0 0", overflowWrap: "anywhere" }}>
-            {proposal.strategyVersion} - 操盤室提案
+            {t("agora.tradingRoom.proposal.title", { version: proposal.strategyVersion })}
           </h2>
           <p style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 760 }}>
-            {proposal.rationale}
+            {agoraCopy(t, proposal.rationaleKey, proposal.rationale)}
           </p>
         </div>
         <div style={{ alignItems: "flex-end", display: "flex", flex: "0 0 auto", flexDirection: "column", gap: 8 }}>
-          <span style={{ color: COLORS.muted, fontSize: 12 }}>Generated {new Date(proposal.generatedAt).toLocaleString()}</span>
+          <span style={{ color: COLORS.muted, fontSize: 12 }}>{t("agora.tradingRoom.proposal.generatedAt", { time: new Date(proposal.generatedAt).toLocaleString() })}</span>
           <StatusPill status={availability} />
         </div>
       </header>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <span style={summaryPillStyle}>
-          {proposal.views.length} 個 View
+          {t("agora.tradingRoom.proposal.viewCount", { count: proposal.views.length })}
         </span>
         <span style={summaryPillStyle}>
-          {proposal.views.reduce((sum, view) => sum + (view.widgetCount ?? view.widgets.length), 0)} widgets
+          {t("agora.tradingRoom.proposal.widgetCount", { count: proposal.views.reduce((sum, view) => sum + (view.widgetCount ?? view.widgets.length), 0) })}
         </span>
         <span style={summaryPillStyle}>
-          Personalization {proposal.personalizationApplied.status === "applied" ? "applied" : "not applied"}
+          {t(`agora.tradingRoom.proposal.${proposal.personalizationApplied.status === "applied" ? "personalizationApplied" : "personalizationNotApplied"}`)}
         </span>
       </div>
 
@@ -283,21 +288,21 @@ export function WorkspaceProposalPreview({
               <StatusPill status={source.status} />
               <span style={{ color: COLORS.text, flex: "1 1 auto", fontSize: 12, fontWeight: 700, lineHeight: 1.35, minWidth: 0, overflowWrap: "anywhere" }}>{source.dataSource}</span>
             </div>
-            {source.reason ? <div style={{ color: COLORS.muted, fontSize: 12, lineHeight: 1.4, marginTop: 4, overflowWrap: "anywhere" }}>{source.reason}</div> : null}
+            {source.reason ? <div style={{ color: COLORS.muted, fontSize: 12, lineHeight: 1.4, marginTop: 4, overflowWrap: "anywhere" }}>{agoraCopy(t, source.reasonCode ? `agora.tradingRoom.reasons.${source.reasonCode}` : undefined, source.reason)}</div> : null}
           </div>
         ))}
       </section>
 
       {personalizationItems.length ? (
         <section data-testid="workspace-proposal-personalization" style={{ color: COLORS.textSoft, fontSize: 12 }}>
-          Personalization: {personalizationItems.map((item) => `${item.key}: ${String(item.value)}`).join(" · ")}
+          {t("agora.tradingRoom.proposal.personalization", { items: personalizationItems.map((item) => `${item.key}: ${String(item.value)}`).join(" · ") })}
         </section>
       ) : null}
 
       {proposal.warnings.length ? (
         <section data-testid="workspace-proposal-warnings" style={{ color: COLORS.warning, fontSize: 12 }}>
           {proposal.warnings.map((warning, index) => (
-            <div key={`proposal-warning-${index}`}>{safeWarningText(warning)}</div>
+            <div key={`proposal-warning-${index}`}>{agoraCopy(t, proposal.warningCodes?.[index] ? `agora.tradingRoom.warnings.${proposal.warningCodes[index]}` : undefined, safeWarningText(warning))}</div>
           ))}
         </section>
       ) : null}
@@ -342,19 +347,19 @@ export function WorkspaceProposalPreview({
           }}
           type="button"
         >
-          套用完整提案
+          {t("agora.tradingRoom.proposal.accept")}
         </button>
         <button data-testid="workspace-proposal-preview-first" onClick={() => proposal.views[0] && onPreviewView?.(proposal.views[0])} style={secondaryButtonStyle} type="button">
-          逐頁預覽
+          {t("agora.tradingRoom.proposal.previewView")}
         </button>
         <button data-testid="workspace-proposal-adjust-layout" onClick={onAdjustLayout} style={secondaryButtonStyle} type="button">
-          先調整版面
+          {t("agora.tradingRoom.proposal.adjustLayout")}
         </button>
         <button data-testid="workspace-proposal-regenerate" onClick={onRegenerate} style={secondaryButtonStyle} type="button">
-          重新產生
+          {t("agora.tradingRoom.proposal.regenerate")}
         </button>
         <button data-testid="workspace-proposal-back" onClick={onBackToWorkshop} style={secondaryButtonStyle} type="button">
-          回到策略工坊
+          {t("agora.tradingRoom.proposal.backToWorkshop")}
         </button>
       </footer>
     </div>
