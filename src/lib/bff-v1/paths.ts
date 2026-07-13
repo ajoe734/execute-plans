@@ -224,8 +224,12 @@ export const paths = {
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
   mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
-  mgmtQuarterlyRanking: (quarter?: string) =>
-    `${BASE}/management/quarterly-ranking${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRanking: (quarter?: string, persona?: string) => {
+    const qs: string[] = [];
+    if (quarter) qs.push(`quarter=${enc(quarter)}`);
+    if (persona) qs.push(`persona=${enc(persona)}`);
+    return `${BASE}/management/quarterly-ranking${qs.length ? `?${qs.join("&")}` : ""}`;
+  },
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
   mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
     `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,

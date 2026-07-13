@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   CheckCircle2,
   CircleHelp,
@@ -49,10 +51,19 @@ function cardSequence(card: WorkshopCard): number | string {
   return card.sequence_no ?? card.sequence ?? "-";
 }
 
+function copyKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+function workshopLabel(t: TFunction, value: string): string {
+  return t(`agora.workshop.cardLabels.${copyKey(value)}`, { defaultValue: value });
+}
+
 export function StatusPill({ status }: { status: WorkshopCardStatus }) {
+  const { t } = useTranslation();
   return (
     <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium", STATUS_CLASS[status])}>
-      {formatLabel(status)}
+      {t(`agora.workshop.values.${status}`, { defaultValue: formatLabel(status) })}
     </span>
   );
 }
@@ -80,9 +91,10 @@ export function Pill({
 }
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h4 className="text-[11px] font-semibold uppercase text-slate-500">{title}</h4>
+      <h4 className="text-[11px] font-semibold uppercase text-slate-500">{workshopLabel(t, title)}</h4>
       {children}
     </section>
   );
@@ -93,6 +105,7 @@ export function KeyValueGrid({
 }: {
   items: Array<{ label: string; value: unknown; tone?: "slate" | "blue" | "green" | "amber" | "red" }>;
 }) {
+  const { t } = useTranslation();
   const visible = items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
   if (visible.length === 0) return null;
 
@@ -100,7 +113,7 @@ export function KeyValueGrid({
     <dl className="grid gap-2 sm:grid-cols-2">
       {visible.map((item) => (
         <div className="min-w-0" key={item.label}>
-          <dt className="text-[11px] uppercase text-slate-400">{item.label}</dt>
+          <dt className="text-[11px] uppercase text-slate-400">{workshopLabel(t, item.label)}</dt>
           <dd className="break-words text-xs font-medium text-slate-700">{formatScalar(item.value)}</dd>
         </div>
       ))}
@@ -133,10 +146,11 @@ export function TextList({
 }
 
 export function ProgressBar({ value, label }: { value: number; label?: string }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-        <span>{label ?? "Progress"}</span>
+        <span>{workshopLabel(t, label ?? "Progress")}</span>
         <span className="font-mono">{Math.round(value)}%</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -168,19 +182,8 @@ export function EvidenceRefs({ refs }: { refs?: WorkshopEvidenceRef[] }) {
   );
 }
 
-function actionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    approve: "Approve",
-    edit: "Edit",
-    reject: "Reject",
-    cancel: "Cancel",
-    request_explanation: "Explain",
-    open_detail: "Open detail",
-    validate: "Validate",
-    accept: "Accept",
-    open_diff: "Open diff",
-  };
-  return labels[action] ?? formatLabel(action);
+function actionLabel(action: string, t: TFunction): string {
+  return t(`agora.workshop.actions.${action}`, { defaultValue: formatLabel(action) });
 }
 
 function ActionIcon({ action }: { action: string }) {
@@ -193,6 +196,7 @@ function ActionIcon({ action }: { action: string }) {
 }
 
 export function ActionBar({ actions }: { actions?: WorkshopAllowedActions }) {
+  const { t } = useTranslation();
   const enabled = Object.entries(actions ?? {}).filter(([, allowed]) => allowed);
   if (enabled.length === 0) return null;
 
@@ -204,11 +208,11 @@ export function ActionBar({ actions }: { actions?: WorkshopAllowedActions }) {
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600"
           disabled
           key={action}
-          title={actionLabel(action)}
+          title={actionLabel(action, t)}
           type="button"
         >
           <ActionIcon action={action} />
-          <span>{actionLabel(action)}</span>
+          <span>{actionLabel(action, t)}</span>
         </button>
       ))}
     </div>
@@ -244,6 +248,7 @@ export function CardShell({
   card: WorkshopCard;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description";
   const status = card.status ?? "informational";
 
@@ -258,13 +263,13 @@ export function CardShell({
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase text-slate-500">
-            {cardTypeLabel(card.card_type)}
+            {workshopLabel(t, cardTypeLabel(card.card_type))}
           </span>
           <StatusPill status={status} />
           <span className="font-mono text-[11px] text-slate-300">#{cardSequence(card)}</span>
         </div>
         <h3 className="break-words text-sm font-semibold text-slate-900">
-          {card.title || cardTypeLabel(card.card_type)}
+          {card.title || workshopLabel(t, cardTypeLabel(card.card_type))}
         </h3>
         {card.summary ? <p className="break-words text-xs leading-5 text-slate-600">{card.summary}</p> : null}
       </header>

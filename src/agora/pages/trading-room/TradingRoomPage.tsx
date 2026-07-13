@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
@@ -28,28 +30,28 @@ interface TradingRoomUiError {
   code?: string;
 }
 
-function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+function tradingRoomErrorMessage(err: BffError, fallback: string, t: TFunction): string {
   switch (err.status) {
     case 403:
-      return "目前權限或範圍無法讀取這個操盤室提案。";
+      return t("agora.tradingRoom.errors.readForbidden");
     case 404:
-      return "這個操盤室提案或工作區已不存在，請重新產生。";
+      return t("agora.tradingRoom.errors.proposalNotFound");
     case 409:
-      return "操盤室提案狀態已變更，請重新產生後再套用。";
+      return t("agora.tradingRoom.errors.proposalConflict");
     case 412:
-      return "操盤室狀態已過期，請重新整理後再繼續。";
+      return t("agora.tradingRoom.errors.proposalStale");
     case 501:
-      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+      return t("agora.tradingRoom.errors.notImplemented");
     default:
       return err.message || fallback;
   }
 }
 
-function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+function toTradingRoomUiError(err: unknown, fallback: string, t: TFunction): TradingRoomUiError {
   if (err instanceof BffError) {
     return {
       code: err.code,
-      message: tradingRoomErrorMessage(err, fallback),
+      message: tradingRoomErrorMessage(err, fallback, t),
       status: err.status,
     };
   }
@@ -93,11 +95,12 @@ function StrategyLensSwitcher({
   activeStrategyId,
   onSelect,
 }: StrategyLensSwitcherProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="strategy-lens-switcher"
       role="listbox"
-      aria-label="Strategy workspace switcher"
+      aria-label={t("agora.tradingRoom.page.strategySwitcher")}
       style={{
         display: "flex",
         alignItems: "center",
@@ -124,7 +127,7 @@ function StrategyLensSwitcher({
           whiteSpace: "nowrap",
         }}
       >
-        All Strategies
+        {t("agora.tradingRoom.page.allStrategies")}
       </button>
       {strategies.map((s) => (
         <button
@@ -169,6 +172,7 @@ interface RiskBannerProps {
 }
 
 function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | null {
+  const { t } = useTranslation();
   if (state === "normal") return null;
   return (
     <div
@@ -182,7 +186,7 @@ function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | 
         color: "#f0ece4",
       }}
     >
-      <strong>Risk: {state}</strong>
+      <strong>{t("agora.tradingRoom.page.risk", { state })}</strong>
       {summary ? ` — ${summary}` : null}
       {alerts && alerts.length > 0 ? (
         <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
@@ -206,6 +210,7 @@ interface QueueSummaryStripProps {
 }
 
 function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStripProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="queue-summary-strip"
@@ -219,11 +224,11 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
         background: "#171b22",
       }}
     >
-      <span data-testid="queue-entry-count">Entry: {entry}</span>
-      <span data-testid="queue-add-count">Add: {add}</span>
-      <span data-testid="queue-reduce-count">Reduce: {reduce}</span>
-      <span data-testid="queue-exit-count">Exit: {exit}</span>
-      <span data-testid="queue-review-count">Review: {review}</span>
+      <span data-testid="queue-entry-count">{t("agora.tradingRoom.page.queue.entry", { count: entry })}</span>
+      <span data-testid="queue-add-count">{t("agora.tradingRoom.page.queue.add", { count: add })}</span>
+      <span data-testid="queue-reduce-count">{t("agora.tradingRoom.page.queue.reduce", { count: reduce })}</span>
+      <span data-testid="queue-exit-count">{t("agora.tradingRoom.page.queue.exit", { count: exit })}</span>
+      <span data-testid="queue-review-count">{t("agora.tradingRoom.page.queue.review", { count: review })}</span>
     </div>
   );
 }
@@ -464,6 +469,7 @@ interface TradingEventQueueProps {
 }
 
 function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueueProps): JSX.Element {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
@@ -473,15 +479,15 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
   return (
     <div data-testid="trading-event-queue" style={{ flex: 1, overflow: "auto" }}>
       <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        Decision Event Queue
+        {t("agora.tradingRoom.page.eventQueue")}
       </div>
       {loading ? (
         <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          Loading events…
+          {t("agora.tradingRoom.page.loadingEvents")}
         </div>
       ) : events.length === 0 ? (
         <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          No pending decision events.
+          {t("agora.tradingRoom.page.noEvents")}
         </div>
       ) : (
         <table
@@ -490,10 +496,10 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
         >
           <thead>
             <tr style={{ borderBottom: "1px solid #2a2e38" }}>
-              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>Symbol</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>Kind</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>State</th>
-              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>Confidence</th>
+              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.symbol")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.kind")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.state")}</th>
+              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.confidence")}</th>
               <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>EV (net)</th>
             </tr>
           </thead>
@@ -511,8 +517,8 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
                   onClick={() => toggleExpand(ev.decision_event_id)}
                 >
                   <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}</td>
-                  <td style={{ padding: "6px 8px" }}>{STATE_LABEL[ev.state] ?? ev.state}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind })}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: STATE_LABEL[ev.state] ?? ev.state })}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>
                     {(ev.confidence.value * 100).toFixed(0)}%
                   </td>
@@ -540,16 +546,17 @@ interface PositionActionQueueProps {
 }
 
 function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="position-action-queue"
       style={{ borderLeft: "1px solid #2a2e38", width: 240, overflow: "auto", flexShrink: 0, background: "#171b22" }}
     >
       <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        Position Actions
+        {t("agora.tradingRoom.page.positionActions")}
       </div>
       {positionSummaries.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>No open positions.</div>
+        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>{t("agora.tradingRoom.page.noPositions")}</div>
       ) : (
         <ul style={{ margin: 0, padding: "8px 12px", listStyle: "none" }}>
           {positionSummaries.map((p, i) => (
@@ -600,14 +607,14 @@ function selectDefaultReadyStrategy(
     })[0];
 }
 
-function readinessReason(strategy: TradingRoomStrategyEntry): string {
+function readinessReason(strategy: TradingRoomStrategyEntry, t: TFunction): string {
   if (strategy.readiness_state === "conditional") {
-    return "Conditional readiness: continue Strategy Workshop validation before proposal generation.";
+    return t("agora.tradingRoom.page.conditionalReadiness");
   }
   if (strategy.readiness_state === "stale") {
-    return strategy.staleness_reasons?.[0] ?? "Readiness is stale; refresh workshop evidence.";
+    return strategy.staleness_reasons?.[0] ?? t("agora.tradingRoom.page.staleReadiness");
   }
-  return "Blocked readiness: Strategy Workshop must close the missing gate before Trading Room entry.";
+  return t("agora.tradingRoom.page.blockedReadiness");
 }
 
 interface TradingRoomDefaultEntryProps {
@@ -621,6 +628,7 @@ function TradingRoomDefaultEntry({
   onOpenWorkshop,
   onStrategySelect,
 }: TradingRoomDefaultEntryProps): JSX.Element {
+  const { t } = useTranslation();
   const strategies = aggregate.strategies;
   const pendingTotal = strategies.reduce((total, strategy) => total + pendingEventTotal(strategy), 0);
   const entryState = strategies.length === 0 ? "empty" : "no-ready-strategy";
@@ -663,16 +671,16 @@ function TradingRoomDefaultEntry({
           }}
         >
           <div>
-            <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>Dynamic Entry</div>
+            <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.dynamicEntry")}</div>
             <h2 style={{ color: "#f0ece4", fontSize: 20, fontWeight: 800, letterSpacing: 0, margin: "4px 0 0" }}>
               {strategies.length === 0
-                ? "Strategy Workshop is the next step"
-                : "No strategy is ready for proposal generation yet"}
+                ? t("agora.tradingRoom.page.workshopNext")
+                : t("agora.tradingRoom.page.noReadyStrategy")}
             </h2>
             <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.55, margin: "8px 0 0", maxWidth: 860 }}>
               {strategies.length === 0
-                ? "The BFF returned no user-scoped Trading Room strategies, so the default route starts from workshop intake instead of an empty table shell."
-                : "The BFF returned strategies, but none has reached the trading_room readiness gate. Continue the readiness workflow before opening a generated workspace."}
+                ? t("agora.tradingRoom.page.emptyDescription")
+                : t("agora.tradingRoom.page.notReadyDescription")}
             </p>
           </div>
 
@@ -686,11 +694,11 @@ function TradingRoomDefaultEntry({
               gap: 12,
             }}
           >
-            <span>Strategies: {strategies.length}</span>
-            <span>Ready: 0</span>
-            <span>Pending decisions: {pendingTotal}</span>
-            <span>Snapshot: {aggregate.snapshot_at || "unavailable"}</span>
-            <span>Data cutoff: {aggregate.data_cutoff || "unavailable"}</span>
+            <span>{t("agora.tradingRoom.page.strategyCount", { count: strategies.length })}</span>
+            <span>{t("agora.tradingRoom.page.readyCount", { count: 0 })}</span>
+            <span>{t("agora.tradingRoom.page.pendingCount", { count: pendingTotal })}</span>
+            <span>{t("agora.tradingRoom.page.snapshot", { value: aggregate.snapshot_at || t("agora.tradingRoom.page.unavailable") })}</span>
+            <span>{t("agora.tradingRoom.page.dataCutoff", { value: aggregate.data_cutoff || t("agora.tradingRoom.page.unavailable") })}</span>
           </div>
 
           <div>
@@ -710,7 +718,7 @@ function TradingRoomDefaultEntry({
               }}
               type="button"
             >
-              Open Strategy Workshop
+              {t("agora.tradingRoom.page.openWorkshop")}
             </button>
           </div>
         </section>
@@ -742,12 +750,12 @@ function TradingRoomDefaultEntry({
                 </div>
                 <h3 style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 0" }}>{strategy.title}</h3>
                 <p style={{ color: "#8c96a6", fontSize: 12, lineHeight: 1.45, margin: "8px 0 0" }}>
-                  {readinessReason(strategy)}
+                  {readinessReason(strategy, t)}
                 </p>
                 <div style={{ color: "#737d8e", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
-                  <span>Version: {strategy.strategy_spec_registry_id}</span>
-                  <span>Candidates: {strategy.candidate_count ?? 0}</span>
-                  <span>Pending: {pendingEventTotal(strategy)}</span>
+                  <span>{t("agora.tradingRoom.page.version", { value: strategy.strategy_spec_registry_id })}</span>
+                  <span>{t("agora.tradingRoom.page.candidates", { count: strategy.candidate_count ?? 0 })}</span>
+                  <span>{t("agora.tradingRoom.page.pending", { count: pendingEventTotal(strategy) })}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button
@@ -765,7 +773,7 @@ function TradingRoomDefaultEntry({
                     }}
                     type="button"
                   >
-                    Review readiness
+                    {t("agora.tradingRoom.page.reviewReadiness")}
                   </button>
                   {strategy.readiness_state === "ready" && (
                     <button
@@ -782,7 +790,7 @@ function TradingRoomDefaultEntry({
                       }}
                       type="button"
                     >
-                      Open workspace
+                      {t("agora.tradingRoom.page.openWorkspace")}
                     </button>
                   )}
                 </div>
@@ -803,8 +811,7 @@ function TradingRoomDefaultEntry({
               padding: 14,
             }}
           >
-            No BFF strategy records were available for this scope. Continue in the Strategy Workshop to create
-            or restore a strategy-specific readiness packet.
+            {t("agora.tradingRoom.page.noStrategyRecords")}
           </section>
         )}
       </div>
@@ -815,15 +822,7 @@ function TradingRoomDefaultEntry({
 // ── V11 Proposal Generation And Workspace Shell ──────────────────────────────
 
 const GENERATION_STEPS = [
-  "讀取 Winner Branch Score、confidence 與 trust",
-  "分析分點關係映射與資金遷移",
-  "整理分點群組、遷移與分布模型",
-  "建立事件領先研究與證據索引",
-  "轉譯候選、進場、加碼、減碼與出場規則",
-  "校準部位、槓桿、流動性與風險限制",
-  "串接回測、shadow 與監控規則",
-  "產生 Views 與 widgets",
-  "安排 layout 並套用個人化偏好",
+  "score", "relationships", "clusters", "evidence", "rules", "risk", "monitoring", "views", "layout",
 ];
 
 function TradingRoomGenerationProgress({
@@ -833,6 +832,7 @@ function TradingRoomGenerationProgress({
   strategyTitle: string;
   strategyVersion: string;
 }) {
+  const { t } = useTranslation();
   return (
     <section
       data-testid="trading-room-generation-progress"
@@ -846,12 +846,12 @@ function TradingRoomGenerationProgress({
       }}
     >
       <div>
-        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>Trading Servant</div>
+        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.servant")}</div>
         <h2 style={{ color: "#f0ece4", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-          交易僕人正在建立「{strategyTitle || strategyVersion}」交易操盤室
+          {t("agora.tradingRoom.page.generatingTitle", { strategy: strategyTitle || strategyVersion })}
         </h2>
         <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
-          我會先替您把完整操盤頁面準備好。您不需要從空白版面開始；完成後可自行拖曳、刪除、增加、縮放，或直接交代我修改任何圖表。
+          {t("agora.tradingRoom.page.generatingDescription")}
         </p>
       </div>
       <ol
@@ -897,7 +897,7 @@ function TradingRoomGenerationProgress({
             >
               {index + 1}
             </span>
-            <span>{step}</span>
+            <span>{t(`agora.tradingRoom.page.generationSteps.${step}`)}</span>
           </li>
         ))}
       </ol>
@@ -932,6 +932,7 @@ function StrategyWorkspaceView({
   strategyVersion,
   onBackToWorkshop,
 }: StrategyWorkspaceViewProps): JSX.Element {
+  const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
 
   const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
@@ -985,7 +986,7 @@ function StrategyWorkspaceView({
       })
       .catch((err) => {
         if (cancelled) return;
-        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.", t);
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
           setWorkspaceResult(null);
@@ -1021,7 +1022,7 @@ function StrategyWorkspaceView({
       );
       setWorkspaceResult(nextWorkspace);
     } catch (err) {
-      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.", t);
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
         setWorkspaceResult(null);
@@ -1060,13 +1061,16 @@ function StrategyWorkspaceView({
       />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div
+          data-testid="trading-room-workspace-column"
+          style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
+        >
           {!resolvedStrategyVersion ? (
             <div
               data-testid="trading-room-strategy-version-required"
               style={{ padding: 16, fontSize: 13, color: "#e8b750" }}
             >
-              Strategy version is required before Trading Room proposal generation.
+              {t("agora.tradingRoom.page.strategyVersionRequired")}
             </div>
           ) : workspaceResult ? (
             <WorkspaceGridEditor
@@ -1100,7 +1104,7 @@ function StrategyWorkspaceView({
               data-error-status={proposalError?.status ?? ""}
               style={{ padding: 16, fontSize: 13, color: "#f87171" }}
             >
-              {proposalError?.message ?? "Workspace proposal unavailable."}
+              {proposalError?.message ?? t("agora.tradingRoom.page.proposalUnavailable")}
               <div>
                 <button
                   data-testid="trading-room-proposal-retry"
@@ -1118,7 +1122,7 @@ function StrategyWorkspaceView({
                   }}
                   type="button"
                 >
-                  重新產生
+                  {t("agora.tradingRoom.proposal.regenerate")}
                 </button>
               </div>
             </div>
@@ -1155,6 +1159,7 @@ export function TradingRoomPage({
   onOpenWorkshop,
   onStrategySelect,
 }: TradingRoomPageProps): JSX.Element {
+  const { t } = useTranslation();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
@@ -1210,7 +1215,7 @@ export function TradingRoomPage({
         data-testid="trading-room-loading"
         style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#737d8e", background: "#111417" }}
       >
-        Loading Trading Room…
+        {t("agora.tradingRoom.page.loading")}
       </div>
     );
   }
@@ -1221,7 +1226,7 @@ export function TradingRoomPage({
         data-testid="trading-room-error"
         style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#f87171", background: "#111417" }}
       >
-        Failed to load Trading Room.
+        {t("agora.tradingRoom.page.loadFailed")}
       </div>
     );
   }

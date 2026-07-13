@@ -3,7 +3,9 @@
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
-import { bffFetch } from "@/lib/bff-v1/client";
+import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
+import { buildHeaders } from "@/lib/bff-v1/headers";
+import { nextBackoffMs, readSseFrames } from "@/lib/bff-v1/sse/protocol";
 import type { StrategyWorkshop, StrategyCompleteness } from "./types";
 
 // ─── v1.3 types (not yet in auto-generated types.ts) ──────────────────────────
@@ -355,24 +357,69 @@ export async function concludeWorkshop(
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────
 
+/**
+ * Streams workshop events via an authenticated `fetch()` rather than
+ * `EventSource`: the BFF requires the `Authorization` header on this route
+ * and `EventSource` cannot send it (and separately ignores
+ * `VITE_BFF_BASE_URL`, hitting the FE origin instead of the BFF). The server
+ * holds the stream open (heartbeats every ~30s), so a dropped connection is
+ * reopened with backoff rather than treated as terminal.
+ */
 export function openWorkshopStream(
   workshopId: string,
   onEvent?: (event: WorkshopStreamEvent) => void,
 ): () => void {
-  const source = new EventSource(
-    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
-    { withCredentials: true },
-  );
-  if (onEvent) {
-    source.onmessage = (message) => {
-      try {
-        onEvent(entityFrom<WorkshopStreamEvent>(JSON.parse(message.data)));
-      } catch {
-        // Ignore malformed keepalive or compatibility messages.
-      }
-    };
+  let closed = false;
+  let controller: AbortController | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let attempt = 0;
+
+  async function run(): Promise<void> {
+    if (closed) return;
+    controller = new AbortController();
+    const headers = buildHeaders({ method: "GET", extra: { Accept: "text/event-stream" } });
+    let res: Response;
+    try {
+      res = await fetch(
+        `${detectBaseUrl()}/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
+        { headers, credentials: "include", signal: controller.signal },
+      );
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    if (!res.ok || !res.body) {
+      scheduleReconnect();
+      return;
+    }
+    attempt = 0;
+    try {
+      await readSseFrames(res.body, (frame) => {
+        if (closed || !frame.data) return;
+        try {
+          onEvent?.(entityFrom<WorkshopStreamEvent>(JSON.parse(frame.data)));
+        } catch {
+          // Ignore malformed keepalive or compatibility messages.
+        }
+      });
+    } catch {
+      /* stream read error — falls through to reconnect below */
+    }
+    scheduleReconnect();
   }
-  return () => source.close();
+
+  function scheduleReconnect(): void {
+    if (closed) return;
+    reconnectTimer = setTimeout(() => { void run(); }, nextBackoffMs(attempt++));
+  }
+
+  void run();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    controller?.abort();
+  };
 }
 
 // ─── v1.3: Cards ──────────────────────────────────────────────────────────────

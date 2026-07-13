@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
+import "@/i18n";
 
 afterEach(cleanup);
 
@@ -58,42 +59,42 @@ describe("ResearchPlanCard", () => {
 
   it("renders objectives section", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Objectives")).toBeDefined();
+    expect(screen.getByText("目標")).toBeDefined();
     expect(screen.getByText("Validate momentum persistence over 12M horizon")).toBeDefined();
   });
 
   it("renders data requirements", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Data Requirements")).toBeDefined();
+    expect(screen.getByText("資料需求")).toBeDefined();
     expect(screen.getByText("OHLCV daily 10Y")).toBeDefined();
     expect(screen.getByText("sector classifications")).toBeDefined();
   });
 
   it("renders stages section with stage details", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Stages")).toBeDefined();
+    expect(screen.getByText("階段")).toBeDefined();
     expect(screen.getByText("s1")).toBeDefined();
     expect(screen.getByText("s2")).toBeDefined();
     expect(screen.getByText("In-sample momentum validation")).toBeDefined();
-    expect(screen.getByText("Depends on s1")).toBeDefined();
+    expect(screen.getByText("依賴於 s1")).toBeDefined();
   });
 
   it("shows evaluation criteria", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Evaluation Criteria")).toBeDefined();
+    expect(screen.getByText("評估準則")).toBeDefined();
     expect(screen.getByText("> 0.8")).toBeDefined();
     expect(screen.getByText("< 15%")).toBeDefined();
   });
 
   it("shows warnings section", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Warnings")).toBeDefined();
+    expect(screen.getByText("警告")).toBeDefined();
     expect(screen.getByText("Data availability limited post-2023")).toBeDefined();
   });
 
   it("shows budget details when present", () => {
     render(<ResearchPlanCard payload={baseCard.payload} />);
-    expect(screen.getByText("Budget")).toBeDefined();
+    expect(screen.getByText("預算")).toBeDefined();
     expect(screen.getByText("30")).toBeDefined();
     expect(screen.getByText("25")).toBeDefined();
   });

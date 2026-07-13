@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { mgmt } from "@/lib/bff-v1";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
@@ -126,8 +127,10 @@ describe("ranking recommendation submit pages", () => {
       disqualificationReason: "No telemetry coverage",
     };
     let liveCall = 0;
-    mocks.useV5Live.mockImplementation(() => {
+    let rankingLoader: (() => Promise<unknown>) | undefined;
+    mocks.useV5Live.mockImplementation((load: () => Promise<unknown>) => {
       liveCall += 1;
+      if (liveCall % 2 === 1) rankingLoader = load;
       return liveCall % 2 === 1
         ? { data: [focused], loading: false, refresh: vi.fn() }
         : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
@@ -143,6 +146,11 @@ describe("ranking recommendation submit pages", () => {
     expect(within(table).getByText("Crypto-Alt-Hunter")).toBeInTheDocument();
     expect(within(table).getByText("#9")).toBeInTheDocument();
     expect(within(table).getByText(/insufficient data/i)).toBeInTheDocument();
+
+    const listLiveOnly = vi.spyOn(mgmt.quarterlyRanking, "listLiveOnly").mockResolvedValue([focused]);
+    void rankingLoader?.();
+    expect(listLiveOnly).toHaveBeenCalledWith(expect.any(String), focused.personaId);
+    listLiveOnly.mockRestore();
   });
 
   it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {
