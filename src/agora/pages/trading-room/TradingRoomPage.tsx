@@ -1061,7 +1061,10 @@ function StrategyWorkspaceView({
       />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div
+          data-testid="trading-room-workspace-column"
+          style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
+        >
           {!resolvedStrategyVersion ? (
             <div
               data-testid="trading-room-strategy-version-required"
