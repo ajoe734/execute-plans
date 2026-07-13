@@ -25,7 +25,11 @@ type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" |
 // degraded)", never "SNAPSHOT DATA" — that label is reserved for surfaces
 // genuinely backed by a snapshot (local_snapshot/missing/unverifiable, or an
 // unnamed/unknown source we cannot positively confirm is live).
-const LIVE_SURFACE_SOURCES = ["bff_composed", "service_client"];
+// `service_store` and `bff_cheap_count` are real production shell-summary
+// child sources (see services/control-plane/bff/test_mgmt_load_002_shell_summary.py)
+// — they are live pathways, not snapshot signals, even though they are not
+// the primary `bff_composed`/`service_client` surface source.
+const LIVE_SURFACE_SOURCES = ["bff_composed", "service_client", "service_store", "bff_cheap_count"];
 
 // A surface explicitly reporting one of these sources is a true snapshot
 // signal regardless of what its own `status` field claims — an explicit
@@ -94,7 +98,10 @@ export const TopBar = () => {
         }
         const { source: listSource, degradedSurfaces: listDegradedSurfaces } = classifyListSource([a, al]);
         if (listSource !== "live") {
-          clearCounts(listSource, listDegradedSurfaces);
+          // `shell_summary` is what triggered this full-list fallback in the
+          // first place — it must stay named alongside any surfaces the list
+          // envelopes themselves report as degraded.
+          clearCounts(listSource, Array.from(new Set([...listDegradedSurfaces, "shell_summary"])));
           return;
         }
         const approvals = a.items as Array<{ state?: string }>;
@@ -136,12 +143,13 @@ export const TopBar = () => {
           deferHydrateFromFullLists();
           return;
         }
-        if (status === "degraded") {
-          const degraded = classifyShellSummarySurfaces(summary.surfaces);
-          setSource(degraded.source, degraded.degradedSurfaces);
-        } else {
-          setSource("live");
-        }
+        // Always resolve through the per-surface classifier, even when the
+        // primary `shell_summary` status is "ok": a co-reported child surface
+        // can still carry an explicit snapshot source (e.g. status: ok,
+        // source: local_snapshot), and that provenance must dominate — it
+        // must not be bypassed just because the primary surface looks fine.
+        const classified = classifyShellSummarySurfaces(summary.surfaces);
+        setSource(classified.source, classified.degradedSurfaces);
         setCounts({
           approvals: summary.counts.pendingApprovals,
           alerts: summary.counts.openAlerts,

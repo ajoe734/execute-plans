@@ -186,6 +186,54 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     expect(screen.getByText("SNAPSHOT DATA")).toBeInTheDocument();
   });
 
+  it("classifies a production-shaped degraded shell-summary payload (service_store/bff_cheap_count child surfaces) as LIVE (partially degraded), not SNAPSHOT DATA", async () => {
+    // Matches the real BFF contract shape (see
+    // services/control-plane/bff/test_mgmt_load_002_shell_summary.py):
+    // pending_approvals/running_jobs are sourced from service_store and
+    // open_alerts from bff_cheap_count — both live pathways, not snapshot
+    // signals, even though neither is bff_composed/service_client.
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayloadMulti({
+        shell_summary: { status: "degraded", source: "bff_composed" },
+        pending_approvals: { status: "degraded", source: "service_store" },
+        open_alerts: { status: "degraded", source: "bff_cheap_count" },
+        running_jobs: { status: "ok", source: "service_store" },
+      })),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.queryByText("SNAPSHOT DATA")).not.toBeInTheDocument();
+    const badge = screen.getByText("LIVE (PARTIALLY DEGRADED)");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "Degraded surfaces: shell_summary, pending_approvals, open_alerts");
+  });
+
+  it("treats an explicit snapshot source on the primary shell_summary surface as SNAPSHOT DATA even when its own status reports ok", async () => {
+    // The primary surface's status gates entry into the classifier
+    // (shellSummaryStatus reads only surfaces.shell_summary.status), but the
+    // classifier itself — not that top-level status — must decide the
+    // badge. An inconsistent payload (status: ok, source: local_snapshot) on
+    // the primary surface must not bypass classification and render live.
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("ok", "local_snapshot")),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("SNAPSHOT DATA")).toBeInTheDocument();
+  });
+
   it("defers to the full-list fallback only after shell-summary reports unavailable, on an idle callback", async () => {
     const approvalsSpy = vi.spyOn(lists, "approvals");
     const alertsSpy = vi.spyOn(lists, "alerts");
@@ -269,7 +317,12 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     // that must resolve to live-degraded, not an outright SNAPSHOT DATA
     // short-circuit on the envelope-wide flag alone.
     expect(screen.queryByText("SNAPSHOT DATA")).not.toBeInTheDocument();
-    expect(screen.getByText("LIVE (PARTIALLY DEGRADED)")).toBeInTheDocument();
+    const badge = screen.getByText("LIVE (PARTIALLY DEGRADED)");
+    expect(badge).toBeInTheDocument();
+    // shell_summary is what triggered this full-list fallback in the first
+    // place; it must stay named alongside the list envelopes' own degraded
+    // surfaces, not get dropped from the tooltip.
+    expect(badge).toHaveAttribute("title", "Degraded surfaces: approvals, alerts, shell_summary");
   });
 
   it("treats an explicit snapshot source as SNAPSHOT DATA even when that surface reports status ok", async () => {
