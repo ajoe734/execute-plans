@@ -383,14 +383,40 @@ test.describe("Persona Fleet live linked-page contract", () => {
           + `|${escapeForRegExp(PERSONA_ID)} 目前沒有需要審查的人類收件匣項目。)$`,
         ),
       );
+      const focusedInboxIncomplete = page.getByText(new RegExp(
+        `^(?:Inbox status is incomplete for ${escapeForRegExp(PERSONA_ID)}; absence cannot be confirmed\\.`
+        + `|${escapeForRegExp(PERSONA_ID)} 的收件匣狀態不完整，無法確認沒有待處理項目。)$`,
+      ));
+      const incompleteAlertTitle = page.getByText(
+        /^(?:Human Inbox is incomplete|人類收件匣資料不完整)$/,
+      );
+      const incompleteAlertBody = /^(?:Some live sources are unavailable or timed out\. Showing the items that were confirmed\.|部分 live 來源無法使用或已逾時；目前只顯示已確認的項目。)$/;
+      const unavailableAlertTitle = page.getByText(
+        /^(?:Human Inbox status unavailable|無法取得人類收件匣狀態)$/,
+      );
+      const focusedInboxMissing = page.getByText(new RegExp(
+        `^(?:No inbox item found for ${escapeForRegExp(PERSONA_ID)}\\.`
+        + `|找不到 ${escapeForRegExp(PERSONA_ID)} 的收件匣項目。)$`,
+      ));
       await waitForFocusedRead(page, {
         description: `focused Human Inbox ${PERSONA_ID}`,
-        focused: () => focusedInboxItem.or(focusedInboxEmpty).first(),
+        focused: () => focusedInboxItem.or(focusedInboxEmpty).or(focusedInboxIncomplete).first(),
         navigate: (attempt) => attempt === 1
           ? humanGateLink.click()
           : page.reload({ waitUntil: "domcontentloaded" }),
-        responseMatches: (url) => url.pathname.startsWith("/bff/management/human-inbox"),
+        responseMatches: (url) => url.pathname === "/bff/management/human-inbox",
       });
+      if (await focusedInboxIncomplete.isVisible()) {
+        const incompleteAlert = page.getByRole("alert").filter({ has: incompleteAlertTitle });
+        await expect(incompleteAlert).toBeVisible();
+        await expect(incompleteAlert.getByText(incompleteAlertBody)).toBeVisible();
+        await expect(incompleteAlert.getByRole("button", { name: /^(?:Retry|重試)$/ })).toBeVisible();
+        await expect(unavailableAlertTitle).toHaveCount(0);
+        await expect(focusedInboxMissing).toHaveCount(0);
+        await expect(focusedInboxEmpty).toHaveCount(0);
+        await expect(page.getByRole("link", { name: /^(?:Back to Persona Detail|返回 Persona 詳情)$/ }))
+          .toHaveAttribute("href", `/management/personas/${encodeURIComponent(PERSONA_ID)}`);
+      }
       await expect.poll(() => `${new URL(page.url()).pathname}${new URL(page.url()).search}`)
         .toBe(humanGateHref);
       await expect(page.getByRole("heading", { name: /人類收件匣|Human Inbox/i })).toBeVisible();
