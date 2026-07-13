@@ -23,6 +23,7 @@ import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
 import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
 import { ActivityMonitor } from "../components/detail/ActivityMonitor";
 import { MemoryGovernanceQueue } from "../components/detail/MemoryGovernanceQueue";
+import { PersonaTradeJournalTab } from "../components/detail/PersonaTradeJournalTab";
 import { PersonaIdentityTab } from "../components/detail/PersonaIdentityTab";
 import { PersonaWorkspaceTab } from "../components/detail/PersonaWorkspaceTab";
 import { PersonaCapitalBindingTab } from "../components/detail/PersonaCapitalBindingTab";
@@ -239,6 +240,10 @@ export const PersonaDetail = () => {
           {
             value: "memory", label: t("persona.tabs.training"),
             content: <MemoryGovernanceQueue personaId={p.id} />,
+          },
+          {
+            value: "tradeJournal", label: t("persona.tabs.tradeJournal", { defaultValue: "Trade Journal" }),
+            content: <PersonaTradeJournalTab personaId={p.id} />,
           },
           { value: "violations", label: t("phase13.persona.tabs.violations"), content: <PersonaPolicyViolationsTab personaId={p.id} /> },
           { value: "evaluations", label: t("phase13.persona.tabs.evaluations"), content: <PersonaEvaluationsTab personaId={p.id} /> },
