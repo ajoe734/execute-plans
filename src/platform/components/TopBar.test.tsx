@@ -31,6 +31,34 @@ function shellSummaryPayload(status: "ok" | "degraded" | "unavailable", source =
   };
 }
 
+function shellSummaryPayloadMulti(surfaces: Record<string, { status: string; source?: string }>) {
+  return {
+    data: {
+      counts: { pending_approvals: 4, open_alerts: 2, running_jobs: 1 },
+      session: { operator_id: "op-1", roles: ["admin"] },
+      transport: { bff_status: "ok", service: "operator-bff", api_version: "1.0" },
+    },
+    meta: {
+      snapshot_at: "2026-07-01T00:00:00Z",
+      surfaces,
+    },
+  };
+}
+
+function liveListPayload(surfaceName: string, items: unknown[], source = "bff_composed") {
+  return {
+    items,
+    meta: { surfaces: { [surfaceName]: { status: "ok", source } } },
+  };
+}
+
+function degradedEnvelopeListPayload(surfaceName: string, items: unknown[], source = "bff_composed") {
+  return {
+    items,
+    meta: { degradation: true, surfaces: { [surfaceName]: { source } } },
+  };
+}
+
 function routedFetch(handlers: Record<string, () => Response>) {
   return vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -164,6 +192,8 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     const jobsSpy = vi.spyOn(lists, "jobs");
     globalThis.fetch = routedFetch({
       "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("unavailable")),
+      "/bff/approvals": () => jsonResponse(liveListPayload("approvals", [{ id: "a1", state: "pending" }])),
+      "/bff/alerts": () => jsonResponse(liveListPayload("alerts", [{ id: "al1", acknowledged: false }])),
       "/bff/me": () => jsonResponse(mockMe()),
       "/health": () => jsonResponse({ status: "ok" }),
     });
@@ -202,5 +232,68 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     // second independent read here would duplicate `/bff/jobs` — exactly
     // what MGMT-LOAD-003 exists to prevent.
     expect(jobsSpy).not.toHaveBeenCalled();
+
+    // The full-list envelopes themselves classified as live (bff_composed,
+    // status ok) — recovering through the heavier fallback path because
+    // shell-summary was unavailable does not make this a snapshot; it must
+    // badge LIVE (partially degraded), naming shell_summary as the reason
+    // the fallback ran.
+    expect(screen.queryByText("SNAPSHOT DATA")).not.toBeInTheDocument();
+    const badge = screen.getByText("LIVE (PARTIALLY DEGRADED)");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "Degraded surfaces: shell_summary");
+  });
+
+  it("classifies a live full-list envelope with envelope-level degradation as live-degraded, not snapshot", async () => {
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("unavailable")),
+      "/bff/approvals": () => jsonResponse(degradedEnvelopeListPayload("approvals", [{ id: "a1", state: "pending" }])),
+      "/bff/alerts": () => jsonResponse(degradedEnvelopeListPayload("alerts", [{ id: "al1", acknowledged: false }])),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => {
+      markRoutePrimaryReady("/management");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    // Envelope-level `meta.degradation` flags every surface, but each
+    // surface here still names a recognized live source (bff_composed) —
+    // that must resolve to live-degraded, not an outright SNAPSHOT DATA
+    // short-circuit on the envelope-wide flag alone.
+    expect(screen.queryByText("SNAPSHOT DATA")).not.toBeInTheDocument();
+    expect(screen.getByText("LIVE (PARTIALLY DEGRADED)")).toBeInTheDocument();
+  });
+
+  it("treats an explicit snapshot source as SNAPSHOT DATA even when that surface reports status ok", async () => {
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayloadMulti({
+        // Degraded shell_summary gate is what routes into
+        // classifyShellSummarySurfaces at all.
+        shell_summary: { status: "degraded", source: "bff_composed" },
+        // Inconsistent payload: status ok, but an explicit snapshot source.
+        // The explicit source must dominate and still be treated as
+        // degraded/snapshot, not silently skipped as live.
+        approvals: { status: "ok", source: "local_snapshot" },
+      })),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+
+    renderTopBar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const badge = screen.getByText("SNAPSHOT DATA");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "Degraded surfaces: shell_summary, approvals");
   });
 });

@@ -27,6 +27,11 @@ type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" |
 // unnamed/unknown source we cannot positively confirm is live).
 const LIVE_SURFACE_SOURCES = ["bff_composed", "service_client"];
 
+// A surface explicitly reporting one of these sources is a true snapshot
+// signal regardless of what its own `status` field claims — an explicit
+// snapshot source always dominates a co-reported "ok" status.
+const SNAPSHOT_SURFACE_SOURCES = ["local_snapshot", "missing", "unverifiable"];
+
 const CommandPalette = lazy(() =>
   import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
 );
@@ -76,9 +81,9 @@ export const TopBar = () => {
     // second independent read here would be a genuine duplicate `/bff/jobs`
     // request, not just a redundant one. This is also dead weight even
     // without that: `counts.jobs` (like approvals/alerts here) only renders
-    // once `dataSource === "live"`, and this fallback path only ever lands
-    // on "degraded" or a non-live source, so a jobs count fetched here was
-    // never shown.
+    // once `dataSource === "live"`, and this fallback path never lands on
+    // plain "live" (it only runs because shell-summary degraded), so a jobs
+    // count fetched here was never shown.
     const hydrateFromFullLists = () => {
       if (disposed) return;
       Promise.all([lists.approvals(), lists.alerts()]).then(([a, al]) => {
@@ -94,9 +99,11 @@ export const TopBar = () => {
         }
         const approvals = a.items as Array<{ state?: string }>;
         const alerts = al.items as Array<{ acknowledged?: boolean }>;
-        // Recovered via the heavier full-list path, not the cheap summary —
-        // label as degraded so the operator knows counts came from a fallback.
-        setSource("degraded");
+        // Recovered via the heavier full-list path because shell-summary was
+        // unavailable, but the list envelopes themselves classified as live
+        // (listSource === "live" above) — that is still real data, just
+        // fetched through the degraded shell-summary surface's fallback.
+        setSource("live_degraded", ["shell_summary"]);
         setCounts((c) => ({
           ...c,
           approvals: approvals.filter((x) => x.state === "pending").length,
@@ -336,13 +343,14 @@ function classifyEnvelopeSource(env: ListEnvelope<unknown>): EnvelopeSourceClass
   const meta = asRecord(env.meta);
   const surfaces = asRecord(meta?.surfaces);
   if (!meta || !surfaces || Object.keys(surfaces).length === 0) return { source: "unverified", degradedSurfaces: [] };
-  // Envelope-wide flag with no per-surface source to check against — cannot
-  // positively confirm a live pathway, so this stays a true snapshot signal.
-  if (meta.staleness || meta.degradation) return { source: "snapshot", degradedSurfaces: Object.keys(surfaces) };
+  // An envelope-wide flag marks every surface degraded, but a surface can
+  // still name a recognized live pathway (bff_composed/service_client) —
+  // examine each surface's own source instead of assuming snapshot outright.
+  const envelopeFlagged = Boolean(meta.staleness || meta.degradation);
   let worst: "live" | "live_degraded" | "snapshot" = "live";
   const degradedSurfaces: string[] = [];
   for (const [name, surface] of Object.entries(surfaces)) {
-    const cls = classifySurfaceValue(surface);
+    const cls = classifySurfaceValue(surface, envelopeFlagged);
     if (cls === "live") continue;
     degradedSurfaces.push(name);
     if (cls === "snapshot") worst = "snapshot";
@@ -359,15 +367,24 @@ function classifyEnvelopeSource(env: ListEnvelope<unknown>): EnvelopeSourceClass
  * just partially degraded. Anything else flagged degraded with an
  * unspecified/other source falls back to "snapshot": we cannot claim it is
  * live data without a recognized live source.
+ *
+ * `envelopeFlagged` forces this surface into the degraded branch even when
+ * its own status looks fine — an envelope-level staleness/degradation flag
+ * still has to resolve through this surface's own source (see
+ * `classifyEnvelopeSource`), not short-circuit to "snapshot" for the whole
+ * envelope.
  */
-function classifySurfaceValue(surface: unknown): "live" | "live_degraded" | "snapshot" {
-  if (typeof surface === "string") return ["ok", "fresh", "live"].includes(surface.toLowerCase()) ? "live" : "snapshot";
+function classifySurfaceValue(surface: unknown, envelopeFlagged = false): "live" | "live_degraded" | "snapshot" {
+  if (typeof surface === "string") {
+    if (envelopeFlagged) return "snapshot"; // a bare string carries no source to positively confirm as live
+    return ["ok", "fresh", "live"].includes(surface.toLowerCase()) ? "live" : "snapshot";
+  }
   const record = asRecord(surface);
   if (!record) return "snapshot";
   const source = String(record.source ?? "").toLowerCase();
-  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return "snapshot";
+  if (SNAPSHOT_SURFACE_SOURCES.includes(source)) return "snapshot";
   const status = String(record.status ?? record.state ?? "ok").toLowerCase();
-  const flagged = !["ok", "fresh", "live"].includes(status) || Boolean(record.staleness || record.degradation);
+  const flagged = envelopeFlagged || !["ok", "fresh", "live"].includes(status) || Boolean(record.staleness || record.degradation);
   if (!flagged) return "live";
   return LIVE_SURFACE_SOURCES.includes(source) ? "live_degraded" : "snapshot";
 }
@@ -378,9 +395,14 @@ function classifyShellSummarySurfaces(
   const degradedSurfaces: string[] = [];
   let sawSnapshot = false;
   for (const [name, surface] of Object.entries(surfaces)) {
-    if (surface.status === "ok") continue;
+    const source = (surface.source ?? "").toLowerCase();
+    // An explicit snapshot source dominates a co-reported "ok" status — a
+    // payload can be internally inconsistent (status: ok, source:
+    // local_snapshot) and must not be treated as live.
+    const explicitSnapshot = SNAPSHOT_SURFACE_SOURCES.includes(source);
+    if (surface.status === "ok" && !explicitSnapshot) continue;
     degradedSurfaces.push(name);
-    if (!LIVE_SURFACE_SOURCES.includes((surface.source ?? "").toLowerCase())) sawSnapshot = true;
+    if (explicitSnapshot || !LIVE_SURFACE_SOURCES.includes(source)) sawSnapshot = true;
   }
   if (degradedSurfaces.length === 0) return { source: "live", degradedSurfaces: [] };
   return { source: sawSnapshot ? "degraded" : "live_degraded", degradedSurfaces };
