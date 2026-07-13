@@ -1,9 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { authHeaders, installOidcDevLogin } from "./helpers/auth";
+import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "";
 const PERSONA_ID = process.env.PANTHEON_PERSONA_FLEET_AUDIT_ID ?? "persona-20260528-04688755";
+
+async function openFocusedFleetRow(page: Page): Promise<Locator> {
+  await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const nonProductionTab = page.getByRole("tab", { name: /非正式資料|Non-production data/i });
+  await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
+  await nonProductionTab.click();
+  const focusedRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
+  await expect(focusedRow).toBeVisible({ timeout: 30_000 });
+  return focusedRow;
+}
 
 test.describe("Persona Fleet live linked-page contract", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted FE and BFF URLs");
@@ -17,6 +30,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
       roles: ["operator", "reviewer", "approver"],
       tenantId: "pantheon-dev",
     });
+    await installQuietEventSource(page);
   });
 
   test("uses the live BFF contract and keeps every focused target semantically scoped", async ({ page, request }) => {
@@ -53,15 +67,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
       expect(fleetRow.league_score).toBe(rankingRow.score);
     }
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, {
-      waitUntil: "domcontentloaded",
-    });
-    const nonProductionTab = page.getByRole("tab", { name: /非正式資料|Non-production data/i });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-
-    const fleetTableRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
-    await expect(fleetTableRow).toBeVisible({ timeout: 30_000 });
+    const fleetTableRow = await openFocusedFleetRow(page);
 
     const personaName = String(fleetRow.name ?? fleetRow.persona_name ?? fleetRow.personaName ?? PERSONA_ID);
     await fleetTableRow.getByRole("link", { name: personaName, exact: true }).click();
@@ -69,10 +75,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(page.getByRole("heading", { name: personaName, level: 1 })).toBeAttached();
     await expect(page.locator("body")).toContainText(PERSONA_ID);
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const oodaLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+    const oodaLink = (await openFocusedFleetRow(page))
       .locator(`[aria-label="${PERSONA_ID} OODA ${fleetRow.ooda} stage" i]`);
     await expect(oodaLink).toHaveAttribute("href", /\/management\/(data-sources|experiments|research-loop|human-inbox|runtimes|evolution-journal)/);
     await oodaLink.click();
@@ -84,10 +87,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
       await expect(runtimeTable).toContainText(PERSONA_ID);
     }
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const rankRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
+    const rankRow = await openFocusedFleetRow(page);
     const rankLink = rankRow.locator(`[aria-label="${PERSONA_ID} persona league ranking"]`);
     await expect(rankLink).toHaveAttribute(
       "href",
@@ -101,10 +101,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
     }).first();
     await expect(targetRow.or(missingMessage)).toBeVisible({ timeout: 30_000 });
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const focusedFleetRow = page.locator("tr").filter({ hasText: PERSONA_ID }).first();
+    const focusedFleetRow = await openFocusedFleetRow(page);
     const capitalLink = focusedFleetRow.locator(`[aria-label="Open capital for ${PERSONA_ID}"]`);
     await expect(capitalLink).toHaveAttribute(
       "href",
@@ -121,10 +118,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const firstSource = fleetRow.data_sources?.[0];
     const providerKey = firstSource?.provider_key ?? firstSource?.providerKey;
     if (providerKey) {
-      await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-      await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-      await nonProductionTab.click();
-      const sourceLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+      const sourceLink = (await openFocusedFleetRow(page))
         .locator(`[aria-label="${PERSONA_ID} data source ${providerKey}"]`);
       await sourceLink.click();
       await expect(page).toHaveURL(new RegExp(`persona=${PERSONA_ID}.*source=${providerKey}`));
@@ -133,27 +127,22 @@ test.describe("Persona Fleet live linked-page contract", () => {
       await expect(targetSourceRow).toBeVisible({ timeout: 30_000 });
     }
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    await page.locator("tr").filter({ hasText: PERSONA_ID }).first().getByRole("link", { name: /查看研究執行|View research run/i }).click();
+    await (await openFocusedFleetRow(page))
+      .getByRole("link", { name: /查看研究執行|View research run/i })
+      .click();
     const researchFocus = page.getByText(new RegExp(`Persona.*${PERSONA_ID}`, "i")).first();
     await expect(researchFocus).toBeVisible();
     await expect(researchFocus).not.toContainText(/project\s*[：:]\s*nan/i);
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    await page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+    await (await openFocusedFleetRow(page))
       .locator(`[aria-label="${PERSONA_ID} performance attribution"]`).click();
     await expect(page.getByRole("heading", { name: /績效歸因|Performance Attribution/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /績效來源明細|Performance source details/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /績效來源明細|Performance source details/i })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByText(/產生依據|Basis/i).first()).toBeVisible();
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const mutationLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+    const mutationLink = (await openFocusedFleetRow(page))
       .locator(`[aria-label="${PERSONA_ID} mutation history"]`);
     if (fleetRow.last_mutation_kind === "unavailable") {
       await expect(mutationLink).toHaveCount(0);
@@ -170,10 +159,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
       }
     }
 
-    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
-    await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-    await nonProductionTab.click();
-    const humanGateLink = page.locator("tr").filter({ hasText: PERSONA_ID }).first()
+    const humanGateLink = (await openFocusedFleetRow(page))
       .locator(`[aria-label="${PERSONA_ID} human gate"]`);
     if (await humanGateLink.count()) {
       await humanGateLink.click();

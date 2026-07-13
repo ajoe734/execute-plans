@@ -8,6 +8,7 @@ import {
   adaptTradingPulseOverview,
   adaptHumanInboxDetail,
   adaptHumanInboxList,
+  adaptHumanInboxListState,
   adaptManagementPersonaFleet,
   adaptOperationsReadModel,
   adaptPersonaIntent,
@@ -337,6 +338,23 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out).toEqual([]);
   });
 
+  it("humanInbox.listWithStatus rejects malformed live lists under a bounded request", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    let requestSignal: AbortSignal | null | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      requestSignal = init?.signal;
+      return jsonResponse({
+        data: { items: [{ title: "missing stable id" }] },
+        meta: { surfaces: { human_inbox: { status: "ok" } } },
+      });
+    });
+
+    await expect(mgmt.humanInbox.listWithStatus()).rejects.toThrow(
+      "Human Inbox response did not contain a valid item list",
+    );
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+  });
+
   it("humanInbox.get returns no mock detail outside live mode", async () => {
     const out = await mgmt.humanInbox.get("abc-1");
     expect(out).toBeUndefined();
@@ -398,6 +416,83 @@ describe("mgmt façade (PM-Live)", () => {
       links: {
         manageHref: "/management/governance?item=approval-1",
       },
+    });
+  });
+
+  it("preserves degraded Human Inbox surface state with confirmed promotion rows", () => {
+    const out = adaptHumanInboxListState({
+      data: {
+        items: [
+          {
+            review_id: "review-persona-paper-1",
+            kind: "promotion_review",
+            source_type: "promotion_review",
+            persona_id: "persona-paper-1",
+            title: "Paper to Canary promotion review: Paper Persona",
+            status: "pending",
+          },
+          {
+            review_id: "review-persona-canary-2",
+            kind: "promotion_review",
+            source_type: "promotion_review",
+            persona_id: "persona-canary-2",
+            title: "Canary to Live promotion review: Canary Persona",
+            status: "pending",
+          },
+        ],
+      },
+      meta: {
+        snapshot_at: "2026-07-13T00:00:00Z",
+        partial: true,
+        surfaces: {
+          human_inbox: {
+            status: "degraded",
+            source: "bff_composed",
+            message: "One contributor timed out.",
+            reason: "read_timeout",
+            staleness: {
+              served_from: "partial_result",
+              last_known_at: "2026-07-13T00:00:00Z",
+            },
+          },
+        },
+      },
+    });
+
+    expect(out?.items).toHaveLength(2);
+    expect(out?.items.map((item) => item.kind)).toEqual(["promotion_review", "promotion_review"]);
+    expect(out).toMatchObject({
+      snapshotAt: "2026-07-13T00:00:00Z",
+      partial: true,
+      surface: {
+        status: "degraded",
+        source: "bff_composed",
+        reason: "read_timeout",
+        staleness: {
+          servedFrom: "partial_result",
+          lastKnownAt: "2026-07-13T00:00:00Z",
+        },
+      },
+    });
+  });
+
+  it("treats only an explicit healthy empty Human Inbox list as authoritative", () => {
+    expect(adaptHumanInboxList({ data: { items: [] } })).toEqual([]);
+    expect(adaptHumanInboxListState({
+      data: { items: [] },
+      meta: {
+        partial: false,
+        surfaces: { human_inbox: { status: "ok", source: "bff_composed" } },
+      },
+    })).toMatchObject({
+      items: [],
+      partial: false,
+      surface: { status: "ok", source: "bff_composed" },
+    });
+    expect(adaptHumanInboxListState({ data: { items: [{ title: "missing id" }] } })).toBeNull();
+    expect(adaptHumanInboxListState({ data: { items: [] } })).toMatchObject({
+      items: [],
+      surface: { status: "degraded", source: "missing_surface_metadata" },
     });
   });
 

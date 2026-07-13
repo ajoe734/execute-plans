@@ -514,6 +514,49 @@ const mockWidgetRevisionProposal = {
 };
 
 describe("Trading Room workspace proposal routes", () => {
+  it("normalizes Pantheon full/partial/missing availability values at the adapter boundary", async () => {
+    const wireProposal = {
+      ...mockProposal,
+      dataAvailability: {
+        status: "full",
+        sources: [
+          { dataSource: "agora.candidate.members", status: "missing" },
+          { dataSource: "agora.positions", status: "complete" },
+        ],
+      },
+      views: [
+        {
+          id: "overview",
+          title: "Overview",
+          purpose: "Monitor candidates.",
+          order: 0,
+          layoutTemplate: "overview",
+          widgetCount: 2,
+          dataAvailability: "partial",
+          widgets: [
+            { ...mockWidget, dataAvailability: "full" },
+            { ...mockWidget, id: "widget-002", dataAvailability: "missing" },
+          ],
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: wireProposal }));
+    globalThis.fetch = fetchMock;
+
+    const result = await getTradingRoomWorkspaceProposal("strat-001", "proposal-001", BASE);
+
+    expect(result.dataAvailability.status).toBe("complete");
+    expect(result.dataAvailability.sources.map((source) => source.status)).toEqual([
+      "unavailable",
+      "complete",
+    ]);
+    expect(result.views[0]?.dataAvailability).toBe("partial");
+    expect(result.views[0]?.widgets.map((widget) => widget.dataAvailability)).toEqual([
+      "complete",
+      "unavailable",
+    ]);
+  });
+
   it("creates a workspace proposal with strategyVersion and Idempotency-Key", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
     globalThis.fetch = fetchMock;
