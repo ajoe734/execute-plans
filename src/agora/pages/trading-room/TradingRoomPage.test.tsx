@@ -891,6 +891,17 @@ describe("TradingRoomPage", () => {
     expect(widget).toHaveStyle({ background: "#171b22" });
   });
 
+  it("clips the workspace inside a shrinkable flex column so it cannot cover the decision queue", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
+    const shell = await screen.findByTestId("trading-room-workspace-shell");
+    const column = screen.getByTestId("trading-room-workspace-column");
+
+    expect(shell).toHaveStyle({ minHeight: "0", overflow: "hidden" });
+    expect(column).toHaveStyle({ minHeight: "0", minWidth: "0", overflow: "hidden" });
+  });
+
   it("saves drag and resize operations with workspace ETag and idempotency key", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");

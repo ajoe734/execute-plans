@@ -4134,9 +4134,9 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
-    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+    listLiveOnly: (quarter?: string, persona?: string): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, persona) },
         adaptQuarterlyRankingRows,
       ),
     list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
