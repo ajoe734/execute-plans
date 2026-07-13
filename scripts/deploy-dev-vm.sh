@@ -25,7 +25,11 @@ SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
 LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
-DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}"
+# VITE_* values are embedded in the public browser bundle. The baked fallback
+# may therefore be empty or a least-privilege viewer identity only. Operators
+# authenticate through an interactive/session credential that is never part of
+# the build environment.
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:viewer}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 RELEASE_IDENTITY_FILE="${PANTHEON_RELEASE_IDENTITY_FILE:-}"
@@ -132,6 +136,11 @@ for boolean_name in REAL_WRITES ALLOW_DEV_STUB_WRITES SKIP_PROBE; do
     exit 2
   fi
 done
+
+if [[ -n "${DEV_BEARER_TOKEN}" && ! "${DEV_BEARER_TOKEN}" =~ ^[A-Za-z0-9._-]+:viewer$ ]]; then
+  echo "Refusing to embed a non-viewer VITE_BFF_DEV_BEARER_TOKEN in the public frontend bundle." >&2
+  exit 2
+fi
 
 if [[ ! "${RELEASE_INSTANCE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "PANTHEON_DEPLOY_RELEASE_INSTANCE contains unsafe path characters: ${RELEASE_INSTANCE}" >&2

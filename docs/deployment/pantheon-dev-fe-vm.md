@@ -63,6 +63,12 @@ still fails closed. The conditional write probe records a rejected governance
 recommendation and verifies `live_capital_mutation=false`, so it exercises
 persistence without changing capital or runtime state.
 
+`VITE_BFF_DEV_BEARER_TOKEN` is public build input. Automated deployment
+accepts only an empty value or a dev-only `subject:viewer` identity. Operator,
+admin, MFA, and `assistant.kernel.*` credentials must be supplied through an
+interactive cookie or browser session storage and are never embedded in the
+static release.
+
 Manual deployment is available through `workflow_dispatch` on
 `.github/workflows/pantheon-dev-fe-deploy.yml`. The workflow only accepts the
 current `dev` head after a successful integration-gate push run and consumes

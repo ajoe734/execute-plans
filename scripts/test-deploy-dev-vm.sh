@@ -54,6 +54,7 @@ if [[ "${1:-}" == "run" && "${2:-}" == "build" ]]; then
   mkdir -p dist
   printf '<!doctype html><title>deploy test</title>\n' > dist/index.html
   printf '%s %s\n' "${VITE_BFF_REAL_WRITES:-unset}" "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-unset}" >> "${DEPLOY_TEST_LOG_DIR}/build-flags.log"
+  printf '%s\n' "${VITE_BFF_DEV_BEARER_TOKEN:-unset}" >> "${DEPLOY_TEST_LOG_DIR}/browser-token.log"
   exit 0
 fi
 echo "unexpected npm invocation: $*" >&2
@@ -201,6 +202,7 @@ run_deploy() {
 case_root="$(prepare_case safe-default-success)"
 run_deploy "${case_root}"
 assert_eq "false false" "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "safe build flags"
+assert_eq "pantheon-dev-browser:viewer" "$(tail -n 1 "${LOG_DIR}/browser-token.log")" "public viewer token"
 assert_exists "${case_root}/live/deployment.json"
 assert_eq "false" "$("${REAL_NODE}" -e "console.log(require(process.argv[1]).buildMode.VITE_BFF_REAL_WRITES)" "${case_root}/live/deployment.json")" "manifest real-writes flag"
 assert_eq "${GATED_BFF_SHA}" "$("${REAL_NODE}" -e "console.log(require(process.argv[1]).bffSourceCommitSha)" "${case_root}/live/deployment.json")" "manifest BFF SHA"
@@ -342,5 +344,12 @@ if run_deploy "${case_root}" PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true; then
   fail "stub-write deploy without real writes unexpectedly succeeded"
 fi
 assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "rejected stub-write deploy target"
+
+case_root="$(prepare_case privileged-public-token-rejected)"
+if run_deploy "${case_root}" \
+  VITE_BFF_DEV_BEARER_TOKEN="public-browser:operator,admin:mfa:assistant.kernel.repair"; then
+  fail "privileged public bearer unexpectedly reached the frontend build"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "privileged token rejection target"
 
 echo "OK: deploy safety regression harness passed"
