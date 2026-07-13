@@ -206,7 +206,7 @@ describe("public frontend build auth boundary", () => {
       env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
       goto: false,
       token: LOCAL_FIXTURE_AUTH_TOKEN,
-    })).rejects.toThrow(/proven loopback frontend origin/);
+    })).rejects.toThrow(/proven loopback-only E2E target/);
     expect(browserOperations).toEqual([]);
 
     expect(devLoginSession({
@@ -217,7 +217,14 @@ describe("public frontend build auth boundary", () => {
       env: {},
       pageBaseUrl: "https://fe.example.test",
       roles: ["viewer"],
-    })).toThrow(/proven loopback frontend origin/);
+    })).toThrow(/proven loopback-only E2E target/);
+    expect(() => devLoginSession({
+      env: {
+        PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+        PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
+      },
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    })).toThrow(/proven loopback-only E2E target/);
   });
 
   it("rejects an explicit local fixture token for external direct BFF headers", () => {
@@ -327,7 +334,7 @@ describe("public frontend build auth boundary", () => {
     expect(result.status).not.toBe(0);
     expect(output).toMatch(/20-portfolio-book-monitor/);
     expect(output).toMatch(/22-persona-trade-journal/);
-    expect(output).toMatch(/proven loopback frontend origin/);
+    expect(output).toMatch(/proven loopback-only E2E target/);
     expect(output).not.toMatch(/ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/);
   }, 40_000);
 

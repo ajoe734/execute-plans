@@ -173,7 +173,7 @@ function missingExternalCredential(): Error {
 
 function localFixtureExternalFrontend(): Error {
   return new Error(
-    "LOCAL_FIXTURE_AUTH_TOKEN may be installed only for a proven loopback frontend origin",
+    "LOCAL_FIXTURE_AUTH_TOKEN may be installed only for a proven loopback-only E2E target",
   );
 }
 
@@ -262,7 +262,10 @@ export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession 
   );
   if (
     (explicit === undefined || token === LOCAL_FIXTURE_AUTH_TOKEN)
-    && !localFixtureFrontendIsLoopback(options, env)
+    && (
+      !localFixtureFrontendIsLoopback(options, env)
+      || targetsExternalE2eEnvironment(env)
+    )
   ) {
     throw localFixtureExternalFrontend();
   }
