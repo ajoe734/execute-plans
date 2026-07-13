@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_SCRIPT="${ROOT_DIR}/scripts/deploy-dev-vm.sh"
 REAL_NODE="$(command -v node)"
+CURRENT_FE_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
+GATED_BFF_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+OTHER_BFF_SHA="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+GATE_RUN_ID="test-gate-run"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/execute-plans-deploy-test.XXXXXX")"
 MOCK_BIN="${TEST_ROOT}/bin"
 LOG_DIR="${TEST_ROOT}/logs"
@@ -106,6 +110,21 @@ cat > "${MOCK_BIN}/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 url="${!#}"
+if [[ "${url}" == */bff/version ]]; then
+  count_file="${DEPLOY_TEST_BFF_COUNT_FILE:?}"
+  count=0
+  if [[ -f "${count_file}" ]]; then
+    count="$(cat "${count_file}")"
+  fi
+  count=$((count + 1))
+  printf '%s\n' "${count}" > "${count_file}"
+  bff_sha="${DEPLOY_TEST_BFF_SHA:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
+  if [[ "${count}" -gt 1 && -n "${DEPLOY_TEST_BFF_SHA_AFTER_FIRST:-}" ]]; then
+    bff_sha="${DEPLOY_TEST_BFF_SHA_AFTER_FIRST}"
+  fi
+  printf '{"service":"operator-bff","source_commit_sha":"%s","commit":"%s","source_commit_known":true}\n' "${bff_sha}" "${bff_sha}"
+  exit 0
+fi
 if [[ "${DEPLOY_TEST_CURL_SWITCH_TARGET:-}" != "" ]]; then
   ln -sfn "${DEPLOY_TEST_CURL_SWITCH_TARGET}" "${PANTHEON_DEV_FE_ROOT}.external"
   mv -Tf "${PANTHEON_DEV_FE_ROOT}.external" "${PANTHEON_DEV_FE_ROOT}"
@@ -149,12 +168,15 @@ prepare_case() {
     printf '{"commit":"previous"}\n' > "${case_root}/releases/previous/deployment.json"
     ln -s "${case_root}/releases/previous" "${case_root}/live"
   fi
+  printf '{"schemaVersion":1,"frontend":{"repository":"ajoe734/execute-plans","commitSha":"%s"},"bff":{"baseUrl":"https://bff.test","versionUrl":"https://bff.test/bff/version","sourceCommitSha":"%s","sourceCommitKnown":true},"gate":{"workflow":"pantheon-integration-gate.yml","runId":"%s","runUrl":"https://github.test/actions/runs/test-gate-run","observedAt":"2026-07-13T00:00:00Z"}}\n' \
+    "${CURRENT_FE_SHA}" "${GATED_BFF_SHA}" "${GATE_RUN_ID}" > "${case_root}/release-identity.json"
   printf '%s\n' "${case_root}"
 }
 
 run_deploy() {
   local case_root="$1"
   shift
+  rm -f "${case_root}/bff-version-count"
   env -u PANTHEON_DEPLOY_REAL_WRITES -u PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES \
     PATH="${MOCK_BIN}:${PATH}" \
     DEPLOY_TEST_LOG_DIR="${LOG_DIR}" \
@@ -169,6 +191,9 @@ run_deploy() {
     PANTHEON_DEV_FE_KEEP_RELEASES=8 \
     PANTHEON_DEV_FE_HOST=https://deploy.test \
     PANTHEON_BFF_BASE_URL=https://bff.test \
+    PANTHEON_RELEASE_IDENTITY_FILE="${case_root}/release-identity.json" \
+    PANTHEON_RELEASE_GATE_RUN_ID="${GATE_RUN_ID}" \
+    DEPLOY_TEST_BFF_COUNT_FILE="${case_root}/bff-version-count" \
     "$@" \
     bash "${DEPLOY_SCRIPT}"
 }
@@ -178,8 +203,37 @@ run_deploy "${case_root}"
 assert_eq "false false" "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "safe build flags"
 assert_exists "${case_root}/live/deployment.json"
 assert_eq "false" "$("${REAL_NODE}" -e "console.log(require(process.argv[1]).buildMode.VITE_BFF_REAL_WRITES)" "${case_root}/live/deployment.json")" "manifest real-writes flag"
+assert_eq "${GATED_BFF_SHA}" "$("${REAL_NODE}" -e "console.log(require(process.argv[1]).bffSourceCommitSha)" "${case_root}/live/deployment.json")" "manifest BFF SHA"
+assert_eq "${GATED_BFF_SHA}" "$("${REAL_NODE}" -e "console.log(require(process.argv[1]).releaseIdentity.bff.sourceCommitSha)" "${case_root}/live/deployment.json")" "manifest exact release identity"
+assert_eq "2" "$(cat "${case_root}/bff-version-count")" "pre/post-switch BFF identity checks"
 [[ "$(readlink -f "${case_root}/live")" != "${case_root}/releases/previous" ]] || fail "successful deploy did not switch releases"
 assert_missing "${LOG_DIR}/node-probes.log"
+
+case_root="$(prepare_case missing-release-identity)"
+if run_deploy "${case_root}" PANTHEON_RELEASE_IDENTITY_FILE="${case_root}/missing.json"; then
+  fail "deploy without a release identity unexpectedly succeeded"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "missing identity target"
+
+case_root="$(prepare_case wrong-gate-run)"
+if run_deploy "${case_root}" PANTHEON_RELEASE_GATE_RUN_ID="different-gate-run"; then
+  fail "deploy with the wrong integration gate run unexpectedly succeeded"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "wrong gate run target"
+
+case_root="$(prepare_case pre-switch-bff-mismatch)"
+if run_deploy "${case_root}" DEPLOY_TEST_BFF_SHA="${OTHER_BFF_SHA}"; then
+  fail "pre-switch BFF mismatch unexpectedly succeeded"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "pre-switch mismatch target"
+assert_eq "1" "$(cat "${case_root}/bff-version-count")" "pre-switch mismatch BFF check count"
+
+case_root="$(prepare_case post-switch-bff-mismatch)"
+if run_deploy "${case_root}" DEPLOY_TEST_BFF_SHA_AFTER_FIRST="${OTHER_BFF_SHA}"; then
+  fail "post-switch BFF mismatch unexpectedly succeeded"
+fi
+assert_eq "${case_root}/releases/previous" "$(readlink -f "${case_root}/live")" "post-switch mismatch rollback target"
+assert_eq "2" "$(cat "${case_root}/bff-version-count")" "post-switch mismatch BFF check count"
 
 case_root="$(prepare_case probe-failure-rollback)"
 if run_deploy "${case_root}" DEPLOY_TEST_CURL_FAIL=true; then
