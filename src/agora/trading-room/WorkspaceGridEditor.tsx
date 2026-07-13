@@ -741,7 +741,7 @@ export function WorkspaceGridEditor({
   return (
     <section
       data-testid="trading-room-workspace-shell"
-      style={{ background: COLORS.panelInset, color: COLORS.text, display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}
+      style={{ background: COLORS.panelInset, color: COLORS.text, display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden" }}
     >
       <header style={{ borderBottom: `1px solid ${COLORS.border}`, padding: "10px 16px", position: "relative" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
