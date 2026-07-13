@@ -918,6 +918,7 @@ interface StrategyWorkspaceViewProps {
   readinessGate?: string;
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
+  onSwitchStrategy?: () => void;
 }
 
 function StrategyWorkspaceView({
@@ -931,6 +932,7 @@ function StrategyWorkspaceView({
   readinessGate,
   strategyVersion,
   onBackToWorkshop,
+  onSwitchStrategy,
 }: StrategyWorkspaceViewProps): JSX.Element {
   const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
@@ -1077,6 +1079,9 @@ function StrategyWorkspaceView({
               initialEtag={workspaceResult.etag}
               initialWorkspace={workspaceResult.workspace}
               onWorkspaceChange={setWorkspaceResult}
+              strategy={strategy}
+              onBackToWorkshop={onBackToWorkshop}
+              onSwitchStrategy={onSwitchStrategy}
             />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
@@ -1258,6 +1263,7 @@ export function TradingRoomPage({
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           onBackToWorkshop={onBackToWorkshop}
+          onSwitchStrategy={() => handleStrategySelect(undefined)}
           readinessAssessmentId={readinessAssessmentId}
           readinessGate={readinessGate}
           strategyVersion={strategyVersion}
