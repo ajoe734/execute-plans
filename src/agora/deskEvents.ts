@@ -37,4 +37,3 @@ export function reportAgoraLayoutProposalStatus(detail: AgoraLayoutProposalStatu
     }),
   );
 }
-
