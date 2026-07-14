@@ -95,7 +95,7 @@ function shouldClearStaleWorkspaceState(error: TradingRoomUiError): boolean {
 
 // ── Strategy Lens Switcher ────────────────────────────────────────────────────
 
-function cn(...inputs: any[]) {
+function cn(...inputs: unknown[]) {
   return inputs.filter(Boolean).join(" ");
 }
 
@@ -1249,7 +1249,7 @@ function CandidateReviewDrawer({
               {t("agora.tradingRoom.candidates.headers.state", { defaultValue: "Candidate Status" })}
             </h3>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="text-[#c5cad2]">Current State:</span>
+              <span className="text-[#c5cad2]">{t("agora.tradingRoom.candidates.headers.currentState", { defaultValue: "Current State:" })}</span>
               <span className={cn(
                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
                 candidate.state === "new_candidate" && "bg-blue-950 text-blue-400",
@@ -1265,7 +1265,7 @@ function CandidateReviewDrawer({
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <span className="text-[#c5cad2]">AI Fit Score:</span>
+              <span className="text-[#c5cad2]">{t("agora.tradingRoom.candidates.headers.aiFitScore", { defaultValue: "AI Fit Score:" })}</span>
               <span className="font-mono font-bold text-[#e8b750]" data-testid="drawer-candidate-score">{candidate.score}</span>
             </div>
           </div>
@@ -1292,7 +1292,7 @@ function CandidateReviewDrawer({
           
           {/* Next Event */}
           <div>
-            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-1">Next Catalyst Event</h3>
+            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-1">{t("agora.tradingRoom.candidates.headers.nextEvent", { defaultValue: "Next Catalyst Event" })}</h3>
             <p className="text-[#f0ece4] font-semibold bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-event">
               {t(`agora.tradingRoom.candidates.${candidate.id}.nextEvent`, { defaultValue: candidate.nextEvent })}
             </p>
@@ -1300,7 +1300,7 @@ function CandidateReviewDrawer({
           
           {/* Evidence */}
           <div>
-            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-1">Evidence references</h3>
+            <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-1">{t("agora.tradingRoom.candidates.headers.evidenceReferences", { defaultValue: "Evidence references" })}</h3>
             <div className="space-y-1">
               {candidate.evidence.map((ev, idx) => (
                 <div key={idx} className="bg-[#171b22] p-2 rounded border border-[#2a2e38]/50 flex justify-between items-center">
@@ -1314,7 +1314,7 @@ function CandidateReviewDrawer({
         
         {/* Governed Actions Footer */}
         <div className="p-4 border-t border-[#2a2e38] bg-[#171b22] space-y-2">
-          <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">Governed Actions</h3>
+          <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">{t("agora.tradingRoom.candidates.headers.governedActions", { defaultValue: "Governed Actions" })}</h3>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => onUpdateState(candidate.id, "monitoring")}
@@ -1463,7 +1463,7 @@ function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
           <div className="text-[10px] font-bold text-[#8c96a6] uppercase">
             {t("agora.tradingRoom.lenses.dashboard.recipeB.hypothesisTitle", { defaultValue: "Active Hypothesis" })}
           </div>
-          <div className="text-xs text-[#c5cad2] font-semibold mt-0.5">"AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE."</div>
+          <div className="text-xs text-[#c5cad2] font-semibold mt-0.5">"{t("agora.tradingRoom.lenses.dashboard.recipeB.hypothesisNarrative", { defaultValue: "AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE." })}"</div>
         </div>
         <div style={{ display: "flex", gap: 16, flexShrink: 0 }} className="font-mono text-xs">
           <div>
@@ -1486,17 +1486,17 @@ function DashboardRecipeB({ candidates }: { candidates: CandidateRecord[] }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, paddingLeft: 8, paddingRight: 8 }} className="relative">
             <div className="bg-[#1b202c] p-2 rounded border border-[#2a2e38] text-center" style={{ width: 80 }}>
               <div className="text-[9px] text-[#8c96a6]">UPSTREAM</div>
-              <div className="text-[10px] font-bold text-[#f0ece4] mt-0.5">Silicon Wafers</div>
+              <div className="text-[10px] font-bold text-[#f0ece4] mt-0.5">{t("agora.tradingRoom.lenses.dashboard.recipeB.siliconWafers", { defaultValue: "Silicon Wafers" })}</div>
             </div>
             <span className="text-[#2a2e38] text-sm">→</span>
             <div className="bg-[#1b202c] p-2 rounded border border-[#e8b750]/60 text-center" style={{ width: 85 }}>
               <div className="text-[9px] text-[#e8b750]">MIDSTREAM</div>
-              <div className="text-[10px] font-bold text-[#e8b750] mt-0.5">Substrates</div>
+              <div className="text-[10px] font-bold text-[#e8b750] mt-0.5">{t("agora.tradingRoom.lenses.dashboard.recipeB.substrates", { defaultValue: "Substrates" })}</div>
             </div>
             <span className="text-[#2a2e38] text-sm">→</span>
             <div className="bg-[#1b202c] p-2 rounded border border-[#2a2e38] text-center" style={{ width: 80 }}>
               <div className="text-[9px] text-[#8c96a6]">DOWNSTREAM</div>
-              <div className="text-[10px] font-bold text-[#f0ece4] mt-0.5">AI GPU</div>
+              <div className="text-[10px] font-bold text-[#f0ece4] mt-0.5">{t("agora.tradingRoom.lenses.dashboard.recipeB.aiGpu", { defaultValue: "AI GPU" })}</div>
             </div>
           </div>
         </div>
@@ -1677,6 +1677,7 @@ interface TradingRoomDefaultEntryProps {
   eventsLoading: boolean;
   eventsEtag: string | null;
   isSampleData?: boolean;
+  candidatesLoading?: boolean;
 }
 
 function TradingRoomDefaultEntry({
@@ -1695,6 +1696,7 @@ function TradingRoomDefaultEntry({
   eventsLoading,
   eventsEtag,
   isSampleData = false,
+  candidatesLoading = false,
 }: TradingRoomDefaultEntryProps): JSX.Element {
   const { t } = useTranslation();
   const strategies = aggregate.strategies;
@@ -1854,6 +1856,27 @@ function TradingRoomDefaultEntry({
               {t(currentLens.titleKey, { defaultValue: currentLens.titleZh })} - Monitoring Dashboard
             </h2>
             
+            {/* Always show recipe sample data warning badge */}
+            <div
+              style={{
+                background: "rgba(232, 183, 80, 0.08)",
+                border: "1px solid rgba(232, 183, 80, 0.25)",
+                color: "#e8b750",
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                width: "max-content",
+              }}
+              data-testid="dashboard-recipe-sample-warning"
+            >
+              <span>⚠️</span>
+              <span>{t("agora.tradingRoom.lenses.meta.recipeSampleBadge", { defaultValue: "DASHBOARD RECIPE DATA: SAMPLE ONLY" })}</span>
+            </div>
+            
             {isSampleData && (
               <div
                 style={{
@@ -1894,7 +1917,12 @@ function TradingRoomDefaultEntry({
             </div>
             
             <div style={{ flex: 1, overflow: "auto" }}>
-              {filteredCandidates.length === 0 ? (
+              {candidatesLoading ? (
+                <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "#737d8e" }} data-testid="candidates-loading">
+                  <span className="inline-block animate-spin mr-2">⏳</span>
+                  {t("agora.tradingRoom.candidates.headers.loading", { defaultValue: "Loading candidates..." })}
+                </div>
+              ) : filteredCandidates.length === 0 ? (
                 <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "#737d8e" }}>
                   {t("agora.tradingRoom.candidates.headers.noCandidates", { defaultValue: "No candidates in this state. Try changing the lifecycle state filter." })}
                 </div>
@@ -2697,7 +2725,7 @@ export function TradingRoomPage({
               id: item.artifact_id,
               symbol: item.title || item.strategy_ref || "UNKNOWN",
               name: item.title || "Unknown Company",
-              state: item.lifecycle_state === "candidate" ? "new_candidate" : (item.lifecycle_state as any),
+              state: item.lifecycle_state === "candidate" ? "new_candidate" : (item.lifecycle_state as CandidateRecord["state"]),
               lensId: activeLensId,
               score: item.sharpe_summary ? Math.round(item.sharpe_summary * 100) : staticFallback.score,
               reason: staticFallback.reason,
@@ -2853,6 +2881,7 @@ export function TradingRoomPage({
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           isSampleData={isSampleData}
+          candidatesLoading={candidatesLoading}
         />
       )}
     </div>

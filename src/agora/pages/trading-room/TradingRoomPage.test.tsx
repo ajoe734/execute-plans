@@ -1859,4 +1859,56 @@ describe("TradingRoomPage", () => {
     // Focus should be restored back to appleRow
     expect(document.activeElement).toBe(appleRow);
   });
+
+  it("renders lens-specific columns in the candidate board table", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const table = screen.getByTestId("candidate-board-table");
+
+    // By default, activeLensId is 'lens-A'
+    // It should render Accum. Days column header (or localized zh-TW version)
+    expect(within(table).getByText(/累積天數|Accum. Days/)).toBeDefined();
+    expect(within(table).queryByText(/同儕類組|Peer Group/)).toBeNull();
+
+    // Switch to lens-B
+    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
+    const lensBCard = within(lenses).getByText(/產業落後補漲|Industry Laggard/);
+    fireEvent.click(lensBCard);
+
+    // Wait for the lens transition and API response to render lens-B columns
+    await waitFor(() => {
+      const currentTable = screen.getByTestId("candidate-board-table");
+      expect(within(currentTable).getByText(/同儕類組|Peer Group/)).toBeDefined();
+      expect(within(currentTable).queryByText(/累積天數|Accum. Days/)).toBeNull();
+    });
+  });
+
+  it("displays loading spinner state when candidatesLoading is true", async () => {
+    // Mock the candidatePool API to delay its response to simulate loading state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolvePromise: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const delayPromise = new Promise<any>((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockReturnValueOnce(delayPromise);
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    // Verify loading indicator is displayed
+    expect(screen.getByTestId("candidates-loading")).toBeDefined();
+    expect(screen.getByTestId("candidates-loading").textContent).toMatch(/正在載入|Loading/);
+
+    // Resolve the promise to end loading state
+    resolvePromise({ items: [] });
+    await waitFor(() => {
+      expect(screen.queryByTestId("candidates-loading")).toBeNull();
+    });
+  });
 });
