@@ -33,7 +33,7 @@ export interface GovernedProposal {
   revision: number;
   state: string;
   expires_at: string;
-  validation?: { valid?: boolean; errors?: string[]; warnings?: string[]; [key: string]: unknown };
+  validation?: { valid?: boolean; status?: string; errors?: string[]; warnings?: string[]; [key: string]: unknown };
   audit: Array<{ action: string; actor: string; at: string; reason?: string; approval_refs?: string[] }>;
   governed_action_link?: { route?: string; target_type?: string; target_id?: string; execution_authority?: string } | null;
   execution_authority?: "none";
@@ -56,7 +56,23 @@ async function decode<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null) as { data?: T } | BffErrorEnvelope | null;
   if (!response.ok) {
     const normalized = normalizeBffErrorEnvelope(body, response.status);
-    throw normalized ? new BffError(response.status, normalized) : makeBffError({ code: "UNKNOWN_ERROR", message: `Governance request failed (${response.status})` });
+    if (normalized) throw new BffError(response.status, normalized);
+    const code = response.status === 401
+      ? "AUTH_REQUIRED"
+      : response.status === 403
+        ? "PERMISSION_DENIED"
+        : response.status === 404
+          ? "RESOURCE_NOT_FOUND"
+          : response.status === 409 || response.status === 412
+            ? "STATE_CONFLICT"
+            : response.status === 422
+              ? "VALIDATION_FAILED"
+              : "UNKNOWN_ERROR";
+    const fallback = normalizeBffErrorEnvelope({
+      error: { code, message: `Governance request failed (${response.status})` },
+    }, response.status);
+    if (fallback) throw new BffError(response.status, fallback);
+    throw makeBffError({ code: "UNKNOWN_ERROR", message: `Governance request failed (${response.status})` });
   }
   if (!body || typeof body !== "object" || !("data" in body)) {
     throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Malformed governance response" });

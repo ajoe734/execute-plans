@@ -43,6 +43,12 @@ describe("GovernedProposalCard", () => {
     expect(screen.getByRole("button", { name: "validate" })).toBeDisabled();
   });
 
+  it("renders the backend validation status shape as passed", () => {
+    render(<GovernedProposalCard initialProposal={{ ...base, state: "validated", validation: { status: "passed" } }} initialEtag={'"v2"'} />);
+    expect(screen.getByLabelText("Validation result")).toHaveTextContent("Passed");
+    expect(screen.getByLabelText("Validation result")).not.toHaveTextContent("Not passed");
+  });
+
   it("forwards authoritative validation and approval artifacts", async () => {
     const validated = { ...base, state: "validated", validation: { valid: true } };
     vi.spyOn(api, "actOnGovernedProposal").mockResolvedValue({ proposal: { ...validated, state: "approved", revision: 2 }, etag: '"v2"' });

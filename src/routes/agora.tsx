@@ -114,10 +114,12 @@ export function AgoraStrategyWorkshopRoute() {
     returnTo: safeWorkshopReturnPath(searchParams.get("return_to")),
     returnLabel: searchParams.get("return_label") ?? undefined,
   };
+  const governedProposalId = searchParams.get("governedProposalId")?.trim() || undefined;
 
   return (
     <StrategyWorkshopPage
       entry={entry}
+      governedProposalId={governedProposalId}
       onAddToTradingRoom={(handoff) =>
         navigate(
           `/agora/trading-room/${encodeURIComponent(handoff.strategyId)}?${tradingRoomHandoffQuery(handoff)}`,

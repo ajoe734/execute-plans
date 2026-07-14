@@ -854,7 +854,7 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("trading-room-generation-progress");
     expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("交易僕人正在建立");
-    expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("產生 Views 與 widgets");
+    expect(screen.getByTestId("trading-room-generation-progress").textContent).toContain("產生檢視與元件");
   });
 
   it("renders all V11 proposal view thumbnails and widget counts", async () => {

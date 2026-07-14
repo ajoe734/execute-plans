@@ -25,6 +25,7 @@ vi.mock("@/agora/pages/strategy-performance/StrategyPerformancePage", () => ({
 
 vi.mock("@/agora/pages/strategy-workshop/StrategyWorkshopPage", () => ({
   StrategyWorkshopPage: (props: {
+    governedProposalId?: string;
     onAddToTradingRoom?: (handoff: {
       assessedAt?: string;
       readinessAssessmentId: string;
@@ -173,9 +174,9 @@ describe("AgoraStrategyWorkshopRoute", () => {
     expect(safeWorkshopReturnPath("/settings")).toBeUndefined();
   });
 
-  it("passes workshopId and routes Add to Trading Room into the explicit strategy entry", () => {
+  it("passes explicit workshop/proposal ids and routes Add to Trading Room into the explicit strategy entry", () => {
     render(
-      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9"]}>
+      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?governedProposalId=prop-9"]}>
         <Routes>
           <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
           <Route path="/agora/trading-room/:strategyId" element={<LocationProbe />} />
@@ -185,6 +186,7 @@ describe("AgoraStrategyWorkshopRoute", () => {
 
     expect(routeMocks.strategyWorkshopPage).toHaveBeenCalledWith(
       expect.objectContaining({
+        governedProposalId: "prop-9",
         onAddToTradingRoom: expect.any(Function),
         workshopId: "ws-9",
       }),

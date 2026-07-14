@@ -56,6 +56,12 @@ vi.mock("@/agora/useAgoraWriteAccess", () => ({
   }),
 }));
 
+vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
+  ConnectedGovernedProposalCard: ({ proposalId }: { proposalId: string }) => (
+    <div data-testid="connected-governed-proposal">{proposalId}</div>
+  ),
+}));
+
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
@@ -582,6 +588,33 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("mode-selector")).toBeDefined();
     expect(screen.getByTestId("participant-picker")).toBeDefined();
     expect(screen.getByTestId("eligibility-explanation")).toBeDefined();
+  });
+
+  it("keeps the live session renderable when a legacy workshop omits its subject", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-legacy",
+      operator_id: "operator-001",
+      status: "open",
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+
+    render(<StrategyWorkshopPage workshopId="ws-legacy" />);
+
+    const contextBar = await screen.findByTestId("context-bar");
+    expect(contextBar.textContent).toContain("Subject: none (none)");
+    expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
+  });
+
+  it("renders only the governed proposal explicitly linked by the route", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+    render(<StrategyWorkshopPage governedProposalId="prop-pint-010" workshopId="ws-abc" />);
+
+    expect(await screen.findByTestId("connected-governed-proposal")).toHaveTextContent("prop-pint-010");
   });
 
   it("renders warning banners when stale/degraded/denied triggers are toggled", async () => {

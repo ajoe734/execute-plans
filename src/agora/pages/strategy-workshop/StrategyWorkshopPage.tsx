@@ -20,6 +20,7 @@ import {
 } from "@/lib/bff-v1/agora/interaction";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
+import { ConnectedGovernedProposalCard } from "@/agora/components/ConnectedGovernedProposalCard";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
 import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 import {
@@ -296,6 +297,7 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
 
 interface SessionViewProps {
   workshopId: string;
+  governedProposalId?: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
   entry?: WorkshopInteractionEntry;
 }
@@ -343,7 +345,7 @@ function interactionContextRefs(workshop: StrategyWorkshop, participantIds: stri
   return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
 }
 
-function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
+function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
   const writeAccess = useAgoraWriteAccess();
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
@@ -733,13 +735,16 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
               Loading session cards…
             </div>
           )}
-          {!sessionLoading && cardState.cards.length === 0 && (
+          {!sessionLoading && cardState.cards.length === 0 && !governedProposalId && (
             <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400 gap-2">
               <Bot className="h-10 w-10 text-slate-300" />
               <p className="text-sm font-semibold">No activity cards found</p>
               <p className="text-xs">Submit a prompt below to start the conversation with the Servant.</p>
             </div>
           )}
+          {!sessionLoading && governedProposalId ? (
+            <ConnectedGovernedProposalCard key={governedProposalId} proposalId={governedProposalId} />
+          ) : null}
           {!sessionLoading && cardState.cards
             .slice()
             .sort((a, b) => a.sequence_no - b.sequence_no)
@@ -760,7 +765,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5 text-slate-400" />
-                <strong>Subject:</strong> {workshop?.subject.kind ?? "none"} ({workshop?.subject.ref ?? "none"})
+                <strong>Subject:</strong> {workshop?.subject?.kind ?? "none"} ({workshop?.subject?.ref ?? "none"})
               </span>
               <span className="text-slate-300">•</span>
               <span>
@@ -1052,14 +1057,15 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
 // ---------------------------------------------------------------------------
 
 interface StrategyWorkshopPageProps {
+  governedProposalId?: string;
   workshopId?: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
   entry?: WorkshopInteractionEntry;
 }
 
-export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom, entry }: StrategyWorkshopPageProps): JSX.Element {
+export function StrategyWorkshopPage({ governedProposalId, workshopId, onAddToTradingRoom, entry }: StrategyWorkshopPageProps): JSX.Element {
   if (workshopId) {
-    return <WorkshopSessionView key={workshopId} workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
+    return <WorkshopSessionView governedProposalId={governedProposalId} key={workshopId} workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
   }
   return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }
