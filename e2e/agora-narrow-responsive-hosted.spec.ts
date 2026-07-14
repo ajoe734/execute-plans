@@ -142,7 +142,7 @@ async function capture(page: Page, name: string): Promise<string> {
 }
 
 async function openAndVerifyServant(page: Page, narrow: boolean): Promise<void> {
-  const trigger = page.getByRole("button", { name: "Open servant drawer" });
+  const trigger = page.getByRole("button", { name: /servant drawer/i });
   await trigger.focus();
   await trigger.click();
   const drawer = page.getByTestId("trading-desk-servant-drawer");
@@ -153,7 +153,7 @@ async function openAndVerifyServant(page: Page, narrow: boolean): Promise<void> 
     const box = await drawer.boundingBox();
     expect(box?.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
     await expect(page.getByTestId("trading-desk-main").locator("..")).toHaveAttribute("inert", "");
-    const close = drawer.getByRole("button", { name: /close/i }).first();
+    const close = drawer.getByRole("button", { name: /close|關閉/i }).first();
     await expect(close).toBeVisible();
     await expectBoxInsideViewport(page, close);
     await page.keyboard.press("Escape");
