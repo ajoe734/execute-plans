@@ -1978,6 +1978,8 @@ export default {
           boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})",
           currentState: "Current State:",
           aiFitScore: "AI Fit Score:",
+          whySelected: "僕人選出理由 (Why Selected)",
+          concerns: "疑慮與反方論點 (Concerns)",
           nextEvent: "Next Catalyst Event",
           evidenceReferences: "Evidence references",
           governedActions: "Governed Actions",
