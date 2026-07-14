@@ -30,6 +30,7 @@ DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"
+BFF_COMMIT_SOURCE="$([[ -n "${BFF_COMMIT}" ]] && echo workflow_input_or_repo_var || echo unresolved)"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -54,6 +55,11 @@ fi
 
 if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && -z "${BFF_COMMIT}" ]]; then
   echo "Manual final-proof deployment requires an exact Pantheon BFF commit SHA." >&2
+  exit 2
+fi
+
+if [[ -n "${BFF_COMMIT}" && ! "${BFF_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "Pantheon BFF commit provenance must be an exact 40-character SHA." >&2
   exit 2
 fi
 
@@ -112,7 +118,30 @@ export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
 export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
 export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
+
+if [[ -z "${BFF_COMMIT}" ]]; then
+  echo "Resolving active BFF commit from ${BFF_HOST}/bff/version..."
+  BFF_VERSION_JSON="$(curl -fsS --connect-timeout 5 "${BFF_HOST}/bff/version" || true)"
+  BFF_COMMIT="$(node -e '
+    try {
+      const payload = JSON.parse(process.argv[1]);
+      const sha = String(payload.source_commit_sha || payload.commit || "").trim();
+      if (payload.source_commit_known !== true || !/^[0-9a-f]{40}$/iu.test(sha)) process.exit(1);
+      console.log(sha);
+    } catch {
+      process.exit(1);
+    }
+  ' "${BFF_VERSION_JSON}" 2>/dev/null || true)"
+  BFF_COMMIT_SOURCE="bff_version"
+fi
+
+if [[ ! "${BFF_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "Unable to prove an exact active Pantheon BFF commit SHA; deployment is aborted." >&2
+  exit 2
+fi
+
 export PANTHEON_DEPLOY_BFF_COMMIT="${BFF_COMMIT}"
+export PANTHEON_DEPLOY_BFF_COMMIT_SOURCE="${BFF_COMMIT_SOURCE}"
 
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -126,8 +155,9 @@ const metadata = {
   sourceBranch: process.env.PANTHEON_DEPLOY_SOURCE_BRANCH,
   feHost: process.env.PANTHEON_DEPLOY_FE_HOST,
   bffHost: process.env.PANTHEON_DEPLOY_BFF_HOST,
-  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT || "unknown",
-  bffCommitEvidence: Boolean(process.env.PANTHEON_DEPLOY_BFF_COMMIT),
+  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT,
+  bffCommitEvidence: true,
+  bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE,
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",

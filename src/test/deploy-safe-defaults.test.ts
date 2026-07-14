@@ -58,10 +58,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT || "unknown"',
+      "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
     );
     expect(deployScript).toContain(
-      "bffCommitEvidence: Boolean(process.env.PANTHEON_DEPLOY_BFF_COMMIT)",
+      "bffCommitEvidence: true",
+    );
+    expect(deployScript).toContain(
+      "bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE",
     );
     expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
     expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
@@ -74,6 +77,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployWorkflow).toContain("bff_commit:");
     expect(deployWorkflow).toContain("inputs.bff_commit || vars.PANTHEON_BFF_SHA || ''");
     expect(deployScript).toContain('BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"');
+    expect(deployScript).toContain('payload.source_commit_known !== true');
+    expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
 
     const result = rejectedDeploy({
       GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -81,6 +86,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     });
     expect(result.status).toBe(2);
     expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
+
+    const abbreviated = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_BFF_COMMIT: "deadbeef",
+    });
+    expect(abbreviated.status).toBe(2);
+    expect(abbreviated.stderr).toMatch(/exact 40-character SHA/u);
   });
 
   it("keeps every post-deploy acceptance probe read-only", () => {
