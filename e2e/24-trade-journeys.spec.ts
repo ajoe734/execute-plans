@@ -41,9 +41,9 @@ test("renders all five outcomes and honest degraded detail", async ({ page }) =>
     await page.goto("/management/trade-journeys?tenant_id=tenant-a&environment=paper");
     await expect(page.getByRole("heading", { name: /Trade Journeys|交易旅程/ })).toBeVisible();
     for (const row of rows) await expect(page.getByText(row.status)).toBeVisible();
-    await expect(page.getByRole("status").filter({ hasText: "degraded data" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /degraded (?:data|資料)/i })).toBeVisible();
     await page.getByRole("link", { name: "recon-1" }).click();
-    await expect(page.getByText(/Missing ledger_booking/)).toBeVisible();
+    await expect(page.getByText(/Missing ledger_booking|缺少帳務入帳/)).toBeVisible();
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
     expect(results.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
 });

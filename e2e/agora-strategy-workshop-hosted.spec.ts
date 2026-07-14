@@ -23,6 +23,9 @@ const BFF_BASE_URL = trimTrailingSlash(
     process.env.VITE_BFF_BASE_URL ||
     "",
 );
+const IS_HOSTED_FE = Boolean(
+  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
+);
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",
@@ -175,7 +178,7 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 
 test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () => {
   test.skip(
-    !FE_BASE_URL || !BFF_BASE_URL || !AUTH_TOKEN,
+    !IS_HOSTED_FE || !BFF_BASE_URL || !AUTH_TOKEN,
     "Requires hosted FE/BFF URLs and an explicit/RBAC-matrix operator token.",
   );
   test.setTimeout(120_000);

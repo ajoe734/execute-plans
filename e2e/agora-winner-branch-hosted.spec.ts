@@ -15,6 +15,9 @@ const FE_BASE_URL =
   process.env.FRONTEND_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
   "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
+const IS_HOSTED_FE = Boolean(
+  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
+);
 const BFF_BASE_URL =
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
@@ -235,7 +238,10 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 }
 
 test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
-  test.skip(!AUTH_TOKEN, "Requires an explicit or RBAC-matrix operator token.");
+  test.skip(
+    !IS_HOSTED_FE || !AUTH_TOKEN,
+    "Requires a deployed frontend and an explicit/RBAC-matrix operator token.",
+  );
   test.setTimeout(180_000);
 
   test("live readiness cards to Trading Room workspace, widget revision, version history, and rollback", async ({
