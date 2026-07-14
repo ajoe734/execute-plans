@@ -324,15 +324,14 @@ function interactionContextRefs(workshop: StrategyWorkshop, participantIds: stri
   const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
   const strategyId = String(
     metadata.strategy_id
-      ?? session.active_strategy_spec_registry_id
       ?? session.strategy_id
       ?? "",
   ).trim();
   const strategyVersion = String(
     metadata.strategy_version
       ?? metadata.strategy_spec_registry_id
-      ?? metadata.selected_version_id
-      ?? session.selected_version_id
+      ?? metadata.active_strategy_spec_registry_id
+      ?? session.active_strategy_spec_registry_id
       ?? "",
   ).trim();
   if (strategyId && strategyVersion) refs.unshift({ type: "strategy", id: strategyId, version_id: strategyVersion });
