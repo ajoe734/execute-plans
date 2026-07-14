@@ -1126,7 +1126,11 @@ export const HumanInboxPage = () => {
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
-  const { data, loading, error = null, refresh } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const { data, loading, error = null, refresh } = useV5Live(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => clearTimeout(timer));
+  }, []);
   const sorted = useMemo(
     () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
