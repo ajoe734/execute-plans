@@ -38,6 +38,11 @@ type FixtureState = {
   unexpected: Array<{ method: string; path: string }>;
 };
 
+type FixtureOptions = {
+  rejectGovernanceMutations?: boolean;
+  roles?: string[];
+};
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Headers":
@@ -337,7 +342,10 @@ function workshopMessageCount(state: FixtureState): number {
   ).length;
 }
 
-async function installFixture(page: Page): Promise<FixtureState> {
+async function installFixture(
+  page: Page,
+  options: FixtureOptions = {},
+): Promise<FixtureState> {
   const state: FixtureState = {
     proposal: {
       governedActionLink: null,
@@ -351,7 +359,7 @@ async function installFixture(page: Page): Promise<FixtureState> {
 
   await installOidcDevLogin(page, {
     goto: false,
-    roles: ["operator", "reviewer", "approver"],
+    roles: options.roles ?? ["operator", "reviewer", "approver"],
     tenantId: "pantheon-dev",
   });
   await installQuietEventSource(page);
@@ -395,7 +403,7 @@ async function installFixture(page: Page): Promise<FixtureState> {
               locale: "en-US",
               baseCurrency: "USD",
             },
-            roles: ["ops", "viewer"],
+            roles: options.roles ?? ["operator", "reviewer", "approver"],
             capabilities: ["management.read", "persona.view", "archive"],
             env: "dev",
             featureFlags: {},
@@ -434,6 +442,22 @@ async function installFixture(page: Page): Promise<FixtureState> {
         );
       }
       if (method === "POST" && path === `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`) {
+        if (options.rejectGovernanceMutations) {
+          return json(
+            route,
+            {
+              error: {
+                code: "FORBIDDEN",
+                message: "Operator does not hold the required command role",
+                details: {
+                  precondition_failed: "role_check",
+                  reason: "Operator does not hold the required command role",
+                },
+              },
+            },
+            { status: 403 },
+          );
+        }
         const body = requestBody(request) as JsonRecord;
         if (request.headers()["if-match"] !== governedProposalEtag(state)) {
           return json(route, { detail: "proposal ETag is stale" }, { status: 412 });
@@ -881,6 +905,37 @@ test("governed proposal revision and paper validation stay review-only", async (
     status: 200,
   });
 
+  expect(state.unexpected).toEqual([]);
+  expectAuthorityNegative(state);
+});
+
+test("viewer proposal mutation fails closed without changing the revision", async ({ page }) => {
+  const state = await installFixture(page, {
+    rejectGovernanceMutations: true,
+    roles: ["viewer"],
+  });
+
+  await page.goto(
+    `/agora/strategy-workshop/${WORKSHOP_ID}?governedProposalId=${GOVERNED_PROPOSAL_ID}`,
+  );
+  const proposalCard = page.getByTestId(`governed-proposal-${GOVERNED_PROPOSAL_ID}`);
+  await expect(proposalCard).toContainText("revision 1");
+  await proposalCard.getByLabel("Decision reason").fill("Viewer bypass must fail.");
+  await proposalCard.getByRole("button", { name: "Modify" }).click();
+  await proposalCard.getByLabel("Proposed value").fill('{"liquidity_limit":1}');
+  await proposalCard.getByRole("button", { name: "Save new revision" }).click();
+
+  await expect(proposalCard.getByRole("alert")).toHaveText(
+    "You do not have permission for this governance action.",
+  );
+  await expect(proposalCard).toContainText("revision 1");
+  expect(state.proposal.revision).toBe(1);
+  const attempted = mutationRequests(
+    state,
+    `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`,
+  );
+  expect(attempted).toHaveLength(1);
+  expect(attempted[0].headers.authorization).toContain(":viewer");
   expect(state.unexpected).toEqual([]);
   expectAuthorityNegative(state);
 });

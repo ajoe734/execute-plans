@@ -33,6 +33,14 @@ on:
         options:
           - "true"
           - "false"
+      pint_hosted_probe:
+        description: "Opt in to the PINT-010-R2 paper-only hosted proposal and targeted desktop/mobile proof."
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 permissions:
   contents: read
@@ -62,6 +70,7 @@ jobs:
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
+      PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
       # at job level so unit tests can exercise hybrid/auto fallback paths.
       # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
@@ -180,6 +189,16 @@ jobs:
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
 
+      - name: PINT hosted governed-proposal smoke
+        id: pint_hosted_governance
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
+        env:
+          PANTHEON_EXPECTED_BFF_SHA: ${{ env.PANTHEON_BFF_SHA }}
+          PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+        run: |
+          set -o pipefail
+          node scripts/probe-persona-governed-proposal-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-governed-proposal.log"
+
       - name: Management live deep validation
         id: mgmt_live_deep
         continue-on-error: true
@@ -258,6 +277,13 @@ jobs:
         run: |
           set -o pipefail
           npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
+
+      - name: PINT hosted desktop/mobile E2E
+        id: pint_hosted_e2e
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
+        run: |
+          set -o pipefail
+          npx playwright test e2e/29-persona-interaction.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
       - name: Playwright E2E
         id: e2e
