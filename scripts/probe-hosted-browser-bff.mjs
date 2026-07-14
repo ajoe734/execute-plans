@@ -2,12 +2,21 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { normalizeOptionalBearerToken } from "./lib/bearer-token.mjs";
 
 const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
 const UPSTREAM_BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE);
+const BFF_TARGET = new URL(BFF_BASE);
 const OLD_BFF_URL = normalizeOldBffUrl(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");
 const FE_PATH = normalizePath(process.env.PANTHEON_HOSTED_PROBE_PATH || "/management/persona-fleet");
+const BROWSER_AUTH_TOKEN = normalizeOptionalBearerToken(
+  process.env.PANTHEON_HOSTED_BROWSER_BEARER_TOKEN
+    || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN
+    || "",
+  "Hosted browser probe credential",
+);
+const BROWSER_TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
@@ -18,6 +27,17 @@ const REQUIRED_CORE_BFF_PATHS = parsePathList(process.env.PANTHEON_HOSTED_REQUIR
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const probeStartedAt = Date.now();
+
+if (FE_PATH.includes("persona-fleet") && !BROWSER_AUTH_TOKEN) {
+  console.error(
+    "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN is required for the authenticated Persona Fleet browser probe",
+  );
+  process.exit(2);
+}
+if (/^op-fe-gate:/u.test(BROWSER_AUTH_TOKEN)) {
+  console.error("Tracked local fixture credentials are forbidden for the hosted browser probe");
+  process.exit(2);
+}
 
 function currentSha() {
   const fromEnv =
@@ -80,8 +100,14 @@ function pathnameOf(url) {
 }
 
 function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
-  const pathname = pathnameOf(url);
+  let candidate;
+  try {
+    candidate = new URL(url);
+  } catch {
+    return false;
+  }
+  if (candidate.origin !== BFF_TARGET.origin) return false;
+  const pathname = candidate.pathname;
   return pathname.startsWith("/bff/") || ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname);
 }
 
@@ -149,6 +175,15 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
 page.setDefaultNavigationTimeout(OVERALL_TIMEOUT_MS);
+if (BROWSER_AUTH_TOKEN) {
+  await page.addInitScript(
+    ({ tenantId, token }) => {
+      window.sessionStorage.setItem("pantheon.bff.bearerToken", token);
+      window.sessionStorage.setItem("pantheon.bff.tenantId", tenantId);
+    },
+    { tenantId: BROWSER_TENANT_ID, token: BROWSER_AUTH_TOKEN },
+  );
+}
 
 const requests = [];
 const responses = [];
@@ -228,13 +263,21 @@ try {
       const hasSeedFallbackArmed = /seed fallback armed/i.test(text);
       const hasFallbackStandby = /fallback standby/i.test(text);
       const hasLiveEmptyState = /Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料/i.test(text);
+      const requiredPersonaCoverage = {
+        crypto: rows.some((row) => /\bcrypto\b/i.test(row)),
+        twEquity: rows.some((row) => /\b(?:tw|taiwan)\b[^\n]*\bequity\b/i.test(row)),
+        usEquity: rows.some((row) => /\b(?:us|u\.s\.)\b[^\n]*\bequity\b/i.test(row)),
+      };
+      const hasRequiredPersonaCoverage = Object.values(requiredPersonaCoverage).every(Boolean);
+      const requiredSourceEvidence = {
+        qlib: /\bqlib\b/i.test(text),
+        shioaji: /\bshioaji\b/i.test(text),
+      };
+      const hasRequiredSourceEvidence = Object.values(requiredSourceEvidence).every(Boolean);
       const hasNonProductionRows = [
         /persona-crypto/i,
         /persona-us-equity/i,
         /persona-tw-equity/i,
-        /Crypto Persona/i,
-        /US Equity Persona/i,
-        /Taiwan Equity Persona/i,
         /Deploy Smoke Persona/i,
         /dry-run-write-probe/i,
       ].some((pattern) => pattern.test(text));
@@ -245,7 +288,15 @@ try {
         hasFallbackStandby,
         hasLiveEmptyState,
         hasNonProductionRows,
-        rowsValid: (rows.length > 0 || hasLiveEmptyState) && !hasNaN && !hasNonProductionRows,
+        hasRequiredPersonaCoverage,
+        hasRequiredSourceEvidence,
+        requiredPersonaCoverage,
+        requiredSourceEvidence,
+        rowsValid: rows.length >= 3
+          && hasRequiredPersonaCoverage
+          && hasRequiredSourceEvidence
+          && !hasNaN
+          && !hasNonProductionRows,
         liveBannerValid: !hasSeedFallbackArmed,
       };
     }).catch(() => ({
@@ -255,6 +306,10 @@ try {
       hasFallbackStandby: false,
       hasLiveEmptyState: false,
       hasNonProductionRows: false,
+      hasRequiredPersonaCoverage: false,
+      hasRequiredSourceEvidence: false,
+      requiredPersonaCoverage: { crypto: false, twEquity: false, usEquity: false },
+      requiredSourceEvidence: { qlib: false, shioaji: false },
       rowsValid: false,
       liveBannerValid: false,
     }));
@@ -279,7 +334,7 @@ const containsBffStatic = bundleText.includes(BFF_BASE) || html.includes(BFF_BAS
 const observedIntendedBff =
   requests.some((request) => isBffUrl(request.url)) ||
   responses.some((response) => isBffUrl(response.url)) ||
-  coreResponses.some((response) => response.url?.startsWith(BFF_BASE));
+  coreResponses.some((response) => response.url && isBffUrl(response.url));
 const usesIntendedBff = containsBffStatic || observedIntendedBff;
 const containsOld = Boolean(OLD_BFF_URL) && (bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL));
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
@@ -289,7 +344,16 @@ const requiredCoreResponseOk =
   REQUIRED_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
-const personaFleetOk = !personaFleetChecks || (personaFleetChecks.rowsValid && personaFleetChecks.liveBannerValid);
+const personaFleetResponseOk = !personaFleetChecks || responses.some((response) =>
+  pathnameOf(response.url) === "/bff/management/persona-fleet"
+  && response.status >= 200
+  && response.status < 300
+);
+const personaFleetOk = !personaFleetChecks || (
+  personaFleetChecks.rowsValid
+  && personaFleetChecks.liveBannerValid
+  && personaFleetResponseOk
+);
 const optionalCoreResponsesObserved =
   OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
@@ -344,6 +408,9 @@ const md = [
     `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
     `- persona fleet has live empty state: ${personaFleetChecks.hasLiveEmptyState}`,
     `- persona fleet has non-production rows: ${personaFleetChecks.hasNonProductionRows}`,
+    `- persona fleet required persona coverage: ${personaFleetChecks.hasRequiredPersonaCoverage}`,
+    `- persona fleet required source evidence: ${personaFleetChecks.hasRequiredSourceEvidence}`,
+    `- persona fleet BFF response accepted: ${personaFleetResponseOk}`,
     `- persona fleet seed fallback armed: ${personaFleetChecks.hasSeedFallbackArmed}`,
     `- persona fleet fallback standby: ${personaFleetChecks.hasFallbackStandby}`,
     `- persona fleet rows valid: ${personaFleetChecks.rowsValid}`,

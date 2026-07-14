@@ -92,6 +92,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
       );
     }
+    expect(deployWorkflow).toContain(
+      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}",
+    );
 
     const result = rejectedDeploy({
       VITE_SUPABASE_PUBLISHABLE_KEY: "",
@@ -120,6 +123,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedProbeScript).toContain('page.on("pageerror"');
     expect(hostedProbeScript).toContain("rootRendered");
     expect(hostedProbeScript).toContain("pageErrors.length === 0");
+    expect(hostedProbeScript).toContain(
+      "candidate.origin !== BFF_TARGET.origin",
+    );
+    expect(hostedProbeScript).not.toContain("url.startsWith(BFF_BASE)");
+    expect(hostedProbeScript).toContain("rows.length >= 3");
+    expect(hostedProbeScript).toContain("hasRequiredPersonaCoverage");
+    expect(hostedProbeScript).toContain("hasRequiredSourceEvidence");
+    expect(hostedProbeScript).toContain("personaFleetResponseOk");
+    expect(hostedProbeScript).toContain(
+      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN is required",
+    );
+    expect(hostedProbeScript).toContain("window.sessionStorage.setItem");
     expect(hostedPersonaSpec).toContain(
       'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
     );

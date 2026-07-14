@@ -81,6 +81,7 @@ jobs:
           PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
           PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
           GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+          PANTHEON_HOSTED_BROWSER_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: bash scripts/deploy-dev-vm.sh

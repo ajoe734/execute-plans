@@ -9,7 +9,11 @@
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin, normalizeBearerToken } from "./helpers/auth";
+import {
+  devLoginSession,
+  installOidcDevLogin,
+  normalizeBearerToken,
+} from "./helpers/auth";
 
 const FE_BASE_URL =
   process.env.PANTHEON_FE_BASE_URL ||
@@ -35,6 +39,18 @@ if (HOSTED_REQUESTED && !AUTH_TOKEN) {
   throw new Error(
     "AG-DYNUI-FULL-006 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN",
   );
+}
+if (HOSTED_REQUESTED) {
+  devLoginSession({
+    env: {
+      ...process.env,
+      PANTHEON_BFF_BASE_URL: BFF_BASE_URL,
+      PANTHEON_FE_BASE_URL: FE_BASE_URL,
+    },
+    goto: false,
+    pageBaseUrl: FE_BASE_URL,
+    token: AUTH_TOKEN,
+  });
 }
 
 const REQUIRED_CARD_TYPES = ["user_strategy_description", "completeness_update", "readiness_gate"];

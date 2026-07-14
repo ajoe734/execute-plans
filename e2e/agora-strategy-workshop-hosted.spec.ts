@@ -9,7 +9,11 @@
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin, normalizeBearerToken } from "./helpers/auth";
+import {
+  devLoginSession,
+  installOidcDevLogin,
+  normalizeBearerToken,
+} from "./helpers/auth";
 
 const FE_BASE_URL = trimTrailingSlash(
   process.env.AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL ||
@@ -37,6 +41,18 @@ if (HOSTED_REQUESTED && !AUTH_TOKEN) {
   throw new Error(
     "AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN",
   );
+}
+if (HOSTED_REQUESTED) {
+  devLoginSession({
+    env: {
+      ...process.env,
+      PANTHEON_BFF_BASE_URL: BFF_BASE_URL,
+      PANTHEON_FE_BASE_URL: FE_BASE_URL,
+    },
+    goto: false,
+    pageBaseUrl: FE_BASE_URL,
+    token: AUTH_TOKEN,
+  });
 }
 const RAW_UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
 const VIEWPORTS = [

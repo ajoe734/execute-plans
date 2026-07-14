@@ -26,6 +26,12 @@ const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
 // the workflow provisions Chromium separately before its Playwright phase.
 const chromiumInstalled = existsSync(chromium.executablePath());
 
+function syntheticSupabaseJwt(role: string): string {
+  const encode = (value: Record<string, string>) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ role })}.synthetic-signature`;
+}
+
 function filesRecursively(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = `${directory}/${entry.name}`;
@@ -47,12 +53,24 @@ describe("public frontend build auth boundary", () => {
       publishableKey: "sb_publishable_test-key",
       url: "https://project.supabase.example",
     });
+    const legacyAnonKey = syntheticSupabaseJwt("anon");
+    expect(validatePublicSupabaseConfig(
+      "https://project.supabase.example",
+      legacyAnonKey,
+    )).toEqual({
+      publishableKey: legacyAnonKey,
+      url: "https://project.supabase.example",
+    });
     for (const [url, publishableKey] of [
       [undefined, "sb_publishable_test-key"],
       ["https://project.supabase.example", undefined],
       [" project.supabase.example", "sb_publishable_test-key"],
       ["ftp://project.supabase.example", "sb_publishable_test-key"],
+      ["https://user:password@project.supabase.example", "sb_publishable_test-key"],
       ["https://project.supabase.example", "sb_secret_service-role-key"],
+      ["https://project.supabase.example", syntheticSupabaseJwt("service_role")],
+      ["https://project.supabase.example", syntheticSupabaseJwt("authenticated")],
+      ["https://project.supabase.example", "not.a.valid-jwt"],
     ] as const) {
       expect(() => validatePublicSupabaseConfig(url, publishableKey)).toThrow(
         /VITE_SUPABASE_(?:URL|PUBLISHABLE_KEY)/,
@@ -600,6 +618,50 @@ describe("public frontend build auth boundary", () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toMatch(/explicit short-lived BFF_AUTH_TOKEN|short-lived BFF_AUTH_TOKEN/);
+  }, 30_000);
+
+  it.each([
+    {
+      name: "Agora hosted workshop",
+      script: "e2e/agora-strategy-workshop-hosted.spec.ts",
+      optIn: {
+        AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL: "https://fe.example.test",
+        AG_DYNUI_LIVE_WORKSHOP_FE_013_BFF_BASE_URL: "https://bff.example.test",
+      },
+    },
+    {
+      name: "Agora winner branch",
+      script: "e2e/agora-winner-branch-hosted.spec.ts",
+      optIn: {
+        AG_DYNUI_FULL_006_HOSTED: "1",
+        PANTHEON_FE_BASE_URL: "https://fe.example.test",
+        PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+      },
+    },
+  ])("rejects the tracked fixture token in $name before any hosted request", ({ script, optIn }) => {
+    const env = {
+      ...process.env,
+      PANTHEON_HOSTED_E2E: "",
+      BFF_AUTH_TOKEN: LOCAL_FIXTURE_AUTH_TOKEN,
+      ...optIn,
+    };
+    for (const key of [
+      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+      "PANTHEON_BFF_SMOKE_TOKEN",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      delete env[key];
+    }
+    const result = spawnSync(
+      "npx",
+      ["playwright", "test", script, "--list", "--reporter=line"],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /LOCAL_FIXTURE_AUTH_TOKEN.*loopback-only E2E target/,
+    );
   }, 30_000);
 
   it.each([

@@ -85,8 +85,12 @@ Do not say "published to dev" unless all of these are true:
   reports that SHA;
 - the deployed-host browser/BFF probe passed against `/management/persona-fleet`.
 
-The deployed-host probe must show Persona Fleet rows for US/TW/Crypto, shioaji
-/ qlib source evidence, no `NaN`, no old BFF URL, and no armed seed fallback.
+The deployed-host probe receives `PANTHEON_BFF_SMOKE_BEARER_TOKEN` only at
+runtime as `PANTHEON_HOSTED_BROWSER_BEARER_TOKEN`; it is written to the
+ephemeral browser session and is never embedded in the static build. The probe
+must show Persona Fleet rows for US/TW/Crypto, shioaji / qlib source evidence,
+a successful Persona Fleet BFF response, no `NaN`, no old BFF URL, and no armed
+seed fallback. A missing runtime credential or live empty state fails closed.
 
 ## Rollback
 

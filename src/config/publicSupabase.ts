@@ -9,6 +9,28 @@ function required(name: string): Error {
   );
 }
 
+function invalidPublishableKey(): Error {
+  return new Error(
+    "VITE_SUPABASE_PUBLISHABLE_KEY must contain only a Supabase publishable key or legacy anon key; secret and service-role keys are forbidden",
+  );
+}
+
+function legacyJwtRole(value: string): string | null {
+  const segments = value.split(".");
+  if (segments.length !== 3) return null;
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(segments[1], "base64url").toString("utf8"),
+    ) as unknown;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+    const role = (payload as Record<string, unknown>).role;
+    return typeof role === "string" ? role : "";
+  } catch {
+    return "";
+  }
+}
+
 export function validatePublicSupabaseConfig(
   url: string | undefined,
   publishableKey: string | undefined,
@@ -31,10 +53,19 @@ export function validatePublicSupabaseConfig(
   if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
     throw new Error("VITE_SUPABASE_URL must be an absolute http(s) URL");
   }
-  if (/^sb_secret_/iu.test(publishableKey)) {
-    throw new Error(
-      "VITE_SUPABASE_PUBLISHABLE_KEY must not contain a Supabase secret key",
-    );
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error("VITE_SUPABASE_URL must not contain credentials");
+  }
+
+  const legacyRole = legacyJwtRole(publishableKey);
+  const modernPublishable = /^sb_publishable_[A-Za-z0-9_-]+$/u.test(
+    publishableKey,
+  );
+  if (
+    /^sb_secret_/iu.test(publishableKey)
+    || (!modernPublishable && legacyRole !== "anon")
+  ) {
+    throw invalidPublishableKey();
   }
 
   return { publishableKey, url };
