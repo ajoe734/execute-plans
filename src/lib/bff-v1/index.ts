@@ -33,5 +33,8 @@ export * from "./managementConsoleReads";
 export * from "./shellSummary";
 // AG-XR-002 — generated Agora v1 schema/OpenAPI contract types.
 export * from "./agora/types";
+export * from "./agora/governance";
 // 2026-07-11 Persona Trade Journal.
 export * from "./tradeJournal";
+// 2026-07-12 Agora Interactions.
+export * from "./agora/interaction";

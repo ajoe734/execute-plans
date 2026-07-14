@@ -18,7 +18,7 @@ on:
         required: false
         default: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
       bff_sha:
-        description: "Optional exact expected live BFF SHA; unknown or mismatch fails the gate"
+        description: "Pantheon backend/BFF SHA"
         required: false
         default: ""
       pantheon_contract_ref:
@@ -39,14 +39,6 @@ permissions:
   issues: write
   pull-requests: write
 
-# Every integration run exercises the same mutable dev BFF. Keep PR and push
-# candidates from overloading that shared live surface. An exact dev push is
-# the release truth, so it supersedes an older PR run; all other runs queue and
-# never cancel that exact-SHA dev gate.
-concurrency:
-  group: pantheon-fe-bff-integration-live
-  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-
 jobs:
   integration-gate:
     runs-on: ubuntu-latest
@@ -65,10 +57,7 @@ jobs:
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/persona-fleet"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
-      # Only workflow_dispatch may provide an optional expectation. Push gates
-      # must never inherit a stale repository variable: live /bff/version is
-      # the release identity source of truth and must be known/exact.
-      PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha || '' }}
+      PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -110,28 +99,6 @@ jobs:
         run: |
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
-
-      - name: Resolve exact live BFF release identity
-        id: release_identity
-        run: |
-          set -euo pipefail
-          version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version.json"
-          identity_file="$PANTHEON_AUDIT_OUT_DIR/release-identity.json"
-          curl --fail --silent --show-error --location \
-            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-            "${PANTHEON_BFF_BASE_URL%/}/bff/version" > "$version_file"
-          bff_sha="$(node scripts/release-identity.mjs create \
-            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
-            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
-            --version-file "$version_file" \
-            --expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA" \
-            --gate-run-id "$GITHUB_RUN_ID" \
-            --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
-            --output "$identity_file")"
-          echo "PANTHEON_BFF_SHA=${bff_sha}" >> "$GITHUB_ENV"
-          echo "PANTHEON_RELEASE_IDENTITY_FILE=${identity_file}" >> "$GITHUB_ENV"
-          echo "bff_sha=${bff_sha}" >> "$GITHUB_OUTPUT"
-          echo "Exact release identity: FE ${PANTHEON_FRONTEND_SHA}, BFF ${bff_sha}"
 
       - name: Install
         id: install
@@ -323,7 +290,6 @@ jobs:
         run: |
           cat > "$PANTHEON_AUDIT_OUT_DIR/release-gate-step-outcomes.json" <<JSON
           {
-            "release_identity": { "outcome": "${{ steps.release_identity.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-identity.json" },
             "install": { "outcome": "${{ steps.install.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-ci.log" },
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
@@ -370,15 +336,6 @@ jobs:
             pantheon-audits/current-run
             playwright-report
             test-results
-
-      - name: Upload exact release identity
-        if: always() && steps.release_identity.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pantheon-release-identity
-          if-no-files-found: error
-          include-hidden-files: true
-          path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-identity.json
 
       - name: Comment release gate on PR
         if: always() && github.event_name == 'pull_request'

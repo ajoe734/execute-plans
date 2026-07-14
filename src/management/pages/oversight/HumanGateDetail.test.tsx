@@ -72,7 +72,7 @@ function readinessBlockerDetail(): HumanInboxDetail {
   };
 }
 
-function promotionReviewDetail(overrides: Partial<HumanInboxDetail> = {}): HumanInboxDetail {
+function promotionReviewDetail(): HumanInboxDetail {
   return {
     id: "promotion_review:review-persona-paper-1",
     kind: "promotion_review",
@@ -107,7 +107,6 @@ function promotionReviewDetail(overrides: Partial<HumanInboxDetail> = {}): Human
     evidenceRefs: ["evidence:persona-paper-1:paper-score"],
     decisionHistory: [],
     auditRefs: [],
-    ...overrides,
   };
 }
 
@@ -221,46 +220,6 @@ describe("HumanGateDetailPage", () => {
     });
     expect(refresh).toHaveBeenCalled();
     expect(toastMocks.success).toHaveBeenCalledWith("Decision recorded: approved");
-  });
-
-  it.each([
-    [
-      "paper-to-canary",
-      {
-        reviewKind: "paper_to_canary_review",
-        reviewType: undefined,
-        actionId: "promote_to_canary_candidate",
-      } satisfies Partial<HumanInboxDetail>,
-      "Approve Canary",
-    ],
-    [
-      "canary-to-live",
-      {
-        reviewKind: "canary_to_live_review",
-        reviewType: undefined,
-        actionId: "promote_to_canary_candidate",
-      } satisfies Partial<HumanInboxDetail>,
-      "Approve Live",
-    ],
-    [
-      "risk containment",
-      {
-        reviewKind: "risk_containment_review",
-        reviewType: undefined,
-        actionId: "reduce_capital_access",
-      } satisfies Partial<HumanInboxDetail>,
-      "Approve Reduce capital access",
-    ],
-  ])("uses the governed %s approval label", (_semantic, overrides, expectedLabel) => {
-    mocks.useV5Live.mockReturnValue({
-      data: promotionReviewDetail(overrides),
-      loading: false,
-      refresh: vi.fn(),
-    });
-
-    renderDetail("promotion_review:review-persona-paper-1");
-
-    expect(screen.getByRole("button", { name: expectedLabel })).toBeInTheDocument();
   });
 
   it("shows write-disabled feedback when promotion decision is local-only", async () => {

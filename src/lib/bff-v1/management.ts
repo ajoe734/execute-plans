@@ -32,8 +32,6 @@ import {
   type HumanInboxDetail,
   type HumanInboxItem,
   type HumanInboxKind,
-  type HumanInboxListState,
-  type HumanInboxSurfaceState,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -2476,24 +2474,7 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 
 // ---------- PM-6 Human Inbox ----------
 
-const unavailableHumanInbox = (): HumanInboxListState => ({
-  items: [],
-  surface: {
-    status: "unavailable",
-    source: "strict_live_not_active",
-    message: "Human Inbox live data is unavailable.",
-  },
-  partial: true,
-});
-const humanInboxBoundedSignal = (): { signal?: AbortSignal; cancel: () => void } => {
-  if (typeof AbortController === "undefined") return { cancel: () => undefined };
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), 8_000);
-  return {
-    signal: controller.signal,
-    cancel: () => globalThis.clearTimeout(timer),
-  };
-};
+const emptyHumanInbox = (): HumanInboxItem[] => [];
 const missingHumanInboxDetail = (): HumanInboxDetail | undefined => undefined;
 
 export type PromotionReviewDecisionValue = "approve" | "approve_with_conditions" | "reject";
@@ -2551,14 +2532,6 @@ export interface RankingRecommendationSubmitResult {
 const asOptionalString = (raw: unknown): string | undefined => {
   const value = asString(raw);
   return value ? value : undefined;
-};
-
-const firstOptionalString = (...values: unknown[]): string | undefined => {
-  for (const value of values) {
-    const normalized = asOptionalString(value);
-    if (normalized) return normalized;
-  }
-  return undefined;
 };
 
 const asInboxStringList = (raw: unknown): string[] => {
@@ -2686,128 +2659,10 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
   return "";
 };
 
-interface InboxPromotionSemantics {
-  reviewId?: string;
-  reviewKind?: string;
-  reviewType?: string;
-  actionId?: string;
-  personaId?: string;
-}
-
-/**
- * Promotion rows have shipped in several compatible envelopes. The Human
- * Inbox projection owns top-level fields, while detail/list responses may
- * also retain the canonical review under `promotion_review` and its stage
- * semantics under `promotion_path`. Keep all of those shapes truth-bearing so
- * a risk-containment review never falls through to a Canary CTA.
- */
-const inboxPromotionSemantics = (it: Record<string, unknown>): InboxPromotionSemantics => {
-  const promotionContext = isObject(it.promotionContext)
-    ? it.promotionContext
-    : isObject(it.promotion_context)
-    ? it.promotion_context
-    : {};
-  const promotionReview = isObject(it.promotionReview)
-    ? it.promotionReview
-    : isObject(it.promotion_review)
-    ? it.promotion_review
-    : {};
-  const topLevelPath = isObject(it.promotionPath)
-    ? it.promotionPath
-    : isObject(it.promotion_path)
-    ? it.promotion_path
-    : {};
-  const nestedPath = isObject(promotionReview.promotionPath)
-    ? promotionReview.promotionPath
-    : isObject(promotionReview.promotion_path)
-    ? promotionReview.promotion_path
-    : {};
-  const sourceRecommendation = isObject(promotionReview.sourceRecommendation)
-    ? promotionReview.sourceRecommendation
-    : isObject(promotionReview.source_recommendation)
-    ? promotionReview.source_recommendation
-    : {};
-  const submission = isObject(promotionReview.submission) ? promotionReview.submission : {};
-
-  const reviewKind = firstOptionalString(
-    it.reviewKind,
-    it.review_kind,
-    it.reviewType,
-    it.review_type,
-    promotionContext.reviewKind,
-    promotionContext.review_kind,
-    promotionContext.reviewType,
-    promotionContext.review_type,
-    promotionReview.reviewKind,
-    promotionReview.review_kind,
-    promotionReview.reviewType,
-    promotionReview.review_type,
-    topLevelPath.reviewKind,
-    topLevelPath.review_kind,
-    nestedPath.reviewKind,
-    nestedPath.review_kind,
-  );
-  const reviewType = firstOptionalString(
-    it.reviewType,
-    it.review_type,
-    promotionContext.reviewType,
-    promotionContext.review_type,
-    promotionReview.reviewType,
-    promotionReview.review_type,
-    reviewKind,
-  );
-  return {
-    reviewId: firstOptionalString(
-      it.reviewId,
-      it.review_id,
-      it.promotionReviewId,
-      it.promotion_review_id,
-      promotionReview.reviewId,
-      promotionReview.review_id,
-      promotionReview.promotionReviewId,
-      promotionReview.promotion_review_id,
-      promotionReview.id,
-      it.source_id,
-    ),
-    reviewKind,
-    reviewType,
-    actionId: firstOptionalString(
-      it.actionId,
-      it.action_id,
-      it.recommendationActionId,
-      it.recommendation_action_id,
-      promotionContext.actionId,
-      promotionContext.action_id,
-      promotionReview.actionId,
-      promotionReview.action_id,
-      promotionReview.recommendationActionId,
-      promotionReview.recommendation_action_id,
-      sourceRecommendation.actionId,
-      sourceRecommendation.action_id,
-      submission.recommendationActionId,
-      submission.recommendation_action_id,
-    ),
-    personaId: firstOptionalString(
-      it.personaId,
-      it.persona_id,
-      promotionContext.personaId,
-      promotionContext.persona_id,
-      promotionReview.personaId,
-      promotionReview.persona_id,
-      sourceRecommendation.personaId,
-      sourceRecommendation.persona_id,
-    ),
-  };
-};
-
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
-  const promotion = inboxPromotionSemantics(it);
-  const hasPromotionEnvelope = isObject(it.promotionContext) || isObject(it.promotion_context) ||
-    isObject(it.promotionReview) || isObject(it.promotion_review);
-  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType ??
-    (hasPromotionEnvelope ? "promotion_review" : undefined);
+  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType;
   const kind = normalizeInboxKind(rawKind);
-  const fallbackReviewId = asString(promotion.reviewId);
+  const fallbackReviewId = asString(it.reviewId ?? it.review_id ?? it.source_id);
   const id = asString(
     it.id ?? it.inbox_id ?? it.inboxId,
     kind === "promotion_review" && fallbackReviewId ? `promotion_review:${fallbackReviewId}` : "",
@@ -2822,11 +2677,9 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     it.canProceed ?? it.can_proceed,
     actionState ? !actionStateBlocksProceed(actionState) : true,
   );
-  const personaId = promotion.personaId;
-  const reviewId = promotion.reviewId;
-  const reviewKind = promotion.reviewKind;
-  const reviewType = promotion.reviewType;
-  const actionId = promotion.actionId;
+  const personaId = asOptionalString(it.personaId ?? it.persona_id);
+  const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
+  const reviewType = asOptionalString(it.reviewType ?? it.review_type);
   const sourceId = asOptionalString(it.sourceId ?? it.source_id ?? reviewId);
   const decisionHref = asOptionalString(it.decisionHref ?? it.decision_href);
   const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
@@ -2850,9 +2703,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     sourceId,
     personaId,
     reviewId,
-    reviewKind,
     reviewType,
-    actionId,
     decisionHref,
     allowedActions,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,
@@ -2906,52 +2757,9 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxItem[] | null {
   const arr =
     asArray<Record<string, unknown>>(data) ??
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
-  if (!arr || !arr.every(isObject)) return null;
-  const items = arr.map(adaptInboxRecord);
-  return items.every((item): item is HumanInboxItem => item !== null) ? items : null;
-}
-
-const adaptHumanInboxSurface = (raw: unknown): HumanInboxSurfaceState => {
-  if (!isObject(raw)) {
-    return {
-      status: "degraded",
-      source: "missing_surface_metadata",
-      message: "Human Inbox response did not include authoritative surface metadata.",
-    };
-  }
-  const status = asString(raw.status).toLowerCase();
-  const normalizedStatus: HumanInboxSurfaceState["status"] =
-    status === "ok" || status === "degraded" || status === "unavailable"
-      ? status
-      : "degraded";
-  const staleness = isObject(raw.staleness) ? raw.staleness : undefined;
-  const servedFrom = staleness
-    ? asOptionalString(staleness.servedFrom ?? staleness.served_from)
-    : undefined;
-  const lastKnownAt = staleness
-    ? asOptionalString(staleness.lastKnownAt ?? staleness.last_known_at)
-    : undefined;
-  return {
-    status: normalizedStatus,
-    source: asOptionalString(raw.source),
-    message: asOptionalString(raw.message),
-    reason: asOptionalString(raw.reason),
-    staleness: servedFrom || lastKnownAt ? { servedFrom, lastKnownAt } : undefined,
-  };
-};
-
-export function adaptHumanInboxListState(raw: unknown): HumanInboxListState | null {
-  const items = adaptHumanInboxList(raw);
-  if (items === null) return null;
-  const root = isObject(raw) ? raw : {};
-  const meta = isObject(root.meta) ? root.meta : {};
-  const surfaces = isObject(meta.surfaces) ? meta.surfaces : {};
-  return {
-    items,
-    surface: adaptHumanInboxSurface(surfaces.human_inbox),
-    snapshotAt: asOptionalString(meta.snapshotAt ?? meta.snapshot_at),
-    partial: asBoolean(meta.partial, false),
-  };
+  if (!arr) return null;
+  const items = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
+  return items.length ? items : null;
 }
 export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
@@ -3018,6 +2826,14 @@ const normalizeGovernanceDestinations = (destinations?: string[]): string[] => {
     ? destinations
     : [...RANKING_RECOMMENDATION_GOVERNANCE_DESTINATIONS];
   return Array.from(new Set(raw.map((item) => asString(item)).filter(Boolean)));
+};
+
+const firstOptionalString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    const text = asOptionalString(value);
+    if (text) return text;
+  }
+  return undefined;
 };
 
 const promotionReviewInboxId = (reviewId?: string): string | undefined => {
@@ -3991,33 +3807,18 @@ export const mgmt = {
   },
 
   humanInbox: {
-    listWithStatus: async (): Promise<HumanInboxListState> => {
+    list: (): Promise<HumanInboxItem[]> => {
       // Human Inbox is a strict-live surface. Revalidate it independently when
       // entering the page so a transient failure from a previously visited
       // surface cannot leave a stale fail-closed banner over a successful
       // inbox response. A failure from this request reports fallback again.
       liveStatus.retry();
-      const bounded = humanInboxBoundedSignal();
-      try {
-        return await withStrictLiveOrMock<HumanInboxListState, unknown>(
-          {
-            method: "GET",
-            path: paths.mgmtHumanInbox(),
-            signal: bounded.signal,
-          },
-          async () => unavailableHumanInbox(),
-          (raw) => {
-            const state = adaptHumanInboxListState(raw);
-            if (!state) throw new Error("Human Inbox response did not contain a valid item list");
-            return state;
-          },
-        );
-      } finally {
-        bounded.cancel();
-      }
+      return withStrictLiveOrMock<HumanInboxItem[], unknown>(
+        { method: "GET", path: paths.mgmtHumanInbox() },
+        async () => emptyHumanInbox(),
+        (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
+      );
     },
-    list: async (): Promise<HumanInboxItem[]> =>
-      (await mgmt.humanInbox.listWithStatus()).items,
     get: (id: string): Promise<HumanInboxDetail | undefined> =>
       withStrictLiveOrMock<HumanInboxDetail | undefined, unknown>(
         { method: "GET", path: paths.mgmtHumanInboxItem(id) },
@@ -4296,6 +4097,23 @@ export const mgmt = {
         },
         adaptPortfolioHoldingsMonitor,
       ),
+    monitor: (filters: PortfolioHoldingFilters, seedFn: () => PortfolioHoldingsMonitor): Promise<PortfolioHoldingsMonitor> =>
+      withLiveOrMock<PortfolioHoldingsMonitor>(
+        {
+          method: "GET",
+          path: paths.mgmtPortfolioHoldings({
+            deployment_stage: filters.deploymentStage,
+            broker_id: filters.brokerId,
+            runtime_id: filters.runtimeId,
+            source_status: filters.sourceStatus,
+            stale_telemetry: filters.staleTelemetry,
+            risk_state: filters.riskState,
+            capital_pool_id: filters.capitalPoolId,
+            persona_id: filters.personaId,
+          }),
+        },
+        async () => seedFn(), safeAdapt(adaptPortfolioHoldingsMonitor, seedFn),
+      ),
   },
 
   personaLeague: {
@@ -4333,9 +4151,9 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
-    listLiveOnly: (quarter?: string, persona?: string): Promise<QuarterlyRankingRow[]> =>
+    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, persona) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
         adaptQuarterlyRankingRows,
       ),
     list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>

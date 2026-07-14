@@ -204,7 +204,22 @@ export function chartRendererForKind(kind: ChartSpecKind): "builtin" | "echarts"
   return "echarts";
 }
 
-export function validateChartSpecGrammar(chartSpec: ChartSpecV1): WidgetRegistryValidationFailure | null {
+// Structural subset of ChartSpecV1 covering only the fields this grammar
+// check reads. Two independent ChartSpecV1 declarations exist in this
+// codebase (the generated agora contract schema in `agora/types.ts`, and the
+// hand-authored trading-room dashboard type in `agora/tradingRoomTypes.ts`);
+// they agree on these fields but diverge elsewhere (e.g. click_action payload
+// vs params), so this function accepts the common structural shape instead of
+// forcing every caller to pick (and cast into) one nominal type.
+interface ChartSpecGrammarInput {
+  spec_version: unknown;
+  kind: unknown;
+  encodings?: Record<string, unknown>;
+  transforms?: Array<{ type: unknown }>;
+  click_action?: { kind: unknown } | null;
+}
+
+export function validateChartSpecGrammar(chartSpec: ChartSpecGrammarInput): WidgetRegistryValidationFailure | null {
   if (chartSpec.spec_version !== "1.0") {
     return {
       code: "UNAPPROVED_CHART_KIND",

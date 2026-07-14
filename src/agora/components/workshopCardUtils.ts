@@ -90,6 +90,9 @@ export function cardTypeLabel(type: WorkshopCardType): string {
     version_patch_proposal: "Version Patch",
     version_compare: "Version Compare",
     readiness_gate: "Readiness Gate",
+    persona_opinion: "Persona Opinion",
+    opinion: "Persona Opinion",
+    debate: "Debate",
   };
   return labels[type] ?? formatLabel(type);
 }
