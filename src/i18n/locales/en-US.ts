@@ -1620,6 +1620,38 @@ export default {
       attributionOnly: "attribution only",
       missingAttribution: "missing attribution",
       unlinkedTelemetry: "Aggregates telemetry that the BFF could not link to a named Trading Room strategy.",
+      strategyList: "Strategy List",
+      cumulativePnl: "Cumulative Return",
+      holding: "Holding",
+      tradesCount: "Trades",
+      aiVerdictLabel: "AI Verdict",
+      needsAdjust: "Needs Adjust",
+      overview: "Performance",
+      interventionTracking: "Interventions",
+      executionHistory: "Execution History",
+      complianceOverview: "Compliance vs Intervention",
+      aiAcceptedSubsequent: "After AI Proposal Applied",
+      aiRejectedSubsequent: "After AI Proposal Rejected (Counterfactual)",
+      avgSubsequentReturns: "Avg subsequent return · {{count}} items",
+      counterfactualSubsequent: "Est. counterfactual return · {{count}} items",
+      recentInterventions: "Outcome of Last 20 Candidates",
+      interventionFocus: "Analysis Focus: Where trader deviated and whether performance improved or deteriorated.",
+      assistantNotes: "Assistant Notes",
+      adjustSuggestions: "Adjustment Suggestions",
+      apply: "Apply",
+      sendToWorkshop: "Send to Workshop",
+      skip: "Skip",
+      applied: "Applied",
+      anomaly: "Exception",
+      noAnomaly: "No active execution exceptions",
+      date: "Date",
+      stock: "Stock",
+      strategyAdvice: "Strategy Advice",
+      actualAction: "Actual Action",
+      deviate: "Deviation",
+      result: "Result",
+      decisionSupportOnly: "This table presents decision-support states only; no broker execution is implied.",
+      periodLabel: "Period",
     },
     workshop: {
       defaultTitle: "Strategy workshop",
@@ -1823,7 +1855,8 @@ export default {
           freshnessLabel: "Freshness: {{time}}",
           candidateShort: "Cand: {{count}}",
           heldShort: "Mon: {{count}}",
-          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)"
+          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)",
+          recipeSampleBadge: "DASHBOARD RECIPE DATA: SAMPLE ONLY"
         },
         dashboard: {
           recipeA: {
@@ -1833,9 +1866,13 @@ export default {
           },
           recipeB: {
             hypothesisTitle: "Active Hypothesis",
+            hypothesisNarrative: "AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE.",
             timelineTitle: "Catalyst Event Timeline",
             scatterTitle: "Sector Relative-Return Scatter",
-            chainTitle: "Supply Chain & Laggards Map"
+            chainTitle: "Supply Chain & Laggards Map",
+            siliconWafers: "Silicon Wafers",
+            substrates: "Substrates",
+            aiGpu: "AI GPU"
           },
           recipeC: {
             resistanceTitle: "Breakout Resistance Levels",
@@ -1937,7 +1974,13 @@ export default {
           state: "State",
           action: "Action",
           noCandidates: "No candidates in this state. Try changing the lifecycle state filter.",
-          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})"
+          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})",
+          currentState: "Current State:",
+          aiFitScore: "AI Fit Score:",
+          nextEvent: "Next Catalyst Event",
+          evidenceReferences: "Evidence references",
+          governedActions: "Governed Actions",
+          loading: "Loading candidates..."
         }
       },
       errors: {
