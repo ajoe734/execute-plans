@@ -280,7 +280,7 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
             </div>
           </aside>
           <section className="min-h-0 overflow-hidden" data-testid="selected-workshop-runtime">
-            <WorkshopSessionView workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
+            <WorkshopSessionView key={selectedWorkshopId} workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
           </section>
         </div>
       )}
@@ -392,22 +392,22 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
 
     Promise.all([
       getWorkshop(workshopId)
-        .then((ws) => { if (!cancelled) setWorkshop(ws); })
-        .catch(() => undefined),
+        .then((ws) => { if (!cancelled) setWorkshop(ws || null); })
+        .catch(() => { if (!cancelled) setWorkshop(null); }),
       getWorkshopCompleteness(workshopId)
-        .then((c) => { if (!cancelled && c) setCompleteness(c); })
-        .catch(() => undefined),
+        .then((c) => { if (!cancelled) setCompleteness(c || null); })
+        .catch(() => { if (!cancelled) setCompleteness(null); }),
       getWorkshopReadiness(workshopId)
-        .then((r) => { if (!cancelled && r) setReadiness(r); })
-        .catch(() => undefined),
+        .then((r) => { if (!cancelled) setReadiness(r || null); })
+        .catch(() => { if (!cancelled) setReadiness(null); }),
       listWorkshopCards(workshopId)
         .then((items) => {
-          if (!cancelled) dispatch({ type: "RESET", cards: items });
+          if (!cancelled) dispatch({ type: "RESET", cards: items || [] });
         })
-        .catch(() => undefined),
+        .catch(() => { if (!cancelled) dispatch({ type: "RESET", cards: [] }); }),
       listWorkshopEvents(workshopId)
-        .then((response) => { if (!cancelled) setWorkshopEvents(response.items ?? []); })
-        .catch(() => undefined),
+        .then((response) => { if (!cancelled) setWorkshopEvents(response?.items ?? []); })
+        .catch(() => { if (!cancelled) setWorkshopEvents([]); }),
     ]).finally(() => {
       if (!cancelled) setSessionLoading(false);
     });
@@ -456,14 +456,14 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
     getWorkshopCompleteness(workshopId)
-      .then((c) => { if (c) setCompleteness(c); })
-      .catch(() => undefined);
+      .then((c) => { setCompleteness(c || null); })
+      .catch(() => { setCompleteness(null); });
   }, [workshopId]);
 
   const refreshReadiness = useCallback(() => {
     getWorkshopReadiness(workshopId)
-      .then((r) => { if (r) setReadiness(r); })
-      .catch(() => undefined);
+      .then((r) => { setReadiness(r || null); })
+      .catch(() => { setReadiness(null); });
   }, [workshopId]);
 
   const refreshCards = useCallback(() => {
@@ -1065,7 +1065,7 @@ interface StrategyWorkshopPageProps {
 
 export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom, entry }: StrategyWorkshopPageProps): JSX.Element {
   if (workshopId) {
-    return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
+    return <WorkshopSessionView key={workshopId} workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
   }
   return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }
