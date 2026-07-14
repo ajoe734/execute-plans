@@ -889,6 +889,9 @@ function StrategyWorkspaceView({
               initialWorkspace={workspaceResult.workspace}
               onWorkspaceChange={setWorkspaceResult}
               strategy={strategy}
+              workspaceEvents={events}
+              riskSummary={aggregate?.risk_summary}
+              dataCutoff={aggregate?.data_cutoff}
               onBackToWorkshop={onBackToWorkshop}
               onSwitchStrategy={onSwitchStrategy}
             />

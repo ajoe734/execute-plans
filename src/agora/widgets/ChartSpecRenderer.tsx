@@ -184,36 +184,36 @@ function ChartNotice({
   widgetType?: string;
   dataSource?: string;
 }) {
-  let statusLabel = "AWAITING DATA";
-  let statusColor = "#f0b84d";
+  let statusLabel = "DATA UNAVAILABLE";
+  let statusColor = "#8c96a6";
   let icon = "⚡";
   let detailedDescription = message;
 
   if (widgetType === "strategy_status_summary" || widgetType === "research_progress") {
-    statusLabel = "SYSTEM HEALTHY";
-    statusColor = "#56d98b";
+    statusLabel = "AWAITING TELEMETRY";
+    statusColor = "#8c96a6";
     icon = "✓";
-    detailedDescription = "All research streams synchronized. OOS stability check: 0.98. Integrity: green.";
+    detailedDescription = "No status summary or progress logs have been synchronized.";
   } else if (widgetType === "candidate_funnel" || widgetType === "candidate_ranking_table") {
-    statusLabel = "MONITORING ACTIVE";
-    statusColor = "#e8b750";
+    statusLabel = "NO CANDIDATES";
+    statusColor = "#8c96a6";
     icon = "🔍";
-    detailedDescription = "Awaiting candidate signals. No active candidates currently exceed score threshold.";
-  } else if (widgetType?.includes("branch") || widgetType?.includes("winner")) {
+    detailedDescription = "Awaiting candidate monitoring telemetry from BFF.";
+  } else if (widgetType?.includes("branch") || widgetType?.includes("winner") || widgetType === "confidence_decomposition") {
     statusLabel = "AWAITING DISCLOSURES";
     statusColor = "#8c96a6";
     icon = "📊";
-    detailedDescription = "Awaiting winner branch trade disclosures. Estimating relationship confidence...";
+    detailedDescription = "Winner branch scoring and relationship indicators are not available.";
   } else if (widgetType?.includes("migration") || widgetType?.includes("network")) {
-    statusLabel = "NO MIGRATIONS DETECTED";
+    statusLabel = "MIGRATIONS UNAVAILABLE";
     statusColor = "#8c96a6";
     icon = "🔗";
-    detailedDescription = "No active capital migrations. Cluster network remains stable.";
+    detailedDescription = "No capital migration metrics or network topology data are active.";
   } else if (widgetType?.includes("event") || widgetType === "catalyst_timeline") {
-    statusLabel = "MONITORING WINDOW ACTIVE";
-    statusColor = "#56d98b";
+    statusLabel = "TIMELINE UNAVAILABLE";
+    statusColor = "#8c96a6";
     icon = "📅";
-    detailedDescription = "No upcoming catalysts in the 60-day window. Continuous monitoring active.";
+    detailedDescription = "No event lead times or catalyst timelines have been synchronized.";
   } else if (
     widgetType === "position_action_queue" ||
     widgetType === "expected_value_distribution" ||
@@ -225,17 +225,12 @@ function ChartNotice({
     statusLabel = "NO ACTIVE POSITIONS";
     statusColor = "#8c96a6";
     icon = "💼";
-    detailedDescription = "No open positions or active decision events recorded for this strategy version.";
+    detailedDescription = "No active positions, sizing events, or decision queues have been loaded.";
   } else if (widgetType === "evidence_trace" || widgetType === "evidence_references" || widgetType?.includes("evidence")) {
-    statusLabel = "EVIDENCE VALIDATED";
-    statusColor = "#56d98b";
-    icon = "🛡️";
-    detailedDescription = "Backtest and OOS reports validated. Integrity check: green.";
-  } else if (widgetType === "confidence_decomposition") {
-    statusLabel = "AWAITING METRICS";
+    statusLabel = "EVIDENCE UNAVAILABLE";
     statusColor = "#8c96a6";
-    icon = "📊";
-    detailedDescription = "Awaiting stability indices and OOS metrics to decompose.";
+    icon = "🛡️";
+    detailedDescription = "No validation evidence, backtest reports, or OOS indices have been synchronized.";
   }
 
   return (
@@ -659,7 +654,7 @@ export function ChartSpecRenderer({
   widgetType,
   dataSource,
   dataAvailability,
-  isSampleData = true,
+  isSampleData = false,
 }: ChartSpecRendererProps) {
   const validationMessage = validateChartSpecForRendering(spec);
   if (validationMessage) {
