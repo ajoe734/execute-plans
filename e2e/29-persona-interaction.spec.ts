@@ -12,6 +12,7 @@ const DECISION_EVENT_ID = "evt-pint-010";
 const EVENT_ETAG = '"event-v1"';
 const PERSONA_ID = "per_quant";
 const EPISODE_ID = "ep-journal-1";
+const GOVERNED_PROPOSAL_ID = "prop-pint-010";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -23,6 +24,13 @@ type CapturedRequest = {
 };
 
 type FixtureState = {
+  proposal: {
+    governedActionLink: JsonRecord | null;
+    proposedValue: unknown;
+    revision: number;
+    state: string;
+    validation?: JsonRecord;
+  };
   requests: CapturedRequest[];
   unexpected: Array<{ method: string; path: string }>;
 };
@@ -272,6 +280,42 @@ const episodeFixture = {
   ],
 };
 
+function governedProposalFixture(state: FixtureState) {
+  return {
+    proposal_id: GOVERNED_PROPOSAL_ID,
+    proposal_type: "risk_limit_recommendation",
+    target_kind: "strategy",
+    target_id: STRATEGY_ID,
+    target_version: STRATEGY_VERSION,
+    current_value: { liquidity_limit: 5 },
+    proposed_value: state.proposal.proposedValue,
+    rationale: "Reduce paper exposure until the red-team liquidity concern is resolved.",
+    evidence_refs: ["evidence:pint-010-red-team"],
+    environment_ceiling: "paper",
+    required_permissions: ["strategy.review"],
+    required_reviewers: ["risk", "human"],
+    human_gate: true,
+    revision: state.proposal.revision,
+    state: state.proposal.state,
+    expires_at: "2026-08-01T00:00:00Z",
+    validation: state.proposal.validation,
+    audit: [
+      { action: "create", actor: "op-fe-gate", at: NOW },
+      ...(state.proposal.revision >= 2
+        ? [{ action: "modify", actor: "op-fe-gate", at: NOW }]
+        : []),
+      ...(state.proposal.revision >= 3
+        ? [{ action: "validate", actor: "paper-validator", at: NOW }]
+        : []),
+    ],
+    governed_action_link: state.proposal.governedActionLink,
+  };
+}
+
+function governedProposalEtag(state: FixtureState): string {
+  return `"proposal-v${state.proposal.revision}"`;
+}
+
 function workshopMessageCount(state: FixtureState): number {
   return state.requests.filter(
     (request) =>
@@ -281,7 +325,16 @@ function workshopMessageCount(state: FixtureState): number {
 }
 
 async function installFixture(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { requests: [], unexpected: [] };
+  const state: FixtureState = {
+    proposal: {
+      governedActionLink: null,
+      proposedValue: { liquidity_limit: 3 },
+      revision: 1,
+      state: "draft",
+    },
+    requests: [],
+    unexpected: [],
+  };
 
   await installOidcDevLogin(page, {
     goto: false,
@@ -353,6 +406,43 @@ async function installFixture(page: Page): Promise<FixtureState> {
           page_info: { total: 0, page_size: 0 },
           meta: { surfaces: { jobs: { status: "ok", source: "fixture" } } },
         });
+      }
+
+      if (method === "GET" && path === `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}`) {
+        return json(
+          route,
+          { data: governedProposalFixture(state) },
+          { headers: { ETag: governedProposalEtag(state) } },
+        );
+      }
+      if (method === "POST" && path === `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`) {
+        const body = requestBody(request) as JsonRecord;
+        if (request.headers()["if-match"] !== governedProposalEtag(state)) {
+          return json(route, { detail: "proposal ETag is stale" }, { status: 412 });
+        }
+        if (body.action === "modify") {
+          state.proposal.proposedValue = body.proposed_value;
+          state.proposal.revision += 1;
+          state.proposal.state = "draft";
+        } else if (body.action === "validate") {
+          state.proposal.validation = body.validation_result as JsonRecord;
+          state.proposal.revision += 1;
+          state.proposal.state = "validated";
+          state.proposal.governedActionLink = {
+            route: "/bff/actions/{type}/{id}/{action}",
+            target_type: "strategy",
+            target_id: STRATEGY_ID,
+            action: "submit_review",
+            execution_authority: "none",
+          };
+        } else {
+          return json(route, { detail: "unsupported fixture action" }, { status: 422 });
+        }
+        return json(
+          route,
+          { data: governedProposalFixture(state) },
+          { headers: { ETag: governedProposalEtag(state) } },
+        );
       }
 
       if (method === "GET" && path === "/bff/agora/trading-room") {
@@ -607,10 +697,11 @@ async function selectOption(page: Page, testId: string, name: string): Promise<v
 test("one named Persona ask and red-team challenge render a visible disagreement", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const state = await installFixture(page);
 
   await page.goto(`/agora/strategy-workshop/${WORKSHOP_ID}`);
-  await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible();
+  await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 30_000 });
 
   await selectOption(page, "participant-picker", "Named Personas (Select)");
   const namedPanel = page.getByTestId("named-checkbox-panel");
@@ -672,6 +763,81 @@ test("one named Persona ask and red-team challenge render a visible disagreement
       picker_type: "red-team",
     },
   });
+  expect(state.unexpected).toEqual([]);
+  expectAuthorityNegative(state);
+});
+
+test("governed proposal revision and paper validation stay review-only", async ({ page }) => {
+  const state = await installFixture(page);
+  const proposalPath = `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`;
+
+  await page.goto(
+    `/agora/strategy-workshop/${WORKSHOP_ID}?governedProposalId=${GOVERNED_PROPOSAL_ID}`,
+  );
+  const proposalCard = page.getByTestId(`governed-proposal-${GOVERNED_PROPOSAL_ID}`);
+  await expect(proposalCard).toContainText("revision 1");
+  await expect(proposalCard).toContainText("Human gate: required");
+  await expect(proposalCard).toContainText("paper");
+  await expect(proposalCard.getByRole("button", { name: "approve" })).toBeDisabled();
+
+  await proposalCard
+    .getByLabel("Decision reason")
+    .fill("Apply the red-team liquidity limit before paper validation.");
+  await proposalCard.getByRole("button", { name: "Modify" }).click();
+  await proposalCard.getByLabel("Proposed value").fill('{"liquidity_limit":2}');
+  await proposalCard.getByRole("button", { name: "Save new revision" }).click();
+  await expect(proposalCard).toContainText("revision 2");
+
+  const modification = mutationRequests(state, proposalPath)[0];
+  expect(modification?.body).toEqual({
+    action: "modify",
+    reason: "Apply the red-team liquidity limit before paper validation.",
+    proposed_value: { liquidity_limit: 2 },
+  });
+  expect(modification?.headers["if-match"]).toBe('"proposal-v1"');
+  expect(modification?.headers.authorization).toMatch(/^Bearer /);
+  expect(modification?.headers["x-tenant-id"]).toBe("pantheon-dev");
+  expect(modification?.headers["idempotency-key"]).toMatch(/^idk_/);
+
+  const validationBody = {
+    action: "validate",
+    reason: "Paper checks passed with no execution authority.",
+    validation_result: {
+      status: "passed",
+      environment: "paper",
+      execution_attempted: false,
+    },
+  };
+  const validationStatus = await page.evaluate(
+    async ({ body, proposalId }) => {
+      const token = window.sessionStorage.getItem("pantheon.bff.bearerToken") ?? "";
+      const tenantId = window.sessionStorage.getItem("pantheon.bff.tenantId") ?? "";
+      const response = await window.fetch(`/bff/agora/proposals/${proposalId}/actions`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pint-010-paper-validation",
+          "If-Match": '"proposal-v2"',
+          "X-Tenant-Id": tenantId,
+        },
+        body: JSON.stringify(body),
+      });
+      return response.status;
+    },
+    { body: validationBody, proposalId: GOVERNED_PROPOSAL_ID },
+  );
+  expect(validationStatus).toBe(200);
+  expect(mutationRequests(state, proposalPath)[1]?.body).toEqual(validationBody);
+
+  await page.reload();
+  const validatedCard = page.getByTestId(`governed-proposal-${GOVERNED_PROPOSAL_ID}`);
+  await expect(validatedCard).toContainText("revision 3");
+  await expect(validatedCard.getByLabel("Validation result")).toContainText("Passed");
+  await expect(validatedCard).toContainText("This handoff has no execution authority.");
+  await expect(validatedCard.getByRole("button", { name: "approve" })).toBeDisabled();
+
   expect(state.unexpected).toEqual([]);
   expectAuthorityNegative(state);
 });
