@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
@@ -12,13 +13,13 @@ import {
   type DecisionChoice,
   type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
   TradingRoomWorkspaceProposal,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
+import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -30,28 +31,28 @@ interface TradingRoomUiError {
   code?: string;
 }
 
-function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+function tradingRoomErrorMessage(err: BffError, fallback: string, t: TFunction): string {
   switch (err.status) {
     case 403:
-      return "目前權限或範圍無法讀取這個操盤室提案。";
+      return t("agora.tradingRoom.errors.readForbidden");
     case 404:
-      return "這個操盤室提案或工作區已不存在，請重新產生。";
+      return t("agora.tradingRoom.errors.proposalNotFound");
     case 409:
-      return "操盤室提案狀態已變更，請重新產生後再套用。";
+      return t("agora.tradingRoom.errors.proposalConflict");
     case 412:
-      return "操盤室狀態已過期，請重新整理後再繼續。";
+      return t("agora.tradingRoom.errors.proposalStale");
     case 501:
-      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+      return t("agora.tradingRoom.errors.notImplemented");
     default:
       return err.message || fallback;
   }
 }
 
-function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+function toTradingRoomUiError(err: unknown, fallback: string, t: TFunction): TradingRoomUiError {
   if (err instanceof BffError) {
     return {
       code: err.code,
-      message: tradingRoomErrorMessage(err, fallback),
+      message: tradingRoomErrorMessage(err, fallback, t),
       status: err.status,
     };
   }
@@ -95,11 +96,12 @@ function StrategyLensSwitcher({
   activeStrategyId,
   onSelect,
 }: StrategyLensSwitcherProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="strategy-lens-switcher"
       role="listbox"
-      aria-label="Strategy workspace switcher"
+      aria-label={t("agora.tradingRoom.page.strategySwitcher")}
       style={{
         display: "flex",
         alignItems: "center",
@@ -126,7 +128,7 @@ function StrategyLensSwitcher({
           whiteSpace: "nowrap",
         }}
       >
-        All Strategies
+        {t("agora.tradingRoom.page.allStrategies")}
       </button>
       {strategies.map((s) => (
         <button
@@ -171,6 +173,7 @@ interface RiskBannerProps {
 }
 
 function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | null {
+  const { t } = useTranslation();
   if (state === "normal") return null;
   return (
     <div
@@ -184,7 +187,7 @@ function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | 
         color: "#f0ece4",
       }}
     >
-      <strong>Risk: {state}</strong>
+      <strong>{t("agora.tradingRoom.page.risk", { state })}</strong>
       {summary ? ` — ${summary}` : null}
       {alerts && alerts.length > 0 ? (
         <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
@@ -208,6 +211,7 @@ interface QueueSummaryStripProps {
 }
 
 function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStripProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="queue-summary-strip"
@@ -221,11 +225,11 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
         background: "#171b22",
       }}
     >
-      <span data-testid="queue-entry-count">Entry: {entry}</span>
-      <span data-testid="queue-add-count">Add: {add}</span>
-      <span data-testid="queue-reduce-count">Reduce: {reduce}</span>
-      <span data-testid="queue-exit-count">Exit: {exit}</span>
-      <span data-testid="queue-review-count">Review: {review}</span>
+      <span data-testid="queue-entry-count">{t("agora.tradingRoom.page.queue.entry", { count: entry })}</span>
+      <span data-testid="queue-add-count">{t("agora.tradingRoom.page.queue.add", { count: add })}</span>
+      <span data-testid="queue-reduce-count">{t("agora.tradingRoom.page.queue.reduce", { count: reduce })}</span>
+      <span data-testid="queue-exit-count">{t("agora.tradingRoom.page.queue.exit", { count: exit })}</span>
+      <span data-testid="queue-review-count">{t("agora.tradingRoom.page.queue.review", { count: review })}</span>
     </div>
   );
 }
@@ -234,543 +238,13 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
 
 type DecisionCallState = "idle" | "loading" | "success" | "error";
 
-interface DecisionEventDetailPanelProps {
-  event: TradingDecisionEvent;
-  /** ETag from the listDecisionEvents response — forwarded as If-Match to decideOnEvent. */
-  etag?: string | null;
-}
-
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
-  const navigate = useNavigate();
-  const [callState, setCallState] = useState<DecisionCallState>("idle");
-  const [callError, setCallError] = useState<string | null>(null);
-  const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
-
-  // Consultation states
-  const [showConsultPanel, setShowConsultPanel] = useState(false);
-  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
-  const [consultQuery, setConsultQuery] = useState("");
-  const [consultLoading, setConsultLoading] = useState(false);
-  const [consultError, setConsultError] = useState<string | null>(null);
-
-  // Modify linkage states
-  const [showModifyLinkage, setShowModifyLinkage] = useState(false);
-  const [modifyProposalId, setModifyProposalId] = useState("");
-  const [modifyProposalRevision, setModifyProposalRevision] = useState("1");
-  const [modifyWorkshopId, setModifyWorkshopId] = useState("");
-  const [modifyRationale, setModifyRationale] = useState("");
-
-  const canDecide =
-    callState !== "loading" &&
-    callState !== "success" &&
-    (event.state === "pending_review" || event.state === "triggered" || event.state === "approaching");
-
-  async function handleDecide(choice: DecisionChoice) {
-    setCallState("loading");
-    setCallError(null);
-    try {
-      await decideOnEvent(
-        event.decision_event_id,
-        { decision: choice },
-        { ifMatch: etag ?? undefined, idempotencyKey: newUUID(), requestId: newUUID() },
-      );
-      setDecidedChoice(choice);
-      setCallState("success");
-    } catch (err) {
-      setCallError(err instanceof Error ? err.message : "Decision failed");
-      setCallState("error");
-    }
-  }
-
-  const ev = event;
-
   return (
-    <tr data-testid={`event-detail-${ev.decision_event_id}`}>
-      <td colSpan={5} style={{ padding: "8px 16px", background: "#1a2030", borderBottom: "2px solid #2a2e38" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, fontSize: 12 }}>
-
-          {/* Signal Quality */}
-          <div data-testid="detail-confidence">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Signal Quality</div>
-            <div>Confidence: {(ev.confidence.value * 100).toFixed(0)}% ({ev.confidence.basis})</div>
-            <div data-testid="detail-calibration">Calibration: {ev.confidence.calibration_state}</div>
-            {ev.confidence.sample_size != null && (
-              <div>Sample size: {ev.confidence.sample_size}</div>
-            )}
-            <div data-testid="detail-probability">
-              Probability: {(ev.probability.value * 100).toFixed(0)}% — {ev.probability.target_outcome}
-            </div>
-            <div>Horizon: {ev.probability.horizon}</div>
-            {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
-              <div data-testid="detail-probability-interval">
-                CI: [{(ev.probability.ci_lower * 100).toFixed(0)}%, {(ev.probability.ci_upper * 100).toFixed(0)}%]
-              </div>
-            )}
-          </div>
-
-          {/* Expected Value */}
-          <div data-testid="detail-expected-value">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Expected Value</div>
-            <div>Horizon: {ev.expected_value.horizon} ({ev.expected_value.unit})</div>
-            <div>Gross: {ev.expected_value.gross > 0 ? "+" : ""}{ev.expected_value.gross.toFixed(4)}</div>
-            <div>Cost: {ev.expected_value.cost.toFixed(4)}</div>
-            <div>Net: {ev.expected_value.net > 0 ? "+" : ""}{ev.expected_value.net.toFixed(4)}</div>
-            <div>Downside: {ev.expected_value.downside.toFixed(4)}</div>
-          </div>
-
-          {/* Suggested Action */}
-          <div data-testid="detail-suggested-action">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Suggested Action</div>
-            <div style={{ textTransform: "capitalize", fontWeight: 500 }}>{ev.suggested_action}</div>
-            {ev.suggested_size && (
-              <>
-                {ev.suggested_size.size_hint && <div>Size hint: {ev.suggested_size.size_hint}</div>}
-                {ev.suggested_size.portfolio_pct != null && (
-                  <div>Portfolio %: {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}%</div>
-                )}
-                <div style={{ color: "#737d8e", fontSize: 11 }}>Non-binding</div>
-              </>
-            )}
-            {ev.data_cutoff && (
-              <div style={{ marginTop: 4, color: "#8c96a6" }}>Data cutoff: {ev.data_cutoff}</div>
-            )}
-            <div
-              data-testid="detail-no-order-route"
-              style={{ marginTop: 4, fontSize: 11, color: "#4ade80", fontWeight: 500 }}
-            >
-              {ev.no_order_route_proof}
-            </div>
-          </div>
-
-          {/* Invalidation */}
-          <div data-testid="detail-invalidation">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Invalidation</div>
-            <div>State: <span style={{ fontWeight: 500 }}>{ev.invalidation.current_state}</span></div>
-            {ev.invalidation.conditions.length > 0 && (
-              <ul style={{ margin: "4px 0 0 12px", padding: 0 }}>
-                {ev.invalidation.conditions.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
+    <tr data-testid={`event-detail-${event.decision_event_id}`}>
+      <td colSpan={5} style={{ padding: "12px 16px", background: "#11151d", borderBottom: "2px solid #2a2e38" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto" }}>
+          <TradeDecisionCard event={event} etag={etag ?? undefined} />
         </div>
-
-        {/* Rationale */}
-        {ev.rationale.length > 0 && (
-          <div data-testid="detail-rationale" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Rationale</div>
-            {ev.rationale.map((r, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
-                <span style={{ color: "#737d8e", minWidth: 32 }}>{(r.confidence * 100).toFixed(0)}%</span>
-                <span>{r.claim}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Risk Notes */}
-        {ev.risk_notes.length > 0 && (
-          <div data-testid="detail-risk-notes" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Risk Notes</div>
-            {ev.risk_notes.map((rn, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "4px 8px",
-                  background: rn.severity === "critical" || rn.severity === "high" ? "#230e0e" : "#1e1c0e",
-                  borderRadius: 4,
-                  marginBottom: 2,
-                }}
-              >
-                <span style={{ fontWeight: 500 }}>[{rn.severity}] {rn.domain}:</span> {rn.summary}
-                {rn.mitigation && <span style={{ color: "#8c96a6" }}> — {rn.mitigation}</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Evidence Refs */}
-        {ev.evidence_refs.length > 0 && (
-          <div data-testid="detail-evidence-refs" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>
-              Evidence ({ev.evidence_refs.length})
-            </div>
-            {ev.evidence_refs.map((ref, i) => (
-              <div key={i} style={{ color: "#8c96a6" }}>
-                <span style={{ color: "#737d8e" }}>{ref.ref_type}</span> {ref.ref_id}
-                {ref.summary ? ` — ${ref.summary}` : null}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Trader Decision Actions */}
-        <div data-testid="detail-trader-actions" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-          {callState === "success" ? (
-            <span data-testid="detail-decision-confirmed" style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}>
-              Decision recorded: {decidedChoice}
-            </span>
-          ) : (
-            <>
-              <span style={{ fontSize: 12, color: "#8c96a6", marginRight: 4 }}>Trader decision:</span>
-              {(["approve", "reject", "defer", "modify"] as DecisionChoice[]).map((choice) => (
-                <button
-                  key={choice}
-                  data-testid={`decide-${choice}-${ev.decision_event_id}`}
-                  disabled={!canDecide}
-                  onClick={() => {
-                    if (choice === "modify") {
-                      setShowModifyLinkage(true);
-                      setShowConsultPanel(false);
-                    } else {
-                      handleDecide(choice);
-                    }
-                  }}
-                  style={{
-                    padding: "3px 10px",
-                    fontSize: 12,
-                    border: "1px solid #2a2e38",
-                    borderRadius: 4,
-                    cursor: canDecide ? "pointer" : "not-allowed",
-                    background: choice === "approve" ? "rgba(74,222,128,0.12)" : choice === "reject" ? "rgba(248,113,113,0.12)" : "#1e2330",
-                    color: choice === "approve" ? "#4ade80" : choice === "reject" ? "#f87171" : "#8c96a6",
-                    opacity: canDecide ? 1 : 0.5,
-                  }}
-                >
-                  {choice.charAt(0).toUpperCase() + choice.slice(1)}
-                </button>
-              ))}
-              <button
-                type="button"
-                data-testid={`ask-personas-${ev.decision_event_id}`}
-                onClick={() => {
-                  setShowConsultPanel(!showConsultPanel);
-                  setShowModifyLinkage(false);
-                }}
-                style={{
-                  padding: "3px 10px",
-                  fontSize: 12,
-                  border: "1px solid #6366f1",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  background: "#e0e7ff",
-                  color: "#4f46e5",
-                  fontWeight: 500,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4
-                }}
-              >
-                💬 Ask Personas
-              </button>
-              {callState === "loading" && (
-                <span data-testid="detail-decision-loading" style={{ fontSize: 12, color: "#737d8e" }}>
-                  Sending…
-                </span>
-              )}
-              {callState === "error" && callError && (
-                <span data-testid="detail-decision-error" style={{ fontSize: 12, color: "#f87171" }}>
-                  {callError}
-                </span>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Contextual Consultation Panel */}
-        {showConsultPanel && (
-          <div
-            data-testid={`consult-panel-${ev.decision_event_id}`}
-            style={{
-              marginTop: 12,
-              padding: 12,
-              background: "#eff6ff",
-              borderRadius: 6,
-              border: "1px solid #bfdbfe",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ fontWeight: 600, color: "#1e3a8a", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>🔍 Consult Personas on Signal ({ev.subject.symbol})</span>
-            </div>
-            
-            {/* Display carried context */}
-            <div style={{ background: "#fff", padding: 8, borderRadius: 4, marginBottom: 8, border: "1px solid #bfdbfe" }}>
-              <div style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>Carried Context:</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div><strong>Event ID:</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
-                <div><strong>Strategy Version:</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
-                <div style={{ gridColumn: "span 2" }}><strong>Risk Snapshot:</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || "Normal"}</div>
-                <div style={{ gridColumn: "span 2" }}><strong>Evidence Refs:</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || "None"}</div>
-              </div>
-            </div>
-
-            {/* Persona Checklist */}
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Select Personas:</span>
-              <div style={{ display: "flex", gap: 12 }}>
-                {[
-                  { id: "per_quant", name: "Quant" },
-                  { id: "per_risk", name: "Risk" },
-                  { id: "per_macro", name: "Macro" },
-                  { id: "per_red", name: "Red Team" }
-                ].map(p => (
-                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPersonas.includes(p.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPersonas([...selectedPersonas, p.id]);
-                        } else {
-                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
-                        }
-                      }}
-                    />
-                    {p.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Templates */}
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Quick Templates:</span>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
-                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  🔴 Red-Team Analysis
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
-                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  ⚠️ Fast Risk Assessment
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
-                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  📊 Option Comparison
-                </button>
-              </div>
-            </div>
-
-            {/* Prompt input */}
-            <div style={{ marginBottom: 8 }}>
-              <textarea
-                placeholder="Ask your question to the selected personas..."
-                value={consultQuery}
-                onChange={(e) => setConsultQuery(e.target.value)}
-                style={{ width: "100%", height: 60, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
-              />
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                disabled={consultLoading || selectedPersonas.length === 0}
-                onClick={async () => {
-                  setConsultLoading(true);
-                  setConsultError(null);
-                  try {
-                    const newWs = await createWorkshop({
-                      subject: {
-                        kind: "candidate_artifact",
-                        ref: ev.decision_event_id,
-                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
-                      },
-                      participant_persona_ids: selectedPersonas,
-                      metadata: {
-                        decision_event_id: ev.decision_event_id,
-                        strategy_id: ev.strategy_id,
-                        strategy_version: ev.strategy_spec_registry_id,
-                        position_snapshot: ev.position_snapshot,
-                        risk_notes: ev.risk_notes,
-                        evidence_refs: ev.evidence_refs,
-                        context_type: "decision_event_consultation",
-                      }
-                    });
-                    
-                    if (consultQuery.trim()) {
-                      await postWorkshopMessage(newWs.workshop_id, {
-                        content: consultQuery.trim(),
-                        metadata: {
-                          mode: "consult",
-                          participant_persona_ids: selectedPersonas,
-                        }
-                      });
-                    }
-
-                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
-                  } catch (err) {
-                    setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
-                  } finally {
-                    setConsultLoading(false);
-                  }
-                }}
-                style={{
-                  padding: "4px 12px",
-                  background: "#4f46e5",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  fontWeight: 600,
-                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
-                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
-                }}
-                data-testid={`consult-panel-submit-${ev.decision_event_id}`}
-              >
-                {consultLoading ? "Launching..." : "🚀 Launch Workshop Consultation"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowConsultPanel(false)}
-                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-              {consultError && (
-                <span style={{ color: "#dc2626", fontSize: 11 }}>{consultError}</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Structured Modify Linkage Panel */}
-        {showModifyLinkage && (
-          <div
-            data-testid={`modify-linkage-panel-${ev.decision_event_id}`}
-            style={{
-              marginTop: 12,
-              padding: 12,
-              background: "#fffbeb",
-              borderRadius: 6,
-              border: "1px solid #fef3c7",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ fontWeight: 600, color: "#92400e", marginBottom: 8 }}>
-              🛠️ Link Modification Proposal & Consultation
-            </div>
-            
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <div>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Proposal ID:</label>
-                <input
-                  type="text"
-                  placeholder="e.g. prop-123"
-                  value={modifyProposalId}
-                  onChange={(e) => setModifyProposalId(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-proposal-id-${ev.decision_event_id}`}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Proposal Revision:</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={modifyProposalRevision}
-                  onChange={(e) => setModifyProposalRevision(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-proposal-revision-${ev.decision_event_id}`}
-                />
-              </div>
-              <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Consultation Workshop ID:</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ws-abc (optional)"
-                  value={modifyWorkshopId}
-                  onChange={(e) => setModifyWorkshopId(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-workshop-id-${ev.decision_event_id}`}
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Modification Rationale:</label>
-              <textarea
-                placeholder="Explain the changes to sizes, bounds, or limits..."
-                value={modifyRationale}
-                onChange={(e) => setModifyRationale(e.target.value)}
-                style={{ width: "100%", height: 50, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
-                data-testid={`modify-rationale-${ev.decision_event_id}`}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                disabled={callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()}
-                onClick={async () => {
-                  setCallState("loading");
-                  setCallError(null);
-                  try {
-                    await decideOnEvent(
-                      ev.decision_event_id,
-                      {
-                        decision: "modify",
-                        rationale: modifyRationale,
-                        modifications: {
-                          proposal_id: modifyProposalId.trim(),
-                          proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
-                          consultation_workshop_id: modifyWorkshopId.trim() || undefined,
-                        }
-                      },
-                      { ifMatch: etag ?? undefined, idempotencyKey: newUUID(), requestId: newUUID() }
-                    );
-                    setDecidedChoice("modify");
-                    setCallState("success");
-                    setShowModifyLinkage(false);
-                  } catch (err) {
-                    setCallError(err instanceof Error ? err.message : "Modify failed");
-                    setCallState("error");
-                  }
-                }}
-                style={{
-                  padding: "4px 12px",
-                  background: "#d97706",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  fontWeight: 600,
-                  cursor: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? "not-allowed" : "pointer",
-                  opacity: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? 0.7 : 1
-                }}
-                data-testid={`modify-linkage-submit-${ev.decision_event_id}`}
-              >
-                Confirm Modification
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowModifyLinkage(false)}
-                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </td>
     </tr>
   );
@@ -804,6 +278,7 @@ interface TradingEventQueueProps {
 }
 
 function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueueProps): JSX.Element {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
@@ -813,15 +288,15 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
   return (
     <div data-testid="trading-event-queue" style={{ flex: 1, overflow: "auto" }}>
       <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        Decision Event Queue
+        {t("agora.tradingRoom.page.eventQueue")}
       </div>
       {loading ? (
         <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          Loading events…
+          {t("agora.tradingRoom.page.loadingEvents")}
         </div>
       ) : events.length === 0 ? (
         <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          No pending decision events.
+          {t("agora.tradingRoom.page.noEvents")}
         </div>
       ) : (
         <table
@@ -830,10 +305,10 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
         >
           <thead>
             <tr style={{ borderBottom: "1px solid #2a2e38" }}>
-              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>Symbol</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>Kind</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>State</th>
-              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>Confidence</th>
+              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.symbol")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.kind")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.state")}</th>
+              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.confidence")}</th>
               <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>EV (net)</th>
             </tr>
           </thead>
@@ -851,8 +326,8 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
                   onClick={() => toggleExpand(ev.decision_event_id)}
                 >
                   <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}</td>
-                  <td style={{ padding: "6px 8px" }}>{STATE_LABEL[ev.state] ?? ev.state}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind })}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: STATE_LABEL[ev.state] ?? ev.state })}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>
                     {(ev.confidence.value * 100).toFixed(0)}%
                   </td>
@@ -880,16 +355,17 @@ interface PositionActionQueueProps {
 }
 
 function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="position-action-queue"
       style={{ borderLeft: "1px solid #2a2e38", width: 240, overflow: "auto", flexShrink: 0, background: "#171b22" }}
     >
       <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        Position Actions
+        {t("agora.tradingRoom.page.positionActions")}
       </div>
       {positionSummaries.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>No open positions.</div>
+        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>{t("agora.tradingRoom.page.noPositions")}</div>
       ) : (
         <ul style={{ margin: 0, padding: "8px 12px", listStyle: "none" }}>
           {positionSummaries.map((p, i) => (
@@ -940,14 +416,14 @@ function selectDefaultReadyStrategy(
     })[0];
 }
 
-function readinessReason(strategy: TradingRoomStrategyEntry): string {
+function readinessReason(strategy: TradingRoomStrategyEntry, t: TFunction): string {
   if (strategy.readiness_state === "conditional") {
-    return "Conditional readiness: continue Strategy Workshop validation before proposal generation.";
+    return t("agora.tradingRoom.page.conditionalReadiness");
   }
   if (strategy.readiness_state === "stale") {
-    return strategy.staleness_reasons?.[0] ?? "Readiness is stale; refresh workshop evidence.";
+    return strategy.staleness_reasons?.[0] ?? t("agora.tradingRoom.page.staleReadiness");
   }
-  return "Blocked readiness: Strategy Workshop must close the missing gate before Trading Room entry.";
+  return t("agora.tradingRoom.page.blockedReadiness");
 }
 
 interface TradingRoomDefaultEntryProps {
@@ -961,6 +437,7 @@ function TradingRoomDefaultEntry({
   onOpenWorkshop,
   onStrategySelect,
 }: TradingRoomDefaultEntryProps): JSX.Element {
+  const { t } = useTranslation();
   const strategies = aggregate.strategies;
   const pendingTotal = strategies.reduce((total, strategy) => total + pendingEventTotal(strategy), 0);
   const entryState = strategies.length === 0 ? "empty" : "no-ready-strategy";
@@ -1003,16 +480,16 @@ function TradingRoomDefaultEntry({
           }}
         >
           <div>
-            <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>Dynamic Entry</div>
+            <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.dynamicEntry")}</div>
             <h2 style={{ color: "#f0ece4", fontSize: 20, fontWeight: 800, letterSpacing: 0, margin: "4px 0 0" }}>
               {strategies.length === 0
-                ? "Strategy Workshop is the next step"
-                : "No strategy is ready for proposal generation yet"}
+                ? t("agora.tradingRoom.page.workshopNext")
+                : t("agora.tradingRoom.page.noReadyStrategy")}
             </h2>
             <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.55, margin: "8px 0 0", maxWidth: 860 }}>
               {strategies.length === 0
-                ? "The BFF returned no user-scoped Trading Room strategies, so the default route starts from workshop intake instead of an empty table shell."
-                : "The BFF returned strategies, but none has reached the trading_room readiness gate. Continue the readiness workflow before opening a generated workspace."}
+                ? t("agora.tradingRoom.page.emptyDescription")
+                : t("agora.tradingRoom.page.notReadyDescription")}
             </p>
           </div>
 
@@ -1026,11 +503,11 @@ function TradingRoomDefaultEntry({
               gap: 12,
             }}
           >
-            <span>Strategies: {strategies.length}</span>
-            <span>Ready: 0</span>
-            <span>Pending decisions: {pendingTotal}</span>
-            <span>Snapshot: {aggregate.snapshot_at || "unavailable"}</span>
-            <span>Data cutoff: {aggregate.data_cutoff || "unavailable"}</span>
+            <span>{t("agora.tradingRoom.page.strategyCount", { count: strategies.length })}</span>
+            <span>{t("agora.tradingRoom.page.readyCount", { count: 0 })}</span>
+            <span>{t("agora.tradingRoom.page.pendingCount", { count: pendingTotal })}</span>
+            <span>{t("agora.tradingRoom.page.snapshot", { value: aggregate.snapshot_at || t("agora.tradingRoom.page.unavailable") })}</span>
+            <span>{t("agora.tradingRoom.page.dataCutoff", { value: aggregate.data_cutoff || t("agora.tradingRoom.page.unavailable") })}</span>
           </div>
 
           <div>
@@ -1050,7 +527,7 @@ function TradingRoomDefaultEntry({
               }}
               type="button"
             >
-              Open Strategy Workshop
+              {t("agora.tradingRoom.page.openWorkshop")}
             </button>
           </div>
         </section>
@@ -1082,12 +559,12 @@ function TradingRoomDefaultEntry({
                 </div>
                 <h3 style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 0" }}>{strategy.title}</h3>
                 <p style={{ color: "#8c96a6", fontSize: 12, lineHeight: 1.45, margin: "8px 0 0" }}>
-                  {readinessReason(strategy)}
+                  {readinessReason(strategy, t)}
                 </p>
                 <div style={{ color: "#737d8e", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
-                  <span>Version: {strategy.strategy_spec_registry_id}</span>
-                  <span>Candidates: {strategy.candidate_count ?? 0}</span>
-                  <span>Pending: {pendingEventTotal(strategy)}</span>
+                  <span>{t("agora.tradingRoom.page.version", { value: strategy.strategy_spec_registry_id })}</span>
+                  <span>{t("agora.tradingRoom.page.candidates", { count: strategy.candidate_count ?? 0 })}</span>
+                  <span>{t("agora.tradingRoom.page.pending", { count: pendingEventTotal(strategy) })}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button
@@ -1105,7 +582,7 @@ function TradingRoomDefaultEntry({
                     }}
                     type="button"
                   >
-                    Review readiness
+                    {t("agora.tradingRoom.page.reviewReadiness")}
                   </button>
                   {strategy.readiness_state === "ready" && (
                     <button
@@ -1122,7 +599,7 @@ function TradingRoomDefaultEntry({
                       }}
                       type="button"
                     >
-                      Open workspace
+                      {t("agora.tradingRoom.page.openWorkspace")}
                     </button>
                   )}
                 </div>
@@ -1143,8 +620,7 @@ function TradingRoomDefaultEntry({
               padding: 14,
             }}
           >
-            No BFF strategy records were available for this scope. Continue in the Strategy Workshop to create
-            or restore a strategy-specific readiness packet.
+            {t("agora.tradingRoom.page.noStrategyRecords")}
           </section>
         )}
       </div>
@@ -1155,15 +631,7 @@ function TradingRoomDefaultEntry({
 // ── V11 Proposal Generation And Workspace Shell ──────────────────────────────
 
 const GENERATION_STEPS = [
-  "讀取 Winner Branch Score、confidence 與 trust",
-  "分析分點關係映射與資金遷移",
-  "整理分點群組、遷移與分布模型",
-  "建立事件領先研究與證據索引",
-  "轉譯候選、進場、加碼、減碼與出場規則",
-  "校準部位、槓桿、流動性與風險限制",
-  "串接回測、shadow 與監控規則",
-  "產生 Views 與 widgets",
-  "安排 layout 並套用個人化偏好",
+  "score", "relationships", "clusters", "evidence", "rules", "risk", "monitoring", "views", "layout",
 ];
 
 function TradingRoomGenerationProgress({
@@ -1173,6 +641,7 @@ function TradingRoomGenerationProgress({
   strategyTitle: string;
   strategyVersion: string;
 }) {
+  const { t } = useTranslation();
   return (
     <section
       data-testid="trading-room-generation-progress"
@@ -1186,12 +655,12 @@ function TradingRoomGenerationProgress({
       }}
     >
       <div>
-        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>Trading Servant</div>
+        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.servant")}</div>
         <h2 style={{ color: "#f0ece4", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-          交易僕人正在建立「{strategyTitle || strategyVersion}」交易操盤室
+          {t("agora.tradingRoom.page.generatingTitle", { strategy: strategyTitle || strategyVersion })}
         </h2>
         <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
-          我會先替您把完整操盤頁面準備好。您不需要從空白版面開始；完成後可自行拖曳、刪除、增加、縮放，或直接交代我修改任何圖表。
+          {t("agora.tradingRoom.page.generatingDescription")}
         </p>
       </div>
       <ol
@@ -1237,7 +706,7 @@ function TradingRoomGenerationProgress({
             >
               {index + 1}
             </span>
-            <span>{step}</span>
+            <span>{t(`agora.tradingRoom.page.generationSteps.${step}`)}</span>
           </li>
         ))}
       </ol>
@@ -1258,6 +727,7 @@ interface StrategyWorkspaceViewProps {
   readinessGate?: string;
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
+  onSwitchStrategy?: () => void;
 }
 
 function StrategyWorkspaceView({
@@ -1271,7 +741,9 @@ function StrategyWorkspaceView({
   readinessGate,
   strategyVersion,
   onBackToWorkshop,
+  onSwitchStrategy,
 }: StrategyWorkspaceViewProps): JSX.Element {
+  const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
 
   const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
@@ -1325,7 +797,7 @@ function StrategyWorkspaceView({
       })
       .catch((err) => {
         if (cancelled) return;
-        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.", t);
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
           setWorkspaceResult(null);
@@ -1361,7 +833,7 @@ function StrategyWorkspaceView({
       );
       setWorkspaceResult(nextWorkspace);
     } catch (err) {
-      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.", t);
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
         setWorkspaceResult(null);
@@ -1400,19 +872,28 @@ function StrategyWorkspaceView({
       />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div
+          data-testid="trading-room-workspace-column"
+          style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
+        >
           {!resolvedStrategyVersion ? (
             <div
               data-testid="trading-room-strategy-version-required"
               style={{ padding: 16, fontSize: 13, color: "#e8b750" }}
             >
-              Strategy version is required before Trading Room proposal generation.
+              {t("agora.tradingRoom.page.strategyVersionRequired")}
             </div>
           ) : workspaceResult ? (
             <WorkspaceGridEditor
               initialEtag={workspaceResult.etag}
               initialWorkspace={workspaceResult.workspace}
               onWorkspaceChange={setWorkspaceResult}
+              strategy={strategy}
+              workspaceEvents={events}
+              riskSummary={aggregate?.risk_summary}
+              dataCutoff={aggregate?.data_cutoff}
+              onBackToWorkshop={onBackToWorkshop}
+              onSwitchStrategy={onSwitchStrategy}
             />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
@@ -1440,7 +921,7 @@ function StrategyWorkspaceView({
               data-error-status={proposalError?.status ?? ""}
               style={{ padding: 16, fontSize: 13, color: "#f87171" }}
             >
-              {proposalError?.message ?? "Workspace proposal unavailable."}
+              {proposalError?.message ?? t("agora.tradingRoom.page.proposalUnavailable")}
               <div>
                 <button
                   data-testid="trading-room-proposal-retry"
@@ -1458,7 +939,7 @@ function StrategyWorkspaceView({
                   }}
                   type="button"
                 >
-                  重新產生
+                  {t("agora.tradingRoom.proposal.regenerate")}
                 </button>
               </div>
             </div>
@@ -1495,6 +976,7 @@ export function TradingRoomPage({
   onOpenWorkshop,
   onStrategySelect,
 }: TradingRoomPageProps): JSX.Element {
+  const { t } = useTranslation();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
@@ -1550,7 +1032,7 @@ export function TradingRoomPage({
         data-testid="trading-room-loading"
         style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#737d8e", background: "#111417" }}
       >
-        Loading Trading Room…
+        {t("agora.tradingRoom.page.loading")}
       </div>
     );
   }
@@ -1561,7 +1043,7 @@ export function TradingRoomPage({
         data-testid="trading-room-error"
         style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#f87171", background: "#111417" }}
       >
-        Failed to load Trading Room.
+        {t("agora.tradingRoom.page.loadFailed")}
       </div>
     );
   }
@@ -1593,6 +1075,7 @@ export function TradingRoomPage({
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           onBackToWorkshop={onBackToWorkshop}
+          onSwitchStrategy={() => handleStrategySelect(undefined)}
           readinessAssessmentId={readinessAssessmentId}
           readinessGate={readinessGate}
           strategyVersion={strategyVersion}

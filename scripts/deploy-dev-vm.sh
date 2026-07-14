@@ -26,8 +26,7 @@ ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
-CANONICAL_PUBLIC_VIEWER_TOKEN="pantheon-dev-browser:viewer"
-DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-${CANONICAL_PUBLIC_VIEWER_TOKEN}}"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -42,8 +41,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "${DEV_BEARER_TOKEN}" != "${CANONICAL_PUBLIC_VIEWER_TOKEN}" ]]; then
-  echo "Refusing to embed a non-canonical browser bearer token in the public frontend bundle." >&2
+if [[ -n "${DEV_BEARER_TOKEN}" ]]; then
+  echo "Refusing to embed any browser bearer token in the public frontend bundle." >&2
   exit 2
 fi
 
@@ -96,7 +95,7 @@ VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
 VITE_BFF_REAL_WRITES="${REAL_WRITES}" \
 VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}" \
-VITE_BFF_DEV_BEARER_TOKEN="${DEV_BEARER_TOKEN}" \
+VITE_BFF_DEV_BEARER_TOKEN="" \
 npm run build
 
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
@@ -107,7 +106,35 @@ export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
 export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
 export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
-export PANTHEON_DEPLOY_BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-27cd46529c29801db02818aafe4df723cc0f8666}"
+if [[ -z "${PANTHEON_DEPLOY_BFF_COMMIT:-}" ]]; then
+  echo "Fetching active BFF commit from ${BFF_HOST}/bff/version..."
+  BFF_VERSION_JSON="$(curl -fsS --connect-timeout 5 "${BFF_HOST}/bff/version" || echo "")"
+  if [[ -n "${BFF_VERSION_JSON}" ]]; then
+    BFF_COMMIT_SHA="$(node -e '
+      try {
+        const p = JSON.parse(process.argv[1]);
+        const sha = p.commit || p.source_commit_sha || "";
+        if (sha && sha.length >= 8) {
+          console.log(sha);
+        } else {
+          process.exit(1);
+        }
+      } catch {
+        process.exit(1);
+      }
+    ' "${BFF_VERSION_JSON}" || echo "")"
+    if [[ -n "${BFF_COMMIT_SHA}" ]]; then
+      PANTHEON_DEPLOY_BFF_COMMIT="${BFF_COMMIT_SHA}"
+    fi
+  fi
+fi
+
+if [[ -z "${PANTHEON_DEPLOY_BFF_COMMIT:-}" ]]; then
+  echo "Error: PANTHEON_DEPLOY_BFF_COMMIT is not set and could not be resolved from ${BFF_HOST}/bff/version" >&2
+  exit 2
+fi
+
+export PANTHEON_DEPLOY_BFF_COMMIT
 
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -127,6 +154,7 @@ const metadata = {
     VITE_BFF_FALLBACK: "strict",
     VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false",
     VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false",
+    VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
   },
 };
 
@@ -196,7 +224,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
   PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
   PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/management/persona-fleet}" \
+  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/health}" \
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
@@ -221,6 +249,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - preserve_assets: ${PRESERVE_ASSETS}
 - real_writes: ${REAL_WRITES}
 - allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
+- embedded_bearer_token: false
 - probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
 EOF
 
