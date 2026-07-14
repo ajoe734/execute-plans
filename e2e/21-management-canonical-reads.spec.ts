@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
@@ -203,7 +203,12 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
   test("routes management pages to canonical BFF read surfaces without seed fallback", async ({ page }) => {
     const calls: string[] = [];
     await installCanonicalReadFixture(page, calls);
-    await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"], tenantId: "pantheon-dev" });
+    await installOidcDevLogin(page, {
+      goto: false,
+      roles: ["operator", "reviewer", "approver"],
+      tenantId: "pantheon-dev",
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    });
 
     const cases = [
       { path: "/management/data-sources", endpoint: "/bff/management/data-sources", text: "Canonical IBKR", absent: "persona-fleet" },

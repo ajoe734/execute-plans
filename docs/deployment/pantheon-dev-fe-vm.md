@@ -19,10 +19,10 @@ under `/var/www/pantheon-dev-fe-releases`.
 ## Deployment Flow
 
 1. Feature and repair work merges to `dev` through PR.
-2. `Pantheon FE-BFF Integration Gate` runs on the `dev` push.
-3. `Pantheon Dev FE Deploy` is triggered by `workflow_run` only when that gate
-   succeeds for a `dev` push.
-4. The deploy job checks out the exact gated SHA on the VM self-hosted runner.
+2. `Pantheon FE-BFF Integration Gate` runs on the `dev` push and remains
+   required release evidence.
+3. `Pantheon Dev FE Deploy` is triggered directly by the same `dev` push.
+4. The deploy job checks out the exact pushed SHA on the VM self-hosted runner.
 5. `scripts/deploy-dev-vm.sh` runs:
    - `npm ci`
    - Playwright Chromium install for the post-deploy browser probe
@@ -32,16 +32,19 @@ under `/var/www/pantheon-dev-fe-releases`.
    - atomically switch `/var/www/pantheon-dev-fe`
    - fetch `/deployment.json` and verify the deployed commit
    - run `scripts/probe-hosted-browser-bff.mjs` against the public FE host
-   - run `scripts/probe-hosted-management-writes.mjs` to submit a governed
-     recommendation, persist a Human Review decision, and read it back
+   - run the read-only Persona Fleet linked-page contract
 
-The closed Pantheon dev environment builds with `VITE_BFF_REAL_WRITES=true`
-and `VITE_BFF_ALLOW_DEV_STUB_WRITES=true`. The second flag admits the dev
-BFF's authenticated stub session only when `/bff/me` identifies the backend as
-`dev` or `test`; any production environment marker still fails closed. The
-write probe records a rejected governance recommendation and verifies
-`live_capital_mutation=false`, so it exercises persistence without changing
-capital or runtime state.
+Automated Pantheon dev deployment builds with `VITE_BFF_REAL_WRITES=false`
+and `VITE_BFF_ALLOW_DEV_STUB_WRITES=false`. The deploy script fails before
+dependency installation, build, or network probes if runner state attempts to
+enable either flag.
+
+`VITE_BFF_DEV_BEARER_TOKEN` is public build input. Automated deployment
+uses exactly `pantheon-dev-browser:viewer`. Operator, admin, MFA, and
+`assistant.kernel.*` credentials must be supplied through an interactive
+cookie or browser session and are never embedded in the static release.
+Governed write qualification is a separate operator workflow; it is not part
+of automated static frontend deployment.
 
 Manual deployment is available through `workflow_dispatch` on
 `.github/workflows/pantheon-dev-fe-deploy.yml`. Manual deploys should still use
@@ -71,8 +74,6 @@ Do not say "published to dev" unless all of these are true:
 - `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
   reports that SHA;
 - the deployed-host browser/BFF probe passed against `/management/persona-fleet`.
-- the governed management write/read-back probe persisted a Human Review
-  command and resolved it from Human Inbox.
 
 The deployed-host probe must show Persona Fleet rows for US/TW/Crypto, shioaji
 / qlib source evidence, no `NaN`, no old BFF URL, and no armed seed fallback.

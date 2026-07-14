@@ -20,18 +20,18 @@
  *     optional browser-observed SSE BFF base. Defaults to the direct BFF URL so
  *     this probe is not coupled to dev-server event-stream buffering.
  *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *     required; use a short-lived credential for the live BFF contract.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
  *     default: strict
  */
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
+import { bearerHeader } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 const DEFAULT_SSE_OPEN_TIMEOUT_MS = 45_000;
 const ME_REQUEST_MAX_WAIT_MS = 120_000;
@@ -95,8 +95,11 @@ function bffBaseUrl(): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
+  if (!token) {
+    throw new Error("F01 live session contract requires a short-lived BFF_AUTH_TOKEN");
+  }
+  return bearerHeader(token);
 }
 
 function strictFallbackMode(): string {
