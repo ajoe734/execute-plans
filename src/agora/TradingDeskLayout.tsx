@@ -253,7 +253,7 @@ function ServantDrawer({
         {workshopId && contextState.status === "loaded" && (
           <div className="flex flex-col gap-1.5">
             <p className="text-sm font-medium text-[#f0ece4]">
-              {contextState.workshop.subject.title ?? contextState.workshop.subject.ref}
+              {contextState.workshop.subject?.title ?? contextState.workshop.subject?.ref}
             </p>
             <p className="text-xs text-[#8c96a6]">Status: {contextState.workshop.status}</p>
             {typeof contextState.workshop.message_count === "number" && (
