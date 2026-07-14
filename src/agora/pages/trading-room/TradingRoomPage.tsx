@@ -231,10 +231,14 @@ function StrategyLensSwitcher({
     >
       {/* Row 1: The 5 Strategy Lenses Cards */}
       <div
+        data-testid="strategy-lens-card-strip"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: `repeat(${STRATEGY_LENSES.length}, minmax(200px, 1fr))`,
           gap: 12,
+          overflowX: "auto",
+          overscrollBehaviorX: "contain",
+          paddingBottom: 4,
           width: "100%",
         }}
       >
@@ -1523,7 +1527,7 @@ function TradingRoomDefaultEntry({
     <div
       data-entry-state={entryState}
       data-testid="trading-room-default-entry"
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
+      style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden" }}
     >
       <QueueSummaryStrip {...aggregate.queue_summary} />
       <RiskBanner
@@ -2217,7 +2221,7 @@ function StrategyWorkspaceView({
   return (
     <div
       data-testid={`strategy-workspace-${strategyId}`}
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
+      style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden" }}
     >
       <div style={{ padding: "8px 16px", borderBottom: "1px solid #2a2e38", fontSize: 13, flexShrink: 0 }}>
         <strong>{strategy?.title ?? strategyId}</strong>
@@ -2489,7 +2493,7 @@ export function TradingRoomPage({
   return (
     <div
       data-testid="trading-room-page"
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "#111417", color: "#f0ece4" }}
+      style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "#111417", color: "#f0ece4" }}
     >
       <StrategyLensSwitcher
         strategies={aggregate.strategies}

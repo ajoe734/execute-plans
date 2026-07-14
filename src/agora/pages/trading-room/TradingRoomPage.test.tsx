@@ -604,6 +604,9 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
     expect(screen.getByTestId("strategy-lens-switcher")).toBeDefined();
+    const cardStrip = screen.getByTestId("strategy-lens-card-strip");
+    expect(cardStrip.style.gridTemplateColumns).toContain("repeat(5");
+    expect(cardStrip.style.overflowX).toBe("auto");
   });
 
   it("shows all-strategies button in the switcher", async () => {
