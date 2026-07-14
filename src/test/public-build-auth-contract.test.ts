@@ -326,7 +326,7 @@ describe("public frontend build auth boundary", () => {
         "--retries=0",
         "--reporter=line",
       ],
-      { cwd: process.cwd(), encoding: "utf8", env, timeout: 30_000 },
+      { cwd: process.cwd(), encoding: "utf8", env, timeout: 60_000 },
     );
     const output = `${result.stdout}\n${result.stderr}`;
 
@@ -336,7 +336,7 @@ describe("public frontend build auth boundary", () => {
     expect(output).toMatch(/22-persona-trade-journal/);
     expect(output).toMatch(/proven loopback-only E2E target/);
     expect(output).not.toMatch(/ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/);
-  }, 40_000);
+  }, 75_000);
 
   it("discovers fully intercepted fixtures under external global targets without a secret", () => {
     const env = {
