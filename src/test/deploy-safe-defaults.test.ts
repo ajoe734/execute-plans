@@ -47,10 +47,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).not.toMatch(/VITE_BFF_REAL_WRITES=true/u);
     expect(deployScript).not.toMatch(/VITE_BFF_ALLOW_DEV_STUB_WRITES=true/u);
     expect(deployScript).toContain(
-      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES',
+      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES',
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
+    );
+    expect(deployScript).toContain(
+      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT',
     );
     expect(integrationWorkflow.match(
       /VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer/gu,

@@ -162,6 +162,11 @@ function buildRows(
     }));
 
   return [...strategyRows, ...attributionOnlyRows].sort((a, b) => {
+    const aUnassigned = a.strategyId === "unassigned" || a.title.toLowerCase() === "unassigned";
+    const bUnassigned = b.strategyId === "unassigned" || b.title.toLowerCase() === "unassigned";
+    if (aUnassigned !== bUnassigned) {
+      return aUnassigned ? 1 : -1;
+    }
     if (a.kind !== b.kind) return a.kind === "strategy" ? -1 : 1;
     const aRank = a.attribution?.rank ?? Number.MAX_SAFE_INTEGER;
     const bRank = b.attribution?.rank ?? Number.MAX_SAFE_INTEGER;
@@ -529,27 +534,29 @@ function StrategyPerformanceLoaded({
                         "font-mono font-bold text-[14px]",
                         pnlValue !== undefined && pnlValue > 0 ? "text-emerald-400" : pnlValue !== undefined && pnlValue < 0 ? "text-rose-400" : "text-[#f0ece4]"
                       )}>
-                        {formatCurrency(metric(row, "total_pnl"), missing)}
+                        <MetricValue value={metric(row, "total_pnl")} format={(value) => formatCurrency(value, missing)} />
                       </div>
                       <div className="text-[9px] text-[#8c96a6]">{t("agora.performance.cumulativePnl")}</div>
                     </div>
                     <div>
                       <div className="font-mono text-[12px] text-[#f0ece4]">
-                        {formatNumber(row.attribution?.holding_count ?? metric(row, "holding_count"), "0")}
+                        <MetricValue value={row.attribution?.holding_count ?? metric(row, "holding_count")} format={(value) => formatNumber(value, missing)} />
                       </div>
                       <div className="text-[9px] text-[#8c96a6]">{t("agora.performance.holding")}</div>
                     </div>
                     <div>
                       <div className="font-mono text-[12px] text-[#f0ece4]">
-                        {formatNumber(metric(row, "total_trades"), "0")}
+                        <MetricValue value={metric(row, "total_trades")} format={(value) => formatNumber(value, missing)} />
                       </div>
                       <div className="text-[9px] text-[#8c96a6]">{t("agora.performance.tradesCount")}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 text-[11px] text-[#8c96a6]">
                     <span className="text-sky-400">✦</span>
-                    <span className="truncate">
-                      {row.strategy?.shadow_status || (row.strategyId === "unassigned" ? "無連結至具名策略" : "表現穩定 · 持續追蹤")}
+                    <span className="truncate" title={row.strategyId === "unassigned" || row.title.toLowerCase() === "unassigned" ? t("agora.performance.unlinkedTelemetry") : undefined}>
+                      {row.strategyId === "unassigned" || row.title.toLowerCase() === "unassigned"
+                        ? t("agora.performance.unlinkedTelemetry")
+                        : row.strategy?.shadow_status || "表現穩定 · 持續追蹤"}
                     </span>
                   </div>
                   {hasSuggestions && (
@@ -625,13 +632,13 @@ function StrategyPerformanceLoaded({
                       <div className="bg-[#101318]/50 border border-[#2a2e38] rounded-xl p-3">
                         <div className="text-[10px] text-[#8c96a6] mb-1">{t("agora.performance.contribution")}</div>
                         <div className="font-mono font-bold text-lg text-[#f0ece4]">
-                          {formatPercent(activeRow.attribution?.pnl_contribution_pct ?? metric(activeRow, "pnl_contribution_pct"), missing)}
+                          <MetricValue value={activeRow.attribution?.pnl_contribution_pct ?? metric(activeRow, "pnl_contribution_pct")} format={(value) => formatPercent(value, missing)} />
                         </div>
                       </div>
                       <div className="bg-[#101318]/50 border border-[#2a2e38] rounded-xl p-3">
                         <div className="text-[10px] text-[#8c96a6] mb-1">{t("agora.performance.drawdown")}</div>
                         <div className="font-mono font-bold text-lg text-[#f0ece4]">
-                          {formatPercent(metric(activeRow, "worst_drawdown"), missing)}
+                          <MetricValue value={metric(activeRow, "worst_drawdown")} format={(value) => formatPercent(value, missing)} />
                         </div>
                       </div>
                       <div className="bg-[#101318]/50 border border-[#2a2e38] rounded-xl p-3">
