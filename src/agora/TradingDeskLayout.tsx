@@ -19,30 +19,19 @@
 //   /agora/strategy-workshop     策略工坊
 //   /agora/strategy-performance  策略執行與績效
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
-
-/** Below this width the servant drawer becomes a full-width overlay instead of a fixed side column. */
-const MOBILE_BREAKPOINT_PX = 768;
-
-function useIsMobileViewport(): boolean {
-  const [isMobile, setIsMobile] = useState<boolean>(() =>
-    typeof window !== "undefined" ? window.innerWidth < MOBILE_BREAKPOINT_PX : false,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT_PX);
-    handler();
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-
-  return isMobile;
-}
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useIsNarrowViewport } from "./responsive";
+import "./responsive.css";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -93,9 +82,11 @@ function tabFromPath(pathname: string): AgoraTab {
 function CommandBar({
   drawerOpen,
   onToggleDrawer,
+  triggerRef,
 }: {
   drawerOpen: boolean;
   onToggleDrawer: () => void;
+  triggerRef: React.RefObject<HTMLButtonElement>;
 }) {
   return (
     <header
@@ -108,6 +99,7 @@ function CommandBar({
       <span className="text-sm font-bold tracking-wide text-[#f0ece4]">AGORA</span>
       <span className="flex-1" />
       <button
+        ref={triggerRef}
         aria-label={drawerOpen ? "Close servant drawer" : "Open servant drawer"}
         aria-pressed={drawerOpen}
         className={cn(
@@ -208,22 +200,90 @@ function useServantWorkshopContext(workshopId: string | undefined): ServantWorks
 function ServantDrawer({
   open,
   workshopId,
-  isMobile,
+  isNarrow,
+  onOpenChange,
+  triggerRef,
 }: {
   open: boolean;
   workshopId?: string;
-  isMobile: boolean;
+  isNarrow: boolean;
+  onOpenChange: (open: boolean) => void;
+  triggerRef: React.RefObject<HTMLButtonElement>;
 }) {
   const contextState = useServantWorkshopContext(workshopId);
+
+  const context = (
+    <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">
+      {!workshopId && (
+        <p className="text-xs text-[#737d8e]">
+          Servant panel — open a strategy workshop session for contextual state.
+        </p>
+      )}
+      {workshopId && contextState.status === "loading" && (
+        <p className="text-xs text-[#737d8e]">Loading workshop context…</p>
+      )}
+      {workshopId && contextState.status === "error" && (
+        <p className="text-xs text-[#f87171]" role="alert">
+          Workshop context unavailable: {contextState.message}
+        </p>
+      )}
+      {workshopId && contextState.status === "loaded" && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-medium text-[#f0ece4]">
+            {contextState.workshop.subject?.title ?? contextState.workshop.subject?.ref}
+          </p>
+          <p className="text-xs text-[#8c96a6]">Status: {contextState.workshop.status}</p>
+          {typeof contextState.workshop.message_count === "number" && (
+            <p className="text-xs text-[#8c96a6]">
+              Messages: {contextState.workshop.message_count}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  if (isNarrow) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          aria-describedby="servant-drawer-description"
+          aria-label="Servant drawer"
+          className="agora-narrow-drawer flex h-[100dvh] w-full max-w-none flex-col gap-0 border-l border-[#2a2e38] bg-[#171b22] p-0 text-[#f0ece4] sm:max-w-none"
+          data-testid="trading-desk-servant-drawer"
+          onCloseAutoFocus={(event) => {
+            if (triggerRef.current?.isConnected) {
+              event.preventDefault();
+              triggerRef.current.focus();
+            }
+          }}
+          side="right"
+        >
+          <div className="flex min-h-12 shrink-0 items-center border-b border-[#2a2e38] px-4 pr-14">
+            <SheetTitle className="text-xs font-semibold uppercase tracking-wide text-[#e8b750]">
+              Servant
+            </SheetTitle>
+            <SheetDescription className="sr-only" id="servant-drawer-description">
+              Contextual task, decision, and workshop status.
+            </SheetDescription>
+            {workshopId && (
+              <span className="ml-auto font-mono text-xs text-[#737d8e]">
+                {workshopId.slice(0, 8)}…
+              </span>
+            )}
+          </div>
+          {context}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   if (!open) return null;
 
   return (
     <aside
       aria-label="Servant drawer"
-      className={cn(
-        "flex shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]",
-        isMobile ? "fixed inset-x-0 bottom-10 top-[122px] z-30 w-full" : "w-80",
-      )}
+      className="flex w-80 shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]"
       data-testid="trading-desk-servant-drawer"
     >
       <div className="flex h-10 shrink-0 items-center border-b border-[#2a2e38] px-3">
@@ -236,34 +296,7 @@ function ServantDrawer({
           </span>
         )}
       </div>
-      <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">
-        {!workshopId && (
-          <p className="text-xs text-[#737d8e]">
-            Servant panel — open a strategy workshop session for contextual state.
-          </p>
-        )}
-        {workshopId && contextState.status === "loading" && (
-          <p className="text-xs text-[#737d8e]">Loading workshop context…</p>
-        )}
-        {workshopId && contextState.status === "error" && (
-          <p className="text-xs text-[#f87171]" role="alert">
-            Workshop context unavailable: {contextState.message}
-          </p>
-        )}
-        {workshopId && contextState.status === "loaded" && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium text-[#f0ece4]">
-              {contextState.workshop.subject?.title ?? contextState.workshop.subject?.ref}
-            </p>
-            <p className="text-xs text-[#8c96a6]">Status: {contextState.workshop.status}</p>
-            {typeof contextState.workshop.message_count === "number" && (
-              <p className="text-xs text-[#8c96a6]">
-                Messages: {contextState.workshop.message_count}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+      {context}
     </aside>
   );
 }
@@ -324,7 +357,25 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bottomSection, setBottomSection] = useState<string | null>(null);
-  const isMobile = useIsMobileViewport();
+  const isNarrow = useIsNarrowViewport();
+  const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const mainRegionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mainRegion = mainRegionRef.current;
+    if (!mainRegion) return;
+    if (isNarrow && drawerOpen) {
+      mainRegion.setAttribute("inert", "");
+      mainRegion.setAttribute("aria-hidden", "true");
+    } else {
+      mainRegion.removeAttribute("inert");
+      mainRegion.removeAttribute("aria-hidden");
+    }
+    return () => {
+      mainRegion.removeAttribute("inert");
+      mainRegion.removeAttribute("aria-hidden");
+    };
+  }, [drawerOpen, isNarrow]);
 
   const activeTab = tabFromPath(location.pathname);
 
@@ -340,16 +391,17 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
     <div
       className={cn("flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
       data-testid="trading-desk-shell"
-      data-viewport={isMobile ? "mobile" : "desktop"}
+      data-viewport={isNarrow ? "mobile" : "desktop"}
     >
       <CommandBar
         drawerOpen={drawerOpen}
         onToggleDrawer={() => setDrawerOpen((v) => !v)}
+        triggerRef={drawerTriggerRef}
       />
 
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden" ref={mainRegionRef}>
         <main
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
           data-testid="trading-desk-main"
@@ -358,7 +410,13 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
           <Outlet />
         </main>
 
-        <ServantDrawer open={drawerOpen} workshopId={servantWorkshopId} isMobile={isMobile} />
+        <ServantDrawer
+          isNarrow={isNarrow}
+          onOpenChange={setDrawerOpen}
+          open={drawerOpen}
+          triggerRef={drawerTriggerRef}
+          workshopId={servantWorkshopId}
+        />
       </div>
 
       <BottomStrip activeSection={bottomSection} onSectionChange={setBottomSection} />

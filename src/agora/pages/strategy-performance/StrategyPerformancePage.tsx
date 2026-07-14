@@ -407,6 +407,7 @@ function StrategyPerformanceLoaded({
 
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"perf" | "intv" | "hist">("perf");
+  const [mobilePane, setMobilePane] = useState<"decision" | "outcome" | "strategies">("decision");
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -441,6 +442,7 @@ function StrategyPerformanceLoaded({
     <section
       aria-label={t("agora.performance.title")}
       className="flex flex-1 flex-col gap-4 overflow-hidden bg-[#101318] p-4 text-[#f0ece4] md:p-5 h-full"
+      data-testid="strategy-performance-page"
     >
       <header className="flex flex-wrap items-start justify-between gap-3 shrink-0">
         <div>
@@ -487,10 +489,66 @@ function StrategyPerformanceLoaded({
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_1fr_320px] gap-4 overflow-hidden">
+      {activeRow && simulated && (
+        <div
+          className="agora-mobile-only shrink-0 flex-col gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3"
+          data-testid="performance-mobile-priority"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-amber-400">Decision focus</div>
+              <div className="truncate text-sm font-bold text-[#f0ece4]">{activeRow.title}</div>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-3 text-right">
+              <div>
+                <div className="font-mono text-sm font-bold text-[#f0ece4]">
+                  <MetricValue value={metric(activeRow, "total_pnl")} format={(value) => formatCurrency(value, missing)} />
+                </div>
+                <div className="text-[9px] text-[#8c96a6]">PnL</div>
+              </div>
+              <div>
+                <div className="font-mono text-sm font-bold text-rose-300">
+                  <MetricValue value={metric(activeRow, "worst_drawdown")} format={(value) => formatPercent(value, missing)} />
+                </div>
+                <div className="text-[9px] text-[#8c96a6]">Drawdown</div>
+              </div>
+            </div>
+          </div>
+          <p className="line-clamp-2 text-xs leading-relaxed text-amber-100/90">
+            {simulated.warnings[0] ?? t("agora.performance.noAnomaly")}
+          </p>
+        </div>
+      )}
+
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-2 overflow-x-auto"
+        data-testid="performance-mobile-pane-selector"
+      >
+        {([
+          ["decision", "Decisions"],
+          ["outcome", "Selected outcome"],
+          ["strategies", "Strategies"],
+        ] as const).map(([pane, label]) => (
+          <button
+            aria-pressed={mobilePane === pane}
+            className={mobilePane === pane ? "shrink-0 rounded-full bg-sky-500 px-3 py-1.5 text-xs font-semibold text-[#101318]" : "shrink-0 rounded-full border border-[#2a2e38] px-3 py-1.5 text-xs font-semibold text-[#c5cad2]"}
+            key={pane}
+            onClick={() => setMobilePane(pane)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_1fr_320px] gap-4 overflow-hidden" data-testid="performance-pane-grid">
         
         {/* LEFT: STRATEGY LIST */}
-        <div className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden">
+        <div
+          className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden"
+          data-mobile-pane-hidden={mobilePane !== "strategies"}
+          data-testid="performance-strategy-pane"
+        >
           <div className="p-4 border-b border-[#2a2e38] shrink-0">
             <div className="font-bold text-sm text-[#f0ece4]">{t("agora.performance.strategyList")}</div>
             <div className="text-[11.5px] text-[#8c96a6] mt-0.5">
@@ -571,7 +629,11 @@ function StrategyPerformanceLoaded({
         </div>
 
         {/* CENTER: PERFORMANCE + INTERVENTION + HISTORY */}
-        <div className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden">
+        <div
+          className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden"
+          data-mobile-pane-hidden={mobilePane !== "outcome"}
+          data-testid="performance-outcome-pane"
+        >
           {activeRow ? (
             <>
               <div className="flex items-center justify-between p-3 border-b border-[#2a2e38] flex-wrap gap-2 shrink-0 bg-[#1e2330]/20">
@@ -586,7 +648,7 @@ function StrategyPerformanceLoaded({
                     {sourceStateLabel(activeRow, t)}
                   </span>
                 </div>
-                <div className="flex bg-[#101318] border border-[#2a2e38] rounded-full p-0.5 text-xs font-semibold">
+                <div className="flex max-w-full overflow-x-auto bg-[#101318] border border-[#2a2e38] rounded-full p-0.5 text-xs font-semibold">
                   <button
                     onClick={() => setActiveTab("perf")}
                     className={cn(
@@ -697,7 +759,45 @@ function StrategyPerformanceLoaded({
                           {t("agora.performance.returnedRows", { returned: summary.returned_row_count, total: summary.row_count })}
                         </span>
                       </div>
-                      <div className="overflow-x-auto">
+                      <div className="agora-mobile-only flex-col gap-2 p-3" data-testid="performance-narrow-comparison">
+                        {rows.map((row) => (
+                          <button
+                            aria-pressed={row.strategyId === selectedStrategyId}
+                            className={cn(
+                              "rounded-lg border p-3 text-left",
+                              row.strategyId === selectedStrategyId
+                                ? "border-sky-500/60 bg-sky-500/10"
+                                : "border-[#2a2e38] bg-[#101318]/50",
+                            )}
+                            data-testid={`performance-narrow-row-${row.id}`}
+                            key={row.id}
+                            onClick={() => setSelectedStrategyId(row.strategyId)}
+                            type="button"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="min-w-0 truncate text-xs font-bold text-[#f0ece4]">{row.title}</span>
+                              <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[9px]", sourceStateClass(row))}>
+                                {sourceStateLabel(row, t)}
+                              </span>
+                            </div>
+                            <dl className="mt-3 grid grid-cols-3 gap-2">
+                              <div>
+                                <dt className="text-[9px] text-[#8c96a6]">PnL</dt>
+                                <dd className="font-mono text-xs text-[#f0ece4]">{formatCurrency(metric(row, "total_pnl"), missing)}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[9px] text-[#8c96a6]">Drawdown</dt>
+                                <dd className="font-mono text-xs text-rose-300">{formatPercent(metric(row, "worst_drawdown"), missing)}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[9px] text-[#8c96a6]">Trades</dt>
+                                <dd className="font-mono text-xs text-[#f0ece4]">{formatNumber(metric(row, "total_trades"), missing)}</dd>
+                              </div>
+                            </dl>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="agora-desktop-only overflow-x-auto">
                         <table className="w-full text-left text-xs min-w-[750px]">
                           <thead className="bg-[#101318]/30 border-b border-[#2a2e38] text-[#8c96a6] uppercase text-[9px] tracking-wider">
                             <tr>
@@ -829,7 +929,24 @@ function StrategyPerformanceLoaded({
                       <div className="text-xs font-bold text-[#f0ece4]">{t("agora.performance.executionHistory")}</div>
                       <div className="text-[10px] text-[#8c96a6] mt-0.5">{t("agora.performance.decisionSupportOnly")}</div>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="agora-mobile-only flex-col gap-2 p-3" data-testid="performance-narrow-history">
+                      {simulated.execHistory.map((history, index) => (
+                        <article className="rounded-lg border border-[#2a2e38] bg-[#101318]/50 p-3" key={`${history.date}-${history.code}-${index}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-mono text-xs font-bold text-[#f0ece4]">{history.code} · {history.name}</div>
+                              <div className="mt-0.5 text-[10px] text-[#8c96a6]">{history.date} · {history.action}</div>
+                            </div>
+                            <span className="font-mono text-sm font-bold" style={{ color: history.resultColor }}>{history.result}</span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-[10px] text-[#8c96a6]">
+                            <span>Expected: {history.advice}</span>
+                            <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: history.devBg, color: history.devFg }}>{history.deviate}</span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="agora-desktop-only overflow-x-auto">
                       <table className="w-full text-left text-xs min-w-[550px]">
                         <thead className="bg-[#101318]/30 border-b border-[#2a2e38] text-[#8c96a6] uppercase text-[9px] tracking-wider">
                           <tr>
@@ -880,7 +997,11 @@ function StrategyPerformanceLoaded({
         </div>
 
         {/* RIGHT: ASSISTANT NOTES / ADJUSTMENT SUGGESTIONS */}
-        <div className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden">
+        <div
+          className="flex flex-col min-h-0 border border-[#2a2e38] bg-[#171b22] rounded-xl overflow-hidden"
+          data-mobile-pane-hidden={mobilePane !== "decision"}
+          data-testid="performance-decision-pane"
+        >
           <div className="p-3 border-b border-[#2a2e38] flex items-center gap-2 shrink-0 bg-[#1e2330]/20">
             <span className="text-sky-400">✦</span>
             <div className="font-bold text-sm text-[#f0ece4]">{t("agora.performance.assistantNotes")}</div>
@@ -975,7 +1096,7 @@ function StrategyPerformanceLoaded({
       </div>
 
       {/* Collapsible/Accessible Source Health at the very bottom */}
-      <footer className="shrink-0 border border-[#2a2e38] bg-[#171b22]/50 rounded-xl p-3 flex flex-col gap-2">
+      <footer className="shrink-0 border border-[#2a2e38] bg-[#171b22]/50 rounded-xl p-3 flex flex-col gap-2" data-testid="performance-source-health">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xs font-bold text-[#f0ece4]">{t("agora.performance.sourceHealth")}</h2>
           <div className="text-[10px] text-[#8c96a6]">

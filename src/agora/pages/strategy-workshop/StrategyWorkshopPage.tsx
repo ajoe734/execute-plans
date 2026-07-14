@@ -376,6 +376,8 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [sendLoading, setSendLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"conversation" | "readiness">("conversation");
+  const [mobileComposerOptionsOpen, setMobileComposerOptionsOpen] = useState(false);
 
   // Initial data load
   useEffect(() => {
@@ -520,6 +522,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       .filter((c) => c.card_type === "completeness_update")
       .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
   const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
+  const nextQuestionText = (() => {
+    if (!nextQuestion || nextQuestion.card_type !== "next_question") return null;
+    const question = nextQuestion.payload?.question;
+    return typeof question === "string" && question.trim() ? question.trim() : null;
+  })();
 
   const handleContinueDiscussion = useCallback((cardId: string) => {
     setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} - `));
@@ -597,10 +604,37 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   return (
     <div
       data-testid="strategy-workshop-page-session"
+      data-mobile-workshop-pane={mobilePane}
       className="flex h-full w-full overflow-hidden bg-slate-50"
     >
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2"
+        data-testid="workshop-mobile-pane-selector"
+      >
+        <button
+          aria-pressed={mobilePane === "conversation"}
+          className={mobilePane === "conversation" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          onClick={() => setMobilePane("conversation")}
+          type="button"
+        >
+          Conversation
+        </button>
+        <button
+          aria-pressed={mobilePane === "readiness"}
+          className={mobilePane === "readiness" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          onClick={() => setMobilePane("readiness")}
+          type="button"
+        >
+          Next question & readiness
+        </button>
+      </div>
+
       {/* Left: conversation + composer */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200">
+      <div
+        className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200"
+        data-mobile-pane-hidden={mobilePane !== "conversation"}
+        data-testid="workshop-conversation-pane"
+      >
 
         {/* Session header */}
         <div
@@ -724,6 +758,16 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           </div>
         )}
 
+        <div
+          className="agora-mobile-only shrink-0 flex-col gap-1 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-950"
+          data-testid="workshop-mobile-priority"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Next question</span>
+          <span className="line-clamp-2 text-xs font-medium leading-5">
+            {nextQuestionText ?? "Awaiting the next highest-value question."}
+          </span>
+        </div>
+
         {/* Conversation flow */}
         <div
           data-testid="workshop-conversation"
@@ -759,6 +803,22 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
         {/* Composer section */}
         <div data-testid="servant-composer" className="border-t border-slate-200 bg-white p-4 shrink-0 flex flex-col gap-3">
+          <button
+            aria-expanded={mobileComposerOptionsOpen}
+            className="agora-mobile-only items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
+            data-testid="workshop-composer-options-toggle"
+            onClick={() => setMobileComposerOptionsOpen((open) => !open)}
+            type="button"
+          >
+            <span>Mode, participants & context</span>
+            <span aria-hidden="true">{mobileComposerOptionsOpen ? "−" : "+"}</span>
+          </button>
+
+          <div
+            className="flex flex-col gap-3"
+            data-mobile-collapsed={!mobileComposerOptionsOpen}
+            data-testid="workshop-composer-options"
+          >
           
           {/* Context Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100 shrink-0" data-testid="context-bar">
@@ -921,6 +981,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               ))}
             </div>
           )}
+          </div>
 
           {/* Composer Input Area */}
           <div className="flex gap-2">
@@ -969,6 +1030,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       {/* Right: completeness rail + trading room CTA */}
       <div
         data-testid="completeness-rail"
+        data-mobile-pane-hidden={mobilePane !== "readiness"}
         style={{
           width: 240,
           borderLeft: "1px solid #e2e8f0",

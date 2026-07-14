@@ -333,6 +333,35 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("completeness-rail")).toBeDefined();
   });
 
+  it("uses an explicit conversation/readiness selector and collapsible composer context", () => {
+    vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopEvents).mockReturnValue(new Promise(() => {}));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const page = screen.getByTestId("strategy-workshop-page-session");
+    const conversation = screen.getByTestId("workshop-conversation-pane");
+    const readiness = screen.getByTestId("completeness-rail");
+    const options = screen.getByTestId("workshop-composer-options");
+    const optionsToggle = screen.getByTestId("workshop-composer-options-toggle");
+
+    expect(page.getAttribute("data-mobile-workshop-pane")).toBe("conversation");
+    expect(conversation.getAttribute("data-mobile-pane-hidden")).toBe("false");
+    expect(readiness.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(options.getAttribute("data-mobile-collapsed")).toBe("true");
+    expect(optionsToggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(optionsToggle);
+    expect(options.getAttribute("data-mobile-collapsed")).toBe("false");
+    expect(optionsToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next question & readiness" }));
+    expect(page.getAttribute("data-mobile-workshop-pane")).toBe("readiness");
+    expect(conversation.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(readiness.getAttribute("data-mobile-pane-hidden")).toBe("false");
+  });
+
   it("keeps the hosted raw snapshot rail aligned with its latest completeness card", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       ...MOCK_WORKSHOP,

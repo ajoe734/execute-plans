@@ -204,8 +204,16 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible();
       await expect(page.getByTestId("strategy-workshop-runtime-header")).toBeVisible();
       await expect(page.getByTestId("workshop-conversation")).toBeVisible();
-      await expect(page.getByTestId("completeness-rail")).toBeVisible();
       await expect(page.getByTestId("servant-composer")).toBeVisible();
+      if (viewport.name === "mobile") {
+        await expect(page.getByTestId("workshop-mobile-priority")).toBeVisible();
+        await page.getByRole("button", { name: "Next question & readiness" }).click();
+        await expect(page.getByTestId("completeness-rail")).toBeVisible();
+        await page.getByRole("button", { name: "Conversation" }).click();
+        await expect(page.getByTestId("workshop-conversation")).toBeVisible();
+      } else {
+        await expect(page.getByTestId("completeness-rail")).toBeVisible();
+      }
       await expect(page.getByTestId("context-bar")).toBeVisible();
       await expect(page.getByTestId("mode-selector")).toBeVisible();
       await expect(page.getByTestId("participant-picker")).toBeVisible();
