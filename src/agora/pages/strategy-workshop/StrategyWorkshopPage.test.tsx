@@ -469,6 +469,25 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("eligibility-explanation")).toBeDefined();
   });
 
+  it("keeps the live session renderable when a legacy workshop omits its subject", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-legacy",
+      operator_id: "operator-001",
+      status: "open",
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+
+    render(<StrategyWorkshopPage workshopId="ws-legacy" />);
+
+    const contextBar = await screen.findByTestId("context-bar");
+    expect(contextBar.textContent).toContain("Subject: none (none)");
+    expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
+  });
+
   it("renders warning banners when stale/degraded/denied triggers are toggled", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       spec_version: "1.0",
