@@ -55,25 +55,40 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   // Navigate to the evolution journal with the persona parameter
   await page.goto(`${FE_BASE}/management/evolution-journal?persona=${encodeURIComponent(personaId)}`);
 
-  // Wait for the region or fallback card to render
+  // Wait for the region to render
   const region = page.getByRole('region', { name: /演化日誌|Evolution Journal/i });
   await expect(region).toBeVisible({ timeout: 20000 });
 
-  // Wait for the fallback card or the list to be loaded
-  await page.waitForTimeout(5000);
+  // Wait for the loading placeholder to clear (bounds the positive assertions
+  // below to the actually-loaded fallback card, instead of a blind timeout
+  // that would pass equally on an empty/loading page).
+  const loadingPlaceholder = region.getByText(/Loading\.\.\.|載入中/i);
+  await expect(loadingPlaceholder).not.toBeVisible({ timeout: 30000 });
+
+  // Positive assertion: the persona-fleet-summary fallback card itself is
+  // rendered (fallbackEvolutionEntryFromFleet in _core.tsx), not just an
+  // empty/loading region. Its headline and target fields are deterministic
+  // and hardcoded (not i18n-translated), so they are stable to assert on.
+  const fallbackHeadline = page.getByText(/Persona Fleet status summary/i);
+  await expect(fallbackHeadline).toBeVisible({ timeout: 20000 });
+
+  const fallbackFocusBanner = page.getByText(/fleet summary fallback/i);
+  await expect(fallbackFocusBanner).toBeVisible();
+
+  const fallbackTarget = page.getByText(new RegExp(`Persona:${personaId}`, "i"));
+  await expect(fallbackTarget).toBeVisible();
 
   // Assertions to verify:
-  // - The fallback card is visible
   // - No Fixture badge is present
   // - No Approval status/field is present
   // - No NaN values are present on the page
   // - No raw i18n keys (like mgmt.evolution.*) are displayed
   const pageText = await page.innerText("body");
-  
+
   // Make sure raw i18n keys are not shown
   expect(pageText).not.toContain("mgmt.evolution.");
   expect(pageText).not.toContain("common.");
-  
+
   // Make sure no NaN is present
   expect(pageText).not.toContain("NaN");
 
