@@ -56,7 +56,7 @@ jobs:
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /health
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
       PANTHEON_DEPLOY_BFF_COMMIT: ${{ inputs.bff_commit || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
 
