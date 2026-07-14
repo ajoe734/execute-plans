@@ -15,6 +15,11 @@ on:
         required: false
         default: "dev"
         type: string
+      bff_commit:
+        description: "Exact Pantheon BFF merge SHA paired with this frontend deployment. Required for manual final proof."
+        required: false
+        default: ""
+        type: string
       skip_probe:
         description: "Emergency only: deploy without the browser/BFF probe."
         required: false
@@ -52,6 +57,7 @@ jobs:
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
+      PANTHEON_DEPLOY_BFF_COMMIT: ${{ inputs.bff_commit || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
 
     steps:
@@ -102,5 +108,6 @@ jobs:
             echo "- deployed sha: \`${{ steps.sha.outputs.sha }}\`"
             echo "- FE: ${PANTHEON_DEV_FE_HOST}"
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
+            echo "- BFF commit: ${PANTHEON_DEPLOY_BFF_COMMIT:-unknown}"
             echo "- evidence: pantheon-dev-fe-deploy-evidence"
           } >> "$GITHUB_STEP_SUMMARY"

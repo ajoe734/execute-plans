@@ -29,6 +29,7 @@ PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
 DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
+BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -48,6 +49,11 @@ fi
 
 if [[ "${REAL_WRITES}" != "false" || "${ALLOW_DEV_STUB_WRITES}" != "false" ]]; then
   echo "Automated dev frontend deployment is read-only; real and dev-stub writes must remain disabled." >&2
+  exit 2
+fi
+
+if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && -z "${BFF_COMMIT}" ]]; then
+  echo "Manual final-proof deployment requires an exact Pantheon BFF commit SHA." >&2
   exit 2
 fi
 
@@ -106,7 +112,7 @@ export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
 export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
 export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
-export PANTHEON_DEPLOY_BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-27cd46529c29801db02818aafe4df723cc0f8666}"
+export PANTHEON_DEPLOY_BFF_COMMIT="${BFF_COMMIT}"
 
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -120,7 +126,8 @@ const metadata = {
   sourceBranch: process.env.PANTHEON_DEPLOY_SOURCE_BRANCH,
   feHost: process.env.PANTHEON_DEPLOY_FE_HOST,
   bffHost: process.env.PANTHEON_DEPLOY_BFF_HOST,
-  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT,
+  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT || "unknown",
+  bffCommitEvidence: Boolean(process.env.PANTHEON_DEPLOY_BFF_COMMIT),
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",

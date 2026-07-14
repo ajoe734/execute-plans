@@ -10,6 +10,10 @@ const integrationWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
   "utf8",
 );
+const deployWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-dev-fe-deploy.yml"),
+  "utf8",
+);
 const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
@@ -54,12 +58,29 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT',
+      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT || "unknown"',
     );
+    expect(deployScript).toContain(
+      "bffCommitEvidence: Boolean(process.env.PANTHEON_DEPLOY_BFF_COMMIT)",
+    );
+    expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
     expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
     expect(integrationWorkflow.match(
       /VITE_BFF_DEV_BEARER_TOKEN: ""/gu,
     )).toHaveLength(2);
+  });
+
+  it("requires explicit BFF provenance for manual final-proof deployments", () => {
+    expect(deployWorkflow).toContain("bff_commit:");
+    expect(deployWorkflow).toContain("inputs.bff_commit || vars.PANTHEON_BFF_SHA || ''");
+    expect(deployScript).toContain('BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"');
+
+    const result = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_BFF_COMMIT: "",
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
   });
 
   it("keeps every post-deploy acceptance probe read-only", () => {
