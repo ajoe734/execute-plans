@@ -28,7 +28,7 @@ import { canonicalCenterUrl } from "@/management/navigation/managementRouteManif
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
-  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
+  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxList,
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
 import {
@@ -1126,7 +1126,7 @@ export const HumanInboxPage = () => {
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
-  const { data, loading, error = null, refresh } = useV5Live(() => {
+  const { data, loading, error = null, refresh } = useV5Live<HumanInboxList>(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => clearTimeout(timer));
@@ -1135,9 +1135,9 @@ export const HumanInboxPage = () => {
     () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
   );
-  const surfaces = (data as any)?.meta?.surfaces ?? {};
+  const surfaces = data?.meta?.surfaces ?? {};
   const isDegraded = Object.values(surfaces).some(
-    (s: any) => s.status === "degraded" || s.status === "unavailable"
+    (surface) => surface.status === "degraded" || surface.status === "unavailable"
   );
   const isInitialPending = loading && !data && !error;
   const isTransportUnavailable = Boolean(error);

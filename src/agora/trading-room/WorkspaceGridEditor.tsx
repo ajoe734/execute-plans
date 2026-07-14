@@ -515,7 +515,7 @@ function parseNewWidgetPrompt(prompt: string, strategyId: string, currentY: numb
   mapping: string;
 } {
   const isReturn = prompt.includes("報酬") || prompt.includes("return") || prompt.includes("5") || prompt.includes("20");
-  
+
   if (isReturn) {
     const spec: TradingRoomWidgetSpec = {
       id: `servant_widget_${Date.now()}`,
@@ -650,7 +650,7 @@ export function WorkspaceGridEditor({
   const [versions, setVersions] = useState<TradingRoomDashboardVersion[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [revisionTarget, setRevisionTarget] = useState<{ viewId: string; widgetId: string } | null>(null);
-  
+
   // Custom states for notifications and Ask Servant widget proposals
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [widgetProposal, setWidgetProposal] = useState<{
@@ -1083,7 +1083,7 @@ export function WorkspaceGridEditor({
             <span style={{ color: COLORS.muted, fontSize: 12 }}>
               ({draftWorkspace.strategyVersion})
             </span>
-            
+
             {/* Status indicators */}
             <span
               data-testid="workspace-readiness-badge"
@@ -1099,7 +1099,7 @@ export function WorkspaceGridEditor({
             >
               {strategy?.readiness_state || "READY"}
             </span>
-            
+
             <span
               data-testid="workspace-data-freshness"
               style={{
@@ -1112,7 +1112,7 @@ export function WorkspaceGridEditor({
             >
               ● Data: {(activeView?.dataAvailability || "complete").charAt(0).toUpperCase() + (activeView?.dataAvailability || "complete").slice(1)} {dataCutoff ? `(${dataCutoff.includes('T') ? dataCutoff.split('T')[1].slice(0, 5) : dataCutoff})` : ""}
             </span>
-            
+
             <span
               data-testid="workspace-risk-state"
               style={{
@@ -1136,7 +1136,7 @@ export function WorkspaceGridEditor({
             >
               Risk: {riskSummary?.state || "normal"}
             </span>
-            
+
             <span
               data-testid="workspace-pending-decisions"
               style={{
@@ -1398,7 +1398,7 @@ export function WorkspaceGridEditor({
                   : version.generatedBy === "learned_personalization"
                   ? "AI 個人化 (Learner)"
                   : "交易員 (Trader)";
-                  
+
               const badgeBg =
                 version.generatedBy === "trading_servant"
                   ? "rgba(59, 130, 246, 0.15)"
@@ -1687,7 +1687,7 @@ export function WorkspaceGridEditor({
                   onClick={async () => {
                     const widgetSpec = widgetProposal.widgetSpec;
                     const newOp = { kind: "add_registered_widget" as const, payload: { viewId: activeView.id, widgetSpec } };
-                    
+
                     setSaveState("saving");
                     setError(null);
                     try {

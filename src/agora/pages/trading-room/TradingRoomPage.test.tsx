@@ -30,9 +30,26 @@ vi.mock("react-router-dom", () => ({
   useSearchParams: () => [new URLSearchParams()],
 }));
 
-vi.mock("@/lib/bff-v1/agora/workshops", () => ({
-  createWorkshop: vi.fn().mockResolvedValue({ workshop_id: "ws-new-001" }),
-  postWorkshopMessage: vi.fn().mockResolvedValue({ message_id: "msg-001" }),
+vi.mock("@/lib/bff-v1/agora/interaction", () => ({
+  interaction: {
+    resolveContext: vi.fn().mockResolvedValue({ data: { workshop_id: "ws-new-001", context_refs: [{ type: "strategy", id: "strat-001", version_id: "reg-001" }, { type: "decision_event", id: "evt-001" }], verified: true } }),
+    participants: vi.fn().mockResolvedValue({ data: { included: ["per_quant", "per_risk", "per_macro", "per_red"].map((persona_id) => ({ persona_id, display_name: persona_id, eligible: true, reasons: [], recommended: true })), excluded: [] } }),
+    submit: vi.fn().mockResolvedValue({ data: { execution_authority: "none" } }),
+  },
+}));
+
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: ["agora.workshop.v1"],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
 }));
 
 vi.mock("react-grid-layout", async () => {
@@ -83,7 +100,9 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 }));
 
 import { TradingRoomPage } from "./TradingRoomPage";
+import i18n from "@/i18n";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
+import { interaction } from "@/lib/bff-v1/agora/interaction";
 import * as candidatePoolModule from "@/lib/bff-v1/agora/candidatePool";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
@@ -855,7 +874,9 @@ describe("TradingRoomPage", () => {
     for (const view of PROPOSAL_VIEWS) {
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toMatch(/1 widgets|1 個元件/);
+      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toBe(
+        i18n.t("agora.tradingRoom.proposal.widgetCount", { count: 1 }),
+      );
     }
   });
 
@@ -891,10 +912,17 @@ describe("TradingRoomPage", () => {
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
-    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toMatch(/Workspace data availability|工作區資料可用性/);
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toBe(
+      i18n.t("agora.tradingRoom.proposal.workspaceDataAvailability")
+        + i18n.t("agora.tradingRoom.availability.partial"),
+    );
     expect(screen.getByTestId("workspace-proposal-data-availability").textContent).not.toContain("winner_branch.related_branch_flow");
-    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toMatch(/0 full \/ 1 partial \/ 0 missing|0 完整／1 \u90e8\u5206\u53ef\u7528／0 缺漏/);
-    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toMatch(/1 full \/ 0 partial \/ 0 missing|1 完整／0 \u90e8\u5206\u53ef\u7528／0 缺漏/);
+    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain(
+      i18n.t("agora.tradingRoom.proposal.availabilitySummary", { complete: 0, partial: 1, unavailable: 0 }),
+    );
+    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain(
+      i18n.t("agora.tradingRoom.proposal.availabilitySummary", { complete: 1, partial: 0, unavailable: 0 }),
+    );
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");
@@ -1538,15 +1566,18 @@ describe("TradingRoomPage", () => {
     fireEvent.click(launchButton);
 
     await waitFor(() => {
-      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith(expect.objectContaining({
-        subject: expect.objectContaining({
-          kind: "candidate_artifact",
-          ref: "evt-001",
-        }),
-        metadata: expect.objectContaining({
-          decision_event_id: "evt-001",
-          strategy_version: "reg-001",
-        })
+      expect(interaction.resolveContext).toHaveBeenCalledWith({
+        context_refs: [
+          { type: "strategy", id: "strat-001", version_id: "reg-001" },
+          { type: "decision_event", id: "evt-001" },
+        ],
+        environment: "paper",
+      });
+      expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ mode: "consult", workshop_id: "ws-new-001" }));
+      expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+        mode: "consult",
+        workshop_id: "ws-new-001",
+        participant_persona_ids: ["per_quant", "per_risk", "per_macro"],
       }));
     });
   });

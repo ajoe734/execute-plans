@@ -34,6 +34,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1/client";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
@@ -59,7 +60,7 @@ const ago = (hours: number): string => {
   return d.toISOString();
 };
 
-interface RedTeamCandidate {
+interface ChallengeCandidate {
   persona_id: string;
   display_name: string;
   reasons: string[];
@@ -74,6 +75,7 @@ interface PersonaSummary {
 export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
   const navigate = useNavigate();
+  const writeAccess = useAgoraWriteAccess();
   const [activeTab, setActiveTab] = useState<string>("journal");
   const [episodes, setEpisodes] = useState<TradeEpisodeProjection[]>([]);
   const [reflections, setReflections] = useState<PersonaTradeReflection[]>([]);
@@ -108,9 +110,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
   const [varianceAttribution, setVarianceAttribution] = useState<string>("");
   const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
-  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<RedTeamCandidate | null>(null);
-  const [checkingRedTeam, setCheckingRedTeam] = useState<boolean>(false);
-  const [redTeamUnavailableReason, setRedTeamUnavailableReason] = useState<string>("");
+  const [challengeEligiblePersona, setChallengeEligiblePersona] = useState<ChallengeCandidate | null>(null);
+  const [checkingChallengeEligibility, setCheckingChallengeEligibility] = useState<boolean>(false);
+  const [challengeUnavailableReason, setChallengeUnavailableReason] = useState<string>("");
 
   useEffect(() => {
     setBffMode(bffV1.detectMode());
@@ -122,20 +124,21 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       .catch(() => undefined);
   }, []);
 
-  // Resolve the workshop context + red-team eligibility for the selected episode
-  // so the "Reflect with Personas" panel can offer a same-click red-team review.
+  // Resolve canonical challenge eligibility for the selected episode. The
+  // contract does not expose adversarial/style metadata, so selection follows
+  // the backend's included order and never infers a role from an id or name.
   useEffect(() => {
-    if (!selectedEpisode) {
+    if (!selectedEpisode || !writeAccess.interactionAllowed) {
       setResolvedWorkshopId(null);
-      setRedTeamEligiblePersona(null);
-      setRedTeamUnavailableReason("");
+      setChallengeEligiblePersona(null);
+      setChallengeUnavailableReason(selectedEpisode ? (writeAccess.interactionDisabledReason ?? "Interaction is not permitted") : "");
       return;
     }
 
     let cancelled = false;
     const checkEligibility = async () => {
-      setCheckingRedTeam(true);
-      setRedTeamUnavailableReason("");
+      setCheckingChallengeEligibility(true);
+      setChallengeUnavailableReason("");
       try {
         const environment = selectedEpisode.environment || "paper";
         const resolveRes = await interaction.resolveContext({
@@ -154,25 +157,19 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         });
 
         if (cancelled) return;
-        const isRedTeam = (p: { persona_id: string; display_name: string }) =>
-          p.persona_id === "per_red" ||
-          p.persona_id.toLowerCase().includes("red") ||
-          p.display_name.toLowerCase().includes("red");
-        const redTeam = eligibleRes.data.included.find(isRedTeam);
-        setRedTeamEligiblePersona(redTeam ?? null);
+        const challengePersona = eligibleRes.data.included[0];
+        setChallengeEligiblePersona(challengePersona ?? null);
 
-        if (!redTeam) {
-          const excludedRedTeam = eligibleRes.data.excluded.find(isRedTeam);
-          if (excludedRedTeam) {
-            setRedTeamUnavailableReason(excludedRedTeam.reasons.join(", ") || "Ineligible");
-          } else {
-            setRedTeamUnavailableReason("Not found in registry");
-          }
+        if (!challengePersona) {
+          const exclusionReasons = Array.from(new Set(
+            eligibleRes.data.excluded.flatMap((persona) => persona.reasons),
+          ));
+          setChallengeUnavailableReason(exclusionReasons.join(", ") || "No canonical eligible challenge Persona");
         }
       } catch (err: unknown) {
-        setRedTeamUnavailableReason(errorMessage(err, "Failed to fetch participants"));
+        setChallengeUnavailableReason(errorMessage(err, "Failed to fetch participants"));
       } finally {
-        if (!cancelled) setCheckingRedTeam(false);
+        if (!cancelled) setCheckingChallengeEligibility(false);
       }
     };
 
@@ -180,7 +177,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
     return () => {
       cancelled = true;
     };
-  }, [selectedEpisode]);
+  }, [selectedEpisode, writeAccess.interactionAllowed, writeAccess.interactionDisabledReason]);
 
   const loadData = async () => {
     setLoading(true);
@@ -275,9 +272,13 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   };
 
   // PINT-008 — hand a trade episode off to the Strategy Workshop for persona
-  // review (original persona, an alternate persona, or a red-team challenge).
-  const handleReflect = async (type: "original" | "alternate" | "red-team", targetPersonaId: string) => {
+  // review (original persona, an alternate persona, or a canonical challenge).
+  const handleReflect = async (type: "original" | "alternate" | "challenge", targetPersonaId: string) => {
     if (!selectedEpisode) return;
+    if (!writeAccess.interactionAllowed) {
+      toast.error(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted");
+      return;
+    }
     if (!targetPersonaId) {
       toast.error("Please select a persona to review");
       return;
@@ -285,7 +286,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
 
     setSubmittingCommand(true);
     try {
-      const mode = type === "red-team" ? "challenge" : "reflect";
+      const mode = type === "challenge" ? "challenge" : "reflect";
       const environment = selectedEpisode.environment || "paper";
 
       const workshopId =
@@ -813,14 +814,15 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Reflect with Personas (Strategy Workshop)</h3>
                 <div className="flex flex-col gap-3.5 bg-slate-50/50 p-3 rounded-lg border">
 
-                  {/* Original & Red-Team Review Row */}
+                  {/* Original & canonical Challenge review row */}
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       size="sm"
                       variant="outline"
                       className="text-xs font-semibold"
                       onClick={() => handleReflect("original", selectedEpisode.persona_id)}
-                      disabled={submittingCommand}
+                      disabled={submittingCommand || !writeAccess.interactionAllowed}
+                      title={writeAccess.interactionDisabledReason ?? undefined}
                     >
                       Original Persona Review
                     </Button>
@@ -830,14 +832,15 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                         size="sm"
                         variant="outline"
                         className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
-                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id ?? "")}
-                        disabled={submittingCommand || checkingRedTeam || !redTeamEligiblePersona}
+                        onClick={() => handleReflect("challenge", challengeEligiblePersona?.persona_id ?? "")}
+                        disabled={submittingCommand || checkingChallengeEligibility || !challengeEligiblePersona || !writeAccess.interactionAllowed}
+                        title={writeAccess.interactionDisabledReason ?? undefined}
                       >
-                        {checkingRedTeam ? "Checking..." : redTeamEligiblePersona ? "Red Team Review" : "Red Team (Unavailable)"}
+                        {checkingChallengeEligibility ? "Checking..." : challengeEligiblePersona ? "Challenge Persona Review" : "Challenge Persona (Unavailable)"}
                       </Button>
-                      {!checkingRedTeam && !redTeamEligiblePersona && (
-                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="red-team-unavailable">
-                          {redTeamUnavailableReason ? `Unavailable: ${redTeamUnavailableReason}` : "Unavailable in this environment"}
+                      {!checkingChallengeEligibility && !challengeEligiblePersona && (
+                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="challenge-persona-unavailable">
+                          {challengeUnavailableReason ? `Unavailable: ${challengeUnavailableReason}` : "Unavailable in this environment"}
                         </span>
                       )}
                     </div>
@@ -850,7 +853,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                       value={selectedAltPersona}
                       onChange={(e) => setSelectedAltPersona(e.target.value)}
                       className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background"
-                      disabled={submittingCommand}
+                      disabled={submittingCommand || !writeAccess.interactionAllowed}
                     >
                       <option value="">Select Persona...</option>
                       {allPersonas
@@ -865,11 +868,17 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                       size="sm"
                       className="h-7 text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
                       onClick={() => handleReflect("alternate", selectedAltPersona)}
-                      disabled={!selectedAltPersona || submittingCommand}
+                      disabled={!selectedAltPersona || submittingCommand || !writeAccess.interactionAllowed}
+                      title={writeAccess.interactionDisabledReason ?? undefined}
                     >
                       Review
                     </Button>
                   </div>
+                  {writeAccess.interactionDisabledReason ? (
+                    <p className="text-[11px] font-semibold text-amber-700" data-testid="trade-journal-interaction-disabled-reason">
+                      {writeAccess.interactionDisabledReason}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>

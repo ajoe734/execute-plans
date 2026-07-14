@@ -9,6 +9,28 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/bff-v1/agora/interaction", () => ({
+  interaction: {
+    resolveContext: vi.fn(),
+    participants: vi.fn(),
+    submit: vi.fn(),
+  },
+}));
+
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: [],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
 }));

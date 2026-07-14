@@ -5,6 +5,19 @@ import { installQuietEventSource } from "./helpers/sse";
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
 
+type FleetPersona = {
+  id?: string;
+  persona_id?: string;
+  personaId?: string;
+  name?: string;
+  personaName?: string;
+  persona_name?: string;
+};
+
+type EvolutionJournalItem = {
+  target?: { id?: string };
+};
+
 test("capture evolution journal fallback-state hosted evidence", async ({ page, request }) => {
   page.on("console", (msg) => {
     console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`);
@@ -21,20 +34,20 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   const headers = authHeaders({ tenantId: "pantheon-dev" });
   const fleetResponse = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, { headers });
   const fleetData = await fleetResponse.json();
-  const fleetItems = fleetData.data?.items ?? [];
+  const fleetItems = (fleetData.data?.items ?? []) as FleetPersona[];
 
   const journalResponse = await request.get(`${BFF_BASE}/bff/management/evolution-journal`, { headers });
   const journalData = await journalResponse.json();
-  const journalItems = journalData.data?.items ?? journalData ?? [];
+  const journalItems = (journalData.data?.items ?? journalData ?? []) as EvolutionJournalItem[];
 
   // Find a persona ID in the fleet that does not have any evolution journal entry (or fallback to any persona in the fleet)
   const journalPersonaIds = new Set(
     journalItems
-      .map((item: any) => item.target?.id)
+      .map((item) => item.target?.id)
       .filter(Boolean)
   );
 
-  let targetPersona = fleetItems.find((item: any) => {
+  let targetPersona = fleetItems.find((item) => {
     const id = item.id ?? item.persona_id ?? item.personaId;
     return id && !journalPersonaIds.has(id);
   });

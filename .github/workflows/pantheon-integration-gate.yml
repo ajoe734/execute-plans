@@ -25,6 +25,14 @@ on:
         description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
         required: false
         default: "dev"
+      persona_interaction_write_proof:
+        description: "Run the explicitly gated hosted Persona interaction write/readback proof"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       soft_fail:
         description: "Emergency override to keep release gate in observation mode. Hard-gate is the default since 2026-05-14 (FE-INT-GATE early switch). Set true only if a transient external dependency is blocking valid merges."
         required: false
@@ -65,7 +73,10 @@ jobs:
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/health"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
-      PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
+      # Only workflow_dispatch may provide an optional expectation. Push/PR
+      # gates must never inherit a stale repository variable: live
+      # /bff/version is the exact release identity source of truth.
+      PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha || '' }}
       PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -79,7 +90,7 @@ jobs:
       PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
       PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
       PANTHEON_BFF_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_TOKEN }}
+      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
       PANTHEON_BFF_APPROVER_TOKEN: ${{ secrets.PANTHEON_BFF_APPROVER_TOKEN }}
       PANTHEON_BFF_RISK_OWNER_TOKEN: ${{ secrets.PANTHEON_BFF_RISK_OWNER_TOKEN }}
       PANTHEON_BFF_ADMIN_TOKEN: ${{ secrets.PANTHEON_BFF_ADMIN_TOKEN }}
@@ -108,6 +119,28 @@ jobs:
         run: |
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+
+      - name: Resolve exact live BFF release identity
+        id: release_identity
+        run: |
+          set -euo pipefail
+          version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version.json"
+          identity_file="$PANTHEON_AUDIT_OUT_DIR/release-identity.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_BFF_BASE_URL%/}/bff/version" > "$version_file"
+          bff_sha="$(node scripts/release-identity.mjs create \
+            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --version-file "$version_file" \
+            --expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA" \
+            --gate-run-id "$GITHUB_RUN_ID" \
+            --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
+            --output "$identity_file")"
+          echo "PANTHEON_BFF_SHA=${bff_sha}" >> "$GITHUB_ENV"
+          echo "PANTHEON_RELEASE_IDENTITY_FILE=${identity_file}" >> "$GITHUB_ENV"
+          echo "bff_sha=${bff_sha}" >> "$GITHUB_OUTPUT"
+          echo "Exact release identity: FE ${PANTHEON_FRONTEND_SHA}, BFF ${bff_sha}"
 
       - name: Install
         id: install
@@ -278,16 +311,31 @@ jobs:
           set -o pipefail
           npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
 
-      - name: PINT hosted desktop/mobile E2E
+      - name: PINT hosted desktop/mobile write proof
         id: pint_hosted_e2e
-        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
+        if: github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true'
+        env:
+          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -o pipefail
-          npx playwright test e2e/29-persona-interaction.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
+          if [ -z "$PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN" ] || \
+             [ -z "$PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN" ] || \
+             [ -z "$PANTHEON_FE_BASE_URL" ] || \
+             [ -z "$PANTHEON_BFF_BASE_URL" ]; then
+            echo "::error::Hosted Persona write proof requires operator/viewer credentials and FE/BFF URLs."
+            exit 1
+          fi
+          npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
       - name: Playwright E2E
         id: e2e
         continue-on-error: true
+        env:
+          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && '1' || '0' }}
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && secrets.PANTHEON_BFF_OPERATOR_A_TOKEN || '' }}
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -o pipefail
           FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
@@ -305,6 +353,22 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
           npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
+      - name: Verify live BFF release identity remained stable
+        id: release_identity_final
+        if: always() && steps.release_identity.outcome == 'success'
+        run: |
+          set -euo pipefail
+          version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version-final.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_BFF_BASE_URL%/}/bff/version" > "$version_file"
+          node scripts/release-identity.mjs verify-version \
+            --identity-file "$PANTHEON_RELEASE_IDENTITY_FILE" \
+            --version-file "$version_file" \
+            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --gate-run-id "$GITHUB_RUN_ID"
+
       - name: Stop frontend under test
         if: always()
         run: |
@@ -317,6 +381,8 @@ jobs:
         run: |
           cat > "$PANTHEON_AUDIT_OUT_DIR/release-gate-step-outcomes.json" <<JSON
           {
+            "release_identity": { "outcome": "${{ steps.release_identity.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-identity.json" },
+            "release_identity_final": { "outcome": "${{ steps.release_identity_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-version-final.json" },
             "install": { "outcome": "${{ steps.install.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-ci.log" },
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
@@ -333,6 +399,7 @@ jobs:
             "route_load": { "outcome": "${{ steps.route_load.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/route-load-baseline.log" },
             "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
             "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
+            "pint_hosted_e2e": { "outcome": "${{ steps.pint_hosted_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-hosted-desktop-mobile-e2e.log" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
@@ -363,6 +430,15 @@ jobs:
             pantheon-audits/current-run
             playwright-report
             test-results
+
+      - name: Upload exact release identity
+        if: always() && steps.release_identity.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantheon-release-identity
+          if-no-files-found: error
+          include-hidden-files: true
+          path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-identity.json
 
       - name: Comment release gate on PR
         if: always() && github.event_name == 'pull_request'

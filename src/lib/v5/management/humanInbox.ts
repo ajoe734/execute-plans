@@ -57,6 +57,17 @@ export interface HumanInboxItem {
   links: ManagementLinkSet;
 }
 
+export interface HumanInboxSurfaceStatus {
+  status?: string;
+  reason?: string;
+}
+
+export type HumanInboxList = HumanInboxItem[] & {
+  meta?: {
+    surfaces?: Record<string, HumanInboxSurfaceStatus>;
+  };
+};
+
 export interface HumanInboxDecisionRecord {
   decidedAt: string;
   decidedBy: string;

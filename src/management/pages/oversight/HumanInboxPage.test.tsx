@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { HumanInboxPage } from "./_core";
-import type { HumanInboxItem } from "@/lib/v5/management/humanInbox";
+import type { HumanInboxItem, HumanInboxList } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -181,8 +181,8 @@ describe("HumanInboxPage", () => {
   });
 
   it("shows degraded banner and degraded empty body when live data is degraded and empty", () => {
-    const degradedData = [];
-    (degradedData as any).meta = {
+    const degradedData: HumanInboxList = [];
+    degradedData.meta = {
       surfaces: {
         governance_review_queue: { status: "degraded", reason: "timeout" },
       },
