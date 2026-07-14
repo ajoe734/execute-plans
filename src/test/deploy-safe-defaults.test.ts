@@ -62,7 +62,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
 
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
-    expect(deployScript).toContain("e2e/25-persona-fleet-live-linked-pages.spec.ts");
+    expect(deployScript).not.toContain("npx playwright test");
     expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
     expect(hostedPersonaSpec).toContain(
       'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
