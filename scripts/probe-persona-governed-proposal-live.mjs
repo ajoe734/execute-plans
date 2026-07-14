@@ -77,11 +77,11 @@ function expectForbidden(result, label) {
   assert(errorCode(result.payload) === "FORBIDDEN", `${label}: missing Pack-D FORBIDDEN envelope`);
 }
 
-function expectUnauthenticated(result, label) {
+function expectAuthRequired(result, label) {
   expectStatus(result, 401, label);
   assert(
-    errorCode(result.payload) === "UNAUTHENTICATED",
-    `${label}: missing Pack-D UNAUTHENTICATED envelope`,
+    errorCode(result.payload) === "AUTH_REQUIRED",
+    `${label}: expected Pack-D AUTH_REQUIRED, got ${JSON.stringify(result.payload)}`,
   );
 }
 
@@ -99,6 +99,7 @@ function writeEvidence(result) {
     `- bff_commit: ${result.bffCommit}`,
     `- proposal_id: ${result.proposalId}`,
     `- unauthenticated_create_status: ${result.unauthenticatedCreateStatus}`,
+    `- unauthenticated_create_code: ${result.unauthenticatedCreateCode}`,
     `- viewer_create_status: ${result.viewerCreateStatus}`,
     `- viewer_modify_status: ${result.viewerModifyStatus}`,
     `- operator_create_status: ${result.operatorCreateStatus}`,
@@ -112,7 +113,7 @@ function writeEvidence(result) {
     "- tokens_recorded: false",
     "- downstream_execution_attempted: false",
     "",
-    "PASS: unauthenticated creation failed with Pack-D 401; viewer writes failed with Pack-D 403; the operator created, modified, and paper-validated a durable proposal; authenticated readback returned exactly three revisions and create/modify/validate audit events; idempotent replay added no revision.",
+    "PASS: unauthenticated creation failed with Pack-D 401 AUTH_REQUIRED; viewer writes failed with Pack-D 403; the operator created, modified, and paper-validated a durable proposal; authenticated readback returned exactly three revisions and create/modify/validate audit events; idempotent replay added no revision.",
     "",
   ].join("\n");
   fs.writeFileSync(mdPath, markdown, "utf8");
@@ -175,7 +176,7 @@ async function main() {
     headers: { "Idempotency-Key": `${probeId}-unauthenticated-create` },
     method: "POST",
   });
-  expectUnauthenticated(unauthenticatedCreate, "unauthenticated proposal create");
+  expectAuthRequired(unauthenticatedCreate, "unauthenticated proposal create");
 
   const viewerCreate = await request("/bff/agora/proposals", {
     body: proposal,
@@ -274,6 +275,7 @@ async function main() {
     replayRevision: data(replay.payload)?.revision,
     revisions: revisionNumbers,
     tokensRecorded: false,
+    unauthenticatedCreateCode: errorCode(unauthenticatedCreate.payload),
     unauthenticatedCreateStatus: unauthenticatedCreate.status,
     viewerCreateStatus: viewerCreate.status,
     viewerModifyStatus: viewerModify.status,
