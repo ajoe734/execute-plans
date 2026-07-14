@@ -96,6 +96,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 }));
 
 import { TradingRoomPage } from "./TradingRoomPage";
+import i18n from "@/i18n";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
@@ -864,7 +865,9 @@ describe("TradingRoomPage", () => {
     for (const view of PROPOSAL_VIEWS) {
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 widgets");
+      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toBe(
+        i18n.t("agora.tradingRoom.proposal.widgetCount", { count: 1 }),
+      );
     }
   });
 
@@ -882,10 +885,17 @@ describe("TradingRoomPage", () => {
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
-    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("Workspace data availability");
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toBe(
+      i18n.t("agora.tradingRoom.proposal.workspaceDataAvailability")
+        + i18n.t("agora.tradingRoom.availability.partial"),
+    );
     expect(screen.getByTestId("workspace-proposal-data-availability").textContent).not.toContain("winner_branch.related_branch_flow");
-    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain("0 full / 1 partial / 0 missing");
-    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain("1 full / 0 partial / 0 missing");
+    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain(
+      i18n.t("agora.tradingRoom.proposal.availabilitySummary", { complete: 0, partial: 1, unavailable: 0 }),
+    );
+    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain(
+      i18n.t("agora.tradingRoom.proposal.availabilitySummary", { complete: 1, partial: 0, unavailable: 0 }),
+    );
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");

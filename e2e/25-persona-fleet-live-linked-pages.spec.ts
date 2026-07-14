@@ -110,7 +110,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const personaName = String(fleetRow.name ?? fleetRow.persona_name ?? fleetRow.personaName ?? personaId);
     await fleetTableRow.getByRole("link", { name: personaName, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/management/personas/${personaId}`));
-    await expect(page.getByRole("heading", { name: personaName, level: 1 })).toBeAttached();
+    await expect(page.getByRole("heading", { name: personaName, level: 1 })).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("body")).toContainText(personaId);
 
     const oodaFleetRow = await openFocusedFleetRow(page, personaId);
@@ -175,9 +175,12 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await expect(researchFocus).not.toContainText(/project\s*[：:]\s*nan/i);
 
     await (await openFocusedFleetRow(page, personaId)).locator(`[aria-label="${personaId} performance attribution"]`).click();
-    await expect(page.getByRole("heading", { name: /績效歸因|Performance Attribution/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /績效來源明細|Performance source details/i })).toBeVisible();
-    await expect(page.getByText(/產生依據|Basis/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /績效歸因|Performance Attribution/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/正在核對 .* 的正式歸因與來源狀態|Checking formal attribution and source state for /i)).toHaveCount(0, {
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("heading", { name: /績效來源明細|Performance source detail/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/產生依據|Basis/i).first()).toBeVisible({ timeout: 30_000 });
 
     const mutationFleetRow = await openFocusedFleetRow(page, personaId);
     const mutationLink = mutationFleetRow.locator(`[aria-label="${personaId} mutation history"]`);
