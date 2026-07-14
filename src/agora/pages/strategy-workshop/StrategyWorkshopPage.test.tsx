@@ -622,4 +622,28 @@ describe("StrategyWorkshopPage", () => {
     });
     expect(await screen.findByText("策略完整度尚未評估")).toBeDefined();
   });
+
+  it("does not crash when workshop subject is missing or omitted in BFF payload", async () => {
+    const workshopWithNoSubject = {
+      spec_version: "1.0" as const,
+      workshop_id: "ws-no-subject",
+      operator_id: "operator-001",
+      status: "open" as const,
+      subject: undefined as any,
+      created_at: "2026-06-01T00:00:00Z",
+    };
+
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(workshopWithNoSubject);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+
+    render(<StrategyWorkshopPage workshopId="ws-no-subject" />);
+
+    const header = await screen.findByTestId("strategy-workshop-runtime-header");
+    expect(header).toBeDefined();
+    const contextBar = screen.getByTestId("context-bar");
+    expect(contextBar.textContent).toContain("Subject: none");
+  });
 });

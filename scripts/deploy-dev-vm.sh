@@ -107,7 +107,35 @@ export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
 export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
 export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
-export PANTHEON_DEPLOY_BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-27cd46529c29801db02818aafe4df723cc0f8666}"
+if [[ -z "${PANTHEON_DEPLOY_BFF_COMMIT:-}" ]]; then
+  echo "Fetching active BFF commit from ${BFF_HOST}/bff/version..."
+  BFF_VERSION_JSON="$(curl -fsS --connect-timeout 5 "${BFF_HOST}/bff/version" || echo "")"
+  if [[ -n "${BFF_VERSION_JSON}" ]]; then
+    BFF_COMMIT_SHA="$(node -e '
+      try {
+        const p = JSON.parse(process.argv[1]);
+        const sha = p.commit || p.source_commit_sha || "";
+        if (sha && sha.length >= 8) {
+          console.log(sha);
+        } else {
+          process.exit(1);
+        }
+      } catch {
+        process.exit(1);
+      }
+    ' "${BFF_VERSION_JSON}" || echo "")"
+    if [[ -n "${BFF_COMMIT_SHA}" ]]; then
+      PANTHEON_DEPLOY_BFF_COMMIT="${BFF_COMMIT_SHA}"
+    fi
+  fi
+fi
+
+if [[ -z "${PANTHEON_DEPLOY_BFF_COMMIT:-}" ]]; then
+  echo "Error: PANTHEON_DEPLOY_BFF_COMMIT is not set and could not be resolved from ${BFF_HOST}/bff/version" >&2
+  exit 2
+fi
+
+export PANTHEON_DEPLOY_BFF_COMMIT
 
 node --input-type=module <<'NODE'
 import fs from "node:fs";

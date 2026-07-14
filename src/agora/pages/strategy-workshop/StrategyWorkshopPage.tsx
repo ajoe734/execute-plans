@@ -642,7 +642,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5 text-slate-400" />
-                <strong>Subject:</strong> {workshop?.subject.kind ?? "none"} ({workshop?.subject.ref ?? "none"})
+                <strong>Subject:</strong> {workshop?.subject?.kind ?? "none"} ({workshop?.subject?.ref ?? "none"})
               </span>
               <span className="text-slate-300">•</span>
               <span>
