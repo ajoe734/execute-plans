@@ -33,7 +33,7 @@ export function useV5Live<T>(
 ): {
   data: T | undefined;
   loading: boolean;
-  error: any | null;
+  error: unknown | null;
   refresh: () => void;
 } {
   const cacheKey = opts.cacheKey;
@@ -41,7 +41,7 @@ export function useV5Live<T>(
   const cached = getCached<T>(cacheKey);
   const [data, setData] = useState<T | undefined>(() => cached?.data);
   const [loading, setLoading] = useState(() => !cached);
-  const [error, setError] = useState<any | null>(null);
+  const [error, setError] = useState<unknown | null>(null);
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
@@ -98,4 +98,3 @@ export function useV5Live<T>(
 
   return { data, loading, error, refresh };
 }
-
