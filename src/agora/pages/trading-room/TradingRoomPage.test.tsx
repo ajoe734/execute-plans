@@ -870,6 +870,24 @@ describe("TradingRoomPage", () => {
     expect(availability).toHaveStyle({ background: "#171b22" });
   });
 
+  it("prioritizes task and proposal state behind explicit narrow pane controls", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+
+    expect(screen.getByTestId("trading-room-mobile-priority").textContent).toContain("Alpha Momentum");
+    expect(screen.getByTestId("trading-room-mobile-priority").textContent).toContain("Pending 4");
+    expect(screen.getByTestId("trading-room-navigation").getAttribute("data-mobile-collapsed")).toBe("true");
+    expect(screen.getByTestId("trading-room-workspace-layout").getAttribute("data-mobile-workspace-pane")).toBe("workspace");
+    expect(screen.getByTestId("trading-room-workspace-surface").getAttribute("data-mobile-pane-hidden")).toBe("false");
+    expect(screen.getByTestId("trading-room-decision-surface").getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(screen.getByTestId("workspace-proposal-actions").className).toContain("workspace-proposal-actions");
+
+    fireEvent.click(screen.getByRole("button", { name: "Decisions (1)" }));
+    expect(screen.getByTestId("trading-room-workspace-layout").getAttribute("data-mobile-workspace-pane")).toBe("decisions");
+    expect(screen.getByTestId("trading-room-workspace-surface").getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(screen.getByTestId("trading-room-decision-surface").getAttribute("data-mobile-pane-hidden")).toBe("false");
+  });
+
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
@@ -1683,6 +1701,9 @@ describe("TradingRoomPage", () => {
     const drawer = await screen.findByTestId("candidate-review-drawer");
     expect(drawer.getAttribute("role")).toBe("dialog");
     expect(drawer.getAttribute("aria-modal")).toBe("true");
+    expect(screen.getByTestId("trading-room-page").hasAttribute("inert")).toBe(true);
+    expect(screen.getByTestId("trading-room-page").getAttribute("aria-hidden")).toBe("true");
+    expect(document.body.style.overflow).toBe("hidden");
 
     const closeBtn = screen.getByTestId("drawer-close-btn");
     expect(document.activeElement).toBe(closeBtn);
@@ -1691,6 +1712,9 @@ describe("TradingRoomPage", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("candidate-review-drawer")).toBeNull();
     });
+    expect(screen.getByTestId("trading-room-page").hasAttribute("inert")).toBe(false);
+    expect(screen.getByTestId("trading-room-page").hasAttribute("aria-hidden")).toBe(false);
+    expect(document.body.style.overflow).toBe("");
     expect(document.activeElement).toBe(appleRow);
   });
 
