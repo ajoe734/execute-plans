@@ -13,6 +13,9 @@ const EVENT_ETAG = '"event-v1"';
 const PERSONA_ID = "per_quant";
 const EPISODE_ID = "ep-journal-1";
 const GOVERNED_PROPOSAL_ID = "prop-pint-010";
+const FE_ORIGIN = new URL(
+  process.env.PANTHEON_FE_BASE_URL || "http://localhost:5173",
+).origin;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -35,6 +38,16 @@ type FixtureState = {
   unexpected: Array<{ method: string; path: string }>;
 };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Allow-Headers":
+    "Accept, Authorization, Content-Type, Idempotency-Key, If-Match, X-Request-Id, X-Tenant-Id",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Origin": FE_ORIGIN,
+  "Access-Control-Expose-Headers": "ETag, X-Request-Id",
+  Vary: "Origin",
+};
+
 function requestBody(request: Request): unknown {
   const data = request.postData();
   if (!data) return null;
@@ -53,7 +66,7 @@ async function json(
   await route.fulfill({
     body: JSON.stringify(body),
     contentType: "application/json",
-    headers: options.headers,
+    headers: { ...CORS_HEADERS, ...options.headers },
     status: options.status ?? 200,
   });
 }
@@ -349,6 +362,11 @@ async function installFixture(page: Page): Promise<FixtureState> {
       const request = route.request();
       const method = request.method();
       const path = new URL(request.url()).pathname;
+
+      if (method === "OPTIONS") {
+        await route.fulfill({ headers: CORS_HEADERS, status: 204 });
+        return;
+      }
 
       if (method !== "GET") {
         state.requests.push({
