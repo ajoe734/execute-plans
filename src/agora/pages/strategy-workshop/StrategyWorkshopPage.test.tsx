@@ -777,9 +777,8 @@ describe("StrategyWorkshopPage", () => {
       workshop_id: "ws-no-subject",
       operator_id: "operator-001",
       status: "open" as const,
-      subject: undefined as any,
       created_at: "2026-06-01T00:00:00Z",
-    };
+    } as unknown as StrategyWorkshop;
 
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(workshopWithNoSubject);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
