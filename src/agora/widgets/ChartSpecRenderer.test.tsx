@@ -176,6 +176,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="winner_branch_scoreboard"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
@@ -184,6 +185,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="related_branch_network"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
@@ -192,6 +194,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="event_lead_distribution"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("MONITORING WINDOW ACTIVE")).toBeTruthy();
@@ -200,6 +203,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="confidence_decomposition"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING METRICS")).toBeTruthy();

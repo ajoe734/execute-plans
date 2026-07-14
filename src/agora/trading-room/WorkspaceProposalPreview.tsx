@@ -13,7 +13,7 @@ type DataAvailabilityStatus = "complete" | "partial" | "unavailable";
 
 const STATUS_LABEL: Record<DataAvailabilityStatus, string> = {
   complete: "完整",
-  partial: "部分可用",
+  partial: "部分資料可用",
   unavailable: "暫不可用",
 };
 
@@ -265,7 +265,7 @@ export function WorkspaceProposalPreview({
     >
       <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", minWidth: 0 }}>
         <div style={{ flex: "1 1 420px", minWidth: 0 }}>
-          <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>Trading Servant Proposal</div>
+          <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>操盤僕人工作區提案</div>
           <h2 style={{ color: COLORS.text, fontSize: 20, fontWeight: 800, letterSpacing: 0, lineHeight: 1.25, margin: "2px 0 0", overflowWrap: "anywhere" }}>
             {proposal.strategyVersion} - 操盤室提案
           </h2>
@@ -281,7 +281,7 @@ export function WorkspaceProposalPreview({
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <span style={summaryPillStyle}>
-          {proposal.views.length} 個 View
+          {proposal.views.length} 個檢視
         </span>
         <span style={summaryPillStyle}>
           {proposal.views.reduce((sum, view) => sum + (view.widgetCount ?? view.widgets.length), 0)} widgets
