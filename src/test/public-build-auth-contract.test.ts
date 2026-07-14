@@ -199,14 +199,14 @@ describe("public frontend build auth boundary", () => {
 
   it("requires an explicit credential for hosted or external E2E", () => {
     expect(() => authToken({
-      env: { PANTHEON_BFF_BASE_URL: "https://bff.example.test" },
+      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
     })).toThrow(/short-lived BFF_AUTH_TOKEN/);
     expect(authToken({
-      env: { PANTHEON_BFF_BASE_URL: "https://bff.example.test" },
+      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
       token: "signed-short-lived-test-token",
     })).toBe("signed-short-lived-test-token");
     expect(authToken({
-      env: { PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9000" },
+      env: { PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173" },
     })).toMatch(/^op-fe-gate:/);
   });
 
@@ -294,16 +294,16 @@ describe("public frontend build auth boundary", () => {
     })).toThrow(/proven loopback-only E2E target/);
     expect(() => devLoginSession({
       env: {
-        PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+        PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test",
         PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
       },
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     })).toThrow(/proven loopback-only E2E target/);
   });
 
-  it("rejects an explicit local fixture token for external direct BFF headers", () => {
+  it("rejects an explicit local fixture token for an external browser-visible BFF", () => {
     expect(() => authToken({
-      env: { PANTHEON_BFF_BASE_URL: "https://bff.example.test" },
+      env: { PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test" },
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     })).toThrow(/tracked fixture credentials are local-only/);
   });
@@ -316,24 +316,93 @@ describe("public frontend build auth boundary", () => {
     "bff.example.test",
     "ftp://127.0.0.1/resource",
   ])("treats unsafe or non-loopback target %s as external", (target) => {
-    const env = { PANTHEON_BFF_BASE_URL: target };
+    const env = { PANTHEON_BROWSER_BFF_BASE_URL: target };
     expect(targetsExternalE2eEnvironment(env)).toBe(true);
     expect(() => authToken({ env })).toThrow(/short-lived BFF_AUTH_TOKEN/);
   });
 
-  it("does not send local fixture auth through an external Vite proxy target", () => {
+  it("keeps the loopback integration-gate boundary local with an external upstream BFF", () => {
     const env = {
       PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
+      FRONTEND_BASE_URL: "http://127.0.0.1:5173",
+      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:5173",
+      PANTHEON_BROWSER_BFF_BASE_URL: "http://127.0.0.1:5173",
+      PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+      BFF_BASE_URL: "https://bff-alias.example.test",
       VITE_BFF_PROXY_TARGET: "https://bff.example.test",
+      VITE_BFF_BASE_URL: "https://bff-build.example.test",
     };
 
-    expect(targetsExternalE2eEnvironment(env)).toBe(true);
-    expect(() => authToken({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toThrow(
-      /tracked fixture credentials are local-only/,
+    expect(targetsExternalE2eEnvironment(env)).toBe(false);
+    expect(authToken({ env })).toBe(LOCAL_FIXTURE_AUTH_TOKEN);
+    expect(authToken({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toBe(
+      LOCAL_FIXTURE_AUTH_TOKEN,
     );
-    expect(() => devLoginSession({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toThrow(
-      /proven loopback-only E2E target/,
+    expect(devLoginSession({ env, goto: false, token: LOCAL_FIXTURE_AUTH_TOKEN }).token).toBe(
+      LOCAL_FIXTURE_AUTH_TOKEN,
     );
+  });
+
+  it("classifies the integration-gate process env from browser-visible targets", () => {
+    const env = {
+      ...process.env,
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
+      FRONTEND_BASE_URL: "http://127.0.0.1:4173",
+      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4173",
+      PANTHEON_BROWSER_BFF_BASE_URL: "http://127.0.0.1:4173",
+      PANTHEON_BFF_BASE_URL: "https://pantheon-dev-bff.example.test",
+      BFF_BASE_URL: "https://bff-alias.example.test",
+      VITE_BFF_PROXY_TARGET: "https://bff-proxy.example.test",
+      VITE_BFF_BASE_URL: "https://bff-build.example.test",
+      PANTHEON_HOSTED_E2E: "",
+      FE_INT_GATE_LIVE_BFF: "",
+      F08_CREATE_INTENT_LIVE_BFF: "",
+      RUN_LIVE_BFF_CONTRACTS: "",
+    };
+    for (const key of [
+      "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+      "PANTHEON_BFF_SMOKE_TOKEN",
+    ]) {
+      delete env[key];
+    }
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import=tsx",
+        "--input-type=module",
+        "--eval",
+        `import { authToken, devLoginSession, targetsExternalE2eEnvironment } from "./e2e/helpers/auth.ts";
+         const session = devLoginSession({ goto: false });
+         console.log(JSON.stringify({
+           external: targetsExternalE2eEnvironment(),
+           sessionToken: session.token,
+           token: authToken(),
+         }));`,
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      external: false,
+      sessionToken: LOCAL_FIXTURE_AUTH_TOKEN,
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    });
+  });
+
+  it("uses the canonical frontend target before compatibility aliases", () => {
+    expect(targetsExternalE2eEnvironment({
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
+      FRONTEND_BASE_URL: "https://stale-fe.example.test",
+      PLAYWRIGHT_BASE_URL: "https://stale-playwright.example.test",
+    })).toBe(false);
+    expect(targetsExternalE2eEnvironment({
+      PANTHEON_FE_BASE_URL: "",
+      FRONTEND_BASE_URL: "https://fe.example.test",
+      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4173",
+    })).toBe(true);
   });
 
   it.each([
@@ -344,7 +413,7 @@ describe("public frontend build auth boundary", () => {
     "https://127.255.255.254:9443",
     "http://[::1]:9000",
   ])("recognizes exact loopback target %s", (target) => {
-    const env = { PANTHEON_BFF_BASE_URL: target };
+    const env = { PANTHEON_FE_BASE_URL: target };
     expect(targetsExternalE2eEnvironment(env)).toBe(false);
     expect(authToken({ env })).toBe("op-fe-gate:operator,reviewer,approver:mfa");
   });

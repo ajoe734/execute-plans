@@ -151,19 +151,14 @@ export function targetsExternalE2eEnvironment(
   ) {
     return true;
   }
-  return [
-    "PANTHEON_FE_BASE_URL",
-    "FRONTEND_BASE_URL",
-    "PLAYWRIGHT_BASE_URL",
-    "PANTHEON_BFF_BASE_URL",
-    "PANTHEON_BROWSER_BFF_BASE_URL",
-    "BFF_BASE_URL",
-    "VITE_BFF_PROXY_TARGET",
-    "VITE_BFF_BASE_URL",
-  ].some((key) => {
-    const value = env[key]?.trim();
-    return Boolean(value && !isLoopbackTarget(value));
-  });
+
+  // The upstream BFF can be external while a loopback Vite server remains the
+  // browser-visible E2E boundary and proxies same-origin /bff requests. Raw
+  // upstream/proxy variables therefore cannot classify the browser session.
+  if (!isLoopbackTarget(effectiveFrontendTarget({}, env))) return true;
+
+  const browserBffTarget = env.PANTHEON_BROWSER_BFF_BASE_URL?.trim();
+  return Boolean(browserBffTarget && !isLoopbackTarget(browserBffTarget));
 }
 
 function missingExternalCredential(): Error {
