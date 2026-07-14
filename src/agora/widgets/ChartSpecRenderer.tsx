@@ -659,7 +659,7 @@ export function ChartSpecRenderer({
   widgetType,
   dataSource,
   dataAvailability,
-  isSampleData = true,
+  isSampleData = false,
 }: ChartSpecRendererProps) {
   const validationMessage = validateChartSpecForRendering(spec);
   if (validationMessage) {
