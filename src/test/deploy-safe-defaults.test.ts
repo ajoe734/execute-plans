@@ -140,7 +140,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
     expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
     expect(deployScript).toContain(
-      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/health}"',
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}"',
+    );
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"',
+    );
+    expect(deployWorkflow).toContain(
+      "PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me",
     );
   });
 
