@@ -838,6 +838,31 @@ test("governed proposal revision and paper validation stay review-only", async (
   await expect(validatedCard).toContainText("This handoff has no execution authority.");
   await expect(validatedCard.getByRole("button", { name: "approve" })).toBeDisabled();
 
+  const auditReadback = await page.evaluate(async (proposalId) => {
+    const token = window.sessionStorage.getItem("pantheon.bff.bearerToken") ?? "";
+    const tenantId = window.sessionStorage.getItem("pantheon.bff.tenantId") ?? "";
+    const response = await window.fetch(`/bff/agora/proposals/${proposalId}`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "X-Tenant-Id": tenantId,
+      },
+    });
+    const payload = (await response.json()) as {
+      data?: { audit?: Array<{ action?: string }> };
+    };
+    return {
+      actions: payload.data?.audit?.map((entry) => entry.action) ?? [],
+      etag: response.headers.get("etag"),
+      status: response.status,
+    };
+  }, GOVERNED_PROPOSAL_ID);
+  expect(auditReadback).toEqual({
+    actions: ["create", "modify", "validate"],
+    etag: '"proposal-v3"',
+    status: 200,
+  });
+
   expect(state.unexpected).toEqual([]);
   expectAuthorityNegative(state);
 });
