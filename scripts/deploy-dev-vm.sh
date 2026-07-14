@@ -201,12 +201,10 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
 
-  echo "=== run Persona Fleet live linked-page contract ==="
-  PANTHEON_FE_BASE_URL="${FE_HOST}" \
-  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
-  npx playwright test e2e/25-persona-fleet-live-linked-pages.spec.ts --project=chromium
-
-  echo "=== read-only deploy probes passed; governed write/read-back probe is disabled ==="
+  # The full Persona linked-page traversal belongs to the integration E2E gate:
+  # it depends on mutable row/UI state and must not invalidate an otherwise
+  # healthy atomic deploy after the hosted read-only BFF contract has passed.
+  echo "=== read-only hosted browser/BFF probe passed; mutation probes are disabled ==="
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
