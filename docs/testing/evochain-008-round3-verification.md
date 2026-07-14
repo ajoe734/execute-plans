@@ -34,3 +34,23 @@ npx tsc --noEmit -p tsconfig.app.json  # no TopBar-related errors; pre-existing
 See `docs/bff/execution-tasks/2026-07-13-evolution-journal-producer-gap/EVOCHAIN-008-fe-badge-semantics.md`
 in the `pantheon` repo for the full evidence record and the
 EVOCHAIN-008 / EVOCHAIN-011 acceptance-dependency resolution.
+
+## Finalization refresh (2026-07-14)
+
+The task branch was synchronized with `origin/dev` at `ccf640b` through
+merge commit `924dd04`. Focused verification at that synchronized head
+remained green:
+
+```sh
+npx vitest run src/platform/components/TopBar.test.tsx src/lib/bff-v1/__tests__/shellSummary.test.ts  # 14 passed
+npx eslint src/platform/components/TopBar.tsx src/platform/components/TopBar.test.tsx                 # clean
+```
+
+The earlier push-event `Commit trailers` failure in run `29306725971`
+was a raw push-range false positive: the range from `c23e165` to
+`c42c232` re-scanned already-merged, non-task commit `ada61156`, whose
+subject is 78 characters. The pull-request event for the same task head
+(run `29306727322`) correctly evaluated the PR merge-base range and
+passed its trailer, generated-files, and smoke checks. This durable
+task evidence update advances the push range without rewriting the
+unowned `dev` commit.
