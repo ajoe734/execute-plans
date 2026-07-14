@@ -243,6 +243,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
   }, testInfo) => {
     const evidenceScreenshots: string[] = [];
     const events = collectNetwork(page);
+    const isMobileProject = testInfo.project.name.startsWith("mobile");
 
     const live = await discoverReadyWorkshop(request);
 
@@ -256,6 +257,9 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     await test.step("open the live ready workshop and use its Trading Room handoff", async () => {
       await page.goto(`${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(live.workshop.workshop_id)}`);
       await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 20_000 });
+      if (isMobileProject) {
+        await page.getByRole("button", { name: "Next question & readiness" }).click();
+      }
       await expect(page.getByTestId("workshop-readiness")).toHaveText("trading_room", { timeout: 20_000 });
       const addButton = page.getByTestId("add-to-trading-room-btn");
       await expect(addButton).toBeEnabled({ timeout: 20_000 });
@@ -290,6 +294,11 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     await test.step("create a live widget revision and keep original plus modified copy", async () => {
       await page.getByTestId(`workspace-widget-${widgetId}`).click();
       await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeVisible({ timeout: 20_000 });
+      if (isMobileProject) {
+        const drawerBox = await page.getByTestId("workspace-widget-revision-drawer").boundingBox();
+        expect(drawerBox?.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
+        await expect(page.getByTestId("trading-desk-main")).toHaveAttribute("inert", "");
+      }
       await page.getByTestId("workspace-widget-revision-input").fill("改成表格並聚焦 readiness gate、dashboard version、evidence coverage");
       await page.getByTestId("workspace-widget-revision-submit").click();
       await expect(page.getByTestId("workspace-widget-before-after-diff")).toBeVisible({ timeout: 30_000 });

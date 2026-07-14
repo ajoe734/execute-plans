@@ -746,6 +746,21 @@ async function selectOption(page: Page, testId: string, name: string): Promise<v
   await page.getByRole("option", { name, exact: true }).click();
 }
 
+async function revealWorkshopComposerOptions(page: Page): Promise<void> {
+  const toggle = page.getByTestId("workshop-composer-options-toggle");
+  if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") === "false") {
+    await toggle.click();
+  }
+}
+
+async function revealTradingRoomDecisions(page: Page): Promise<void> {
+  await expect(page.getByTestId("trading-room-page")).toBeVisible({ timeout: 30_000 });
+  if ((page.viewportSize()?.width ?? 1280) >= 900) return;
+  const selector = page.getByTestId("trading-room-workspace-pane-selector");
+  await expect(selector).toBeVisible();
+  await selector.getByRole("button", { name: /^Decisions/ }).click();
+}
+
 test("one named Persona ask and red-team challenge render a visible disagreement", async ({
   page,
 }) => {
@@ -754,6 +769,7 @@ test("one named Persona ask and red-team challenge render a visible disagreement
 
   await page.goto(`/agora/strategy-workshop/${WORKSHOP_ID}`);
   await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 30_000 });
+  await revealWorkshopComposerOptions(page);
 
   await selectOption(page, "participant-picker", "Named Personas (Select)");
   const namedPanel = page.getByTestId("named-checkbox-panel");
@@ -959,6 +975,7 @@ test("Trading Room Ask Personas preserves context and modify preserves proposal 
     `?strategyVersion=${STRATEGY_VERSION}&readinessGate=trading_room`;
 
   await page.goto(tradingRoomUrl);
+  await revealTradingRoomDecisions(page);
   const eventRow = page.getByTestId(`event-row-${DECISION_EVENT_ID}`);
   await expect(eventRow).toBeVisible();
   await eventRow.scrollIntoViewIfNeeded();
@@ -1013,6 +1030,7 @@ test("Trading Room Ask Personas preserves context and modify preserves proposal 
   });
 
   await page.goto(tradingRoomUrl);
+  await revealTradingRoomDecisions(page);
   await page.getByTestId(`event-row-${DECISION_EVENT_ID}`).click();
   await page.getByTestId(`decide-modify-${DECISION_EVENT_ID}`).click();
   await expect(page.getByTestId(`modify-linkage-panel-${DECISION_EVENT_ID}`)).toBeVisible();

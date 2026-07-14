@@ -372,12 +372,16 @@ export function WorkspaceProposalPreview({
       </div>
 
       {error ? (
-        <div data-testid="workspace-proposal-error" style={{ color: COLORS.danger, fontSize: 13 }}>
+        <div data-testid="workspace-proposal-error" role="alert" style={{ color: COLORS.danger, fontSize: 13 }}>
           {error}
         </div>
       ) : null}
 
-      <footer style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <footer
+        className="workspace-proposal-actions"
+        data-testid="workspace-proposal-actions"
+        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+      >
         <button
           data-testid="workspace-proposal-accept"
           disabled={busy}
