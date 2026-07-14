@@ -281,6 +281,29 @@ describe("StrategyPerformancePage", () => {
     expect(screen.getByText("聯電")).toBeDefined();
   });
 
+  it("keeps one explicit narrow pane active while preserving every performance task", async () => {
+    arrangeLoaded();
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findAllByText("Breakout Alpha");
+    const decisionPane = screen.getByTestId("performance-decision-pane");
+    const outcomePane = screen.getByTestId("performance-outcome-pane");
+    const strategyPane = screen.getByTestId("performance-strategy-pane");
+
+    expect(decisionPane.getAttribute("data-mobile-pane-hidden")).toBe("false");
+    expect(outcomePane.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(strategyPane.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(screen.getByTestId("performance-mobile-priority").textContent).toContain("Breakout Alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Selected outcome" }));
+    expect(decisionPane.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(outcomePane.getAttribute("data-mobile-pane-hidden")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Strategies" }));
+    expect(outcomePane.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(strategyPane.getAttribute("data-mobile-pane-hidden")).toBe("false");
+  });
+
   it("supports applying Servant suggestions with interactive toasts", async () => {
     arrangeLoaded();
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);

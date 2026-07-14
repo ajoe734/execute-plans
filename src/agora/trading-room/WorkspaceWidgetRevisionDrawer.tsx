@@ -357,15 +357,26 @@ export function WorkspaceWidgetRevisionDrawer({
   const [proposalEtag, setProposalEtag] = useState<string | null>(null);
   const [state, setState] = useState<SubmitState>("idle");
   const [error, setError] = useState<RevisionUiError | null>(null);
+  const backgroundRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    backgroundRef.current =
+      document.querySelector<HTMLElement>('[data-testid="trading-desk-main"]') ??
+      document.querySelector<HTMLElement>('[data-testid="trading-room-workspace-shell"]');
+    backgroundRef.current?.setAttribute("inert", "");
+    backgroundRef.current?.setAttribute("aria-hidden", "true");
     setInstruction("");
     setProposal(null);
     setProposalEtag(null);
     setState("idle");
     setError(null);
+    return () => {
+      backgroundRef.current?.removeAttribute("inert");
+      backgroundRef.current?.removeAttribute("aria-hidden");
+      backgroundRef.current = null;
+    };
   }, [open, widget?.id]);
 
   const draft = useMemo(() => {

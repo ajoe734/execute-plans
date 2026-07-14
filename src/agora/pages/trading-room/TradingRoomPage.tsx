@@ -2288,6 +2288,7 @@ function StrategyWorkspaceView({
     resolvedStrategyVersion,
     routeTradingRoomReady,
     strategyId,
+    t,
   ]);
 
   async function handleAcceptProposal() {

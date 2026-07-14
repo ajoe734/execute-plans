@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useTranslation } from "react-i18next";
 import "@/i18n";
 import GridLayout, { type Layout } from "react-grid-layout";
@@ -174,6 +175,7 @@ function AddWidgetLibrary({
 }) {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState("");
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const entries = getActiveWidgetTypes()
     .map((widgetType) => getWidgetRegistryEntry(widgetType))
     .filter((entry): entry is WidgetRegistryEntry => Boolean(entry));
@@ -184,30 +186,55 @@ function AddWidgetLibrary({
   }, {});
 
   return (
-    <aside
-      data-testid="workspace-add-widget-library"
-      style={{
-        background: COLORS.panelElevated,
-        border: `1px solid ${COLORS.borderStrong}`,
-        borderRadius: 8,
-        boxShadow: "0 18px 42px rgba(0, 0, 0, 0.42)",
-        display: "flex",
-        flexDirection: "column",
-        maxHeight: 520,
-        overflow: "auto",
-        padding: 12,
-        position: "absolute",
-        right: 16,
-        top: 58,
-        width: 360,
-        zIndex: 20,
+    <DialogPrimitive.Root
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
       }}
+      open
     >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          style={{ background: "rgba(6, 8, 14, 0.36)", inset: 0, position: "fixed", zIndex: 19 }}
+        />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          data-testid="workspace-add-widget-library"
+          onCloseAutoFocus={(event) => {
+            const previousFocus = previousFocusRef.current;
+            if (previousFocus?.isConnected) {
+              event.preventDefault();
+              previousFocus.focus();
+            }
+          }}
+          onOpenAutoFocus={() => {
+            previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          style={{
+            background: COLORS.panelElevated,
+            border: `1px solid ${COLORS.borderStrong}`,
+            borderRadius: 8,
+            boxShadow: "0 18px 42px rgba(0, 0, 0, 0.42)",
+            display: "flex",
+            flexDirection: "column",
+            maxHeight: 520,
+            overflow: "auto",
+            padding: 12,
+            position: "fixed",
+            right: 16,
+            top: 116,
+            width: 360,
+            zIndex: 20,
+          }}
+        >
       <header style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
-        <button aria-label="Close widget library" onClick={onClose} style={plainButtonStyle} type="button">
-          ×
-        </button>
+        <DialogPrimitive.Title asChild>
+          <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
+        </DialogPrimitive.Title>
+        <DialogPrimitive.Close asChild>
+          <button aria-label="Close widget library" style={plainButtonStyle} type="button">
+            ×
+          </button>
+        </DialogPrimitive.Close>
       </header>
 
       {/* Ask Servant Input */}
@@ -217,6 +244,7 @@ function AddWidgetLibrary({
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <input
+            aria-label="Describe the widget for Servant"
             data-testid="workspace-ask-servant-widget-input"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -277,7 +305,9 @@ function AddWidgetLibrary({
           </div>
         </section>
       ))}
-    </aside>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
@@ -1140,7 +1170,7 @@ export function WorkspaceGridEditor({
 
         {/* Row 2: Entrances & Tabs */}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 }}>
             <button
               data-testid="workspace-back-to-strategies"
               onClick={onSwitchStrategy}
@@ -1183,6 +1213,7 @@ export function WorkspaceGridEditor({
               版本紀錄 (Versions)
             </button>
             <button
+              aria-pressed={editMode}
               data-testid="workspace-edit-mode-toggle"
               onClick={() => setEditMode((prev) => !prev)}
               style={primaryButtonStyle}
@@ -1486,40 +1517,43 @@ export function WorkspaceGridEditor({
 
       {/* New Widget Proposal Preview Modal */}
       {widgetProposal && (
-        <div
-          data-testid="workspace-widget-proposal-modal"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.75)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
+        <DialogPrimitive.Root
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setWidgetProposal(null);
           }}
+          open
         >
-          <div
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay
+              style={{ background: "rgba(0, 0, 0, 0.75)", inset: 0, position: "fixed", zIndex: 1000 }}
+            />
+            <DialogPrimitive.Content
+            aria-describedby={undefined}
+            data-testid="workspace-widget-proposal-modal"
             style={{
               background: COLORS.panelElevated,
               border: `1px solid ${COLORS.borderStrong}`,
               borderRadius: 8,
-              maxHeight: "calc(100dvh - 32px)",
-              maxWidth: 580,
-              overflowY: "auto",
-              width: "100%",
-              padding: 20,
               boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
               display: "flex",
               flexDirection: "column",
               gap: 12,
+              left: "50%",
+              maxHeight: "calc(100dvh - 32px)",
+              maxWidth: 580,
+              overflowY: "auto",
+              padding: 20,
+              position: "fixed",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "calc(100% - 32px)",
+              zIndex: 1001,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: 10 }}>
-              <strong style={{ color: COLORS.accent, fontSize: 15 }}>交易僕人 - 新 Widget 提案 (Proposal)</strong>
+              <DialogPrimitive.Title asChild>
+                <strong style={{ color: COLORS.accent, fontSize: 15 }}>交易僕人 - 新 Widget 提案 (Proposal)</strong>
+              </DialogPrimitive.Title>
               <span style={{ fontSize: 11, background: "rgba(59, 130, 246, 0.15)", color: "#60a5fa", padding: "2px 6px", borderRadius: 4 }}>
                 Servant Proposed
               </span>
@@ -1685,8 +1719,9 @@ export function WorkspaceGridEditor({
                 </button>
               </div>
             )}
-          </div>
-        </div>
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
       )}
 
       <WorkspaceWidgetRevisionDrawer
