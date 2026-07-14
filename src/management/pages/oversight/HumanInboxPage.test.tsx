@@ -54,6 +54,26 @@ function readinessBlockerItem(personaId = "persona-tw-equity", title = "Taiwan E
   };
 }
 
+function promotionReviewItem(reviewId = "review-persona-paper-1", title = "Paper Persona"): HumanInboxItem {
+  return {
+    id: `promotion_review:${reviewId}`,
+    kind: "promotion_review",
+    title: `Paper to Canary promotion review: ${title}`,
+    summary: "promotion_to_canary is awaiting human decision.",
+    requiredRole: "approver",
+    consequenceIfApproved: "",
+    consequenceIfRejected: "",
+    consequenceIfIgnored: "",
+    canDecide: true,
+    canProceed: false,
+    detailHref: `/management/human-inbox/${encodeURIComponent(`promotion_review:${reviewId}`)}`,
+    links: {
+      manageHref: `/management/persona-fleet?persona=persona-paper-1`,
+      recommendedActionHref: `/management/human-inbox/${encodeURIComponent(`promotion_review:${reviewId}`)}`,
+    },
+  };
+}
+
 describe("HumanInboxPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
@@ -146,17 +166,54 @@ describe("HumanInboxPage", () => {
     expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
   });
 
-  it("does not fall back to the legacy mock inbox when live data is unavailable", () => {
+  it("shows transport unavailable warning when live data retrieval fails with an error", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,
+      loading: false,
+      error: new Error("Network timeout"),
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    expect(screen.getByText("Transport Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
+  });
+
+  it("shows degraded banner and degraded empty body when live data is degraded and empty", () => {
+    const degradedData = [];
+    (degradedData as any).meta = {
+      surfaces: {
+        governance_review_queue: { status: "degraded", reason: "timeout" },
+      },
+    };
+    mocks.useV5Live.mockReturnValue({
+      data: degradedData,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    expect(screen.getByText(/Live queue status is degraded/)).toBeInTheDocument();
+    expect(screen.getByText("No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out.")).toBeInTheDocument();
+    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
+  });
+
+  it("renders promotion reviews and links them to the detail page for decision click-through", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [promotionReviewItem()],
       loading: false,
       refresh: vi.fn(),
     });
 
     renderInbox();
 
-    expect(screen.getByText("No Human Inbox items currently require review.")).toBeInTheDocument();
-    expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
-    expect(screen.queryByText("Beta drift critical on momentum sleeve")).not.toBeInTheDocument();
+    expect(screen.getByText("Paper to Canary promotion review: Paper Persona")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open detail" })).toHaveAttribute(
+      "href",
+      "/management/human-inbox/promotion_review%3Areview-persona-paper-1?returnUrl=%2Fmanagement%2Fhuman-inbox",
+    );
   });
 });

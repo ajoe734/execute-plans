@@ -33,6 +33,7 @@ export function useV5Live<T>(
 ): {
   data: T | undefined;
   loading: boolean;
+  error: any | null;
   refresh: () => void;
 } {
   const cacheKey = opts.cacheKey;
@@ -40,6 +41,7 @@ export function useV5Live<T>(
   const cached = getCached<T>(cacheKey);
   const [data, setData] = useState<T | undefined>(() => cached?.data);
   const [loading, setLoading] = useState(() => !cached);
+  const [error, setError] = useState<any | null>(null);
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
@@ -49,6 +51,7 @@ export function useV5Live<T>(
     const fresh = getCached<T>(cacheKey);
     if (!force && fresh && fresh.expiresAt > Date.now()) {
       setData(fresh.data);
+      setError(null);
       setLoading(false);
       return () => { alive = false; };
     }
@@ -59,6 +62,7 @@ export function useV5Live<T>(
     } else {
       setLoading(true);
     }
+    setError(null);
 
     loaderRef.current()
       .then((d) => {
@@ -68,11 +72,18 @@ export function useV5Live<T>(
             expiresAt: Date.now() + staleMs,
           });
         }
-        if (alive) { setData(d); setLoading(false); }
+        if (alive) {
+          setData(d);
+          setError(null);
+          setLoading(false);
+        }
       })
       .catch((err) => {
         console.error("[useV5Live] loader failed", err);
-        if (alive) setLoading(false);
+        if (alive) {
+          setError(err);
+          setLoading(false);
+        }
       });
     return () => { alive = false; };
   }, [cacheKey, staleMs]);
@@ -85,5 +96,6 @@ export function useV5Live<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  return { data, loading, refresh };
+  return { data, loading, error, refresh };
 }
+
