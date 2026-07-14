@@ -77,6 +77,14 @@ function expectForbidden(result, label) {
   assert(errorCode(result.payload) === "FORBIDDEN", `${label}: missing Pack-D FORBIDDEN envelope`);
 }
 
+function expectUnauthenticated(result, label) {
+  expectStatus(result, 401, label);
+  assert(
+    errorCode(result.payload) === "UNAUTHENTICATED",
+    `${label}: missing Pack-D UNAUTHENTICATED envelope`,
+  );
+}
+
 function writeEvidence(result) {
   fs.mkdirSync(AUDIT_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/gu, "").replace(/-/gu, "");
@@ -90,6 +98,7 @@ function writeEvidence(result) {
     `- bff: ${result.bffBaseUrl}`,
     `- bff_commit: ${result.bffCommit}`,
     `- proposal_id: ${result.proposalId}`,
+    `- unauthenticated_create_status: ${result.unauthenticatedCreateStatus}`,
     `- viewer_create_status: ${result.viewerCreateStatus}`,
     `- viewer_modify_status: ${result.viewerModifyStatus}`,
     `- operator_create_status: ${result.operatorCreateStatus}`,
@@ -103,7 +112,7 @@ function writeEvidence(result) {
     "- tokens_recorded: false",
     "- downstream_execution_attempted: false",
     "",
-    "PASS: viewer writes failed with Pack-D 403; the operator created, modified, and paper-validated a durable proposal; authenticated readback returned exactly three revisions and create/modify/validate audit events; idempotent replay added no revision.",
+    "PASS: unauthenticated creation failed with Pack-D 401; viewer writes failed with Pack-D 403; the operator created, modified, and paper-validated a durable proposal; authenticated readback returned exactly three revisions and create/modify/validate audit events; idempotent replay added no revision.",
     "",
   ].join("\n");
   fs.writeFileSync(mdPath, markdown, "utf8");
@@ -160,6 +169,13 @@ async function main() {
     human_gate: true,
     consultation_refs: [`consultation:${probeId}`],
   };
+
+  const unauthenticatedCreate = await request("/bff/agora/proposals", {
+    body: proposal,
+    headers: { "Idempotency-Key": `${probeId}-unauthenticated-create` },
+    method: "POST",
+  });
+  expectUnauthenticated(unauthenticatedCreate, "unauthenticated proposal create");
 
   const viewerCreate = await request("/bff/agora/proposals", {
     body: proposal,
@@ -258,6 +274,7 @@ async function main() {
     replayRevision: data(replay.payload)?.revision,
     revisions: revisionNumbers,
     tokensRecorded: false,
+    unauthenticatedCreateStatus: unauthenticatedCreate.status,
     viewerCreateStatus: viewerCreate.status,
     viewerModifyStatus: viewerModify.status,
   };
