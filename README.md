@@ -79,7 +79,12 @@ VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=true
 VITE_BFF_ALLOW_DEV_STUB_WRITES=true
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<public-publishable-or-anon-key>
 ```
+
+Supabase values above are public browser configuration, not server secrets.
+Never use a service-role or `sb_secret_` key in any `VITE_*` variable.
 
 Pantheon dev is a closed test environment. Its explicit dev-only stub-write
 gate requires `/bff/me` to report `dev` or `test` and is rejected for any

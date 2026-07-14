@@ -19,6 +19,7 @@ import {
   PUBLIC_DEV_VIEWER_BEARER_TOKEN,
   validatePublicBuildBearerToken,
 } from "@/config/publicBuildAuth";
+import { validatePublicSupabaseConfig } from "@/config/publicSupabase";
 
 const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
 // These two subprocess checks are optional in a browser-free unit-test phase;
@@ -38,6 +39,27 @@ afterEach(() => {
 });
 
 describe("public frontend build auth boundary", () => {
+  it("requires valid public Supabase client configuration without accepting secret keys", () => {
+    expect(validatePublicSupabaseConfig(
+      "https://project.supabase.example",
+      "sb_publishable_test-key",
+    )).toEqual({
+      publishableKey: "sb_publishable_test-key",
+      url: "https://project.supabase.example",
+    });
+    for (const [url, publishableKey] of [
+      [undefined, "sb_publishable_test-key"],
+      ["https://project.supabase.example", undefined],
+      [" project.supabase.example", "sb_publishable_test-key"],
+      ["ftp://project.supabase.example", "sb_publishable_test-key"],
+      ["https://project.supabase.example", "sb_secret_service-role-key"],
+    ] as const) {
+      expect(() => validatePublicSupabaseConfig(url, publishableKey)).toThrow(
+        /VITE_SUPABASE_(?:URL|PUBLISHABLE_KEY)/,
+      );
+    }
+  });
+
   it("accepts only empty or the canonical dev viewer identity", () => {
     expect(validatePublicBuildBearerToken("")).toBe("");
     expect(validatePublicBuildBearerToken(undefined)).toBe("");
@@ -74,6 +96,28 @@ describe("public frontend build auth boundary", () => {
       expect(`${result.stdout}\n${result.stderr}`).toMatch(
         /canonical public dev viewer identity/,
       );
+    },
+    30_000,
+  );
+
+  it(
+    "rejects a build before bundling when public Supabase configuration is missing",
+    () => {
+      const result = spawnSync("npm", ["run", "build"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          VITE_BFF_DEV_BEARER_TOKEN: "",
+          VITE_SUPABASE_PUBLISHABLE_KEY: "",
+          VITE_SUPABASE_URL: "",
+        },
+      });
+      const output = `${result.stdout}\n${result.stderr}`;
+
+      expect(result.status).not.toBe(0);
+      expect(output).toMatch(/VITE_SUPABASE_URL is required public browser configuration/);
+      expect(output).not.toMatch(/supabaseUrl is required/);
     },
     30_000,
   );
