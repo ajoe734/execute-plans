@@ -1823,7 +1823,8 @@ export default {
           freshnessLabel: "Freshness: {{time}}",
           candidateShort: "Cand: {{count}}",
           heldShort: "Mon: {{count}}",
-          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)"
+          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)",
+          recipeSampleBadge: "DASHBOARD RECIPE DATA: SAMPLE ONLY"
         },
         dashboard: {
           recipeA: {
@@ -1835,7 +1836,11 @@ export default {
             hypothesisTitle: "Active Hypothesis",
             timelineTitle: "Catalyst Event Timeline",
             scatterTitle: "Sector Relative-Return Scatter",
-            chainTitle: "Supply Chain & Laggards Map"
+            chainTitle: "Supply Chain & Laggards Map",
+            hypothesisNarrative: "AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE.",
+            siliconWafers: "Silicon Wafers",
+            substrates: "Substrates",
+            aiGpu: "AI GPU"
           },
           recipeC: {
             resistanceTitle: "Breakout Resistance Levels",
@@ -1937,7 +1942,15 @@ export default {
           state: "State",
           action: "Action",
           noCandidates: "No candidates in this state. Try changing the lifecycle state filter.",
-          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})"
+          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})",
+          currentState: "Current State:",
+          aiFitScore: "AI Fit Score:",
+          whySelected: "僕人選出理由 (Why Selected)",
+          concerns: "疑慮與反方論點 (Concerns)",
+          nextEvent: "Next Catalyst Event",
+          evidenceReferences: "Evidence references",
+          governedActions: "Governed Actions",
+          loading: "Loading candidates..."
         }
       },
       errors: {

@@ -1805,7 +1805,8 @@ export default {
           freshnessLabel: "新鮮度: {{time}}",
           candidateShort: "候選: {{count}}",
           heldShort: "監控: {{count}}",
-          sampleDataBadge: "僅限模擬數據 (BFF 離線)"
+          sampleDataBadge: "僅限模擬數據 (BFF 離線)",
+          recipeSampleBadge: "儀表板配方數據：僅限樣品"
         },
         dashboard: {
           recipeA: {
@@ -1817,7 +1818,11 @@ export default {
             hypothesisTitle: "當前核心假設",
             timelineTitle: "催化劑事件時間軸",
             scatterTitle: "板塊相對回報散佈圖",
-            chainTitle: "供應鏈與落後補漲地圖"
+            chainTitle: "供應鏈與落後補漲地圖",
+            hypothesisNarrative: "AI GPU 需求正推動矽晶圓與載板需求；台積電的產能限制使封裝關注點轉移至日月光。",
+            siliconWafers: "矽晶圓",
+            substrates: "載板",
+            aiGpu: "AI GPU"
           },
           recipeC: {
             resistanceTitle: "突破阻力價位",
@@ -1919,7 +1924,15 @@ export default {
           state: "狀態",
           action: "操作",
           noCandidates: "此狀態下無候選人。請嘗試變更生命週期狀態篩選器。",
-          boardTitle: "候選人與監控看板 ({{count}})"
+          boardTitle: "候選人與監控看板 ({{count}})",
+          currentState: "目前狀態:",
+          aiFitScore: "AI 契合度評分:",
+          whySelected: "僕人選出理由 (Why Selected)",
+          concerns: "疑慮與反方論點 (Concerns)",
+          nextEvent: "下一個催化劑事件",
+          evidenceReferences: "佐證與參考文獻",
+          governedActions: "治理操作",
+          loading: "正在載入候選標的..."
         }
       },
       errors: {
