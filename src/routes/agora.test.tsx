@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { AgoraLayoutRoute, AgoraStrategyPerformanceRoute, AgoraStrategyWorkshopRoute } from "./agora";
+import { AgoraLayoutRoute, AgoraStrategyPerformanceRoute, AgoraStrategyWorkshopRoute, safeWorkshopReturnPath } from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
@@ -34,6 +34,7 @@ vi.mock("@/agora/pages/strategy-workshop/StrategyWorkshopPage", () => ({
       workshopId: string;
       workshopVersionId?: string;
     }) => void;
+    entry?: Record<string, unknown>;
     workshopId?: string;
   }) => {
     routeMocks.strategyWorkshopPage(props);
@@ -163,6 +164,15 @@ describe("AgoraLayoutRoute", () => {
 });
 
 describe("AgoraStrategyWorkshopRoute", () => {
+  it("accepts only same-origin Management or Agora return paths", () => {
+    expect(safeWorkshopReturnPath("/management/personas/persona-a?tab=tradeJournal")).toBe("/management/personas/persona-a?tab=tradeJournal");
+    expect(safeWorkshopReturnPath("/agora/trading-room/strategy-a")).toBe("/agora/trading-room/strategy-a");
+    expect(safeWorkshopReturnPath("//evil.example/path")).toBeUndefined();
+    expect(safeWorkshopReturnPath("https://evil.example/path")).toBeUndefined();
+    expect(safeWorkshopReturnPath("/management\\evil")).toBeUndefined();
+    expect(safeWorkshopReturnPath("/settings")).toBeUndefined();
+  });
+
   it("passes workshopId and routes Add to Trading Room into the explicit strategy entry", () => {
     render(
       <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9"]}>
@@ -186,6 +196,27 @@ describe("AgoraStrategyWorkshopRoute", () => {
     expect(location.getAttribute("data-strategy-version")).toBe("reg-001");
     expect(location.getAttribute("data-readiness-gate")).toBe("trading_room");
     expect(location.getAttribute("data-readiness-assessment-id")).toBe("ready-001");
+  });
+
+  it("preserves canonical Persona interaction deep-link context", () => {
+    render(
+      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?mode=consult&participants=persona-a%2Cpersona-b&picker=cross-style&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+A"]}>
+        <Routes>
+          <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(routeMocks.strategyWorkshopPage).toHaveBeenCalledWith(expect.objectContaining({
+      entry: {
+        mode: "consult",
+        participantIds: ["persona-a", "persona-b"],
+        picker: "cross-style",
+        returnTo: "/management/personas/persona-a",
+        returnLabel: "Persona A",
+      },
+      workshopId: "ws-9",
+    }));
   });
 });
 

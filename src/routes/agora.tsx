@@ -5,6 +5,9 @@ import { StrategyPerformancePage } from "@/agora/pages/strategy-performance/Stra
 import {
   StrategyWorkshopPage,
   type TradingRoomReadinessHandoff,
+  type WorkshopInteractionEntry,
+  type WorkshopInteractionMode,
+  type WorkshopParticipantPicker,
 } from "@/agora/pages/strategy-workshop/StrategyWorkshopPage";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import { useLiveSseConnection } from "@/platform/hooks";
@@ -19,6 +22,21 @@ function tradingRoomHandoffQuery(handoff: TradingRoomReadinessHandoff): string {
   if (handoff.workshopVersionId) params.set("workshopVersionId", handoff.workshopVersionId);
   if (handoff.assessedAt) params.set("assessedAt", handoff.assessedAt);
   return params.toString();
+}
+
+export function safeWorkshopReturnPath(value: string | null): string | undefined {
+  const containsUnsafeCharacter = value
+    ? Array.from(value).some((character) => character === "\\" || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+    : false;
+  if (!value || !value.startsWith("/") || value.startsWith("//") || containsUnsafeCharacter) return undefined;
+  try {
+    const parsed = new URL(value, "https://pantheon.internal");
+    if (parsed.origin !== "https://pantheon.internal") return undefined;
+    if (!parsed.pathname.startsWith("/management/") && !parsed.pathname.startsWith("/agora/")) return undefined;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return undefined;
+  }
 }
 
 // Agora is an intentional standalone workbench shell (not a Management
@@ -84,9 +102,22 @@ export function AgoraTradingRoomRoute() {
 export function AgoraStrategyWorkshopRoute() {
   const navigate = useNavigate();
   const { workshopId } = useParams<{ workshopId?: string }>();
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get("mode");
+  const picker = searchParams.get("picker");
+  const allowedModes = new Set<WorkshopInteractionMode>(["ask", "challenge", "consult", "propose_action", "reflect"]);
+  const allowedPickers = new Set<WorkshopParticipantPicker>(["named", "recommended", "committee", "red-team", "same-style", "cross-style"]);
+  const entry: WorkshopInteractionEntry = {
+    mode: allowedModes.has(mode as WorkshopInteractionMode) ? mode as WorkshopInteractionMode : undefined,
+    participantIds: searchParams.get("participants")?.split(",").map((item) => item.trim()).filter(Boolean),
+    picker: allowedPickers.has(picker as WorkshopParticipantPicker) ? picker as WorkshopParticipantPicker : undefined,
+    returnTo: safeWorkshopReturnPath(searchParams.get("return_to")),
+    returnLabel: searchParams.get("return_label") ?? undefined,
+  };
 
   return (
     <StrategyWorkshopPage
+      entry={entry}
       onAddToTradingRoom={(handoff) =>
         navigate(
           `/agora/trading-room/${encodeURIComponent(handoff.strategyId)}?${tradingRoomHandoffQuery(handoff)}`,

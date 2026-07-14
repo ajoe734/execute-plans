@@ -26,9 +26,12 @@ vi.mock("react-router-dom", () => ({
   useSearchParams: () => [new URLSearchParams()],
 }));
 
-vi.mock("@/lib/bff-v1/agora/workshops", () => ({
-  createWorkshop: vi.fn().mockResolvedValue({ workshop_id: "ws-new-001" }),
-  postWorkshopMessage: vi.fn().mockResolvedValue({ message_id: "msg-001" }),
+vi.mock("@/lib/bff-v1/agora/interaction", () => ({
+  interaction: {
+    resolveContext: vi.fn().mockResolvedValue({ data: { workshop_id: "ws-new-001", context_refs: [{ type: "strategy", id: "strat-001", version_id: "reg-001" }, { type: "decision_event", id: "evt-001" }], verified: true } }),
+    participants: vi.fn().mockResolvedValue({ data: { included: ["per_quant", "per_risk", "per_macro", "per_red"].map((persona_id) => ({ persona_id, display_name: persona_id, eligible: true, reasons: [], recommended: true })), excluded: [] } }),
+    submit: vi.fn().mockResolvedValue({ data: { execution_authority: "none" } }),
+  },
 }));
 
 vi.mock("react-grid-layout", async () => {
@@ -80,7 +83,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 
 import { TradingRoomPage } from "./TradingRoomPage";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
-import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
+import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -1512,15 +1515,18 @@ describe("TradingRoomPage", () => {
     fireEvent.click(launchButton);
     
     await waitFor(() => {
-      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith(expect.objectContaining({
-        subject: expect.objectContaining({
-          kind: "candidate_artifact",
-          ref: "evt-001",
-        }),
-        metadata: expect.objectContaining({
-          decision_event_id: "evt-001",
-          strategy_version: "reg-001",
-        })
+      expect(interaction.resolveContext).toHaveBeenCalledWith({
+        context_refs: [
+          { type: "strategy", id: "strat-001", version_id: "reg-001" },
+          { type: "decision_event", id: "evt-001" },
+        ],
+        environment: "paper",
+      });
+      expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ mode: "consult", workshop_id: "ws-new-001" }));
+      expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+        mode: "consult",
+        workshop_id: "ws-new-001",
+        participant_persona_ids: ["per_quant", "per_risk", "per_macro"],
       }));
     });
   });

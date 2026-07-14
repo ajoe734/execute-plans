@@ -1,4 +1,6 @@
 import { BffError, makeBffError, normalizeBffErrorEnvelope, type BffErrorEnvelope } from "../errors";
+import { buildHeaders } from "../headers";
+import { detectBaseUrl } from "../client";
 
 export type ProposalAction =
   | "request_review" | "request_research" | "modify" | "validate"
@@ -36,7 +38,7 @@ export interface ProposalActionBody {
   validation_result?: Record<string, unknown>;
 }
 
-const baseUrl = () => (import.meta.env.VITE_BFF_BASE_URL ?? "").replace(/\/$/, "");
+const baseUrl = () => detectBaseUrl().replace(/\/$/, "");
 
 async function decode<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null) as { data?: T } | BffErrorEnvelope | null;
@@ -52,7 +54,7 @@ async function decode<T>(response: Response): Promise<T> {
 
 export async function getGovernedProposal(proposalId: string): Promise<ProposalSnapshot> {
   const response = await fetch(`${baseUrl()}/bff/agora/proposals/${encodeURIComponent(proposalId)}`, {
-    credentials: "include", headers: { Accept: "application/json" },
+    credentials: "include", headers: buildHeaders({ method: "GET" }),
   });
   const proposal = await decode<GovernedProposal>(response);
   const etag = response.headers.get("ETag");
@@ -62,7 +64,7 @@ export async function getGovernedProposal(proposalId: string): Promise<ProposalS
 
 export async function getProposalRevisions(proposalId: string): Promise<GovernedProposal[]> {
   const response = await fetch(`${baseUrl()}/bff/agora/proposals/${encodeURIComponent(proposalId)}/revisions`, {
-    credentials: "include", headers: { Accept: "application/json" },
+    credentials: "include", headers: buildHeaders({ method: "GET" }),
   });
   return decode<GovernedProposal[]>(response);
 }
@@ -72,7 +74,7 @@ export async function actOnGovernedProposal(
 ): Promise<ProposalSnapshot> {
   const response = await fetch(`${baseUrl()}/bff/agora/proposals/${encodeURIComponent(proposalId)}/actions`, {
     method: "POST", credentials: "include",
-    headers: { "Content-Type": "application/json", Accept: "application/json", "If-Match": etag },
+    headers: buildHeaders({ method: "POST", extra: { "If-Match": etag } }),
     body: JSON.stringify(body),
   });
   const proposal = await decode<GovernedProposal>(response);

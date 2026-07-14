@@ -155,7 +155,7 @@ describe("HumanInboxPage", () => {
 
     renderInbox();
 
-    expect(screen.getByText("No live inbox items are available.")).toBeInTheDocument();
+    expect(screen.getByText("No Human Inbox items currently require review.")).toBeInTheDocument();
     expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
     expect(screen.queryByText("Beta drift critical on momentum sleeve")).not.toBeInTheDocument();
   });

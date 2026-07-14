@@ -203,6 +203,13 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("workshop-conversation")).toBeVisible();
       await expect(page.getByTestId("completeness-rail")).toBeVisible();
       await expect(page.getByTestId("servant-composer")).toBeVisible();
+      await expect(page.getByTestId("context-bar")).toBeVisible();
+      await expect(page.getByTestId("mode-selector")).toBeVisible();
+      await expect(page.getByTestId("participant-picker")).toBeVisible();
+      await expect(page.getByTestId("eligibility-explanation")).toBeVisible();
+      await expect(page.getByTestId("eligibility-explanation")).toContainText(
+        /eligible|eligibility|opinion authority|unavailable/i,
+      );
       await expect(page.getByTestId("workshop-card-summary")).toContainText(/Cards: \d+/);
       await expect(page.getByTestId("workshop-event-summary")).toContainText(/Events: \d+/);
       await expect(page.getByTestId("workshop-readiness-summary")).toContainText(/Readiness:/);

@@ -903,7 +903,7 @@ export interface TradingRoomWidgetSpec {
     "window"?: string;
   };
   "chartSpec": ChartSpecV1;
-  "interactions": Array<AgoraInteractionSchema>;
+  "interactions": Array<interaction>;
   "placement": WidgetPlacement;
   "minSize": WidgetSize;
   "maxSize": WidgetSize;
@@ -1011,7 +1011,7 @@ export interface ChartSpecV1 {
     "severity"?: "info" | "watch" | "warning" | "high" | "critical";
     "label"?: string;
   }>;
-  "click_action"?: AgoraInteractionSchema;
+  "click_action"?: interaction;
   "options"?: Record<string, unknown>;
 }
 
@@ -1029,7 +1029,7 @@ export interface transform {
   "params"?: Record<string, unknown>;
 }
 
-export interface AgoraInteractionSchema {
+export interface interaction {
   "kind": "open_candidate" | "open_strategy" | "open_position" | "open_evidence" | "open_research_run" | "open_shadow_record" | "filter_workspace" | "cross_highlight" | "add_to_monitoring" | "remove_from_monitoring" | "park_candidate" | "request_more_research" | "send_to_shadow" | "request_widget_revision" | "create_journal_note";
   "params"?: Record<string, unknown>;
 }
@@ -1134,7 +1134,7 @@ export interface WidgetSpecV2 {
     "window"?: string;
   };
   "chart_spec": ChartSpecV1;
-  "interactions": Array<AgoraInteractionSchema>;
+  "interactions": Array<interaction>;
   "sensitivity": "public_market" | "user_private" | "broker_sensitive" | "restricted";
   "can_export": boolean;
   "registry_version": "widget_registry.v1";
@@ -2145,7 +2145,7 @@ export interface WidgetSpec {
   "metadata"?: Record<string, unknown>;
 }
 
-export type AgoraSchema = AgoraUserScope | agora_capability | agora_servant_policy | CandidatePool | DashboardRecipe | PersonalizationEvent | ResearchPlan | ResearchRunSummary | ServantProfile | ShadowDecision | StrategyCompleteness | StrategyWorkshop | TradingEvent | TradingIntent | TradingRoomWorkspaceContract | TradingRoomWorkspaceProposal | TradingRoomWorkspace | TradingRoomViewSpec | TradingRoomWidgetSpec | WidgetPlacement | WidgetSize | DataAvailabilitySummary | PersonalizationSummary | WorkspaceLayoutOperation | WidgetRevisionProposal | TradingRoomDashboardVersion | WorkspaceChangeLogEntry | WorkspaceError | ChartSpecV1 | field_encoding | transform | AgoraInteractionSchema | AgoraCrossRepoCompatibilityManifest | DashboardRecipeV2 | dashboard_view | widget_placement | WidgetSpecV2 | PrivateContentRef | StrategyRefContract | strategy_ref_input | workshop_strategy_projection | workshop_conclude_refs | first_version_link_request | strategy_ref_error_codes | create_from_draft_semantics | free_form_semantics | WorkshopEvent | WorkshopPersistenceContract | workshop_status | strategy_workshop_session_row | strategy_workshop_event_row | strategy_workshop_version_link_row | strategy_completeness_snapshot_row | agora_private_content_object_row | WorkshopStorageContract | WorkshopVersionLink | GovernedIntentHandoff | actor | evidence_ref | ResearchPlanExecution | stage | ResearchRunProjection | progress | metric | StrategyReadinessAssessment | gate | requirement | TradingDecisionEvent | TradingRoomAggregate | VersionCompare | version_ref | VersionPatchProposal | patch_operation | predicted_effect | WorkshopCard | payload_user_strategy_description | payload_servant_reconstruction | payload_completeness_update | payload_missing_definition | payload_next_question | payload_research_plan_proposal | payload_research_progress | payload_research_result | payload_consult_result | payload_version_patch_proposal | payload_version_compare | payload_readiness_gate | WorkshopStreamEvent | CandidateDiscussion | CandidateMemberReview | CandidateMonitoringStatus | CandidateScoreResult | WidgetSpec;
+export type AgoraSchema = AgoraUserScope | agora_capability | agora_servant_policy | CandidatePool | DashboardRecipe | PersonalizationEvent | ResearchPlan | ResearchRunSummary | ServantProfile | ShadowDecision | StrategyCompleteness | StrategyWorkshop | TradingEvent | TradingIntent | TradingRoomWorkspaceContract | TradingRoomWorkspaceProposal | TradingRoomWorkspace | TradingRoomViewSpec | TradingRoomWidgetSpec | WidgetPlacement | WidgetSize | DataAvailabilitySummary | PersonalizationSummary | WorkspaceLayoutOperation | WidgetRevisionProposal | TradingRoomDashboardVersion | WorkspaceChangeLogEntry | WorkspaceError | ChartSpecV1 | field_encoding | transform | interaction | AgoraCrossRepoCompatibilityManifest | DashboardRecipeV2 | dashboard_view | widget_placement | WidgetSpecV2 | PrivateContentRef | StrategyRefContract | strategy_ref_input | workshop_strategy_projection | workshop_conclude_refs | first_version_link_request | strategy_ref_error_codes | create_from_draft_semantics | free_form_semantics | WorkshopEvent | WorkshopPersistenceContract | workshop_status | strategy_workshop_session_row | strategy_workshop_event_row | strategy_workshop_version_link_row | strategy_completeness_snapshot_row | agora_private_content_object_row | WorkshopStorageContract | WorkshopVersionLink | GovernedIntentHandoff | actor | evidence_ref | ResearchPlanExecution | stage | ResearchRunProjection | progress | metric | StrategyReadinessAssessment | gate | requirement | TradingDecisionEvent | TradingRoomAggregate | VersionCompare | version_ref | VersionPatchProposal | patch_operation | predicted_effect | WorkshopCard | payload_user_strategy_description | payload_servant_reconstruction | payload_completeness_update | payload_missing_definition | payload_next_question | payload_research_plan_proposal | payload_research_progress | payload_research_result | payload_consult_result | payload_version_patch_proposal | payload_version_compare | payload_readiness_gate | WorkshopStreamEvent | CandidateDiscussion | CandidateMemberReview | CandidateMonitoringStatus | CandidateScoreResult | WidgetSpec;
 
 export interface AgoraSchemaByTitle {
   AgoraUserScope: AgoraUserScope;
@@ -2179,7 +2179,7 @@ export interface AgoraSchemaByTitle {
   ChartSpecV1: ChartSpecV1;
   field_encoding: field_encoding;
   transform: transform;
-  interaction: AgoraInteractionSchema;
+  interaction: interaction;
   AgoraCrossRepoCompatibilityManifest: AgoraCrossRepoCompatibilityManifest;
   DashboardRecipeV2: DashboardRecipeV2;
   dashboard_view: dashboard_view;

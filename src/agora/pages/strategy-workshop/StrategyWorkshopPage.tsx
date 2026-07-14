@@ -7,13 +7,17 @@ import {
   getWorkshopReadiness,
   listWorkshopCards,
   listWorkshopEvents,
-  postWorkshopMessage,
   openWorkshopStream,
   type WorkshopCard,
   type WorkshopCompleteness,
   type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
+import {
+  interaction,
+  type ContextRef,
+  type PersonaEligibility,
+} from "@/lib/bff-v1/agora/interaction";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
@@ -291,9 +295,66 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
 interface SessionViewProps {
   workshopId: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+  entry?: WorkshopInteractionEntry;
 }
 
-function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
+export type WorkshopInteractionMode = "ask" | "challenge" | "consult" | "propose_action" | "reflect";
+export type WorkshopParticipantPicker = "named" | "recommended" | "committee" | "red-team" | "same-style" | "cross-style";
+
+export interface WorkshopInteractionEntry {
+  mode?: WorkshopInteractionMode;
+  participantIds?: string[];
+  picker?: WorkshopParticipantPicker;
+  returnTo?: string;
+  returnLabel?: string;
+}
+
+function normalizedEnvironment(workshop: StrategyWorkshop | null): "research" | "shadow" | "paper" | "canary" | "live" {
+  const value = String(recordFrom(workshop?.metadata).environment ?? "paper");
+  return ["research", "shadow", "paper", "canary", "live"].includes(value)
+    ? value as "research" | "shadow" | "paper" | "canary" | "live"
+    : "paper";
+}
+
+function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[]): ContextRef[] {
+  const metadata = recordFrom(workshop.metadata);
+  const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
+  const strategyId = String(metadata.strategy_id ?? "").trim();
+  const strategyVersion = String(
+    metadata.strategy_version
+      ?? metadata.strategy_spec_registry_id
+      ?? metadata.selected_version_id
+      ?? "",
+  ).trim();
+  if (strategyId && strategyVersion) refs.unshift({ type: "strategy", id: strategyId, version_id: strategyVersion });
+  const decisionEventId = String(metadata.decision_event_id ?? "").trim();
+  if (decisionEventId) refs.push({ type: "decision_event", id: decisionEventId });
+  const journalEntryId = String(metadata.journal_entry_id ?? metadata.trade_episode_id ?? "").trim();
+  if (journalEntryId) refs.push({ type: "journal_entry", id: journalEntryId });
+  const performanceWindowId = String(metadata.performance_window_id ?? "").trim();
+  if (performanceWindowId) refs.push({ type: "performance_window", id: performanceWindowId });
+  return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
+}
+
+function pickerParticipants(
+  picker: WorkshopParticipantPicker,
+  included: PersonaEligibility[],
+  preferred: string[] = [],
+): string[] {
+  const eligibleIds = new Set(included.map((item) => item.persona_id));
+  const preserved = preferred.filter((id) => eligibleIds.has(id));
+  if (picker === "named" && preserved.length) return preserved;
+  if (picker === "red-team") {
+    const red = included.find((item) => /red|adversar|challenge/i.test(`${item.persona_id} ${item.display_name}`));
+    return red ? [red.persona_id] : [];
+  }
+  const recommended = included.filter((item) => item.recommended).map((item) => item.persona_id);
+  if (picker === "same-style") return (preserved.length ? preserved : recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, 1);
+  if (picker === "committee" || picker === "cross-style") return (recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, 2);
+  return (preserved.length ? preserved : recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, picker === "recommended" ? 3 : 1);
+}
+
+function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
@@ -301,9 +362,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
   const [composerValue, setComposerValue] = useState("");
 
   // Custom states for PINT-005
-  const [selectedMode, setSelectedMode] = useState<"ask" | "challenge" | "consult" | "propose_action" | "reflect">("ask");
-  const [pickerSelectionType, setPickerSelectionType] = useState<"named" | "recommended" | "committee" | "red-team" | "same-style" | "cross-style">("recommended");
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(["per_quant", "per_macro", "per_risk"]);
+  const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
+  const [pickerSelectionType, setPickerSelectionType] = useState<WorkshopParticipantPicker>(entry?.picker ?? (entry?.participantIds?.length ? "named" : "recommended"));
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(entry?.participantIds ?? []);
+  const [eligibleParticipants, setEligibleParticipants] = useState<PersonaEligibility[]>([]);
+  const [excludedParticipants, setExcludedParticipants] = useState<PersonaEligibility[]>([]);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const [focusedRef, setFocusedRef] = useState<string | null>(null);
   
   // Warning/Banner simulator states
@@ -351,6 +416,42 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       cancelled = true;
     };
   }, [workshopId]);
+
+  const refreshEligibility = useCallback(async (
+    mode: WorkshopInteractionMode,
+    preferred: string[] = selectedParticipants,
+    picker: WorkshopParticipantPicker = pickerSelectionType,
+  ) => {
+    if (!workshop) return;
+    setEligibilityLoading(true);
+    setEligibilityError(null);
+    try {
+      const result = await interaction.participants({
+        workshop_id: workshopId,
+        mode,
+        environment: normalizedEnvironment(workshop),
+        required_capability: "persona_opinion",
+      });
+      setEligibleParticipants(result.data.included);
+      setExcludedParticipants(result.data.excluded);
+      setSelectedParticipants(pickerParticipants(picker, result.data.included, preferred));
+    } catch (error) {
+      setEligibleParticipants([]);
+      setExcludedParticipants([]);
+      setSelectedParticipants([]);
+      setEligibilityError(error instanceof Error ? error.message : "Participant eligibility is unavailable.");
+    } finally {
+      setEligibilityLoading(false);
+    }
+  }, [pickerSelectionType, selectedParticipants, workshop, workshopId]);
+
+  useEffect(() => {
+    if (!workshop) return;
+    void refreshEligibility(selectedMode, entry?.participantIds ?? selectedParticipants, pickerSelectionType);
+    // The entry context is intentionally applied only when the resolved workshop first loads.
+    // Subsequent picker/mode changes call refreshEligibility from their controls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workshop, workshopId]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -436,21 +537,44 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !content || isDenied || sendLoading) return;
+      if (!workshopId || !workshop || !content || isDenied || sendLoading) return;
       setSendLoading(true);
       setSendError(null);
       try {
-        await postWorkshopMessage(workshopId, {
-          content,
-          metadata: {
-            mode: selectedMode,
-            participant_persona_ids: selectedParticipants,
-            focused_ref: focusedRef,
-            subject_kind: workshop?.subject?.kind,
-            subject_ref: workshop?.subject?.ref,
-            picker_type: pickerSelectionType,
-          },
+        if (selectedParticipants.length === 0) {
+          throw new Error("Choose at least one eligible Persona before submitting.");
+        }
+        const contextRefs = interactionContextRefs(workshop, selectedParticipants);
+        const resolved = await interaction.resolveContext({
+          workshop_id: workshopId,
+          context_refs: contextRefs,
+          environment: normalizedEnvironment(workshop),
         });
+        if (!resolved.data.verified || resolved.data.workshop_id !== workshopId) {
+          throw new Error("The canonical Workshop context could not be verified.");
+        }
+        const eligibility = await interaction.participants({
+          workshop_id: workshopId,
+          mode: selectedMode,
+          environment: normalizedEnvironment(workshop),
+          required_capability: "persona_opinion",
+        });
+        const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+        if (!selectedParticipants.every((id) => eligibleIds.has(id))) {
+          throw new Error("One or more selected Personas are no longer eligible. Refresh the participant list.");
+        }
+        const result = await interaction.submit({
+          workshop_id: workshopId,
+          mode: selectedMode,
+          environment: normalizedEnvironment(workshop),
+          required_capability: "persona_opinion",
+          topic: content,
+          participant_persona_ids: selectedParticipants,
+          context_refs: resolved.data.context_refs,
+        });
+        if (result.data.execution_authority !== "none") {
+          throw new Error("The interaction response violated the no-execution authority boundary.");
+        }
         setComposerValue("");
         setFocusedRef(null);
         refreshCards();
@@ -465,11 +589,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     },
     [
       workshopId,
+      workshop,
       selectedMode,
       selectedParticipants,
-      focusedRef,
-      workshop,
-      pickerSelectionType,
       isDenied,
       sendLoading,
       refreshCards,
@@ -512,6 +634,11 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {entry?.returnTo ? (
+              <a className="text-xs font-medium text-indigo-600 underline" data-testid="workshop-return-link" href={entry.returnTo}>
+                {entry.returnLabel ?? "Back to source"}
+              </a>
+            ) : null}
             <span className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
               workshop?.status === "open"
@@ -706,9 +833,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
               {/* Mode Selector */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
-                <Select
+              <Select
                   value={selectedMode}
-                  onValueChange={(val: string) => setSelectedMode(val as typeof selectedMode)}
+                  onValueChange={(val: string) => {
+                    const mode = val as WorkshopInteractionMode;
+                    setSelectedMode(mode);
+                    void refreshEligibility(mode, selectedParticipants, pickerSelectionType);
+                  }}
                 >
                   <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
                     <SelectValue placeholder="Select mode" />
@@ -729,13 +860,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <Select
                   value={pickerSelectionType}
                   onValueChange={(val: string) => {
-                    setPickerSelectionType(val as typeof pickerSelectionType);
-                    if (val === "recommended") setSelectedParticipants(["per_quant", "per_macro", "per_risk"]);
-                    else if (val === "committee") setSelectedParticipants(["per_risk", "per_macro"]);
-                    else if (val === "red-team") setSelectedParticipants(["per_red"]);
-                    else if (val === "same-style") setSelectedParticipants(["per_quant"]);
-                    else if (val === "cross-style") setSelectedParticipants(["per_quant", "per_macro"]);
-                    else if (val === "named") setSelectedParticipants(["per_quant"]);
+                    const picker = val as WorkshopParticipantPicker;
+                    setPickerSelectionType(picker);
+                    setSelectedParticipants(pickerParticipants(picker, eligibleParticipants, selectedParticipants));
                   }}
                 >
                   <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker">
@@ -755,20 +882,22 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
             {/* Explanation box */}
             <div className="flex-1 min-w-[200px] max-w-[400px] bg-slate-50 border border-slate-100 p-2 rounded text-[11px] text-slate-500 leading-normal" data-testid="eligibility-explanation">
-              {(() => {
+              {eligibilityLoading ? "Checking Persona eligibility…" : eligibilityError ? `Eligibility unavailable: ${eligibilityError}` : (() => {
+                const selected = selectedParticipants.length;
+                const excluded = excludedParticipants.length;
                 switch (pickerSelectionType) {
                   case "recommended":
-                    return "Recommended Panel - Servant selected panel optimized for checking strategy completeness. Eligible.";
+                    return `Recommended Panel — ${selected} eligible selected; ${excluded} excluded by the canonical capability gate.`;
                   case "committee":
-                    return "Risk Committee - Requires Risk Officer and Macro Strategist for capital allocations. Eligible.";
+                    return `Risk Committee — ${selected} eligible selected. The committee has opinion authority only.`;
                   case "red-team":
-                    return "Red Team - Adversary probing of strategy assumptions. Restricted to research/paper environment. Eligible.";
+                    return selected ? "Red Team — eligible adversarial Persona selected; opinion authority only." : "Red Team unavailable — no eligible adversarial Persona for this environment.";
                   case "same-style":
-                    return "Same-Style Comparison - Contrasts similar archetype models (e.g. Quant-to-Quant) to measure parameter sensitivity. Eligible.";
+                    return `Same-Style Comparison — ${selected} eligible Persona selected.`;
                   case "cross-style":
-                    return "Cross-Style Comparison - Matches opposing styles (e.g. Quant vs Macro) to find regime blind spots. Eligible.";
+                    return `Cross-Style Comparison — ${selected} eligible Personas selected.`;
                   case "named":
-                    return "Named Personas - Check individual personas below to include them in the workshop session.";
+                    return `Named Personas — choose from ${eligibleParticipants.length} canonical eligible participant(s).`;
                   default:
                     return "";
                 }
@@ -779,51 +908,24 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           {/* Named Persona check boxes when Named is selected */}
           {pickerSelectionType === "named" && (
             <div className="flex flex-wrap gap-4 border border-slate-100 bg-slate-50 p-2.5 rounded shrink-0" data-testid="named-checkbox-panel">
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_quant")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_quant"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_quant"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for all strategy scopes. Eligible.">Quant Architect</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_macro")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_macro"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_macro"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for macro regime analysis. Eligible.">Macro Strategist</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_risk")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_risk"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_risk"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for all risk assessment. Eligible.">Risk Officer Bot</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-not-allowed">
-                <input 
-                  type="checkbox" 
-                  disabled
-                  checked={false}
-                  className="rounded border-slate-200 text-slate-300 cursor-not-allowed"
-                />
-                <span title="Under Review. Blocked: Restricted to research/paper environments.">Red Team Adversary (Disabled)</span>
-              </label>
+              {eligibleParticipants.map((persona) => (
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer" key={persona.persona_id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedParticipants.includes(persona.persona_id)}
+                    onChange={(event) => setSelectedParticipants((current) => event.target.checked
+                      ? Array.from(new Set([...current, persona.persona_id]))
+                      : current.filter((id) => id !== persona.persona_id))}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span title={`Capability snapshot: ${persona.capability_snapshot_id ?? "verified"}`}>{persona.display_name}</span>
+                </label>
+              ))}
+              {excludedParticipants.map((persona) => (
+                <span className="text-xs text-slate-400" key={persona.persona_id} title={persona.reasons.join(", ")}>
+                  {persona.display_name} (Unavailable: {persona.reasons.join(", ")})
+                </span>
+              ))}
             </div>
           )}
 
@@ -847,7 +949,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             <Button
               className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
               data-testid="servant-composer-submit"
-              disabled={sendLoading || isDenied || !composerValue.trim() || workshop?.status === "concluded"}
+              disabled={sendLoading || eligibilityLoading || isDenied || !composerValue.trim() || selectedParticipants.length === 0 || workshop?.status === "concluded"}
               onClick={() => handleSend(composerValue)}
               type="button"
             >
@@ -958,11 +1060,12 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 interface StrategyWorkshopPageProps {
   workshopId?: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+  entry?: WorkshopInteractionEntry;
 }
 
-export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
+export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom, entry }: StrategyWorkshopPageProps): JSX.Element {
   if (workshopId) {
-    return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} />;
+    return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
   }
   return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }

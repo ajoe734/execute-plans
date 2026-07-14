@@ -12,7 +12,7 @@ import {
   type DecisionChoice,
   type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
+import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
   TradingRoomWorkspaceProposal,
@@ -591,35 +591,44 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   setConsultLoading(true);
                   setConsultError(null);
                   try {
-                    const newWs = await createWorkshop({
-                      subject: {
-                        kind: "candidate_artifact",
-                        ref: ev.decision_event_id,
-                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
-                      },
-                      participant_persona_ids: selectedPersonas,
-                      metadata: {
-                        decision_event_id: ev.decision_event_id,
-                        strategy_id: ev.strategy_id,
-                        strategy_version: ev.strategy_spec_registry_id,
-                        position_snapshot: ev.position_snapshot,
-                        risk_notes: ev.risk_notes,
-                        evidence_refs: ev.evidence_refs,
-                        context_type: "decision_event_consultation",
-                      }
+                    const contextRefs = [
+                      { type: "strategy" as const, id: ev.strategy_id, version_id: ev.strategy_spec_registry_id },
+                      { type: "decision_event" as const, id: ev.decision_event_id },
+                    ];
+                    const resolved = await interaction.resolveContext({
+                      context_refs: contextRefs,
+                      environment: "paper",
                     });
-                    
-                    if (consultQuery.trim()) {
-                      await postWorkshopMessage(newWs.workshop_id, {
-                        content: consultQuery.trim(),
-                        metadata: {
-                          mode: "consult",
-                          participant_persona_ids: selectedPersonas,
-                        }
-                      });
+                    const eligibility = await interaction.participants({
+                      workshop_id: resolved.data.workshop_id,
+                      mode: "consult",
+                      environment: "paper",
+                      required_capability: "persona_opinion",
+                    });
+                    const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+                    if (!selectedPersonas.every((id) => eligibleIds.has(id))) {
+                      throw new Error("One or more selected Personas are not eligible for this paper consultation.");
                     }
-
-                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
+                    const submitted = await interaction.submit({
+                      workshop_id: resolved.data.workshop_id,
+                      mode: "consult",
+                      environment: "paper",
+                      required_capability: "persona_opinion",
+                      topic: consultQuery.trim() || `Review ${ev.subject.symbol} ${ev.event_kind} decision ${ev.decision_event_id}`,
+                      participant_persona_ids: selectedPersonas,
+                      context_refs: resolved.data.context_refs,
+                    });
+                    if (submitted.data.execution_authority !== "none") {
+                      throw new Error("Consultation response violated the no-execution authority boundary.");
+                    }
+                    const params = new URLSearchParams({
+                      mode: "consult",
+                      participants: selectedPersonas.join(","),
+                      picker: selectedPersonas.some((id) => /red/i.test(id)) ? "red-team" : "named",
+                      return_to: `/agora/trading-room/${encodeURIComponent(ev.strategy_id)}`,
+                      return_label: "Trading Room",
+                    });
+                    navigate(`/agora/strategy-workshop/${resolved.data.workshop_id}?${params.toString()}`);
                   } catch (err) {
                     setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
                   } finally {
