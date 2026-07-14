@@ -6,7 +6,6 @@ import {
   createTradingRoomWorkspaceProposal,
   getTradingRoom,
   listDecisionEvents,
-  patchTradingRoomWorkspaceLayout,
   decideOnEvent,
   type TradingRoomAggregate,
   type TradingRoomStrategyEntry,
@@ -20,16 +19,7 @@ import type {
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
-import {
-  WorkspaceLayoutProposalDrawer,
-} from "@/agora/trading-room/WorkspaceLayoutProposalDrawer";
-import type { WorkspaceLayoutProposal } from "@/agora/trading-room/workspaceLayoutProposal";
-import {
-  AGORA_LAYOUT_PROPOSAL_REQUEST_EVENT,
-  reportAgoraLayoutProposalStatus,
-  requestAgoraLayoutProposal,
-  type AgoraLayoutProposalRequestDetail,
-} from "@/agora/deskEvents";
+import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -248,204 +238,12 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
 
 type DecisionCallState = "idle" | "loading" | "success" | "error";
 
-interface DecisionEventDetailPanelProps {
-  event: TradingDecisionEvent;
-  /** ETag from the listDecisionEvents response — forwarded as If-Match to decideOnEvent. */
-  etag?: string | null;
-}
-
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
-  const [callState, setCallState] = useState<DecisionCallState>("idle");
-  const [callError, setCallError] = useState<string | null>(null);
-  const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
-
-  const canDecide =
-    callState !== "loading" &&
-    callState !== "success" &&
-    (event.state === "pending_review" || event.state === "triggered" || event.state === "approaching");
-
-  async function handleDecide(choice: DecisionChoice) {
-    setCallState("loading");
-    setCallError(null);
-    try {
-      await decideOnEvent(
-        event.decision_event_id,
-        { decision: choice },
-        { ifMatch: etag ?? undefined, idempotencyKey: newUUID(), requestId: newUUID() },
-      );
-      setDecidedChoice(choice);
-      setCallState("success");
-    } catch (err) {
-      setCallError(err instanceof Error ? err.message : "Decision failed");
-      setCallState("error");
-    }
-  }
-
-  const ev = event;
-
   return (
-    <tr data-testid={`event-detail-${ev.decision_event_id}`}>
-      <td colSpan={5} style={{ padding: "8px 16px", background: "#1a2030", borderBottom: "2px solid #2a2e38" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, fontSize: 12 }}>
-
-          {/* Signal Quality */}
-          <div data-testid="detail-confidence">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Signal Quality</div>
-            <div>Confidence: {(ev.confidence.value * 100).toFixed(0)}% ({ev.confidence.basis})</div>
-            <div data-testid="detail-calibration">Calibration: {ev.confidence.calibration_state}</div>
-            {ev.confidence.sample_size != null && (
-              <div>Sample size: {ev.confidence.sample_size}</div>
-            )}
-            <div data-testid="detail-probability">
-              Probability: {(ev.probability.value * 100).toFixed(0)}% — {ev.probability.target_outcome}
-            </div>
-            <div>Horizon: {ev.probability.horizon}</div>
-            {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
-              <div data-testid="detail-probability-interval">
-                CI: [{(ev.probability.ci_lower * 100).toFixed(0)}%, {(ev.probability.ci_upper * 100).toFixed(0)}%]
-              </div>
-            )}
-          </div>
-
-          {/* Expected Value */}
-          <div data-testid="detail-expected-value">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Expected Value</div>
-            <div>Horizon: {ev.expected_value.horizon} ({ev.expected_value.unit})</div>
-            <div>Gross: {ev.expected_value.gross > 0 ? "+" : ""}{ev.expected_value.gross.toFixed(4)}</div>
-            <div>Cost: {ev.expected_value.cost.toFixed(4)}</div>
-            <div>Net: {ev.expected_value.net > 0 ? "+" : ""}{ev.expected_value.net.toFixed(4)}</div>
-            <div>Downside: {ev.expected_value.downside.toFixed(4)}</div>
-          </div>
-
-          {/* Suggested Action */}
-          <div data-testid="detail-suggested-action">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Suggested Action</div>
-            <div style={{ textTransform: "capitalize", fontWeight: 500 }}>{ev.suggested_action}</div>
-            {ev.suggested_size && (
-              <>
-                {ev.suggested_size.size_hint && <div>Size hint: {ev.suggested_size.size_hint}</div>}
-                {ev.suggested_size.portfolio_pct != null && (
-                  <div>Portfolio %: {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}%</div>
-                )}
-                <div style={{ color: "#737d8e", fontSize: 11 }}>Non-binding</div>
-              </>
-            )}
-            {ev.data_cutoff && (
-              <div style={{ marginTop: 4, color: "#8c96a6" }}>Data cutoff: {ev.data_cutoff}</div>
-            )}
-            <div
-              data-testid="detail-no-order-route"
-              style={{ marginTop: 4, fontSize: 11, color: "#4ade80", fontWeight: 500 }}
-            >
-              {ev.no_order_route_proof}
-            </div>
-          </div>
-
-          {/* Invalidation */}
-          <div data-testid="detail-invalidation">
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Invalidation</div>
-            <div>State: <span style={{ fontWeight: 500 }}>{ev.invalidation.current_state}</span></div>
-            {ev.invalidation.conditions.length > 0 && (
-              <ul style={{ margin: "4px 0 0 12px", padding: 0 }}>
-                {ev.invalidation.conditions.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-        </div>
-
-        {/* Rationale */}
-        {ev.rationale.length > 0 && (
-          <div data-testid="detail-rationale" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Rationale</div>
-            {ev.rationale.map((r, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
-                <span style={{ color: "#737d8e", minWidth: 32 }}>{(r.confidence * 100).toFixed(0)}%</span>
-                <span>{r.claim}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Risk Notes */}
-        {ev.risk_notes.length > 0 && (
-          <div data-testid="detail-risk-notes" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Risk Notes</div>
-            {ev.risk_notes.map((rn, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "4px 8px",
-                  background: rn.severity === "critical" || rn.severity === "high" ? "#230e0e" : "#1e1c0e",
-                  borderRadius: 4,
-                  marginBottom: 2,
-                }}
-              >
-                <span style={{ fontWeight: 500 }}>[{rn.severity}] {rn.domain}:</span> {rn.summary}
-                {rn.mitigation && <span style={{ color: "#8c96a6" }}> — {rn.mitigation}</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Evidence Refs */}
-        {ev.evidence_refs.length > 0 && (
-          <div data-testid="detail-evidence-refs" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>
-              Evidence ({ev.evidence_refs.length})
-            </div>
-            {ev.evidence_refs.map((ref, i) => (
-              <div key={i} style={{ color: "#8c96a6" }}>
-                <span style={{ color: "#737d8e" }}>{ref.ref_type}</span> {ref.ref_id}
-                {ref.summary ? ` — ${ref.summary}` : null}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Trader Decision Actions */}
-        <div data-testid="detail-trader-actions" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-          {callState === "success" ? (
-            <span data-testid="detail-decision-confirmed" style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}>
-              Decision recorded: {decidedChoice}
-            </span>
-          ) : (
-            <>
-              <span style={{ fontSize: 12, color: "#8c96a6", marginRight: 4 }}>Trader decision:</span>
-              {(["approve", "reject", "defer", "modify"] as DecisionChoice[]).map((choice) => (
-                <button
-                  key={choice}
-                  data-testid={`decide-${choice}-${ev.decision_event_id}`}
-                  disabled={!canDecide}
-                  onClick={() => handleDecide(choice)}
-                  style={{
-                    padding: "3px 10px",
-                    fontSize: 12,
-                    border: "1px solid #2a2e38",
-                    borderRadius: 4,
-                    cursor: canDecide ? "pointer" : "not-allowed",
-                    background: choice === "approve" ? "rgba(74,222,128,0.12)" : choice === "reject" ? "rgba(248,113,113,0.12)" : "#1e2330",
-                    color: choice === "approve" ? "#4ade80" : choice === "reject" ? "#f87171" : "#8c96a6",
-                    opacity: canDecide ? 1 : 0.5,
-                  }}
-                >
-                  {choice.charAt(0).toUpperCase() + choice.slice(1)}
-                </button>
-              ))}
-              {callState === "loading" && (
-                <span data-testid="detail-decision-loading" style={{ fontSize: 12, color: "#737d8e" }}>
-                  Sending…
-                </span>
-              )}
-              {callState === "error" && callError && (
-                <span data-testid="detail-decision-error" style={{ fontSize: 12, color: "#f87171" }}>
-                  {callError}
-                </span>
-              )}
-            </>
-          )}
+    <tr data-testid={`event-detail-${event.decision_event_id}`}>
+      <td colSpan={5} style={{ padding: "12px 16px", background: "#11151d", borderBottom: "2px solid #2a2e38" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto" }}>
+          <TradeDecisionCard event={event} etag={etag ?? undefined} />
         </div>
       </td>
     </tr>
@@ -932,12 +730,6 @@ interface StrategyWorkspaceViewProps {
   onSwitchStrategy?: () => void;
 }
 
-interface OpenLayoutProposalRequest extends AgoraLayoutProposalRequestDetail {
-  proposalId: string | null;
-  sourceDashboardVersion: number | null;
-  sourceEtag: string | null;
-}
-
 function StrategyWorkspaceView({
   strategyId,
   strategy,
@@ -964,48 +756,11 @@ function StrategyWorkspaceView({
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
   const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
-  const [layoutRequest, setLayoutRequest] = useState<OpenLayoutProposalRequest | null>(null);
-  const [layoutApplying, setLayoutApplying] = useState(false);
-  const [layoutError, setLayoutError] = useState<string | null>(null);
 
   useEffect(() => {
     setWorkspaceResult(null);
     setSelectedPreviewViewId(null);
-    setLayoutRequest(null);
-    setLayoutApplying(false);
-    setLayoutError(null);
   }, [strategyId, resolvedStrategyVersion]);
-
-  useEffect(() => {
-    const handleLayoutProposalRequest = (event: Event) => {
-      const detail = (event as CustomEvent<AgoraLayoutProposalRequestDetail>).detail;
-      if (!detail?.instruction?.trim()) return;
-      setLayoutError(null);
-      setLayoutRequest({
-        ...detail,
-        instruction: detail.instruction.trim(),
-        proposalId: proposal?.proposalId ?? null,
-        sourceDashboardVersion: workspaceResult?.workspace.dashboardVersion ?? null,
-        sourceEtag: workspaceResult?.etag ?? null,
-      });
-      reportAgoraLayoutProposalStatus({ status: "preview", taskId: detail.taskId });
-    };
-    window.addEventListener(AGORA_LAYOUT_PROPOSAL_REQUEST_EVENT, handleLayoutProposalRequest);
-    return () => window.removeEventListener(AGORA_LAYOUT_PROPOSAL_REQUEST_EVENT, handleLayoutProposalRequest);
-  }, [proposal?.proposalId, workspaceResult?.etag, workspaceResult?.workspace.dashboardVersion]);
-
-  useEffect(() => {
-    if (
-      layoutRequest?.sourceEtag &&
-      workspaceResult &&
-      (
-        layoutRequest.sourceEtag !== workspaceResult.etag ||
-        layoutRequest.sourceDashboardVersion !== workspaceResult.workspace.dashboardVersion
-      )
-    ) {
-      setLayoutError(t("agora.tradingRoom.layoutProposal.stale"));
-    }
-  }, [layoutRequest, t, workspaceResult]);
 
   useEffect(() => {
     if (!resolvedStrategyVersion) {
@@ -1037,7 +792,7 @@ function StrategyWorkspaceView({
       .then((nextProposal) => {
         if (cancelled) return;
         setProposal(nextProposal);
-        setSelectedPreviewViewId(null);
+        setSelectedPreviewViewId(nextProposal.views[0]?.id ?? null);
         setProposalLoading(false);
       })
       .catch((err) => {
@@ -1063,7 +818,6 @@ function StrategyWorkspaceView({
     resolvedStrategyVersion,
     routeTradingRoomReady,
     strategyId,
-    t,
   ]);
 
   async function handleAcceptProposal() {
@@ -1095,93 +849,7 @@ function StrategyWorkspaceView({
     setWorkspaceResult(null);
     setProposal(null);
     setSelectedPreviewViewId(null);
-    setLayoutRequest(null);
-    setLayoutApplying(false);
-    setLayoutError(null);
     setProposalRevision((prev) => prev + 1);
-  }
-
-  function openLayoutProposal(instruction: string, source: AgoraLayoutProposalRequestDetail["source"]) {
-    requestAgoraLayoutProposal({ instruction, source });
-  }
-
-  async function handleApplyLayoutProposal(layoutProposal: WorkspaceLayoutProposal) {
-    if (!layoutRequest || layoutApplying || !layoutProposal.validation.valid) return;
-    setLayoutApplying(true);
-    setLayoutError(null);
-    let baseline = workspaceResult;
-    let acceptedBaseline = false;
-
-    try {
-      if (baseline) {
-        const workspaceChanged =
-          layoutRequest.sourceEtag !== baseline.etag ||
-          layoutRequest.sourceDashboardVersion !== baseline.workspace.dashboardVersion;
-        if (workspaceChanged) {
-          throw new Error(t("agora.tradingRoom.layoutProposal.stale"));
-        }
-      } else {
-        if (!proposal || layoutRequest.proposalId !== proposal.proposalId) {
-          throw new Error(t("agora.tradingRoom.layoutProposal.stale"));
-        }
-        baseline = await acceptTradingRoomWorkspaceProposalWithMeta(
-          strategyId,
-          proposal.proposalId,
-          { expectedStatus: "preview" },
-          { idempotencyKey: newUUID() },
-        );
-        acceptedBaseline = true;
-        setWorkspaceResult(baseline);
-        setLayoutRequest((current) => current ? {
-          ...current,
-          sourceDashboardVersion: baseline?.workspace.dashboardVersion ?? null,
-          sourceEtag: baseline?.etag ?? null,
-        } : current);
-      }
-
-      if (!baseline.etag) {
-        throw new Error(t("agora.tradingRoom.layoutProposal.etagRequired"));
-      }
-      if (
-        acceptedBaseline &&
-        JSON.stringify(layoutProposal.beforeViews) !== JSON.stringify(baseline.workspace.views)
-      ) {
-        throw new Error(t("agora.tradingRoom.layoutProposal.acceptedSnapshotChanged"));
-      }
-
-      const nextWorkspace = await patchTradingRoomWorkspaceLayout(
-        baseline.workspace.id,
-        { operations: layoutProposal.operations },
-        { ifMatch: baseline.etag, idempotencyKey: newUUID() },
-      );
-      setWorkspaceResult(nextWorkspace);
-      setLayoutRequest(null);
-      reportAgoraLayoutProposalStatus({
-        dashboardVersion: nextWorkspace.workspace.dashboardVersion,
-        status: "applied",
-        taskId: layoutRequest.taskId,
-      });
-    } catch (error) {
-      const fallback = acceptedBaseline
-        ? t("agora.tradingRoom.layoutProposal.acceptedButNotApplied")
-        : t("agora.tradingRoom.layoutProposal.applyFailed");
-      const nextError = toTradingRoomUiError(error, fallback, t);
-      const message = acceptedBaseline ? `${fallback} ${nextError.message}` : nextError.message;
-      setLayoutError(message);
-      reportAgoraLayoutProposalStatus({ message, status: "error", taskId: layoutRequest.taskId });
-    } finally {
-      setLayoutApplying(false);
-    }
-  }
-
-  function handleRejectLayoutProposal(layoutProposal: WorkspaceLayoutProposal) {
-    setLayoutRequest(null);
-    setLayoutError(null);
-    reportAgoraLayoutProposalStatus({
-      message: layoutProposal.intent?.summary ?? layoutProposal.instruction,
-      status: "rejected",
-      taskId: layoutRequest?.taskId,
-    });
   }
 
   return (
@@ -1219,12 +887,11 @@ function StrategyWorkspaceView({
             <WorkspaceGridEditor
               initialEtag={workspaceResult.etag}
               initialWorkspace={workspaceResult.workspace}
-              onRequestLayoutProposal={() => openLayoutProposal(
-                t("agora.tradingRoom.layoutProposal.defaultInstruction"),
-                "workspace",
-              )}
               onWorkspaceChange={setWorkspaceResult}
               strategy={strategy}
+              workspaceEvents={events}
+              riskSummary={aggregate?.risk_summary}
+              dataCutoff={aggregate?.data_cutoff}
               onBackToWorkshop={onBackToWorkshop}
               onSwitchStrategy={onSwitchStrategy}
             />
@@ -1239,10 +906,7 @@ function StrategyWorkspaceView({
                 busy={accepting}
                 error={proposalError?.message ?? null}
                 onAccept={handleAcceptProposal}
-                onAdjustLayout={() => openLayoutProposal(
-                  t("agora.tradingRoom.layoutProposal.defaultInstruction"),
-                  "proposal_preview",
-                )}
+                onAdjustLayout={() => setSelectedPreviewViewId(proposal.views[0]?.id ?? null)}
                 onBackToWorkshop={onBackToWorkshop}
                 onPreviewView={(view) => setSelectedPreviewViewId(view.id)}
                 onRegenerate={regenerateProposal}
@@ -1285,20 +949,6 @@ function StrategyWorkspaceView({
         </div>
         <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
       </div>
-      <WorkspaceLayoutProposalDrawer
-        busy={layoutApplying}
-        currentVersion={workspaceResult?.workspace.dashboardVersion ?? 1}
-        error={layoutError}
-        initialInstruction={layoutRequest?.instruction}
-        onApply={handleApplyLayoutProposal}
-        onClose={() => {
-          setLayoutRequest(null);
-          setLayoutError(null);
-        }}
-        onReject={handleRejectLayoutProposal}
-        open={layoutRequest !== null}
-        views={workspaceResult?.workspace.views ?? proposal?.views ?? []}
-      />
     </div>
   );
 }

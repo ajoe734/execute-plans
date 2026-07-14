@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import {
   CheckCircle2,
   CircleHelp,
@@ -51,19 +49,10 @@ function cardSequence(card: WorkshopCard): number | string {
   return card.sequence_no ?? card.sequence ?? "-";
 }
 
-function copyKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
-
-function workshopLabel(t: TFunction, value: string): string {
-  return t(`agora.workshop.cardLabels.${copyKey(value)}`, { defaultValue: value });
-}
-
 export function StatusPill({ status }: { status: WorkshopCardStatus }) {
-  const { t } = useTranslation();
   return (
     <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium", STATUS_CLASS[status])}>
-      {t(`agora.workshop.values.${status}`, { defaultValue: formatLabel(status) })}
+      {formatLabel(status)}
     </span>
   );
 }
@@ -91,10 +80,9 @@ export function Pill({
 }
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
-  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h4 className="text-[11px] font-semibold uppercase text-slate-500">{workshopLabel(t, title)}</h4>
+      <h4 className="text-[11px] font-semibold uppercase text-slate-500">{title}</h4>
       {children}
     </section>
   );
@@ -105,7 +93,6 @@ export function KeyValueGrid({
 }: {
   items: Array<{ label: string; value: unknown; tone?: "slate" | "blue" | "green" | "amber" | "red" }>;
 }) {
-  const { t } = useTranslation();
   const visible = items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
   if (visible.length === 0) return null;
 
@@ -113,7 +100,7 @@ export function KeyValueGrid({
     <dl className="grid gap-2 sm:grid-cols-2">
       {visible.map((item) => (
         <div className="min-w-0" key={item.label}>
-          <dt className="text-[11px] uppercase text-slate-400">{workshopLabel(t, item.label)}</dt>
+          <dt className="text-[11px] uppercase text-slate-400">{item.label}</dt>
           <dd className="break-words text-xs font-medium text-slate-700">{formatScalar(item.value)}</dd>
         </div>
       ))}
@@ -146,11 +133,10 @@ export function TextList({
 }
 
 export function ProgressBar({ value, label }: { value: number; label?: string }) {
-  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-        <span>{workshopLabel(t, label ?? "Progress")}</span>
+        <span>{label ?? "Progress"}</span>
         <span className="font-mono">{Math.round(value)}%</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -182,8 +168,19 @@ export function EvidenceRefs({ refs }: { refs?: WorkshopEvidenceRef[] }) {
   );
 }
 
-function actionLabel(action: string, t: TFunction): string {
-  return t(`agora.workshop.actions.${action}`, { defaultValue: formatLabel(action) });
+function actionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    approve: "Approve",
+    edit: "Edit",
+    reject: "Reject",
+    cancel: "Cancel",
+    request_explanation: "Explain",
+    open_detail: "Open detail",
+    validate: "Validate",
+    accept: "Accept",
+    open_diff: "Open diff",
+  };
+  return labels[action] ?? formatLabel(action);
 }
 
 function ActionIcon({ action }: { action: string }) {
@@ -196,7 +193,6 @@ function ActionIcon({ action }: { action: string }) {
 }
 
 export function ActionBar({ actions }: { actions?: WorkshopAllowedActions }) {
-  const { t } = useTranslation();
   const enabled = Object.entries(actions ?? {}).filter(([, allowed]) => allowed);
   if (enabled.length === 0) return null;
 
@@ -208,11 +204,11 @@ export function ActionBar({ actions }: { actions?: WorkshopAllowedActions }) {
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600"
           disabled
           key={action}
-          title={actionLabel(action, t)}
+          title={actionLabel(action)}
           type="button"
         >
           <ActionIcon action={action} />
-          <span>{actionLabel(action, t)}</span>
+          <span>{actionLabel(action)}</span>
         </button>
       ))}
     </div>
@@ -244,37 +240,90 @@ export function NoOrderRouteBadge({ value }: { value?: unknown }) {
 export function CardShell({
   card,
   children,
+  onContinueDiscussion,
 }: {
   card: WorkshopCard;
   children: ReactNode;
+  onContinueDiscussion?: (cardId: string) => void;
 }) {
-  const { t } = useTranslation();
-  const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description";
   const status = card.status ?? "informational";
+
+  let authorLabel = "Workshop Servant";
+  let bgClass = "mr-auto max-w-[92%] border-slate-200 bg-slate-50/50";
+  let accentBorder = "";
+  let authorBadgeColor = "bg-slate-100 text-slate-700 border-slate-200";
+
+  const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description" || card.persona_id === "human";
+  const isPersona = card.card_type === "persona_opinion" || card.card_type === "opinion" || (card.persona_id !== undefined && card.persona_id !== "servant" && card.persona_id !== "human");
+  const isSynthesis = card.card_type === "consult_result";
+  const isTool = ["research_result", "research_progress", "research_plan_proposal"].includes(card.card_type);
+
+  if (isUser) {
+    authorLabel = "Human (Operator)";
+    bgClass = "ml-auto max-w-[78%] border-blue-200 bg-blue-50/70";
+    authorBadgeColor = "bg-blue-100 text-blue-800 border-blue-200";
+  } else if (isPersona) {
+    authorLabel = `Persona: ${formatLabel(card.persona_id || "Bot")}`;
+    bgClass = "mr-auto max-w-[92%] border-purple-200 bg-purple-50/20";
+    accentBorder = "border-l-4 border-l-purple-500";
+    authorBadgeColor = "bg-purple-100 text-purple-800 border-purple-200";
+  } else if (isSynthesis) {
+    authorLabel = "Committee Synthesis";
+    bgClass = "mr-auto max-w-[92%] border-indigo-200 bg-indigo-50/30";
+    accentBorder = "border-l-4 border-l-indigo-500";
+    authorBadgeColor = "bg-indigo-100 text-indigo-800 border-indigo-200";
+  } else if (isTool) {
+    authorLabel = "Tool Execution";
+    bgClass = "mr-auto max-w-[92%] border-emerald-200 bg-emerald-50/20";
+    accentBorder = "border-l-4 border-l-emerald-500";
+    authorBadgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+  } else {
+    authorLabel = "Workshop Servant";
+    bgClass = "mr-auto max-w-[92%] border-slate-300 bg-slate-50/50";
+    authorBadgeColor = "bg-slate-200 text-slate-800 border-slate-300";
+  }
 
   return (
     <article
       className={cn(
-        "space-y-3 rounded-lg border p-3 text-sm shadow-sm",
-        isUser ? "ml-auto max-w-[78%] border-blue-200 bg-blue-50" : "mr-auto max-w-[92%] bg-white",
-        !isUser && CARD_ACCENT[status],
+        "space-y-3 rounded-lg border p-3 text-sm shadow-sm transition-all duration-200 hover:shadow-md",
+        bgClass,
+        accentBorder,
+        !isUser && !isPersona && !isSynthesis && !isTool && CARD_ACCENT[status],
       )}
+      data-testid={`workshop-card-${card.card_id}`}
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase text-slate-500">
-            {workshopLabel(t, cardTypeLabel(card.card_type))}
+            {cardTypeLabel(card.card_type)}
+          </span>
+          <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", authorBadgeColor)}>
+            {authorLabel}
           </span>
           <StatusPill status={status} />
           <span className="font-mono text-[11px] text-slate-300">#{cardSequence(card)}</span>
         </div>
         <h3 className="break-words text-sm font-semibold text-slate-900">
-          {card.title || workshopLabel(t, cardTypeLabel(card.card_type))}
+          {card.title || cardTypeLabel(card.card_type)}
         </h3>
         {card.summary ? <p className="break-words text-xs leading-5 text-slate-600">{card.summary}</p> : null}
       </header>
       {children}
       <EvidenceRefs refs={card.evidence_refs} />
+      {onContinueDiscussion ? (
+        <div className="flex border-t border-slate-100 pt-3">
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700"
+            data-testid={`workshop-card-${card.card_id}-discuss`}
+            onClick={() => onContinueDiscussion(card.card_id)}
+            type="button"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>Ask Servant</span>
+          </button>
+        </div>
+      ) : null}
       <ActionBar actions={card.allowed_actions} />
     </article>
   );

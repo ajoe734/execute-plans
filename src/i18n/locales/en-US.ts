@@ -1621,6 +1621,38 @@ export default {
       attributionOnly: "attribution only",
       missingAttribution: "missing attribution",
       unlinkedTelemetry: "Aggregates telemetry that the BFF could not link to a named Trading Room strategy.",
+      strategyList: "Strategy List",
+      cumulativePnl: "Cumulative Return",
+      holding: "Holding",
+      tradesCount: "Trades",
+      aiVerdictLabel: "AI Verdict",
+      needsAdjust: "Needs Adjust",
+      overview: "Performance",
+      interventionTracking: "Interventions",
+      executionHistory: "Execution History",
+      complianceOverview: "Compliance vs Intervention",
+      aiAcceptedSubsequent: "After AI Proposal Applied",
+      aiRejectedSubsequent: "After AI Proposal Rejected (Counterfactual)",
+      avgSubsequentReturns: "Avg subsequent return · {{count}} items",
+      counterfactualSubsequent: "Est. counterfactual return · {{count}} items",
+      recentInterventions: "Outcome of Last 20 Candidates",
+      interventionFocus: "Analysis Focus: Where trader deviated and whether performance improved or deteriorated.",
+      assistantNotes: "Assistant Notes",
+      adjustSuggestions: "Adjustment Suggestions",
+      apply: "Apply",
+      sendToWorkshop: "Send to Workshop",
+      skip: "Skip",
+      applied: "Applied",
+      anomaly: "Exception",
+      noAnomaly: "No active execution exceptions",
+      date: "Date",
+      stock: "Stock",
+      strategyAdvice: "Strategy Advice",
+      actualAction: "Actual Action",
+      deviate: "Deviation",
+      result: "Result",
+      decisionSupportOnly: "This table presents decision-support states only; no broker execution is implied.",
+      periodLabel: "Period",
     },
     workshop: {
       defaultTitle: "Strategy workshop",
@@ -1645,6 +1677,12 @@ export default {
       missingStrategyId: "Trading Room handoff is missing strategy id",
       missingStrategyVersion: "Trading Room handoff is missing strategy version",
       incompleteHandoff: "Trading Room handoff is incomplete",
+      newStrategy: "New Strategy",
+      newStrategyTitle: "Create New Strategy Workshop",
+      strategyNameLabel: "Strategy Name",
+      strategyDescLabel: "Professional Strategy Description",
+      startDiscussion: "Start Discussion",
+      examplesTitle: "Professional Strategy Description Examples (Click to apply)",
       rail: {
         completeness: "Completeness",
         completenessEmpty: "Strategy completeness has not been assessed",
@@ -1660,6 +1698,9 @@ export default {
         passed: "Passed",
         blocked: "Blocked",
         nextQuestion: "Next Question",
+        winnerBranchMap: "Winner Branch 12-Block Map",
+        missingAssumptions: "Prioritized Missing Assumptions",
+        conflictingAssumptions: "Conflicting Assumptions",
       },
       values: {
         complete: "Complete",
@@ -1678,6 +1719,24 @@ export default {
         completed: "Completed",
         failed: "Failed",
         stale: "Stale",
+        market_scope: "Market Scope",
+        insider_branch_mapping: "Insider Branch Mapping",
+        winner_branch_scoring: "Winner Branch Scoring",
+        migration_reverse_flow: "Migration Reverse Flow",
+        event_lead: "Event Lead",
+        signal_formation: "Signal Formation",
+        entry_holding: "Entry Holding",
+        add_reduce_exit: "Add/Reduce/Exit",
+        sizing_leverage: "Sizing & Leverage",
+        cost_liquidity_capacity: "Cost, Liquidity & Capacity",
+        validation_backtest_refutation: "Validation, Backtest & Refutation",
+        monitoring_update: "Monitoring Update",
+        confirmed: "Confirmed",
+        inferred_needs_confirmation: "Inferred (Needs Confirmation)",
+        missing: "Missing",
+        weak: "Weak",
+        conflicting: "Conflicting",
+        not_applicable: "Not Applicable",
       },
       actions: {
         approve: "Approve", edit: "Edit", reject: "Reject", cancel: "Cancel", request_explanation: "Explain",
@@ -1689,6 +1748,24 @@ export default {
         needs_confirmation: "Needs Confirmation",
         consultation: "Consultation",
         type: "Type",
+        strategy_core: "Understood Strategy Core",
+        research_subproblems: "Research Subproblems",
+        recognized_components: "Recognized Components",
+        non_assertable_claims: "Claims That Cannot Yet Be Asserted",
+        methodology: "Research Methodology",
+        sample_period: "Sample Period",
+        confidence_level: "Confidence Level",
+        caveats: "Caveats & Limitations",
+        conclusions: "Research Conclusions",
+        branch_mapping: "Relationship & Branch Mapping",
+        winner_branch_score: "Winner Branch Score",
+        winner_branch_versions: "Score Versions",
+        branch_migration: "Branch Migration Flow",
+        event_lead_analysis: "Event Lead Analysis",
+        probability_ev: "Probability & Expected Value (EV) Analysis",
+        position_sizing_capacity: "Position Sizing & Capacity Constraints",
+        literature_analogue: "Literature & Similar Alpha Analogues",
+        backtest_robustness: "Backtest Robustness & Failure Modes",
         freshness: "Freshness",
         participants: "Participants",
         consensus: "Consensus",
@@ -1726,6 +1803,187 @@ export default {
       },
     },
     tradingRoom: {
+      lenses: {
+        chip: {
+          title: "Chip/Large-Holder Positioning",
+          thesis: "Identify symbols where large institutions are accumulating positions while price remains quiet.",
+          rules: {
+            concentration: "Concentration",
+            accumDays: "Accumulation Days",
+            priceDev: "Price Deviation"
+          }
+        },
+        laggard: {
+          title: "Industry Laggard",
+          thesis: "Identify supplier and sector constituents lagging high-momentum peers with active catalysts.",
+          rules: {
+            peerMomentum: "Peer Momentum Diff",
+            revenueExposure: "Revenue Exposure",
+            catalystHorizon: "Catalyst Horizon"
+          }
+        },
+        breakout: {
+          title: "Technical Breakout",
+          thesis: "Monitor critical breakout resistance levels, anchored VWAPs, and setup confirmation.",
+          rules: {
+            distance: "Distance to Level",
+            volumeMultiple: "Volume Multiple",
+            atrRule: "ATR Rule"
+          }
+        },
+        event: {
+          title: "Event Trading",
+          thesis: "Identify expectation mismatches and volatility setups surrounding scheduled catalysts.",
+          rules: {
+            countdown: "Countdown",
+            ivPercentile: "IV Percentile",
+            consensusDev: "Consensus Deviation"
+          }
+        },
+        liquidity: {
+          title: "Large-Flow/Liquidity Execution",
+          thesis: "Assess market impact, spreads, and slippage risk for sizable executions.",
+          rules: {
+            advRatio: "ADV Ratio",
+            slippage: "Slippage Tolerance",
+            spreadLimit: "Spread Limit"
+          }
+        },
+        meta: {
+          candidateLabel: "Candidates: {{count}}",
+          heldLabel: "Monitoring: {{count}}",
+          riskLabel: "Risk: {{state}}",
+          freshnessLabel: "Freshness: {{time}}",
+          candidateShort: "Cand: {{count}}",
+          heldShort: "Mon: {{count}}",
+          sampleDataBadge: "SAMPLE DATA ONLY (BFF OFFLINE)",
+          recipeSampleBadge: "DASHBOARD RECIPE DATA: SAMPLE ONLY"
+        },
+        dashboard: {
+          recipeA: {
+            funnelTitle: "Candidate Funnel & Flow",
+            heatmapTitle: "Broker Branch x Date Heatmap",
+            networkTitle: "Same Broker Cross-Branch Network"
+          },
+          recipeB: {
+            hypothesisTitle: "Active Hypothesis",
+            hypothesisNarrative: "AI GPU demand is driving silicone wafer substrate demand; supply constraints at TSMC shift packaging focus to ASE.",
+            timelineTitle: "Catalyst Event Timeline",
+            scatterTitle: "Sector Relative-Return Scatter",
+            chainTitle: "Supply Chain & Laggards Map",
+            siliconWafers: "Silicon Wafers",
+            substrates: "Substrates",
+            aiGpu: "AI GPU"
+          },
+          recipeC: {
+            resistanceTitle: "Breakout Resistance Levels",
+            vwapTitle: "Anchored VWAP Setup",
+            invalidationTitle: "Technical Invalidation Bounds"
+          },
+          recipeD: {
+            eventCalendar: "Scheduled Catalyst Calendar",
+            impliedVolatility: "Implied Volatility (IV) Structure",
+            scenarioTree: "Expectation Gap Scenario Tree"
+          },
+          recipeE: {
+            liquidityDepth: "Liquidity Depth & Order Book",
+            marketImpact: "Execution Slippage Model",
+            utilization: "Capital Allocation Capacity"
+          }
+        }
+      },
+      candidates: {
+        cand_a1: {
+          reason: "Significant accumulation from major institutional broker branches (Morgan Stanley, Goldman Sachs) over the last 7 days. Price remains consolidated within a tight 1.5% range.",
+          concerns: "Minor distribution from minor retail desks, but institutional net flows are highly positive.",
+          nextEvent: "Earnings report in 14 days"
+        },
+        cand_a2: {
+          reason: "Consistent net buy pressure on key custody bank accounts (State Street, BNY Mellon). 5 consecutive days of increasing institutional volume support.",
+          concerns: "High absolute valuation multiples, but growth runway remains intact.",
+          nextEvent: "Product announcement in 5 days"
+        },
+        cand_a3: {
+          reason: "Spike in block trade activity at key VWAP support levels. Order flow shows institutional block size execution.",
+          concerns: "High beta and volatility, macro headwinds in EV sector.",
+          nextEvent: "Production numbers release in 10 days"
+        },
+        cand_a4: {
+          reason: "Large-holder distribution pattern detected on several broker desks. Net retail buyers dominate currently.",
+          concerns: "Severe supply chain constraints, potential near-term peak margin risk.",
+          nextEvent: "Developer conference tomorrow"
+        },
+        cand_b1: {
+          reason: "NVIDIA and TSMC have rallied substantially, while AMD lags by 15.4% over a 20-day horizon despite similar AI product exposure.",
+          concerns: "Lower gross margin profile compared to NVDA; slower product ramp.",
+          nextEvent: "New chip launch in 6 days"
+        },
+        cand_b2: {
+          reason: "Lags the global foundry peer index by 22%. Governed catalysts include upcoming government subsidies and fab progress.",
+          concerns: "High capital expenditures leading to free cash flow headwinds.",
+          nextEvent: "Government fab subsidy signoff in 12 days"
+        },
+        cand_b3: {
+          reason: "Mobile handset chips sector recovery. Lags MediaTek and Apple mobile chip valuation benchmarks by 10.2%.",
+          concerns: "Slow mobile market recovery, high reliance on key client license renewals.",
+          nextEvent: "Mobile chip summit in 10 days"
+        },
+        cand_c1: {
+          reason: "Breakout above $185.00 resistance. Volume is 2.4x the 20-day average. Anchored VWAP from recent swing low holds as support.",
+          concerns: "Potential fake breakout if volume does not persist; overhead macro market resistance.",
+          nextEvent: "Retail sales data tomorrow"
+        },
+        cand_c2: {
+          reason: "Consolidating 1.4% below $178.50 breakout level. Volatility ATR ratio at 0.9 showing squeeze compression.",
+          concerns: "Regulatory antitrust news overhang.",
+          nextEvent: "Court ruling hearing in 7 days"
+        },
+        cand_d1: {
+          reason: "Upcoming earnings call. Implied options volatility is in the 92nd percentile. Scenario tree shows substantial upside on positive guidance.",
+          concerns: "Geopolitical risk premium, high pre-earnings positioning.",
+          nextEvent: "Earnings call in 18 hours"
+        },
+        cand_e1: {
+          reason: "Executing $50M target allocation. Spread is tight at 0.05%, and average daily volume (ADV) can support execution over 2 days with low market impact.",
+          concerns: "Slippage may increase if macro liquidity drops; high correlation to broad indices.",
+          nextEvent: "Index rebalancing in 4 days"
+        },
+        headers: {
+          rank: "Rank",
+          symbol: "Symbol",
+          name: "Name",
+          aiScore: "AI Score",
+          accumDays: "Accum. Days",
+          concentration: "Concentration",
+          priceDev: "Price Dev.",
+          peerGroup: "Peer Group",
+          similarity: "Similarity",
+          priceLag: "Price Lag",
+          catalystHorizon: "Catalyst Horizon",
+          breakoutLevel: "Breakout Level",
+          distancePct: "Distance %",
+          volumeMultiplier: "Volume Multiplier",
+          atrRatio: "ATR Ratio",
+          eventType: "Event Type",
+          countdown: "Countdown",
+          ivPct: "IV %",
+          expectedImpact: "Expected Impact",
+          targetAmount: "Target Amount",
+          advPct: "ADV %",
+          estSlippage: "Est. Slippage",
+          marketImpact: "Market Impact",
+          state: "State",
+          action: "Action",
+          noCandidates: "No candidates in this state. Try changing the lifecycle state filter.",
+          boardTitle: "CANDIDATE & MONITORING BOARD ({{count}})",
+          currentState: "Current State:",
+          aiFitScore: "AI Fit Score:",
+          nextEvent: "Next Catalyst Event",
+          evidenceReferences: "Evidence references",
+          governedActions: "Governed Actions",
+          loading: "Loading candidates..."
+        }
+      },
       errors: {
         readForbidden: "You do not have permission or scope to read this Trading Room proposal.",
         proposalNotFound: "This Trading Room proposal or workspace no longer exists. Please regenerate.",

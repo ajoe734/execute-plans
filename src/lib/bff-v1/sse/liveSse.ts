@@ -1,23 +1,20 @@
 // BFF Contract v1 — Live SSE connector.
-// In live mode, opens the `/bff/events/stream` channel with an authenticated
-// streaming `fetch()` (browser `EventSource` cannot send the `Authorization`
-// header the BFF requires — it would otherwise 401 and permanently fall back
-// to snapshot data) and emits each typed envelope onto the in-memory realtime
-// bus topic `sse:<channel>`. This makes `subscribe(channel, handler)` from
+// In live mode, opens an EventSource against `/bff/events/stream` and emits
+// each typed envelope onto the in-memory realtime bus topic
+// `sse:<channel>`. This makes `subscribe(channel, handler)` from
 // `./bridge` work uniformly across mock + live.
 //
-// On transport failure (network down, non-2xx before any frame arrives),
+// On transport failure (network down, EventSource error before any open),
 // reports fallback to liveStatus and the existing in-memory mock bus
 // continues to drive UI.
 
 import { realtime } from "@/lib/bff/realtime";
 import { liveStatus } from "../liveStatus";
-import { buildHeaders } from "../headers";
 import { isSseEvent, type SseEvent } from "./channels";
-import { buildSseUrl, nextBackoffMs, readSseFrames, type SseConnectInit } from "./protocol";
+import { buildSseUrl, nextBackoffMs, type SseConnectInit } from "./protocol";
 import { paths } from "../paths";
 
-let current: { close: () => void } | null = null;
+let current: { es: EventSource; close: () => void } | null = null;
 let attempt = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastEventId: string | undefined;
@@ -51,7 +48,7 @@ function isLiveModeConfigured(): boolean {
 
 /** Open / re-open the live SSE connection. No-op when not configured for live. */
 export function connectLiveSse(init: SseConnectInit = {}): () => void {
-  if (!isLiveModeConfigured() || typeof fetch === "undefined") {
+  if (!isLiveModeConfigured() || typeof EventSource === "undefined") {
     return () => {};
   }
   // Single-flight.
@@ -60,79 +57,53 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   const base = readBaseUrl();
   const url = `${base}${buildSseUrl(paths.sse(), { ...init, lastEventId: init.lastEventId ?? lastEventId })}`;
 
-  const controller = new AbortController();
-  let closedByCaller = false;
+  let opened = false;
+  const es = new EventSource(url, { withCredentials: true });
 
-  // Gate on the *configured* mode, not the effective one: after a fallback the
-  // effective mode is "mock", but we still want to keep retrying to recover.
-  function scheduleReconnect() {
-    if (closedByCaller || !isLiveModeConfigured()) return;
-    const delay = nextBackoffMs(attempt++);
-    clearTimer();
-    reconnectTimer = setTimeout(() => connectLiveSse(init), delay);
-  }
-
-  /** `opened=false` means the stream never delivered a single frame (never
-   *  opened → transport failure). `opened=true` means it was live and then
-   *  dropped. Either way we KEEP probing so connectivity recovery auto-clears
-   *  the banner and resumes live — previously this gave up and latched until
-   *  a manual retry click. */
-  function finish(opened: boolean) {
-    current = null;
-    if (closedByCaller) return;
-    realtime.markLiveError();
-    if (!opened) liveStatus.reportFallback("sse_open_failed");
-    scheduleReconnect();
-  }
-
-  void (async () => {
-    const headers = buildHeaders({
-      method: "GET",
-      extra: {
-        Accept: "text/event-stream",
-        ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
-      },
-    });
-    let res: Response;
-    try {
-      res = await fetch(url, { headers, credentials: "include", signal: controller.signal });
-    } catch {
-      finish(false);
-      return;
-    }
-    if (!res.ok || !res.body) {
-      finish(false);
-      return;
-    }
-
+  es.addEventListener("open", () => {
+    opened = true;
     attempt = 0;
     realtime.markLiveOpen();
     liveStatus.reportSuccess();
+  });
 
+  es.addEventListener("message", (e: MessageEvent) => {
     try {
-      await readSseFrames(res.body, (frame) => {
-        if (frame.id) lastEventId = frame.id;
-        if (!frame.data) return;
-        try {
-          dispatch(JSON.parse(frame.data));
-        } catch {
-          /* ignore malformed line */
-        }
-      });
+      const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+      dispatch(data);
     } catch {
-      /* stream read error — falls through to finish(true) below */
+      /* ignore malformed line */
     }
-    finish(true);
-  })();
+  });
 
-  current = {
-    close: () => {
-      closedByCaller = true;
+  es.addEventListener("error", () => {
+    realtime.markLiveError();
+    if (!opened) {
+      // Never opened → transport failure. Fall back to seed for reads, but KEEP
+      // probing (scheduleReconnect) so connectivity recovery auto-clears the
+      // banner and resumes live — previously this gave up and latched until a
+      // manual retry click.
+      liveStatus.reportFallback("sse_open_failed");
+      cleanup(/*scheduleReconnect*/ true);
+      return;
+    }
+    // transient — schedule reconnect with backoff
+    cleanup(/*scheduleReconnect*/ true);
+  });
+
+  function cleanup(scheduleReconnect = false) {
+    try { es.close(); } catch { /* noop */ }
+    current = null;
+    // Gate on the *configured* mode, not the effective one: after a fallback the
+    // effective mode is "mock", but we still want to keep retrying to recover.
+    if (scheduleReconnect && isLiveModeConfigured()) {
+      const delay = nextBackoffMs(attempt++);
       clearTimer();
-      try { controller.abort(); } catch { /* noop */ }
-      current = null;
-    },
-  };
+      reconnectTimer = setTimeout(() => connectLiveSse(init), delay);
+    }
+  }
+
+  current = { es, close: () => { clearTimer(); cleanup(false); } };
   return current.close;
 }
 

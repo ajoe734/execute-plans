@@ -6,11 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "..");
-const outFile = path.join(repoRoot, "src/lib/bff-v1/agora/types.ts");
+const typesOutFile = path.join(repoRoot, "src/lib/bff-v1/agora/types.ts");
+const snapshotOutFile = path.join(repoRoot, "src/lib/bff-v1/agora/contract-snapshot.json");
 
 const schemaRootRel = "services/control-plane/specs/agora";
 const openapiRootRel = "services/control-plane/openapi";
-const bundleIndexRel = `${schemaRootRel}/bundle_index.json`;
+const defaultBundleIndexRel = `${schemaRootRel}/bundle_index.v1_5.json`;
 
 const args = new Set(process.argv.slice(2));
 const writeMode = args.has("--write");
@@ -24,8 +25,29 @@ function readJson(filePath) {
   return JSON.parse(readText(filePath));
 }
 
+function sha256Bytes(bytes) {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
+}
+
 function sha256File(filePath) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  return sha256Bytes(fs.readFileSync(filePath));
+}
+
+function sha256Json(value) {
+  return sha256Bytes(stableJson(value));
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function fail(message) {
@@ -33,8 +55,17 @@ function fail(message) {
   process.exit(1);
 }
 
+function bundleRelFromEnv() {
+  const requested = process.env.AGORA_CONTRACT_BUNDLE || defaultBundleIndexRel;
+  if (requested.startsWith("services/control-plane/")) return requested;
+  if (requested.startsWith("specs/agora/")) return `services/control-plane/${requested}`;
+  if (requested.startsWith("bundle_index")) return `${schemaRootRel}/${requested}`;
+  return requested;
+}
+
 function findPantheonRoot() {
   const explicit = process.env.PANTHEON_CONTRACT_ROOT || process.env.PANTHEON_REPO_ROOT;
+  const bundleIndexRel = bundleRelFromEnv();
   const candidates = [
     explicit,
     path.join(repoRoot, "pantheon-contract"),
@@ -56,46 +87,140 @@ function findPantheonRoot() {
   );
 }
 
-function loadBundle(pantheonRoot) {
-  const bundleIndex = readJson(path.join(pantheonRoot, bundleIndexRel));
-  const files = bundleIndex.files || {};
-  const mismatches = [];
+function controlPlanePath(pantheonRoot, rel) {
+  return path.join(pantheonRoot, "services/control-plane", rel);
+}
 
-  for (const [rel, expected] of Object.entries(files)) {
-    const actualPath = path.join(pantheonRoot, "services/control-plane", rel);
-    if (!fs.existsSync(actualPath)) {
-      mismatches.push(`${rel}: missing`);
-      continue;
+function verifyFileHash(pantheonRoot, rel, expected, mismatches) {
+  const actualPath = controlPlanePath(pantheonRoot, rel);
+  if (!fs.existsSync(actualPath)) {
+    mismatches.push(`${rel}: missing`);
+    return;
+  }
+  const actual = sha256File(actualPath);
+  if (actual !== expected) {
+    mismatches.push(`${rel}: expected ${expected}, actual ${actual}`);
+  }
+}
+
+function openapiRelFromBundlePath(bundleOpenapiPath) {
+  return String(bundleOpenapiPath || "").replace(/^services\/control-plane\//, "");
+}
+
+function readBundleChain(pantheonRoot, bundleRel, seen = new Set()) {
+  if (seen.has(bundleRel)) fail(`Cycle in Agora bundle extension chain at ${bundleRel}`);
+  seen.add(bundleRel);
+
+  const bundlePath = path.join(pantheonRoot, bundleRel);
+  const bundle = readJson(bundlePath);
+  const chain = [];
+  const parent = bundle.extends?.bundle_path;
+  if (parent) {
+    const parentRel = parent.startsWith("services/control-plane/")
+      ? parent
+      : `services/control-plane/${parent}`;
+    chain.push(...readBundleChain(pantheonRoot, parentRel, seen));
+  }
+  chain.push({ rel: bundleRel, bundle });
+  return chain;
+}
+
+function loadBundle(pantheonRoot) {
+  const requestedBundleRel = bundleRelFromEnv();
+  const chain = readBundleChain(pantheonRoot, requestedBundleRel);
+  const latest = chain[chain.length - 1];
+  const mismatches = [];
+  const files = {};
+  const openapiFiles = {};
+
+  for (const item of chain) {
+    for (const [rel, expected] of Object.entries(item.bundle.files || {})) {
+      verifyFileHash(pantheonRoot, rel, expected, mismatches);
+      files[rel] = expected;
     }
-    const actual = sha256File(actualPath);
-    if (actual !== expected) {
-      mismatches.push(`${rel}: expected ${expected}, actual ${actual}`);
+    if (item.bundle.openapi?.path && item.bundle.openapi?.sha256) {
+      const rel = openapiRelFromBundlePath(item.bundle.openapi.path);
+      verifyFileHash(pantheonRoot, rel, item.bundle.openapi.sha256, mismatches);
+      files[rel] = item.bundle.openapi.sha256;
+      openapiFiles[rel] = item.bundle.openapi.sha256;
     }
   }
 
   if (mismatches.length > 0) {
-    fail(`Pantheon bundle_index.json is not reproducible:\n${mismatches.join("\n")}`);
+    fail(`Pantheon Agora bundle is not reproducible:\n${mismatches.join("\n")}`);
   }
 
   const schemaEntries = Object.keys(files)
-    .filter((rel) => rel.startsWith("specs/agora/") && rel.endsWith(".schema.json"));
-  const schemas = schemaEntries.map((rel) => {
-    const fileName = path.basename(rel);
-    return {
-      rel,
-      fileName,
-      schema: readJson(path.join(pantheonRoot, schemaRootRel, fileName)),
-    };
-  });
-  const capabilityManifest = readJson(path.join(pantheonRoot, schemaRootRel, "capability_manifest.json"));
-  const openapiText = readText(path.join(pantheonRoot, openapiRootRel, "agora_v1.openapi.yaml"));
+    .filter((rel) => rel.startsWith("specs/agora/") && rel.endsWith(".schema.json"))
+    .sort();
+  const schemas = schemaEntries.map((rel) => ({
+    rel,
+    fileName: path.basename(rel),
+    schema: readJson(controlPlanePath(pantheonRoot, rel)),
+  }));
+
+  const schemaNameByRel = new Map();
+  const schemaNameByBasename = new Map();
+  for (const entry of schemas) {
+    const name = typeNameFromSchema(entry.schema, entry.fileName);
+    schemaNameByRel.set(entry.rel, name);
+    schemaNameByBasename.set(entry.fileName, name);
+  }
+
+  const capabilityManifests = Object.keys(files)
+    .filter((rel) => rel.startsWith("specs/agora/") && rel.endsWith(".json") && rel.includes("capability_manifest"))
+    .sort()
+    .map((rel) => readJson(controlPlanePath(pantheonRoot, rel)));
+
+  const routePaths = [];
+  const seenRoutes = new Set();
+  const openapiRels = Object.keys(files)
+    .filter((rel) => rel.startsWith("openapi/") && rel.endsWith(".yaml"))
+    .sort();
+  for (const rel of openapiRels) {
+    for (const route of extractOpenApiPaths(readText(controlPlanePath(pantheonRoot, rel)))) {
+      if (!seenRoutes.has(route)) {
+        seenRoutes.add(route);
+        routePaths.push(route);
+      }
+    }
+  }
+
+  const requiredDefinitionChecksums = latest.bundle.required_definition_checksums || {};
+  const computedRequiredDefinitionChecksums = computeDefinitionChecksums(schemas, requiredDefinitionChecksums);
+  for (const [name, expected] of Object.entries(requiredDefinitionChecksums)) {
+    const actual = computedRequiredDefinitionChecksums[name];
+    if (actual !== expected) {
+      fail(`Definition checksum mismatch for ${name}: expected ${expected}, actual ${actual || "missing"}`);
+    }
+  }
 
   return {
-    bundleIndex,
+    requestedBundleRel,
+    latestBundle: latest.bundle,
+    files,
+    openapiFiles,
     schemas,
-    capabilityManifest,
-    routePaths: extractOpenApiPaths(openapiText),
+    schemaNameByRel,
+    schemaNameByBasename,
+    capabilityManifests,
+    routePaths,
+    requiredDefinitionChecksums,
   };
+}
+
+function computeDefinitionChecksums(schemas, requiredDefinitionChecksums) {
+  const wanted = new Set(Object.keys(requiredDefinitionChecksums || {}));
+  const result = {};
+  if (wanted.size === 0) return result;
+  for (const entry of schemas) {
+    for (const [name, definition] of Object.entries(entry.schema.definitions || {})) {
+      if (wanted.has(name)) {
+        result[name] = sha256Json(definition);
+      }
+    }
+  }
+  return result;
 }
 
 function extractOpenApiPaths(openapiText) {
@@ -120,12 +245,43 @@ function literal(value) {
 
 function typeNameFromSchema(schema, fallback) {
   const raw = String(schema.title || fallback || "AgoraSchema");
-  const cleaned = raw.replace(/[^A-Za-z0-9_]/g, "");
+  return cleanTypeName(raw);
+}
+
+function cleanTypeName(raw) {
+  const cleaned = String(raw).replace(/[^A-Za-z0-9_]/g, "");
   return /^[A-Za-z_]/.test(cleaned) ? cleaned : `Agora${cleaned}`;
 }
 
-function schemaToType(schema, indent = 0) {
+function refToType(ref, context) {
+  if (typeof ref !== "string") return "unknown";
+  const [refPath, fragment] = ref.split("#");
+  if (fragment?.startsWith("/definitions/")) {
+    return cleanTypeName(decodeURIComponent(fragment.slice("/definitions/".length)));
+  }
+  if (!refPath || refPath === "") {
+    return "unknown";
+  }
+  const basename = path.basename(refPath);
+  return context.schemaNameByBasename.get(basename) || cleanTypeName(basename.replace(/\.schema\.json$/, ""));
+}
+
+function schemaToType(schema, context, indent = 0) {
   if (!schema || typeof schema !== "object") return "unknown";
+
+  if (schema.$ref) {
+    return refToType(schema.$ref, context);
+  }
+
+  if (Array.isArray(schema.oneOf)) {
+    return schema.oneOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+  }
+  if (Array.isArray(schema.anyOf)) {
+    return schema.anyOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+  }
+  if (Array.isArray(schema.allOf)) {
+    return schema.allOf.map((item) => schemaToType(item, context, indent)).join(" & ");
+  }
 
   if (Array.isArray(schema.enum)) {
     return schema.enum.map((item) => literal(item)).join(" | ");
@@ -136,10 +292,12 @@ function schemaToType(schema, indent = 0) {
   }
 
   if (Array.isArray(schema.type)) {
-    return schema.type.map((item) => schemaToType({ ...schema, type: item }, indent)).join(" | ");
+    return schema.type.map((item) => schemaToType({ ...schema, type: item }, context, indent)).join(" | ");
   }
 
   switch (schema.type) {
+    case "null":
+      return "null";
     case "string":
       return "string";
     case "integer":
@@ -148,18 +306,18 @@ function schemaToType(schema, indent = 0) {
     case "boolean":
       return "boolean";
     case "array":
-      return `Array<${schemaToType(schema.items || {}, indent)}>`;
+      return `Array<${schemaToType(schema.items || {}, context, indent)}>`;
     case "object":
-      return objectToType(schema, indent);
+      return objectToType(schema, context, indent);
     default:
       if (schema.properties || schema.additionalProperties) {
-        return objectToType(schema, indent);
+        return objectToType(schema, context, indent);
       }
       return "unknown";
   }
 }
 
-function objectToType(schema, indent = 0) {
+function objectToType(schema, context, indent = 0) {
   const properties = schema.properties || {};
   const required = new Set(schema.required || []);
   const entries = Object.entries(properties);
@@ -168,7 +326,7 @@ function objectToType(schema, indent = 0) {
 
   if (entries.length === 0) {
     if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
-      return `Record<string, ${schemaToType(schema.additionalProperties, indent)}>`;
+      return `Record<string, ${schemaToType(schema.additionalProperties, context, indent)}>`;
     }
     if (schema.additionalProperties === true) {
       return "Record<string, unknown>";
@@ -179,54 +337,116 @@ function objectToType(schema, indent = 0) {
   const lines = ["{"];
   for (const [name, propSchema] of entries) {
     const optional = required.has(name) ? "" : "?";
-    lines.push(`${childPad}${literal(name)}${optional}: ${schemaToType(propSchema, indent + 2)};`);
+    lines.push(`${childPad}${literal(name)}${optional}: ${schemaToType(propSchema, context, indent + 2)};`);
   }
   if (schema.additionalProperties === true) {
     lines.push(`${childPad}[key: string]: unknown;`);
   } else if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
-    lines.push(`${childPad}[key: string]: ${schemaToType(schema.additionalProperties, indent + 2)};`);
+    lines.push(`${childPad}[key: string]: ${schemaToType(schema.additionalProperties, context, indent + 2)};`);
   }
   lines.push(`${pad}}`);
   return lines.join("\n");
 }
 
-function emitInterface(entry) {
-  const name = typeNameFromSchema(entry.schema, entry.fileName);
-  const body = objectToType(entry.schema, 0);
-  const lines = [
-    `export interface ${name} ${body}`,
-    "",
-  ];
-  return { name, text: lines.join("\n") };
+function emitDeclaration(name, schema, context) {
+  const body = schemaToType(schema, context, 0);
+  if (body.startsWith("{\n")) {
+    return {
+      name,
+      text: `export interface ${name} ${body}\n`,
+    };
+  }
+  return {
+    name,
+    text: `export type ${name} = ${body};\n`,
+  };
+}
+
+function collectDeclarations(bundle) {
+  const declarations = [];
+  const seenNames = new Set();
+  const context = {
+    schemaNameByBasename: bundle.schemaNameByBasename,
+  };
+
+  function addDeclaration(name, schema) {
+    const safeName = cleanTypeName(name);
+    if (seenNames.has(safeName)) return;
+    seenNames.add(safeName);
+    declarations.push(emitDeclaration(safeName, schema, context));
+  }
+
+  for (const entry of bundle.schemas) {
+    addDeclaration(typeNameFromSchema(entry.schema, entry.fileName), entry.schema);
+    for (const [definitionName, definition] of Object.entries(entry.schema.definitions || {})) {
+      addDeclaration(definitionName, definition);
+    }
+  }
+
+  return declarations;
 }
 
 function stableCapability(capability) {
+  const name = capability.name || capability.id;
   return {
-    name: capability.name,
+    name,
+    version: capability.version,
     schemas: capability.schemas || [],
     bffRouteFamilies: capability.bff_route_families || [],
     bffPathPrefixes: capability.bff_path_prefixes || [],
+    routes: capability.routes || [],
     authLevel: capability.auth_level,
   };
 }
 
-function generateTypes(bundle) {
-  const interfaces = bundle.schemas.map(emitInterface);
-  const capabilitySummary = (bundle.capabilityManifest.capabilities || []).map(stableCapability);
-  const schemaFiles = bundle.schemas.map((entry) => entry.fileName);
+function collectCapabilities(bundle) {
+  const capabilities = [];
+  const seen = new Set();
+  for (const manifest of bundle.capabilityManifests) {
+    for (const capability of manifest.capabilities || []) {
+      const stable = stableCapability(capability);
+      if (!stable.name || seen.has(stable.name)) continue;
+      seen.add(stable.name);
+      capabilities.push(stable);
+    }
+  }
+  return capabilities;
+}
 
-  return [
+function buildSnapshot(bundle, capabilities, declarations) {
+  return {
+    contract_name: "pantheon-agora-v1",
+    contract_version: bundle.latestBundle.bundle_version,
+    source_bundle: bundle.requestedBundleRel,
+    extends: bundle.latestBundle.extends || null,
+    files: bundle.files,
+    required_definition_checksums: bundle.requiredDefinitionChecksums,
+    schema_count: bundle.schemas.length,
+    capability_count: capabilities.length,
+    operation_count: bundle.routePaths.length,
+    generated_type_count: declarations.length,
+  };
+}
+
+function generateTypes(bundle) {
+  const declarations = collectDeclarations(bundle);
+  const capabilities = collectCapabilities(bundle);
+  const schemaFiles = bundle.schemas.map((entry) => entry.rel);
+  const snapshot = buildSnapshot(bundle, capabilities, declarations);
+
+  const sourceLine = `// Source: Pantheon ${bundle.requestedBundleRel}.`;
+  const text = [
     "// Generated by scripts/contract-drift-check.mjs --write.",
-    "// Source: Pantheon AG-XR-001 Agora v1 schema/OpenAPI bundle.",
+    sourceLine,
     "// Do not edit by hand; update the Pantheon bundle, then regenerate.",
     "",
     `export const AGORA_CONTRACT_SNAPSHOT = ${JSON.stringify(
       {
-        bundleVersion: bundle.bundleIndex.bundle_version,
-        frozenBy: bundle.bundleIndex.frozen_by,
-        schemaBundleIndex: bundle.capabilityManifest.schema_bundle_index,
-        openapiRef: bundle.capabilityManifest.openapi_ref,
-        files: bundle.bundleIndex.files,
+        bundleVersion: snapshot.contract_version,
+        sourceBundle: snapshot.source_bundle,
+        extends: snapshot.extends,
+        files: snapshot.files,
+        requiredDefinitionChecksums: snapshot.required_definition_checksums,
       },
       null,
       2,
@@ -234,23 +454,53 @@ function generateTypes(bundle) {
     "",
     `export const AGORA_SCHEMA_FILES = ${JSON.stringify(schemaFiles, null, 2)} as const;`,
     "",
-    `export const AGORA_CAPABILITIES = ${JSON.stringify(capabilitySummary, null, 2)} as const;`,
+    `export const AGORA_SCHEMA_DEFINITION_CHECKSUMS = ${JSON.stringify(
+      bundle.requiredDefinitionChecksums,
+      null,
+      2,
+    )} as const;`,
+    "",
+    `export const AGORA_CAPABILITIES = ${JSON.stringify(capabilities, null, 2)} as const;`,
     "",
     `export const AGORA_ROUTE_PATHS = ${JSON.stringify(bundle.routePaths, null, 2)} as const;`,
     "",
     "export type AgoraContractFile = keyof typeof AGORA_CONTRACT_SNAPSHOT.files;",
     "export type AgoraSchemaFile = (typeof AGORA_SCHEMA_FILES)[number];",
+    "export type AgoraRequiredDefinitionName = keyof typeof AGORA_SCHEMA_DEFINITION_CHECKSUMS;",
     "export type AgoraCapabilityName = (typeof AGORA_CAPABILITIES)[number][\"name\"];",
     "export type AgoraRoutePath = (typeof AGORA_ROUTE_PATHS)[number];",
     "",
-    ...interfaces.map((item) => item.text),
-    `export type AgoraSchema = ${interfaces.map((item) => item.name).join(" | ")};`,
+    ...declarations.map((item) => item.text),
+    `export type AgoraSchema = ${declarations.map((item) => item.name).join(" | ")};`,
     "",
     "export interface AgoraSchemaByTitle {",
-    ...interfaces.map((item) => `  ${item.name}: ${item.name};`),
+    ...declarations.map((item) => `  ${item.name}: ${item.name};`),
     "}",
     "",
   ].join("\n");
+
+  return { text, snapshot };
+}
+
+function writeGenerated(generated) {
+  fs.mkdirSync(path.dirname(typesOutFile), { recursive: true });
+  fs.writeFileSync(typesOutFile, generated.text, "utf8");
+  fs.writeFileSync(snapshotOutFile, `${JSON.stringify(generated.snapshot, null, 2)}\n`, "utf8");
+  console.log(`[contract-drift] wrote ${path.relative(repoRoot, typesOutFile)}`);
+  console.log(`[contract-drift] wrote ${path.relative(repoRoot, snapshotOutFile)}`);
+}
+
+function assertGeneratedFile(filePath, expected) {
+  if (!fs.existsSync(filePath)) {
+    fail(`${path.relative(repoRoot, filePath)} is missing. Run npm run contract:drift:update.`);
+  }
+  const existing = readText(filePath);
+  if (existing !== expected) {
+    fail(
+      `${path.relative(repoRoot, filePath)} is stale against the Pantheon Agora bundle. ` +
+        "Run PANTHEON_CONTRACT_ROOT=<pantheon> npm run contract:drift:update and commit the result.",
+    );
+  }
 }
 
 function main() {
@@ -260,33 +510,24 @@ function main() {
 
   if (summaryMode) {
     console.log(`Pantheon root: ${pantheonRoot}`);
+    console.log(`Bundle: ${bundle.requestedBundleRel}`);
     console.log(`Schemas: ${bundle.schemas.length}`);
-    console.log(`Capabilities: ${(bundle.capabilityManifest.capabilities || []).length}`);
+    console.log(`Capabilities: ${collectCapabilities(bundle).length}`);
     console.log(`OpenAPI routes: ${bundle.routePaths.length}`);
+    console.log(`Generated types: ${generated.snapshot.generated_type_count}`);
   }
 
   if (writeMode) {
-    fs.mkdirSync(path.dirname(outFile), { recursive: true });
-    fs.writeFileSync(outFile, generated, "utf8");
-    console.log(`[contract-drift] wrote ${path.relative(repoRoot, outFile)}`);
+    writeGenerated(generated);
     return;
   }
 
-  if (!fs.existsSync(outFile)) {
-    fail(`${path.relative(repoRoot, outFile)} is missing. Run npm run contract:drift:update.`);
-  }
-
-  const existing = readText(outFile);
-  if (existing !== generated) {
-    fail(
-      `${path.relative(repoRoot, outFile)} is stale against the Pantheon Agora bundle. ` +
-        "Run PANTHEON_CONTRACT_ROOT=<pantheon> npm run contract:drift:update and commit the result.",
-    );
-  }
+  assertGeneratedFile(typesOutFile, generated.text);
+  assertGeneratedFile(snapshotOutFile, `${JSON.stringify(generated.snapshot, null, 2)}\n`);
 
   console.log(
     `[contract-drift] Agora bundle aligned: ${bundle.schemas.length} schemas, ` +
-      `${bundle.routePaths.length} routes, ${Object.keys(bundle.bundleIndex.files || {}).length} sha256 entries.`,
+      `${bundle.routePaths.length} routes, ${Object.keys(bundle.files || {}).length} sha256 entries.`,
   );
 }
 

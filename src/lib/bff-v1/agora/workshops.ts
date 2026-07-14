@@ -3,9 +3,7 @@
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
-import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
-import { buildHeaders } from "@/lib/bff-v1/headers";
-import { nextBackoffMs, readSseFrames } from "@/lib/bff-v1/sse/protocol";
+import { bffFetch } from "@/lib/bff-v1/client";
 import type { StrategyWorkshop, StrategyCompleteness } from "./types";
 
 // ─── v1.3 types (not yet in auto-generated types.ts) ──────────────────────────
@@ -22,7 +20,10 @@ export type WorkshopCardType =
   | "consult_result"
   | "version_patch_proposal"
   | "version_compare"
-  | "readiness_gate";
+  | "readiness_gate"
+  | "persona_opinion"
+  | "opinion"
+  | "debate";
 
 export type WorkshopCardStatus =
   | "informational"
@@ -185,38 +186,6 @@ function itemsFrom<T>(value: unknown, aliases: string[] = []): T[] {
   return [];
 }
 
-const WORKSHOP_SUBJECT_KINDS = new Set<StrategyWorkshop["subject"]["kind"]>([
-  "strategy_spec",
-  "research_plan",
-  "candidate_artifact",
-  "free_form",
-]);
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function normalizeWorkshop(value: unknown): StrategyWorkshop {
-  const workshop = recordFrom(value);
-  const workshopId = optionalString(workshop.workshop_id) ?? "";
-  const rawSubject = recordFrom(workshop.subject);
-  const rawKind = optionalString(rawSubject.kind);
-  const kind = rawKind && WORKSHOP_SUBJECT_KINDS.has(rawKind as StrategyWorkshop["subject"]["kind"])
-    ? rawKind as StrategyWorkshop["subject"]["kind"]
-    : "free_form";
-  const ref = optionalString(rawSubject.ref) ?? workshopId;
-  const title = optionalString(rawSubject.title);
-
-  return {
-    ...workshop,
-    subject: {
-      kind,
-      ref,
-      ...(title ? { title } : {}),
-    },
-  } as unknown as StrategyWorkshop;
-}
-
 // ─── Workshop CRUD ─────────────────────────────────────────────────────────────
 
 export async function listWorkshops(params?: {
@@ -233,7 +202,7 @@ export async function listWorkshops(params?: {
     path: "/bff/agora/workshops",
     query,
   });
-  return itemsFrom<unknown>(body, ["workshops", "results"]).map(normalizeWorkshop);
+  return itemsFrom<StrategyWorkshop>(body, ["workshops", "results"]);
 }
 
 export async function createWorkshop(body: {
@@ -246,7 +215,7 @@ export async function createWorkshop(body: {
     path: "/bff/agora/workshops",
     body,
   });
-  return normalizeWorkshop(dataFrom(response));
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop> {
@@ -254,7 +223,7 @@ export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop>
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
   });
-  return normalizeWorkshop(dataFrom(response));
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Workshop messages ─────────────────────────────────────────────────────────
@@ -384,74 +353,29 @@ export async function concludeWorkshop(
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/conclude`,
     body: body ?? {},
   });
-  return normalizeWorkshop(dataFrom(response));
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────
 
-/**
- * Streams workshop events via an authenticated `fetch()` rather than
- * `EventSource`: the BFF requires the `Authorization` header on this route
- * and `EventSource` cannot send it (and separately ignores
- * `VITE_BFF_BASE_URL`, hitting the FE origin instead of the BFF). The server
- * holds the stream open (heartbeats every ~30s), so a dropped connection is
- * reopened with backoff rather than treated as terminal.
- */
 export function openWorkshopStream(
   workshopId: string,
   onEvent?: (event: WorkshopStreamEvent) => void,
 ): () => void {
-  let closed = false;
-  let controller: AbortController | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-  let attempt = 0;
-
-  async function run(): Promise<void> {
-    if (closed) return;
-    controller = new AbortController();
-    const headers = buildHeaders({ method: "GET", extra: { Accept: "text/event-stream" } });
-    let res: Response;
-    try {
-      res = await fetch(
-        `${detectBaseUrl()}/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
-        { headers, credentials: "include", signal: controller.signal },
-      );
-    } catch {
-      scheduleReconnect();
-      return;
-    }
-    if (!res.ok || !res.body) {
-      scheduleReconnect();
-      return;
-    }
-    attempt = 0;
-    try {
-      await readSseFrames(res.body, (frame) => {
-        if (closed || !frame.data) return;
-        try {
-          onEvent?.(entityFrom<WorkshopStreamEvent>(JSON.parse(frame.data)));
-        } catch {
-          // Ignore malformed keepalive or compatibility messages.
-        }
-      });
-    } catch {
-      /* stream read error — falls through to reconnect below */
-    }
-    scheduleReconnect();
+  const source = new EventSource(
+    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
+    { withCredentials: true },
+  );
+  if (onEvent) {
+    source.onmessage = (message) => {
+      try {
+        onEvent(entityFrom<WorkshopStreamEvent>(JSON.parse(message.data)));
+      } catch {
+        // Ignore malformed keepalive or compatibility messages.
+      }
+    };
   }
-
-  function scheduleReconnect(): void {
-    if (closed) return;
-    reconnectTimer = setTimeout(() => { void run(); }, nextBackoffMs(attempt++));
-  }
-
-  void run();
-
-  return () => {
-    closed = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    controller?.abort();
-  };
+  return () => source.close();
 }
 
 // ─── v1.3: Cards ──────────────────────────────────────────────────────────────

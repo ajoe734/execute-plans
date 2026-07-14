@@ -112,5 +112,8 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Deploy safety contract
+        run: npx vitest run src/test/deploy-safe-defaults.test.ts
+
       - name: Build
         run: npm run build

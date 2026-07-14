@@ -218,18 +218,19 @@ export const paths = {
 
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
-  mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
+  mgmtPortfolioHoldings: (query?: Record<string, string | undefined>) => {
+    const params = Object.entries(query ?? {})
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([key, value]) => `${enc(key)}=${enc(value)}`);
+    return `${BASE}/management/portfolio-book/holdings${params.length ? `?${params.join("&")}` : ""}`;
+  },
   mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
   mgmtPortfolioExposure: () => `${BASE}/management/portfolio-book/exposure`,
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
   mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
-  mgmtQuarterlyRanking: (quarter?: string, persona?: string) => {
-    const qs: string[] = [];
-    if (quarter) qs.push(`quarter=${enc(quarter)}`);
-    if (persona) qs.push(`persona=${enc(persona)}`);
-    return `${BASE}/management/quarterly-ranking${qs.length ? `?${qs.join("&")}` : ""}`;
-  },
+  mgmtQuarterlyRanking: (quarter?: string) =>
+    `${BASE}/management/quarterly-ranking${quarter ? `?quarter=${enc(quarter)}` : ""}`,
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
   mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
     `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
@@ -267,4 +268,17 @@ export const paths = {
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:submit-review`,
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
+
+  // ---- 2026-07-12 Agora Interactions ----
+  agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,
+  agoraInteractionsEligible: () => `${BASE}/agora/interactions/participants:eligible`,
+  agoraInteractionsSubmit: () => `${BASE}/agora/interactions`,
+
+  // ---- 2026-07-12 OODA Packets & Evolution Reviews ----
+  oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
+  oodaPackets: () => `${BASE}/ooda/packets`,
+  strategyOodaPackets: (id: string) => `${BASE}/strategies/${enc(id)}/ooda`,
+  runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
+  evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
+  evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
 } as const;
