@@ -3,6 +3,7 @@ import { authHeaders, installOidcDevLogin } from "./helpers/auth";
 
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "";
+const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer";
 const PERSONA_ID = process.env.PANTHEON_PERSONA_FLEET_AUDIT_ID ?? "persona-20260528-04688755";
 
 test.describe("Persona Fleet live linked-page contract", () => {
@@ -11,14 +12,18 @@ test.describe("Persona Fleet live linked-page contract", () => {
   test.beforeEach(async ({ page }) => {
     await installOidcDevLogin(page, {
       goto: false,
-      roles: ["operator", "reviewer", "approver"],
+      roles: ["viewer"],
       tenantId: "pantheon-dev",
+      token: PUBLIC_VIEWER_TOKEN,
     });
   });
 
   test("uses the live BFF contract and keeps every focused target semantically scoped", async ({ page, request }) => {
     test.setTimeout(180_000);
-    const headers = authHeaders({ tenantId: "pantheon-dev" });
+    const headers = authHeaders({
+      tenantId: "pantheon-dev",
+      token: PUBLIC_VIEWER_TOKEN,
+    });
     const fleetResponse = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, { headers });
     expect(fleetResponse.ok()).toBe(true);
     const fleetPayload = await fleetResponse.json();

@@ -5,6 +5,9 @@
 # execute-plans self-hosted GitHub Actions runner. It builds the Vite bundle,
 # installs it as an immutable release under /var/www, switches the Caddy root
 # symlink, and then probes the deployed host against the dev BFF.
+if [[ "$-" == *x* ]]; then
+  set +x
+fi
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,7 +26,10 @@ ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
-DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}"
+CANONICAL_PUBLIC_VIEWER_TOKEN="pantheon-dev-browser:viewer"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-${CANONICAL_PUBLIC_VIEWER_TOKEN}}"
+REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
+ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -35,6 +41,16 @@ cleanup() {
   rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
+
+if [[ "${DEV_BEARER_TOKEN}" != "${CANONICAL_PUBLIC_VIEWER_TOKEN}" ]]; then
+  echo "Refusing to embed a non-canonical browser bearer token in the public frontend bundle." >&2
+  exit 2
+fi
+
+if [[ "${REAL_WRITES}" != "false" || "${ALLOW_DEV_STUB_WRITES}" != "false" ]]; then
+  echo "Automated dev frontend deployment is read-only; real and dev-stub writes must remain disabled." >&2
+  exit 2
+fi
 
 if [[ "${DEPLOY_ROOT}" != "${STRICT_DIR_PREFIX}" && "${DEPLOY_ROOT}" != "${STRICT_DIR_PREFIX}/"* ]]; then
   echo "Refusing to deploy outside allowed root prefix: ${DEPLOY_ROOT}" >&2
@@ -78,8 +94,8 @@ echo "=== build strict live dev bundle ==="
 VITE_BFF_MODE=live \
 VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
-VITE_BFF_REAL_WRITES=true \
-VITE_BFF_ALLOW_DEV_STUB_WRITES=true \
+VITE_BFF_REAL_WRITES="${REAL_WRITES}" \
+VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}" \
 VITE_BFF_DEV_BEARER_TOKEN="${DEV_BEARER_TOKEN}" \
 npm run build
 
@@ -89,6 +105,8 @@ export PANTHEON_DEPLOY_SOURCE_REF="${SOURCE_REF:-${SHA}}"
 export PANTHEON_DEPLOY_SOURCE_BRANCH="${SOURCE_BRANCH}"
 export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
+export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
+export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
 
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -105,8 +123,8 @@ const metadata = {
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",
-    VITE_BFF_REAL_WRITES: "true",
-    VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
+    VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES,
+    VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES,
   },
 };
 
@@ -186,10 +204,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
   npx playwright test e2e/25-persona-fleet-live-linked-pages.spec.ts --project=chromium
 
-  echo "=== run governed management write/read-back probe ==="
-  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
-  PANTHEON_BFF_AUTH_TOKEN="${DEV_BEARER_TOKEN}" \
-  node scripts/probe-hosted-management-writes.mjs
+  echo "=== read-only deploy probes passed; governed write/read-back probe is disabled ==="
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
@@ -204,6 +219,8 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - release_dir: ${RELEASE_DIR}
 - deploy_root: ${DEPLOY_ROOT}
 - preserve_assets: ${PRESERVE_ASSETS}
+- real_writes: ${REAL_WRITES}
+- allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
 - probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
 EOF
 
