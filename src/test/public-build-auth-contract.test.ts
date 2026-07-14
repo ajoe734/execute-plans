@@ -654,6 +654,14 @@ describe("public frontend build auth boundary", () => {
       },
     },
     {
+      name: "Agora hosted responsive parity",
+      script: "e2e/agora-narrow-responsive-hosted.spec.ts",
+      optIn: {
+        AG_UIPOL_011_EXPECTED_FE_SHA: "0123456789abcdef0123456789abcdef01234567",
+        AG_UIPOL_011_FE_BASE_URL: "https://fe.example.test",
+      },
+    },
+    {
       name: "Agora winner branch",
       script: "e2e/agora-winner-branch-hosted.spec.ts",
       optIn: { AG_DYNUI_FULL_006_HOSTED: "1" },
@@ -705,6 +713,14 @@ describe("public frontend build auth boundary", () => {
         AG_DYNUI_FULL_006_HOSTED: "1",
         PANTHEON_FE_BASE_URL: "https://fe.example.test",
         PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+      },
+    },
+    {
+      name: "Agora hosted responsive parity",
+      script: "e2e/agora-narrow-responsive-hosted.spec.ts",
+      optIn: {
+        AG_UIPOL_011_EXPECTED_FE_SHA: "0123456789abcdef0123456789abcdef01234567",
+        AG_UIPOL_011_FE_BASE_URL: "https://fe.example.test",
       },
     },
   ])("rejects the tracked fixture token in $name before any hosted request", ({ script, optIn }) => {
