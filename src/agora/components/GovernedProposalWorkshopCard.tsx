@@ -38,22 +38,27 @@ export function GovernedProposalWorkshopCard({ payload, proposalId }: { payload:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initial || !id) return;
+    if (!id) return;
     let cancelled = false;
     getGovernedProposal(id)
       .then((result) => { if (!cancelled) setSnapshot(result); })
       .catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "Proposal readback unavailable."); });
     return () => { cancelled = true; };
-  }, [id, initial]);
+  }, [id]);
 
   if (error) return <div className="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">{error}</div>;
   if (!snapshot) return <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Loading governed proposal…</div>;
 
   const validationResult = record(payload.validation_result ?? snapshot.proposal.validation);
-  const approvalRefs = strings(payload.approval_refs);
+  const canonicalApprovalRefs = strings(snapshot.proposal.available_approval_decision_refs);
+  const approvalRefs = Array.isArray(snapshot.proposal.available_approval_decision_refs)
+    ? canonicalApprovalRefs
+    : strings(payload.approval_refs);
+  const approvalReadiness = snapshot.proposal.approval_decision_readiness;
   return (
     <GovernedProposalCard
       approvalRefs={approvalRefs}
+      approvalReadiness={approvalReadiness}
       initialEtag={snapshot.etag}
       initialProposal={snapshot.proposal}
       onUpdated={(proposal, etag) => setSnapshot({ proposal, etag })}

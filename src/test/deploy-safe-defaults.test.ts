@@ -14,6 +14,10 @@ const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
 );
+const hostedBrowserProbe = readFileSync(
+  resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
+  "utf8",
+);
 
 function rejectedDeploy(extraEnv: Record<string, string>) {
   return spawnSync("bash", [deployScriptPath], {
@@ -22,19 +26,16 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
     env: {
       ...process.env,
       PANTHEON_DEPLOY_ALLOW_DIRTY: "true",
+      VITE_BFF_DEV_BEARER_TOKEN: "",
       ...extraEnv,
     },
   });
 }
 
 describe("Pantheon dev frontend deploy safety boundary", () => {
-  it("builds only with the canonical public viewer and safe write flags", () => {
-    expect(deployScript).toContain(
-      'CANONICAL_PUBLIC_VIEWER_TOKEN="pantheon-dev-browser:viewer"',
-    );
-    expect(deployScript).toContain(
-      'DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-${CANONICAL_PUBLIC_VIEWER_TOKEN}}"',
-    );
+  it("builds with no embedded bearer token and safe write flags", () => {
+    expect(deployScript).toContain('DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"');
+    expect(deployScript).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
     expect(deployScript).toContain('REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
     expect(deployScript).toContain(
       'ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
@@ -55,8 +56,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT',
     );
+    expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
     expect(integrationWorkflow.match(
-      /VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer/gu,
+      /VITE_BFF_DEV_BEARER_TOKEN: ""/gu,
     )).toHaveLength(2);
   });
 
@@ -64,11 +66,21 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
     expect(deployScript).not.toContain("npx playwright test");
     expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
-    expect(hostedPersonaSpec).toContain(
-      'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
-    );
+    expect(hostedPersonaSpec).toContain('roleTokenFromEnv("viewer"');
     expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
-    expect(hostedPersonaSpec).toContain("token: PUBLIC_VIEWER_TOKEN");
+    expect(hostedPersonaSpec).toContain("token: VIEWER_TOKEN");
+  });
+
+  it("defines the deployed-host contract as an unauthenticated strict auth boundary", () => {
+    expect(hostedBrowserProbe).toContain('const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]');
+    expect(hostedBrowserProbe).toContain("response.status === 401");
+    expect(hostedBrowserProbe).toMatch(/AUTH_REQUIRED\|authentication required/u);
+    expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
+    expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
+    expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
+    expect(deployScript).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}"',
+    );
   });
 
   it("fails closed on a non-canonical token without echoing it", () => {
@@ -76,7 +88,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const result = rejectedDeploy({ VITE_BFF_DEV_BEARER_TOKEN: sentinel });
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/non-canonical browser bearer token/u);
+    expect(result.stderr).toMatch(/any browser bearer token/u);
     expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
   });
 

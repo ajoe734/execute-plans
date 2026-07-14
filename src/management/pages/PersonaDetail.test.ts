@@ -46,7 +46,7 @@ describe("PersonaDetail", () => {
       workshopId: "ws/persona 1",
       mode: "consult",
       participantIds: ["persona-a", "persona-b"],
-      picker: "cross-style",
+      picker: "named",
       returnTo: "/management/personas/persona-a?tab=tradeJournal",
       returnLabel: "Persona A",
     });

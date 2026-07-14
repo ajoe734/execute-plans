@@ -19,6 +19,7 @@ import type {
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -242,13 +243,14 @@ interface DecisionEventDetailPanelProps {
 
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
   const navigate = useNavigate();
+  const writeAccess = useAgoraWriteAccess();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
 
   // Consultation states
   const [showConsultPanel, setShowConsultPanel] = useState(false);
-  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
+  const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
   const [consultQuery, setConsultQuery] = useState("");
   const [consultLoading, setConsultLoading] = useState(false);
   const [consultError, setConsultError] = useState<string | null>(null);
@@ -445,6 +447,8 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
               <button
                 type="button"
                 data-testid={`ask-personas-${ev.decision_event_id}`}
+                disabled={!writeAccess.interactionAllowed}
+                title={writeAccess.interactionDisabledReason ?? undefined}
                 onClick={() => {
                   setShowConsultPanel(!showConsultPanel);
                   setShowModifyLinkage(false);
@@ -454,13 +458,14 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   fontSize: 12,
                   border: "1px solid #6366f1",
                   borderRadius: 4,
-                  cursor: "pointer",
+                  cursor: writeAccess.interactionAllowed ? "pointer" : "not-allowed",
                   background: "#e0e7ff",
                   color: "#4f46e5",
                   fontWeight: 500,
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 4
+                  gap: 4,
+                  opacity: writeAccess.interactionAllowed ? 1 : 0.55,
                 }}
               >
                 💬 Ask Personas
@@ -507,31 +512,11 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
               </div>
             </div>
 
-            {/* Persona Checklist */}
+            {/* Participant eligibility is authoritative and resolved at launch. */}
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Select Personas:</span>
-              <div style={{ display: "flex", gap: 12 }}>
-                {[
-                  { id: "per_quant", name: "Quant" },
-                  { id: "per_risk", name: "Risk" },
-                  { id: "per_macro", name: "Macro" },
-                  { id: "per_red", name: "Red Team" }
-                ].map(p => (
-                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPersonas.includes(p.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPersonas([...selectedPersonas, p.id]);
-                        } else {
-                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
-                        }
-                      }}
-                    />
-                    {p.name}
-                  </label>
-                ))}
+              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Participants:</span>
+              <div data-testid="consult-authoritative-eligibility" style={{ color: "#64748b" }}>
+                The canonical eligibility service will choose up to three recommended eligible Personas at launch. No Persona identity is inferred from a name or fixture.
               </div>
             </div>
 
@@ -543,7 +528,6 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   type="button"
                   onClick={() => {
                     setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
-                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
                   }}
                   style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -553,7 +537,6 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   type="button"
                   onClick={() => {
                     setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
-                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
                   }}
                   style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -563,7 +546,6 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   type="button"
                   onClick={() => {
                     setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
-                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
                   }}
                   style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -586,7 +568,8 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
-                disabled={consultLoading || selectedPersonas.length === 0}
+                disabled={consultLoading || !writeAccess.interactionAllowed}
+                title={writeAccess.interactionDisabledReason ?? undefined}
                 onClick={async () => {
                   setConsultLoading(true);
                   setConsultError(null);
@@ -605,9 +588,14 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                       environment: "paper",
                       required_capability: "persona_opinion",
                     });
+                    const recommended = eligibility.data.included.filter((item) => item.recommended);
+                    const eligiblePanel = (recommended.length ? recommended : eligibility.data.included)
+                      .slice(0, 3)
+                      .map((item) => item.persona_id);
+                    setSelectedPersonas(eligiblePanel);
                     const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
-                    if (!selectedPersonas.every((id) => eligibleIds.has(id))) {
-                      throw new Error("One or more selected Personas are not eligible for this paper consultation.");
+                    if (eligiblePanel.length === 0 || !eligiblePanel.every((id) => eligibleIds.has(id))) {
+                      throw new Error("No eligible Persona is available for this paper consultation.");
                     }
                     const submitted = await interaction.submit({
                       workshop_id: resolved.data.workshop_id,
@@ -615,7 +603,7 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                       environment: "paper",
                       required_capability: "persona_opinion",
                       topic: consultQuery.trim() || `Review ${ev.subject.symbol} ${ev.event_kind} decision ${ev.decision_event_id}`,
-                      participant_persona_ids: selectedPersonas,
+                      participant_persona_ids: eligiblePanel,
                       context_refs: resolved.data.context_refs,
                     });
                     if (submitted.data.execution_authority !== "none") {
@@ -623,8 +611,8 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                     }
                     const params = new URLSearchParams({
                       mode: "consult",
-                      participants: selectedPersonas.join(","),
-                      picker: selectedPersonas.some((id) => /red/i.test(id)) ? "red-team" : "named",
+                      participants: eligiblePanel.join(","),
+                      picker: "named",
                       return_to: `/agora/trading-room/${encodeURIComponent(ev.strategy_id)}`,
                       return_label: "Trading Room",
                     });
@@ -642,8 +630,8 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                   border: "none",
                   borderRadius: 4,
                   fontWeight: 600,
-                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
-                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
+                  cursor: (consultLoading || !writeAccess.interactionAllowed) ? "not-allowed" : "pointer",
+                  opacity: (consultLoading || !writeAccess.interactionAllowed) ? 0.7 : 1
                 }}
                 data-testid={`consult-panel-submit-${ev.decision_event_id}`}
               >
@@ -658,6 +646,11 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
               </button>
               {consultError && (
                 <span style={{ color: "#dc2626", fontSize: 11 }}>{consultError}</span>
+              )}
+              {writeAccess.interactionDisabledReason && (
+                <span data-testid="trading-room-interaction-disabled-reason" style={{ color: "#92400e", fontSize: 11 }}>
+                  {writeAccess.interactionDisabledReason}
+                </span>
               )}
             </div>
           </div>

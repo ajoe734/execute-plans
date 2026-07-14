@@ -7,8 +7,8 @@ import {
   type TradingRoomReadinessHandoff,
   type WorkshopInteractionEntry,
   type WorkshopInteractionMode,
-  type WorkshopParticipantPicker,
 } from "@/agora/pages/strategy-workshop/StrategyWorkshopPage";
+import type { WorkshopParticipantPicker } from "@/agora/participantPicker";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import { useLiveSseConnection } from "@/platform/hooks";
 
@@ -106,7 +106,7 @@ export function AgoraStrategyWorkshopRoute() {
   const mode = searchParams.get("mode");
   const picker = searchParams.get("picker");
   const allowedModes = new Set<WorkshopInteractionMode>(["ask", "challenge", "consult", "propose_action", "reflect"]);
-  const allowedPickers = new Set<WorkshopParticipantPicker>(["named", "recommended", "committee", "red-team", "same-style", "cross-style"]);
+  const allowedPickers = new Set<WorkshopParticipantPicker>(["named", "recommended", "eligible-one", "eligible-two", "eligible-three"]);
   const entry: WorkshopInteractionEntry = {
     mode: allowedModes.has(mode as WorkshopInteractionMode) ? mode as WorkshopInteractionMode : undefined,
     participantIds: searchParams.get("participants")?.split(",").map((item) => item.trim()).filter(Boolean),

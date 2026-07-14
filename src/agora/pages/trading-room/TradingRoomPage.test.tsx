@@ -34,6 +34,20 @@ vi.mock("@/lib/bff-v1/agora/interaction", () => ({
   },
 }));
 
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: ["agora.workshop.v1"],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 vi.mock("react-grid-layout", async () => {
   const ReactModule = await import("react");
   const MockGridLayout = ({

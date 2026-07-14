@@ -1,5 +1,23 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/agora/useAgoraWriteAccess", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/agora/useAgoraWriteAccess")>();
+  return {
+    ...original,
+    useAgoraWriteAccess: () => ({
+      actorId: "operator-1",
+      agoraCapabilities: ["agora.workshop.v1"],
+      capabilities: ["risk.review"],
+      roles: ["operator"],
+      loading: false,
+      interactionAllowed: true,
+      interactionDisabledReason: null,
+      writeAllowed: true,
+      writeDisabledReason: null,
+    }),
+  };
+});
 
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
 import { WorkshopCardRenderer } from "./WorkshopCardRenderer";

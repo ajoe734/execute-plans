@@ -33,6 +33,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { pickerParticipants, type WorkshopParticipantPicker } from "@/agora/participantPicker";
 import {
   Select,
   SelectContent,
@@ -299,8 +301,6 @@ interface SessionViewProps {
 }
 
 export type WorkshopInteractionMode = "ask" | "challenge" | "consult" | "propose_action" | "reflect";
-export type WorkshopParticipantPicker = "named" | "recommended" | "committee" | "red-team" | "same-style" | "cross-style";
-
 export interface WorkshopInteractionEntry {
   mode?: WorkshopInteractionMode;
   participantIds?: string[];
@@ -318,12 +318,19 @@ function normalizedEnvironment(workshop: StrategyWorkshop | null): "research" | 
 
 function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[]): ContextRef[] {
   const metadata = recordFrom(workshop.metadata);
+  const session = recordFrom(workshop);
   const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
-  const strategyId = String(metadata.strategy_id ?? "").trim();
+  const strategyId = String(
+    metadata.strategy_id
+      ?? session.active_strategy_spec_registry_id
+      ?? session.strategy_id
+      ?? "",
+  ).trim();
   const strategyVersion = String(
     metadata.strategy_version
       ?? metadata.strategy_spec_registry_id
       ?? metadata.selected_version_id
+      ?? session.selected_version_id
       ?? "",
   ).trim();
   if (strategyId && strategyVersion) refs.unshift({ type: "strategy", id: strategyId, version_id: strategyVersion });
@@ -336,25 +343,8 @@ function interactionContextRefs(workshop: StrategyWorkshop, participantIds: stri
   return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
 }
 
-function pickerParticipants(
-  picker: WorkshopParticipantPicker,
-  included: PersonaEligibility[],
-  preferred: string[] = [],
-): string[] {
-  const eligibleIds = new Set(included.map((item) => item.persona_id));
-  const preserved = preferred.filter((id) => eligibleIds.has(id));
-  if (picker === "named" && preserved.length) return preserved;
-  if (picker === "red-team") {
-    const red = included.find((item) => /red|adversar|challenge/i.test(`${item.persona_id} ${item.display_name}`));
-    return red ? [red.persona_id] : [];
-  }
-  const recommended = included.filter((item) => item.recommended).map((item) => item.persona_id);
-  if (picker === "same-style") return (preserved.length ? preserved : recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, 1);
-  if (picker === "committee" || picker === "cross-style") return (recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, 2);
-  return (preserved.length ? preserved : recommended.length ? recommended : included.map((item) => item.persona_id)).slice(0, picker === "recommended" ? 3 : 1);
-}
-
 function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
+  const writeAccess = useAgoraWriteAccess();
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
@@ -537,7 +527,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !workshop || !content || isDenied || sendLoading) return;
+      if (!workshopId || !workshop || !content || isDenied || sendLoading || !writeAccess.interactionAllowed) return;
       setSendLoading(true);
       setSendError(null);
       try {
@@ -594,6 +584,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
       selectedParticipants,
       isDenied,
       sendLoading,
+      writeAccess.interactionAllowed,
       refreshCards,
       refreshCompleteness,
       refreshEvents,
@@ -869,11 +860,10 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
                     <SelectValue placeholder="Select panel" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="recommended" className="text-xs">Recommended Panel</SelectItem>
-                    <SelectItem value="committee" className="text-xs">Risk Committee</SelectItem>
-                    <SelectItem value="red-team" className="text-xs">Red Team</SelectItem>
-                    <SelectItem value="same-style" className="text-xs">Same-Style Comparison</SelectItem>
-                    <SelectItem value="cross-style" className="text-xs">Cross-Style Comparison</SelectItem>
+                    <SelectItem value="recommended" className="text-xs">Recommended-or-Eligible Panel</SelectItem>
+                    <SelectItem value="eligible-one" className="text-xs">First Eligible Persona</SelectItem>
+                    <SelectItem value="eligible-two" className="text-xs">First Two Eligible Personas</SelectItem>
+                    <SelectItem value="eligible-three" className="text-xs">First Three Eligible Personas</SelectItem>
                     <SelectItem value="named" className="text-xs">Named Personas (Select)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -887,15 +877,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
                 const excluded = excludedParticipants.length;
                 switch (pickerSelectionType) {
                   case "recommended":
-                    return `Recommended Panel — ${selected} eligible selected; ${excluded} excluded by the canonical capability gate.`;
-                  case "committee":
-                    return `Risk Committee — ${selected} eligible selected. The committee has opinion authority only.`;
-                  case "red-team":
-                    return selected ? "Red Team — eligible adversarial Persona selected; opinion authority only." : "Red Team unavailable — no eligible adversarial Persona for this environment.";
-                  case "same-style":
-                    return `Same-Style Comparison — ${selected} eligible Persona selected.`;
-                  case "cross-style":
-                    return `Cross-Style Comparison — ${selected} eligible Personas selected.`;
+                    return `Recommended-or-Eligible Panel — up to ${selected} canonical eligible selected (recommended first when supplied); ${excluded} excluded by the capability gate.`;
+                  case "eligible-one":
+                    return `First Eligible Persona — ${selected} selected in canonical eligibility order.`;
+                  case "eligible-two":
+                    return `First Two Eligible Personas — ${selected} selected in canonical eligibility order.`;
+                  case "eligible-three":
+                    return `First Three Eligible Personas — ${selected} selected in canonical eligibility order.`;
                   case "named":
                     return `Named Personas — choose from ${eligibleParticipants.length} canonical eligible participant(s).`;
                   default:
@@ -934,13 +922,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
             <textarea
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
-              disabled={sendLoading || isDenied || workshop?.status === "concluded"}
-              placeholder={isDenied ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
+              disabled={sendLoading || isDenied || !writeAccess.interactionAllowed || workshop?.status === "concluded"}
+              placeholder={isDenied || !writeAccess.interactionAllowed ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
               onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied) {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied && writeAccess.interactionAllowed) {
                   e.preventDefault();
                   handleSend(composerValue);
                 }
@@ -949,7 +937,8 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
             <Button
               className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
               data-testid="servant-composer-submit"
-              disabled={sendLoading || eligibilityLoading || isDenied || !composerValue.trim() || selectedParticipants.length === 0 || workshop?.status === "concluded"}
+              disabled={sendLoading || eligibilityLoading || isDenied || !writeAccess.interactionAllowed || !composerValue.trim() || selectedParticipants.length === 0 || workshop?.status === "concluded"}
+              title={writeAccess.interactionDisabledReason ?? undefined}
               onClick={() => handleSend(composerValue)}
               type="button"
             >
@@ -961,6 +950,11 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom, entry }: SessionV
               送出
             </Button>
           </div>
+          {writeAccess.interactionDisabledReason ? (
+            <p className="text-xs font-semibold text-amber-700" data-testid="interaction-disabled-reason">
+              {writeAccess.interactionDisabledReason}
+            </p>
+          ) : null}
           {sendError && (
             <p className="text-xs text-red-500 font-semibold" data-testid="servant-composer-error">{sendError}</p>
           )}

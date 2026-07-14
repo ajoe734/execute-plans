@@ -39,7 +39,7 @@ async function install(page: Page) {
 test("renders all five outcomes and honest degraded detail", async ({ page }) => {
     await install(page);
     await page.goto("/management/trade-journeys?tenant_id=tenant-a&environment=paper");
-    await expect(page.getByRole("heading", { name: "Trade Journeys" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Trade Journeys|交易旅程/ })).toBeVisible();
     for (const row of rows) await expect(page.getByText(row.status)).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "degraded data" })).toBeVisible();
     await page.getByRole("link", { name: "recon-1" }).click();

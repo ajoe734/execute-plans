@@ -25,6 +25,14 @@ on:
         description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
         required: false
         default: "dev"
+      persona_interaction_write_proof:
+        description: "Run the explicitly gated hosted Persona interaction write/readback proof"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       soft_fail:
         description: "Emergency override to keep release gate in observation mode. Hard-gate is the default since 2026-05-14 (FE-INT-GATE early switch). Set true only if a transient external dependency is blocking valid merges."
         required: false
@@ -55,7 +63,7 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/persona-fleet"
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
       PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
@@ -70,7 +78,7 @@ jobs:
       PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
       PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
       PANTHEON_BFF_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_TOKEN }}
+      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
       PANTHEON_BFF_APPROVER_TOKEN: ${{ secrets.PANTHEON_BFF_APPROVER_TOKEN }}
       PANTHEON_BFF_RISK_OWNER_TOKEN: ${{ secrets.PANTHEON_BFF_RISK_OWNER_TOKEN }}
       PANTHEON_BFF_ADMIN_TOKEN: ${{ secrets.PANTHEON_BFF_ADMIN_TOKEN }}
@@ -125,7 +133,7 @@ jobs:
         id: build
         continue-on-error: true
         env:
-          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
+          VITE_BFF_DEV_BEARER_TOKEN: ""
         run: |
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
@@ -201,7 +209,7 @@ jobs:
         if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
         continue-on-error: true
         env:
-          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
+          VITE_BFF_DEV_BEARER_TOKEN: ""
         run: |
           set -o pipefail
           VITE_BFF_MODE=live \
@@ -265,6 +273,10 @@ jobs:
       - name: Playwright E2E
         id: e2e
         continue-on-error: true
+        env:
+          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && '1' || '0' }}
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && secrets.PANTHEON_BFF_OPERATOR_A_TOKEN || '' }}
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -o pipefail
           FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"

@@ -200,7 +200,7 @@ describe("AgoraStrategyWorkshopRoute", () => {
 
   it("preserves canonical Persona interaction deep-link context", () => {
     render(
-      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?mode=consult&participants=persona-a%2Cpersona-b&picker=cross-style&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+A"]}>
+      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?mode=consult&participants=persona-a%2Cpersona-b&picker=named&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+A"]}>
         <Routes>
           <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
         </Routes>
@@ -211,7 +211,7 @@ describe("AgoraStrategyWorkshopRoute", () => {
       entry: {
         mode: "consult",
         participantIds: ["persona-a", "persona-b"],
-        picker: "cross-style",
+        picker: "named",
         returnTo: "/management/personas/persona-a",
         returnLabel: "Persona A",
       },

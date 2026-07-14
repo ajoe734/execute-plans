@@ -42,7 +42,22 @@ vi.mock("@/lib/bff-v1/agora/interaction", () => ({
   },
 }));
 
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: ["agora.workshop.v1"],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 
@@ -126,6 +141,20 @@ const LIVE_COMPLETENESS_CARD: WorkshopCard = {
 afterEach(cleanup);
 
 describe("StrategyWorkshopPage", () => {
+  it("uses truthful eligibility-order pickers without inferring style or role from names", () => {
+    const included = [
+      { persona_id: "persona-z", display_name: "Red Team-ish Name", eligible: true, reasons: [], recommended: false },
+      { persona_id: "persona-a", display_name: "Same Style-ish Name", eligible: true, reasons: [], recommended: false },
+      { persona_id: "persona-b", display_name: "Risk Committee-ish Name", eligible: true, reasons: [], recommended: false },
+    ];
+    expect(pickerParticipants("eligible-one", included)).toEqual(["persona-z"]);
+    expect(pickerParticipants("eligible-two", included)).toEqual(["persona-z", "persona-a"]);
+    expect(pickerParticipants("eligible-three", included)).toEqual(["persona-z", "persona-a", "persona-b"]);
+    expect(pickerParticipants("named", included, ["persona-b"])).toEqual(["persona-b"]);
+    expect(pickerParticipants("named", included, ["missing-persona"])).toEqual([]);
+    expect(pickerParticipants("eligible-two", included, ["persona-b"])).toEqual(["persona-z", "persona-a"]);
+  });
+
   beforeEach(() => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
@@ -391,6 +420,37 @@ describe("StrategyWorkshopPage", () => {
     });
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(2);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the live session's immutable strategy pointers for propose-action context", async () => {
+    const liveSession = {
+      ...MOCK_WORKSHOP,
+      active_strategy_spec_registry_id: "strategy-registry-9",
+      selected_version_id: "immutable-version-4",
+    } as StrategyWorkshop;
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(liveSession);
+    vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
+      data: {
+        workshop_id: "ws-abc",
+        context_refs: body.context_refs,
+        verified: true,
+      },
+    } as Awaited<ReturnType<typeof interaction.resolveContext>>));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Propose a bounded candidate measure" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
+      workshop_id: "ws-abc",
+      context_refs: expect.arrayContaining([{
+        type: "strategy",
+        id: "strategy-registry-9",
+        version_id: "immutable-version-4",
+      }]),
+    })));
   });
 
   it("fails closed when a deep-linked Persona is no longer eligible", async () => {

@@ -34,6 +34,7 @@ import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTa
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
@@ -44,7 +45,7 @@ export function personaWorkshopEntryUrl(input: {
   workshopId: string;
   mode: "ask" | "challenge" | "consult";
   participantIds: string[];
-  picker: "named" | "cross-style";
+  picker: "named" | "recommended" | "eligible-one" | "eligible-two" | "eligible-three";
   returnTo: string;
   returnLabel: string;
 }): string {
@@ -84,6 +85,7 @@ export const PersonaDetail = () => {
   const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const { can } = usePermissions();
+  const writeAccess = useAgoraWriteAccess();
   const canRetire = can("archive");
 
   useEffect(() => {
@@ -145,6 +147,10 @@ export const PersonaDetail = () => {
     commandReceiptDescription(receipt, { fallback: `Persona ${p.id} · ${action}` });
 
   const openPersonaInteraction = async (mode: "ask" | "challenge" | "consult", compare = false) => {
+    if (!writeAccess.interactionAllowed) {
+      setInteractionError(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted.");
+      return;
+    }
     setInteractionBusy(compare ? "compare" : mode);
     setInteractionError(null);
     try {
@@ -171,7 +177,7 @@ export const PersonaDetail = () => {
         workshopId: resolved.data.workshop_id,
         mode,
         participantIds,
-        picker: compare ? "cross-style" : "named",
+        picker: "named",
         returnTo,
         returnLabel: `Persona ${p.name}`,
       }));
@@ -189,13 +195,13 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
-            <Button disabled={interactionBusy !== null} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
               <MessageSquare className="h-4 w-4 mr-1" />Talk to
             </Button>
-            <Button disabled={interactionBusy !== null} onClick={() => void openPersonaInteraction("challenge")} size="sm" variant="outline">
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("challenge")} size="sm" variant="outline">
               <MessageSquare className="h-4 w-4 mr-1" />Ask to review
             </Button>
-            <Button disabled={interactionBusy !== null} onClick={() => void openPersonaInteraction("consult", true)} size="sm" variant="outline">
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("consult", true)} size="sm" variant="outline">
               <GitCompare className="h-4 w-4 mr-1" />Compare
             </Button>
             <Button asChild size="sm" variant="outline">
@@ -340,6 +346,11 @@ export const PersonaDetail = () => {
           },
         ]}
       />
+      {writeAccess.interactionDisabledReason ? (
+        <p className="px-6 pb-2 text-xs font-semibold text-amber-700" data-testid="persona-interaction-disabled-reason">
+          {writeAccess.interactionDisabledReason}
+        </p>
+      ) : null}
       {interactionError ? (
         <div className="mx-6 mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="persona-interaction-error" role="alert">
           {interactionError}

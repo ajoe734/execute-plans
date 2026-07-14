@@ -26,8 +26,7 @@ ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
-CANONICAL_PUBLIC_VIEWER_TOKEN="pantheon-dev-browser:viewer"
-DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-${CANONICAL_PUBLIC_VIEWER_TOKEN}}"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -42,8 +41,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "${DEV_BEARER_TOKEN}" != "${CANONICAL_PUBLIC_VIEWER_TOKEN}" ]]; then
-  echo "Refusing to embed a non-canonical browser bearer token in the public frontend bundle." >&2
+if [[ -n "${DEV_BEARER_TOKEN}" ]]; then
+  echo "Refusing to embed any browser bearer token in the public frontend bundle." >&2
   exit 2
 fi
 
@@ -96,7 +95,7 @@ VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
 VITE_BFF_REAL_WRITES="${REAL_WRITES}" \
 VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}" \
-VITE_BFF_DEV_BEARER_TOKEN="${DEV_BEARER_TOKEN}" \
+VITE_BFF_DEV_BEARER_TOKEN="" \
 npm run build
 
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
@@ -196,7 +195,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
   PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
   PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/management/persona-fleet}" \
+  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
@@ -204,7 +203,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   # The full Persona linked-page traversal belongs to the integration E2E gate:
   # it depends on mutable row/UI state and must not invalidate an otherwise
   # healthy atomic deploy after the hosted read-only BFF contract has passed.
-  echo "=== read-only hosted browser/BFF probe passed; mutation probes are disabled ==="
+  echo "=== unauthenticated strict browser/BFF probe passed; token injection and mutation probes are disabled ==="
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF

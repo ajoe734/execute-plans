@@ -8,7 +8,7 @@
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin } from "./helpers/auth";
+import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
 
 const FE_BASE_URL = trimTrailingSlash(
   process.env.AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL ||
@@ -23,11 +23,11 @@ const BFF_BASE_URL = trimTrailingSlash(
     process.env.VITE_BFF_BASE_URL ||
     "",
 );
-const AUTH_TOKEN =
-  process.env.BFF_AUTH_TOKEN ||
-  process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-dynui-live-tabs-013";
 const RAW_UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
@@ -175,8 +175,8 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 
 test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () => {
   test.skip(
-    !FE_BASE_URL || !BFF_BASE_URL,
-    "Set AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL/PANTHEON_FE_BASE_URL and AG_DYNUI_LIVE_WORKSHOP_FE_013_BFF_BASE_URL/PANTHEON_BFF_BASE_URL.",
+    !FE_BASE_URL || !BFF_BASE_URL || !AUTH_TOKEN,
+    "Requires hosted FE/BFF URLs and an explicit/RBAC-matrix operator token.",
   );
   test.setTimeout(120_000);
 

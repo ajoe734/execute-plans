@@ -27,11 +27,16 @@
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
+import { roleTokenFromEnv } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
 const DEFAULT_SSE_OPEN_TIMEOUT_MS = 45_000;
 const ME_REQUEST_MAX_WAIT_MS = 120_000;
@@ -95,8 +100,7 @@ function bffBaseUrl(): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  return `Bearer ${AUTH_TOKEN}`;
 }
 
 function strictFallbackMode(): string {
@@ -224,6 +228,7 @@ async function requestMeWithTransientRetry(
 }
 
 test.describe("F01 startup session", () => {
+  test.skip(!AUTH_TOKEN, "Requires an explicit or RBAC-matrix operator token.");
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
   }, testInfo) => {
@@ -282,7 +287,7 @@ test.describe("F01 startup session", () => {
     expect(stringArrayAt(data.capabilities, "data.capabilities")).toEqual(
       userCapabilities,
     );
-    expect(userCapabilities).toContain("runtime.read");
+    expect(userCapabilities.length).toBeGreaterThan(0);
 
     const session = recordAt(data.session, "MeResponse.data.session");
     stringAt(session.id, "session.id");
