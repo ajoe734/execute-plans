@@ -24,6 +24,12 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
 }));
 
+vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
+  ConnectedGovernedProposalCard: ({ proposalId }: { proposalId: string }) => (
+    <div data-testid="connected-governed-proposal">{proposalId}</div>
+  ),
+}));
+
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 
@@ -486,6 +492,14 @@ describe("StrategyWorkshopPage", () => {
     const contextBar = await screen.findByTestId("context-bar");
     expect(contextBar.textContent).toContain("Subject: none (none)");
     expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
+  });
+
+  it("renders only the governed proposal explicitly linked by the route", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+    render(<StrategyWorkshopPage governedProposalId="prop-pint-010" workshopId="ws-abc" />);
+
+    expect(await screen.findByTestId("connected-governed-proposal")).toHaveTextContent("prop-pint-010");
   });
 
   it("renders warning banners when stale/degraded/denied triggers are toggled", async () => {

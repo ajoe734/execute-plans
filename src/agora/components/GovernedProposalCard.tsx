@@ -34,6 +34,7 @@ export function GovernedProposalCard({ initialProposal, initialEtag, validationR
   const [error, setError] = useState<string | null>(null);
   const terminal = ["approved", "rejected", "cancelled"].includes(proposal.state);
   const highEnvironment = ["paper", "canary", "live"].includes(proposal.environment_ceiling);
+  const validationPassed = proposal.validation?.valid ?? proposal.validation?.status === "passed";
 
   async function run(action: ProposalAction) {
     setBusy(action); setError(null);
@@ -78,8 +79,8 @@ export function GovernedProposalCard({ initialProposal, initialEtag, validationR
         <p className="text-xs text-slate-600">Reviewers: {proposal.required_reviewers.join(", ")}</p></div>
     </section>
 
-    {proposal.validation ? <section className="rounded-md border border-slate-200 p-3" aria-label="Validation result"><h4 className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">{proposal.validation.valid ? <CheckCircle2 className="h-4 w-4 text-green-600"/> : <AlertTriangle className="h-4 w-4 text-red-600"/>}Validation</h4>
-      <p className="mt-2 text-xs text-slate-700">{proposal.validation.valid ? "Passed" : "Not passed"}</p>{proposal.validation.errors?.map(item => <p className="text-xs text-red-700" key={item}>{item}</p>)}</section> : null}
+    {proposal.validation ? <section className="rounded-md border border-slate-200 p-3" aria-label="Validation result"><h4 className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">{validationPassed ? <CheckCircle2 className="h-4 w-4 text-green-600"/> : <AlertTriangle className="h-4 w-4 text-red-600"/>}Validation</h4>
+      <p className="mt-2 text-xs text-slate-700">{validationPassed ? "Passed" : "Not passed"}</p>{proposal.validation.errors?.map(item => <p className="text-xs text-red-700" key={item}>{item}</p>)}</section> : null}
     <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600"><strong>Decision handoff only.</strong> Conversation and approval do not mean execution. {proposal.governed_action_link?.execution_authority === "none" ? "This handoff has no execution authority." : "Any execution remains with the governed downstream owner."}</div>
     {error ? <div role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{error}</div> : null}
     {!terminal ? <footer className="space-y-2"><input aria-label="Decision reason" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Reason or decision note" value={reason} onChange={e => setReason(e.target.value)} />
