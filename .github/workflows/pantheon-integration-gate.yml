@@ -320,13 +320,7 @@ jobs:
           PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -o pipefail
-          if [ -z "$PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN" ] || \
-             [ -z "$PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN" ] || \
-             [ -z "$PANTHEON_FE_BASE_URL" ] || \
-             [ -z "$PANTHEON_BFF_BASE_URL" ]; then
-            echo "::error::Hosted Persona write proof requires operator/viewer credentials and FE/BFF URLs."
-            exit 1
-          fi
+          node scripts/validate-persona-hosted-proof-env.mjs
           npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
       - name: Playwright E2E

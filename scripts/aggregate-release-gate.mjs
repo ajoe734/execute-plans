@@ -793,8 +793,13 @@ function analyzeHostedProbe(stepOutcomes) {
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
   const requiredCoreResponsesComplete = parseBoolAfter(text, "required core BFF responses complete");
   const personaFleetRowCount = parseNumberAfter(text, "persona fleet row count");
-  const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid");
-  const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid");
+  const personaFleetRowsValid = parseBoolAfter(text, "persona fleet rows valid") ??
+    parseBoolAfter(text, "persona fleet rows valid (informational while unauthenticated)");
+  const personaFleetLiveBannerValid = parseBoolAfter(text, "persona fleet live banner valid") ??
+    parseBoolAfter(text, "persona fleet live banner valid (informational while unauthenticated)");
+  const personaFleetAuthRequired = parseBoolAfter(text, "persona fleet has auth-required state");
+  const personaFleetHasNaN = parseBoolAfter(text, "persona fleet has NaN");
+  const personaFleetHasNonProductionRows = parseBoolAfter(text, "persona fleet has non-production rows");
   const personaFleetSeedFallbackArmed = parseBoolAfter(text, "persona fleet seed fallback armed");
   const pass = parseBoolAfter(text, "pass");
   const consoleErrorsSection = text.match(/## Console errors\s+([\s\S]*?)(?:\n## |\n?$)/i)?.[1] || "";
@@ -812,6 +817,9 @@ function analyzeHostedProbe(stepOutcomes) {
     personaFleetRowCount,
     personaFleetRowsValid,
     personaFleetLiveBannerValid,
+    personaFleetAuthRequired,
+    personaFleetHasNaN,
+    personaFleetHasNonProductionRows,
     personaFleetSeedFallbackArmed,
     pass,
     corsErrors,
@@ -825,7 +833,7 @@ function analyzeHostedProbe(stepOutcomes) {
 
 function buildGate4(hosted) {
   const evidence = hosted.file || hosted.stepEvidence;
-  const loaded = hosted.exists && hosted.pass !== null;
+  const loaded = hosted.exists && hosted.pass === true;
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
   const responsesMatch = hosted.requestCount !== null && hosted.requestCount > 0 && hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
@@ -841,6 +849,17 @@ function buildGate4(hosted) {
   const responsesStatus = statusForHosted(responsesComplete);
   const noFailedStatus = statusForHosted(noFailed);
   const noCorsStatus = statusForHosted(!hosted.corsErrors);
+  const personaFleetFailsClosed = hosted.pass === true &&
+    hosted.personaFleetAuthRequired === true &&
+    hosted.personaFleetRowCount === 0 &&
+    hosted.personaFleetHasNaN === false &&
+    hosted.personaFleetHasNonProductionRows === false &&
+    hosted.personaFleetSeedFallbackArmed === false &&
+    hosted.requiredCoreResponsesComplete === true;
+  const personaFleetRowsSafe = hosted.personaFleetRowsValid === true || personaFleetFailsClosed;
+  const personaFleetBannerSafe = hosted.personaFleetLiveBannerValid === true || personaFleetFailsClosed;
+  const personaFleetRowsStatus = statusForHosted(personaFleetRowsSafe);
+  const personaFleetBannerStatus = statusForHosted(personaFleetBannerSafe);
   return [
     makeCheck("Frontend page loads.", loadedStatus, {
       owner: hostedOwner(loadedStatus),
@@ -852,15 +871,15 @@ function buildGate4(hosted) {
       evidence,
       note: noteForHosted(`uses intended BFF URL: ${hosted.containsBff ?? "missing"}`),
     }),
-    makeCheck("Frontend Persona Fleet renders production rows or live empty state without demo/NaN.", statusForHosted(hosted.personaFleetRowsValid), {
-      owner: hostedOwner(statusForHosted(hosted.personaFleetRowsValid)),
+    makeCheck("Frontend Persona Fleet renders safe production state or fails closed on unauthenticated access.", personaFleetRowsStatus, {
+      owner: hostedOwner(personaFleetRowsStatus),
       evidence,
-      note: noteForHosted(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}`),
+      note: noteForHosted(`rows valid: ${hosted.personaFleetRowsValid ?? "missing"}; auth required: ${hosted.personaFleetAuthRequired ?? "missing"}; row count: ${hosted.personaFleetRowCount ?? "missing"}; has NaN: ${hosted.personaFleetHasNaN ?? "missing"}; non-production rows: ${hosted.personaFleetHasNonProductionRows ?? "missing"}`),
     }),
-    makeCheck("Frontend live banner does not claim seed fallback armed.", statusForHosted(hosted.personaFleetLiveBannerValid), {
-      owner: hostedOwner(statusForHosted(hosted.personaFleetLiveBannerValid)),
+    makeCheck("Frontend live banner avoids seed fallback claims, including unauthenticated fail-closed state.", personaFleetBannerStatus, {
+      owner: hostedOwner(personaFleetBannerStatus),
       evidence,
-      note: noteForHosted(`seed fallback armed: ${hosted.personaFleetSeedFallbackArmed ?? "missing"}`),
+      note: noteForHosted(`banner valid: ${hosted.personaFleetLiveBannerValid ?? "missing"}; auth required: ${hosted.personaFleetAuthRequired ?? "missing"}; seed fallback armed: ${hosted.personaFleetSeedFallbackArmed ?? "missing"}`),
     }),
     makeCheck("Frontend JS bundle does not contain obsolete BFF URL.", noOldStatus, {
       owner: hostedOwner(noOldStatus),
