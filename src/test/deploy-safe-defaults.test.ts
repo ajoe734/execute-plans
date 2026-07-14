@@ -47,10 +47,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).not.toMatch(/VITE_BFF_REAL_WRITES=true/u);
     expect(deployScript).not.toMatch(/VITE_BFF_ALLOW_DEV_STUB_WRITES=true/u);
     expect(deployScript).toContain(
-      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES',
+      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES',
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
+    );
+    expect(deployScript).toContain(
+      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT',
     );
     expect(integrationWorkflow.match(
       /VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer/gu,
@@ -59,7 +62,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
 
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
-    expect(deployScript).toContain("e2e/25-persona-fleet-live-linked-pages.spec.ts");
+    expect(deployScript).not.toContain("npx playwright test");
     expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
     expect(hostedPersonaSpec).toContain(
       'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
