@@ -39,6 +39,7 @@ import {
 import { chartSpecForKind, chartSpecSummary } from "./workspaceChartSpec";
 import WorkspaceWidgetRevisionDrawer from "./WorkspaceWidgetRevisionDrawer";
 import { agoraCopy } from "@/agora/i18n";
+import { useIsNarrowViewport } from "@/agora/responsive";
 
 const GRID_COLS = 12;
 const GRID_WIDTH = 1320;
@@ -604,6 +605,7 @@ export function WorkspaceGridEditor({
   onSwitchStrategy,
 }: WorkspaceGridEditorProps) {
   const { t } = useTranslation();
+  const isNarrowViewport = useIsNarrowViewport();
   const [baseWorkspace, setBaseWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [draftWorkspace, setDraftWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [currentEtag, setCurrentEtag] = useState<string | null>(initialEtag ?? null);
@@ -975,6 +977,7 @@ export function WorkspaceGridEditor({
   }
 
   function handleAskServant(prompt: string) {
+    if (!activeView) return;
     const currentY = maxViewY(activeView.widgets);
     const parsed = parseNewWidgetPrompt(prompt, draftWorkspace.strategyId, currentY);
     setWidgetProposal({
@@ -983,6 +986,37 @@ export function WorkspaceGridEditor({
       problem: parsed.problem,
       mapping: parsed.mapping,
     });
+  }
+
+  function renderWidgetCard(widget: TradingRoomWidgetSpec, viewId: string, stacked = false) {
+    return (
+      <div
+        data-testid={`workspace-grid-cell-${widget.id}`}
+        key={widget.id}
+        style={stacked ? { minHeight: 260, width: "100%" } : undefined}
+      >
+        <WorkspaceWidgetCard
+          editMode={editMode}
+          menuOpen={menuWidgetId === widget.id}
+          onChangeChart={(kind) => handleChangeChart(widget, kind)}
+          onDuplicate={() => handleDuplicate(widget)}
+          onMenuToggle={() => setMenuWidgetId((current) => current === widget.id ? null : widget.id)}
+          onRemove={() => handleRemove(widget)}
+          onRequestRevision={() => {
+            setMenuWidgetId(null);
+            setRevisionTarget({ viewId, widgetId: widget.id });
+          }}
+          onEditDataRange={() => handleEditDataRange(widget)}
+          onAddBenchmark={() => handleAddBenchmark(widget)}
+          onMarkUseful={() => handleMarkUseful(widget)}
+          onMarkNotUseful={() => handleMarkNotUseful(widget)}
+          onWhyShown={() => handleWhyShown(widget)}
+          onViewEvidence={() => handleViewEvidence(widget)}
+          widget={widget}
+          workspaceEvents={workspaceEvents}
+        />
+      </div>
+    );
   }
 
   if (!activeView) {
@@ -1012,7 +1046,7 @@ export function WorkspaceGridEditor({
       >
         {/* Row 1: Identity & State badges */}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, minWidth: 0 }}>
             <span style={{ fontSize: 18, fontWeight: 800, color: COLORS.text }}>
               {strategy?.title || "Winner Branch"}
             </span>
@@ -1087,7 +1121,7 @@ export function WorkspaceGridEditor({
             </span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             <span
               data-testid="workspace-dashboard-version"
               style={{
@@ -1218,6 +1252,16 @@ export function WorkspaceGridEditor({
           </div>
         ) : null}
 
+        {isNarrowViewport ? (
+          <div
+            data-testid="workspace-narrow-layout-notice"
+            style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.5 }}
+          >
+            Widgets are shown as a stacked narrow preview. Desktop grid coordinates stay unchanged; explicit add,
+            remove, chart, and revision actions remain available.
+          </div>
+        ) : null}
+
         {showAddLibrary ? (
           <AddWidgetLibrary
             onAdd={handleAddFromLibrary}
@@ -1264,49 +1308,37 @@ export function WorkspaceGridEditor({
             background: editMode
               ? "linear-gradient(rgba(232, 183, 80, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(232, 183, 80, 0.1) 1px, transparent 1px)"
               : "transparent",
-            backgroundSize: editMode ? "110px 74px" : undefined,
+            backgroundSize: editMode && !isNarrowViewport ? "110px 74px" : undefined,
             border: editMode ? `1px dashed ${COLORS.borderStrong}` : "1px solid transparent",
             borderRadius: 8,
-            minWidth: GRID_WIDTH,
+            minWidth: isNarrowViewport ? 0 : GRID_WIDTH,
             padding: editMode ? 8 : 0,
           }}
         >
-          <GridLayout
-            className="layout"
-            cols={GRID_COLS}
-            draggableHandle=".workspace-widget-drag-handle"
-            isDraggable={editMode}
-            isResizable={editMode}
-            layout={layoutFromWidgets(visibleWidgets)}
-            rowHeight={ROW_HEIGHT}
-            width={GRID_WIDTH}
-            onLayoutChange={handleLayoutChange}
-          >
-            {visibleWidgets.map((widget) => (
-              <div key={widget.id} data-testid={`workspace-grid-cell-${widget.id}`}>
-                <WorkspaceWidgetCard
-                  editMode={editMode}
-                  menuOpen={menuWidgetId === widget.id}
-                  onChangeChart={(kind) => handleChangeChart(widget, kind)}
-                  onDuplicate={() => handleDuplicate(widget)}
-                  onMenuToggle={() => setMenuWidgetId((current) => current === widget.id ? null : widget.id)}
-                  onRemove={() => handleRemove(widget)}
-                  onRequestRevision={() => {
-                    setMenuWidgetId(null);
-                    setRevisionTarget({ viewId: activeView.id, widgetId: widget.id });
-                  }}
-                  onEditDataRange={() => handleEditDataRange(widget)}
-                  onAddBenchmark={() => handleAddBenchmark(widget)}
-                  onMarkUseful={() => handleMarkUseful(widget)}
-                  onMarkNotUseful={() => handleMarkNotUseful(widget)}
-                  onWhyShown={() => handleWhyShown(widget)}
-                  onViewEvidence={() => handleViewEvidence(widget)}
-                  widget={widget}
-                  workspaceEvents={workspaceEvents}
-                />
-              </div>
-            ))}
-          </GridLayout>
+          {isNarrowViewport ? (
+            <div
+              data-testid="workspace-grid-stacked"
+              style={{ display: "grid", gap: 12, minWidth: 0, width: "100%" }}
+            >
+              {[...visibleWidgets]
+                .sort((left, right) => left.placement.y - right.placement.y || left.placement.x - right.placement.x)
+                .map((widget) => renderWidgetCard(widget, activeView.id, true))}
+            </div>
+          ) : (
+            <GridLayout
+              className="layout"
+              cols={GRID_COLS}
+              draggableHandle=".workspace-widget-drag-handle"
+              isDraggable={editMode}
+              isResizable={editMode}
+              layout={layoutFromWidgets(visibleWidgets)}
+              rowHeight={ROW_HEIGHT}
+              width={GRID_WIDTH}
+              onLayoutChange={handleLayoutChange}
+            >
+              {visibleWidgets.map((widget) => renderWidgetCard(widget, activeView.id))}
+            </GridLayout>
+          )}
         </div>
 
         {error ? (
@@ -1322,7 +1354,7 @@ export function WorkspaceGridEditor({
 
         {/* Dashboard Version History Section */}
         <section data-testid="workspace-version-history" style={{ marginTop: 24, borderTop: `1px solid ${COLORS.border}`, paddingTop: 16 }}>
-          <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginBottom: 12 }}>
             <strong style={{ color: COLORS.text, fontSize: 14 }}>Dashboard Version History</strong>
             {versionError ? <span style={{ color: COLORS.danger, fontSize: 12 }}>{versionError}</span> : null}
           </div>
@@ -1363,8 +1395,8 @@ export function WorkspaceGridEditor({
                     gap: 6,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                       <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 800 }}>
                         Version {version.dashboardVersion}
                       </span>
@@ -1475,7 +1507,9 @@ export function WorkspaceGridEditor({
               background: COLORS.panelElevated,
               border: `1px solid ${COLORS.borderStrong}`,
               borderRadius: 8,
+              maxHeight: "calc(100dvh - 32px)",
               maxWidth: 580,
+              overflowY: "auto",
               width: "100%",
               padding: 20,
               boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
@@ -1539,7 +1573,7 @@ export function WorkspaceGridEditor({
                   }}
                   data-testid="workspace-widget-proposal-adjust-input"
                 />
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
                   <button
                     onClick={() => {
                       setIsAdjusting(false);
@@ -1581,7 +1615,10 @@ export function WorkspaceGridEditor({
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, width: "100%" }}>
+              <div
+                className="agora-drawer-action-footer"
+                style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8, marginTop: 10, width: "100%" }}
+              >
                 <button
                   onClick={() => setWidgetProposal(null)}
                   style={secondaryButtonStyle}

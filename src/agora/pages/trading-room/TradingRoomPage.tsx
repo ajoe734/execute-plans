@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
@@ -949,10 +950,18 @@ function CandidateReviewDrawer({
   const drawerRef = React.useRef<HTMLDivElement>(null);
   const closeBtnRef = React.useRef<HTMLButtonElement>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
+  const backgroundRef = React.useRef<HTMLElement | null>(null);
 
   // Focus trap and Escape key closing behavior
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement;
+    backgroundRef.current =
+      document.querySelector<HTMLElement>('[data-testid="trading-desk-main"]') ??
+      document.querySelector<HTMLElement>('[data-testid="trading-room-page"]');
+    backgroundRef.current?.setAttribute("inert", "");
+    backgroundRef.current?.setAttribute("aria-hidden", "true");
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     if (closeBtnRef.current) {
       closeBtnRef.current.focus();
     }
@@ -988,6 +997,9 @@ function CandidateReviewDrawer({
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      backgroundRef.current?.removeAttribute("inert");
+      backgroundRef.current?.removeAttribute("aria-hidden");
+      document.body.style.overflow = previousBodyOverflow;
       if (previousFocusRef.current) {
         previousFocusRef.current.focus();
       }
@@ -1012,7 +1024,7 @@ function CandidateReviewDrawer({
     return strategies[0].strategy_id;
   })();
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex justify-end"
       data-testid="candidate-review-drawer"
@@ -1025,7 +1037,7 @@ function CandidateReviewDrawer({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Slide-over Content */}
-      <div className="relative w-[380px] h-full bg-[#1e2330] border-l border-[#2a2e38] shadow-2xl flex flex-col text-xs text-[#f0ece4] z-10 animate-in slide-in-from-right duration-200">
+      <div className="agora-candidate-drawer-panel relative h-full w-[380px] bg-[#1e2330] border-l border-[#2a2e38] shadow-2xl flex flex-col text-xs text-[#f0ece4] z-10 animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
         <div className="p-4 border-b border-[#2a2e38] bg-[#171b22] flex justify-between items-center">
           <div>
@@ -1115,7 +1127,7 @@ function CandidateReviewDrawer({
         </div>
 
         {/* Governed Actions Footer */}
-        <div className="p-4 border-t border-[#2a2e38] bg-[#171b22] space-y-2">
+        <div className="agora-drawer-action-footer p-4 border-t border-[#2a2e38] bg-[#171b22] space-y-2">
           <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">{t("agora.tradingRoom.candidates.headers.governedActions", { defaultValue: "Governed Actions" })}</h3>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -1164,7 +1176,8 @@ function CandidateReviewDrawer({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1501,6 +1514,7 @@ function TradingRoomDefaultEntry({
   candidatesLoading = false,
 }: TradingRoomDefaultEntryProps): JSX.Element {
   const { t } = useTranslation();
+  const [mobilePane, setMobilePane] = useState<"tasks" | "context">("tasks");
   const strategies = aggregate.strategies;
   const entryState = strategies.length === 0 ? "empty" : "no-ready-strategy";
 
@@ -1536,10 +1550,49 @@ function TradingRoomDefaultEntry({
         alerts={aggregate.risk_summary.alerts}
       />
 
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }} className="bg-[#111417]">
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-[#2a2e38] bg-[#171b22] px-3 py-2"
+        data-testid="trading-room-mobile-pane-selector"
+      >
+        <button
+          aria-pressed={mobilePane === "tasks"}
+          className={mobilePane === "tasks" ? "rounded bg-[#e8b750] px-3 py-1.5 text-xs font-bold text-[#111417]" : "rounded border border-[#2a2e38] px-3 py-1.5 text-xs text-[#c5cad2]"}
+          onClick={() => setMobilePane("tasks")}
+          type="button"
+        >
+          Decisions
+        </button>
+        <button
+          aria-pressed={mobilePane === "context"}
+          className={mobilePane === "context" ? "rounded bg-[#e8b750] px-3 py-1.5 text-xs font-bold text-[#111417]" : "rounded border border-[#2a2e38] px-3 py-1.5 text-xs text-[#c5cad2]"}
+          onClick={() => setMobilePane("context")}
+          type="button"
+        >
+          Lens context
+        </button>
+        <label className="ml-auto flex min-w-0 items-center gap-1 text-[10px] text-[#8c96a6]">
+          State
+          <select
+            aria-label="Candidate lifecycle state"
+            className="min-w-0 max-w-[9rem] rounded border border-[#2a2e38] bg-[#111417] px-2 py-1 text-xs text-[#f0ece4]"
+            data-testid="trading-room-mobile-filter"
+            onChange={(event) => setCandidateFilter(event.target.value)}
+            value={candidateFilter}
+          >
+            {(Object.keys(stateCounts) as Array<keyof typeof stateCounts>).map((stateKey) => (
+              <option key={stateKey} value={stateKey}>
+                {getLifecycleLabel(stateKey, t)} ({stateCounts[stateKey]})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div data-testid="trading-room-default-entry-body" style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }} className="bg-[#111417]">
         {/* Left Sidebar (Thesis / Rules / Filters) */}
         <div
           data-testid="trading-room-lens-sidebar"
+          className="agora-desktop-only"
           style={{
             width: 240,
             borderRight: "1px solid #2a2e38",
@@ -1650,9 +1703,14 @@ function TradingRoomDefaultEntry({
         </div>
 
         {/* Main Dashboard + Board Column */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <div data-testid="trading-room-lens-content" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
           {/* Lens specific Dashboard container */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16, borderBottom: "1px solid #2a2e38" }} className="overscroll-contain">
+          <div
+            className="overscroll-contain"
+            data-mobile-pane-hidden={mobilePane !== "context"}
+            data-testid="trading-room-lens-dashboard"
+            style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16, borderBottom: "1px solid #2a2e38" }}
+          >
             <h2 style={{ fontSize: 15, fontWeight: 700, color: "#f0ece4", display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
               <span style={{ color: "#e8b750" }}>✦</span>
               {t(currentLens.titleKey, { defaultValue: currentLens.titleZh })} - Monitoring Dashboard
@@ -1710,7 +1768,11 @@ function TradingRoomDefaultEntry({
           </div>
 
           {/* Dense Candidate Board Table */}
-          <div style={{ height: 260, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#171b22" }}>
+          <div
+            data-mobile-pane-hidden={mobilePane !== "tasks"}
+            data-testid="trading-room-candidate-board"
+            style={{ height: 260, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#171b22" }}
+          >
             <div style={{ padding: "8px 16px", borderBottom: "1px solid #2a2e38", background: "#1a1f29", fontWeight: 700, fontSize: 12, color: "#8c96a6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{t("agora.tradingRoom.candidates.headers.boardTitle", { count: filteredCandidates.length, defaultValue: `CANDIDATE & MONITORING BOARD (${filteredCandidates.length})` })}</span>
               <span style={{ fontSize: 9, color: "#737d8e", fontFamily: "monospace", textTransform: "uppercase" }}>
@@ -1729,7 +1791,45 @@ function TradingRoomDefaultEntry({
                   {t("agora.tradingRoom.candidates.headers.noCandidates", { defaultValue: "No candidates in this state. Try changing the lifecycle state filter." })}
                 </div>
               ) : (
-                <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse", fontSize: 12 }} data-testid="candidate-board-table">
+                <>
+                <div className="agora-mobile-only flex-col gap-2 p-3" data-testid="candidate-board-mobile">
+                  {filteredCandidates.map((candidate, index) => (
+                    <article
+                      className="rounded-lg border border-[#2a2e38] bg-[#111417] p-3"
+                      data-testid={`candidate-mobile-card-${candidate.symbol}`}
+                      key={candidate.id}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-[#737d8e]">
+                            #{index + 1} · {getLifecycleLabel(candidate.state, t)}
+                          </div>
+                          <h3 className="mt-1 truncate text-sm font-bold text-[#f0ece4]">
+                            {candidate.symbol} · {candidate.name}
+                          </h3>
+                        </div>
+                        <span className="shrink-0 font-mono text-base font-bold text-[#e8b750]">
+                          {candidate.score}
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#c5cad2]">
+                        {candidate.reason}
+                      </p>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="line-clamp-1 text-[10px] text-[#f05c61]">Risk: {candidate.concerns}</span>
+                        <button
+                          className="shrink-0 rounded border border-[rgba(232,183,80,0.45)] px-3 py-1.5 text-xs font-bold text-[#e8b750]"
+                          data-testid={`review-mobile-btn-${candidate.symbol}`}
+                          onClick={() => setSelectedCandidate(candidate)}
+                          type="button"
+                        >
+                          {t("agora.tradingRoom.candidates.headers.action", { defaultValue: "Review" })}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <table className="agora-desktop-only" style={{ width: "100%", textAlign: "left", borderCollapse: "collapse", fontSize: 12 }} data-testid="candidate-board-table">
                   <thead>
                     <tr style={{ borderBottom: "1px solid #2a2e38", color: "#8c96a6", background: "rgba(20,24,32,0.5)", position: "sticky", top: 0 }}>
                       <th style={{ padding: 8, fontWeight: 600, textAlign: "center", width: 40 }}>
@@ -1940,6 +2040,7 @@ function TradingRoomDefaultEntry({
                     ))}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
           </div>
@@ -2122,10 +2223,12 @@ function StrategyWorkspaceView({
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
   const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"decisions" | "workspace">("decisions");
 
   useEffect(() => {
     setWorkspaceResult(null);
     setSelectedPreviewViewId(null);
+    setMobilePane("decisions");
   }, [strategyId, resolvedStrategyVersion]);
 
   useEffect(() => {
@@ -2140,6 +2243,7 @@ function StrategyWorkspaceView({
     setProposal(null);
     setProposalError(null);
     setProposalLoading(true);
+    setMobilePane("workspace");
 
     createTradingRoomWorkspaceProposal(
       strategyId,
@@ -2237,11 +2341,42 @@ function StrategyWorkspaceView({
         alerts={aggregate.risk_summary.alerts}
       />
 
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-[#2a2e38] bg-[#171b22] px-3 py-2"
+        data-testid="trading-room-workspace-pane-selector"
+      >
+        <button
+          aria-pressed={mobilePane === "decisions"}
+          className={mobilePane === "decisions" ? "rounded bg-[#e8b750] px-3 py-1.5 text-xs font-bold text-[#111417]" : "rounded border border-[#2a2e38] px-3 py-1.5 text-xs text-[#c5cad2]"}
+          onClick={() => setMobilePane("decisions")}
+          type="button"
+        >
+          Decisions ({filteredEvents.length})
+        </button>
+        <button
+          aria-pressed={mobilePane === "workspace"}
+          className={mobilePane === "workspace" ? "rounded bg-[#e8b750] px-3 py-1.5 text-xs font-bold text-[#111417]" : "rounded border border-[#2a2e38] px-3 py-1.5 text-xs text-[#c5cad2]"}
+          onClick={() => setMobilePane("workspace")}
+          type="button"
+        >
+          Workspace
+        </button>
+      </div>
+
+      <div
+        data-mobile-workspace-pane={mobilePane}
+        data-testid="trading-room-workspace-layout"
+        style={{ flex: 1, display: "flex", overflow: "hidden" }}
+      >
         <div
           data-testid="trading-room-workspace-column"
           style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
         >
+          <div
+            data-mobile-pane-hidden={mobilePane !== "workspace"}
+            data-testid="trading-room-workspace-surface"
+            style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden" }}
+          >
           {!resolvedStrategyVersion ? (
             <div
               data-testid="trading-room-strategy-version-required"
@@ -2310,10 +2445,19 @@ function StrategyWorkspaceView({
               </div>
             </div>
           )}
+          </div>
 
-          <TradingEventQueue events={filteredEvents} loading={eventsLoading} eventsEtag={eventsEtag} />
+          <div
+            data-mobile-pane-hidden={mobilePane !== "decisions"}
+            data-testid="trading-room-decision-surface"
+            style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}
+          >
+            <TradingEventQueue events={filteredEvents} loading={eventsLoading} eventsEtag={eventsEtag} />
+          </div>
         </div>
-        <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+        <div data-mobile-pane-hidden={mobilePane !== "decisions"} data-testid="trading-room-position-surface">
+          <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+        </div>
       </div>
     </div>
   );
@@ -2355,6 +2499,7 @@ export function TradingRoomPage({
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateRecord | null>(null);
   const [candidateFilter, setCandidateFilter] = useState<string>("all");
   const [activeStrategyIdOverride, setActiveStrategyIdOverride] = useState<string | null>(null);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
@@ -2495,14 +2640,47 @@ export function TradingRoomPage({
       data-testid="trading-room-page"
       style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "#111417", color: "#f0ece4" }}
     >
-      <StrategyLensSwitcher
-        strategies={aggregate.strategies}
-        activeStrategyId={effectiveStrategyId}
-        onSelect={handleStrategySelect}
-        activeLensId={activeLensId}
-        setActiveLensId={setActiveLensId}
-        candidates={candidates}
-      />
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-3 border-b border-[#2a2e38] bg-[#111417] px-3 py-2"
+        data-testid="trading-room-mobile-priority"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#8c96a6]">Current task</div>
+          <div className="truncate text-xs font-semibold text-[#f0ece4]">
+            {activeStrategy?.title ?? STRATEGY_LENSES.find((lens) => lens.id === activeLensId)?.titleZh}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className={aggregate.risk_summary.state === "normal" ? "text-xs font-bold text-[#43cf94]" : "text-xs font-bold text-[#f05c61]"}>
+            Risk: {aggregate.risk_summary.state}
+          </div>
+          <div className="text-[10px] text-[#e8b750]">
+            Pending {Object.values(aggregate.queue_summary).reduce((total, count) => total + count, 0)}
+          </div>
+        </div>
+        <button
+          aria-expanded={mobileNavigationOpen}
+          className="shrink-0 rounded border border-[#2a2e38] px-2.5 py-1.5 text-xs font-semibold text-[#c5cad2]"
+          onClick={() => setMobileNavigationOpen((open) => !open)}
+          type="button"
+        >
+          {mobileNavigationOpen ? "Hide lenses" : "Lenses"}
+        </button>
+      </div>
+
+      <div data-mobile-collapsed={!mobileNavigationOpen} data-testid="trading-room-navigation">
+        <StrategyLensSwitcher
+          strategies={aggregate.strategies}
+          activeStrategyId={effectiveStrategyId}
+          onSelect={(id) => {
+            handleStrategySelect(id);
+            setMobileNavigationOpen(false);
+          }}
+          activeLensId={activeLensId}
+          setActiveLensId={setActiveLensId}
+          candidates={candidates}
+        />
+      </div>
 
       {effectiveStrategyId ? (
         <StrategyWorkspaceView

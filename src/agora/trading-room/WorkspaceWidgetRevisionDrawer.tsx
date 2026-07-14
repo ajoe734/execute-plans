@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   DataAvailabilityStatus,
@@ -303,6 +304,7 @@ function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }
         {durable ? "Backend beforeSpec / proposedSpec field diff" : "Draft field diff before proposal"}
       </div>
       <div
+        className="workspace-widget-diff-header"
         style={{
           background: "#202532",
           borderTop: "1px solid #343b4c",
@@ -319,6 +321,7 @@ function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }
       </div>
       {rows.map((row) => (
         <div
+          className="workspace-widget-diff-row"
           data-changed={row.changed ? "true" : "false"}
           data-testid={`workspace-widget-diff-${row.id}`}
           key={row.id}
@@ -354,6 +357,7 @@ export function WorkspaceWidgetRevisionDrawer({
   const [proposalEtag, setProposalEtag] = useState<string | null>(null);
   const [state, setState] = useState<SubmitState>("idle");
   const [error, setError] = useState<RevisionUiError | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -455,47 +459,62 @@ export function WorkspaceWidgetRevisionDrawer({
   const diffRows = buildWidgetDiffRows(beforeSpec, afterSpec);
 
   return (
-    <div
-      data-testid="workspace-widget-revision-overlay"
-      onClick={onClose}
-      style={{
-        background: "rgba(6, 8, 14, 0.64)",
-        bottom: 0,
-        display: "flex",
-        justifyContent: "flex-end",
-        left: 0,
-        position: "fixed",
-        right: 0,
-        top: 0,
-        zIndex: 80,
+    <DialogPrimitive.Root
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
       }}
+      open={open}
     >
-      <aside
-        aria-label="Widget Adjustment Drawer"
-        data-testid="workspace-widget-revision-drawer"
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          background: "#202532",
-          borderLeft: "1px solid #3a4254",
-          color: "#f6f8fc",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          maxWidth: "100%",
-          width: 520,
-        }}
-      >
-        <header style={{ borderBottom: "1px solid #343b4c", display: "flex", justifyContent: "space-between", gap: 12, padding: "18px 20px" }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          data-testid="workspace-widget-revision-overlay"
+          style={{ background: "rgba(6, 8, 14, 0.64)", inset: 0, position: "fixed", zIndex: 80 }}
+        />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className="agora-narrow-workspace-revision"
+          data-testid="workspace-widget-revision-drawer"
+          onCloseAutoFocus={(event) => {
+            const previousFocus = previousFocusRef.current;
+            if (previousFocus?.isConnected) {
+              event.preventDefault();
+              previousFocus.focus();
+            }
+          }}
+          onOpenAutoFocus={() => {
+            previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          style={{
+            background: "#202532",
+            borderLeft: "1px solid #3a4254",
+            bottom: 0,
+            color: "#f6f8fc",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            maxWidth: "100%",
+            position: "fixed",
+            right: 0,
+            top: 0,
+            width: 520,
+            zIndex: 81,
+          }}
+        >
+        <header className="agora-narrow-drawer" style={{ borderBottom: "1px solid #343b4c", display: "flex", justifyContent: "space-between", gap: 12, padding: "18px 20px" }}>
           <div>
             <div style={{ color: "#f0b84d", fontSize: 12, fontWeight: 900 }}>Widget Adjustment Drawer</div>
-            <h2 style={{ color: "#ffffff", fontSize: 16, fontWeight: 900, letterSpacing: 0, margin: "3px 0 0" }}>
-              交代僕人修改 Widget
-            </h2>
+            <DialogPrimitive.Title asChild>
+              <h2 style={{ color: "#ffffff", fontSize: 16, fontWeight: 900, letterSpacing: 0, margin: "3px 0 0" }}>
+                交代僕人修改 Widget
+              </h2>
+            </DialogPrimitive.Title>
             <div style={{ color: "#9aa5b8", fontSize: 12, marginTop: 3 }}>{widget.title}</div>
           </div>
-          <button aria-label="Close widget revision drawer" onClick={onClose} style={iconButtonStyle} type="button">
-            ×
-          </button>
+          <DialogPrimitive.Close asChild>
+            <button aria-label="Close widget revision drawer" style={iconButtonStyle} type="button">
+              ×
+            </button>
+          </DialogPrimitive.Close>
         </header>
 
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px 18px" }}>
@@ -530,8 +549,12 @@ export function WorkspaceWidgetRevisionDrawer({
           ) : null}
 
           <form onSubmit={submitProposal} style={{ display: "grid", gap: 10, marginTop: 14 }}>
+            <label htmlFor="workspace-widget-revision-instruction" style={{ color: "#c4ccda", fontSize: 12, fontWeight: 800 }}>
+              Revision instruction
+            </label>
             <textarea
               data-testid="workspace-widget-revision-input"
+              id="workspace-widget-revision-instruction"
               onChange={(event) => setInstruction(event.target.value)}
               placeholder="例如：把這張圖改成分點為列、日期為欄的熱圖..."
               style={textareaStyle}
@@ -593,7 +616,7 @@ export function WorkspaceWidgetRevisionDrawer({
 
           <section data-testid="workspace-widget-before-after-preview" style={{ marginTop: 16 }}>
             <div style={{ color: "#8793a8", fontSize: 11, fontWeight: 900, marginBottom: 9 }}>Before / After Preview</div>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+            <div className="workspace-widget-before-after-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
               <PreviewCard label="目前" widget={beforeSpec} />
               <PreviewCard label="僕人建議" widget={afterSpec} />
             </div>
@@ -603,7 +626,7 @@ export function WorkspaceWidgetRevisionDrawer({
           </section>
         </div>
 
-        <footer style={{ background: "#1a1f2a", borderTop: "1px solid #343b4c", display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 20px" }}>
+        <footer className="agora-drawer-action-footer" style={{ background: "#1a1f2a", borderTop: "1px solid #343b4c", display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 20px" }}>
           {proposal ? (
             <>
               <button
@@ -638,8 +661,9 @@ export function WorkspaceWidgetRevisionDrawer({
             取消
           </button>
         </footer>
-      </aside>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
