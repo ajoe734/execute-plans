@@ -33,9 +33,18 @@ const STATUS_COLOR: Record<DataAvailabilityStatus, { bg: string; fg: string; bor
   unavailable: { bg: "rgba(255, 107, 107, 0.13)", fg: COLORS.danger, border: "rgba(255, 107, 107, 0.42)" },
 };
 
+function safeAvailabilityStatus(value: unknown): DataAvailabilityStatus {
+  return value === "complete" || value === "partial" || value === "unavailable"
+    ? value
+    : "unavailable";
+}
+
 function StatusPill({ status }: { status: DataAvailabilityStatus }) {
   const { t } = useTranslation();
-  const color = STATUS_COLOR[status];
+  // Transport normalization owns canonical aliases, but keep the render path
+  // fail-safe for unexpected persisted values instead of crashing the route.
+  const safeStatus = safeAvailabilityStatus(status);
+  const color = STATUS_COLOR[safeStatus];
   return (
     <span
       style={{
@@ -53,7 +62,7 @@ function StatusPill({ status }: { status: DataAvailabilityStatus }) {
         whiteSpace: "nowrap",
       }}
     >
-      {t(`agora.tradingRoom.availability.${status}`)}
+      {t(`agora.tradingRoom.availability.${safeStatus}`)}
     </span>
   );
 }
@@ -124,7 +133,9 @@ function ViewProposalCard({
     .map((widget) => ({ widget, validation: validateTradingRoomWidgetSpec(widget) }))
     .filter((entry) => !entry.validation.ok);
   const widgetAvailability = view.widgets.map((widget) => ({
-    status: widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability ?? "unavailable",
+    status: safeAvailabilityStatus(
+      widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability,
+    ),
     widget,
   }));
   const counts = widgetAvailability.reduce(
@@ -249,9 +260,12 @@ export function WorkspaceProposalPreview({
   selectedViewId,
 }: WorkspaceProposalPreviewProps) {
   const { t } = useTranslation();
-  const availability = proposal.dataAvailability.status;
+  const availability = safeAvailabilityStatus(proposal.dataAvailability.status);
   const sourceStatuses = new Map(
-    proposal.dataAvailability.sources.map((source) => [source.dataSource, source.status] as const),
+    proposal.dataAvailability.sources.map((source) => [
+      source.dataSource,
+      safeAvailabilityStatus(source.status),
+    ] as const),
   );
   const personalizationItems = proposal.personalizationApplied.items ?? [];
   const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
