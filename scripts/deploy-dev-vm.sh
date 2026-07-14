@@ -197,6 +197,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
   PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
   PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/management/persona-fleet}" \
+  PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE="true" \
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs

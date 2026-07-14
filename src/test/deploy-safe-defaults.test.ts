@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
 const deployScript = readFileSync(deployScriptPath, "utf8");
+const hostedProbeScript = readFileSync(
+  resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
+  "utf8",
+);
 const integrationWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
   "utf8",
@@ -62,8 +66,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
 
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
+    expect(deployScript).toContain('PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE="true"');
     expect(deployScript).not.toContain("npx playwright test");
     expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
+    expect(hostedProbeScript).toContain(
+      'process.env.PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE === "true"',
+    );
+    expect(hostedProbeScript).toContain(
+      "response.status === 401 || response.status === 403",
+    );
     expect(hostedPersonaSpec).toContain(
       'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
     );

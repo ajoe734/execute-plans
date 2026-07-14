@@ -12,6 +12,8 @@ const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
+const ACCEPT_AUTH_CHALLENGE =
+  process.env.PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE === "true";
 const REQUIRED_CORE_BFF_PATHS = parsePathList(process.env.PANTHEON_HOSTED_REQUIRED_BFF_PATHS, [
   "/bff/management/persona-fleet",
 ]);
@@ -91,8 +93,12 @@ function isCoreBffResponse(res, expectedPath) {
 }
 
 function isAcceptableCoreStatus(response) {
+  if (response.status >= 200 && response.status < 400) return true;
+  if (ACCEPT_AUTH_CHALLENGE && (response.status === 401 || response.status === 403)) {
+    return true;
+  }
   if (response.path === "/bff/me") return response.status >= 200 && response.status < 500;
-  return response.status >= 200 && response.status < 400;
+  return false;
 }
 
 function isRequiredCorePath(pathname) {
@@ -292,6 +298,7 @@ const md = [
   `nocache: ${NOCACHE_SHA}`,
   `timeout ms: ${OVERALL_TIMEOUT_MS}`,
   `navigation waitUntil: ${NAVIGATION_WAIT_UNTIL}`,
+  `auth challenge accepted as routing proof: ${ACCEPT_AUTH_CHALLENGE}`,
   `core waitForResponse paths: ${CORE_BFF_PATHS.join(", ")}`,
   `required core waitForResponse paths: ${REQUIRED_CORE_BFF_PATHS.join(", ")}`,
   `optional core waitForResponse paths: ${OPTIONAL_CORE_BFF_PATHS.join(", ")}`,
