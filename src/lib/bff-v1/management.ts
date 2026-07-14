@@ -2759,7 +2759,10 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxItem[] | null {
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
   const items = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  return items.length ? items : null;
+  if (isObject(data) && data.meta) {
+    (items as any).meta = data.meta;
+  }
+  return items;
 }
 export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
@@ -3816,7 +3819,15 @@ export const mgmt = {
       return withStrictLiveOrMock<HumanInboxItem[], unknown>(
         { method: "GET", path: paths.mgmtHumanInbox() },
         async () => emptyHumanInbox(),
-        (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
+        (raw) => {
+          const adapted = adaptHumanInboxList(raw);
+          if (adapted) return adapted;
+          const empty = emptyHumanInbox();
+          if (isObject(raw) && raw.meta) {
+            (empty as any).meta = raw.meta;
+          }
+          return empty;
+        },
       );
     },
     get: (id: string): Promise<HumanInboxDetail | undefined> =>
