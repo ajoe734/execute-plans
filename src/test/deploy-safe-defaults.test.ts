@@ -1,12 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
 const deployScript = readFileSync(deployScriptPath, "utf8");
-const localEnv = readFileSync(resolve(root, ".env"), "utf8");
+const localEnvPath = resolve(root, ".env");
+const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
 const hostedProbeScript = readFileSync(
   resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
   "utf8",
@@ -17,6 +18,10 @@ const deployWorkflow = readFileSync(
 );
 const integrationWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
+  "utf8",
+);
+const branchWorkflow = readFileSync(
+  resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
 const hostedPersonaSpec = readFileSync(
@@ -66,8 +71,36 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
-    expect(localEnv).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
-    expect(localEnv).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(existsSync(localEnvPath)).toBe(false);
+    expect(gitignore).toMatch(/^\.env\*$/mu);
+    expect(gitignore).toMatch(/^!\.env\*\.example$/mu);
+  });
+
+  it("injects public Supabase config explicitly and fails closed when it is missing", () => {
+    expect(deployScript).toContain('SUPABASE_URL="${VITE_SUPABASE_URL:-}"');
+    expect(deployScript).toContain(
+      'SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-}"',
+    );
+    expect(deployScript).toContain(
+      'VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"',
+    );
+    for (const workflow of [branchWorkflow, deployWorkflow, integrationWorkflow]) {
+      expect(workflow).toContain(
+        'VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}',
+      );
+      expect(workflow).toContain(
+        'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
+      );
+    }
+
+    const result = rejectedDeploy({
+      VITE_SUPABASE_PUBLISHABLE_KEY: "",
+      VITE_SUPABASE_URL: "",
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(
+      /VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required/,
+    );
   });
 
   it("keeps every post-deploy acceptance probe read-only", () => {
@@ -84,6 +117,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/health"',
     );
     expect(hostedProbeScript).not.toContain("PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE");
+    expect(hostedProbeScript).toContain('page.on("pageerror"');
+    expect(hostedProbeScript).toContain("rootRendered");
+    expect(hostedProbeScript).toContain("pageErrors.length === 0");
     expect(hostedPersonaSpec).toContain(
       'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
     );

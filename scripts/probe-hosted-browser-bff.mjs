@@ -155,10 +155,12 @@ const responses = [];
 const failed = [];
 const oldUrlHits = [];
 const consoleErrors = [];
+const pageErrors = [];
 const coreResponses = [];
 let html = "";
 let bundleText = "";
 let personaFleetChecks = null;
+let rootChecks = null;
 const bundleFetches = [];
 
 page.on("request", req => {
@@ -179,6 +181,9 @@ page.on("requestfailed", req => {
 page.on("console", msg => {
   if (msg.type() === "error") consoleErrors.push(msg.text());
 });
+page.on("pageerror", error => {
+  pageErrors.push(error.message);
+});
 
 const pageUrl = withNoCache(`${FE_BASE}${FE_PATH}`);
 try {
@@ -190,6 +195,18 @@ try {
   );
 
   await page.goto(pageUrl, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: remainingTimeoutMs() });
+  await page.waitForFunction(() => {
+    const root = document.querySelector("#root");
+    return Boolean(root && (root.childElementCount > 0 || root.textContent?.trim()));
+  }, undefined, { timeout: Math.min(10_000, remainingTimeoutMs()) }).catch(() => {});
+  rootChecks = await page.evaluate(() => {
+    const root = document.querySelector("#root");
+    return {
+      bodyTextLength: (document.body.innerText || "").trim().length,
+      childElementCount: root?.childElementCount ?? 0,
+      rootTextLength: (root?.textContent || "").trim().length,
+    };
+  });
   coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
   coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
 
@@ -277,7 +294,19 @@ const optionalCoreResponsesObserved =
   OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
-const pass = usesIntendedBff && requiredCoreResponseOk && personaFleetOk && oldUrlHitCount === 0 && requests.length > 0 && failed.length === 0;
+const rootRendered = Boolean(
+  rootChecks
+  && rootChecks.bodyTextLength > 0
+  && (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0),
+);
+const pass = usesIntendedBff
+  && requiredCoreResponseOk
+  && personaFleetOk
+  && rootRendered
+  && pageErrors.length === 0
+  && oldUrlHitCount === 0
+  && requests.length > 0
+  && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
@@ -305,6 +334,11 @@ const md = [
   `- old BFF URL hit count: ${oldUrlHitCount}`,
   `- required core BFF responses complete: ${requiredCoreResponseOk}`,
   `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
+  `- root rendered: ${rootRendered}`,
+  `- root child element count: ${rootChecks?.childElementCount ?? 0}`,
+  `- root text length: ${rootChecks?.rootTextLength ?? 0}`,
+  `- body text length: ${rootChecks?.bodyTextLength ?? 0}`,
+  `- page error count: ${pageErrors.length}`,
   ...(personaFleetChecks ? [
     `- persona fleet row count: ${personaFleetChecks.rowCount}`,
     `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
@@ -351,6 +385,10 @@ const md = [
   `## Console errors`,
   ``,
   consoleErrors.length ? consoleErrors.slice(0, 20).map(e => `- ${e}`).join("\n") : "None",
+  ``,
+  `## Page errors`,
+  ``,
+  pageErrors.length ? pageErrors.slice(0, 20).map(e => `- ${e}`).join("\n") : "None",
 ].join("\n");
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
