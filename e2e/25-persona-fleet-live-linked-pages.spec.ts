@@ -89,7 +89,7 @@ test.describe("Persona Fleet live linked-page contract", () => {
     await rankLink.click();
     const rankingTable = page.getByRole("table").first();
     await expect(rankingTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
-    await expect(rankingTable).toContainText("Crypto-Alt-Hunter");
+    await expect(rankingTable).toContainText(personaName);
 
     await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(PERSONA_ID)}`, { waitUntil: "domcontentloaded" });
     await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });

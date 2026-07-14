@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
-vi.mock("../client", () => ({ bffFetch: fetchMock }));
+vi.mock("../client", () => ({ bffFetch: fetchMock, detectBaseUrl: () => "https://bff.example", bffV1: { detectMode: () => "live" } }));
 
 import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys } from "../tradeJourneys";
 
@@ -31,27 +31,39 @@ describe("canonical Trade Journey client", () => {
   });
 });
 
-it("deduplicates revisioned invalidations and marks disconnect stale", () => {
-  class MockEventSource {
-    static instance: MockEventSource;
-    onopen: (() => void) | null = null; onerror: (() => void) | null = null;
-    listeners: Record<string, (event: MessageEvent) => void> = {};
-    constructor(public url: string) { MockEventSource.instance = this; }
-    addEventListener(name: string, listener: EventListener) { this.listeners[name] = listener as (event: MessageEvent) => void; }
-    close = vi.fn();
-  }
-  vi.stubGlobal("EventSource", MockEventSource);
+it("polls the authenticated cursor endpoint, dedupes revisions, and marks failures stale", async () => {
+  vi.useFakeTimers();
+  const sse = (id: number, event: string, payload: Record<string, unknown>) =>
+    ({ ok: true, text: () => Promise.resolve(`id: ${id}\nevent: ${event}\ndata: ${JSON.stringify(payload)}\n\n`) });
+  const responses = [
+    sse(4, "journeys_changed", { revision: 4, gap: false, snapshot_refetch: true }),
+    sse(4, "journeys_changed", { revision: 4, gap: false, snapshot_refetch: true }),
+    sse(3, "journeys_changed", { revision: 3, gap: false, snapshot_refetch: true }),
+    sse(6, "snapshot_refetch_required", { revision: 6, gap: true, snapshot_refetch: true }),
+  ];
+  const fetchSpy = vi.fn(() => responses.length ? Promise.resolve(responses.shift()) : Promise.reject(new Error("down")));
+  vi.stubGlobal("fetch", fetchSpy);
   const invalidate = vi.fn(), state = vi.fn();
   const subscription = subscribeTradeJourneys({ tenant_id: "tenant-a", environment: "paper" }, { onInvalidate: invalidate, onState: state });
-  const source = MockEventSource.instance;
-  expect(source.url).toContain("tenant_id=tenant-a");
-  source.onopen?.();
-  const emit = (revision: number, gap = false) => source.listeners.journeys_changed({ data: JSON.stringify({ revision, gap, snapshot_refetch: true }), lastEventId: String(revision) } as MessageEvent);
-  emit(4); emit(4); emit(3); emit(6, true);
+  expect(state).toHaveBeenCalledWith("connecting");
+  while (responses.length) await vi.advanceTimersByTimeAsync(15_000);
+  // 4 scripted frames: revision 4 invalidates once (repeat + lower revision 3
+  // deduped), gap revision 6 invalidates again.
   expect(invalidate).toHaveBeenCalledTimes(2);
-  source.onerror?.();
+  expect(state).toHaveBeenLastCalledWith("live");
+  const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toContain("https://bff.example/bff/management/trade-journeys/events?");
+  expect(url).toContain("tenant_id=tenant-a");
+  expect((init.headers as Record<string, string>).Accept).toBe("text/event-stream");
+  // Cursor resume: once revision 4 was seen, subsequent polls carry it.
+  const headerSets = fetchSpy.mock.calls.map(call => (call as unknown as [string, RequestInit])[1].headers as Record<string, string>);
+  expect(headerSets.some(h => h["Last-Event-ID"] === "4")).toBe(true);
+  await vi.advanceTimersByTimeAsync(15_000); // transport failure -> stale
   expect(state).toHaveBeenLastCalledWith("stale");
+  const calls = fetchSpy.mock.calls.length;
   subscription.close();
-  expect(source.close).toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(fetchSpy.mock.calls.length).toBe(calls); // closed -> no further polls
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });

@@ -2,7 +2,12 @@ import { CheckCircle2, CircleAlert, CircleDashed, ShieldCheck } from "lucide-rea
 
 import { cn } from "@/lib/utils";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
-import type { WorkshopCard, WorkshopReadinessAssessment } from "@/lib/bff-v1/agora/workshops";
+import type {
+  WorkshopCard,
+  WorkshopCompleteness,
+  WorkshopReadinessAssessment,
+} from "@/lib/bff-v1/agora/workshops";
+import { materializeWorkshopCompleteness } from "./workshopCompletenessDisplay";
 import {
   KeyValueGrid,
   Pill,
@@ -25,16 +30,12 @@ function DimensionIcon({ grade }: { grade: string }) {
   return <CircleAlert className="h-3.5 w-3.5 text-red-500" />;
 }
 
-function dimensionProgress(completeness: StrategyCompleteness): number {
-  const dimensions = completeness.dimensions ?? [];
-  if (!dimensions.length) return 0;
-  const score = dimensions.reduce((sum, dim) => {
-    if (dim.grade === "complete") return sum + 1;
-    if (dim.grade === "partial") return sum + 0.5;
-    return sum;
-  }, 0);
-  return (score / dimensions.length) * 100;
-}
+const OVERALL_PROGRESS: Record<StrategyCompleteness["overall_grade"], number> = {
+  complete: 100,
+  mostly_complete: 75,
+  partial: 50,
+  incomplete: 0,
+};
 
 function ReadinessPanel({
   readiness,
@@ -64,17 +65,24 @@ function ReadinessPanel({
             const gate = stringValue(gateRecord.gate, "unknown");
             const state = stringValue(gateRecord.state);
             const passed = booleanValue(gateRecord.passed);
+            const isReady = passed === true || state === "ready" || state === "passed";
             const stateLabel = state ? formatLabel(state) : passed === undefined ? "Not assessed" : passed ? "Passed" : "Blocked";
             return (
               <div
-                className="space-y-2 border-l border-slate-200 pl-3"
+                className={cn(
+                  "space-y-2 border-l pl-3",
+                  isReady ? "border-green-400 bg-green-50/60 py-2 pr-2" : "border-slate-200",
+                )}
+                data-readiness-state={isReady ? "ready" : "not-ready"}
                 data-testid={`readiness-gate-${gate}`}
                 key={gate}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-xs font-medium text-slate-800">{formatLabel(gate)}</span>
-                  <Pill tone={passed === true || state === "ready" || state === "passed" ? "green" : "amber"}>
+                  <ShieldCheck className={cn("h-3.5 w-3.5", isReady ? "text-green-600" : "text-slate-400")} />
+                  <span className={cn("text-xs font-medium", isReady ? "text-green-900" : "text-slate-800")}>
+                    {formatLabel(gate)}
+                  </span>
+                  <Pill tone={isReady ? "green" : "amber"}>
                     <span data-testid={`readiness-gate-${gate}-state`}>{stateLabel}</span>
                   </Pill>
                 </div>
@@ -122,16 +130,19 @@ function NextQuestionPanel({ card }: { card?: WorkshopCard | null }) {
 
 export function StrategyCompletenessRail({
   completeness,
+  completenessCard,
   readiness,
   nextQuestion,
 }: {
-  completeness: StrategyCompleteness | null;
+  completeness: WorkshopCompleteness | null;
+  completenessCard?: WorkshopCard | null;
   readiness?: WorkshopReadinessAssessment | Record<string, unknown> | null;
   nextQuestion?: WorkshopCard | null;
 }) {
-  const metadata = asRecord(completeness?.metadata);
+  const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
+  const metadata = asRecord(displayCompleteness?.metadata);
 
-  if (!completeness) {
+  if (!displayCompleteness) {
     return (
       <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
         <div className="flex flex-col items-center justify-center gap-2 p-4 text-center" data-testid="completeness-empty">
@@ -143,7 +154,7 @@ export function StrategyCompletenessRail({
     );
   }
 
-  const progress = dimensionProgress(completeness);
+  const progress = OVERALL_PROGRESS[displayCompleteness.overall_grade] ?? 0;
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto p-3" data-testid="strategy-completeness-rail">
@@ -151,26 +162,26 @@ export function StrategyCompletenessRail({
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Completeness</span>
           <span
-            className={cn("text-xs font-semibold", OVERALL_TONE[completeness.overall_grade])}
+            className={cn("text-xs font-semibold", OVERALL_TONE[displayCompleteness.overall_grade] ?? "text-slate-500")}
             data-testid="completeness-overall-grade"
           >
-            {formatLabel(completeness.overall_grade)}
+            {formatLabel(displayCompleteness.overall_grade)}
           </span>
         </div>
-        <ProgressBar value={progress} label="Dimension coverage" />
+        <ProgressBar value={progress} label="Overall completeness" />
       </div>
 
       <KeyValueGrid
         items={[
-          { label: "Research ready", value: completeness.research_ready },
-          { label: "Assessed by", value: completeness.assessed_by_persona_id },
-          { label: "Assessed at", value: completeness.assessed_at },
+          { label: "Research ready", value: displayCompleteness.research_ready },
+          { label: "Assessed by", value: displayCompleteness.assessed_by_persona_id },
+          { label: "Assessed at", value: displayCompleteness.assessed_at },
         ]}
       />
 
       <Section title="Dimensions">
         <div className="space-y-3">
-          {(completeness.dimensions ?? []).map((dim) => (
+          {displayCompleteness.dimensions.map((dim) => (
             <div
               className="space-y-2 border-l border-slate-200 pl-3"
               data-testid={`completeness-dimension-${dim.dimension}`}
@@ -193,7 +204,7 @@ export function StrategyCompletenessRail({
       </Section>
 
       <Section title="Blockers">
-        <TextList items={completeness.blockers} tone="red" />
+        <TextList items={displayCompleteness.blockers} tone="red" />
       </Section>
 
       <ReadinessPanel readiness={readiness} metadata={metadata} />

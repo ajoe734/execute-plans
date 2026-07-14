@@ -1,4 +1,5 @@
-import { bffFetch } from "./client";
+import { bffFetch, bffV1, detectBaseUrl } from "./client";
+import { buildHeaders } from "./headers";
 
 export type JourneyReadState = "formal" | "partial" | "degraded" | "unavailable";
 export type JourneyEnvironment = "paper" | "canary" | "live";
@@ -82,30 +83,66 @@ export const resolveTradeJourney = (query: { q: string; tenant_id: string; envir
 export type JourneyLiveState = "connecting" | "live" | "stale";
 export interface JourneyLiveSubscription { close(): void }
 
+export const JOURNEY_EVENTS_POLL_MS = 15_000;
+
+interface SseFrame { id?: string; event?: string; data?: string }
+
+/** Minimal text/event-stream frame parser (id/event/data lines only). */
+export function parseSseFrames(text: string): SseFrame[] {
+  return text.split(/\n\n+/).map(block => {
+    const frame: SseFrame = {};
+    for (const line of block.split("\n")) {
+      const match = /^(id|event|data):\s?(.*)$/.exec(line);
+      if (!match) continue;
+      if (match[1] === "data") frame.data = frame.data === undefined ? match[2] : `${frame.data}\n${match[2]}`;
+      else frame[match[1] as "id" | "event"] = match[2];
+    }
+    return frame;
+  }).filter(frame => frame.id !== undefined || frame.event !== undefined || frame.data !== undefined);
+}
+
 export function subscribeTradeJourneys(
   query: { tenant_id: string; environment: string },
   handlers: { onInvalidate: () => void; onState: (state: JourneyLiveState) => void },
 ): JourneyLiveSubscription {
-  if (typeof EventSource === "undefined") {
-    handlers.onState("stale");
+  // Mock mode has no live invalidation channel; report live so the seeded
+  // dataset does not render a permanently-stale badge.
+  if (bffV1.detectMode() === "mock") {
+    handlers.onState("live");
     return { close() {} };
   }
-  const params = new URLSearchParams(query);
-  const source = new EventSource(`/bff/management/trade-journeys/events?${params}`, { withCredentials: true });
+  // The BFF cursor endpoint authenticates via the Authorization header, which
+  // the browser EventSource API cannot send, and the server closes the stream
+  // after one revision frame by design — so poll it with an authenticated
+  // fetch instead of EventSource (which also skipped VITE_BFF_BASE_URL).
+  let closed = false;
   let highestRevision = 0;
-  handlers.onState("connecting");
-  source.onopen = () => handlers.onState("live");
-  source.onerror = () => handlers.onState("stale");
-  const receive = (event: MessageEvent) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const params = new URLSearchParams(query);
+  const poll = async () => {
+    if (closed) return;
     try {
-      const payload = JSON.parse(event.data) as { revision?: number; gap?: boolean; snapshot_refetch?: boolean };
-      const revision = Number(payload.revision ?? event.lastEventId);
-      if (!Number.isFinite(revision) || revision <= highestRevision) return;
-      highestRevision = revision;
-      if (payload.snapshot_refetch || payload.gap) handlers.onInvalidate();
-    } catch { handlers.onState("stale"); }
+      const headers = buildHeaders({ method: "GET", extra: { Accept: "text/event-stream", ...(highestRevision ? { "Last-Event-ID": String(highestRevision) } : {}) } });
+      const res = await fetch(`${detectBaseUrl()}/bff/management/trade-journeys/events?${params}`, { headers, credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let invalidate = false;
+      for (const frame of parseSseFrames(await res.text())) {
+        if (frame.event !== "journeys_changed" && frame.event !== "snapshot_refetch_required") continue;
+        const payload = JSON.parse(frame.data || "{}") as { revision?: number; gap?: boolean; snapshot_refetch?: boolean };
+        const revision = Number(payload.revision ?? frame.id);
+        if (!Number.isFinite(revision) || revision <= highestRevision) continue;
+        highestRevision = revision;
+        if (payload.snapshot_refetch || payload.gap) invalidate = true;
+      }
+      if (closed) return;
+      handlers.onState("live");
+      if (invalidate) handlers.onInvalidate();
+    } catch {
+      if (!closed) handlers.onState("stale");
+    }
+    if (!closed) timer = setTimeout(poll, JOURNEY_EVENTS_POLL_MS);
   };
-  source.addEventListener("journeys_changed", receive);
-  source.addEventListener("snapshot_refetch_required", receive);
-  return { close: () => source.close() };
+  handlers.onState("connecting");
+  void poll();
+  return { close: () => { closed = true; if (timer) clearTimeout(timer); } };
 }
