@@ -3810,14 +3810,14 @@ export const mgmt = {
   },
 
   humanInbox: {
-    list: (): Promise<HumanInboxItem[]> => {
+    list: (opts?: { signal?: AbortSignal }): Promise<HumanInboxItem[]> => {
       // Human Inbox is a strict-live surface. Revalidate it independently when
       // entering the page so a transient failure from a previously visited
       // surface cannot leave a stale fail-closed banner over a successful
       // inbox response. A failure from this request reports fallback again.
       liveStatus.retry();
       return withStrictLiveOrMock<HumanInboxItem[], unknown>(
-        { method: "GET", path: paths.mgmtHumanInbox() },
+        { method: "GET", path: paths.mgmtHumanInbox(), signal: opts?.signal },
         async () => emptyHumanInbox(),
         (raw) => {
           const adapted = adaptHumanInboxList(raw);
