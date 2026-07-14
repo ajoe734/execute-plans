@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { chromium } from "@playwright/test";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -20,6 +21,9 @@ import {
 } from "@/config/publicBuildAuth";
 
 const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
+// These two subprocess checks are optional in a browser-free unit-test phase;
+// the workflow provisions Chromium separately before its Playwright phase.
+const chromiumInstalled = existsSync(chromium.executablePath());
 
 function filesRecursively(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -53,22 +57,26 @@ describe("public frontend build auth boundary", () => {
     }
   });
 
-  it("rejects a privileged token at the standard Vite build boundary", () => {
-    const result = spawnSync("npm", ["run", "build"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        VITE_BFF_DEV_BEARER_TOKEN:
-          "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
-      },
-    });
+  it(
+    "rejects a privileged token at the standard Vite build boundary",
+    () => {
+      const result = spawnSync("npm", ["run", "build"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          VITE_BFF_DEV_BEARER_TOKEN:
+            "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+        },
+      });
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /canonical public dev viewer identity/,
-    );
-  });
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(
+        /canonical public dev viewer identity/,
+      );
+    },
+    30_000,
+  );
 
   it("rejects a privileged token before the standard Vite dev server can bind", () => {
     const result = spawnSync(
@@ -107,21 +115,25 @@ describe("public frontend build auth boundary", () => {
     " ",
     ` ${PUBLIC_DEV_VIEWER_BEARER_TOKEN}`,
     `${PUBLIC_DEV_VIEWER_BEARER_TOKEN} `,
-  ])("rejects raw whitespace variant %j at the Vite build boundary", (token) => {
-    const result = spawnSync("npm", ["run", "build"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        VITE_BFF_DEV_BEARER_TOKEN: token,
-      },
-    });
+  ])(
+    "rejects raw whitespace variant %j at the Vite build boundary",
+    (token) => {
+      const result = spawnSync("npm", ["run", "build"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          VITE_BFF_DEV_BEARER_TOKEN: token,
+        },
+      });
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /canonical public dev viewer identity/,
-    );
-  });
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(
+        /canonical public dev viewer identity/,
+      );
+    },
+    30_000,
+  );
 
   it("requires an explicit credential for hosted or external E2E", () => {
     expect(() => authToken({
@@ -247,6 +259,21 @@ describe("public frontend build auth boundary", () => {
     expect(() => authToken({ env })).toThrow(/short-lived BFF_AUTH_TOKEN/);
   });
 
+  it("does not send local fixture auth through an external Vite proxy target", () => {
+    const env = {
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
+      VITE_BFF_PROXY_TARGET: "https://bff.example.test",
+    };
+
+    expect(targetsExternalE2eEnvironment(env)).toBe(true);
+    expect(() => authToken({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toThrow(
+      /tracked fixture credentials are local-only/,
+    );
+    expect(() => devLoginSession({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toThrow(
+      /proven loopback-only E2E target/,
+    );
+  });
+
   it.each([
     "http://localhost:9000",
     "http://localhost.:9000",
@@ -304,39 +331,45 @@ describe("public frontend build auth boundary", () => {
     }
   });
 
-  it("fails the fixture-only portfolio specs before navigation for an external frontend", () => {
-    const env = {
-      ...process.env,
-      PANTHEON_FE_BASE_URL: "https://fe.example.test",
-      FRONTEND_BASE_URL: "https://fe.example.test",
-      PLAYWRIGHT_BASE_URL: "https://fe.example.test",
-      PANTHEON_HOSTED_E2E: "",
-      FE_INT_GATE_LIVE_BFF: "",
-      F08_CREATE_INTENT_LIVE_BFF: "",
-      RUN_LIVE_BFF_CONTRACTS: "",
-    };
-    const result = spawnSync(
-      "npx",
-      [
-        "playwright",
-        "test",
-        "e2e/20-portfolio-book-monitor.spec.ts",
-        "e2e/22-persona-trade-journal.spec.ts",
-        "--project=chromium",
-        "--retries=0",
-        "--reporter=line",
-      ],
-      { cwd: process.cwd(), encoding: "utf8", env, timeout: 60_000 },
-    );
-    const output = `${result.stdout}\n${result.stderr}`;
+  it.skipIf(!chromiumInstalled)(
+    "fails the fixture-only portfolio specs before navigation for an external frontend",
+    () => {
+      const env = {
+        ...process.env,
+        PANTHEON_FE_BASE_URL: "https://fe.example.test",
+        FRONTEND_BASE_URL: "https://fe.example.test",
+        PLAYWRIGHT_BASE_URL: "https://fe.example.test",
+        PANTHEON_HOSTED_E2E: "",
+        FE_INT_GATE_LIVE_BFF: "",
+        F08_CREATE_INTENT_LIVE_BFF: "",
+        RUN_LIVE_BFF_CONTRACTS: "",
+      };
+      const result = spawnSync(
+        "npx",
+        [
+          "playwright",
+          "test",
+          "e2e/20-portfolio-book-monitor.spec.ts",
+          "e2e/22-persona-trade-journal.spec.ts",
+          "--project=chromium",
+          "--retries=0",
+          "--reporter=line",
+        ],
+        { cwd: process.cwd(), encoding: "utf8", env, timeout: 60_000 },
+      );
+      const output = `${result.stdout}\n${result.stderr}`;
 
-    expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
-    expect(result.status).not.toBe(0);
-    expect(output).toMatch(/20-portfolio-book-monitor/);
-    expect(output).toMatch(/22-persona-trade-journal/);
-    expect(output).toMatch(/proven loopback-only E2E target/);
-    expect(output).not.toMatch(/ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/);
-  }, 75_000);
+      expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
+      expect(result.status).not.toBe(0);
+      expect(output).toMatch(/20-portfolio-book-monitor/);
+      expect(output).toMatch(/22-persona-trade-journal/);
+      expect(output).toMatch(/proven loopback-only E2E target/);
+      expect(output).not.toMatch(
+        /ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/,
+      );
+    },
+    75_000,
+  );
 
   it("discovers fully intercepted fixtures under external global targets without a secret", () => {
     const env = {
@@ -377,43 +410,47 @@ describe("public frontend build auth boundary", () => {
     expect(`${result.stdout}\n${result.stderr}`).toMatch(/08-create-intent|20-portfolio-book-monitor/);
   }, 30_000);
 
-  it("runs the fully intercepted F08 fixture with an external global BFF and no secret", () => {
-    const env = {
-      ...process.env,
-      PANTHEON_BFF_BASE_URL: "https://bff.example.test",
-      PANTHEON_FE_BASE_URL: "http://127.0.0.1:9",
-      FRONTEND_BASE_URL: "http://127.0.0.1:9",
-      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:9",
-      PANTHEON_HOSTED_E2E: "",
-      FE_INT_GATE_LIVE_BFF: "",
-      F08_CREATE_INTENT_LIVE_BFF: "",
-      RUN_LIVE_BFF_CONTRACTS: "",
-    };
-    for (const key of [
-      "BFF_AUTH_TOKEN",
-      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-      "PANTHEON_BFF_SMOKE_TOKEN",
-      "VITE_BFF_DEV_BEARER_TOKEN",
-    ]) {
-      delete env[key];
-    }
+  it.skipIf(!chromiumInstalled)(
+    "runs the fully intercepted F08 fixture with an external global BFF and no secret",
+    () => {
+      const env = {
+        ...process.env,
+        PANTHEON_BFF_BASE_URL: "https://bff.example.test",
+        PANTHEON_FE_BASE_URL: "http://127.0.0.1:9",
+        FRONTEND_BASE_URL: "http://127.0.0.1:9",
+        PLAYWRIGHT_BASE_URL: "http://127.0.0.1:9",
+        PANTHEON_HOSTED_E2E: "",
+        FE_INT_GATE_LIVE_BFF: "",
+        F08_CREATE_INTENT_LIVE_BFF: "",
+        RUN_LIVE_BFF_CONTRACTS: "",
+      };
+      for (const key of [
+        "BFF_AUTH_TOKEN",
+        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+        "PANTHEON_BFF_SMOKE_TOKEN",
+        "VITE_BFF_DEV_BEARER_TOKEN",
+      ]) {
+        delete env[key];
+      }
 
-    const result = spawnSync(
-      "npx",
-      [
-        "playwright",
-        "test",
-        "e2e/08-create-intent.spec.ts",
-        "--project=chromium",
-        "--reporter=line",
-      ],
-      { cwd: process.cwd(), encoding: "utf8", env },
-    );
+      const result = spawnSync(
+        "npx",
+        [
+          "playwright",
+          "test",
+          "e2e/08-create-intent.spec.ts",
+          "--project=chromium",
+          "--reporter=line",
+        ],
+        { cwd: process.cwd(), encoding: "utf8", env },
+      );
 
-    expect(result.status).toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/2 passed/);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/1 skipped/);
-  }, 30_000);
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(/2 passed/);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(/1 skipped/);
+    },
+    30_000,
+  );
 
   it("does not opt the Agora winner branch into live execution from token presence alone", () => {
     const env = {
@@ -489,6 +526,11 @@ describe("public frontend build auth boundary", () => {
       name: "Agora winner branch",
       script: "e2e/agora-winner-branch-hosted.spec.ts",
       optIn: { AG_DYNUI_FULL_006_HOSTED: "1" },
+    },
+    {
+      name: "Evolution journal hosted evidence",
+      script: "e2e/evochain009.spec.ts",
+      optIn: { PANTHEON_HOSTED_E2E: "1" },
     },
   ])("fails $name before test execution without an explicit token", ({ script, optIn }) => {
     const env = {

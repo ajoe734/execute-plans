@@ -158,6 +158,7 @@ export function targetsExternalE2eEnvironment(
     "PANTHEON_BFF_BASE_URL",
     "PANTHEON_BROWSER_BFF_BASE_URL",
     "BFF_BASE_URL",
+    "VITE_BFF_PROXY_TARGET",
     "VITE_BFF_BASE_URL",
   ].some((key) => {
     const value = env[key]?.trim();

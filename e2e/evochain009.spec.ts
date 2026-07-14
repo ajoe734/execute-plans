@@ -1,11 +1,33 @@
 import { expect, test } from "@playwright/test";
-import { installOidcDevLogin, authHeaders } from "./helpers/auth";
+import { authHeaders, authToken, installOidcDevLogin } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const RUN_HOSTED = process.env.PANTHEON_HOSTED_E2E === "1";
+const AUTH_ENV = {
+  ...process.env,
+  PANTHEON_BFF_BASE_URL: BFF_BASE,
+  PANTHEON_FE_BASE_URL: FE_BASE,
+};
+const AUTH_TOKEN = RUN_HOSTED ? authToken({ env: AUTH_ENV }) : "";
+
+type FleetItem = {
+  id?: string;
+  name?: string;
+  persona_id?: string;
+  persona_name?: string;
+  personaId?: string;
+  personaName?: string;
+};
+
+type JournalItem = {
+  target?: { id?: string };
+};
 
 test("capture evolution journal fallback-state hosted evidence", async ({ page, request }) => {
+  test.skip(!RUN_HOSTED, "Set PANTHEON_HOSTED_E2E=1 with a short-lived BFF_AUTH_TOKEN.");
+
   page.on("console", (msg) => {
     console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`);
   });
@@ -14,27 +36,43 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   });
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await installOidcDevLogin(page, { tenantId: "pantheon-dev", goto: false });
+  await installOidcDevLogin(page, {
+    env: AUTH_ENV,
+    goto: false,
+    pageBaseUrl: FE_BASE,
+    tenantId: "pantheon-dev",
+    token: AUTH_TOKEN,
+  });
   await installQuietEventSource(page);
 
   // Fetch live fleet personas and evolution journal entries
-  const headers = authHeaders({ tenantId: "pantheon-dev" });
+  const headers = authHeaders({
+    env: AUTH_ENV,
+    tenantId: "pantheon-dev",
+    token: AUTH_TOKEN,
+  });
   const fleetResponse = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, { headers });
-  const fleetData = await fleetResponse.json();
+  const fleetData = await fleetResponse.json() as {
+    data?: { items?: FleetItem[] };
+  };
   const fleetItems = fleetData.data?.items ?? [];
 
   const journalResponse = await request.get(`${BFF_BASE}/bff/management/evolution-journal`, { headers });
-  const journalData = await journalResponse.json();
-  const journalItems = journalData.data?.items ?? journalData ?? [];
+  const journalData = await journalResponse.json() as
+    | JournalItem[]
+    | { data?: { items?: JournalItem[] } };
+  const journalItems = Array.isArray(journalData)
+    ? journalData
+    : journalData.data?.items ?? [];
 
   // Find a persona ID in the fleet that does not have any evolution journal entry (or fallback to any persona in the fleet)
   const journalPersonaIds = new Set(
     journalItems
-      .map((item: any) => item.target?.id)
+      .map((item) => item.target?.id)
       .filter(Boolean)
   );
 
-  let targetPersona = fleetItems.find((item: any) => {
+  let targetPersona = fleetItems.find((item) => {
     const id = item.id ?? item.persona_id ?? item.personaId;
     return id && !journalPersonaIds.has(id);
   });
