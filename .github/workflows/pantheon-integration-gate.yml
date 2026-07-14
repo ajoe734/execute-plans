@@ -124,6 +124,8 @@ jobs:
       - name: Build
         id: build
         continue-on-error: true
+        env:
+          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
         run: |
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
@@ -198,6 +200,8 @@ jobs:
         id: pr_preview
         if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
         continue-on-error: true
+        env:
+          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
         run: |
           set -o pipefail
           VITE_BFF_MODE=live \

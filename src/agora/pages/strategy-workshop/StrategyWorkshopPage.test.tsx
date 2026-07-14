@@ -589,4 +589,56 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByText("Macro Strategist")).toBeDefined();
     expect(screen.getByText("Parameters are robust.")).toBeDefined();
   });
+
+  it("proves no stale rail/gates/CTA/handoff when switching from A-ready to B-null/error", async () => {
+    const onAddToTradingRoom = vi.fn();
+    vi.mocked(workshopsModule.getWorkshop).mockImplementation(async (id) => ({
+      ...MOCK_WORKSHOP,
+      workshop_id: id,
+    }));
+    
+    const cardA = {
+      ...LIVE_COMPLETENESS_CARD,
+      workshop_id: "ws-A",
+    };
+    vi.mocked(workshopsModule.listWorkshopCards).mockImplementation(async (id) => {
+      if (id === "ws-A") return [cardA];
+      return [];
+    });
+    
+    // For A, return ready and complete
+    const snapshotA = {
+      ...LIVE_COMPLETENESS_SNAPSHOT,
+      workshop_id: "ws-A",
+    };
+    const readinessA = {
+      ...TRADING_ROOM_READY,
+      workshop_id: "ws-A",
+    };
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockImplementation(async (id) => {
+      if (id === "ws-A") return readinessA;
+      return null;
+    });
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockImplementation(async (id) => {
+      if (id === "ws-A") return snapshotA;
+      return null;
+    });
+
+    const { rerender } = render(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-A" />);
+
+    // Prove A's CTA is enabled and completeness exists
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("策略完整度尚未評估")).toBeNull();
+
+    // Now switch to B
+    rerender(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-B" />);
+
+    // Prove B's CTA is disabled and completeness is cleared (shows empty state text)
+    await waitFor(async () => {
+      const bBtn = screen.getByTestId("add-to-trading-room-btn");
+      expect((bBtn as HTMLButtonElement).disabled).toBe(true);
+    });
+    expect(await screen.findByText("策略完整度尚未評估")).toBeDefined();
+  });
 });

@@ -194,7 +194,7 @@ describe("StrategyPerformancePage", () => {
     );
   });
 
-  it("distinguishes measured zero from values the BFF did not report", async () => {
+  it("distinguishes measured zero from values the BFF did not report in both list and table", async () => {
     const attribution = attributionResponse();
     attribution.data.items = [
       {
@@ -211,12 +211,21 @@ describe("StrategyPerformancePage", () => {
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     await screen.findAllByText("Breakout Alpha");
-    const zero = screen.getAllByTitle("已量測：零")[0];
-    const unreported = screen.getAllByTitle("BFF 未回報量測值")[0];
-    expect(zero.textContent).toBe("$0");
-    expect(zero.getAttribute("data-metric-state")).toBe("measured");
-    expect(unreported.textContent).toBe("未回報");
-    expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
+    
+    // Both list and table should render zero PNL and unreported total_trades
+    const zeros = screen.getAllByTitle("已量測：零");
+    expect(zeros.length).toBeGreaterThanOrEqual(2); // one in list, one in table, one in top summary card too!
+    zeros.forEach((zero) => {
+      expect(zero.textContent).toBe("$0");
+      expect(zero.getAttribute("data-metric-state")).toBe("measured");
+    });
+
+    const unreporteds = screen.getAllByTitle("BFF 未回報量測值");
+    expect(unreporteds.length).toBeGreaterThanOrEqual(2); // one in list, one in table, one in top summary card too!
+    unreporteds.forEach((unreported) => {
+      expect(unreported.textContent).toBe("未回報");
+      expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
+    });
   });
 
   it("shows the live BFF error state without rendering fallback rows", async () => {
