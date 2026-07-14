@@ -163,6 +163,7 @@ const metadata = {
     VITE_BFF_FALLBACK: "strict",
     VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false",
     VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false",
+    VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
   },
 };
 
@@ -232,7 +233,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
   PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
   PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
+  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/health}" \
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
@@ -257,6 +258,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - preserve_assets: ${PRESERVE_ASSETS}
 - real_writes: ${REAL_WRITES}
 - allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
+- embedded_bearer_token: false
 - probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
 EOF
 

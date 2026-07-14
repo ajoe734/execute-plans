@@ -369,7 +369,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       headers: headers(VIEWER_TOKEN, { "Idempotency-Key": `viewer-denied-${randomUUID()}` }),
       data: { context_refs: [{ type: "persona", id: persona.id }], environment: "paper" },
     });
-    expect([401, 403]).toContain(denied.status());
+    expect(denied.status()).toBe(403);
     expect(browserInteractionPosts).toEqual([]);
   });
 });

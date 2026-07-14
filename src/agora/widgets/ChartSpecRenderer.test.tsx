@@ -145,8 +145,8 @@ describe("ChartSpecRenderer", () => {
     );
 
     expect(screen.getByTestId("chart-render-notice")).toBeTruthy();
-    expect(screen.getByText("MONITORING ACTIVE")).toBeTruthy();
-    expect(screen.getByText("Awaiting candidate signals. No active candidates currently exceed score threshold.")).toBeTruthy();
+    expect(screen.getByText("NO CANDIDATES")).toBeTruthy();
+    expect(screen.getByText("Awaiting candidate monitoring telemetry from BFF.")).toBeTruthy();
     expect(screen.queryByText("SAMPLE DATA")).toBeNull();
   });
 
@@ -197,7 +197,7 @@ describe("ChartSpecRenderer", () => {
         isSampleData={false}
       />
     );
-    expect(screen.getByText("MONITORING WINDOW ACTIVE")).toBeTruthy();
+    expect(screen.getByText("TIMELINE UNAVAILABLE")).toBeTruthy();
 
     rerender(
       <ChartSpecRenderer
@@ -206,6 +206,6 @@ describe("ChartSpecRenderer", () => {
         isSampleData={false}
       />
     );
-    expect(screen.getByText("AWAITING METRICS")).toBeTruthy();
+    expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
   });
 });

@@ -39,6 +39,7 @@ type FixtureState = {
 };
 
 type FixtureOptions = {
+  rejectGovernanceMutations?: boolean;
   roles?: string[];
 };
 
@@ -466,6 +467,22 @@ async function installFixture(
         );
       }
       if (method === "POST" && path === `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`) {
+        if (options.rejectGovernanceMutations) {
+          return json(
+            route,
+            {
+              error: {
+                code: "FORBIDDEN",
+                message: "Operator does not hold the required command role",
+                details: {
+                  precondition_failed: "role_check",
+                  reason: "Operator does not hold the required command role",
+                },
+              },
+            },
+            { status: 403 },
+          );
+        }
         const body = requestBody(request) as JsonRecord;
         if (request.headers()["if-match"] !== governedProposalEtag(state)) {
           return json(route, { detail: "proposal ETag is stale" }, { status: 412 });
@@ -946,7 +963,10 @@ test("governed proposal revision and paper validation stay review-only", async (
 });
 
 test("viewer proposal mutation fails closed without changing the revision", async ({ page }) => {
-  const state = await installFixture(page, { roles: ["viewer"] });
+  const state = await installFixture(page, {
+    rejectGovernanceMutations: true,
+    roles: ["viewer"],
+  });
 
   await page.goto(
     `/agora/strategy-workshop/${WORKSHOP_ID}?governedProposalId=${GOVERNED_PROPOSAL_ID}`,
@@ -956,10 +976,38 @@ test("viewer proposal mutation fails closed without changing the revision", asyn
   const modifyButton = proposalCard.getByRole("button", { name: "Modify" });
   await expect(modifyButton).toBeDisabled();
   await expect(modifyButton).toHaveAttribute("title", /require an operator/i);
+
+  const bypassStatus = await page.evaluate(async (proposalId) => {
+    const token = window.sessionStorage.getItem("pantheon.bff.bearerToken") ?? "";
+    const tenantId = window.sessionStorage.getItem("pantheon.bff.tenantId") ?? "";
+    const response = await window.fetch(`/bff/agora/proposals/${proposalId}/actions`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "pint-010-viewer-bypass",
+        "If-Match": '"proposal-v1"',
+        "X-Tenant-Id": tenantId,
+      },
+      body: JSON.stringify({
+        action: "modify",
+        reason: "Viewer bypass must fail.",
+        proposed_value: { liquidity_limit: 1 },
+      }),
+    });
+    return response.status;
+  }, GOVERNED_PROPOSAL_ID);
+
+  expect(bypassStatus).toBe(403);
+  await expect(proposalCard).toContainText("revision 1");
   expect(state.proposal.revision).toBe(1);
-  expect(
-    mutationRequests(state, `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`),
-  ).toEqual([]);
+  const attempted = mutationRequests(
+    state,
+    `/bff/agora/proposals/${GOVERNED_PROPOSAL_ID}/actions`,
+  );
+  expect(attempted).toHaveLength(1);
+  expect(attempted[0].headers.authorization).toContain(":viewer");
   expect(state.unexpected).toEqual([]);
   expectAuthorityNegative(state);
 });
