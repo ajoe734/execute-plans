@@ -1960,6 +1960,8 @@ export default {
           boardTitle: "候選人與監控看板 ({{count}})",
           currentState: "目前狀態：",
           aiFitScore: "AI 契合度評分：",
+          whySelected: "僕人選出理由 (Why Selected)",
+          concerns: "疑慮與反方論點 (Concerns)",
           nextEvent: "下一個催化劑事件",
           evidenceReferences: "證據參考資料",
           governedActions: "治理操作",

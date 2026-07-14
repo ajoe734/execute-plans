@@ -532,6 +532,54 @@ describe("Trading Room workspace proposal routes", () => {
     expect(result.proposalId).toBe("proposal-001");
   });
 
+  it("normalizes canonical BFF availability across proposal summaries, views, and widgets", async () => {
+    const canonicalProposal = {
+      ...mockProposal,
+      dataAvailability: {
+        status: "full",
+        sources: [
+          { dataSource: "agora.candidate.members", status: "missing" },
+          { dataSource: "agora.decision.events", status: "partial" },
+        ],
+      },
+      views: [
+        {
+          id: "overview",
+          title: "Overview",
+          purpose: "Decision overview",
+          order: 0,
+          layoutTemplate: "decision_grid",
+          widgetCount: 2,
+          dataAvailability: "missing",
+          widgets: [
+            { ...mockWidget, dataAvailability: "full" },
+            { ...mockWidget, id: "widget-002", dataAvailability: "missing" },
+          ],
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: canonicalProposal }));
+    globalThis.fetch = fetchMock;
+
+    const result = await createTradingRoomWorkspaceProposal(
+      "strat-001",
+      { strategyVersion: "winner-branch-v4", tradingRoomReady: true },
+      undefined,
+      BASE,
+    );
+
+    expect(result.dataAvailability.status).toBe("complete");
+    expect(result.dataAvailability.sources.map((source) => source.status)).toEqual([
+      "unavailable",
+      "partial",
+    ]);
+    expect(result.views[0].dataAvailability).toBe("unavailable");
+    expect(result.views[0].widgets.map((widget) => widget.dataAvailability)).toEqual([
+      "complete",
+      "unavailable",
+    ]);
+  });
+
   it("gets a workspace proposal and sends no mutation headers", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
     globalThis.fetch = fetchMock;
@@ -654,6 +702,31 @@ describe("Trading Room workspace proposal routes", () => {
     expect(result.etag).toBe('"workspace-etag-v1"');
   });
 
+  it("normalizes canonical BFF availability in accepted workspaces", async () => {
+    const canonicalWorkspace = {
+      ...mockWorkspace,
+      views: [
+        {
+          id: "overview",
+          title: "Overview",
+          purpose: "Decision overview",
+          order: 0,
+          layoutTemplate: "decision_grid",
+          widgetCount: 1,
+          dataAvailability: "missing",
+          widgets: [{ ...mockWidget, dataAvailability: "full" }],
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: canonicalWorkspace }));
+    globalThis.fetch = fetchMock;
+
+    const result = await getTradingRoomWorkspaceWithMeta("workspace-001", BASE);
+
+    expect(result.workspace.views[0].dataAvailability).toBe("unavailable");
+    expect(result.workspace.views[0].widgets[0].dataAvailability).toBe("complete");
+  });
+
   it("patches workspace layout with If-Match and Idempotency-Key", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       ok(
@@ -693,7 +766,18 @@ describe("Trading Room workspace proposal routes", () => {
 
   it("lists workspace versions and rolls back a version with ETag metadata", async () => {
     const versions = [
-      { id: "version-001", dashboardVersion: 1, changeSummary: "initial" },
+      {
+        id: "version-001",
+        dashboardVersion: 1,
+        changeSummary: "initial",
+        views: [
+          {
+            id: "overview",
+            dataAvailability: "missing",
+            widgets: [{ ...mockWidget, dataAvailability: "full" }],
+          },
+        ],
+      },
       { id: "version-002", dashboardVersion: 2, changeSummary: "layout changed" },
     ];
     const rollbackVersion = { id: "version-003", dashboardVersion: 3 };
@@ -716,7 +800,10 @@ describe("Trading Room workspace proposal routes", () => {
       );
     globalThis.fetch = fetchMock;
 
-    await expect(listTradingRoomWorkspaceVersions("workspace-001", BASE)).resolves.toHaveLength(2);
+    const listedVersions = await listTradingRoomWorkspaceVersions("workspace-001", BASE);
+    expect(listedVersions).toHaveLength(2);
+    expect(listedVersions[0].views[0].dataAvailability).toBe("unavailable");
+    expect(listedVersions[0].views[0].widgets[0].dataAvailability).toBe("complete");
     const result = await rollbackTradingRoomWorkspaceVersion(
       "workspace-001",
       "version-001",
@@ -739,8 +826,14 @@ describe("Trading Room workspace proposal routes", () => {
   });
 
   it("creates a widget revision proposal with proposedSpec and Idempotency-Key", async () => {
+    const canonicalRevisionProposal = {
+      ...mockWidgetRevisionProposal,
+      beforeSpec: { ...mockWidgetRevisionProposal.beforeSpec, dataAvailability: "full" },
+      proposedSpec: { ...mockWidgetRevisionProposal.proposedSpec, dataAvailability: "partial" },
+      dataAvailability: "missing",
+    };
     const fetchMock = vi.fn().mockResolvedValue(
-      ok({ data: mockWidgetRevisionProposal }, 201, { ETag: '"revision-etag-v1"' }),
+      ok({ data: canonicalRevisionProposal }, 201, { ETag: '"revision-etag-v1"' }),
     );
     globalThis.fetch = fetchMock;
 
@@ -774,6 +867,9 @@ describe("Trading Room workspace proposal routes", () => {
     expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-revision-create-1");
     expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["If-Match"]).toBeUndefined();
     expect(result.proposal.id).toBe("wrp-001");
+    expect(result.proposal.dataAvailability).toBe("unavailable");
+    expect(result.proposal.beforeSpec.dataAvailability).toBe("complete");
+    expect(result.proposal.proposedSpec.dataAvailability).toBe("partial");
     expect(result.etag).toBe('"revision-etag-v1"');
   });
 
