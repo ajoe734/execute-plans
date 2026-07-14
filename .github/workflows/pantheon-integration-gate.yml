@@ -124,11 +124,9 @@ jobs:
       - name: Build
         id: build
         continue-on-error: true
-        env:
-          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
         run: |
           set -o pipefail
-          npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
+          VITE_BFF_DEV_BEARER_TOKEN="" npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
 
       - name: Bundle-size budget check
         id: bundle_budget
@@ -200,13 +198,12 @@ jobs:
         id: pr_preview
         if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
         continue-on-error: true
-        env:
-          VITE_BFF_DEV_BEARER_TOKEN: pantheon-dev-browser:viewer
         run: |
           set -o pipefail
           VITE_BFF_MODE=live \
           VITE_BFF_BASE_URL="" \
           VITE_BFF_FALLBACK=strict \
+          VITE_BFF_DEV_BEARER_TOKEN="" \
           npm run dev -- --host 127.0.0.1 --port 4173 > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
           echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
           for i in {1..60}; do
