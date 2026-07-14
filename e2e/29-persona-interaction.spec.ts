@@ -498,6 +498,16 @@ async function installFixture(
         );
       }
       if (
+        method === "GET" &&
+        /^\/bff\/agora\/candidate-pools\/[^/]+\/members$/.test(path)
+      ) {
+        return json(
+          route,
+          { items: [] },
+          { headers: { ETag: '"candidate-pool-empty-v1"' } },
+        );
+      }
+      if (
         method === "POST" &&
         path === `/bff/agora/strategies/${STRATEGY_ID}/trading-room/proposals`
       ) {
@@ -949,7 +959,11 @@ test("Trading Room Ask Personas preserves context and modify preserves proposal 
     `?strategyVersion=${STRATEGY_VERSION}&readinessGate=trading_room`;
 
   await page.goto(tradingRoomUrl);
-  await page.getByTestId(`event-row-${DECISION_EVENT_ID}`).click();
+  const eventRow = page.getByTestId(`event-row-${DECISION_EVENT_ID}`);
+  await expect(eventRow).toBeVisible();
+  await eventRow.scrollIntoViewIfNeeded();
+  await expect(eventRow).toBeInViewport();
+  await eventRow.click();
   await expect(page.getByTestId("detail-no-order-route")).toHaveText(
     "agora_decision_support_only",
   );
