@@ -1,6 +1,6 @@
 import React from "react";
 import { act } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Layout } from "react-grid-layout";
 
@@ -19,6 +19,10 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   patchTradingRoomWorkspaceLayout: vi.fn(),
   rollbackTradingRoomWorkspaceVersion: vi.fn(),
   decideOnEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/bff-v1/agora/candidatePool", () => ({
+  listCandidatePoolMembers: vi.fn().mockImplementation(() => Promise.resolve({ items: [] })),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -99,6 +103,8 @@ import { TradingRoomPage } from "./TradingRoomPage";
 import i18n from "@/i18n";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
+import * as candidatePoolModule from "@/lib/bff-v1/agora/candidatePool";
+import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -1523,21 +1529,21 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("event-row-evt-001");
     fireEvent.click(screen.getByTestId("event-row-evt-001"));
-    
+
     const askButton = screen.getByTestId("ask-personas-evt-001");
     expect(askButton).toBeDefined();
-    
+
     // Toggle the panel on
     fireEvent.click(askButton);
     const consultPanel = screen.getByTestId("consult-panel-evt-001");
     expect(consultPanel).toBeDefined();
     expect(consultPanel.textContent).toContain("evt-001");
     expect(consultPanel.textContent).toContain("reg-001");
-    
+
     // Test Launch Workshop Consultation
     const launchButton = screen.getByTestId("consult-panel-submit-evt-001");
     fireEvent.click(launchButton);
-    
+
     await waitFor(() => {
       expect(interaction.resolveContext).toHaveBeenCalledWith({
         context_refs: [
@@ -1559,26 +1565,26 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("event-row-evt-001");
     fireEvent.click(screen.getByTestId("event-row-evt-001"));
-    
+
     const modifyButton = screen.getByTestId("decide-modify-evt-001");
     fireEvent.click(modifyButton);
-    
+
     const modifyPanel = screen.getByTestId("modify-linkage-panel-evt-001");
     expect(modifyPanel).toBeDefined();
-    
+
     const propIdInput = screen.getByTestId("modify-proposal-id-evt-001");
     const propRevInput = screen.getByTestId("modify-proposal-revision-evt-001");
     const wsIdInput = screen.getByTestId("modify-workshop-id-evt-001");
     const rationaleInput = screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits...");
-    
+
     fireEvent.change(propIdInput, { target: { value: "prop-xyz" } });
     fireEvent.change(propRevInput, { target: { value: "2" } });
     fireEvent.change(wsIdInput, { target: { value: "ws-abc" } });
     fireEvent.change(rationaleInput, { target: { value: "Reduced leverage due to IV increase" } });
-    
+
     const submitButton = screen.getByTestId("modify-linkage-submit-evt-001");
     fireEvent.click(submitButton);
-    
+
     await waitFor(() => {
       expect(tradingRoomModule.decideOnEvent).toHaveBeenCalledWith(
         "evt-001",
@@ -1593,6 +1599,178 @@ describe("TradingRoomPage", () => {
         }),
         expect.any(Object)
       );
+    });
+  });
+
+  // ── AG-UIPOL-007: Multi-Lens Monitoring & Candidate Parity ──────────────────
+
+  it("renders all five strategy lenses in the switcher and shows their titles", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    expect(screen.getByText("籌碼大戶部位建立")).toBeDefined();
+    expect(screen.getByText("產業落後補漲")).toBeDefined();
+    expect(screen.getByText("技術突破")).toBeDefined();
+    expect(screen.getByText("事件交易")).toBeDefined();
+    expect(screen.getByText("大額資金進出")).toBeDefined();
+  });
+
+  it("switches to the selected lens dashboard when clicking a lens card", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+
+    fireEvent.click(screen.getByText("事件交易"));
+
+    expect(screen.getByTestId("dashboard-recipe-d")).toBeDefined();
+    expect(screen.getByText("預期差情境分析樹")).toBeDefined();
+  });
+
+  it("opens the Candidate Review Drawer when a candidate row is clicked, and does not claim real execution", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    fireEvent.click(appleRow);
+
+    expect(screen.getByTestId("candidate-review-drawer")).toBeDefined();
+    expect(screen.getByTestId("drawer-candidate-symbol").textContent).toBe("AAPL");
+    expect(screen.getByTestId("drawer-candidate-score").textContent).toBe("94");
+    expect(screen.getByTestId("drawer-candidate-reason").textContent).toContain("Significant accumulation");
+    expect(screen.getByTestId("drawer-action-monitor").textContent).toBe("納入監控");
+    expect(screen.getByTestId("drawer-action-shadow").textContent).toBe("送影子追蹤");
+    expect(screen.getByTestId("drawer-action-workspace").textContent).toBe("開啟 Winner Branch 工作區");
+  });
+
+  it("updates candidate state in drawer when state transition action is clicked", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    fireEvent.click(appleRow);
+
+    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("待討論");
+    fireEvent.click(screen.getByTestId("drawer-action-monitor"));
+    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
+  });
+
+  it("renders distinct dashboards and recipes when switching lenses A to E", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    expect(screen.getByTestId("dashboard-recipe-a")).toBeDefined();
+
+    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
+    fireEvent.click(within(lenses).getByText("產業落後補漲"));
+    expect(await screen.findByTestId("dashboard-recipe-b")).toBeDefined();
+    fireEvent.click(within(lenses).getByText("技術突破"));
+    expect(await screen.findByTestId("dashboard-recipe-c")).toBeDefined();
+    fireEvent.click(within(lenses).getByText("事件交易"));
+    expect(await screen.findByTestId("dashboard-recipe-d")).toBeDefined();
+    fireEvent.click(within(lenses).getByText("大額資金進出"));
+    expect(await screen.findByTestId("dashboard-recipe-e")).toBeDefined();
+  });
+
+  it("renders empty candidate state message when no candidates match active filter", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const sidebar = screen.getByTestId("trading-room-lens-sidebar");
+    fireEvent.click(within(sidebar).getByText("暫放觀察"));
+
+    expect(await screen.findByText(/此狀態下無候選人/i)).toBeDefined();
+  });
+
+  it("displays sample data warning when BFF candidatePool API fails", async () => {
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockRejectedValueOnce(
+      new Error("Network Error"),
+    );
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-data-warning")).toBeDefined();
+      expect(screen.getByTestId("sample-data-warning").textContent).toContain("模擬數據");
+    });
+  });
+
+  it("handles drawer Escape key closing and keyboard focus trap accessibility", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const appleRow = await screen.findByTestId("candidate-row-AAPL");
+    appleRow.focus();
+    expect(document.activeElement).toBe(appleRow);
+
+    fireEvent.click(appleRow);
+    const drawer = await screen.findByTestId("candidate-review-drawer");
+    expect(drawer.getAttribute("role")).toBe("dialog");
+    expect(drawer.getAttribute("aria-modal")).toBe("true");
+
+    const closeBtn = screen.getByTestId("drawer-close-btn");
+    expect(document.activeElement).toBe(closeBtn);
+
+    fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("candidate-review-drawer")).toBeNull();
+    });
+    expect(document.activeElement).toBe(appleRow);
+  });
+
+  it("renders lens-specific columns in the candidate board table", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+
+    // Switch to continuous monitoring view (de-select strat-001)
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    const table = screen.getByTestId("candidate-board-table");
+
+    // By default, activeLensId is 'lens-A'
+    // It should render Accum. Days column header (or localized zh-TW version)
+    expect(within(table).getByText(/累積天數|Accum. Days/)).toBeDefined();
+    expect(within(table).queryByText(/同儕類組|Peer Group/)).toBeNull();
+
+    // Switch to lens-B
+    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
+    const lensBCard = within(lenses).getByText(/產業落後補漲|Industry Laggard/);
+    fireEvent.click(lensBCard);
+
+    // Wait for the lens transition and API response to render lens-B columns
+    await waitFor(() => {
+      const currentTable = screen.getByTestId("candidate-board-table");
+      expect(within(currentTable).getByText(/同儕類組|Peer Group/)).toBeDefined();
+      expect(within(currentTable).queryByText(/累積天數|Accum. Days/)).toBeNull();
+    });
+  });
+
+  it("displays loading spinner state when candidatesLoading is true", async () => {
+    // Mock the candidatePool API to delay its response to simulate loading state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolvePromise: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const delayPromise = new Promise<any>((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockReturnValueOnce(delayPromise);
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    // Verify loading indicator is displayed
+    expect(screen.getByTestId("candidates-loading")).toBeDefined();
+    expect(screen.getByTestId("candidates-loading").textContent).toMatch(/正在載入|Loading/);
+
+    // Resolve the promise to end loading state
+    resolvePromise({ items: [] });
+    await waitFor(() => {
+      expect(screen.queryByTestId("candidates-loading")).toBeNull();
     });
   });
 });
