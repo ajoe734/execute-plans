@@ -122,10 +122,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
     );
     expect(integrationWorkflow).toContain(
-      '[ -z "$PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN" ]',
-    );
-    expect(integrationWorkflow).toContain(
-      '[ -z "$PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN" ]',
+      "node scripts/validate-persona-hosted-proof-env.mjs",
     );
     expect(hostedPersonaInteractionSpec).toContain(
       "expect(denied.status()).toBe(403)",
