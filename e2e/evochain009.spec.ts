@@ -1,9 +1,90 @@
 import { expect, test } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { installOidcDevLogin, authHeaders } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+
+type FleetPersona = {
+  id?: string;
+  persona_id?: string;
+  personaId?: string;
+  name?: string;
+  personaName?: string;
+  persona_name?: string;
+};
+
+type JournalEntry = {
+  target?: { id?: string };
+};
+
+type FleetResponseBody = { data?: { items?: FleetPersona[] } };
+type JournalResponseBody = { data?: { items?: JournalEntry[] } } | JournalEntry[];
+
+// Fetches and parses a BFF JSON endpoint with bounded retry: hosted-run flakiness
+// (cold-start 5xx, transiently empty/malformed bodies) previously surfaced as an
+// opaque JSON.parse crash instead of a diagnosable failure, especially on the
+// mobile-chromium project.
+async function fetchJsonWithRetry<T>(
+  request: APIRequestContext,
+  url: string,
+  headers: Record<string, string>,
+  label: string,
+  { retries = 3, delayMs = 2000 }: { retries?: number; delayMs?: number } = {},
+): Promise<T> {
+  let lastError = "unknown error";
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await request.get(url, { headers });
+      const status = response.status();
+      const bodyText = await response.text();
+
+      if (!response.ok()) {
+        lastError = `${label} returned HTTP ${status}: ${bodyText.slice(0, 500)}`;
+      } else {
+        try {
+          return JSON.parse(bodyText) as T;
+        } catch (parseError) {
+          lastError = `${label} returned HTTP ${status} but body failed to parse as JSON (${(parseError as Error).message}): ${bodyText.slice(0, 500)}`;
+        }
+      }
+    } catch (requestError) {
+      lastError = `${label} request threw: ${(requestError as Error).message}`;
+    }
+
+    console.log(`[BFF Retry ${attempt}/${retries}] ${lastError}`);
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error(`${label} failed after ${retries} attempts. Last error: ${lastError}`);
+}
+
+// Navigates and waits for the target region, retrying the navigation itself
+// (not just the assertion) so a single slow/failed hosted page load doesn't
+// fail the whole run outright.
+async function gotoWithRegionRetry(
+  page: Page,
+  url: string,
+  region: Locator,
+  { attempts = 2, timeoutMs = 20000 }: { attempts?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    try {
+      await expect(region).toBeVisible({ timeout: timeoutMs });
+      return;
+    } catch (err) {
+      console.log(`[Navigation Retry ${attempt}/${attempts}] region not visible: ${(err as Error).message}`);
+      if (attempt === attempts) {
+        throw err;
+      }
+    }
+  }
+}
 
 test("capture evolution journal fallback-state hosted evidence", async ({ page, request }) => {
   page.on("console", (msg) => {
@@ -17,24 +98,36 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   await installOidcDevLogin(page, { tenantId: "pantheon-dev", goto: false });
   await installQuietEventSource(page);
 
-  // Fetch live fleet personas and evolution journal entries
+  // Fetch live fleet personas and evolution journal entries with bounded retry
+  // and status/body validation so a transient hosted-run hiccup produces a
+  // clear diagnostic failure instead of a silent empty-array fallback.
   const headers = authHeaders({ tenantId: "pantheon-dev" });
-  const fleetResponse = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, { headers });
-  const fleetData = await fleetResponse.json();
-  const fleetItems = fleetData.data?.items ?? [];
+  const fleetData = await fetchJsonWithRetry<FleetResponseBody>(
+    request,
+    `${BFF_BASE}/bff/management/persona-fleet?page_size=100`,
+    headers,
+    "persona-fleet fetch",
+  );
+  const fleetItems: FleetPersona[] = fleetData.data?.items ?? [];
 
-  const journalResponse = await request.get(`${BFF_BASE}/bff/management/evolution-journal`, { headers });
-  const journalData = await journalResponse.json();
-  const journalItems = journalData.data?.items ?? journalData ?? [];
+  const journalData = await fetchJsonWithRetry<JournalResponseBody>(
+    request,
+    `${BFF_BASE}/bff/management/evolution-journal`,
+    headers,
+    "evolution-journal fetch",
+  );
+  const journalItems: JournalEntry[] = Array.isArray(journalData)
+    ? journalData
+    : journalData.data?.items ?? [];
 
   // Find a persona ID in the fleet that does not have any evolution journal entry (or fallback to any persona in the fleet)
   const journalPersonaIds = new Set(
     journalItems
-      .map((item: any) => item.target?.id)
+      .map((item) => item.target?.id)
       .filter(Boolean)
   );
 
-  let targetPersona = fleetItems.find((item: any) => {
+  let targetPersona = fleetItems.find((item) => {
     const id = item.id ?? item.persona_id ?? item.personaId;
     return id && !journalPersonaIds.has(id);
   });
@@ -52,12 +145,14 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
 
   console.log(`Using target persona ID: ${personaId} (${personaName})`);
 
-  // Navigate to the evolution journal with the persona parameter
-  await page.goto(`${FE_BASE}/management/evolution-journal?persona=${encodeURIComponent(personaId)}`);
-
-  // Wait for the region to render
+  // Navigate to the evolution journal with the persona parameter, retrying the
+  // navigation (not just the assertion) if the region fails to render.
   const region = page.getByRole('region', { name: /演化日誌|Evolution Journal/i });
-  await expect(region).toBeVisible({ timeout: 20000 });
+  await gotoWithRegionRetry(
+    page,
+    `${FE_BASE}/management/evolution-journal?persona=${encodeURIComponent(personaId)}`,
+    region,
+  );
 
   // Wait for the loading placeholder to clear (bounds the positive assertions
   // below to the actually-loaded fallback card, instead of a blind timeout
