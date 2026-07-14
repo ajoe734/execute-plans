@@ -291,7 +291,13 @@ export const tradeJournal = {
     );
   },
 
-  decideLesson: (personaId: string, lessonId: string, reason: string, decision: "endorsed" | "rejected" | "quarantined"): Promise<CommandResponse> => {
+  decideLesson: (
+    personaId: string,
+    lessonId: string,
+    reason: string,
+    decision: "endorsed" | "rejected" | "quarantined",
+    varianceAttribution?: string,
+  ): Promise<CommandResponse> => {
     const mockFn = async (): Promise<CommandResponse> => {
       return {
         data: { status: "accepted", commandId: `cmd-decide-${Math.random().toString(36).substr(2, 9)}` },
@@ -303,7 +309,7 @@ export const tradeJournal = {
       {
         method: "POST",
         path: paths.tradeLessonDecide(personaId, lessonId),
-        body: { reason, decision },
+        body: varianceAttribution ? { reason, decision, variance_attribution: varianceAttribution } : { reason, decision },
         idempotencyKey: `idem-decide-${lessonId}-${Math.random().toString(36).substr(2, 9)}`,
       },
       mockFn,

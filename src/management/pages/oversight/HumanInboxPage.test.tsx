@@ -1,15 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { HumanInboxPage } from "./_core";
-import type {
-  HumanInboxItem,
-  HumanInboxListState,
-  HumanInboxSurfaceStatus,
-} from "@/lib/v5/management/humanInbox";
+import type { HumanInboxItem } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -58,19 +54,6 @@ function readinessBlockerItem(personaId = "persona-tw-equity", title = "Taiwan E
   };
 }
 
-function inboxState(
-  items: HumanInboxItem[],
-  status: HumanInboxSurfaceStatus = "ok",
-  partial = false,
-): HumanInboxListState {
-  return {
-    items,
-    surface: { status, source: "bff_composed" },
-    snapshotAt: "2026-07-13T00:00:00Z",
-    partial,
-  };
-}
-
 describe("HumanInboxPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
@@ -78,9 +61,8 @@ describe("HumanInboxPage", () => {
 
   it("links evidence-bearing readiness blockers to the detail evidence section", () => {
     mocks.useV5Live.mockReturnValue({
-      data: inboxState([readinessBlockerItem()]),
+      data: [readinessBlockerItem()],
       loading: false,
-      error: undefined,
       refresh: vi.fn(),
     });
 
@@ -100,12 +82,11 @@ describe("HumanInboxPage", () => {
 
   it("honors the persona query by showing only matching inbox items", () => {
     mocks.useV5Live.mockReturnValue({
-      data: inboxState([
+      data: [
         readinessBlockerItem("persona-crypto", "Crypto Persona"),
         readinessBlockerItem("persona-tw-equity", "Taiwan Equity Persona"),
-      ]),
+      ],
       loading: false,
-      error: undefined,
       refresh: vi.fn(),
     });
 
@@ -128,12 +109,11 @@ describe("HumanInboxPage", () => {
 
   it("preserves Portfolio Book target context without hiding the live queue", () => {
     mocks.useV5Live.mockReturnValue({
-      data: inboxState([
+      data: [
         readinessBlockerItem("persona-crypto", "Crypto Persona"),
         readinessBlockerItem("persona-tw-equity", "Taiwan Equity Persona"),
-      ]),
+      ],
       loading: false,
-      error: undefined,
       refresh: vi.fn(),
     });
 
@@ -156,7 +136,6 @@ describe("HumanInboxPage", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,
       loading: true,
-      error: undefined,
       refresh: vi.fn(),
     });
 
@@ -167,120 +146,17 @@ describe("HumanInboxPage", () => {
     expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
   });
 
-  it("shows unavailable with retry instead of a false empty inbox", () => {
-    const refresh = vi.fn();
+  it("does not fall back to the legacy mock inbox when live data is unavailable", () => {
     mocks.useV5Live.mockReturnValue({
       data: undefined,
       loading: false,
-      error: new Error("request timed out"),
-      refresh,
-    });
-
-    renderInbox();
-
-    expect(screen.getByText("Human Inbox status unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
-    expect(screen.queryByText("Beta drift critical on momentum sleeve")).not.toBeInTheDocument();
-  });
-
-  it("shows an authoritative empty state only for a healthy complete response", () => {
-    mocks.useV5Live.mockReturnValue({
-      data: inboxState([]),
-      loading: false,
-      error: undefined,
       refresh: vi.fn(),
     });
 
     renderInbox();
 
     expect(screen.getByText("No Human Inbox items currently require review.")).toBeInTheDocument();
-    expect(screen.queryByText("Human Inbox is incomplete")).not.toBeInTheDocument();
-  });
-
-  it("does not call a degraded empty response authoritative", () => {
-    mocks.useV5Live.mockReturnValue({
-      data: inboxState([], "degraded", true),
-      loading: false,
-      error: undefined,
-      refresh: vi.fn(),
-    });
-
-    renderInbox();
-
-    expect(screen.getByText("Human Inbox is incomplete")).toBeInTheDocument();
-    expect(screen.getByText("No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out.")).toBeInTheDocument();
-    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
-  });
-
-  it("marks a focused degraded response incomplete instead of empty or missing", () => {
-    mocks.useV5Live.mockReturnValue({
-      data: inboxState([], "degraded", true),
-      loading: false,
-      error: undefined,
-      refresh: vi.fn(),
-    });
-
-    renderInbox("/management/human-inbox?persona=persona-tw-equity");
-
-    expect(
-      screen.getByText("Inbox status is incomplete for persona-tw-equity; absence cannot be confirmed."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Human Inbox is incomplete")).toBeInTheDocument();
-    expect(
-      screen.getByText("Some live sources are unavailable or timed out. Showing the items that were confirmed."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    expect(screen.queryByText("Human Inbox status unavailable")).not.toBeInTheDocument();
-    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("No Human Inbox items currently require review for persona-tw-equity."),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to Persona Detail" })).toHaveAttribute(
-      "href",
-      "/management/personas/persona-tw-equity",
-    );
-  });
-
-  it("keeps a focused transport failure distinct from a degraded response", () => {
-    mocks.useV5Live.mockReturnValue({
-      data: undefined,
-      loading: false,
-      error: new Error("request timed out"),
-      refresh: vi.fn(),
-    });
-
-    renderInbox("/management/human-inbox?persona=persona-tw-equity");
-
-    expect(
-      screen.getByText("Inbox status is incomplete for persona-tw-equity; absence cannot be confirmed."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Human Inbox status unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("Human Inbox is incomplete")).not.toBeInTheDocument();
-    expect(screen.queryByText("No inbox item found for persona-tw-equity.")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("No Human Inbox items currently require review for persona-tw-equity."),
-    ).not.toBeInTheDocument();
-  });
-
-  it("keeps confirmed rows visible when a refresh fails", () => {
-    mocks.useV5Live.mockReturnValue({
-      data: inboxState([
-        readinessBlockerItem("persona-crypto", "Crypto Persona"),
-        readinessBlockerItem("persona-tw-equity", "Taiwan Equity Persona"),
-      ]),
-      loading: false,
-      error: new Error("refresh timed out"),
-      refresh: vi.fn(),
-    });
-
-    renderInbox();
-
-    expect(screen.getByText("Human Inbox is incomplete")).toBeInTheDocument();
-    expect(screen.getByText("Persona needs review: Crypto Persona")).toBeInTheDocument();
-    expect(screen.getByText("Persona needs review: Taiwan Equity Persona")).toBeInTheDocument();
-    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Approve mutation v3 for alpha-trader")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beta drift critical on momentum sleeve")).not.toBeInTheDocument();
   });
 });

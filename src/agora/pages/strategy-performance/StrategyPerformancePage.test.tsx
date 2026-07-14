@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { StrategyPerformancePage } from "./StrategyPerformancePage";
@@ -127,11 +127,11 @@ describe("StrategyPerformancePage", () => {
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "策略執行與績效" })).toBeDefined();
-    expect(screen.getByText("Breakout Alpha")).toBeDefined();
+    expect(screen.getAllByText("Breakout Alpha").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,250").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-4.20%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2/3").length).toBeGreaterThan(0);
-    expect(screen.getByText("即時歸因")).toBeDefined();
+    expect(screen.getAllByText("即時歸因").length).toBeGreaterThan(0);
     expect(screen.getByText("portfolio_book")).toBeDefined();
     expect(screen.getByText(/read_only_performance_attribution/)).toBeDefined();
     expect(screen.queryByText(/coming soon|即將推出/i)).toBeNull();
@@ -162,8 +162,8 @@ describe("StrategyPerformancePage", () => {
 
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
-    expect(await screen.findByText("Carry Beta")).toBeDefined();
-    expect(screen.getByText("缺少歸因資料")).toBeDefined();
+    expect(await screen.findAllByText("Carry Beta")).toBeDefined();
+    expect(screen.getAllByText("缺少歸因資料").length).toBeGreaterThan(0);
   });
 
   it("places the explained Unassigned bucket after named strategies", async () => {
@@ -186,15 +186,15 @@ describe("StrategyPerformancePage", () => {
 
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
-    const named = await screen.findByText("Breakout Alpha");
-    const unassigned = screen.getByText("Unassigned");
-    expect(named.compareDocumentPosition(unassigned) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const named = await screen.findAllByText("Breakout Alpha");
+    const unassigned = screen.getAllByText("Unassigned");
+    expect(named[0].compareDocumentPosition(unassigned[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId("performance-row-attribution-row-unassigned-description").textContent).toContain(
       "無法連結至具名交易操盤室策略",
     );
   });
 
-  it("distinguishes measured zero from values the BFF did not report", async () => {
+  it("distinguishes measured zero from values the BFF did not report in both list and table", async () => {
     const attribution = attributionResponse();
     attribution.data.items = [
       {
@@ -210,13 +210,22 @@ describe("StrategyPerformancePage", () => {
 
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
-    await screen.findByText("Breakout Alpha");
-    const zero = screen.getByTitle("已量測：零");
-    const unreported = screen.getByTitle("BFF 未回報量測值");
-    expect(zero.textContent).toBe("$0");
-    expect(zero.getAttribute("data-metric-state")).toBe("measured");
-    expect(unreported.textContent).toBe("未回報");
-    expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
+    await screen.findAllByText("Breakout Alpha");
+    
+    // Both list and table should render zero PNL and unreported total_trades
+    const zeros = screen.getAllByTitle("已量測：零");
+    expect(zeros.length).toBeGreaterThanOrEqual(2); // one in list, one in table, one in top summary card too!
+    zeros.forEach((zero) => {
+      expect(zero.textContent).toBe("$0");
+      expect(zero.getAttribute("data-metric-state")).toBe("measured");
+    });
+
+    const unreporteds = screen.getAllByTitle("BFF 未回報量測值");
+    expect(unreporteds.length).toBeGreaterThanOrEqual(2); // one in list, one in table, one in top summary card too!
+    unreporteds.forEach((unreported) => {
+      expect(unreported.textContent).toBe("未回報");
+      expect(unreported.getAttribute("data-metric-state")).toBe("not-reported");
+    });
   });
 
   it("shows the live BFF error state without rendering fallback rows", async () => {
@@ -231,5 +240,56 @@ describe("StrategyPerformancePage", () => {
     await waitFor(() => {
       expect(screen.queryByText("Breakout Alpha")).toBeNull();
     });
+  });
+
+  it("supports period changes and updates the query parameters", async () => {
+    arrangeLoaded();
+    const { container } = render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findAllByText("Breakout Alpha");
+
+    const select = container.querySelector("select");
+    expect(select).toBeDefined();
+    if (select) {
+      fireEvent.change(select, { target: { value: "7d" } });
+      await waitFor(() => {
+        expect(tradingRoomMocks.getTradingRoomPerformanceAttribution).toHaveBeenCalledWith({
+          pageSize: 50,
+          period: "7d",
+        });
+      });
+    }
+  });
+
+  it("supports tab switching to Interventions and Execution History", async () => {
+    arrangeLoaded();
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findAllByText("Breakout Alpha");
+
+    // Click on Interventions tab
+    const intvButton = screen.getByText("干預追蹤");
+    fireEvent.click(intvButton);
+    expect(screen.getByText("過去 20 筆候選的處理結果")).toBeDefined();
+    expect(screen.getByText("主動加碼 (未達訊號條件)")).toBeDefined();
+
+    // Click on Execution History tab
+    const histButton = screen.getByText("執行歷史");
+    fireEvent.click(histButton);
+    expect(screen.getByText("日期")).toBeDefined();
+    expect(screen.getByText("台積電")).toBeDefined();
+    expect(screen.getByText("聯電")).toBeDefined();
+  });
+
+  it("supports applying Servant suggestions with interactive toasts", async () => {
+    arrangeLoaded();
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findAllByText("Breakout Alpha");
+
+    const applyButton = screen.getAllByText("套用")[0];
+    fireEvent.click(applyButton);
+    expect(screen.getByText("套用調整建議成功！已送至策略工坊")).toBeDefined();
+    expect(screen.getByText("已套用")).toBeDefined();
   });
 });

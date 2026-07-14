@@ -84,9 +84,12 @@ export function AgoraTradingRoomRoute() {
 export function AgoraStrategyWorkshopRoute() {
   const navigate = useNavigate();
   const { workshopId } = useParams<{ workshopId?: string }>();
+  const [searchParams] = useSearchParams();
+  const governedProposalId = searchParams.get("governedProposalId")?.trim() || undefined;
 
   return (
     <StrategyWorkshopPage
+      governedProposalId={governedProposalId}
       onAddToTradingRoom={(handoff) =>
         navigate(
           `/agora/trading-room/${encodeURIComponent(handoff.strategyId)}?${tradingRoomHandoffQuery(handoff)}`,

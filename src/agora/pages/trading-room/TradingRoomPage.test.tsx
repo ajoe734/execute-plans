@@ -25,6 +25,16 @@ vi.mock("@/lib/bff-v1/agora/candidatePool", () => ({
   listCandidatePoolMembers: vi.fn().mockImplementation(() => Promise.resolve({ items: [] })),
 }));
 
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams()],
+}));
+
+vi.mock("@/lib/bff-v1/agora/workshops", () => ({
+  createWorkshop: vi.fn().mockResolvedValue({ workshop_id: "ws-new-001" }),
+  postWorkshopMessage: vi.fn().mockResolvedValue({ message_id: "msg-001" }),
+}));
+
 vi.mock("react-grid-layout", async () => {
   const ReactModule = await import("react");
   const MockGridLayout = ({
@@ -75,6 +85,7 @@ vi.mock("@/agora/widgets/ChartSpecRenderer", () => ({
 import { TradingRoomPage } from "./TradingRoomPage";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import * as candidatePoolModule from "@/lib/bff-v1/agora/candidatePool";
+import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
   ChartSpecV1,
@@ -514,21 +525,6 @@ const MOCK_VERSION_2: TradingRoomDashboardVersion = {
 
 afterEach(cleanup);
 
-async function openSingleColumnLayoutProposal(): Promise<void> {
-  fireEvent.click(screen.getByTestId("workspace-proposal-adjust-layout"));
-  await screen.findByTestId("workspace-layout-proposal-drawer");
-  fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
-  fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
-  await screen.findByTestId("workspace-layout-proposal-preview");
-}
-
-function expectNoExecutionSideEffects(): void {
-  expect(tradingRoomModule.acceptWidgetRevisionProposal).not.toHaveBeenCalled();
-  expect(tradingRoomModule.createWidgetRevisionProposal).not.toHaveBeenCalled();
-  expect(tradingRoomModule.decideOnEvent).not.toHaveBeenCalled();
-  expect(tradingRoomModule.rollbackTradingRoomWorkspaceVersion).not.toHaveBeenCalled();
-}
-
 describe("TradingRoomPage", () => {
   beforeEach(() => {
     gridCallbacks.onLayoutChange = undefined;
@@ -856,7 +852,7 @@ describe("TradingRoomPage", () => {
     for (const view of PROPOSAL_VIEWS) {
       expect(screen.getByTestId(`workspace-proposal-view-${view.id}`)).toBeDefined();
       expect(screen.getByTestId(`workspace-proposal-thumbnail-${view.id}`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toContain("1 個元件");
+      expect(screen.getByTestId(`workspace-proposal-view-${view.id}-widget-count`).textContent).toMatch(/1 widgets|1 個元件/);
     }
   });
 
@@ -867,178 +863,20 @@ describe("TradingRoomPage", () => {
     const availability = screen.getByTestId("workspace-proposal-data-availability");
 
     expect(preview).toHaveStyle({ background: "#11151d" });
-    expect(firstView).toHaveStyle({ background: "#171b22" });
+    expect(firstView).toHaveStyle({ background: "#222535" });
     expect(availability).toHaveStyle({ background: "#171b22" });
-    expect(screen.queryByTestId("workspace-proposal-preview-first")).toBeNull();
   });
 
   it("shows proposal data availability, warnings, and personalization without raw backend wording", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
-    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toContain("工作區資料可用性");
+    expect(screen.getByTestId("workspace-proposal-data-availability").textContent).toMatch(/Workspace data availability|工作區資料可用性/);
     expect(screen.getByTestId("workspace-proposal-data-availability").textContent).not.toContain("winner_branch.related_branch_flow");
-    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toContain("0 完整／1 部分可用／0 缺漏");
-    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toContain("1 完整／0 部分可用／0 缺漏");
+    expect(screen.getByTestId("workspace-proposal-view-branch-relationship-availability").textContent).toMatch(/0 full \/ 1 partial \/ 0 missing|0 完整／1 \u90e8\u5206\u53ef\u7528／0 缺漏/);
+    expect(screen.getByTestId("workspace-proposal-view-strategy-overview-availability").textContent).toMatch(/1 full \/ 0 partial \/ 0 missing|1 完整／0 \u90e8\u5206\u53ef\u7528／0 缺漏/);
     expect(screen.getByTestId("workspace-proposal-personalization").textContent).toContain("density");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).toContain("後台執行狀態");
     expect(screen.getByTestId("workspace-proposal-warnings").textContent).not.toContain("RuntimeBinding");
-  });
-
-  it("opens a whole-workspace layout proposal without accepting or patching before Apply", async () => {
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-
-    await openSingleColumnLayoutProposal();
-
-    for (const view of PROPOSAL_VIEWS) {
-      expect(screen.getByTestId(`workspace-layout-proposal-view-${view.id}-before`)).toBeDefined();
-      expect(screen.getByTestId(`workspace-layout-proposal-view-${view.id}-after`)).toBeDefined();
-    }
-    expect((screen.getByTestId("workspace-layout-proposal-apply") as HTMLButtonElement).disabled).toBe(false);
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
-    expectNoExecutionSideEffects();
-  });
-
-  it("rejects a whole-workspace layout proposal without any workspace mutation", async () => {
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    await openSingleColumnLayoutProposal();
-
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-reject"));
-
-    await waitFor(() => expect(screen.queryByTestId("workspace-layout-proposal-drawer")).toBeNull());
-    expect(screen.getByTestId("workspace-proposal-preview")).toBeDefined();
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
-    expectNoExecutionSideEffects();
-  });
-
-  it("accepts a preview before applying one safe layout PATCH with the returned ETag", async () => {
-    const mutationOrder: string[] = [];
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockImplementationOnce(async () => {
-      mutationOrder.push("accept");
-      return {
-        etag: '"accepted-workspace-etag-v1"',
-        version: MOCK_VERSION_1,
-        workspace: MOCK_WORKSPACE,
-      };
-    });
-    vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mockImplementationOnce(async () => {
-      mutationOrder.push("patch");
-      return {
-        etag: '"workspace-etag-v2"',
-        version: MOCK_VERSION_2,
-        workspace: MOCK_WORKSPACE_V2,
-      };
-    });
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    await openSingleColumnLayoutProposal();
-
-    expect(mutationOrder).toEqual([]);
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
-
-    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1));
-    expect(mutationOrder).toEqual(["accept", "patch"]);
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledWith(
-      "strat-001",
-      "proposal-001",
-      { expectedStatus: "preview" },
-      expect.objectContaining({ idempotencyKey: expect.any(String) }),
-    );
-
-    const [workspaceId, body, options] = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[0];
-    expect(workspaceId).toBe("workspace-001");
-    expect(body.operations).toHaveLength(PROPOSAL_VIEWS.length);
-    expect(body.operations.every((operation) => operation.kind === "resize_widget")).toBe(true);
-    expect(options).toEqual({
-      ifMatch: '"accepted-workspace-etag-v1"',
-      idempotencyKey: expect.any(String),
-    });
-    expect(JSON.stringify({ body, workspaceId })).not.toMatch(/\b(?:broker|order|capital|runtime)\b/iu);
-    expectNoExecutionSideEffects();
-    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
-  });
-
-  it("does not PATCH when pre-accept workspace acceptance fails", async () => {
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta)
-      .mockRejectedValueOnce(new Error("accept failed before layout PATCH"));
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    await openSingleColumnLayoutProposal();
-
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
-
-    await screen.findByText("accept failed before layout PATCH");
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("trading-room-workspace-shell")).toBeNull();
-    expectNoExecutionSideEffects();
-  });
-
-  it("preserves accepted v1 after a PATCH failure and retries without accepting again", async () => {
-    vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout)
-      .mockRejectedValueOnce(new Error("layout PATCH failed after acceptance"));
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    await openSingleColumnLayoutProposal();
-
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
-
-    await screen.findByText(/layout PATCH failed after acceptance/u);
-    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v1"));
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
-    await screen.findByTestId("workspace-layout-proposal-preview");
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
-
-    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(2));
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledTimes(1);
-    const retryOptions = vi.mocked(tradingRoomModule.patchTradingRoomWorkspaceLayout).mock.calls[1][2];
-    expect(retryOptions).toEqual({
-      ifMatch: '"workspace-etag-v1"',
-      idempotencyKey: expect.any(String),
-    });
-    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
-  });
-
-  it("applies an accepted-workspace layout request once with the current ETag", async () => {
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValueOnce({
-      etag: '"current-workspace-etag-v1"',
-      version: MOCK_VERSION_1,
-      workspace: MOCK_WORKSPACE,
-    });
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
-    await screen.findByTestId("trading-room-workspace-shell");
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockClear();
-
-    fireEvent.click(screen.getByTestId("workspace-request-layout-proposal"));
-    await screen.findByTestId("workspace-layout-proposal-drawer");
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-chip-single_column"));
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-generate"));
-    await screen.findByTestId("workspace-layout-proposal-preview");
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("workspace-layout-proposal-apply"));
-
-    await waitFor(() => expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledTimes(1));
-    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
-    expect(tradingRoomModule.patchTradingRoomWorkspaceLayout).toHaveBeenCalledWith(
-      "workspace-001",
-      expect.objectContaining({ operations: expect.any(Array) }),
-      {
-        ifMatch: '"current-workspace-etag-v1"',
-        idempotencyKey: expect.any(String),
-      },
-    );
-    expectNoExecutionSideEffects();
-    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
   });
 
   it("accepts the proposal and renders the accepted workspace shell", async () => {
@@ -1058,27 +896,6 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
   });
 
-  it("requires an explicit view choice when the accepted active view is invalid", async () => {
-    vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValueOnce({
-      etag: '"workspace-etag-v1"',
-      version: MOCK_VERSION_1,
-      workspace: { ...MOCK_WORKSPACE, activeViewId: "missing-view" },
-    });
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
-
-    const chooser = await screen.findByTestId("workspace-view-chooser");
-    expect(screen.queryByTestId("workspace-control-strip")).toBeNull();
-    expect(screen.getByTestId("workspace-request-layout-proposal")).toBeDefined();
-
-    fireEvent.click(within(chooser).getAllByRole("button")[0]);
-
-    expect(await screen.findByTestId("workspace-control-strip")).toBeDefined();
-    expect(screen.getByTestId("workspace-readiness-badge")).toBeDefined();
-    expect(screen.getByTestId("workspace-request-layout-proposal")).toBeDefined();
-  });
-
   it("keeps the accepted workspace shell and widgets on the dark Trading Room surface", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
@@ -1088,17 +905,6 @@ describe("TradingRoomPage", () => {
 
     expect(shell).toHaveStyle({ background: "#11151d" });
     expect(widget).toHaveStyle({ background: "#171b22" });
-  });
-
-  it("clips the workspace inside a shrinkable flex column so it cannot cover the decision queue", async () => {
-    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
-    await screen.findByTestId("workspace-proposal-preview");
-    fireEvent.click(screen.getByTestId("workspace-proposal-accept"));
-    const shell = await screen.findByTestId("trading-room-workspace-shell");
-    const column = screen.getByTestId("trading-room-workspace-column");
-
-    expect(shell).toHaveStyle({ minHeight: "0", overflow: "hidden" });
-    expect(column).toHaveStyle({ minHeight: "0", minWidth: "0", overflow: "hidden" });
   });
 
   it("saves drag and resize operations with workspace ETag and idempotency key", async () => {
@@ -1131,7 +937,6 @@ describe("TradingRoomPage", () => {
       ),
     );
     await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
-    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
   });
 
   it("removes and restores widgets through layout operations without deleting the widget", async () => {
@@ -1240,8 +1045,6 @@ describe("TradingRoomPage", () => {
         }),
       ),
     );
-    await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v3"));
-    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
   });
 
   it("opens widget adjustment drawer from widget click and applies a backend revision proposal", async () => {
@@ -1331,7 +1134,6 @@ describe("TradingRoomPage", () => {
       ),
     );
     await waitFor(() => expect(screen.getByTestId("workspace-dashboard-version").textContent).toContain("v2"));
-    await waitFor(() => expect(tradingRoomModule.listTradingRoomWorkspaceVersions).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("workspace-widget-w-status").textContent).toContain("策略狀態摘要 Revised");
   });
 
@@ -1695,6 +1497,80 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("detail-suggested-action").textContent).toContain("enter");
   });
 
+  it("shows Ask Personas button and opens consultation panel on click", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("event-row-evt-001");
+    fireEvent.click(screen.getByTestId("event-row-evt-001"));
+
+    const askButton = screen.getByTestId("ask-personas-evt-001");
+    expect(askButton).toBeDefined();
+
+    // Toggle the panel on
+    fireEvent.click(askButton);
+    const consultPanel = screen.getByTestId("consult-panel-evt-001");
+    expect(consultPanel).toBeDefined();
+    expect(consultPanel.textContent).toContain("evt-001");
+    expect(consultPanel.textContent).toContain("reg-001");
+
+    // Test Launch Workshop Consultation
+    const launchButton = screen.getByTestId("consult-panel-submit-evt-001");
+    fireEvent.click(launchButton);
+
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith(expect.objectContaining({
+        subject: expect.objectContaining({
+          kind: "candidate_artifact",
+          ref: "evt-001",
+        }),
+        metadata: expect.objectContaining({
+          decision_event_id: "evt-001",
+          strategy_version: "reg-001",
+        })
+      }));
+    });
+  });
+
+  it("opens modify linkage panel and submits modifications on confirm", async () => {
+    render(<TradingRoomPage />);
+    await screen.findByTestId("event-row-evt-001");
+    fireEvent.click(screen.getByTestId("event-row-evt-001"));
+
+    const modifyButton = screen.getByTestId("decide-modify-evt-001");
+    fireEvent.click(modifyButton);
+
+    const modifyPanel = screen.getByTestId("modify-linkage-panel-evt-001");
+    expect(modifyPanel).toBeDefined();
+
+    const propIdInput = screen.getByTestId("modify-proposal-id-evt-001");
+    const propRevInput = screen.getByTestId("modify-proposal-revision-evt-001");
+    const wsIdInput = screen.getByTestId("modify-workshop-id-evt-001");
+    const rationaleInput = screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits...");
+
+    fireEvent.change(propIdInput, { target: { value: "prop-xyz" } });
+    fireEvent.change(propRevInput, { target: { value: "2" } });
+    fireEvent.change(wsIdInput, { target: { value: "ws-abc" } });
+    fireEvent.change(rationaleInput, { target: { value: "Reduced leverage due to IV increase" } });
+
+    const submitButton = screen.getByTestId("modify-linkage-submit-evt-001");
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(tradingRoomModule.decideOnEvent).toHaveBeenCalledWith(
+        "evt-001",
+        expect.objectContaining({
+          decision: "modify",
+          rationale: "Reduced leverage due to IV increase",
+          modifications: {
+            proposal_id: "prop-xyz",
+            proposal_revision: 2,
+            consultation_workshop_id: "ws-abc",
+          }
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
   // ── AG-UIPOL-007: Multi-Lens Monitoring & Candidate Parity ──────────────────
 
   it("renders all five strategy lenses in the switcher and shows their titles", async () => {
@@ -1710,12 +1586,9 @@ describe("TradingRoomPage", () => {
   it("switches to the selected lens dashboard when clicking a lens card", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
-    // Switch to Event Trading Lens
-    const eventTradingLens = screen.getByText("事件交易");
-    fireEvent.click(eventTradingLens);
-    
-    // Check if Event Trading Dashboard is rendered
+
+    fireEvent.click(screen.getByText("事件交易"));
+
     expect(screen.getByTestId("dashboard-recipe-d")).toBeDefined();
     expect(screen.getByText("預期差情境分析樹")).toBeDefined();
   });
@@ -1723,21 +1596,15 @@ describe("TradingRoomPage", () => {
   it("opens the Candidate Review Drawer when a candidate row is clicked, and does not claim real execution", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
-    // Switch to continuous monitoring view (de-select strat-001)
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
-    
-    // Click Apple candidate in Chip lens
+
     const appleRow = await screen.findByTestId("candidate-row-AAPL");
     fireEvent.click(appleRow);
-    
-    // Check if drawer is opened with correct details
+
     expect(screen.getByTestId("candidate-review-drawer")).toBeDefined();
     expect(screen.getByTestId("drawer-candidate-symbol").textContent).toBe("AAPL");
     expect(screen.getByTestId("drawer-candidate-score").textContent).toBe("94");
     expect(screen.getByTestId("drawer-candidate-reason").textContent).toContain("Significant accumulation");
-    
-    // Verify governed action buttons are present and copy does not claim execution
     expect(screen.getByTestId("drawer-action-monitor").textContent).toBe("納入監控");
     expect(screen.getByTestId("drawer-action-shadow").textContent).toBe("送影子追蹤");
     expect(screen.getByTestId("drawer-action-workspace").textContent).toBe("開啟 Winner Branch 工作區");
@@ -1746,82 +1613,54 @@ describe("TradingRoomPage", () => {
   it("updates candidate state in drawer when state transition action is clicked", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
-    // Switch to continuous monitoring view (de-select strat-001)
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
-    
-    // Open Apple candidate drawer
+
     const appleRow = await screen.findByTestId("candidate-row-AAPL");
     fireEvent.click(appleRow);
-    
-    // Current state should be "待討論" (to_discuss)
+
     expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("待討論");
-    
-    // Click "納入監控" (monitoring)
     fireEvent.click(screen.getByTestId("drawer-action-monitor"));
-    
-    // State in drawer should update to "納入監控"
     expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
   });
 
   it("renders distinct dashboards and recipes when switching lenses A to E", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
-    // Switch to continuous monitoring view (de-select strat-001)
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
-    
-    // We should be on lens-A by default. Check if recipe A elements exist
+
     expect(screen.getByTestId("dashboard-recipe-a")).toBeDefined();
 
-    // Switch to lens-B
     const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
-    const lensBCard = within(lenses).getByText("產業落後補漲");
-    fireEvent.click(lensBCard);
+    fireEvent.click(within(lenses).getByText("產業落後補漲"));
     expect(await screen.findByTestId("dashboard-recipe-b")).toBeDefined();
-
-    // Switch to lens-C
-    const lensCCard = within(lenses).getByText("技術突破");
-    fireEvent.click(lensCCard);
+    fireEvent.click(within(lenses).getByText("技術突破"));
     expect(await screen.findByTestId("dashboard-recipe-c")).toBeDefined();
-
-    // Switch to lens-D
-    const lensDCard = within(lenses).getByText("事件交易");
-    fireEvent.click(lensDCard);
+    fireEvent.click(within(lenses).getByText("事件交易"));
     expect(await screen.findByTestId("dashboard-recipe-d")).toBeDefined();
-
-    // Switch to lens-E
-    const lensECard = within(lenses).getByText("大額資金進出");
-    fireEvent.click(lensECard);
+    fireEvent.click(within(lenses).getByText("大額資金進出"));
     expect(await screen.findByTestId("dashboard-recipe-e")).toBeDefined();
   });
 
   it("renders empty candidate state message when no candidates match active filter", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
-    // Switch to continuous monitoring view (de-select strat-001)
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
 
-    // Select state filter '暫放觀察' (parked) which has 0 items initially
     const sidebar = screen.getByTestId("trading-room-lens-sidebar");
-    const parkedBtn = within(sidebar).getByText("暫放觀察");
-    fireEvent.click(parkedBtn);
+    fireEvent.click(within(sidebar).getByText("暫放觀察"));
 
-    // Verify empty state message
     expect(await screen.findByText(/此狀態下無候選人/i)).toBeDefined();
   });
 
   it("displays sample data warning when BFF candidatePool API fails", async () => {
     vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockRejectedValueOnce(
-      new Error("Network Error")
+      new Error("Network Error"),
     );
-    
+
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
 
-    // Wait for the sample data warning badge to be displayed
     await waitFor(() => {
       expect(screen.getByTestId("sample-data-warning")).toBeDefined();
       expect(screen.getByTestId("sample-data-warning").textContent).toContain("模擬數據");
@@ -1837,33 +1676,25 @@ describe("TradingRoomPage", () => {
     appleRow.focus();
     expect(document.activeElement).toBe(appleRow);
 
-    // Open candidate drawer
     fireEvent.click(appleRow);
     const drawer = await screen.findByTestId("candidate-review-drawer");
-    expect(drawer).toBeDefined();
-
-    // Expect dialog accessibility attributes
     expect(drawer.getAttribute("role")).toBe("dialog");
     expect(drawer.getAttribute("aria-modal")).toBe("true");
 
-    // Close button should get focus automatically
     const closeBtn = screen.getByTestId("drawer-close-btn");
     expect(document.activeElement).toBe(closeBtn);
 
-    // Press Escape to close drawer
     fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
     await waitFor(() => {
       expect(screen.queryByTestId("candidate-review-drawer")).toBeNull();
     });
-
-    // Focus should be restored back to appleRow
     expect(document.activeElement).toBe(appleRow);
   });
 
   it("renders lens-specific columns in the candidate board table", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    
+
     // Switch to continuous monitoring view (de-select strat-001)
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
 

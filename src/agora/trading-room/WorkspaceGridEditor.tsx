@@ -20,6 +20,8 @@ import {
   patchTradingRoomWorkspaceLayout,
   rollbackTradingRoomWorkspaceVersion,
   type TradingRoomWorkspaceResult,
+  type TradingDecisionEvent,
+  type TradingRoomRiskSummary,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import {
   CHART_SPEC_KINDS,
@@ -61,9 +63,11 @@ type SaveState = "idle" | "saving" | "error";
 export interface WorkspaceGridEditorProps {
   initialEtag?: string | null;
   initialWorkspace: TradingRoomWorkspace;
-  onRequestLayoutProposal?: () => void;
   onWorkspaceChange?: (result: TradingRoomWorkspaceResult) => void;
   strategy?: TradingRoomStrategyEntry;
+  workspaceEvents?: TradingDecisionEvent[];
+  riskSummary?: TradingRoomRiskSummary;
+  dataCutoff?: string;
   onBackToWorkshop?: () => void;
   onSwitchStrategy?: () => void;
 }
@@ -81,12 +85,6 @@ function cloneWorkspace(workspace: TradingRoomWorkspace): TradingRoomWorkspace {
 
 function sortedViews(workspace: TradingRoomWorkspace) {
   return [...workspace.views].sort((a, b) => a.order - b.order);
-}
-
-function explicitActiveViewId(workspace: TradingRoomWorkspace): string {
-  return workspace.activeViewId && workspace.views.some((view) => view.id === workspace.activeViewId)
-    ? workspace.activeViewId
-    : "";
 }
 
 function layoutFromWidgets(widgets: TradingRoomWidgetSpec[]): Layout[] {
@@ -297,6 +295,7 @@ function WorkspaceWidgetCard({
   onWhyShown,
   onViewEvidence,
   widget,
+  workspaceEvents = [],
 }: {
   editMode: boolean;
   menuOpen: boolean;
@@ -312,6 +311,7 @@ function WorkspaceWidgetCard({
   onWhyShown: () => void;
   onViewEvidence: () => void;
   widget: TradingRoomWidgetSpec;
+  workspaceEvents?: TradingDecisionEvent[];
 }) {
   const { t } = useTranslation();
   const validation = validateTradingRoomWidgetSpec(widget);
@@ -461,7 +461,7 @@ function WorkspaceWidgetCard({
       <div style={{ minHeight: 0, flex: 1, padding: "0 10px 10px" }}>
         {validation.ok ? (
           <ChartSpecRenderer
-            data={widget.dataAvailability === "unavailable" ? [] : undefined}
+            data={widget.dataAvailability === "unavailable" ? [] : getWidgetData(widget.widgetType, workspaceEvents)}
             height={170}
             spec={widget.chartSpec}
             widgetType={widget.widgetType}
@@ -484,7 +484,7 @@ function parseNewWidgetPrompt(prompt: string, strategyId: string, currentY: numb
   mapping: string;
 } {
   const isReturn = prompt.includes("報酬") || prompt.includes("return") || prompt.includes("5") || prompt.includes("20");
-
+  
   if (isReturn) {
     const spec: TradingRoomWidgetSpec = {
       id: `servant_widget_${Date.now()}`,
@@ -546,6 +546,42 @@ function parseNewWidgetPrompt(prompt: string, strategyId: string, currentY: numb
   };
 }
 
+function getWidgetData(widgetType: string, events: TradingDecisionEvent[]): Record<string, unknown>[] | undefined {
+  if (widgetType === "signal_decision_queue" || widgetType === "overview_decision_queue") {
+    return events.map((ev) => ({
+      event_id: ev.decision_event_id,
+      event_type: ev.event_kind,
+      instrument: ev.subject.symbol,
+      status: ev.state,
+      suggested_action: ev.suggested_action,
+      triggered_at: ev.triggered_at,
+    }));
+  }
+  if (widgetType === "position_action_queue") {
+    const posEvents = events.filter(
+      (ev) => ev.event_kind === "add" || ev.event_kind === "reduce" || ev.event_kind === "exit"
+    );
+    return posEvents.map((ev) => ({
+      position_id: ev.position_ref || "pos_default",
+      instrument: ev.subject.symbol,
+      action_type: ev.event_kind,
+      status: ev.state,
+      triggered_at: ev.triggered_at,
+    }));
+  }
+  if (widgetType === "candidate_ranking_table") {
+    const candEvents = events.filter((ev) => ev.event_kind === "entry" || ev.candidate_ref);
+    return candEvents.map((ev) => ({
+      candidate_id: ev.candidate_ref || "cand_default",
+      instrument: ev.subject.symbol,
+      score: Math.round(ev.confidence?.value * 100 || 85),
+      confidence: ev.confidence?.value || 0.85,
+      expected_value: ev.expected_value?.net || 0,
+    }));
+  }
+  return undefined;
+}
+
 function pendingEventTotal(strategy: TradingRoomStrategyEntry): number {
   return (
     (strategy.pending_event_counts?.entry ?? 0) +
@@ -559,9 +595,11 @@ function pendingEventTotal(strategy: TradingRoomStrategyEntry): number {
 export function WorkspaceGridEditor({
   initialEtag,
   initialWorkspace,
-  onRequestLayoutProposal,
   onWorkspaceChange,
   strategy,
+  workspaceEvents = [],
+  riskSummary,
+  dataCutoff,
   onBackToWorkshop,
   onSwitchStrategy,
 }: WorkspaceGridEditorProps) {
@@ -569,7 +607,7 @@ export function WorkspaceGridEditor({
   const [baseWorkspace, setBaseWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [draftWorkspace, setDraftWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [currentEtag, setCurrentEtag] = useState<string | null>(initialEtag ?? null);
-  const [activeViewId, setActiveViewId] = useState(() => explicitActiveViewId(initialWorkspace));
+  const [activeViewId, setActiveViewId] = useState(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
   const [editMode, setEditMode] = useState(false);
   const [pendingOps, setPendingOps] = useState<WorkspaceLayoutOperation[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -580,7 +618,7 @@ export function WorkspaceGridEditor({
   const [versions, setVersions] = useState<TradingRoomDashboardVersion[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [revisionTarget, setRevisionTarget] = useState<{ viewId: string; widgetId: string } | null>(null);
-
+  
   // Custom states for notifications and Ask Servant widget proposals
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [widgetProposal, setWidgetProposal] = useState<{
@@ -589,12 +627,14 @@ export function WorkspaceGridEditor({
     problem: string;
     mapping: string;
   } | null>(null);
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const [adjustPromptText, setAdjustPromptText] = useState("");
 
   useEffect(() => {
     setBaseWorkspace(cloneWorkspace(initialWorkspace));
     setDraftWorkspace(cloneWorkspace(initialWorkspace));
     setCurrentEtag(initialEtag ?? null);
-    setActiveViewId(explicitActiveViewId(initialWorkspace));
+    setActiveViewId(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
     setEditMode(false);
     setPendingOps([]);
     setSaveState("idle");
@@ -621,7 +661,7 @@ export function WorkspaceGridEditor({
   }, [initialWorkspace.id, baseWorkspace.dashboardVersion]);
 
   const views = useMemo(() => sortedViews(draftWorkspace), [draftWorkspace]);
-  const activeView = views.find((view) => view.id === activeViewId) ?? null;
+  const activeView = views.find((view) => view.id === activeViewId) ?? views[0];
   const visibleWidgets = activeView?.widgets.filter((widget) => widget.visible !== false) ?? [];
   const removedWidgets = activeView?.widgets.filter((widget) => widget.visible === false) ?? [];
   const dirty = pendingOps.length > 0;
@@ -935,7 +975,6 @@ export function WorkspaceGridEditor({
   }
 
   function handleAskServant(prompt: string) {
-    if (!activeView) return;
     const currentY = maxViewY(activeView.widgets);
     const parsed = parseNewWidgetPrompt(prompt, draftWorkspace.strategyId, currentY);
     setWidgetProposal({
@@ -946,35 +985,11 @@ export function WorkspaceGridEditor({
     });
   }
 
-  if (!views.length) {
-    return (
-      <div data-testid="trading-room-workspace-empty" style={{ color: COLORS.muted, fontSize: 13, padding: 16 }}>
-        {t("agora.tradingRoom.layoutProposal.noViews")}
-      </div>
-    );
-  }
-
   if (!activeView) {
     return (
-      <section
-        data-testid="trading-room-workspace-shell"
-        style={{ background: COLORS.panelInset, color: COLORS.text, display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden", padding: 16 }}
-      >
-        <h2 style={{ fontSize: 18, margin: 0 }}>{t("agora.tradingRoom.layoutProposal.chooseView")}</h2>
-        <p style={{ color: COLORS.muted, fontSize: 12 }}>{t("agora.tradingRoom.layoutProposal.chooseViewHint")}</p>
-        <div data-testid="workspace-view-chooser" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {views.map((view) => (
-            <button key={view.id} onClick={() => setActiveViewId(view.id)} style={secondaryButtonStyle} type="button">
-              {agoraCopy(t, view.titleKey, view.title)}
-            </button>
-          ))}
-        </div>
-        {onRequestLayoutProposal ? (
-          <button data-testid="workspace-request-layout-proposal" onClick={onRequestLayoutProposal} style={{ ...primaryButtonStyle, alignSelf: "flex-start", marginTop: 16 }} type="button">
-            {t("agora.tradingRoom.layoutProposal.open")}
-          </button>
-        ) : null}
-      </section>
+      <div data-testid="trading-room-workspace-empty" style={{ color: COLORS.muted, fontSize: 13, padding: 16 }}>
+        Workspace contains no views.
+      </div>
     );
   }
 
@@ -1004,7 +1019,7 @@ export function WorkspaceGridEditor({
             <span style={{ color: COLORS.muted, fontSize: 12 }}>
               ({draftWorkspace.strategyVersion})
             </span>
-
+            
             {/* Status indicators */}
             <span
               data-testid="workspace-readiness-badge"
@@ -1020,33 +1035,44 @@ export function WorkspaceGridEditor({
             >
               {strategy?.readiness_state || "READY"}
             </span>
-
+            
             <span
               data-testid="workspace-data-freshness"
               style={{
                 fontSize: 11,
-                color: COLORS.good,
+                color: activeView?.dataAvailability === "complete" || !activeView?.dataAvailability ? COLORS.good : activeView?.dataAvailability === "partial" ? COLORS.warning : COLORS.muted,
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
               }}
             >
-              ● Data: Complete (10:42)
+              ● Data: {(activeView?.dataAvailability || "complete").charAt(0).toUpperCase() + (activeView?.dataAvailability || "complete").slice(1)} {dataCutoff ? `(${dataCutoff.includes('T') ? dataCutoff.split('T')[1].slice(0, 5) : dataCutoff})` : ""}
             </span>
-
+            
             <span
               data-testid="workspace-risk-state"
               style={{
                 fontSize: 11,
-                background: "rgba(86, 217, 139, 0.15)",
-                color: COLORS.good,
+                background:
+                  (riskSummary?.state || "normal") === "critical"
+                    ? "rgba(235, 87, 87, 0.15)"
+                    : (riskSummary?.state || "normal") === "warning" || (riskSummary?.state || "normal") === "watch"
+                    ? "rgba(240, 184, 77, 0.15)"
+                    : "rgba(86, 217, 139, 0.15)",
+                color:
+                  (riskSummary?.state || "normal") === "critical"
+                    ? COLORS.danger
+                    : (riskSummary?.state || "normal") === "warning" || (riskSummary?.state || "normal") === "watch"
+                    ? COLORS.warning
+                    : COLORS.good,
                 padding: "2px 6px",
                 borderRadius: 4,
+                textTransform: "uppercase",
               }}
             >
-              Risk: Normal
+              Risk: {riskSummary?.state || "normal"}
             </span>
-
+            
             <span
               data-testid="workspace-pending-decisions"
               style={{
@@ -1060,6 +1086,7 @@ export function WorkspaceGridEditor({
               {strategy ? pendingEventTotal(strategy) : 0} Pending Decisions
             </span>
           </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               data-testid="workspace-dashboard-version"
@@ -1121,11 +1148,6 @@ export function WorkspaceGridEditor({
             >
               版本紀錄 (Versions)
             </button>
-            {onRequestLayoutProposal ? (
-              <button data-testid="workspace-request-layout-proposal" onClick={onRequestLayoutProposal} style={secondaryButtonStyle} type="button">
-                {t("agora.tradingRoom.layoutProposal.open")}
-              </button>
-            ) : null}
             <button
               data-testid="workspace-edit-mode-toggle"
               onClick={() => setEditMode((prev) => !prev)}
@@ -1280,6 +1302,7 @@ export function WorkspaceGridEditor({
                   onWhyShown={() => handleWhyShown(widget)}
                   onViewEvidence={() => handleViewEvidence(widget)}
                   widget={widget}
+                  workspaceEvents={workspaceEvents}
                 />
               </div>
             ))}
@@ -1312,7 +1335,7 @@ export function WorkspaceGridEditor({
                   : version.generatedBy === "learned_personalization"
                   ? "AI 個人化 (Learner)"
                   : "交易員 (Trader)";
-
+                  
               const badgeBg =
                 version.generatedBy === "trading_servant"
                   ? "rgba(59, 130, 246, 0.15)"
@@ -1494,46 +1517,137 @@ export function WorkspaceGridEditor({
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
-              <button
-                onClick={() => setWidgetProposal(null)}
-                style={secondaryButtonStyle}
-                type="button"
-              >
-                Reject (拒絕)
-              </button>
-              <button
-                onClick={() => {
-                  setToastMessage("Servant is adjusting layout options for the proposed returns widget...");
-                  setWidgetProposal(null);
-                }}
-                style={secondaryButtonStyle}
-                type="button"
-              >
-                Adjust (再微調)
-              </button>
-              <button
-                onClick={() => {
-                  setToastMessage(`Frontend widget component request PLG-REQ-${Date.now().toString(36).toUpperCase()} registered.`);
-                  setWidgetProposal(null);
-                }}
-                style={secondaryButtonStyle}
-                type="button"
-              >
-                Plugin Request (新增前端需求)
-              </button>
-              <button
-                onClick={() => {
-                  addWidgetSpec(widgetProposal.widgetSpec, "ask_servant_create");
-                  setToastMessage("🎉 New widget proposal accepted and added to layout version.");
-                  setWidgetProposal(null);
-                }}
-                style={primaryButtonStyle}
-                type="button"
-              >
-                Accept & Version Add (套用)
-              </button>
-            </div>
+            {isAdjusting ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+                <label style={{ fontSize: 13, color: COLORS.textSoft, fontWeight: "bold" }}>
+                  輸入您的調整指示 (Enter adjustment instruction):
+                </label>
+                <input
+                  type="text"
+                  value={adjustPromptText}
+                  onChange={(e) => setAdjustPromptText(e.target.value)}
+                  placeholder="e.g. change type to bar / 換成直條圖"
+                  style={{
+                    background: COLORS.panel,
+                    color: COLORS.text,
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 4,
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                  data-testid="workspace-widget-proposal-adjust-input"
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      setIsAdjusting(false);
+                      setAdjustPromptText("");
+                    }}
+                    style={secondaryButtonStyle}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const spec = { ...widgetProposal.widgetSpec };
+                      const promptLower = adjustPromptText.toLowerCase();
+                      if (promptLower.includes("bar") || promptLower.includes("條")) {
+                        spec.chartSpec = { ...spec.chartSpec, kind: "bar" };
+                      } else if (promptLower.includes("line") || promptLower.includes("線")) {
+                        spec.chartSpec = { ...spec.chartSpec, kind: "line" };
+                      } else if (promptLower.includes("restricted") || promptLower.includes("限制")) {
+                        spec.sensitivity = "restricted";
+                      } else if (promptLower.includes("public") || promptLower.includes("公開")) {
+                        spec.sensitivity = "public_market";
+                      }
+                      setWidgetProposal({
+                        ...widgetProposal,
+                        prompt: `${widgetProposal.prompt} (Adjusted: ${adjustPromptText})`,
+                        widgetSpec: spec,
+                      });
+                      setIsAdjusting(false);
+                      setAdjustPromptText("");
+                      setToastMessage("Servant adjusted the widget spec according to your feedback.");
+                    }}
+                    style={primaryButtonStyle}
+                    type="button"
+                    data-testid="workspace-widget-proposal-adjust-submit"
+                  >
+                    Apply Adjustment
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, width: "100%" }}>
+                <button
+                  onClick={() => setWidgetProposal(null)}
+                  style={secondaryButtonStyle}
+                  type="button"
+                  data-testid="workspace-widget-proposal-reject"
+                >
+                  Reject (拒絕)
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAdjusting(true);
+                  }}
+                  style={secondaryButtonStyle}
+                  type="button"
+                  data-testid="workspace-widget-proposal-adjust"
+                >
+                  Adjust (再微調)
+                </button>
+                <button
+                  onClick={() => {
+                    const reqId = `PLG-REQ-${Date.now().toString(36).toUpperCase()}`;
+                    setToastMessage(`Frontend widget component request ${reqId} registered.`);
+                    setWidgetProposal(null);
+                  }}
+                  style={secondaryButtonStyle}
+                  type="button"
+                  data-testid="workspace-widget-proposal-plugin"
+                >
+                  Plugin Request (新增前端需求)
+                </button>
+                <button
+                  onClick={async () => {
+                    const widgetSpec = widgetProposal.widgetSpec;
+                    const newOp = { kind: "add_registered_widget" as const, payload: { viewId: activeView.id, widgetSpec } };
+                    
+                    setSaveState("saving");
+                    setError(null);
+                    try {
+                      const result = await patchTradingRoomWorkspaceLayout(
+                        draftWorkspace.id,
+                        { operations: [...pendingOps, newOp] },
+                        { ifMatch: currentEtag, idempotencyKey: newUUID() },
+                      );
+                      setBaseWorkspace(cloneWorkspace(result.workspace));
+                      setDraftWorkspace(cloneWorkspace(result.workspace));
+                      setCurrentEtag(result.etag);
+                      setPendingOps([]);
+                      setEditMode(false);
+                      setSaveState("idle");
+                      onWorkspaceChange?.(result);
+                      setToastMessage("🎉 New widget proposal accepted and durable layout version created successfully.");
+                    } catch (err) {
+                      addWidgetSpec(widgetSpec, "ask_servant_create");
+                      setToastMessage("New widget proposal added to local draft layout.");
+                      setSaveState("idle");
+                    }
+                    setWidgetProposal(null);
+                  }}
+                  style={primaryButtonStyle}
+                  type="button"
+                  data-testid="workspace-widget-proposal-accept"
+                >
+                  Accept & Version Add (套用)
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

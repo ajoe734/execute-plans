@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 
 import type {
   DataAvailabilityStatus,
@@ -27,7 +25,12 @@ import {
 import { chartSpecForKind, chartSpecSummary } from "./workspaceChartSpec";
 
 const QUICK_INSTRUCTIONS = [
-  "heatmap", "cluster", "recent", "sortableTable", "split", "eventWindow",
+  "改成分點為列、日期為欄的熱圖",
+  "疊加 cluster-adjusted flow",
+  "只看最近 20 日並排除低量",
+  "改成可排序表格",
+  "拆成關係人與出貨兩張",
+  "畫事件前後並標重大訊息",
 ];
 
 type SubmitState = "idle" | "creating" | "ready" | "accepting" | "error";
@@ -132,46 +135,46 @@ function chartDiffSummary(widget: TradingRoomWidgetSpec): string {
   return `${chartSpecSummary(widget.chartSpec)} · ${stableText(widget.chartSpec)}`;
 }
 
-function buildWidgetDiffRows(before: TradingRoomWidgetSpec, after: TradingRoomWidgetSpec | null, t: TFunction): DiffRow[] {
+function buildWidgetDiffRows(before: TradingRoomWidgetSpec, after: TradingRoomWidgetSpec | null): DiffRow[] {
   if (!after) return [];
   const rows: Array<Omit<DiffRow, "changed">> = [
-    { id: "title", label: t("agora.tradingRoom.drawer.fields.title"), before: before.title, after: after.title },
-    { id: "widget-type", label: t("agora.tradingRoom.drawer.fields.widgetType"), before: before.widgetType, after: after.widgetType },
-    { id: "data-source", label: t("agora.tradingRoom.drawer.fields.dataSource"), before: before.dataSource, after: after.dataSource },
-    { id: "query-filters", label: t("agora.tradingRoom.drawer.fields.queryFilters"), before: stableText(before.query.filters), after: stableText(after.query.filters) },
-    { id: "query-window", label: t("agora.tradingRoom.drawer.fields.queryWindow"), before: before.query.window ?? "-", after: after.query.window ?? "-" },
-    { id: "query-sort", label: t("agora.tradingRoom.drawer.fields.querySort"), before: stableText(before.query.sort), after: stableText(after.query.sort) },
-    { id: "query-limit", label: t("agora.tradingRoom.drawer.fields.queryLimit"), before: stableText(before.query.limit), after: stableText(after.query.limit) },
-    { id: "chart-spec", label: t("agora.tradingRoom.drawer.fields.chartSpec"), before: chartDiffSummary(before), after: chartDiffSummary(after) },
-    { id: "interactions", label: t("agora.tradingRoom.drawer.fields.interactions"), before: interactionSummary(before), after: interactionSummary(after) },
-    { id: "sensitivity", label: t("agora.tradingRoom.drawer.fields.sensitivity"), before: before.sensitivity, after: after.sensitivity },
-    { id: "placement", label: t("agora.tradingRoom.drawer.fields.placement"), before: placementSummary(before), after: placementSummary(after) },
+    { id: "title", label: "Title", before: before.title, after: after.title },
+    { id: "widget-type", label: "Widget type", before: before.widgetType, after: after.widgetType },
+    { id: "data-source", label: "Data source", before: before.dataSource, after: after.dataSource },
+    { id: "query-filters", label: "Query filters", before: stableText(before.query.filters), after: stableText(after.query.filters) },
+    { id: "query-window", label: "Query window", before: before.query.window ?? "-", after: after.query.window ?? "-" },
+    { id: "query-sort", label: "Query sort", before: stableText(before.query.sort), after: stableText(after.query.sort) },
+    { id: "query-limit", label: "Query limit", before: stableText(before.query.limit), after: stableText(after.query.limit) },
+    { id: "chart-spec", label: "Chart spec", before: chartDiffSummary(before), after: chartDiffSummary(after) },
+    { id: "interactions", label: "Interactions", before: interactionSummary(before), after: interactionSummary(after) },
+    { id: "sensitivity", label: "Sensitivity", before: before.sensitivity, after: after.sensitivity },
+    { id: "placement", label: "Placement", before: placementSummary(before), after: placementSummary(after) },
   ];
   return rows.map((row) => ({ ...row, changed: row.before !== row.after }));
 }
 
-function revisionErrorMessage(error: BffError, fallback: string, t: TFunction): string {
+function revisionErrorMessage(error: BffError, fallback: string): string {
   switch (error.status) {
     case 403:
-      return t("agora.tradingRoom.errors.createRevisionForbidden");
+      return "目前權限或範圍無法建立這個 Widget revision proposal。";
     case 404:
-      return t("agora.tradingRoom.errors.workspaceNotFound");
+      return "這個 Workspace、View 或 Widget 已不存在，請重新整理後再試。";
     case 412:
-      return t("agora.tradingRoom.errors.workspaceStale");
+      return "Workspace 版本已過期，請重新整理後再套用。";
     case 422:
-      return error.message || t("agora.tradingRoom.errors.proposalInvalid");
+      return error.message || "Widget revision proposal 未通過驗證。";
     case 502:
-      return t("agora.tradingRoom.errors.proposalIncomplete");
+      return "BFF 回傳的 Widget revision proposal 格式不完整。";
     default:
       return error.message || fallback;
   }
 }
 
-function toRevisionUiError(error: unknown, fallback: string, t: TFunction): RevisionUiError {
+function toRevisionUiError(error: unknown, fallback: string): RevisionUiError {
   if (error instanceof BffError) {
     return {
       code: error.code,
-      message: revisionErrorMessage(error, fallback, t),
+      message: revisionErrorMessage(error, fallback),
       status: error.status,
     };
   }
@@ -282,7 +285,6 @@ function ContextRow({ label, value }: { label: string; value: string }) {
 }
 
 function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }) {
-  const { t } = useTranslation();
   return (
     <div
       data-durable-snapshot={durable ? "backend-proposal" : "draft-preview"}
@@ -298,7 +300,7 @@ function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }
       }}
     >
       <div style={{ color: "#8793a8", fontSize: 11, fontWeight: 900, padding: "9px 10px" }}>
-        {t(durable ? "agora.tradingRoom.drawer.backendDiff" : "agora.tradingRoom.drawer.draftDiff")}
+        {durable ? "Backend beforeSpec / proposedSpec field diff" : "Draft field diff before proposal"}
       </div>
       <div
         style={{
@@ -311,9 +313,9 @@ function FieldDiffTable({ durable, rows }: { durable: boolean; rows: DiffRow[] }
           gridTemplateColumns: "112px minmax(0, 1fr) minmax(0, 1fr)",
         }}
       >
-        <span style={{ padding: "8px 10px" }}>{t("agora.tradingRoom.drawer.field")}</span>
-        <span style={{ padding: "8px 10px" }}>{t("agora.tradingRoom.drawer.before")}</span>
-        <span style={{ padding: "8px 10px" }}>{t("agora.tradingRoom.drawer.after")}</span>
+        <span style={{ padding: "8px 10px" }}>Field</span>
+        <span style={{ padding: "8px 10px" }}>Before</span>
+        <span style={{ padding: "8px 10px" }}>After</span>
       </div>
       {rows.map((row) => (
         <div
@@ -347,7 +349,6 @@ export function WorkspaceWidgetRevisionDrawer({
   widget,
   workspace,
 }: WorkspaceWidgetRevisionDrawerProps) {
-  const { t } = useTranslation();
   const [instruction, setInstruction] = useState("");
   const [proposal, setProposal] = useState<WidgetRevisionProposal | null>(null);
   const [proposalEtag, setProposalEtag] = useState<string | null>(null);
@@ -410,7 +411,7 @@ export function WorkspaceWidgetRevisionDrawer({
       setProposalEtag(result.etag);
       setState("ready");
     } catch (err) {
-      setError(toRevisionUiError(err, "Widget revision proposal failed.", t));
+      setError(toRevisionUiError(err, "Widget revision proposal failed."));
       setState("error");
     }
   }
@@ -437,7 +438,7 @@ export function WorkspaceWidgetRevisionDrawer({
       await onRevisionAccepted(result);
       onClose();
     } catch (err) {
-      setError(toRevisionUiError(err, "Widget revision acceptance failed.", t));
+      setError(toRevisionUiError(err, "Widget revision acceptance failed."));
       setState("error");
     }
   }
@@ -451,7 +452,7 @@ export function WorkspaceWidgetRevisionDrawer({
 
   const beforeSpec = proposal?.beforeSpec ?? widget;
   const afterSpec = proposal?.proposedSpec ?? draft?.proposedSpec ?? null;
-  const diffRows = buildWidgetDiffRows(beforeSpec, afterSpec, t);
+  const diffRows = buildWidgetDiffRows(beforeSpec, afterSpec);
 
   return (
     <div
@@ -470,7 +471,7 @@ export function WorkspaceWidgetRevisionDrawer({
       }}
     >
       <aside
-        aria-label={t("agora.tradingRoom.drawer.title")}
+        aria-label="Widget Adjustment Drawer"
         data-testid="workspace-widget-revision-drawer"
         onClick={(event) => event.stopPropagation()}
         style={{
@@ -486,40 +487,40 @@ export function WorkspaceWidgetRevisionDrawer({
       >
         <header style={{ borderBottom: "1px solid #343b4c", display: "flex", justifyContent: "space-between", gap: 12, padding: "18px 20px" }}>
           <div>
-            <div style={{ color: "#f0b84d", fontSize: 12, fontWeight: 900 }}>{t("agora.tradingRoom.drawer.title")}</div>
+            <div style={{ color: "#f0b84d", fontSize: 12, fontWeight: 900 }}>Widget Adjustment Drawer</div>
             <h2 style={{ color: "#ffffff", fontSize: 16, fontWeight: 900, letterSpacing: 0, margin: "3px 0 0" }}>
-              {t("agora.tradingRoom.drawer.heading")}
+              交代僕人修改 Widget
             </h2>
             <div style={{ color: "#9aa5b8", fontSize: 12, marginTop: 3 }}>{widget.title}</div>
           </div>
-          <button aria-label={t("agora.tradingRoom.drawer.close")} onClick={onClose} style={iconButtonStyle} type="button">
+          <button aria-label="Close widget revision drawer" onClick={onClose} style={iconButtonStyle} type="button">
             ×
           </button>
         </header>
 
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px 18px" }}>
           <section data-testid="workspace-widget-revision-context" style={{ background: "#171b25", border: "1px solid #343b4c", borderRadius: 10, display: "grid", gap: 12, padding: 14 }}>
-            <ContextRow label={t("agora.tradingRoom.drawer.context.workspace")} value={`${workspace.id} / dashboard v${workspace.dashboardVersion}`} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.strategy")} value={`${workspace.strategyId} / ${workspace.strategyVersion}`} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.view")} value={view ? `${view.title} (${view.id})` : "-"} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.widgetId")} value={widget.id} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.widgetTitle")} value={widget.title} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.widgetType")} value={widget.widgetType} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.purpose")} value={widget.purpose} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.whyIncluded")} value={widget.whyIncluded} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.dataSource")} value={widget.dataSource} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.fields")} value={fieldSummary(widget)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.filters")} value={stableText(widget.query.filters)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.sort")} value={stableText(widget.query.sort)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.limit")} value={stableText(widget.query.limit)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.window")} value={widget.query.window ?? "-"} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.chart")} value={chartSpecSummary(widget.chartSpec)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.interactions")} value={interactionSummary(widget)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.sensitivity")} value={widget.sensitivity} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.placement")} value={placementSummary(widget)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.availability")} value={dataAvailabilitySummary(view)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.warnings")} value={warningSummary(view)} />
-            <ContextRow label={t("agora.tradingRoom.drawer.context.evidence")} value={relatedEvidence(widget, view)} />
+            <ContextRow label="Workspace" value={`${workspace.id} / dashboard v${workspace.dashboardVersion}`} />
+            <ContextRow label="所屬策略" value={`${workspace.strategyId} / ${workspace.strategyVersion}`} />
+            <ContextRow label="所屬 View" value={view ? `${view.title} (${view.id})` : "-"} />
+            <ContextRow label="Widget ID" value={widget.id} />
+            <ContextRow label="Widget 標題" value={widget.title} />
+            <ContextRow label="Widget type" value={widget.widgetType} />
+            <ContextRow label="Widget 目的" value={widget.purpose} />
+            <ContextRow label="為何納入" value={widget.whyIncluded} />
+            <ContextRow label="資料來源" value={widget.dataSource} />
+            <ContextRow label="目前欄位" value={fieldSummary(widget)} />
+            <ContextRow label="目前篩選" value={stableText(widget.query.filters)} />
+            <ContextRow label="目前排序" value={stableText(widget.query.sort)} />
+            <ContextRow label="目前筆數上限" value={stableText(widget.query.limit)} />
+            <ContextRow label="目前時間窗口" value={widget.query.window ?? "-"} />
+            <ContextRow label="目前圖表型態" value={chartSpecSummary(widget.chartSpec)} />
+            <ContextRow label="可用互動" value={interactionSummary(widget)} />
+            <ContextRow label="資料敏感度" value={widget.sensitivity} />
+            <ContextRow label="目前 Placement" value={placementSummary(widget)} />
+            <ContextRow label="資料可用性" value={dataAvailabilitySummary(view)} />
+            <ContextRow label="Warnings" value={warningSummary(view)} />
+            <ContextRow label="相關證據" value={relatedEvidence(widget, view)} />
           </section>
 
           {disabledReason ? (
@@ -532,16 +533,14 @@ export function WorkspaceWidgetRevisionDrawer({
             <textarea
               data-testid="workspace-widget-revision-input"
               onChange={(event) => setInstruction(event.target.value)}
-              placeholder={t("agora.tradingRoom.drawer.placeholder")}
+              placeholder="例如：把這張圖改成分點為列、日期為欄的熱圖..."
               style={textareaStyle}
               value={instruction}
             />
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {QUICK_INSTRUCTIONS.map((key) => {
-                const text = t(`agora.tradingRoom.drawer.quick.${key}`);
-                return (
+              {QUICK_INSTRUCTIONS.map((text) => (
                 <button
-                  key={key}
+                  key={text}
                   onClick={() => {
                     setInstruction(text);
                     adjustAgain();
@@ -551,8 +550,7 @@ export function WorkspaceWidgetRevisionDrawer({
                 >
                   {text}
                 </button>
-                );
-              })}
+              ))}
             </div>
             <button
               data-testid="workspace-widget-revision-submit"
@@ -560,7 +558,7 @@ export function WorkspaceWidgetRevisionDrawer({
               style={canSubmit ? primaryButtonStyle : disabledButtonStyle}
               type="submit"
             >
-              {state === "creating" ? t("agora.tradingRoom.drawer.creating") : t("agora.tradingRoom.drawer.submit")}
+              {state === "creating" ? "建立 Proposal..." : "交代"}
             </button>
           </form>
 
@@ -579,9 +577,9 @@ export function WorkspaceWidgetRevisionDrawer({
           {proposal ? (
             <section data-testid="workspace-widget-revision-proposal" style={{ display: "grid", gap: 12, marginTop: 16 }}>
               <div style={{ background: "#283021", border: "1px solid #76652e", borderRadius: 10, padding: 13 }}>
-                <div style={{ color: "#f0b84d", fontSize: 11, fontWeight: 900, marginBottom: 6 }}>{t("agora.tradingRoom.drawer.proposalReady")}</div>
+                <div style={{ color: "#f0b84d", fontSize: 11, fontWeight: 900, marginBottom: 6 }}>僕人準備這樣調整</div>
                 <div style={{ color: "#f3f6fb", fontSize: 13, lineHeight: 1.6 }}>{proposal.rationale}</div>
-                {proposalEtag ? <div style={{ color: "#8793a8", fontSize: 11, marginTop: 8 }}>{t("agora.tradingRoom.drawer.etagReady")}</div> : null}
+                {proposalEtag ? <div style={{ color: "#8793a8", fontSize: 11, marginTop: 8 }}>Proposal ETag ready</div> : null}
               </div>
               {proposal.warnings.length ? (
                 <div style={warningStyle}>
@@ -594,10 +592,10 @@ export function WorkspaceWidgetRevisionDrawer({
           ) : null}
 
           <section data-testid="workspace-widget-before-after-preview" style={{ marginTop: 16 }}>
-            <div style={{ color: "#8793a8", fontSize: 11, fontWeight: 900, marginBottom: 9 }}>{t("agora.tradingRoom.drawer.preview")}</div>
+            <div style={{ color: "#8793a8", fontSize: 11, fontWeight: 900, marginBottom: 9 }}>Before / After Preview</div>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <PreviewCard label={t("agora.tradingRoom.drawer.current")} widget={beforeSpec} />
-              <PreviewCard label={t("agora.tradingRoom.drawer.suggested")} widget={afterSpec} />
+              <PreviewCard label="目前" widget={beforeSpec} />
+              <PreviewCard label="僕人建議" widget={afterSpec} />
             </div>
             {diffRows.length ? (
               <FieldDiffTable durable={Boolean(proposal)} rows={diffRows} />
@@ -615,7 +613,7 @@ export function WorkspaceWidgetRevisionDrawer({
                 style={canAccept ? primaryButtonStyle : disabledButtonStyle}
                 type="button"
               >
-                {state === "accepting" ? t("agora.tradingRoom.drawer.applying") : t("agora.tradingRoom.drawer.apply")}
+                {state === "accepting" ? "套用中..." : "套用修改"}
               </button>
               <button
                 data-testid="workspace-widget-revision-adjust-again"
@@ -623,7 +621,7 @@ export function WorkspaceWidgetRevisionDrawer({
                 style={secondaryButtonStyle}
                 type="button"
               >
-                {t("agora.tradingRoom.drawer.adjustAgain")}
+                再調整
               </button>
               <button
                 data-testid="workspace-widget-revision-keep-copy"
@@ -632,12 +630,12 @@ export function WorkspaceWidgetRevisionDrawer({
                 style={secondaryButtonStyle}
                 type="button"
               >
-                {t("agora.tradingRoom.drawer.keepCopy")}
+                保留原圖並新增一張
               </button>
             </>
           ) : null}
           <button data-testid="workspace-widget-revision-cancel" onClick={onClose} style={secondaryButtonStyle} type="button">
-            {t("agora.tradingRoom.drawer.cancel")}
+            取消
           </button>
         </footer>
       </aside>
@@ -646,19 +644,18 @@ export function WorkspaceWidgetRevisionDrawer({
 }
 
 function PreviewCard({ label, widget }: { label: string; widget: TradingRoomWidgetSpec | null }) {
-  const { t } = useTranslation();
   if (!widget) {
     return (
       <div style={previewCardStyle}>
         <div style={{ color: "#8793a8", fontSize: 11 }}>{label}</div>
-        <div style={{ color: "#8793a8", fontSize: 12, marginTop: 14 }}>{t("agora.tradingRoom.drawer.noProposal")}</div>
+        <div style={{ color: "#8793a8", fontSize: 12, marginTop: 14 }}>尚未建立 proposal</div>
       </div>
     );
   }
   const validation = validateTradingRoomWidgetSpec(widget);
   return (
     <div style={previewCardStyle}>
-      <div style={{ color: label === t("agora.tradingRoom.drawer.current") ? "#8793a8" : "#f0b84d", fontSize: 11, fontWeight: 900, marginBottom: 8 }}>{label}</div>
+      <div style={{ color: label === "目前" ? "#8793a8" : "#f0b84d", fontSize: 11, fontWeight: 900, marginBottom: 8 }}>{label}</div>
       <div style={{ color: "#f6f8fc", fontSize: 12, fontWeight: 800, marginBottom: 6 }}>{widget.title}</div>
       <div style={{ color: "#9aa5b8", fontSize: 11, lineHeight: 1.4, marginBottom: 8 }}>{chartSpecSummary(widget.chartSpec)}</div>
       {validation.ok ? (

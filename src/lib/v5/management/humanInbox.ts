@@ -46,12 +46,7 @@ export interface HumanInboxItem {
   sourceId?: string;
   personaId?: string;
   reviewId?: string;
-  /** Canonical governance review semantic (for example paper_to_canary_review). */
-  reviewKind?: string;
-  /** Legacy review semantic retained for older BFF payloads. */
   reviewType?: string;
-  /** Recommendation/action being reviewed (for example reduce_capital_access). */
-  actionId?: string;
   decisionHref?: string;
   allowedActions?: HumanInboxAllowedActions;
   /** Optional blocking reason when canProceed=false. */
@@ -60,30 +55,6 @@ export interface HumanInboxItem {
   evidenceRefs?: string[];
   detailHref: string;
   links: ManagementLinkSet;
-}
-
-export type HumanInboxSurfaceStatus = "ok" | "degraded" | "unavailable";
-
-export interface HumanInboxSurfaceState {
-  status: HumanInboxSurfaceStatus;
-  source?: string;
-  message?: string;
-  reason?: string;
-  staleness?: {
-    servedFrom?: string;
-    lastKnownAt?: string;
-  };
-}
-
-/**
- * Truth-bearing list state. An empty `items` array is authoritative only when
- * `surface.status === "ok"` and `partial === false`.
- */
-export interface HumanInboxListState {
-  items: HumanInboxItem[];
-  surface: HumanInboxSurfaceState;
-  snapshotAt?: string;
-  partial: boolean;
 }
 
 export interface HumanInboxDecisionRecord {

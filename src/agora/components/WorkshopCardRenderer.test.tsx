@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
 import { WorkshopCardRenderer } from "./WorkshopCardRenderer";
-import "@/i18n";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/types";
 
@@ -61,7 +60,7 @@ describe("WorkshopCardRenderer", () => {
     expect(screen.getByText("Prototype winner-branch plan")).toBeInTheDocument();
     expect(screen.getByText("Validate branch accumulation lead time")).toBeInTheDocument();
     expect(screen.getByText("vectorbt")).toBeInTheDocument();
-    expect(screen.getByText("核准")).toBeInTheDocument();
+    expect(screen.getByText("Approve")).toBeInTheDocument();
     expect(container.querySelector("pre")).toBeNull();
     expect(container).not.toHaveTextContent('"objectives"');
   });
@@ -190,7 +189,7 @@ describe("StrategyCompletenessRail", () => {
     expect(screen.getByText("Data dependencies")).toBeInTheDocument();
     expect(screen.getByText("PIT data source unknown")).toBeInTheDocument();
     expect(screen.getByText("Critical definition missing")).toBeInTheDocument();
-    expect(screen.getByText("初步研究")).toBeInTheDocument();
+    expect(screen.getByText("Preliminary research")).toBeInTheDocument();
     expect(screen.getByText("PR-03 blocked")).toBeInTheDocument();
   });
 });

@@ -11,11 +11,13 @@
  */
 
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   decideOnEvent,
   type TradingDecisionEvent,
   type DecisionChoice,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -58,9 +60,9 @@ const SEVERITY_COLOR: Record<string, { bg: string; text: string }> = {
 };
 
 const INVALIDATION_COLOR: Record<string, string> = {
-  valid: "#16a34a",
-  watch: "#d97706",
-  invalidated: "#dc2626",
+  valid: "#4ade80",
+  watch: "#fbbf24",
+  invalidated: "#ff6b6b",
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -106,9 +108,24 @@ export function TradeDecisionCard({
   etag,
   onDecisionRecorded,
 }: TradeDecisionCardProps): JSX.Element {
+  const navigate = useNavigate();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
+
+  // Consultation states
+  const [showConsultPanel, setShowConsultPanel] = useState(false);
+  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
+  const [consultQuery, setConsultQuery] = useState("");
+  const [consultLoading, setConsultLoading] = useState(false);
+  const [consultError, setConsultError] = useState<string | null>(null);
+
+  // Modify linkage states
+  const [showModifyLinkage, setShowModifyLinkage] = useState(false);
+  const [modifyProposalId, setModifyProposalId] = useState("");
+  const [modifyProposalRevision, setModifyProposalRevision] = useState("1");
+  const [modifyWorkshopId, setModifyWorkshopId] = useState("");
+  const [modifyRationale, setModifyRationale] = useState("");
 
   const kindStyle = EVENT_KIND_COLOR[event.event_kind] ?? {
     bg: "#f8fafc",
@@ -155,7 +172,7 @@ export function TradeDecisionCard({
       style={{
         border: `1px solid ${kindStyle.border}`,
         borderRadius: 8,
-        background: "#1e2330",
+        background: "#171b22",
         display: "flex",
         flexDirection: "column",
         gap: 0,
@@ -203,7 +220,7 @@ export function TradeDecisionCard({
         )}
 
         {ev.subject.venue && (
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>{ev.subject.venue}</span>
+          <span style={{ fontSize: 12, color: "#8c96a6" }}>{ev.subject.venue}</span>
         )}
 
         <div style={{ flex: 1 }} />
@@ -223,7 +240,7 @@ export function TradeDecisionCard({
         {ev.trigger && (
           <div data-testid={`trade-decision-card-trigger-${ev.decision_event_id}`}>
             <SectionHeading label="Trigger" />
-            <div style={{ fontSize: 13, color: "#c4ccda" }}>
+            <div style={{ fontSize: 13, color: "#f0ece4" }}>
               {ev.trigger.summary}
               {ev.trigger.distance_to_trigger != null && (
                 <span style={{ marginLeft: 8, color: "#8c96a6", fontSize: 12 }}>
@@ -236,10 +253,10 @@ export function TradeDecisionCard({
 
         {/* Signal Quality: Confidence (≠ Probability) */}
         <div
-          data-testid={`trade-decision-card-confidence-${ev.decision_event_id}`}
+          data-testid="detail-confidence"
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
         >
-          <div>
+          <div data-testid={`trade-decision-card-confidence-${ev.decision_event_id}`}>
             <SectionHeading label="Confidence (evidence quality)" />
             <div style={{ fontSize: 13, color: "#f0ece4" }}>
               <strong>{(ev.confidence.value * 100).toFixed(0)}%</strong>
@@ -248,105 +265,116 @@ export function TradeDecisionCard({
               </span>
             </div>
             <div
-              data-testid={`trade-decision-card-calibration-${ev.decision_event_id}`}
+              data-testid="detail-calibration"
               style={{ fontSize: 12, color: "#8c96a6" }}
             >
-              Calibration: {ev.confidence.calibration_state}
+              <div data-testid={`trade-decision-card-calibration-${ev.decision_event_id}`}>
+                Calibration: {ev.confidence.calibration_state}
+              </div>
             </div>
             {ev.confidence.sample_size != null && (
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>
+              <div style={{ fontSize: 12, color: "#8c96a6" }}>
                 n={ev.confidence.sample_size}
               </div>
             )}
           </div>
 
           {/* Probability (distinct from confidence per D4 spec) */}
-          <div data-testid={`trade-decision-card-probability-${ev.decision_event_id}`}>
-            <SectionHeading label="Probability (outcome forecast)" />
-            <div style={{ fontSize: 13, color: "#f0ece4" }}>
-              <strong>{(ev.probability.value * 100).toFixed(0)}%</strong>
-              {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
-                <span
-                  data-testid={`trade-decision-card-probability-ci-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#8c96a6", marginLeft: 6 }}
-                >
-                  [{(ev.probability.ci_lower * 100).toFixed(0)}%–{(ev.probability.ci_upper * 100).toFixed(0)}%]
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 12, color: "#8c96a6" }}>
-              {ev.probability.target_outcome} · {ev.probability.horizon}
+          <div data-testid="detail-probability">
+            <div data-testid={`trade-decision-card-probability-${ev.decision_event_id}`}>
+              <SectionHeading label="Probability (outcome forecast)" />
+              <div style={{ fontSize: 13, color: "#f0ece4" }}>
+                <strong>{(ev.probability.value * 100).toFixed(0)}%</strong>
+                {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
+                  <span
+                    data-testid="detail-probability-interval"
+                    style={{ fontSize: 12, color: "#8c96a6", marginLeft: 6 }}
+                  >
+                    <span data-testid={`trade-decision-card-probability-ci-${ev.decision_event_id}`}>
+                      [{(ev.probability.ci_lower * 100).toFixed(0)}%–{(ev.probability.ci_upper * 100).toFixed(0)}%]
+                    </span>
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "#8c96a6" }}>
+                {ev.probability.target_outcome} · {ev.probability.horizon}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Expected Value — gross/cost/net/downside per D2 spec */}
-        <div data-testid={`trade-decision-card-ev-${ev.decision_event_id}`}>
-          <SectionHeading label={`Expected Value (${ev.expected_value.horizon}, ${ev.expected_value.unit})`} />
-          <div style={{ display: "flex", gap: 20, fontSize: 13, flexWrap: "wrap" }}>
-            <div>
-              <span style={{ color: "#8c96a6", fontSize: 12 }}>Gross </span>
-              <span style={{ fontWeight: 500, color: "#f0ece4" }}>
-                {ev.expected_value.gross >= 0 ? "+" : ""}
-                {ev.expected_value.gross.toFixed(4)}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: "#8c96a6", fontSize: 12 }}>Cost </span>
-              <span style={{ fontWeight: 500, color: "#f0ece4" }}>
-                {ev.expected_value.cost.toFixed(4)}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: "#8c96a6", fontSize: 12 }}>Net </span>
-              <span
-                data-testid={`trade-decision-card-ev-net-${ev.decision_event_id}`}
-                style={{
-                  fontWeight: 600,
-                  color: ev.expected_value.net >= 0 ? "#16a34a" : "#dc2626",
-                }}
-              >
-                {ev.expected_value.net >= 0 ? "+" : ""}
-                {ev.expected_value.net.toFixed(4)}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: "#8c96a6", fontSize: 12 }}>Downside </span>
-              <span style={{ fontWeight: 500, color: "#dc2626" }}>
-                {ev.expected_value.downside.toFixed(4)}
-              </span>
+        <div data-testid="detail-expected-value">
+          <div data-testid={`trade-decision-card-ev-${ev.decision_event_id}`}>
+            <SectionHeading label={`Expected Value (${ev.expected_value.horizon}, ${ev.expected_value.unit})`} />
+            <div style={{ display: "flex", gap: 20, fontSize: 13, flexWrap: "wrap" }}>
+              <div>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>Gross </span>
+                <span style={{ fontWeight: 500, color: "#f0ece4" }}>
+                  {ev.expected_value.gross >= 0 ? "+" : ""}
+                  {ev.expected_value.gross.toFixed(4)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>Cost </span>
+                <span style={{ fontWeight: 500, color: "#f0ece4" }}>
+                  {ev.expected_value.cost.toFixed(4)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>Net </span>
+                <span
+                  data-testid={`trade-decision-card-ev-net-${ev.decision_event_id}`}
+                  style={{
+                    fontWeight: 600,
+                    color: ev.expected_value.net >= 0 ? "#4ade80" : "#ff6b6b",
+                  }}
+                >
+                  {ev.expected_value.net >= 0 ? "+" : ""}
+                  {ev.expected_value.net.toFixed(4)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>Downside </span>
+                <span style={{ fontWeight: 500, color: "#ff6b6b" }}>
+                  {ev.expected_value.downside.toFixed(4)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Suggested Action */}
-        <div data-testid={`trade-decision-card-suggested-${ev.decision_event_id}`}>
-          <SectionHeading label="Suggested Action (non-binding)" />
-          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#f0ece4" }}>
-            <span style={{ fontWeight: 600, textTransform: "capitalize" }}>
-              {ev.suggested_action}
-            </span>
-            {ev.suggested_size && (
-              <>
-                {ev.suggested_size.size_hint && (
-                  <span style={{ color: "#8c96a6" }}>
-                    Size: {ev.suggested_size.size_hint}
-                  </span>
-                )}
-                {ev.suggested_size.portfolio_pct != null && (
-                  <span style={{ color: "#8c96a6" }}>
-                    {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}% portfolio
-                  </span>
-                )}
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>non-binding</span>
-              </>
-            )}
+        <div data-testid="detail-suggested-action">
+          <div data-testid={`trade-decision-card-suggested-${ev.decision_event_id}`}>
+            <SectionHeading label="Suggested Action (non-binding)" />
+            <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#f0ece4" }}>
+              <span style={{ fontWeight: 600, textTransform: "capitalize" }}>
+                {ev.suggested_action}
+              </span>
+              {ev.suggested_size && (
+                <>
+                  {ev.suggested_size.size_hint && (
+                    <span style={{ color: "#8c96a6" }}>
+                      Size: {ev.suggested_size.size_hint}
+                    </span>
+                  )}
+                  {ev.suggested_size.portfolio_pct != null && (
+                    <span style={{ color: "#8c96a6" }}>
+                      {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}% portfolio
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: "#8c96a6" }}>non-binding</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Rationale */}
         {ev.rationale.length > 0 && (
-          <div data-testid={`trade-decision-card-rationale-${ev.decision_event_id}`}>
+          <div data-testid="detail-rationale">
+            <div data-testid={`trade-decision-card-rationale-${ev.decision_event_id}`}>
             <SectionHeading label="Rationale" />
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {ev.rationale.map((r, i) => (
@@ -355,7 +383,7 @@ export function TradeDecisionCard({
                     style={{
                       minWidth: 36,
                       fontSize: 12,
-                      color: "#94a3b8",
+                      color: "#8c96a6",
                       paddingTop: 1,
                     }}
                   >
@@ -366,57 +394,63 @@ export function TradeDecisionCard({
               ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Risk Notes */}
         {ev.risk_notes.length > 0 && (
-          <div data-testid={`trade-decision-card-risk-notes-${ev.decision_event_id}`}>
-            <SectionHeading label="Risk Notes" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {ev.risk_notes.map((rn, i) => {
-                const color = SEVERITY_COLOR[rn.severity] ?? SEVERITY_COLOR.info;
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 4,
-                      background: color.bg,
-                      fontSize: 12,
-                      color: color.text,
-                      border: `1px solid ${color.text}33`,
-                    }}
-                  >
-                    <span style={{ fontWeight: 600 }}>[{rn.severity}]</span>{" "}
-                    <span style={{ fontWeight: 500 }}>{rn.domain}:</span> {rn.summary}
-                    {rn.mitigation && (
-                      <span style={{ color: "#8c96a6", marginLeft: 4 }}> — {rn.mitigation}</span>
-                    )}
-                  </div>
-                );
-              })}
+          <div data-testid="detail-risk-notes">
+            <div data-testid={`trade-decision-card-risk-notes-${ev.decision_event_id}`}>
+              <SectionHeading label="Risk Notes" />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {ev.risk_notes.map((rn, i) => {
+                  const color = SEVERITY_COLOR[rn.severity] ?? SEVERITY_COLOR.info;
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 4,
+                        background: color.bg,
+                        fontSize: 12,
+                        color: color.text,
+                        border: `1px solid ${color.text}33`,
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>[{rn.severity}]</span>{" "}
+                      <span style={{ fontWeight: 500 }}>{rn.domain}:</span> {rn.summary}
+                      {rn.mitigation && (
+                        <span style={{ color: "#8c96a6", marginLeft: 4 }}> — {rn.mitigation}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
         {/* Evidence Refs */}
         {ev.evidence_refs.length > 0 && (
-          <div data-testid={`trade-decision-card-evidence-${ev.decision_event_id}`}>
-            <SectionHeading label={`Evidence (${ev.evidence_refs.length})`} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {ev.evidence_refs.map((ref, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#c4ccda" }}>
-                  <span style={{ color: "#8c96a6", fontWeight: 600 }}>{ref.ref_type.toUpperCase()}</span>{" "}
-                  {ref.ref_id}
-                  {ref.summary ? ` — ${ref.summary}` : null}
-                </div>
-              ))}
+          <div data-testid="detail-evidence-refs">
+            <div data-testid={`trade-decision-card-evidence-${ev.decision_event_id}`}>
+              <SectionHeading label={`Evidence (${ev.evidence_refs.length})`} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {ev.evidence_refs.map((ref, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "#c4ccda" }}>
+                    <span style={{ color: "#8c96a6", fontWeight: 600 }}>{ref.ref_type.toUpperCase()}</span>{" "}
+                    {ref.ref_id}
+                    {ref.summary ? ` — ${ref.summary}` : null}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* Invalidation */}
-        <div data-testid={`trade-decision-card-invalidation-${ev.decision_event_id}`}>
+        <div data-testid="detail-invalidation">
+          <div data-testid={`trade-decision-card-invalidation-${ev.decision_event_id}`}>
           <SectionHeading label="Invalidation" />
           <div style={{ fontSize: 13, color: "#f0ece4" }}>
             State:{" "}
@@ -431,6 +465,7 @@ export function TradeDecisionCard({
               ))}
             </ul>
           )}
+          </div>
         </div>
 
         {/* Position snapshot (for add/reduce/exit/review events) */}
@@ -460,11 +495,13 @@ export function TradeDecisionCard({
               Data cutoff: {ev.data_cutoff}
             </span>
           )}
-          <span
-            data-testid={`trade-decision-card-no-order-route-${ev.decision_event_id}`}
-            style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}
-          >
-            {ev.no_order_route_proof}
+          <span data-testid="detail-no-order-route">
+            <span
+              data-testid={`trade-decision-card-no-order-route-${ev.decision_event_id}`}
+              style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}
+            >
+              {ev.no_order_route_proof}
+            </span>
           </span>
         </div>
 
@@ -486,15 +523,19 @@ export function TradeDecisionCard({
 
         {/* Trader Decision Buttons */}
         <div
-          data-testid={`trade-decision-card-actions-${ev.decision_event_id}`}
+          data-testid="detail-trader-actions"
           style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
         >
           {callState === "success" ? (
             <span
-              data-testid={`trade-decision-card-confirmed-${ev.decision_event_id}`}
-              style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}
+              data-testid="detail-decision-confirmed"
             >
-              Decision recorded: {decidedChoice?.toUpperCase()}
+              <span
+                data-testid={`confirmed-${ev.decision_event_id}`}
+                style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}
+              >
+                Decision recorded: {decidedChoice}
+              </span>
             </span>
           ) : (
             <>
@@ -505,9 +546,16 @@ export function TradeDecisionCard({
                 (choice) => (
                   <button
                     key={choice}
-                    data-testid={`trade-decision-card-decide-${choice}-${ev.decision_event_id}`}
+                    data-testid={`decide-${choice}-${ev.decision_event_id}`}
                     disabled={!canDecide}
-                    onClick={() => handleDecide(choice)}
+                    onClick={() => {
+                      if (choice === "modify") {
+                        setShowModifyLinkage(true);
+                        setShowConsultPanel(false);
+                      } else {
+                        handleDecide(choice);
+                      }
+                    }}
                     style={{
                       padding: "4px 12px",
                       fontSize: 12,
@@ -534,25 +582,345 @@ export function TradeDecisionCard({
                   </button>
                 ),
               )}
+              <button
+                type="button"
+                data-testid={`ask-personas-${ev.decision_event_id}`}
+                onClick={() => {
+                  setShowConsultPanel(!showConsultPanel);
+                  setShowModifyLinkage(false);
+                }}
+                style={{
+                  padding: "4px 12px",
+                  fontSize: 12,
+                  border: "1px solid #6366f1",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  background: "#e0e7ff",
+                  color: "#4f46e5",
+                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4
+                }}
+              >
+                💬 Ask Personas
+              </button>
               {callState === "loading" && (
                 <span
-                  data-testid={`trade-decision-card-loading-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#8c96a6" }}
+                  data-testid={`decision-loading-${ev.decision_event_id}`}
+                  style={{ fontSize: 12, color: "#94a3b8" }}
                 >
                   Sending…
                 </span>
               )}
               {callState === "error" && callError && (
                 <span
-                  data-testid={`trade-decision-card-error-${ev.decision_event_id}`}
-                  style={{ fontSize: 12, color: "#f87171" }}
+                  data-testid="detail-decision-error"
                 >
-                  {callError}
+                  <span data-testid={`error-${ev.decision_event_id}`} style={{ fontSize: 12, color: "#f87171" }}>
+                    {callError}
+                  </span>
                 </span>
               )}
             </>
           )}
         </div>
+
+        {/* Contextual Consultation Panel */}
+        {showConsultPanel && (
+          <div
+            data-testid={`consult-panel-${ev.decision_event_id}`}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: "#1e2330",
+              borderRadius: 6,
+              border: "1px solid #2a2e38",
+              fontSize: 12,
+              color: "#f0ece4",
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "#e8b750", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>🔍 Consult Personas on Signal ({ev.subject.symbol})</span>
+            </div>
+            
+            {/* Display carried context */}
+            <div style={{ background: "#121620", padding: 8, borderRadius: 4, marginBottom: 8, border: "1px solid #2a2e38" }}>
+              <div style={{ color: "#8c96a6", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>Carried Context:</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div><strong>Event ID:</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
+                <div><strong>Strategy Version:</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
+                <div style={{ gridColumn: "span 2" }}><strong>Risk Snapshot:</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || "Normal"}</div>
+                <div style={{ gridColumn: "span 2" }}><strong>Evidence Refs:</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || "None"}</div>
+              </div>
+            </div>
+
+            {/* Persona Checklist */}
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Select Personas:</span>
+              <div style={{ display: "flex", gap: 12 }}>
+                {[
+                  { id: "per_quant", name: "Quant" },
+                  { id: "per_risk", name: "Risk" },
+                  { id: "per_macro", name: "Macro" },
+                  { id: "per_red", name: "Red Team" }
+                ].map(p => (
+                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#c4ccda" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedPersonas.includes(p.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPersonas([...selectedPersonas, p.id]);
+                        } else {
+                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
+                        }
+                      }}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Templates */}
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Quick Templates:</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
+                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
+                >
+                  🔴 Red-Team Analysis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
+                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
+                >
+                  ⚠️ Fast Risk Assessment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
+                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
+                  }}
+                  style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
+                >
+                  📊 Option Comparison
+                </button>
+              </div>
+            </div>
+
+            {/* Prompt input */}
+            <div style={{ marginBottom: 8 }}>
+              <textarea
+                placeholder="Ask your question to the selected personas..."
+                value={consultQuery}
+                onChange={(e) => setConsultQuery(e.target.value)}
+                style={{ width: "100%", height: 60, padding: 6, borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4", resize: "none" }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                disabled={consultLoading || selectedPersonas.length === 0}
+                onClick={async () => {
+                  setConsultLoading(true);
+                  setConsultError(null);
+                  try {
+                    const newWs = await createWorkshop({
+                      subject: {
+                        kind: "candidate_artifact",
+                        ref: ev.decision_event_id,
+                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
+                      },
+                      participant_persona_ids: selectedPersonas,
+                      metadata: {
+                        decision_event_id: ev.decision_event_id,
+                        strategy_id: ev.strategy_id,
+                        strategy_version: ev.strategy_spec_registry_id,
+                        position_snapshot: ev.position_snapshot,
+                        risk_notes: ev.risk_notes,
+                        evidence_refs: ev.evidence_refs,
+                        context_type: "decision_event_consultation",
+                      }
+                    });
+                    
+                    if (consultQuery.trim()) {
+                      await postWorkshopMessage(newWs.workshop_id, {
+                        content: consultQuery.trim(),
+                        metadata: {
+                          mode: "consult",
+                          participant_persona_ids: selectedPersonas,
+                        }
+                      });
+                    }
+
+                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
+                  } catch (err) {
+                    setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
+                  } finally {
+                    setConsultLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "4px 12px",
+                  background: "#4f46e5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
+                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
+                }}
+                data-testid={`consult-panel-submit-${ev.decision_event_id}`}
+              >
+                {consultLoading ? "Launching..." : "🚀 Launch Workshop Consultation"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConsultPanel(false)}
+                style={{ padding: "4px 12px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              {consultError && (
+                <span style={{ color: "#f87171", fontSize: 11 }}>{consultError}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Structured Modify Linkage Panel */}
+        {showModifyLinkage && (
+          <div
+            data-testid={`modify-linkage-panel-${ev.decision_event_id}`}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: "#221c10",
+              borderRadius: 6,
+              border: "1px solid #e8b750",
+              fontSize: 12,
+              color: "#f0ece4",
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "#e8b750", marginBottom: 8 }}>
+              🛠️ Link Modification Proposal & Consultation
+            </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Linked Proposal ID:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. prop-123"
+                  value={modifyProposalId}
+                  onChange={(e) => setModifyProposalId(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4" }}
+                  data-testid={`modify-proposal-id-${ev.decision_event_id}`}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Proposal Revision:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={modifyProposalRevision}
+                  onChange={(e) => setModifyProposalRevision(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4" }}
+                  data-testid={`modify-proposal-revision-${ev.decision_event_id}`}
+                />
+              </div>
+              <div style={{ gridColumn: "span 2" }}>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Linked Consultation Workshop ID:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ws-abc (optional)"
+                  value={modifyWorkshopId}
+                  onChange={(e) => setModifyWorkshopId(e.target.value)}
+                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4" }}
+                  data-testid={`modify-workshop-id-${ev.decision_event_id}`}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Modification Rationale:</label>
+              <textarea
+                placeholder="Explain the changes to sizes, bounds, or limits..."
+                value={modifyRationale}
+                onChange={(e) => setModifyRationale(e.target.value)}
+                style={{ width: "100%", height: 50, padding: 6, borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4", resize: "none" }}
+                data-testid={`modify-rationale-${ev.decision_event_id}`}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                disabled={callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()}
+                onClick={async () => {
+                  setCallState("loading");
+                  setCallError(null);
+                  try {
+                    await decideOnEvent(
+                      ev.decision_event_id,
+                      {
+                        decision: "modify",
+                        rationale: modifyRationale,
+                        modifications: {
+                          proposal_id: modifyProposalId.trim(),
+                          proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
+                          consultation_workshop_id: modifyWorkshopId.trim() || undefined,
+                        }
+                      },
+                      { ifMatch: etag, idempotencyKey: newUUID(), requestId: newUUID() }
+                    );
+                    setDecidedChoice("modify");
+                    setCallState("success");
+                    setShowModifyLinkage(false);
+                    onDecisionRecorded?.("modify", ev.decision_event_id);
+                  } catch (err) {
+                    setCallError(err instanceof Error ? err.message : "Modify failed");
+                    setCallState("error");
+                  }
+                }}
+                style={{
+                  padding: "4px 12px",
+                  background: "#d97706",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  cursor: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? "not-allowed" : "pointer",
+                  opacity: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? 0.7 : 1
+                }}
+                data-testid={`modify-linkage-submit-${ev.decision_event_id}`}
+              >
+                Confirm Modification
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowModifyLinkage(false)}
+                style={{ padding: "4px 12px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

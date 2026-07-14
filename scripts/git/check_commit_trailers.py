@@ -122,6 +122,35 @@ def collect_messages_from_range(rev_range: str) -> list[tuple[str, str]]:
     return items
 
 
+def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+
+
+def resolve_trunk_ref() -> str | None:
+    """Resolve the canonical trunk (main) ref for ancestry exemption.
+
+    Commits already reachable from ``main`` were validated by main's own
+    branch protection when they landed (mirrors the ``promote/*`` skip: the
+    published history was already checked). Reconcile / back-merge PRs that
+    carry main's history into ``dev`` must not be re-linted per-commit.
+    Fail-safe: return None when trunk cannot be resolved (no exemption).
+    """
+    if os.environ.get("PANTHEON_TRAILER_NO_TRUNK_EXEMPT") == "1":
+        return None
+    for ref in ("origin/main", "refs/remotes/origin/main", "main"):
+        if _run_git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"]).returncode == 0:
+            return ref
+    # Not checked out locally (shallow CI clone): fetch once, use FETCH_HEAD.
+    if _run_git(["fetch", "--quiet", "--depth=2147483647", "origin", "main"]).returncode == 0:
+        if _run_git(["rev-parse", "--verify", "--quiet", "FETCH_HEAD^{commit}"]).returncode == 0:
+            return "FETCH_HEAD"
+    return None
+
+
+def is_on_trunk(sha: str, trunk_ref: str) -> bool:
+    return _run_git(["merge-base", "--is-ancestor", sha, trunk_ref]).returncode == 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
@@ -159,8 +188,12 @@ def main() -> int:
     else:
         targets = collect_messages_from_range(args.rev_range)
 
+    trunk_ref = resolve_trunk_ref() if args.rev_range else None
     exit_code = 0
     for sha, msg in targets:
+        if trunk_ref and sha not in ("<staged>",) and is_on_trunk(sha, trunk_ref):
+            # Already validated on main; do not re-lint reconciled history.
+            continue
         if args.skip_merge:
             parents = subprocess.run(
                 ["git", "rev-list", "--parents", "-n", "1", sha],

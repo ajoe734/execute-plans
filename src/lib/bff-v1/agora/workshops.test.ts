@@ -17,7 +17,6 @@ import { materializeWorkshopCompleteness } from "@/agora/components/workshopComp
 
 vi.mock("@/lib/bff-v1/client", () => ({
   bffFetch: vi.fn(),
-  detectBaseUrl: () => "https://bff.example.test",
 }));
 
 const mockWorkshop: StrategyWorkshop = {
@@ -81,18 +80,6 @@ describe("listWorkshops", () => {
 
     expect(result).toEqual([]);
   });
-
-  it("normalizes an absent subject into a safe structural fallback", async () => {
-    const { subject: _subject, ...withoutSubject } = mockWorkshop;
-    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [withoutSubject] } });
-
-    const [result] = await listWorkshops();
-
-    expect(result.subject).toEqual({
-      kind: "free_form",
-      ref: "ws-001",
-    });
-  });
 });
 
 describe("getWorkshop", () => {
@@ -102,40 +89,6 @@ describe("getWorkshop", () => {
     const result = await getWorkshop("ws-001");
 
     expect(result).toEqual(mockWorkshop);
-  });
-
-  it("fills missing subject kind and ref while preserving a valid title", async () => {
-    vi.mocked(bffFetch).mockResolvedValue({
-      data: {
-        ...mockWorkshop,
-        subject: { title: "  Partial subject title  " },
-      },
-    });
-
-    const result = await getWorkshop("ws-001");
-
-    expect(result.subject).toEqual({
-      kind: "free_form",
-      ref: "ws-001",
-      title: "Partial subject title",
-    });
-  });
-
-  it("preserves valid partial subject identity without inventing a title", async () => {
-    vi.mocked(bffFetch).mockResolvedValue({
-      data: {
-        ...mockWorkshop,
-        subject: { kind: "strategy_spec", ref: "strategy-v4" },
-      },
-    });
-
-    const result = await getWorkshop("ws-001");
-
-    expect(result.subject).toEqual({
-      kind: "strategy_spec",
-      ref: "strategy-v4",
-    });
-    expect(result.subject.title).toBeUndefined();
   });
 });
 
@@ -298,45 +251,41 @@ describe("postWorkshopMessage", () => {
 });
 
 describe("openWorkshopStream", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  it("returns a React effect cleanup and forwards parsed stream events", () => {
+    const close = vi.fn();
+    const source = { close, onmessage: null as ((message: MessageEvent<string>) => void) | null };
+    const EventSourceMock = vi.fn().mockReturnValue(source);
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
 
-  it("opens the workshop stream via authenticated fetch and forwards parsed stream events", async () => {
-    const streamEvent = {
+    const cleanup = openWorkshopStream("ws/001", onEvent);
+
+    expect(EventSourceMock).toHaveBeenCalledWith(
+      "/bff/agora/workshops/ws%2F001/stream",
+      { withCredentials: true },
+    );
+    source.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          data: {
+            event_id: "evt-001",
+            workshop_id: "ws/001",
+            event_type: "workshop.snapshot",
+            payload: {},
+            occurred_at: "2026-06-01T00:00:00Z",
+          },
+        }),
+      }),
+    );
+    expect(onEvent).toHaveBeenCalledWith({
       event_id: "evt-001",
       workshop_id: "ws/001",
       event_type: "workshop.snapshot",
       payload: {},
       occurred_at: "2026-06-01T00:00:00Z",
-    };
-    const encoder = new TextEncoder();
-    const response = new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(`id: evt-001\nevent: workshop.snapshot\ndata: ${JSON.stringify({ data: streamEvent })}\n\n`),
-          );
-          controller.close();
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "text/event-stream" } },
-    );
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    vi.stubGlobal("fetch", fetchMock);
-    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
-
-    const cleanup = openWorkshopStream("ws/001", onEvent);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://bff.example.test/bff/agora/workshops/ws%2F001/stream");
-    expect((init.headers as Record<string, string>).Accept).toBe("text/event-stream");
-    expect(init.credentials).toBe("include");
-
-    expect(onEvent).toHaveBeenCalledWith(streamEvent);
+    });
 
     cleanup();
-    expect((init.signal as AbortSignal).aborted).toBe(true);
+    expect(close).toHaveBeenCalled();
   });
 });

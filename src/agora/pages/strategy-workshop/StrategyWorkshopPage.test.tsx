@@ -1,11 +1,11 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+import type { StrategyWorkshop, WorkshopCard } from "@/lib/bff-v1/agora/types";
 import type {
-  StrategyReadinessAssessment,
-  WorkshopCard,
+  WorkshopCard as WorkshopCardSchema,
   WorkshopCompletenessSnapshot,
+  WorkshopReadinessAssessment,
   WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
 
@@ -16,7 +16,6 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
   listWorkshopEvents: vi.fn().mockResolvedValue({ items: [] }),
-  createWorkshop: vi.fn().mockResolvedValue(null),
   postWorkshopMessage: vi.fn().mockResolvedValue({
     message_id: "msg-001",
     workshop_id: "ws-abc",
@@ -25,8 +24,13 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
 }));
 
+vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
+  ConnectedGovernedProposalCard: ({ proposalId }: { proposalId: string }) => (
+    <div data-testid="connected-governed-proposal">{proposalId}</div>
+  ),
+}));
+
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
-import "@/i18n";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 
 const MOCK_WORKSHOP = {
@@ -53,7 +57,7 @@ const TRADING_ROOM_READY = {
   strategy_spec_registry_id: "reg-001",
   workshop_version_id: "wsv-001",
   workshop_id: "ws-abc",
-} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 const BLOCKED_READINESS = {
   ...TRADING_ROOM_READY,
@@ -62,13 +66,13 @@ const BLOCKED_READINESS = {
   gate: "full_validation",
   highest_ready_gate: "full_validation",
   passed: true,
-} as StrategyReadinessAssessment & { highest_ready_gate: "full_validation" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "full_validation" };
 
 const MISSING_STRATEGY_ID_READINESS = {
   ...TRADING_ROOM_READY,
   assessment_id: "ready-missing-strategy",
   strategy_id: undefined,
-} as StrategyReadinessAssessment & { highest_ready_gate: "trading_room" };
+} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
 
 const LIVE_COMPLETENESS_SNAPSHOT: WorkshopCompletenessSnapshot = {
   snapshot_id: "8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
@@ -218,8 +222,8 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.getWorkshop).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledWith(rawWorkshopId);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith(rawWorkshopId);
-    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("卡片：1");
-    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("事件：1");
+    expect(screen.getByTestId("workshop-card-summary").textContent).toContain("Cards: 1");
+    expect(screen.getByTestId("workshop-event-summary").textContent).toContain("Events: 1");
     expect(screen.getByTestId("strategy-workshop-runtime-header").textContent).not.toContain(
       "Live Strategy Workshop",
     );
@@ -291,14 +295,14 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
 
-    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("完整");
+    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("Complete");
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
     expect(screen.getByTestId("completeness-grade").textContent).toBe("complete");
     expect(screen.getByText("Strategy completeness updated")).toBeDefined();
-    expect(screen.getByText("整體等級").nextElementSibling?.textContent).toBe("complete");
+    expect(screen.getByText("Overall grade").nextElementSibling?.textContent).toBe("complete");
     expect(
-      screen.getAllByText("研究就緒")
+      screen.getAllByText("Research ready")
         .some((label) => label.nextElementSibling?.textContent === "Yes"),
     ).toBe(true);
   });
@@ -354,7 +358,7 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
-    fireEvent.change(screen.getByPlaceholderText("傳訊息給策略工坊僕人…"), {
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
       target: { value: "What evidence is missing?" },
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
@@ -362,6 +366,14 @@ describe("StrategyWorkshopPage", () => {
     await waitFor(() => {
       expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith("ws-abc", {
         content: "What evidence is missing?",
+        metadata: {
+          mode: "ask",
+          participant_persona_ids: ["per_quant", "per_macro", "per_risk"],
+          focused_ref: null,
+          subject_kind: "free_form",
+          subject_ref: "strategy-draft-001",
+          picker_type: "recommended",
+        },
       });
     });
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(2);
@@ -420,7 +432,7 @@ describe("StrategyWorkshopPage", () => {
 
     const button = await screen.findByTestId("add-to-trading-room-btn");
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
-    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("缺少策略 ID");
+    expect(screen.getByTestId("add-to-trading-room-reason").textContent).toContain("missing strategy id");
     fireEvent.click(button);
     expect(onAddToTradingRoom).not.toHaveBeenCalled();
   });
@@ -443,97 +455,228 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.listWorkshops).toHaveBeenCalled();
   });
 
-  it("renders the NewWorkshopForm when clicking the New Strategy button and handles creation", async () => {
-    vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([MOCK_WORKSHOP]);
-    vi.mocked(workshopsModule.createWorkshop).mockResolvedValue({
-      ...MOCK_WORKSHOP,
-      workshop_id: "ws-new-created",
-      subject: {
-        kind: "free_form",
-        ref: "user_123",
-        title: "Test Created Strategy",
-      },
-    });
-
-    render(<StrategyWorkshopPage />);
-
-    // Click the "+ New Strategy" button
-    const newBtn = await screen.findByTestId("new-workshop-btn");
-    fireEvent.click(newBtn);
-
-    // Form should be visible
-    expect(screen.getByTestId("new-workshop-form")).toBeDefined();
-
-    // Fill the inputs
-    const nameInput = screen.getByPlaceholderText("例如: 波動度縮減勝出分支突破策略");
-    const descInput = screen.getByPlaceholderText("請詳細描述策略邏輯、交易標的、進出場條件與風險管理方式...");
-
-    fireEvent.change(nameInput, { target: { value: "Test Created Strategy" } });
-    fireEvent.change(descInput, { target: { value: "Detailed professional strategy description here." } });
-
-    // Submit
-    const submitBtn = screen.getByTestId("start-discussion-btn");
-    fireEvent.click(submitBtn);
-
-    await waitFor(() => {
-      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith({
-        subject: {
-          kind: "free_form",
-          ref: expect.stringContaining("user_"),
-          title: "Test Created Strategy",
-        },
-        metadata: {
-          strategy_name: "Test Created Strategy",
-          description: "Detailed professional strategy description here.",
-        },
-      });
-    });
-  });
-
-  it("renders all 12 Winner Branch blocks in the completeness rail", async () => {
-    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
-    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue({
-      ...LIVE_COMPLETENESS_SNAPSHOT,
-      overall_grade: "complete",
-      state_map_json: {
-        market_scope: "confirmed",
-        insider_branch_mapping: "confirmed",
-        winner_branch_scoring: "confirmed",
-        migration_reverse_flow: "confirmed",
-        event_lead: "confirmed",
-        signal_formation: "confirmed",
-        entry_holding: "confirmed",
-        add_reduce_exit: "confirmed",
-        sizing_leverage: "confirmed",
-        cost_liquidity_capacity: "confirmed",
-        validation_backtest_refutation: "confirmed",
-        monitoring_update: "confirmed",
-      },
-    });
+  it("renders the Context Bar, Mode Selector, and Participant Picker in session view", () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-abc",
+      operator_id: "operator-001",
+      status: "open",
+      subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    expect(screen.getByTestId("context-bar")).toBeDefined();
+    expect(screen.getByTestId("mode-selector")).toBeDefined();
+    expect(screen.getByTestId("participant-picker")).toBeDefined();
+    expect(screen.getByTestId("eligibility-explanation")).toBeDefined();
+  });
 
-    // Verify all 12 block elements exist
-    const blockIds = [
-      "market_scope",
-      "insider_branch_mapping",
-      "winner_branch_scoring",
-      "migration_reverse_flow",
-      "event_lead",
-      "signal_formation",
-      "entry_holding",
-      "add_reduce_exit",
-      "sizing_leverage",
-      "cost_liquidity_capacity",
-      "validation_backtest_refutation",
-      "monitoring_update",
-    ];
+  it("keeps the live session renderable when a legacy workshop omits its subject", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-legacy",
+      operator_id: "operator-001",
+      status: "open",
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
-    for (const id of blockIds) {
-      const blockEl = await screen.findByTestId(`winner-branch-block-${id}`);
-      expect(blockEl).toBeDefined();
-      expect(blockEl.getAttribute("data-block-grade")).toBe("confirmed");
-    }
+    render(<StrategyWorkshopPage workshopId="ws-legacy" />);
+
+    const contextBar = await screen.findByTestId("context-bar");
+    expect(contextBar.textContent).toContain("Subject: none (none)");
+    expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
+  });
+
+  it("renders only the governed proposal explicitly linked by the route", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+    render(<StrategyWorkshopPage governedProposalId="prop-pint-010" workshopId="ws-abc" />);
+
+    expect(await screen.findByTestId("connected-governed-proposal")).toHaveTextContent("prop-pint-010");
+  });
+
+  it("renders warning banners when stale/degraded/denied triggers are toggled", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-abc",
+      operator_id: "operator-001",
+      status: "open",
+      subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    
+    // Simulate user clicking on state toggle buttons using fireEvent and findBy
+    const staleBtn = screen.getByTestId("toggle-stale-btn");
+    fireEvent.click(staleBtn);
+    expect(await screen.findByTestId("warning-stale")).toBeDefined();
+
+    const degradedBtn = screen.getByTestId("toggle-degraded-btn");
+    fireEvent.click(degradedBtn);
+    expect(await screen.findByTestId("warning-degraded")).toBeDefined();
+
+    const deniedBtn = screen.getByTestId("toggle-denied-btn");
+    fireEvent.click(deniedBtn);
+    expect(await screen.findByTestId("warning-denied")).toBeDefined();
+  });
+
+  it("renders independent persona opinions and debates in cards list", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      spec_version: "1.0",
+      workshop_id: "ws-abc",
+      operator_id: "operator-001",
+      status: "open",
+      subject: { kind: "strategy_spec", ref: "stg_001", title: "Quant Alpha" },
+      created_at: "2026-06-01T00:00:00Z",
+    } as unknown as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([
+        {
+          card_id: "card-opinion-1",
+          card_type: "persona_opinion",
+          workshop_id: "ws-abc",
+          sequence_no: 1,
+          status: "completed",
+          title: "Opinion by Quant Architect",
+          payload: {
+            stance: "approve",
+            confidence: 0.9,
+            rationale: "The backtest Sharpe is high and meets criteria.",
+            persona_id: "per_quant",
+            persona_version: "1.2",
+            uncertainty: "Data coverage lacks 2020 crash."
+          },
+          created_at: "2026-06-01T00:00:00Z",
+        },
+        {
+          card_id: "card-debate-1",
+          card_type: "debate",
+          workshop_id: "ws-abc",
+          sequence_no: 2,
+          status: "informational",
+          title: "Debate on Regime Shift",
+          payload: {
+            topic: "Regime Shift sensitivity",
+            summary: "Quant vs Macro on Sharpe persistence",
+            exchanges: [
+              {
+                speaker: "Quant Architect",
+                stance: "approve",
+                message: "Parameters are robust.",
+              },
+              {
+                speaker: "Macro Strategist",
+                stance: "challenge",
+                message: "Interest rate cut could break regime assumptions.",
+              }
+            ]
+          },
+          created_at: "2026-06-01T00:00:00Z",
+        }
+      // `listWorkshopCards`'s mocked-module type resolves `WorkshopCard` from
+      // `agora/workshops`, distinct from the `agora/types` `WorkshopCard`
+      // imported above — cast through the schema's own type for this fixture.
+      ] as unknown as WorkshopCardSchema[]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    
+    // Verify custom cards exist
+    await screen.findByTestId("workshop-card-card-opinion-1");
+    expect(screen.getByText("Opinion Stance:")).toBeDefined();
+    expect(screen.getByText("Approve (贊成)")).toBeDefined();
+    expect(screen.getByText("The backtest Sharpe is high and meets criteria.")).toBeDefined();
+
+    expect(screen.getByTestId("workshop-card-card-debate-1")).toBeDefined();
+    expect(screen.getByText("Quant Architect")).toBeDefined();
+    expect(screen.getByText("Macro Strategist")).toBeDefined();
+    expect(screen.getByText("Parameters are robust.")).toBeDefined();
+  });
+
+  it("proves no stale rail/gates/CTA/handoff when switching from A-ready to B-null/error", async () => {
+    const onAddToTradingRoom = vi.fn();
+    vi.mocked(workshopsModule.getWorkshop).mockImplementation(async (id) => ({
+      ...MOCK_WORKSHOP,
+      workshop_id: id,
+    }));
+    
+    const cardA = {
+      ...LIVE_COMPLETENESS_CARD,
+      workshop_id: "ws-A",
+    };
+    vi.mocked(workshopsModule.listWorkshopCards).mockImplementation(async (id) => {
+      if (id === "ws-A") return [cardA];
+      return [];
+    });
+    
+    // For A, return ready and complete
+    const snapshotA = {
+      ...LIVE_COMPLETENESS_SNAPSHOT,
+      workshop_id: "ws-A",
+    };
+    const readinessA = {
+      ...TRADING_ROOM_READY,
+      workshop_id: "ws-A",
+    };
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockImplementation(async (id) => {
+      if (id === "ws-A") return readinessA;
+      return null;
+    });
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockImplementation(async (id) => {
+      if (id === "ws-A") return snapshotA;
+      return null;
+    });
+
+    const { rerender } = render(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-A" />);
+
+    // Prove A's CTA is enabled and completeness exists
+    const button = await screen.findByTestId("add-to-trading-room-btn");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("策略完整度尚未評估")).toBeNull();
+
+    // Now switch to B
+    rerender(<StrategyWorkshopPage onAddToTradingRoom={onAddToTradingRoom} workshopId="ws-B" />);
+
+    // Prove B's CTA is disabled and completeness is cleared (shows empty state text)
+    await waitFor(async () => {
+      const bBtn = screen.getByTestId("add-to-trading-room-btn");
+      expect((bBtn as HTMLButtonElement).disabled).toBe(true);
+    });
+    expect(await screen.findByText("策略完整度尚未評估")).toBeDefined();
+  });
+
+  it("does not crash when workshop subject is missing or omitted in BFF payload", async () => {
+    const workshopWithNoSubject = {
+      spec_version: "1.0" as const,
+      workshop_id: "ws-no-subject",
+      operator_id: "operator-001",
+      status: "open" as const,
+      subject: undefined as any,
+      created_at: "2026-06-01T00:00:00Z",
+    };
+
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(workshopWithNoSubject);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+
+    render(<StrategyWorkshopPage workshopId="ws-no-subject" />);
+
+    const header = await screen.findByTestId("strategy-workshop-runtime-header");
+    expect(header).toBeDefined();
+    const contextBar = screen.getByTestId("context-bar");
+    expect(contextBar.textContent).toContain("Subject: none");
   });
 });

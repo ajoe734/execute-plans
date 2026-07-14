@@ -119,8 +119,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
 
   // Fetch Live Data
   const { data: rows, loading: rowsLoading } = useV5Live(
-    () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter, personaFocus || undefined),
-    [currentQuarter, personaFocus],
+    () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter), [currentQuarter],
   );
   const { data: formula } = useV5Live(
     () => mgmt.quarterlyRanking.formulaLiveOnly(), [],
