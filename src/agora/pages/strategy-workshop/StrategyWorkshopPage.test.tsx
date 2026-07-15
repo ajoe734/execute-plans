@@ -460,8 +460,9 @@ describe("StrategyWorkshopPage", () => {
   it("uses the live session's immutable strategy pointers for propose-action context", async () => {
     const liveSession = {
       ...MOCK_WORKSHOP,
+      strategy_id: "strategy-stable-9",
       active_strategy_spec_registry_id: "strategy-registry-9",
-      selected_version_id: "immutable-version-4",
+      selected_version_id: "workshop-version-link-4",
     } as StrategyWorkshop;
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(liveSession);
     vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
@@ -482,10 +483,31 @@ describe("StrategyWorkshopPage", () => {
       workshop_id: "ws-abc",
       context_refs: expect.arrayContaining([{
         type: "strategy",
-        id: "strategy-registry-9",
-        version_id: "immutable-version-4",
+        id: "strategy-stable-9",
+        version_id: "strategy-registry-9",
       }]),
     })));
+  });
+
+  it("fails closed instead of treating a Registry version as a stable strategy id", async () => {
+    const sessionWithoutStableStrategyId = {
+      ...MOCK_WORKSHOP,
+      active_strategy_spec_registry_id: "strategy-registry-only",
+      selected_version_id: "workshop-version-link-only",
+    } as StrategyWorkshop;
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(sessionWithoutStableStrategyId);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Ask without inventing a strategy identity" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalled());
+    const request = vi.mocked(interaction.resolveContext).mock.calls.at(-1)?.[0];
+    expect(request?.context_refs).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "strategy" }),
+    ]));
   });
 
   it("fails closed when a deep-linked Persona is no longer eligible", async () => {
