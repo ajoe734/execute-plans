@@ -81,6 +81,11 @@ describe("release gate Playwright classification", () => {
         title: "keeps Cockpit load and SSE rerender proxy within soft budgets",
       },
       {
+        file: "18-perf.spec.ts",
+        status: "skipped",
+        title: "optional performance measurement",
+      },
+      {
         file: "25-persona-fleet-live-linked-pages.spec.ts",
         status: "unexpected",
         title: "keeps every focused target semantically scoped",

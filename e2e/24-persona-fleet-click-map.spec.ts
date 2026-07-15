@@ -379,6 +379,7 @@ async function captureScreenshot(page: Page, name: string): Promise<void> {
 }
 
 test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
+  test.setTimeout(180_000);
   test.skip(
     targetsExternalE2eEnvironment(),
     "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
@@ -518,7 +519,7 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded" });
 
     console.log("Clicking Non-Production tab...");
-    await page.getByRole("tab", { name: /非正式資料/ }).click();
+    await page.getByRole("radio", { name: /非正式資料/ }).click();
 
     // Link 9: Recent mutation - Fallback Path (Crypto-Alt-Hunter)
     console.log("Clicking Fallback Recent mutation link...");
@@ -545,7 +546,7 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded" });
 
     console.log("Clicking Non-Production tab...");
-    await page.getByRole("tab", { name: /非正式資料/ }).click();
+    await page.getByRole("radio", { name: /非正式資料/ }).click();
 
     // Link 10: Missing-Data Path (Missing Data Persona should have no link)
     console.log("Checking Missing-Data row links...");

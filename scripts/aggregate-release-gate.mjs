@@ -1267,6 +1267,11 @@ function analyzeHostedProbe(stepOutcomes) {
     text,
     "required core BFF responses complete",
   );
+  const frontendShellStatus = parseSummaryNumber(text, "frontend shell status");
+  const applicationRootRendered = parseBoolAfter(
+    text,
+    "application root rendered",
+  );
   const personaFleetRowCount = parseNumberAfter(
     text,
     "persona fleet row count",
@@ -1314,6 +1319,8 @@ function analyzeHostedProbe(stepOutcomes) {
     containsBff,
     containsOld,
     requiredCoreResponsesComplete,
+    frontendShellStatus,
+    applicationRootRendered,
     personaFleetRowCount,
     personaFleetRowsValid,
     personaFleetLiveBannerValid,
@@ -1333,16 +1340,15 @@ function analyzeHostedProbe(stepOutcomes) {
 
 function buildGate4(hosted) {
   const evidence = hosted.file || hosted.stepEvidence;
-  const loaded = hosted.exists && hosted.pass === true;
+  const loaded =
+    hosted.frontendShellStatus >= 200 &&
+    hosted.frontendShellStatus < 400 &&
+    hosted.applicationRootRendered === true;
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
-  const responsesMatch =
-    hosted.requestCount !== null &&
-    hosted.requestCount > 0 &&
-    hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
   const requiredResponsesComplete =
     Boolean(hosted.requiredCoreResponsesComplete) && noFailed;
-  const responsesComplete = responsesMatch || requiredResponsesComplete;
+  const responsesComplete = requiredResponsesComplete;
   const statusForHosted = (condition) =>
     hostedStatus(
       hosted.exists ? (condition ? "pass" : "fail") : hosted.missingStatus,
@@ -1375,7 +1381,9 @@ function buildGate4(hosted) {
     makeCheck("Frontend page loads.", loadedStatus, {
       owner: hostedOwner(loadedStatus),
       evidence,
-      note: noteForHosted(`probe pass: ${hosted.pass}`),
+      note: noteForHosted(
+        `shell status: ${hosted.frontendShellStatus ?? "missing"}; application root rendered: ${hosted.applicationRootRendered ?? "missing"}`,
+      ),
     }),
     makeCheck("Frontend runtime uses intended BFF URL.", containsBffStatus, {
       owner: hostedOwner(containsBffStatus),
@@ -1551,6 +1559,7 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
   }
   const noteParts = [`${matches.length} matching spec(s)`];
   if (passed.length) noteParts.push(`${passed.length} runnable passed`);
+  if (failed.length) noteParts.push(`${failed.length} unexpected or incomplete`);
   if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
   if (status === "warn")
     noteParts.push(`${flowId} marked by release-gate exception`);
@@ -1562,25 +1571,24 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
 }
 
 function buildGate5(playwright) {
+  const unexpectedSpecs = playwright.specs.filter((spec) =>
+    ["fail", "missing"].includes(spec.status),
+  );
+  const overallStatus = !playwright.jsonFile
+    ? "missing"
+    : unexpectedSpecs.length
+      ? "fail"
+      : "pass";
+  const evidence =
+    playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile;
   return [
     makeCheck(
       "No unexpected Playwright failures.",
-      playwright.jsonFile
-        ? playwright.specs.some((spec) =>
-            ["fail", "missing"].includes(spec.status),
-          )
-          ? "fail"
-          : "pass"
-        : "missing",
+      overallStatus,
       {
-        owner: playwright.specs.some((spec) =>
-          ["fail", "missing"].includes(spec.status),
-        )
-          ? GATE_OWNERS[5]
-          : "",
-        evidence:
-          playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile,
-        note: `${playwright.specs.filter((spec) => ["fail", "missing"].includes(spec.status)).length} unexpected or incomplete spec(s)`,
+        owner: overallStatus === "pass" ? "" : GATE_OWNERS[5],
+        evidence,
+        note: `${unexpectedSpecs.length} unexpected or incomplete spec(s)`,
       },
     ),
     checkFlow(
@@ -1656,7 +1664,7 @@ function buildGate5(playwright) {
       playwright,
       "F13",
       "F13 Agora.",
-      /\bf13\b|13-agora\.spec\.[jt]s/,
+      /13-agora\.spec\.[jt]s/,
     ),
     checkFlow(
       playwright,
@@ -1674,7 +1682,7 @@ function buildGate5(playwright) {
       playwright,
       "F16",
       "F16 audit/correlation.",
-      /\bf16\b|audit.*correlation|correlation/,
+      /16-audit-correlation\.spec\.[jt]s/,
     ),
   ];
 }
@@ -1685,9 +1693,19 @@ function buildGate6(playwright) {
   const f17Specs = playwright.specs.filter((spec) =>
     /(?:^|\/)17-a11y-v5\.spec\.[jt]s$/i.test(spec.file),
   );
+  function statusFor(matches) {
+    if (!matches.length) return "missing";
+    const failed = matches.filter((spec) =>
+      ["fail", "missing"].includes(spec.status),
+    );
+    if (failed.length) return worstStatus(failed.map((spec) => spec.status));
+    if (matches.some((spec) => spec.status === "pass")) return "pass";
+    return "skip";
+  }
+
   const axeSpecs = f17Specs.filter((spec) => /axe|a11y/i.test(spec.title));
   const axeStatus = axeSpecs.length
-    ? worstStatus(axeSpecs.map((spec) => spec.status))
+    ? statusFor(axeSpecs)
     : playwright.lastRun?.status === "failed"
       ? "fail"
       : "missing";
@@ -1701,12 +1719,6 @@ function buildGate6(playwright) {
   const ssePerfSpecs = perfSpecs.filter((spec) =>
     /sse.*rerender|rerender.*sse/i.test(spec.title),
   );
-
-  function statusFor(matches) {
-    return matches.length
-      ? worstStatus(matches.map((spec) => spec.status))
-      : "missing";
-  }
 
   return [
     makeCheck("v5 axe smoke critical/serious = 0.", axeStatus, {

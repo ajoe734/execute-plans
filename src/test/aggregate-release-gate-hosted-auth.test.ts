@@ -35,6 +35,8 @@ function gate4For(summaryLines: string[]) {
 }
 
 const safeUnauthenticatedSummary = [
+  "frontend shell status: 200",
+  "application root rendered: true",
   "contains intended BFF URL: true",
   "required core BFF responses complete: true",
   "persona fleet row count: 0",
@@ -97,11 +99,38 @@ describe("release Gate 4 unauthenticated Persona Fleet contract", () => {
     expect(personaChecks.some((check) => check.status === "fail")).toBe(true);
   });
 
-  it("fails the page-load check when the probe reports pass false", () => {
+  it("keeps page-load evidence independent from another strict probe failure", () => {
     const checks = gate4For(
       safeUnauthenticatedSummary.map((line) => line === "pass: true" ? "pass: false" : line),
     );
 
+    expect(checks.find((check) => check.label === "Frontend page loads.")?.status).toBe("pass");
+  });
+
+  it("fails page-load evidence when the application root is not rendered", () => {
+    const checks = gate4For(
+      safeUnauthenticatedSummary.map((line) =>
+        line === "application root rendered: true"
+          ? "application root rendered: false"
+          : line,
+      ),
+    );
+
     expect(checks.find((check) => check.label === "Frontend page loads.")?.status).toBe("fail");
+  });
+
+  it("does not accept matching totals in place of required core response evidence", () => {
+    const checks = gate4For(
+      safeUnauthenticatedSummary.map((line) =>
+        line === "required core BFF responses complete: true"
+          ? "required core BFF responses complete: false"
+          : line,
+      ),
+    );
+
+    expect(
+      checks.find((check) => check.label === "Browser receives required BFF responses.")
+        ?.status,
+    ).toBe("fail");
   });
 });
