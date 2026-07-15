@@ -7,13 +7,17 @@ import {
   getWorkshopReadiness,
   listWorkshopCards,
   listWorkshopEvents,
-  postWorkshopMessage,
   openWorkshopStream,
   type WorkshopCard,
   type WorkshopCompleteness,
   type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
+import {
+  interaction,
+  type ContextRef,
+  type PersonaEligibility,
+} from "@/lib/bff-v1/agora/interaction";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { ConnectedGovernedProposalCard } from "@/agora/components/ConnectedGovernedProposalCard";
@@ -30,6 +34,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { pickerParticipants, type WorkshopParticipantPicker } from "@/agora/participantPicker";
 import {
   Select,
   SelectContent,
@@ -293,9 +299,54 @@ interface SessionViewProps {
   workshopId: string;
   governedProposalId?: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+  entry?: WorkshopInteractionEntry;
 }
 
-function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
+export type WorkshopInteractionMode = "ask" | "challenge" | "consult" | "propose_action" | "reflect";
+export interface WorkshopInteractionEntry {
+  mode?: WorkshopInteractionMode;
+  participantIds?: string[];
+  picker?: WorkshopParticipantPicker;
+  returnTo?: string;
+  returnLabel?: string;
+}
+
+function normalizedEnvironment(workshop: StrategyWorkshop | null): "research" | "shadow" | "paper" | "canary" | "live" {
+  const value = String(recordFrom(workshop?.metadata).environment ?? "paper");
+  return ["research", "shadow", "paper", "canary", "live"].includes(value)
+    ? value as "research" | "shadow" | "paper" | "canary" | "live"
+    : "paper";
+}
+
+function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[]): ContextRef[] {
+  const metadata = recordFrom(workshop.metadata);
+  const session = recordFrom(workshop);
+  const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
+  const strategyId = String(
+    metadata.strategy_id
+      ?? session.active_strategy_spec_registry_id
+      ?? session.strategy_id
+      ?? "",
+  ).trim();
+  const strategyVersion = String(
+    metadata.strategy_version
+      ?? metadata.strategy_spec_registry_id
+      ?? metadata.selected_version_id
+      ?? session.selected_version_id
+      ?? "",
+  ).trim();
+  if (strategyId && strategyVersion) refs.unshift({ type: "strategy", id: strategyId, version_id: strategyVersion });
+  const decisionEventId = String(metadata.decision_event_id ?? "").trim();
+  if (decisionEventId) refs.push({ type: "decision_event", id: decisionEventId });
+  const journalEntryId = String(metadata.journal_entry_id ?? metadata.trade_episode_id ?? "").trim();
+  if (journalEntryId) refs.push({ type: "journal_entry", id: journalEntryId });
+  const performanceWindowId = String(metadata.performance_window_id ?? "").trim();
+  if (performanceWindowId) refs.push({ type: "performance_window", id: performanceWindowId });
+  return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
+}
+
+function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
+  const writeAccess = useAgoraWriteAccess();
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
@@ -303,9 +354,13 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [composerValue, setComposerValue] = useState("");
 
   // Custom states for PINT-005
-  const [selectedMode, setSelectedMode] = useState<"ask" | "challenge" | "consult" | "propose_action" | "reflect">("ask");
-  const [pickerSelectionType, setPickerSelectionType] = useState<"named" | "recommended" | "committee" | "red-team" | "same-style" | "cross-style">("recommended");
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(["per_quant", "per_macro", "per_risk"]);
+  const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
+  const [pickerSelectionType, setPickerSelectionType] = useState<WorkshopParticipantPicker>(entry?.picker ?? (entry?.participantIds?.length ? "named" : "recommended"));
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(entry?.participantIds ?? []);
+  const [eligibleParticipants, setEligibleParticipants] = useState<PersonaEligibility[]>([]);
+  const [excludedParticipants, setExcludedParticipants] = useState<PersonaEligibility[]>([]);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const [focusedRef, setFocusedRef] = useState<string | null>(null);
   
   // Warning/Banner simulator states
@@ -321,6 +376,8 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [sendLoading, setSendLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"conversation" | "readiness">("conversation");
+  const [mobileComposerOptionsOpen, setMobileComposerOptionsOpen] = useState(false);
 
   // Initial data load
   useEffect(() => {
@@ -353,6 +410,42 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       cancelled = true;
     };
   }, [workshopId]);
+
+  const refreshEligibility = useCallback(async (
+    mode: WorkshopInteractionMode,
+    preferred: string[] = selectedParticipants,
+    picker: WorkshopParticipantPicker = pickerSelectionType,
+  ) => {
+    if (!workshop) return;
+    setEligibilityLoading(true);
+    setEligibilityError(null);
+    try {
+      const result = await interaction.participants({
+        workshop_id: workshopId,
+        mode,
+        environment: normalizedEnvironment(workshop),
+        required_capability: "persona_opinion",
+      });
+      setEligibleParticipants(result.data.included);
+      setExcludedParticipants(result.data.excluded);
+      setSelectedParticipants(pickerParticipants(picker, result.data.included, preferred));
+    } catch (error) {
+      setEligibleParticipants([]);
+      setExcludedParticipants([]);
+      setSelectedParticipants([]);
+      setEligibilityError(error instanceof Error ? error.message : "Participant eligibility is unavailable.");
+    } finally {
+      setEligibilityLoading(false);
+    }
+  }, [pickerSelectionType, selectedParticipants, workshop, workshopId]);
+
+  useEffect(() => {
+    if (!workshop) return;
+    void refreshEligibility(selectedMode, entry?.participantIds ?? selectedParticipants, pickerSelectionType);
+    // The entry context is intentionally applied only when the resolved workshop first loads.
+    // Subsequent picker/mode changes call refreshEligibility from their controls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workshop, workshopId]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -429,6 +522,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       .filter((c) => c.card_type === "completeness_update")
       .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
   const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
+  const nextQuestionText = (() => {
+    if (!nextQuestion || nextQuestion.card_type !== "next_question") return null;
+    const question = nextQuestion.payload?.question;
+    return typeof question === "string" && question.trim() ? question.trim() : null;
+  })();
 
   const handleContinueDiscussion = useCallback((cardId: string) => {
     setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} - `));
@@ -438,21 +536,44 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !content || isDenied || sendLoading) return;
+      if (!workshopId || !workshop || !content || isDenied || sendLoading || !writeAccess.interactionAllowed) return;
       setSendLoading(true);
       setSendError(null);
       try {
-        await postWorkshopMessage(workshopId, {
-          content,
-          metadata: {
-            mode: selectedMode,
-            participant_persona_ids: selectedParticipants,
-            focused_ref: focusedRef,
-            subject_kind: workshop?.subject?.kind,
-            subject_ref: workshop?.subject?.ref,
-            picker_type: pickerSelectionType,
-          },
+        if (selectedParticipants.length === 0) {
+          throw new Error("Choose at least one eligible Persona before submitting.");
+        }
+        const contextRefs = interactionContextRefs(workshop, selectedParticipants);
+        const resolved = await interaction.resolveContext({
+          workshop_id: workshopId,
+          context_refs: contextRefs,
+          environment: normalizedEnvironment(workshop),
         });
+        if (!resolved.data.verified || resolved.data.workshop_id !== workshopId) {
+          throw new Error("The canonical Workshop context could not be verified.");
+        }
+        const eligibility = await interaction.participants({
+          workshop_id: workshopId,
+          mode: selectedMode,
+          environment: normalizedEnvironment(workshop),
+          required_capability: "persona_opinion",
+        });
+        const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+        if (!selectedParticipants.every((id) => eligibleIds.has(id))) {
+          throw new Error("One or more selected Personas are no longer eligible. Refresh the participant list.");
+        }
+        const result = await interaction.submit({
+          workshop_id: workshopId,
+          mode: selectedMode,
+          environment: normalizedEnvironment(workshop),
+          required_capability: "persona_opinion",
+          topic: content,
+          participant_persona_ids: selectedParticipants,
+          context_refs: resolved.data.context_refs,
+        });
+        if (result.data.execution_authority !== "none") {
+          throw new Error("The interaction response violated the no-execution authority boundary.");
+        }
         setComposerValue("");
         setFocusedRef(null);
         refreshCards();
@@ -467,13 +588,12 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     },
     [
       workshopId,
+      workshop,
       selectedMode,
       selectedParticipants,
-      focusedRef,
-      workshop,
-      pickerSelectionType,
       isDenied,
       sendLoading,
+      writeAccess.interactionAllowed,
       refreshCards,
       refreshCompleteness,
       refreshEvents,
@@ -484,10 +604,37 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   return (
     <div
       data-testid="strategy-workshop-page-session"
+      data-mobile-workshop-pane={mobilePane}
       className="flex h-full w-full overflow-hidden bg-slate-50"
     >
+      <div
+        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2"
+        data-testid="workshop-mobile-pane-selector"
+      >
+        <button
+          aria-pressed={mobilePane === "conversation"}
+          className={mobilePane === "conversation" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          onClick={() => setMobilePane("conversation")}
+          type="button"
+        >
+          Conversation
+        </button>
+        <button
+          aria-pressed={mobilePane === "readiness"}
+          className={mobilePane === "readiness" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          onClick={() => setMobilePane("readiness")}
+          type="button"
+        >
+          Next question & readiness
+        </button>
+      </div>
+
       {/* Left: conversation + composer */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200">
+      <div
+        className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200"
+        data-mobile-pane-hidden={mobilePane !== "conversation"}
+        data-testid="workshop-conversation-pane"
+      >
 
         {/* Session header */}
         <div
@@ -514,6 +661,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {entry?.returnTo ? (
+              <a className="text-xs font-medium text-indigo-600 underline" data-testid="workshop-return-link" href={entry.returnTo}>
+                {entry.returnLabel ?? "Back to source"}
+              </a>
+            ) : null}
             <span className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
               workshop?.status === "open"
@@ -606,6 +758,16 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           </div>
         )}
 
+        <div
+          className="agora-mobile-only shrink-0 flex-col gap-1 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-950"
+          data-testid="workshop-mobile-priority"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Next question</span>
+          <span className="line-clamp-2 text-xs font-medium leading-5">
+            {nextQuestionText ?? "Awaiting the next highest-value question."}
+          </span>
+        </div>
+
         {/* Conversation flow */}
         <div
           data-testid="workshop-conversation"
@@ -641,6 +803,22 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
         {/* Composer section */}
         <div data-testid="servant-composer" className="border-t border-slate-200 bg-white p-4 shrink-0 flex flex-col gap-3">
+          <button
+            aria-expanded={mobileComposerOptionsOpen}
+            className="agora-mobile-only items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
+            data-testid="workshop-composer-options-toggle"
+            onClick={() => setMobileComposerOptionsOpen((open) => !open)}
+            type="button"
+          >
+            <span>Mode, participants & context</span>
+            <span aria-hidden="true">{mobileComposerOptionsOpen ? "−" : "+"}</span>
+          </button>
+
+          <div
+            className="flex flex-col gap-3"
+            data-mobile-collapsed={!mobileComposerOptionsOpen}
+            data-testid="workshop-composer-options"
+          >
           
           {/* Context Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100 shrink-0" data-testid="context-bar">
@@ -711,9 +889,13 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               {/* Mode Selector */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
-                <Select
+              <Select
                   value={selectedMode}
-                  onValueChange={(val: string) => setSelectedMode(val as typeof selectedMode)}
+                  onValueChange={(val: string) => {
+                    const mode = val as WorkshopInteractionMode;
+                    setSelectedMode(mode);
+                    void refreshEligibility(mode, selectedParticipants, pickerSelectionType);
+                  }}
                 >
                   <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
                     <SelectValue placeholder="Select mode" />
@@ -734,24 +916,19 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                 <Select
                   value={pickerSelectionType}
                   onValueChange={(val: string) => {
-                    setPickerSelectionType(val as typeof pickerSelectionType);
-                    if (val === "recommended") setSelectedParticipants(["per_quant", "per_macro", "per_risk"]);
-                    else if (val === "committee") setSelectedParticipants(["per_risk", "per_macro"]);
-                    else if (val === "red-team") setSelectedParticipants(["per_red"]);
-                    else if (val === "same-style") setSelectedParticipants(["per_quant"]);
-                    else if (val === "cross-style") setSelectedParticipants(["per_quant", "per_macro"]);
-                    else if (val === "named") setSelectedParticipants(["per_quant"]);
+                    const picker = val as WorkshopParticipantPicker;
+                    setPickerSelectionType(picker);
+                    setSelectedParticipants(pickerParticipants(picker, eligibleParticipants, selectedParticipants));
                   }}
                 >
                   <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker">
                     <SelectValue placeholder="Select panel" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="recommended" className="text-xs">Recommended Panel</SelectItem>
-                    <SelectItem value="committee" className="text-xs">Risk Committee</SelectItem>
-                    <SelectItem value="red-team" className="text-xs">Red Team</SelectItem>
-                    <SelectItem value="same-style" className="text-xs">Same-Style Comparison</SelectItem>
-                    <SelectItem value="cross-style" className="text-xs">Cross-Style Comparison</SelectItem>
+                    <SelectItem value="recommended" className="text-xs">Recommended-or-Eligible Panel</SelectItem>
+                    <SelectItem value="eligible-one" className="text-xs">First Eligible Persona</SelectItem>
+                    <SelectItem value="eligible-two" className="text-xs">First Two Eligible Personas</SelectItem>
+                    <SelectItem value="eligible-three" className="text-xs">First Three Eligible Personas</SelectItem>
                     <SelectItem value="named" className="text-xs">Named Personas (Select)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -760,20 +937,20 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
             {/* Explanation box */}
             <div className="flex-1 min-w-[200px] max-w-[400px] bg-slate-50 border border-slate-100 p-2 rounded text-[11px] text-slate-500 leading-normal" data-testid="eligibility-explanation">
-              {(() => {
+              {eligibilityLoading ? "Checking Persona eligibility…" : eligibilityError ? `Eligibility unavailable: ${eligibilityError}` : (() => {
+                const selected = selectedParticipants.length;
+                const excluded = excludedParticipants.length;
                 switch (pickerSelectionType) {
                   case "recommended":
-                    return "Recommended Panel - Servant selected panel optimized for checking strategy completeness. Eligible.";
-                  case "committee":
-                    return "Risk Committee - Requires Risk Officer and Macro Strategist for capital allocations. Eligible.";
-                  case "red-team":
-                    return "Red Team - Adversary probing of strategy assumptions. Restricted to research/paper environment. Eligible.";
-                  case "same-style":
-                    return "Same-Style Comparison - Contrasts similar archetype models (e.g. Quant-to-Quant) to measure parameter sensitivity. Eligible.";
-                  case "cross-style":
-                    return "Cross-Style Comparison - Matches opposing styles (e.g. Quant vs Macro) to find regime blind spots. Eligible.";
+                    return `Recommended-or-Eligible Panel — up to ${selected} canonical eligible selected (recommended first when supplied); ${excluded} excluded by the capability gate.`;
+                  case "eligible-one":
+                    return `First Eligible Persona — ${selected} selected in canonical eligibility order.`;
+                  case "eligible-two":
+                    return `First Two Eligible Personas — ${selected} selected in canonical eligibility order.`;
+                  case "eligible-three":
+                    return `First Three Eligible Personas — ${selected} selected in canonical eligibility order.`;
                   case "named":
-                    return "Named Personas - Check individual personas below to include them in the workshop session.";
+                    return `Named Personas — choose from ${eligibleParticipants.length} canonical eligible participant(s).`;
                   default:
                     return "";
                 }
@@ -784,66 +961,40 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           {/* Named Persona check boxes when Named is selected */}
           {pickerSelectionType === "named" && (
             <div className="flex flex-wrap gap-4 border border-slate-100 bg-slate-50 p-2.5 rounded shrink-0" data-testid="named-checkbox-panel">
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_quant")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_quant"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_quant"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for all strategy scopes. Eligible.">Quant Architect</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_macro")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_macro"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_macro"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for macro regime analysis. Eligible.">Macro Strategist</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedParticipants.includes("per_risk")}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedParticipants([...selectedParticipants, "per_risk"]);
-                    else setSelectedParticipants(selectedParticipants.filter(p => p !== "per_risk"));
-                  }}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span title="Deployed. Approved for all risk assessment. Eligible.">Risk Officer Bot</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-not-allowed">
-                <input 
-                  type="checkbox" 
-                  disabled
-                  checked={false}
-                  className="rounded border-slate-200 text-slate-300 cursor-not-allowed"
-                />
-                <span title="Under Review. Blocked: Restricted to research/paper environments.">Red Team Adversary (Disabled)</span>
-              </label>
+              {eligibleParticipants.map((persona) => (
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer" key={persona.persona_id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedParticipants.includes(persona.persona_id)}
+                    onChange={(event) => setSelectedParticipants((current) => event.target.checked
+                      ? Array.from(new Set([...current, persona.persona_id]))
+                      : current.filter((id) => id !== persona.persona_id))}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span title={`Capability snapshot: ${persona.capability_snapshot_id ?? "verified"}`}>{persona.display_name}</span>
+                </label>
+              ))}
+              {excludedParticipants.map((persona) => (
+                <span className="text-xs text-slate-400" key={persona.persona_id} title={persona.reasons.join(", ")}>
+                  {persona.display_name} (Unavailable: {persona.reasons.join(", ")})
+                </span>
+              ))}
             </div>
           )}
+          </div>
 
           {/* Composer Input Area */}
           <div className="flex gap-2">
             <textarea
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
-              disabled={sendLoading || isDenied || workshop?.status === "concluded"}
-              placeholder={isDenied ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
+              disabled={sendLoading || isDenied || !writeAccess.interactionAllowed || workshop?.status === "concluded"}
+              placeholder={isDenied || !writeAccess.interactionAllowed ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
               onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied) {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied && writeAccess.interactionAllowed) {
                   e.preventDefault();
                   handleSend(composerValue);
                 }
@@ -852,7 +1003,8 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             <Button
               className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
               data-testid="servant-composer-submit"
-              disabled={sendLoading || isDenied || !composerValue.trim() || workshop?.status === "concluded"}
+              disabled={sendLoading || eligibilityLoading || isDenied || !writeAccess.interactionAllowed || !composerValue.trim() || selectedParticipants.length === 0 || workshop?.status === "concluded"}
+              title={writeAccess.interactionDisabledReason ?? undefined}
               onClick={() => handleSend(composerValue)}
               type="button"
             >
@@ -864,6 +1016,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               送出
             </Button>
           </div>
+          {writeAccess.interactionDisabledReason ? (
+            <p className="text-xs font-semibold text-amber-700" data-testid="interaction-disabled-reason">
+              {writeAccess.interactionDisabledReason}
+            </p>
+          ) : null}
           {sendError && (
             <p className="text-xs text-red-500 font-semibold" data-testid="servant-composer-error">{sendError}</p>
           )}
@@ -873,6 +1030,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       {/* Right: completeness rail + trading room CTA */}
       <div
         data-testid="completeness-rail"
+        data-mobile-pane-hidden={mobilePane !== "readiness"}
         style={{
           width: 240,
           borderLeft: "1px solid #e2e8f0",
@@ -964,11 +1122,12 @@ interface StrategyWorkshopPageProps {
   governedProposalId?: string;
   workshopId?: string;
   onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+  entry?: WorkshopInteractionEntry;
 }
 
-export function StrategyWorkshopPage({ governedProposalId, workshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
+export function StrategyWorkshopPage({ governedProposalId, workshopId, onAddToTradingRoom, entry }: StrategyWorkshopPageProps): JSX.Element {
   if (workshopId) {
-    return <WorkshopSessionView governedProposalId={governedProposalId} key={workshopId} workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} />;
+    return <WorkshopSessionView governedProposalId={governedProposalId} key={workshopId} workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} entry={entry} />;
   }
   return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }

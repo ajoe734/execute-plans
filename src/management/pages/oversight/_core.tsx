@@ -7,7 +7,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import { canonicalCenterUrl } from "@/management/navigation/managementRouteManif
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
-  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem,
+  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxList,
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
 import {
@@ -1126,11 +1126,23 @@ export const HumanInboxPage = () => {
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
-  const { data, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const { data, loading, error = null, refresh } = useV5Live<HumanInboxList>(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => clearTimeout(timer));
+  }, []);
   const sorted = useMemo(
     () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
   );
+  const surfaces = data?.meta?.surfaces ?? {};
+  const isDegraded = Object.values(surfaces).some(
+    (surface) => surface.status === "degraded" || surface.status === "unavailable"
+  );
+  const isInitialPending = loading && !data && !error;
+  const isTransportUnavailable = Boolean(error);
+  const isDegradedQueue = !loading && !error && isDegraded;
+
   const hasTargetContext = Boolean(targetFocus || runtimeFocus);
   const focusTokens = useMemo(
     () => (hasTargetContext
@@ -1222,9 +1234,45 @@ export const HumanInboxPage = () => {
           </div>
         </Card>
       )}
-      {!loading && visibleItems.length === 0 && (
+      {isInitialPending && (
+        <div className="flex items-center justify-center p-12 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>{t("mgmt.inbox.loadingQueue", "Loading live queue...")}</span>
+        </div>
+      )}
+      {isTransportUnavailable && (
+        <Card className="border-status-failed/30 bg-status-failed/10 p-4 text-sm flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-status-failed">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-semibold">{t("mgmt.inbox.transportErrorTitle", "Transport Unavailable")}</span>
+          </div>
+          <p className="text-muted-foreground">
+            {t("mgmt.inbox.transportErrorDesc", "Unable to retrieve live queue items because the server is unreachable or returned an error.")}
+          </p>
+          <div>
+            <Button size="sm" variant="outline" onClick={() => refresh?.()}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              {t("mgmt.inbox.retry", "Retry")}
+            </Button>
+          </div>
+        </Card>
+      )}
+      {isDegradedQueue && (
+        <Card className="border-status-warning/30 bg-status-warning/10 p-3 text-sm flex items-center justify-between gap-2">
+          <span className="text-foreground">
+            {t("mgmt.inbox.degradedQueueDesc", "Live queue status is degraded. Some items might be missing or delayed due to a downstream timeout.")}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => refresh?.()}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            {t("mgmt.inbox.refresh", "Refresh")}
+          </Button>
+        </Card>
+      )}
+      {!loading && !error && visibleItems.length === 0 && (
         <Card className="p-4 text-sm text-muted-foreground">
-          {personaFocus
+          {isDegraded
+            ? t("mgmt.inbox.degradedEmptyBody", "No items visible in this degraded view. Try refreshing.")
+            : personaFocus
             ? t("mgmt.inbox.focusEmptyBodyFmt", { persona: personaFocus })
             : t("mgmt.inbox.emptyBody")}
         </Card>

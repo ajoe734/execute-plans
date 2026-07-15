@@ -15,12 +15,12 @@ type FleetPersona = {
   persona_name?: string;
 };
 
-type JournalEntry = {
+type EvolutionJournalItem = {
   target?: { id?: string };
 };
 
 type FleetResponseBody = { data?: { items?: FleetPersona[] } };
-type JournalResponseBody = { data?: { items?: JournalEntry[] } } | JournalEntry[];
+type JournalResponseBody = { data?: { items?: EvolutionJournalItem[] } } | EvolutionJournalItem[];
 
 // Fetches and parses a BFF JSON endpoint with bounded retry: hosted-run flakiness
 // (cold-start 5xx, transiently empty/malformed bodies) previously surfaced as an
@@ -31,7 +31,7 @@ async function fetchJsonWithRetry<T>(
   url: string,
   headers: Record<string, string>,
   label: string,
-  { retries = 3, delayMs = 2000 }: { retries?: number; delayMs?: number } = {},
+  { retries = 3, delayMs = 2000, validate }: { retries?: number; delayMs?: number; validate?: (data: T) => boolean } = {},
 ): Promise<T> {
   let lastError = "unknown error";
 
@@ -45,7 +45,12 @@ async function fetchJsonWithRetry<T>(
         lastError = `${label} returned HTTP ${status}: ${bodyText.slice(0, 500)}`;
       } else {
         try {
-          return JSON.parse(bodyText) as T;
+          const parsed = JSON.parse(bodyText) as T;
+          if (validate && !validate(parsed)) {
+            lastError = `${label} returned HTTP ${status} but validation failed: ${bodyText.slice(0, 500)}`;
+          } else {
+            return parsed;
+          }
         } catch (parseError) {
           lastError = `${label} returned HTTP ${status} but body failed to parse as JSON (${(parseError as Error).message}): ${bodyText.slice(0, 500)}`;
         }
@@ -107,6 +112,9 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
     `${BFF_BASE}/bff/management/persona-fleet?page_size=100`,
     headers,
     "persona-fleet fetch",
+    {
+      validate: (data) => Array.isArray(data?.data?.items) && data.data.items.length > 0,
+    },
   );
   const fleetItems: FleetPersona[] = fleetData.data?.items ?? [];
 
@@ -116,32 +124,35 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
     headers,
     "evolution-journal fetch",
   );
-  const journalItems: JournalEntry[] = Array.isArray(journalData)
+  const journalItems: EvolutionJournalItem[] = Array.isArray(journalData)
     ? journalData
     : journalData.data?.items ?? [];
 
-  // Find a persona ID in the fleet that does not have any evolution journal entry (or fallback to any persona in the fleet)
+  // Find a persona ID in the fleet that does not have any evolution journal entry (otherwise fail with diagnostics)
   const journalPersonaIds = new Set(
     journalItems
       .map((item) => item.target?.id)
       .filter(Boolean)
   );
 
-  let targetPersona = fleetItems.find((item) => {
+  const targetPersona = fleetItems.find((item) => {
     const id = item.id ?? item.persona_id ?? item.personaId;
     return id && !journalPersonaIds.has(id);
   });
 
-  if (!targetPersona && fleetItems.length > 0) {
-    targetPersona = fleetItems[0];
+  if (!targetPersona) {
+    const allPersonaIds = fleetItems.map((item) => item.id ?? item.persona_id ?? item.personaId).join(", ");
+    const targetIds = Array.from(journalPersonaIds).join(", ");
+    throw new Error(
+      `No persona found without journal entries. ` +
+      `Available fleet personas: [${allPersonaIds}]. ` +
+      `Journal targets: [${targetIds}]. ` +
+      `Cannot execute fallback-state assertion deterministically.`
+    );
   }
 
-  const personaId = targetPersona
-    ? (targetPersona.id ?? targetPersona.persona_id ?? targetPersona.personaId)
-    : "persona-20260528-04688755";
-  const personaName = targetPersona
-    ? (targetPersona.name ?? targetPersona.personaName ?? targetPersona.persona_name)
-    : "Test Persona";
+  const personaId = targetPersona.id ?? targetPersona.persona_id ?? targetPersona.personaId;
+  const personaName = targetPersona.name ?? targetPersona.personaName ?? targetPersona.persona_name;
 
   console.log(`Using target persona ID: ${personaId} (${personaName})`);
 

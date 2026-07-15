@@ -141,6 +141,17 @@ describe("TradingDeskLayout", () => {
     expect(screen.getByTestId("trading-desk-shell").dataset.viewport).toBe("mobile");
   });
 
+  it("uses one exact 900px breakpoint across the shell", () => {
+    setViewportWidth(899);
+    const firstRender = renderTradingDesk();
+    expect(screen.getByTestId("trading-desk-shell").dataset.viewport).toBe("mobile");
+    firstRender.unmount();
+
+    setViewportWidth(900);
+    renderTradingDesk();
+    expect(screen.getByTestId("trading-desk-shell").dataset.viewport).toBe("desktop");
+  });
+
   it("renders the servant drawer as a fixed full-width overlay on mobile", () => {
     setViewportWidth(MOBILE_WIDTH);
     renderTradingDesk();
@@ -148,6 +159,27 @@ describe("TradingDeskLayout", () => {
     const drawer = screen.getByTestId("trading-desk-servant-drawer");
     expect(drawer.className).toContain("fixed");
     expect(drawer.className).toContain("w-full");
+  });
+
+  it("traps the mobile Servant as a modal, isolates main content, and restores trigger focus", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderTradingDesk();
+    const trigger = screen.getByRole("button", { name: "Open servant drawer" }) as HTMLButtonElement;
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "Servant" });
+    const mainRegion = screen.getByTestId("trading-desk-main").parentElement;
+    expect(dialog).toBe(screen.getByTestId("trading-desk-servant-drawer"));
+    expect(mainRegion?.hasAttribute("inert")).toBe(true);
+    expect(mainRegion?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.activeElement).not.toBe(trigger);
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("trading-desk-servant-drawer")).toBeNull());
+    expect(mainRegion?.hasAttribute("inert")).toBe(false);
+    expect(mainRegion?.hasAttribute("aria-hidden")).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("renders the servant drawer as a fixed-width side column on desktop", () => {

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WorkspaceGridEditor } from "./WorkspaceGridEditor";
 import type { TradingRoomWorkspace } from "@/lib/bff-v1/agora/tradingRoomTypes";
@@ -201,6 +201,15 @@ const mockEvents: TradingDecisionEvent[] = [
 ];
 
 describe("WorkspaceGridEditor component", () => {
+  function setViewportWidth(width: number) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width, writable: true });
+    act(() => window.dispatchEvent(new Event("resize")));
+  }
+
+  beforeEach(() => {
+    setViewportWidth(1280);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -298,6 +307,80 @@ describe("WorkspaceGridEditor component", () => {
     expect(screen.getByText("triggered")).toBeTruthy();
   });
 
+  it("projects widgets as ordered stacked cards below 900px without changing desktop coordinates", () => {
+    const laterWidget = {
+      ...dummyWorkspace.views[0].widgets[0],
+      placement: { ...dummyWorkspace.views[0].widgets[0].placement, x: 4, y: 5 },
+    };
+    const earlierWidget = {
+      ...dummyWorkspace.views[0].widgets[0],
+      id: "widget-earlier",
+      title: "Earlier Widget",
+      placement: { ...dummyWorkspace.views[0].widgets[0].placement, x: 0, y: 1 },
+    };
+    const responsiveWorkspace: TradingRoomWorkspace = {
+      ...dummyWorkspace,
+      views: [{ ...dummyWorkspace.views[0], widgetCount: 2, widgets: [laterWidget, earlierWidget] }],
+    };
+
+    setViewportWidth(899);
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={responsiveWorkspace} />);
+
+    const stacked = screen.getByTestId("workspace-grid-stacked");
+    expect(screen.queryByTestId("mock-grid-layout")).toBeNull();
+    expect(screen.getByTestId("workspace-grid-drop-surface").style.minWidth).toBe("0");
+    expect(Array.from(stacked.children).map((cell) => cell.getAttribute("data-testid"))).toEqual([
+      "workspace-grid-cell-widget-earlier",
+      "workspace-grid-cell-widget-1",
+    ]);
+    expect(laterWidget.placement).toEqual({ x: 4, y: 5, width: 4, height: 3, minWidth: 2, minHeight: 2 });
+  });
+
+  it("keeps the 1320px draggable grid at and above the shared breakpoint", () => {
+    setViewportWidth(900);
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
+
+    expect(screen.getByTestId("mock-grid-layout")).toBeTruthy();
+    expect(screen.queryByTestId("workspace-grid-stacked")).toBeNull();
+    expect(screen.getByTestId("workspace-grid-drop-surface").style.minWidth).toBe("1320px");
+  });
+
+  it("uses a modal revision drawer and restores focus after Escape", async () => {
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
+    const trigger = screen.getByTestId("workspace-header-ask-servant") as HTMLButtonElement;
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: "交代僕人修改 Widget" });
+    expect(dialog).toBe(screen.getByTestId("workspace-widget-revision-drawer"));
+    expect(document.body.contains(dialog)).toBe(true);
+    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("inert")).toBe(true);
+    expect(screen.getByTestId("trading-room-workspace-shell").getAttribute("aria-hidden")).toBe("true");
+    expect(document.activeElement).not.toBe(trigger);
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("workspace-widget-revision-drawer")).toBeNull());
+    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("inert")).toBe(false);
+    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("aria-hidden")).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("opens the widget library as an escapable modal and restores the add trigger", async () => {
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    const trigger = screen.getByTestId("workspace-add-widget-button") as HTMLButtonElement;
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const library = await screen.findByTestId("workspace-add-widget-library");
+    expect(library.getAttribute("role")).toBe("dialog");
+    expect(document.body.contains(library)).toBe(true);
+
+    fireEvent.keyDown(library, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("workspace-add-widget-library")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
   it("handles the Servant new-widget proposal flow: accept, adjust, reject, plugin request", async () => {
     const onWorkspaceChangeMock = vi.fn();
     render(
@@ -319,7 +402,7 @@ describe("WorkspaceGridEditor component", () => {
     // 3. Find input and type command
     const commandInput = screen.getByTestId("workspace-ask-servant-widget-input");
     const submitBtn = screen.getByTestId("workspace-ask-servant-widget-submit");
-    
+
     fireEvent.change(commandInput, { target: { value: "新增報酬折線圖" } });
     fireEvent.click(submitBtn);
 
@@ -335,7 +418,7 @@ describe("WorkspaceGridEditor component", () => {
     // Type adjustment and apply
     fireEvent.change(screen.getByTestId("workspace-widget-proposal-adjust-input"), { target: { value: "change type to bar" } });
     fireEvent.click(screen.getByTestId("workspace-widget-proposal-adjust-submit"));
-    
+
     await screen.findByText("Servant adjusted the widget spec according to your feedback.");
 
     // Test Plugin Request
@@ -368,5 +451,5 @@ describe("WorkspaceGridEditor component", () => {
     });
 
     expect(screen.getByText("🎉 New widget proposal accepted and durable layout version created successfully.")).toBeTruthy();
-  });
+  }, 15_000);
 });

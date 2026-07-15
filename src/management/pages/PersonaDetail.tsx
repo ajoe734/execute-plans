@@ -6,11 +6,12 @@ import { bff } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
+import { interaction, type EligibilityResponse } from "@/lib/bff-v1/agora/interaction";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
-import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox } from "lucide-react";
+import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox, MessageSquare, GitCompare } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -33,11 +34,42 @@ import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTa
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
 
 export const personaHumanInboxUrl = (personaId: string) =>
   `/management/human-inbox?persona=${encodeURIComponent(personaId)}`;
+
+export function personaWorkshopEntryUrl(input: {
+  workshopId: string;
+  mode: "ask" | "challenge" | "consult";
+  participantIds: string[];
+  picker: "named" | "recommended" | "eligible-one" | "eligible-two" | "eligible-three";
+  returnTo: string;
+  returnLabel: string;
+}): string {
+  const params = new URLSearchParams({
+    mode: input.mode,
+    participants: input.participantIds.join(","),
+    picker: input.picker,
+    return_to: input.returnTo,
+    return_label: input.returnLabel,
+  });
+  return `/agora/strategy-workshop/${encodeURIComponent(input.workshopId)}?${params.toString()}`;
+}
+
+function selectPersonaEntryParticipants(
+  personaId: string,
+  eligibility: EligibilityResponse,
+  compare: boolean,
+): string[] {
+  const eligibleIds = eligibility.included.map((item) => item.persona_id);
+  if (!eligibleIds.includes(personaId)) return [];
+  if (!compare) return [personaId];
+  const comparison = eligibility.included.find((item) => item.persona_id !== personaId);
+  return comparison ? [personaId, comparison.persona_id] : [];
+}
 
 export const PersonaDetail = () => {
   const { id } = useParams();
@@ -50,7 +82,10 @@ export const PersonaDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
+  const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
+  const [interactionError, setInteractionError] = useState<string | null>(null);
   const { can } = usePermissions();
+  const writeAccess = useAgoraWriteAccess();
   const canRetire = can("archive");
 
   useEffect(() => {
@@ -111,6 +146,48 @@ export const PersonaDetail = () => {
   const personaReceipt = (receipt: Record<string, unknown>, action: string) =>
     commandReceiptDescription(receipt, { fallback: `Persona ${p.id} · ${action}` });
 
+  const openPersonaInteraction = async (mode: "ask" | "challenge" | "consult", compare = false) => {
+    if (!writeAccess.interactionAllowed) {
+      setInteractionError(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted.");
+      return;
+    }
+    setInteractionBusy(compare ? "compare" : mode);
+    setInteractionError(null);
+    try {
+      const contextRefs = [{ type: "persona" as const, id: p.id }];
+      const resolved = await interaction.resolveContext({ context_refs: contextRefs, environment: "paper" });
+      if (!resolved.data.verified) throw new Error("The canonical Workshop context was not verified.");
+      const eligibility = await interaction.participants({
+        workshop_id: resolved.data.workshop_id,
+        mode,
+        environment: "paper",
+        required_capability: "persona_opinion",
+      });
+      const participantIds = selectPersonaEntryParticipants(p.id, eligibility.data, compare);
+      if (participantIds.length === 0) {
+        const excluded = eligibility.data.excluded.find((item) => item.persona_id === p.id);
+        throw new Error(excluded
+          ? `This Persona is not eligible: ${excluded.reasons.join(", ")}.`
+          : compare
+            ? "No second eligible Persona is available for comparison."
+            : "This Persona is not available in the canonical eligibility snapshot.");
+      }
+      const returnTo = `${location.pathname}${location.search}`;
+      navigate(personaWorkshopEntryUrl({
+        workshopId: resolved.data.workshop_id,
+        mode,
+        participantIds,
+        picker: "named",
+        returnTo,
+        returnLabel: `Persona ${p.name}`,
+      }));
+    } catch (error) {
+      setInteractionError(error instanceof Error ? error.message : "Unable to open the canonical Workshop.");
+    } finally {
+      setInteractionBusy(null);
+    }
+  };
+
   return (
     <>
       <ObjectDetailLayout
@@ -118,6 +195,15 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
+              <MessageSquare className="h-4 w-4 mr-1" />Talk to
+            </Button>
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("challenge")} size="sm" variant="outline">
+              <MessageSquare className="h-4 w-4 mr-1" />Ask to review
+            </Button>
+            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("consult", true)} size="sm" variant="outline">
+              <GitCompare className="h-4 w-4 mr-1" />Compare
+            </Button>
             <Button asChild size="sm" variant="outline">
               <Link to={personaHumanInboxUrl(p.id)}>
                 <Inbox className="h-4 w-4 mr-1" />{t("mgmt.inbox.openForPersona")}
@@ -260,6 +346,16 @@ export const PersonaDetail = () => {
           },
         ]}
       />
+      {writeAccess.interactionDisabledReason ? (
+        <p className="px-6 pb-2 text-xs font-semibold text-amber-700" data-testid="persona-interaction-disabled-reason">
+          {writeAccess.interactionDisabledReason}
+        </p>
+      ) : null}
+      {interactionError ? (
+        <div className="mx-6 mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="persona-interaction-error" role="alert">
+          {interactionError}
+        </div>
+      ) : null}
 
       <HighRiskConfirm
         open={confirmOpen}

@@ -24,6 +24,38 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
 }));
 
+vi.mock("@/lib/bff-v1/agora/interaction", () => ({
+  interaction: {
+    resolveContext: vi.fn().mockResolvedValue({ data: { workshop_id: "ws-abc", context_refs: [{ type: "persona", id: "per_quant" }], verified: true } }),
+    participants: vi.fn().mockResolvedValue({
+      data: {
+        included: [
+          { persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true },
+          { persona_id: "per_macro", display_name: "Macro Strategist", eligible: true, reasons: [], recommended: true },
+          { persona_id: "per_risk", display_name: "Risk Officer", eligible: true, reasons: [], recommended: true },
+          { persona_id: "per_red", display_name: "Red Team", eligible: true, reasons: [], recommended: false },
+        ],
+        excluded: [],
+      },
+    }),
+    submit: vi.fn().mockResolvedValue({ data: { execution_authority: "none" } }),
+  },
+}));
+
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: ["agora.workshop.v1"],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
   ConnectedGovernedProposalCard: ({ proposalId }: { proposalId: string }) => (
     <div data-testid="connected-governed-proposal">{proposalId}</div>
@@ -31,7 +63,9 @@ vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
 }));
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
+import { interaction } from "@/lib/bff-v1/agora/interaction";
 
 const MOCK_WORKSHOP = {
   spec_version: "1.0",
@@ -113,6 +147,20 @@ const LIVE_COMPLETENESS_CARD: WorkshopCard = {
 afterEach(cleanup);
 
 describe("StrategyWorkshopPage", () => {
+  it("uses truthful eligibility-order pickers without inferring style or role from names", () => {
+    const included = [
+      { persona_id: "persona-z", display_name: "Red Team-ish Name", eligible: true, reasons: [], recommended: false },
+      { persona_id: "persona-a", display_name: "Same Style-ish Name", eligible: true, reasons: [], recommended: false },
+      { persona_id: "persona-b", display_name: "Risk Committee-ish Name", eligible: true, reasons: [], recommended: false },
+    ];
+    expect(pickerParticipants("eligible-one", included)).toEqual(["persona-z"]);
+    expect(pickerParticipants("eligible-two", included)).toEqual(["persona-z", "persona-a"]);
+    expect(pickerParticipants("eligible-three", included)).toEqual(["persona-z", "persona-a", "persona-b"]);
+    expect(pickerParticipants("named", included, ["persona-b"])).toEqual(["persona-b"]);
+    expect(pickerParticipants("named", included, ["missing-persona"])).toEqual([]);
+    expect(pickerParticipants("eligible-two", included, ["persona-b"])).toEqual(["persona-z", "persona-a"]);
+  });
+
   beforeEach(() => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
@@ -285,6 +333,35 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("completeness-rail")).toBeDefined();
   });
 
+  it("uses an explicit conversation/readiness selector and collapsible composer context", () => {
+    vi.mocked(workshopsModule.getWorkshop).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+    vi.mocked(workshopsModule.listWorkshopEvents).mockReturnValue(new Promise(() => {}));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const page = screen.getByTestId("strategy-workshop-page-session");
+    const conversation = screen.getByTestId("workshop-conversation-pane");
+    const readiness = screen.getByTestId("completeness-rail");
+    const options = screen.getByTestId("workshop-composer-options");
+    const optionsToggle = screen.getByTestId("workshop-composer-options-toggle");
+
+    expect(page.getAttribute("data-mobile-workshop-pane")).toBe("conversation");
+    expect(conversation.getAttribute("data-mobile-pane-hidden")).toBe("false");
+    expect(readiness.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(options.getAttribute("data-mobile-collapsed")).toBe("true");
+    expect(optionsToggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(optionsToggle);
+    expect(options.getAttribute("data-mobile-collapsed")).toBe("false");
+    expect(optionsToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next question & readiness" }));
+    expect(page.getAttribute("data-mobile-workshop-pane")).toBe("readiness");
+    expect(conversation.getAttribute("data-mobile-pane-hidden")).toBe("true");
+    expect(readiness.getAttribute("data-mobile-pane-hidden")).toBe("false");
+  });
+
   it("keeps the hosted raw snapshot rail aligned with its latest completeness card", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       ...MOCK_WORKSHOP,
@@ -350,7 +427,7 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("servant-composer")).toBeDefined();
   });
 
-  it("posts servant composer messages through the BFF module and refreshes the runtime projection", async () => {
+  it("resolves canonical context, rechecks eligibility, and submits a no-authority Persona interaction", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
@@ -364,20 +441,87 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
     await waitFor(() => {
-      expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith("ws-abc", {
-        content: "What evidence is missing?",
-        metadata: {
-          mode: "ask",
-          participant_persona_ids: ["per_quant", "per_macro", "per_risk"],
-          focused_ref: null,
-          subject_kind: "free_form",
-          subject_ref: "strategy-draft-001",
-          picker_type: "recommended",
-        },
-      });
+      expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
+        workshop_id: "ws-abc",
+        context_refs: expect.arrayContaining([{ type: "persona", id: "per_quant" }]),
+      }));
+      expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ workshop_id: "ws-abc", mode: "ask" }));
+      expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+        workshop_id: "ws-abc",
+        mode: "ask",
+        topic: "What evidence is missing?",
+        participant_persona_ids: ["per_quant", "per_macro", "per_risk"],
+      }));
     });
     expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(2);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the live session's immutable strategy pointers for propose-action context", async () => {
+    const liveSession = {
+      ...MOCK_WORKSHOP,
+      active_strategy_spec_registry_id: "strategy-registry-9",
+      selected_version_id: "immutable-version-4",
+    } as StrategyWorkshop;
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(liveSession);
+    vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
+      data: {
+        workshop_id: "ws-abc",
+        context_refs: body.context_refs,
+        verified: true,
+      },
+    } as Awaited<ReturnType<typeof interaction.resolveContext>>));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Propose a bounded candidate measure" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
+      workshop_id: "ws-abc",
+      context_refs: expect.arrayContaining([{
+        type: "strategy",
+        id: "strategy-registry-9",
+        version_id: "immutable-version-4",
+      }]),
+    })));
+  });
+
+  it("fails closed when a deep-linked Persona is no longer eligible", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(interaction.participants).mockResolvedValueOnce({
+      data: { included: [], excluded: [{ persona_id: "per_quant", display_name: "Quant", eligible: false, reasons: ["capability_missing"], recommended: false }] },
+    });
+
+    render(<StrategyWorkshopPage entry={{ mode: "ask", participantIds: ["per_quant"], picker: "named" }} workshopId="ws-abc" />);
+    await waitFor(() => expect(screen.getByTestId("eligibility-explanation").textContent).toContain("0 canonical eligible"));
+    expect(screen.getByTestId("servant-composer-submit")).toBeDisabled();
+  });
+
+  it("rejects an interaction response that claims execution authority", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(interaction.submit).mockResolvedValueOnce({
+      data: { interaction_id: "interaction-unsafe", execution_authority: "orders" },
+    } as never);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Place this trade directly" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
+      "The interaction response violated the no-execution authority boundary.",
+    );
+    expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(1);
+    expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(1);
   });
 
   it("enables Add to Trading Room only when the trading-room readiness gate passes and a route handler exists", async () => {
@@ -662,9 +806,8 @@ describe("StrategyWorkshopPage", () => {
       workshop_id: "ws-no-subject",
       operator_id: "operator-001",
       status: "open" as const,
-      subject: undefined as any,
       created_at: "2026-06-01T00:00:00Z",
-    };
+    } as unknown as StrategyWorkshop;
 
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(workshopWithNoSubject);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);

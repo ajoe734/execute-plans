@@ -49,7 +49,7 @@ test.describe("Trade Journeys cross-entry integration", () => {
     await expect(navLink).toHaveCount(1);
     await page.goto("/management/trade-journeys?tenant_id=tenant-a");
     await expect(page).toHaveURL(/\/management\/trade-journeys(\?|$)/);
-    await expect(page.getByRole("heading", { name: "Trade Journeys" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Trade Journeys|交易旅程/ })).toBeVisible();
   });
 
   test("the Cockpit exposes a Trade Journeys destination that round-trips back to Cockpit", async ({ page }) => {
@@ -61,7 +61,7 @@ test.describe("Trade Journeys cross-entry integration", () => {
     await expect(cockpitLink).toHaveAttribute("href", /^\/management\/trade-journeys\?tenant_id=tenant-a&return_to=%2Fmanagement%2Fcockpit(%3F|$)/);
     await cockpitLink.click();
     await expect(page).toHaveURL(/\/management\/trade-journeys/);
-    const backLink = page.getByRole("link", { name: /Back to/ });
+    const backLink = page.getByRole("link", { name: /Back to|返回/ });
     await expect(backLink).toBeVisible();
     await backLink.click();
     await expect(page).toHaveURL(/\/management\/cockpit/);
@@ -71,16 +71,16 @@ test.describe("Trade Journeys cross-entry integration", () => {
     const queries: URLSearchParams[] = [];
     await install(page, queries);
     await page.goto("/management/trade-journeys?tenant_id=tenant-a&environment=paper&persona_id=persona-a");
-    await expect(page.getByText(/Focused: persona persona-a/)).toBeVisible();
+    await expect(page.getByText(/(?:Focused:|聚焦：)\s*(?:persona|Persona) persona-a/)).toBeVisible();
     await expect(page.getByText("journey-persona-a-1")).toBeVisible();
     await expect(page.getByText("journey-other-1")).not.toBeVisible();
     await expect.poll(() => queries.at(-1)?.get("persona_id")).toBe("persona-a");
 
-    const showAll = page.getByRole("link", { name: "Show all journeys" });
+    const showAll = page.getByRole("link", { name: /Show all journeys|顯示全部旅程/ });
     await expect(showAll).toHaveAttribute("href", /^\/management\/trade-journeys\?tenant_id=tenant-a&environment=paper$/);
     await showAll.click();
     await expect(page).toHaveURL(/\/management\/trade-journeys\?tenant_id=tenant-a&environment=paper$/);
-    await expect(page.getByText(/Focused:/)).not.toBeVisible();
+    await expect(page.getByText(/Focused:|聚焦：/)).not.toBeVisible();
     await expect.poll(() => queries.at(-1)?.get("persona_id")).toBeNull();
   });
 
@@ -94,14 +94,14 @@ test.describe("Trade Journeys cross-entry integration", () => {
 
     await crossLink.click();
     await expect(page).toHaveURL(/\/management\/trade-journeys\?persona_id=persona-a/);
-    await expect(page.getByText(/Focused: persona persona-a/)).toBeVisible();
+    await expect(page.getByText(/(?:Focused:|聚焦：)\s*(?:persona|Persona) persona-a/)).toBeVisible();
     await expect.poll(() => queries.at(-1)?.get("persona_id")).toBe("persona-a");
 
     await page.getByRole("link", { name: "journey-persona-a-1" }).click();
     await expect(page).toHaveURL(/\/management\/trade-journeys\/journey-persona-a-1/);
     await expect(page.getByText("journey-persona-a-1", { exact: false })).toBeVisible();
 
-    const backToRuntimes = page.getByRole("link", { name: /Back to Runtimes/ });
+    const backToRuntimes = page.getByRole("link", { name: /Back to Runtimes|返回.*(?:Runtimes|執行環境)/ });
     await expect(backToRuntimes).toBeVisible();
     await expect(backToRuntimes).toHaveAttribute("href", "/management/runtimes?persona=persona-a");
     await backToRuntimes.click();

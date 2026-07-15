@@ -8,22 +8,25 @@
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin } from "./helpers/auth";
+import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
 
 const FE_BASE_URL =
   process.env.PANTHEON_FE_BASE_URL ||
   process.env.FRONTEND_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
   "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
+const IS_HOSTED_FE = Boolean(
+  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
+);
 const BFF_BASE_URL =
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
   "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
-const AUTH_TOKEN =
-  process.env.BFF_AUTH_TOKEN ||
-  process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
 
@@ -235,6 +238,10 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 }
 
 test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
+  test.skip(
+    !IS_HOSTED_FE || !AUTH_TOKEN,
+    "Requires a deployed frontend and an explicit/RBAC-matrix operator token.",
+  );
   test.setTimeout(180_000);
 
   test("live readiness cards to Trading Room workspace, widget revision, version history, and rollback", async ({
@@ -243,6 +250,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
   }, testInfo) => {
     const evidenceScreenshots: string[] = [];
     const events = collectNetwork(page);
+    const isMobileProject = testInfo.project.name.startsWith("mobile");
 
     const live = await discoverReadyWorkshop(request);
 
@@ -256,6 +264,9 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     await test.step("open the live ready workshop and use its Trading Room handoff", async () => {
       await page.goto(`${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(live.workshop.workshop_id)}`);
       await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 20_000 });
+      if (isMobileProject) {
+        await page.getByRole("button", { name: "Next question & readiness" }).click();
+      }
       await expect(page.getByTestId("workshop-readiness")).toHaveText("trading_room", { timeout: 20_000 });
       const addButton = page.getByTestId("add-to-trading-room-btn");
       await expect(addButton).toBeEnabled({ timeout: 20_000 });
@@ -290,6 +301,11 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     await test.step("create a live widget revision and keep original plus modified copy", async () => {
       await page.getByTestId(`workspace-widget-${widgetId}`).click();
       await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeVisible({ timeout: 20_000 });
+      if (isMobileProject) {
+        const drawerBox = await page.getByTestId("workspace-widget-revision-drawer").boundingBox();
+        expect(drawerBox?.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
+        await expect(page.getByTestId("trading-desk-main")).toHaveAttribute("inert", "");
+      }
       await page.getByTestId("workspace-widget-revision-input").fill("改成表格並聚焦 readiness gate、dashboard version、evidence coverage");
       await page.getByTestId("workspace-widget-revision-submit").click();
       await expect(page.getByTestId("workspace-widget-before-after-diff")).toBeVisible({ timeout: 30_000 });

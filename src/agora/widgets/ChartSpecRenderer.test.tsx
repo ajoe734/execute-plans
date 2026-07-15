@@ -57,24 +57,88 @@ describe("ChartSpecRenderer", () => {
     expect(screen.getByText("1.42")).toBeTruthy();
   });
 
-  it("renders complex chart kinds through the ECharts dispatch", () => {
+  it.each([
+    {
+      kind: "network" as const,
+      expectedSeries: "graph",
+      data: [{ source: "A", target: "B", value: 10 }],
+      encodings: {
+        source: { field: "source", type: "nominal" as const },
+        target: { field: "target", type: "nominal" as const },
+        value: { field: "value", type: "quantitative" as const },
+      },
+    },
+    {
+      kind: "sankey" as const,
+      expectedSeries: "sankey",
+      data: [{ source: "A", target: "B", value: 10 }],
+      encodings: {
+        source: { field: "source", type: "nominal" as const },
+        target: { field: "target", type: "nominal" as const },
+        value: { field: "value", type: "quantitative" as const },
+      },
+    },
+    {
+      kind: "candlestick" as const,
+      expectedSeries: "candlestick",
+      data: [{ time: "2026-07-15", open: 10, high: 14, low: 8, close: 12 }],
+      encodings: {
+        x: { field: "time", type: "temporal" as const },
+        open: { field: "open", type: "quantitative" as const },
+        high: { field: "high", type: "quantitative" as const },
+        low: { field: "low", type: "quantitative" as const },
+        close: { field: "close", type: "quantitative" as const },
+      },
+    },
+    {
+      kind: "gauge" as const,
+      expectedSeries: "gauge",
+      data: [{ label: "Confidence", value: 78 }],
+      encodings: {
+        label: { field: "label", type: "nominal" as const },
+        value: { field: "value", type: "quantitative" as const },
+      },
+    },
+    {
+      kind: "heatmap" as const,
+      expectedSeries: "heatmap",
+      data: [{ time: "2026-07-15", branch: "A", value: 42 }],
+      encodings: {
+        x: { field: "time", type: "temporal" as const },
+        y: { field: "branch", type: "nominal" as const },
+        value: { field: "value", type: "quantitative" as const },
+      },
+    },
+    {
+      kind: "scatter" as const,
+      expectedSeries: "scatter",
+      data: [{ x: 1, y: 2, size: 3 }],
+      encodings: {
+        x: { field: "x", type: "quantitative" as const },
+        y: { field: "y", type: "quantitative" as const },
+        size: { field: "size", type: "quantitative" as const },
+      },
+    },
+  ])("renders $kind through ECharts without the vulnerable lines series", ({
+    data,
+    encodings,
+    expectedSeries,
+    kind,
+  }) => {
     render(
       <ChartSpecRenderer
-        data={[{ source: "A", target: "B", value: 10 }]}
-        spec={{
-          spec_version: "1.0",
-          kind: "network",
-          encodings: {
-            source: { field: "source", type: "nominal" },
-            target: { field: "target", type: "nominal" },
-            value: { field: "value", type: "quantitative" },
-          },
-        }}
+        data={data}
+        spec={{ spec_version: "1.0", kind, encodings }}
       />,
     );
 
     expect(screen.getByTestId("chart-renderer-echarts")).toBeTruthy();
-    expect(screen.getByTestId("mock-echarts").getAttribute("data-option")).toContain("graph");
+    const option = JSON.parse(
+      screen.getByTestId("mock-echarts").getAttribute("data-option") ?? "{}",
+    ) as { series?: Array<{ type?: string }> };
+    const seriesTypes = option.series?.map((series) => series.type) ?? [];
+    expect(seriesTypes).toEqual([expectedSeries]);
+    expect(seriesTypes).not.toContain("lines");
   });
 
   it("renders table, timeline, and stacked_bar without external chart execution", () => {
@@ -176,6 +240,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="winner_branch_scoreboard"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
@@ -184,6 +249,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="related_branch_network"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
@@ -192,6 +258,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="event_lead_distribution"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("TIMELINE UNAVAILABLE")).toBeTruthy();
@@ -200,6 +267,7 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
         widgetType="confidence_decomposition"
+        isSampleData={false}
       />
     );
     expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
