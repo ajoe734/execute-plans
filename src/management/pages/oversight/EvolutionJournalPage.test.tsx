@@ -173,4 +173,29 @@ describe("EvolutionJournalPage Rendering", () => {
     // Approval status should NOT be rendered since status is NaN (and thus hidden)
     expect(screen.queryByText("Approval status")).not.toBeInTheDocument();
   });
+
+  it("uses Number.isFinite for before and after metrics to defensively suppress NaN values", () => {
+    mockEvolutionEntries = [
+      {
+        id: "evo-dec-metric-nan",
+        title: "NaN Metrics Entry",
+        status: "executed",
+        entry_type: "evolution_decision",
+        action_type: "retrain",
+        risk_level: "low",
+        target: { type: "Persona", id: "persona-tw-equity" },
+        occurred_at: "2026-07-13T12:00:00Z",
+        before: NaN,
+        after: 12.34,
+      },
+    ];
+
+    renderJournal();
+
+    expect(screen.getByText("NaN Metrics Entry")).toBeInTheDocument();
+    // Since before is NaN, hasMetrics is false, so it should not render before or after
+    expect(screen.queryByText("before")).not.toBeInTheDocument();
+    expect(screen.queryByText("after")).not.toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
+  });
 });

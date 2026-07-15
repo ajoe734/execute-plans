@@ -1955,7 +1955,11 @@ export const EvolutionJournalPage = () => {
           ? (Number.isNaN(new Date(whenRaw).getTime()) ? String(whenRaw) : safeDateTime(whenRaw))
           : undefined;
 
-        const hasMetrics = typeof e.before === "number" && typeof e.after === "number";
+        const hasMetrics =
+          typeof e.before === "number" &&
+          Number.isFinite(e.before) &&
+          typeof e.after === "number" &&
+          Number.isFinite(e.after);
         // Formal entries (evolution_decision / mutation_review) carry a real
         // governance lifecycle state in `status`; label it explicitly as
         // approval status instead of relying on the generic status badge,
