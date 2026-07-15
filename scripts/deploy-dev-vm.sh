@@ -221,16 +221,18 @@ const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedSta
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
 const modernIdentity = Boolean(expectedGithubDigest);
+const expectedBffSha = String(expectedBff || "").toLowerCase();
+const observedBffCommit = String(payload.bffCommit || "").toLowerCase();
+const observedBffSourceCommit = String(payload.bffSourceCommitSha || "").toLowerCase();
+const observedNestedBffSourceCommit = String(payload.bff?.sourceCommitSha || "").toLowerCase();
 const partialModernIdentity = !modernIdentity && Boolean(
   payload.schemaVersion != null ||
+  payload.repository ||
   payload.frontendSha ||
   payload.frontend ||
   payload.gate ||
   payload.integrationGateRunId ||
-  payload.githubArtifactDigest ||
-  payload.bffSourceCommitSha ||
-  payload.bffHost ||
-  payload.bff
+  payload.githubArtifactDigest
 );
 if (partialModernIdentity) {
   throw new Error("deployment manifest has incomplete modern release identity");
@@ -295,13 +297,19 @@ if (
 }
 if (
   expectedBff &&
-  (String(payload.bffCommit || "").toLowerCase() !== expectedBff.toLowerCase() ||
+  (observedBffCommit !== expectedBffSha ||
     payload.bffCommitEvidence !== true ||
+    (observedBffSourceCommit && observedBffSourceCommit !== expectedBffSha) ||
+    (payload.bffHost && payload.bffHost !== expectedBffHost) ||
+    (payload.bff?.baseUrl && payload.bff.baseUrl !== expectedBffHost) ||
+    (observedNestedBffSourceCommit && observedNestedBffSourceCommit !== expectedBffSha) ||
+    (payload.bff?.sourceCommitKnown !== undefined &&
+      payload.bff.sourceCommitKnown !== true) ||
     (modernIdentity &&
-      (String(payload.bffSourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
-        payload.bffHost !== expectedBffHost ||
-        payload.bff?.baseUrl !== expectedBffHost ||
-        String(payload.bff?.sourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
+      (!observedBffSourceCommit ||
+        !payload.bffHost ||
+        !payload.bff?.baseUrl ||
+        !observedNestedBffSourceCommit ||
         payload.bff?.sourceCommitKnown !== true)))
 ) {
   throw new Error("deployment manifest BFF identity mismatch");
