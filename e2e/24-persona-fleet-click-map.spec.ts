@@ -1,5 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 import { mkdirSync } from "node:fs";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
@@ -375,6 +379,11 @@ async function captureScreenshot(page: Page, name: string): Promise<void> {
 }
 
 test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
+
   test.beforeEach(async ({ page }) => {
     await installMockFixture(page);
     await installOidcDevLogin(page, {

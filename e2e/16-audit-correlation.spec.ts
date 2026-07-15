@@ -21,7 +21,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { LOCAL_FIXTURE_AUTH_TOKEN, mutationAuthHeaders } from "./helpers/auth";
+import { mutationAuthHeaders } from "./helpers/auth";
 import {
   OPERATOR_DEV_ID,
   STRATEGY_DEV_ID,
@@ -420,7 +420,12 @@ function auditEntryFromResponse(value: unknown): AuditEntry {
 function headersFor(sourceMode: SourceMode, suffix: string): Record<string, string> {
   const correlationId = seededCorrelationId(`f16-${suffix}`);
   return mutationAuthHeaders({
-    token: LOCAL_FIXTURE_AUTH_TOKEN,
+    // F16 owns a loopback-only HTTP/SSE harness. Do not let ambient hosted-gate
+    // variables reclassify this isolated request boundary as an external BFF.
+    env: {
+      PANTHEON_BROWSER_BFF_BASE_URL: "http://127.0.0.1",
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1",
+    },
     extra: {
       "Idempotency-Key": seededIdempotencyKey("strategies", `f16-${suffix}`),
       "X-Correlation-Id": correlationId,

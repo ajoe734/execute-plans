@@ -30,7 +30,7 @@ function gate4For(summaryLines: string[]) {
     env: { ...process.env, PANTHEON_HOSTED_FE_HARD_GATE: "true" },
   });
   return (JSON.parse(readFileSync(jsonOut, "utf8")) as {
-    gates: Record<string, Array<{ label: string; status: string }>>;
+    gates: Record<string, Array<{ label: string; note: string; status: string }>>;
   }).gates["4"];
 }
 
@@ -42,6 +42,7 @@ const safeUnauthenticatedSummary = [
   "persona fleet has auth-required state: true",
   "persona fleet has non-production rows: false",
   "persona fleet seed fallback armed: false",
+  "browser BFF write-method request count: 0",
   "request count: 5",
   "response count: 5",
   "failed count: 0",
@@ -57,6 +58,10 @@ describe("release Gate 4 unauthenticated Persona Fleet contract", () => {
 
     expect(personaChecks).toHaveLength(2);
     expect(personaChecks.every((check) => check.status === "pass")).toBe(true);
+    expect(
+      checks.find((check) => check.label === "Browser receives required BFF responses.")
+        ?.note,
+    ).toContain("responses 5/5");
   });
 
   it("fails when the unauthenticated state contains NaN", () => {

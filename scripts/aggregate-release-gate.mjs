@@ -277,6 +277,14 @@ function parseNumberAfter(text, label) {
   return match ? Number(match[1]) : null;
 }
 
+function parseSummaryNumber(text, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(
+    new RegExp(`^\\s*(?:-\\s*)?${escaped}\\s*:?\\s*(-?\\d+)\\s*$`, "im"),
+  );
+  return match ? Number(match[1]) : null;
+}
+
 function parseBoolAfter(text, label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = text.match(new RegExp(`${escaped}\\s*:?\\s*(true|false)`, "i"));
@@ -1249,10 +1257,10 @@ function analyzeHostedProbe(stepOutcomes) {
   );
   const file = latestAuditFile([/^hosted-browser-bff-probe-.*\.md$/]);
   const text = readText(file);
-  const requestCount = parseNumberAfter(text, "request count");
-  const responseCount = parseNumberAfter(text, "response count");
-  const failedCount = parseNumberAfter(text, "failed count");
-  const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
+  const requestCount = parseSummaryNumber(text, "request count");
+  const responseCount = parseSummaryNumber(text, "response count");
+  const failedCount = parseSummaryNumber(text, "failed count");
+  const oldHitCount = parseSummaryNumber(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
   const requiredCoreResponsesComplete = parseBoolAfter(
@@ -1555,6 +1563,26 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
 
 function buildGate5(playwright) {
   return [
+    makeCheck(
+      "No unexpected Playwright failures.",
+      playwright.jsonFile
+        ? playwright.specs.some((spec) =>
+            ["fail", "missing"].includes(spec.status),
+          )
+          ? "fail"
+          : "pass"
+        : "missing",
+      {
+        owner: playwright.specs.some((spec) =>
+          ["fail", "missing"].includes(spec.status),
+        )
+          ? GATE_OWNERS[5]
+          : "",
+        evidence:
+          playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile,
+        note: `${playwright.specs.filter((spec) => ["fail", "missing"].includes(spec.status)).length} unexpected or incomplete spec(s)`,
+      },
+    ),
     checkFlow(
       playwright,
       "F01",
@@ -1624,7 +1652,12 @@ function buildGate5(playwright) {
       "F12 Approval Governance.",
       /\bf12\b|approval governance|12-approval/,
     ),
-    checkFlow(playwright, "F13", "F13 Agora.", /\bf13\b|13-agora|agora/),
+    checkFlow(
+      playwright,
+      "F13",
+      "F13 Agora.",
+      /\bf13\b|13-agora\.spec\.[jt]s/,
+    ),
     checkFlow(
       playwright,
       "F14",
@@ -1649,25 +1682,24 @@ function buildGate5(playwright) {
 function buildGate6(playwright) {
   const evidence =
     playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile;
-  const axeSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /\bf17\b|17-a11y|axe|a11y/),
+  const f17Specs = playwright.specs.filter((spec) =>
+    /(?:^|\/)17-a11y-v5\.spec\.[jt]s$/i.test(spec.file),
   );
+  const axeSpecs = f17Specs.filter((spec) => /axe|a11y/i.test(spec.title));
   const axeStatus = axeSpecs.length
     ? worstStatus(axeSpecs.map((spec) => spec.status))
     : playwright.lastRun?.status === "failed"
       ? "fail"
       : "missing";
-  const focusSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /focus/),
-  );
-  const motionSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /reduced motion|motion/),
+  const focusSpecs = f17Specs.filter((spec) => /focus/i.test(spec.title));
+  const motionSpecs = f17Specs.filter((spec) =>
+    /reduced motion|motion/i.test(spec.title),
   );
   const perfSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /\bf18\b|18-perf|performance|budget/),
+    /(?:^|\/)18-perf\.spec\.[jt]s$/i.test(spec.file),
   );
-  const ssePerfSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /sse.*rerender|rerender.*sse/),
+  const ssePerfSpecs = perfSpecs.filter((spec) =>
+    /sse.*rerender|rerender.*sse/i.test(spec.title),
   );
 
   function statusFor(matches) {

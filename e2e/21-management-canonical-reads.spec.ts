@@ -1,5 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
@@ -201,6 +205,10 @@ async function installCanonicalReadFixture(page: Page, calls: string[]): Promise
 
 test.describe("MGMT-GAP-002 canonical management reads", () => {
   test("routes management pages to canonical BFF read surfaces without seed fallback", async ({ page }) => {
+    test.skip(
+      targetsExternalE2eEnvironment(),
+      "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+    );
     const calls: string[] = [];
     await installCanonicalReadFixture(page, calls);
     await installOidcDevLogin(page, {
