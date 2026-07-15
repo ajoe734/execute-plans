@@ -384,6 +384,7 @@ jobs:
       - name: Management hosted production acceptance
         id: mgmt_hosted_accept
         continue-on-error: true
+        timeout-minutes: 8
         env:
           PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
           PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
