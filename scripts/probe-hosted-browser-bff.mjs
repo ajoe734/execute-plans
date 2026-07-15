@@ -1577,12 +1577,16 @@ async function runProbe() {
       "PANTHEON_EXPECTED_ARTIFACT_DIGEST must be an exact SHA-256 digest",
     );
   }
-  if (CANDIDATE_DIR && !RELEASE_STRICT) {
+  if (CANDIDATE_DIR && !RELEASE_STRICT && !LEGACY_ROLLBACK_TARGET_COMPAT) {
     strictConfigurationFailures.push(
       "PANTHEON_CANDIDATE_DIR requires PANTHEON_PROBE_RELEASE_STRICT=1",
     );
   }
-  if (LEGACY_RELEASE_COMPAT && !RELEASE_STRICT) {
+  if (
+    LEGACY_RELEASE_COMPAT &&
+    !RELEASE_STRICT &&
+    !LEGACY_ROLLBACK_TARGET_COMPAT
+  ) {
     strictConfigurationFailures.push(
       "PANTHEON_PROBE_LEGACY_RELEASE_COMPAT requires PANTHEON_PROBE_RELEASE_STRICT=1",
     );

@@ -664,6 +664,12 @@ describe("hosted browser strict release policy", () => {
 
     expect(source).toContain("PANTHEON_PROBE_RELEASE_STRICT");
     expect(source).toContain("PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT");
+    expect(source).toContain(
+      "CANDIDATE_DIR && !RELEASE_STRICT && !LEGACY_ROLLBACK_TARGET_COMPAT",
+    );
+    expect(source).toContain(
+      "LEGACY_RELEASE_COMPAT &&\n    !RELEASE_STRICT &&\n    !LEGACY_ROLLBACK_TARGET_COMPAT",
+    );
     expect(source).toContain("PANTHEON_EXPECTED_FE_SHA");
     expect(source).toContain("PANTHEON_EXPECTED_ARTIFACT_DIGEST");
     expect(source).toContain("PANTHEON_PROBE_JSON_OUT");
