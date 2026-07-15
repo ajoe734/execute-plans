@@ -12,7 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { URL } from "node:url";
+import { URL, pathToFileURL } from "node:url";
 
 const ROOT = process.cwd();
 const BFF_BASE_URL = (
@@ -526,24 +526,54 @@ async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
   return lastState;
 }
 
+export function classifySseLongReconnect({ first, second, durationMs = SSE_MS }) {
+  const duplicateIds = [...new Set([...first.duplicateIds, ...second.duplicateIds].filter(Boolean))];
+  const totalMessages = first.messages + second.messages;
+  const totalHeartbeats = first.heartbeats + second.heartbeats;
+  const hasReplayAnchor = Boolean(first.lastEventId);
+
+  if (!first.opened || first.error || duplicateIds.length > 0) {
+    const opened = first.opened && second.opened;
+    return {
+      status: "fail",
+      durationMs,
+      first,
+      second,
+      duplicateIds,
+      note: `opened=${opened}; first=${first.status}/${first.error || "ok"}; reconnect=${second.status}/${second.error || "ok"}; duplicate ids=${duplicateIds.length}`,
+    };
+  }
+
+  if (!second.opened || second.error) {
+    const status = hasReplayAnchor ? "fail" : "warn";
+    const reason = hasReplayAnchor
+      ? "reconnect with Last-Event-ID did not open"
+      : "initial stream opened without an event id to replay; reconnect did not open";
+    return {
+      status,
+      durationMs,
+      first,
+      second,
+      duplicateIds,
+      note: `${reason}; first=${first.status}/${first.error || "ok"}; reconnect=${second.status}/${second.error || "ok"}; duplicate ids=${duplicateIds.length}`,
+    };
+  }
+
+  const status = totalMessages + totalHeartbeats > 0 ? "pass" : "warn";
+  const note =
+    totalMessages + totalHeartbeats > 0
+      ? `stream opened twice; messages=${totalMessages}; heartbeats=${totalHeartbeats}; lastEventId=${first.lastEventId || "none"}`
+      : "stream opened twice but no events or heartbeat comments arrived during the observation window";
+  return { status, durationMs, first, second, duplicateIds, note };
+}
+
 async function runSseLongReconnect() {
   const token = SMOKE_TOKEN || OPERATOR_A_TOKEN || OPERATOR_B_TOKEN || "";
   const firstDuration = Math.floor(SSE_MS / 2);
   const secondDuration = SSE_MS - firstDuration;
   const first = await readSsePhase({ token, durationMs: firstDuration, phase: "initial" });
   const second = await readSsePhase({ token, lastEventId: first.lastEventId, durationMs: secondDuration, phase: "reconnect" });
-  const duplicateIds = [...new Set([...first.duplicateIds, ...second.duplicateIds].filter(Boolean))];
-  const opened = first.opened && second.opened;
-  const totalMessages = first.messages + second.messages;
-  const totalHeartbeats = first.heartbeats + second.heartbeats;
-  const hardFailure = !opened || first.error || second.error || duplicateIds.length > 0;
-  const status = hardFailure ? "fail" : totalMessages + totalHeartbeats > 0 ? "pass" : "warn";
-  const note = hardFailure
-    ? `opened=${opened}; first=${first.status}/${first.error || "ok"}; reconnect=${second.status}/${second.error || "ok"}; duplicate ids=${duplicateIds.length}`
-    : totalMessages + totalHeartbeats > 0
-    ? `stream opened twice; messages=${totalMessages}; heartbeats=${totalHeartbeats}; lastEventId=${first.lastEventId || "none"}`
-    : "stream opened twice but no events or heartbeat comments arrived during the observation window";
-  return { status, durationMs: SSE_MS, first, second, duplicateIds, note };
+  return classifySseLongReconnect({ first, second, durationMs: SSE_MS });
 }
 
 function tableRow(cells) {
@@ -643,7 +673,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("[live-deep] Fatal:", err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error("[live-deep] Fatal:", err);
+    process.exit(1);
+  });
+}
