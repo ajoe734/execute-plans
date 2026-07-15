@@ -140,6 +140,16 @@ function validateRunId(value) {
   return value;
 }
 
+function validateRunIdOrLegacy(value) {
+  return value === "legacy" ? value : validateRunId(value);
+}
+
+function validateGithubDigestOrLegacy(value) {
+  if (value === "legacy") return value;
+  if (!/^sha256:[0-9a-f]{64}$/u.test(value.toLowerCase())) invalidDetail();
+  return value.toLowerCase();
+}
+
 function validateActor(value) {
   if (value === "none") return value;
   if (
@@ -187,6 +197,8 @@ function validateStatus(value) {
 }
 
 const DETAIL_VALIDATORS = Object.freeze({
+  acceptedGateRunId: validateRunIdOrLegacy,
+  acceptedGithubArtifactDigest: validateGithubDigestOrLegacy,
   artifactDigestSha256: (value) => validateDigest(value, ["legacy"]),
   auditDir: (value) => validatePath(value),
   bffCommit: validateSha40,
@@ -202,6 +214,9 @@ const DETAIL_VALIDATORS = Object.freeze({
     if (!/^sha256:[0-9a-f]{64}$/u.test(value.toLowerCase())) invalidDetail();
     return value.toLowerCase();
   },
+  incomingEquivalentGateRunId: validateRunId,
+  incomingGateRunId: validateRunId,
+  incomingGithubArtifactDigest: validateGithubDigestOrLegacy,
   integrationGateRunId: validateRunId,
   integrationGateRunUrl: validateGateUrl,
   integrationGateStatus: validateStatus,
@@ -216,11 +231,14 @@ const DETAIL_VALIDATORS = Object.freeze({
   previousArtifactDigest: (value) =>
     validateDigest(value, ["legacy", "missing", "none"]),
   previousCommit: validateCommitOrPlaceholder,
+  previousGateRunId: validateRunIdOrLegacy,
+  previousManifestBffCommit: validateSha40,
   previousTarget: (value) => validatePath(value, ["missing", "none"]),
   probeStatus: validateStatus,
   releaseDir: (value) => validatePath(value),
   rollbackStatus: validateStatus,
   rollbackDrill: validateBoolean,
+  runtimeBffCommit: validateSha40,
   validatedDevSha: validateSha40,
 });
 

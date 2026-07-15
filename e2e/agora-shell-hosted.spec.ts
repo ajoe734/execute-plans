@@ -3,11 +3,16 @@
  *
  * This spec runs only when the Pantheon dev frontend URL is supplied. It does
  * not intercept Agora responses: every tab renders against the deployed BFF.
+ * A hosted URL therefore requires an explicit short-lived BFF auth token.
  */
 
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
-import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
+import {
+  installOidcDevLogin,
+  roleTokenFromEnv,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const FE_BASE_URL = (
   process.env.AG_UIPOL_002_FE_BASE_URL ||
@@ -16,7 +21,7 @@ const FE_BASE_URL = (
   ""
 ).replace(/\/+$/, "");
 const IS_HOSTED_FE = Boolean(
-  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
+  FE_BASE_URL && targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: FE_BASE_URL }),
 );
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
@@ -25,6 +30,10 @@ const AUTH_TOKEN = roleTokenFromEnv("operator", [
 ]);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-uipol-002";
+
+if (IS_HOSTED_FE && !AUTH_TOKEN) {
+  throw new Error("AG-UIPOL-002 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN");
+}
 
 const VIEWPORTS = [
   { name: "desktop-narrow", width: 1280, height: 900 },
@@ -65,8 +74,8 @@ async function expectSinglePageScrollOwner(page: Page): Promise<void> {
 
 test.describe("AG-UIPOL-002 hosted standalone Agora shell", () => {
   test.skip(
-    !IS_HOSTED_FE || !AUTH_TOKEN,
-    "Requires a deployed frontend and an explicit/RBAC-matrix operator token.",
+    !IS_HOSTED_FE,
+    "Set AG_UIPOL_002_FE_BASE_URL or PANTHEON_FE_BASE_URL to an absolute hosted frontend URL.",
   );
   test.setTimeout(120_000);
 

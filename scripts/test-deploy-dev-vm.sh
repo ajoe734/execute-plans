@@ -12,10 +12,16 @@ DEPLOY_SOURCE="${ROOT_DIR}/scripts/deploy-dev-vm.sh"
 CANDIDATE_SOURCE="${ROOT_DIR}/scripts/release-candidate.mjs"
 EVIDENCE_SOURCE="${ROOT_DIR}/scripts/release-evidence.mjs"
 CAS_SOURCE="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
+ATOMIC_MANIFEST_SOURCE="${ROOT_DIR}/scripts/atomic-release-manifest.py"
 SYSTEM_PATH="${PATH}"
 REAL_NODE="$(command -v node)"
 
-for required_file in "${DEPLOY_SOURCE}" "${CANDIDATE_SOURCE}" "${EVIDENCE_SOURCE}" "${CAS_SOURCE}"; do
+for required_file in \
+  "${DEPLOY_SOURCE}" \
+  "${CANDIDATE_SOURCE}" \
+  "${EVIDENCE_SOURCE}" \
+  "${CAS_SOURCE}" \
+  "${ATOMIC_MANIFEST_SOURCE}"; do
   if [[ ! -f "${required_file}" ]]; then
     echo "missing test contract: ${required_file}" >&2
     exit 2
@@ -153,6 +159,9 @@ fi
 if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-symlink-cas.py ]]; then
   printf 'atomic-cas:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
 fi
+if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-release-manifest.py ]]; then
+  printf 'atomic-manifest:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
+fi
 exec "$@"
 MOCK
 
@@ -222,13 +231,16 @@ cp "${DEPLOY_SOURCE}" "${BASE_SOURCE}/scripts/deploy-dev-vm.sh"
 cp "${CANDIDATE_SOURCE}" "${BASE_SOURCE}/scripts/release-candidate.mjs"
 cp "${EVIDENCE_SOURCE}" "${BASE_SOURCE}/scripts/release-evidence.mjs"
 cp "${CAS_SOURCE}" "${BASE_SOURCE}/scripts/atomic-symlink-cas.py"
+cp "${ATOMIC_MANIFEST_SOURCE}" "${BASE_SOURCE}/scripts/atomic-release-manifest.py"
 chmod +x "${BASE_SOURCE}/scripts/deploy-dev-vm.sh" \
   "${BASE_SOURCE}/scripts/release-candidate.mjs" \
   "${BASE_SOURCE}/scripts/release-evidence.mjs" \
-  "${BASE_SOURCE}/scripts/atomic-symlink-cas.py"
+  "${BASE_SOURCE}/scripts/atomic-symlink-cas.py" \
+  "${BASE_SOURCE}/scripts/atomic-release-manifest.py"
 
 cat > "${BASE_SOURCE}/scripts/probe-hosted-browser-bff.mjs" <<'MOCK_PROBE'
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -238,6 +250,30 @@ const phase = match?.[1] || "unknown";
 const log = process.env.MOCK_CALL_LOG;
 if (!log) throw new Error("MOCK_CALL_LOG is required");
 fs.appendFileSync(log, `probe:${phase}\n`, "utf8");
+if (phase === "recovery_rollback") {
+  const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
+  const probeIndex = calls.lastIndexOf(`probe:${phase}`);
+  const npmIndex = calls.lastIndexOf("npm", probeIndex);
+  const npxIndex = calls.lastIndexOf("npx", probeIndex);
+  if (npmIndex < 0 || npxIndex < 0 || npmIndex >= probeIndex || npxIndex >= probeIndex) {
+    throw new Error("recovery probe dependencies were not installed first");
+  }
+}
+if (
+  phase === "candidate_pre_switch" &&
+  process.env.MOCK_ADVANCE_DEV_AFTER_PROBE === "true"
+) {
+  execFileSync(
+    "git",
+    [
+      `--git-dir=${process.env.MOCK_ORIGIN_DIR}`,
+      "update-ref",
+      "refs/heads/dev",
+      process.env.MOCK_ADVANCED_DEV_SHA,
+    ],
+    { stdio: "ignore" },
+  );
+}
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify({ phase, pass: true })}\n`, "utf8");
@@ -273,7 +309,8 @@ make_previous_manifest() {
   local output="$1"
   local commit="$2"
   local digest="$3"
-  "${REAL_NODE}" --input-type=module - "${output}" "${commit}" "${digest}" "${BFF_SHA}" <<'NODE'
+  local bff_commit="${4:-${BFF_SHA}}"
+  "${REAL_NODE}" --input-type=module - "${output}" "${commit}" "${digest}" "${bff_commit}" <<'NODE'
 import fs from "node:fs";
 const [output, commit, digest, bffCommit] = process.argv.slice(2);
 const manifest = {
@@ -293,6 +330,57 @@ const manifest = {
   },
 };
 fs.writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+NODE
+}
+
+upgrade_previous_manifest_to_modern() {
+  local manifest="$1"
+  local commit digest
+  commit="$(json_field "${manifest}" commit)"
+  digest="$(json_field "${manifest}" artifactDigestSha256)"
+  "${REAL_NODE}" --input-type=module - \
+    "${manifest}" "${commit}" "${digest}" "${BFF_SHA}" <<'NODE'
+import fs from "node:fs";
+const [file, commit, digest, bffCommit] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+const gateRunId = "7001";
+payload.schemaVersion = 1;
+payload.repository = "ajoe734/execute-plans";
+payload.frontendSha = commit;
+payload.frontend = { repository: "ajoe734/execute-plans", commitSha: commit };
+payload.gate = {
+  workflow: "pantheon-integration-gate.yml",
+  runId: gateRunId,
+  runUrl: `https://github.com/ajoe734/execute-plans/actions/runs/${gateRunId}`,
+};
+payload.integrationGateRunId = gateRunId;
+payload.githubArtifactDigest = `sha256:${digest}`;
+payload.bffSourceCommitSha = bffCommit;
+payload.bffHost = "https://bff.test";
+payload.bff = {
+  baseUrl: "https://bff.test",
+  sourceCommitSha: bffCommit,
+  sourceCommitKnown: true,
+};
+payload.deploymentState = "accepted";
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+NODE
+}
+
+corrupt_modern_previous_manifest() {
+  local manifest="$1"
+  local field="$2"
+  "${REAL_NODE}" --input-type=module - "${manifest}" "${field}" <<'NODE'
+import fs from "node:fs";
+const [file, field] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+if (field === "gate_url") payload.gate.runUrl = "https://attacker.invalid/actions/runs/7001";
+else if (field === "github_digest") payload.githubArtifactDigest = "sha256:bad";
+else if (field === "frontend_sha") payload.frontend.commitSha = "3".repeat(40);
+else if (field === "frontend_repository") payload.frontend.repository = "attacker/execute-plans";
+else if (field === "bff_sha") payload.bff.sourceCommitSha = "4".repeat(40);
+else throw new Error(`unsupported corruption field: ${field}`);
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 NODE
 }
 
@@ -393,6 +481,9 @@ run_deploy() {
       MOCK_FAIL_PROBE_PHASES="" \
       MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
       MOCK_BAD_GITHUB_DIGEST="false" \
+      MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+      MOCK_ADVANCED_DEV_SHA="" \
+      MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
       PANTHEON_DEV_FE_HOST="https://fe.test" \
       PANTHEON_BFF_BASE_URL="https://bff.test" \
       PANTHEON_OLD_BFF_URL="https://old-bff.test" \
@@ -515,6 +606,38 @@ test_valid_candidate_success() {
   assert_probe_not_called rollback
   grep -Fxq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
     show_deploy_failure "valid switch did not use atomic symlink exchange CAS"
+  grep -Fxq 'atomic-manifest:publish' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "valid acceptance did not atomically publish its manifest"
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case valid-legacy-without-manifest-digest
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    delete payload.artifactDigest;
+    delete payload.artifactDigestSha256;
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "explicit legacy predecessor compatibility should succeed"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case valid-modern-previous
+  upgrade_previous_manifest_to_modern "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "candidate with a fully qualified modern predecessor should succeed"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
 }
@@ -542,6 +665,7 @@ test_tampered_candidate_and_digest_rejected() {
 }
 
 test_pre_probe_failure_preserves_previous() {
+  local corruption
   setup_case pre-probe-failure
   run_deploy MOCK_FAIL_PROBE_PHASES=candidate_pre_switch
   [[ "${RUN_STATUS}" -ne 0 ]] || die "failed candidate pre-probe unexpectedly succeeded"
@@ -551,10 +675,28 @@ test_pre_probe_failure_preserves_previous() {
   assert_probe_not_called rollback
   assert_summary_outcome rejected_before_switch
   verify_evidence_pair
+
+  for corruption in gate_url github_digest frontend_sha frontend_repository bff_sha; do
+    setup_case "modern-previous-${corruption}"
+    upgrade_previous_manifest_to_modern "${PREVIOUS_TARGET}/deployment.json"
+    corrupt_modern_previous_manifest \
+      "${PREVIOUS_TARGET}/deployment.json" \
+      "${corruption}"
+    run_deploy
+    [[ "${RUN_STATUS}" -ne 0 ]] || \
+      die "modern predecessor corruption ${corruption} unexpectedly switched"
+    assert_previous_is_live
+    assert_probe_not_called previous_target_pre_switch
+    assert_probe_not_called candidate_pre_switch
+    assert_probe_not_called post_switch
+    assert_summary_outcome rejected_before_switch
+    verify_evidence_pair
+  done
 }
 
 test_bff_identity_is_bound_before_and_after_switch() {
   local different_bff_sha="cccccccccccccccccccccccccccccccccccccccc"
+  local historical_bff_sha="dddddddddddddddddddddddddddddddddddddddd"
 
   setup_case bff-unknown-before-candidate
   run_deploy MOCK_BFF_KNOWN_SEQUENCE=false
@@ -600,6 +742,20 @@ test_bff_identity_is_bound_before_and_after_switch() {
     show_deploy_failure "rollback did not use atomic symlink exchange CAS"
   assert_summary_outcome rolled_back
   verify_evidence_pair
+
+  setup_case previous-manifest-has-historical-bff
+  make_previous_manifest \
+    "${PREVIOUS_TARGET}/deployment.json" \
+    "${PREVIOUS_SHA}" \
+    "$(json_field "${PREVIOUS_TARGET}/deployment.json" artifactDigestSha256)" \
+    "${historical_bff_sha}"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "historical predecessor BFF identity blocked a compatible release"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
 }
 
 test_post_probe_failure_rolls_back_and_reprobes() {
@@ -609,6 +765,20 @@ test_post_probe_failure_rolls_back_and_reprobes() {
   assert_previous_is_live
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  verify_evidence_pair
+
+  setup_case historical-bff-post-probe-rollback
+  make_previous_manifest \
+    "${PREVIOUS_TARGET}/deployment.json" \
+    "${PREVIOUS_SHA}" \
+    "$(json_field "${PREVIOUS_TARGET}/deployment.json" artifactDigestSha256)" \
+    "dddddddddddddddddddddddddddddddddddddddd"
+  run_deploy MOCK_FAIL_PROBE_PHASES=post_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "historical-BFF rollback failure unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_called previous_target_pre_switch
   assert_probe_called rollback
   assert_summary_outcome rolled_back
   verify_evidence_pair
@@ -745,6 +915,7 @@ test_external_live_switch_is_never_overwritten() {
 }
 
 test_out_of_order_and_expected_dev_mismatch_rejected() {
+  local advanced_dev_sha nonancestor_sha
   setup_case remote-dev-mismatch
   git --git-dir="${CASE_ORIGIN}" update-ref refs/heads/dev "${PREVIOUS_SHA}"
   run_deploy
@@ -757,6 +928,33 @@ test_out_of_order_and_expected_dev_mismatch_rejected() {
   [[ "${RUN_STATUS}" -ne 0 ]] || die "stale expected dev identity unexpectedly succeeded"
   assert_previous_is_live
   grep -Fq "Trusted controller checkout" "${RUN_OUTPUT}" || show_deploy_failure "missing expected-dev rejection"
+
+  setup_case dev-advances-after-candidate-probe
+  advanced_dev_sha="$(git -C "${CASE_REPO}" commit-tree "${CANDIDATE_SHA}^{tree}" -p "${CANDIDATE_SHA}" -m "advanced dev after candidate probe")"
+  git -C "${CASE_REPO}" push -q origin \
+    "${advanced_dev_sha}:refs/heads/dev-advance-candidate" >/dev/null
+  run_deploy \
+    MOCK_ADVANCE_DEV_AFTER_PROBE=true \
+    MOCK_ADVANCED_DEV_SHA="${advanced_dev_sha}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "candidate switched after dev advanced"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  grep -Fq "Dev advanced after candidate probe" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing second out-of-order rejection"
+
+  setup_case served-nonancestor
+  nonancestor_sha="$(git -C "${CASE_REPO}" commit-tree "${PREVIOUS_SHA}^{tree}" -m "unrelated served release")"
+  make_previous_manifest \
+    "${PREVIOUS_TARGET}/deployment.json" \
+    "${nonancestor_sha}" \
+    "$(json_field "${PREVIOUS_TARGET}/deployment.json" artifactDigestSha256)"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "served non-ancestor unexpectedly switched"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "served SHA is not an ancestor" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing served-ancestry rejection"
 }
 
 test_concurrent_flock_rejected() {
@@ -790,10 +988,13 @@ test_exact_candidate_noop_revalidates_live_release() {
   "${REAL_NODE}" -e '
     const fs=require("node:fs");const file=process.argv[1];
     const value=JSON.parse(fs.readFileSync(file,"utf8"));
-    value.githubArtifactDigest=`sha256:${process.argv[2]}`;
+    value.integrationGateRunId="8999";
+    value.gate.runId="8999";
+    value.gate.runUrl="https://github.com/ajoe734/execute-plans/actions/runs/8999";
+    value.githubArtifactDigest=`sha256:${"e".repeat(64)}`;
     value.deploymentState="accepted";
     fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`);
-  ' "${PREVIOUS_TARGET}/deployment.json" "${CANDIDATE_DIGEST}"
+  ' "${PREVIOUS_TARGET}/deployment.json"
 
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "exact live candidate no-op should pass revalidation"
@@ -808,6 +1009,9 @@ test_exact_candidate_noop_revalidates_live_release() {
   bff_checks="$(grep -Fxc 'curl:bff-version' "${CASE_CALL_LOG}" || true)"
   [[ "${bff_checks}" -ge 2 ]] || show_deploy_failure "no-op skipped BFF identity revalidation"
   assert_summary_outcome accepted
+  grep -Fq "\"incomingEquivalentGateRunId\":\"${GATE_RUN_ID}\"" \
+    "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "no-op evidence omitted the incoming equivalent gate"
   verify_evidence_pair
 }
 
@@ -818,6 +1022,8 @@ test_interrupted_candidate_recovers_or_rolls_back() {
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "interrupted candidate did not roll forward"
   [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || die "recovery changed the valid candidate target"
   [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "accepted" ]] || die "recovery did not repair deploymentState"
+  grep -Fxq 'atomic-manifest:publish' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "interrupted roll-forward did not atomically publish its manifest"
   assert_probe_called noop
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -839,13 +1045,27 @@ test_interrupted_candidate_recovers_or_rolls_back() {
   assert_previous_is_live
   assert_probe_not_called candidate_pre_switch
   assert_probe_called recovery_rollback
+  "${REAL_NODE}" --input-type=module - "${CASE_CALL_LOG}" <<'NODE'
+import fs from "node:fs";
+const calls = fs.readFileSync(process.argv[2], "utf8").trim().split(/\r?\n/u);
+const probe = calls.indexOf("probe:recovery_rollback");
+if (
+  probe < 0 ||
+  calls.indexOf("npm") < 0 ||
+  calls.indexOf("npx") < 0 ||
+  calls.indexOf("npm") >= probe ||
+  calls.indexOf("npx") >= probe
+) {
+  throw new Error("recovery dependencies were not installed before re-probe");
+}
+NODE
   assert_summary_outcome recovery_rolled_back
   grep -Fq "must be restored before a different candidate" "${RUN_OUTPUT}" || \
     show_deploy_failure "missing interrupted predecessor recovery message"
   verify_evidence_pair
 }
 
-test_emergency_override_cannot_skip_integrity_or_probes() {
+test_emergency_override_guards() {
   local override_reason="approved emergency regression override"
 
   setup_case emergency-tampered
@@ -938,7 +1158,7 @@ run_test "concurrent flock rejects" test_concurrent_flock_rejected
 run_test "same SHA with a different digest rejects" test_same_sha_different_digest_rejected
 run_test "exact same SHA and digest revalidates the live release" test_exact_candidate_noop_revalidates_live_release
 run_test "interrupted candidate rolls forward or restores its exact predecessor" test_interrupted_candidate_recovers_or_rolls_back
-run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_cannot_skip_integrity_or_probes
+run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_guards
 run_test "write, bearer, and skip-probe inputs fail closed" test_write_token_and_skip_flags_fail_closed
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"

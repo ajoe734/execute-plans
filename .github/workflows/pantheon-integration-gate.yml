@@ -187,6 +187,8 @@ jobs:
           VITE_BFF_REAL_WRITES: "false"
           VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"
           VITE_BFF_DEV_BEARER_TOKEN: ""
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"

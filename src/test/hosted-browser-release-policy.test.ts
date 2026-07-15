@@ -14,6 +14,7 @@ import {
   HOSTED_UX_PERFORMANCE_BUDGETS,
   HOSTED_UX_PROFILES,
   assessHostedUxProfile,
+  assessPersonaFleetSafety,
   canonicalizeSha256,
   cssBoxShadowHasVisibleLayer,
   cssColorHasVisibleAlpha,
@@ -99,6 +100,18 @@ afterEach(() => {
 });
 
 describe("hosted browser strict release policy", () => {
+  const safePersonaFleetEvidence = {
+    rowCount: 2,
+    hasNaN: false,
+    hasSeedFallbackArmed: false,
+    hasFallbackStandby: false,
+    hasLiveEmptyState: false,
+    hasAuthRequiredState: false,
+    hasNonProductionRows: false,
+    rowsValid: true,
+    liveBannerValid: true,
+  };
+
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);
     expect(cssColorHasVisibleAlpha("rgba(0, 0, 0, 0)")).toBe(false);
@@ -179,6 +192,49 @@ describe("hosted browser strict release policy", () => {
         "integrationGateRunIdValid",
         "realWritesDisabled",
       ]),
+    );
+  });
+
+  it("admits a legacy rollback manifest only under explicit strict compatibility", () => {
+    const frontendSha = "a".repeat(40);
+    const backendSha = "b".repeat(40);
+    const digest = "c".repeat(64);
+    const legacyManifest = {
+      app: "execute-plans",
+      environment: "pantheon-dev-fe",
+      commit: frontendSha,
+      bffCommit: backendSha,
+      bffCommitEvidence: true,
+      buildMode: {
+        VITE_BFF_MODE: "live",
+        VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: "false",
+        VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+      },
+    };
+
+    const ordinary = inspectDeploymentMetadata(legacyManifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: digest,
+    });
+    const rollbackCompatibility = inspectDeploymentMetadata(legacyManifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: digest,
+      allowLegacyRelease: true,
+    });
+
+    expect(ordinary.pass).toBe(false);
+    expect(ordinary.failures).toEqual(
+      expect.arrayContaining([
+        "artifactDigestPresent",
+        "artifactDigestMatchesExpected",
+        "integrationGateRunIdValid",
+      ]),
+    );
+    expect(rollbackCompatibility.pass).toBe(true);
+    expect(rollbackCompatibility.deployment?.legacyReleaseCompatibility).toBe(
+      true,
     );
   });
 
@@ -276,6 +332,62 @@ describe("hosted browser strict release policy", () => {
       totalTransferBytes: 8 * 1024 * 1024,
     });
     expect(assessHostedUxProfile(passingHostedUxProfile()).pass).toBe(true);
+  });
+
+  it.each([
+    ["production rows", safePersonaFleetEvidence, "production_rows"],
+    [
+      "explicit authentication boundary",
+      {
+        ...safePersonaFleetEvidence,
+        rowCount: 0,
+        rowsValid: false,
+        hasAuthRequiredState: true,
+      },
+      "auth_required_empty",
+    ],
+    [
+      "explicit live-empty state",
+      {
+        ...safePersonaFleetEvidence,
+        rowCount: 0,
+        hasLiveEmptyState: true,
+      },
+      "live_empty",
+    ],
+  ])("accepts Persona Fleet %s", (_label, evidence, expectedState) => {
+    const assessment = assessPersonaFleetSafety(evidence);
+
+    expect(assessment.pass).toBe(true);
+    expect(assessment.state).toBe(expectedState);
+    expect(assessment.failures).toEqual([]);
+  });
+
+  it.each([
+    [
+      "seed fallback",
+      { hasSeedFallbackArmed: true, liveBannerValid: false },
+      "seedFallbackAbsent",
+    ],
+    [
+      "non-production rows",
+      { hasNonProductionRows: true },
+      "nonProductionRowsAbsent",
+    ],
+    ["NaN content", { hasNaN: true }, "nanAbsent"],
+    [
+      "ambiguous empty state",
+      { rowCount: 0, rowsValid: false },
+      "explicitSafeState",
+    ],
+  ])("rejects Persona Fleet %s", (_label, mutation, expectedFailure) => {
+    const assessment = assessPersonaFleetSafety({
+      ...safePersonaFleetEvidence,
+      ...mutation,
+    });
+
+    expect(assessment.pass).toBe(false);
+    expect(assessment.failures).toContain(expectedFailure);
   });
 
   it.each([
@@ -530,6 +642,10 @@ describe("hosted browser strict release policy", () => {
     expect(source).toContain('reducedMotion: "reduce"');
     expect(source).toContain('element.matches(":focus-visible")');
     expect(source).toContain("HOSTED_UX_PERFORMANCE_BUDGETS");
+    expect(source).toContain("personaFleetSafety.pass &&");
+    expect(source).toContain(
+      "personaFleetSafetyPassed: personaFleetSafety.pass",
+    );
     expect(source).not.toContain("response.url?.startsWith(BFF_BASE)");
   });
 });

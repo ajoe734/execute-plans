@@ -11,6 +11,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 SYMLINK_CAS_HELPER="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
+ATOMIC_MANIFEST_HELPER="${ROOT_DIR}/scripts/atomic-release-manifest.py"
 
 FE_HOST="${PANTHEON_DEV_FE_HOST:-https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io}"
 BFF_HOST="${PANTHEON_BFF_BASE_URL:-https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io}"
@@ -63,6 +64,7 @@ PREVIOUS_DIGEST=""
 PREVIOUS_MANIFEST_DIGEST=""
 PREVIOUS_GATE_RUN_ID=""
 PREVIOUS_GITHUB_ARTIFACT_DIGEST=""
+PREVIOUS_MANIFEST_BFF_COMMIT=""
 PREVIOUS_DEPLOYMENT_STATE=""
 PREVIOUS_RELEASE_NAME=""
 RECOVERY_ATTEMPTED=false
@@ -73,6 +75,7 @@ RECOVERY_DIGEST=""
 RECOVERY_MANIFEST_DIGEST=""
 RECOVERY_GATE_RUN_ID=""
 RECOVERY_GITHUB_ARTIFACT_DIGEST=""
+RECOVERY_MANIFEST_BFF_COMMIT=""
 LOCK_ACQUIRED=false
 EVIDENCE_INITIALIZED=false
 EVIDENCE_FINALIZED=false
@@ -85,6 +88,7 @@ NEXT_LINK_CREATED=false
 ROLLBACK_LINK_CREATED=false
 RELEASE_CREATED=false
 DURABLE_EVIDENCE_PERSISTED=false
+PROBE_DEPENDENCIES_READY=false
 
 bool_value() {
   local name="$1"
@@ -203,25 +207,34 @@ remove_candidate_release() {
   fi
 }
 
-verify_public_manifest() {
-  local expected_sha="$1"
-  local expected_digest="${2:-}"
-  local expected_gate="${3:-}"
-  local output_file="$4"
+verify_manifest_file() {
+  local manifest_file="$1"
+  local expected_sha="$2"
+  local expected_digest="${3:-}"
+  local expected_gate="${4:-}"
   local expected_bff="${5:-${BFF_COMMIT}}"
   local expected_state="${6:-}"
   local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
-  if ! curl --fail --silent --show-error --location \
-    --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-    "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"; then
-    return 1
-  fi
-  if ! node --input-type=module - "${output_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" <<'NODE'
+  if ! node --input-type=module - "${manifest_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" <<'NODE'
 import fs from "node:fs";
 const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
 const modernIdentity = Boolean(expectedGithubDigest);
+const partialModernIdentity = !modernIdentity && Boolean(
+  payload.schemaVersion != null ||
+  payload.frontendSha ||
+  payload.frontend ||
+  payload.gate ||
+  payload.integrationGateRunId ||
+  payload.githubArtifactDigest ||
+  payload.bffSourceCommitSha ||
+  payload.bffHost ||
+  payload.bff
+);
+if (partialModernIdentity) {
+  throw new Error("deployment manifest has incomplete modern release identity");
+}
 if (
   payload.app !== "execute-plans" ||
   payload.environment !== "pantheon-dev-fe" ||
@@ -242,8 +255,14 @@ if (
 if (!modernIdentity && payload.repository && payload.repository !== "ajoe734/execute-plans") {
   throw new Error("legacy deployment manifest repository mismatch");
 }
-if (expectedDigest && digest !== expectedDigest.toLowerCase()) {
+if (
+  expectedDigest &&
+  ((digest && digest !== expectedDigest.toLowerCase()) || (!digest && modernIdentity))
+) {
   throw new Error("deployment manifest artifact digest mismatch");
+}
+if (modernIdentity && !/^[1-9][0-9]*$/u.test(String(expectedGate))) {
+  throw new Error("deployment manifest modern gate identity is missing");
 }
 if (expectedGate) {
   let gateUrl;
@@ -308,6 +327,50 @@ NODE
   fi
 }
 
+verify_public_manifest() {
+  local expected_sha="$1"
+  local expected_digest="${2:-}"
+  local expected_gate="${3:-}"
+  local output_file="$4"
+  local expected_bff="${5:-${BFF_COMMIT}}"
+  local expected_state="${6:-}"
+  local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
+  if ! curl --fail --silent --show-error --location \
+    --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+    "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"; then
+    return 1
+  fi
+  verify_manifest_file \
+    "${output_file}" \
+    "${expected_sha}" \
+    "${expected_digest}" \
+    "${expected_gate}" \
+    "${expected_bff}" \
+    "${expected_state}" \
+    "${expected_github_digest}"
+}
+
+ensure_probe_dependencies() {
+  if [[ "${PROBE_DEPENDENCIES_READY}" == "true" ]]; then
+    return 0
+  fi
+  echo "=== install probe dependencies ==="
+  npm ci
+  npx playwright install chromium
+  PROBE_DEPENDENCIES_READY=true
+}
+
+publish_manifest_atomically() {
+  local source_file="$1"
+  local release_dir="$2"
+  local label="$3"
+  sudo python3 "${ATOMIC_MANIFEST_HELPER}" publish \
+    --source "${source_file}" \
+    --release-store "${RELEASES_DIR}" \
+    --release-dir "${release_dir}" \
+    --stage-name ".deployment-${RELEASE_INSTANCE}-${label}.tmp"
+}
+
 verify_bff_identity() {
   local stage="$1"
   local output_file="${AUDIT_DIR}/bff-version-${stage}.json"
@@ -343,6 +406,7 @@ run_release_probe() {
   local expected_sha="$3"
   local expected_digest="$4"
   local strict="$5"
+  local legacy_compat="${6:-false}"
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
   local candidate_env=""
   if [[ -n "${candidate_dir}" ]]; then
@@ -358,6 +422,7 @@ run_release_probe() {
     PANTHEON_EXPECTED_FE_SHA="${expected_sha}" \
     PANTHEON_EXPECTED_ARTIFACT_DIGEST="${expected_digest}" \
     PANTHEON_PROBE_RELEASE_STRICT="${strict}" \
+    PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
     PANTHEON_CANDIDATE_DIR="${candidate_env}" \
     PANTHEON_PROBE_JSON_OUT="${json_out}" \
     PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
@@ -368,8 +433,42 @@ run_release_probe() {
   evidence_append "browser.probe.${phase}" passed "frontendSha=${expected_sha}" "artifactDigestSha256=${expected_digest:-legacy}"
 }
 
+prequalify_rollback_target() {
+  local phase="$1"
+  local release_root="$2"
+  local release_commit="$3"
+  local release_digest="$4"
+  local manifest_digest="$5"
+  local gate_run_id="$6"
+  local manifest_bff_commit="$7"
+  local github_artifact_digest="$8"
+  local legacy_compat=true
+  if [[ "${manifest_digest}" =~ ^[0-9a-f]{64}$ && "${gate_run_id}" =~ ^[1-9][0-9]*$ ]]; then
+    legacy_compat=false
+  fi
+  if ! verify_manifest_file \
+    "${release_root}/deployment.json" \
+    "${release_commit}" \
+    "${manifest_digest:-${release_digest}}" \
+    "${gate_run_id}" \
+    "${manifest_bff_commit}" \
+    "" \
+    "${github_artifact_digest}"; then
+    evidence_append "rollback_target.manifest.${phase}" failed "frontendSha=${release_commit}"
+    return 1
+  fi
+  evidence_append "rollback_target.manifest.${phase}" passed "frontendSha=${release_commit}"
+  if ! run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" true "${legacy_compat}"; then
+    evidence_append "rollback_target.${phase}" failed "frontendSha=${release_commit}"
+    return 1
+  fi
+  evidence_append "rollback_target.${phase}" passed \
+    "frontendSha=${release_commit}" \
+    "runtimeBffCommit=${BFF_COMMIT}"
+}
+
 verify_restored_previous() {
-  local rollback_strict=false
+  local rollback_legacy=true
   if [[ "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
     evidence_append rollback.switch failed
     return 1
@@ -379,7 +478,7 @@ verify_restored_previous() {
     return 1
   fi
   evidence_append rollback.assets passed "previousCommit=${PREVIOUS_COMMIT}"
-  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${BFF_COMMIT}" "" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"; then
+  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"; then
     evidence_append rollback.manifest failed "previousCommit=${PREVIOUS_COMMIT}"
     return 1
   fi
@@ -389,9 +488,9 @@ verify_restored_previous() {
     return 1
   fi
   if [[ "${PREVIOUS_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ && "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
-    rollback_strict=true
+    rollback_legacy=false
   fi
-  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" "${rollback_strict}"; then
+  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" true "${rollback_legacy}"; then
     evidence_append rollback.reprobe failed "previousCommit=${PREVIOUS_COMMIT}"
     return 1
   fi
@@ -455,7 +554,7 @@ rollback_release() {
 }
 
 restore_interrupted_release() {
-  local strict=false
+  local legacy_compat=true
   local observed_target
   observed_target="$(current_live_target)"
   if ! verify_dist_digest "${RECOVERY_TARGET}" "${RECOVERY_DIGEST}" >/dev/null; then
@@ -496,7 +595,7 @@ restore_interrupted_release() {
   fi
   evidence_append recovery.rollback_assets passed "previousCommit=${RECOVERY_COMMIT}"
 
-  if ! verify_public_manifest "${RECOVERY_COMMIT}" "${RECOVERY_MANIFEST_DIGEST}" "${RECOVERY_GATE_RUN_ID}" "${AUDIT_DIR}/recovery-rollback-deployment.json" "${BFF_COMMIT}" "" "${RECOVERY_GITHUB_ARTIFACT_DIGEST}"; then
+  if ! verify_public_manifest "${RECOVERY_COMMIT}" "${RECOVERY_MANIFEST_DIGEST}" "${RECOVERY_GATE_RUN_ID}" "${AUDIT_DIR}/recovery-rollback-deployment.json" "${RECOVERY_MANIFEST_BFF_COMMIT}" "" "${RECOVERY_GITHUB_ARTIFACT_DIGEST}"; then
     evidence_append recovery.rollback_manifest failed "previousCommit=${RECOVERY_COMMIT}"
     return 1
   fi
@@ -505,9 +604,9 @@ restore_interrupted_release() {
     return 1
   fi
   if [[ "${RECOVERY_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ && "${RECOVERY_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
-    strict=true
+    legacy_compat=false
   fi
-  if ! run_release_probe recovery_rollback "" "${RECOVERY_COMMIT}" "${RECOVERY_DIGEST}" "${strict}"; then
+  if ! run_release_probe recovery_rollback "" "${RECOVERY_COMMIT}" "${RECOVERY_DIGEST}" true "${legacy_compat}"; then
     evidence_append recovery.rollback_reprobe failed "previousCommit=${RECOVERY_COMMIT}"
     return 1
   fi
@@ -527,15 +626,16 @@ prepare_interrupted_recovery() {
   fi
   RECOVERY_MANIFEST_DIGEST="$(node -e '
     const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-    const expectedCommit=process.argv[2],expectedBff=process.argv[3];
+    const expectedCommit=process.argv[2],manifestBff=String(p.bffCommit||"").toLowerCase();
     const digest=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();
     const safe=String(p.commit||"").toLowerCase()===expectedCommit&&p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
       p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
       p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
-      p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&String(p.bffCommit||"").toLowerCase()===expectedBff&&
+      p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&/^[0-9a-f]{40}$/.test(manifestBff)&&
       p.bffCommitEvidence===true&&["","accepted"].includes(String(p.deploymentState||""));
     if(!safe||(digest&&!/^[0-9a-f]{64}$/.test(digest)))process.exit(1);process.stdout.write(digest);
-  ' "${RECOVERY_TARGET}/deployment.json" "${RECOVERY_COMMIT}" "${BFF_COMMIT}")"
+  ' "${RECOVERY_TARGET}/deployment.json" "${RECOVERY_COMMIT}")"
+  RECOVERY_MANIFEST_BFF_COMMIT="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.bffCommit||"").toLowerCase();if(!/^[0-9a-f]{40}$/.test(s)||p.bffCommitEvidence!==true)process.exit(1);process.stdout.write(s)' "${RECOVERY_TARGET}/deployment.json")"
   RECOVERY_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${RECOVERY_TARGET}/deployment.json")"
   RECOVERY_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${RECOVERY_TARGET}/deployment.json")"
   verify_dist_digest "${RECOVERY_TARGET}" "${RECOVERY_DIGEST}" >/dev/null
@@ -718,8 +818,8 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   exit 2
 fi
 
-if [[ ! -f "${SYMLINK_CAS_HELPER}" ]]; then
-  echo "Missing atomic symlink CAS helper: ${SYMLINK_CAS_HELPER}" >&2
+if [[ ! -f "${SYMLINK_CAS_HELPER}" || ! -f "${ATOMIC_MANIFEST_HELPER}" ]]; then
+  echo "Missing atomic deployment helper." >&2
   exit 2
 fi
 
@@ -818,25 +918,29 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_COMMIT="$(node -e '
     const fs=require("node:fs");
     const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-    const expectedBff=process.argv[2].toLowerCase();
     const commit=String(p.commit||"").toLowerCase();
+    const manifestBff=String(p.bffCommit||"").toLowerCase();
     const state=String(p.deploymentState||"");
     const safe=p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
       p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
       p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&
       p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
       p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&
-      String(p.bffCommit||"").toLowerCase()===expectedBff&&p.bffCommitEvidence===true&&
+      /^[0-9a-f]{40}$/.test(manifestBff)&&p.bffCommitEvidence===true&&
       ["","accepted","candidate"].includes(state);
     if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
     process.stdout.write(commit);
-  ' "${PREVIOUS_TARGET}/deployment.json" "${BFF_COMMIT}")"
+  ' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_MANIFEST_BFF_COMMIT="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.bffCommit||"").toLowerCase();if(!/^[0-9a-f]{40}$/.test(s)||p.bffCommitEvidence!==true)process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_MANIFEST_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_DEPLOYMENT_STATE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(p.deploymentState||""))' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_DIGEST="$(verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_MANIFEST_DIGEST}")"
-  evidence_append previous_release qualified "previousCommit=${PREVIOUS_COMMIT}" "previousArtifactDigest=${PREVIOUS_DIGEST}"
+  evidence_append previous_release qualified \
+    "previousCommit=${PREVIOUS_COMMIT}" \
+    "previousArtifactDigest=${PREVIOUS_DIGEST}" \
+    "previousManifestBffCommit=${PREVIOUS_MANIFEST_BFF_COMMIT}"
 elif [[ ! -e "${DEPLOY_ROOT}" && "${ALLOW_BOOTSTRAP}" == "true" ]]; then
   evidence_append previous_release bootstrap "deployRoot=${DEPLOY_ROOT}"
 elif [[ ! -e "${DEPLOY_ROOT}" ]]; then
@@ -850,12 +954,20 @@ fi
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
   if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" != "${SHA}" ]]; then
     prepare_interrupted_recovery
+    ensure_probe_dependencies
     evidence_append recovery.new_candidate rejected "previousCommit=${PREVIOUS_COMMIT}"
     echo "An interrupted candidate must be restored before a different candidate can deploy." >&2
     exit 2
   fi
   if [[ "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
-    if [[ -n "${PREVIOUS_DIGEST}" && "${PREVIOUS_DIGEST}" == "${ARTIFACT_DIGEST}" ]]; then
+    if [[ -z "${PREVIOUS_DIGEST}" || "${PREVIOUS_DIGEST}" != "${ARTIFACT_DIGEST}" ]]; then
+      echo "Same-SHA artifact replacement rejected because the served digest differs or is unproven." >&2
+      evidence_append candidate.reproducibility failed "previousCommit=${PREVIOUS_COMMIT}"
+      exit 2
+    elif [[ "${PREVIOUS_MANIFEST_BFF_COMMIT}" == "${BFF_COMMIT}" &&
+      "${PREVIOUS_MANIFEST_DIGEST}" == "${ARTIFACT_DIGEST}" &&
+      "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ &&
+      "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
       NOOP_DEPLOY=true
       if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
         prepare_interrupted_recovery
@@ -866,10 +978,19 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
         echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
         exit 2
       fi
-    else
-      echo "Same-SHA artifact replacement rejected because the served digest differs or is unproven." >&2
-      evidence_append candidate.reproducibility failed "previousCommit=${PREVIOUS_COMMIT}"
+    elif [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+      prepare_interrupted_recovery
+      evidence_append recovery.bff_requalification rejected \
+        "previousManifestBffCommit=${PREVIOUS_MANIFEST_BFF_COMMIT}" \
+        "runtimeBffCommit=${BFF_COMMIT}"
+      echo "An interrupted candidate must be restored before BFF pair requalification." >&2
       exit 2
+    else
+      evidence_append candidate.identity_requalification pending \
+        "previousManifestBffCommit=${PREVIOUS_MANIFEST_BFF_COMMIT}" \
+        "runtimeBffCommit=${BFF_COMMIT}" \
+        "previousGateRunId=${PREVIOUS_GATE_RUN_ID:-legacy}" \
+        "incomingGateRunId=${GATE_RUN_ID}"
     fi
   elif ! git merge-base --is-ancestor "${PREVIOUS_COMMIT}" "${SHA}"; then
     if [[ "${EMERGENCY_OVERRIDE}" != "true" ]]; then
@@ -883,19 +1004,39 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
   fi
 fi
 
-echo "=== install probe dependencies ==="
-npm ci
-npx playwright install chromium
+ensure_probe_dependencies
 
 verify_bff_identity pre_candidate
+
+if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
+  prequalify_rollback_target \
+    recovery_target_pre_switch \
+    "${RECOVERY_TARGET}" \
+    "${RECOVERY_COMMIT}" \
+    "${RECOVERY_DIGEST}" \
+    "${RECOVERY_MANIFEST_DIGEST}" \
+    "${RECOVERY_GATE_RUN_ID}" \
+    "${RECOVERY_MANIFEST_BFF_COMMIT}" \
+    "${RECOVERY_GITHUB_ARTIFACT_DIGEST}"
+elif [[ -n "${PREVIOUS_TARGET}" && "${NOOP_DEPLOY}" != "true" ]]; then
+  prequalify_rollback_target \
+    previous_target_pre_switch \
+    "${PREVIOUS_TARGET}" \
+    "${PREVIOUS_COMMIT}" \
+    "${PREVIOUS_DIGEST}" \
+    "${PREVIOUS_MANIFEST_DIGEST}" \
+    "${PREVIOUS_GATE_RUN_ID}" \
+    "${PREVIOUS_MANIFEST_BFF_COMMIT}" \
+    "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
+fi
 
 if [[ "${NOOP_DEPLOY}" == "true" ]]; then
   echo "=== exact live candidate no-op revalidation ==="
   verify_dist_digest "${PREVIOUS_TARGET}" "${ARTIFACT_DIGEST}" >/dev/null
   if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${BFF_COMMIT}" candidate
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" candidate "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
   else
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json"
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
   fi
   run_release_probe noop "" "${SHA}" "${ARTIFACT_DIGEST}" true
   verify_bff_identity noop_final
@@ -915,11 +1056,19 @@ manifest.probes = {
 };
 fs.writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-    sudo install -o root -g root -m 664 "${TMP_DIR}/recovered-deployment.json" "${PREVIOUS_TARGET}/deployment.json"
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${BFF_COMMIT}" accepted
+    publish_manifest_atomically \
+      "${TMP_DIR}/recovered-deployment.json" \
+      "${PREVIOUS_TARGET}" \
+      recovered
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
   fi
-  evidence_append candidate.noop passed "previousCommit=${PREVIOUS_COMMIT}"
+  evidence_append candidate.noop passed \
+    "previousCommit=${PREVIOUS_COMMIT}" \
+    "acceptedGateRunId=${PREVIOUS_GATE_RUN_ID:-legacy}" \
+    "incomingEquivalentGateRunId=${GATE_RUN_ID}" \
+    "acceptedGithubArtifactDigest=${PREVIOUS_GITHUB_ARTIFACT_DIGEST:-legacy}" \
+    "incomingGithubArtifactDigest=${GITHUB_ARTIFACT_DIGEST}"
   cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 # Pantheon Dev FE Deploy
 
@@ -1075,7 +1224,10 @@ manifest.probes = {
 };
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-sudo install -o root -g root -m 664 "${TMP_DIR}/release/deployment.json" "${RELEASE_DIR}/deployment.json"
+publish_manifest_atomically \
+  "${TMP_DIR}/release/deployment.json" \
+  "${RELEASE_DIR}" \
+  accepted
 verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted
 evidence_append release.accepted passed "releaseDir=${RELEASE_DIR}" "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
 

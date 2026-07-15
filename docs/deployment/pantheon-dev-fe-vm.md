@@ -50,6 +50,14 @@ Automated deployment is always read-only:
 can skip integrity, auth, browser, or rollback probes. Governed write tests are
 separate manual test workflows and are not release acceptance probes.
 
+The legacy Supabase login provider still needs two public browser values:
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. The integration gate
+injects them from GitHub Actions repository variables while building the
+immutable candidate. They are public configuration, but the key must be a
+publishable/anon client key, never a service-role or `sb_secret_` key. Missing
+values fail before the candidate build; the deploy controller does not rebuild
+or inject configuration after the gate.
+
 Manual deployment is available through `workflow_dispatch` on
 `.github/workflows/pantheon-dev-fe-deploy.yml`. It still requires an exact
 successful `dev` push gate run and its immutable candidate artifact. Deploying
@@ -93,8 +101,12 @@ Do not say "published to dev" unless all of these are true:
   evidence instead of overwriting a prior attempt. A sealed copy is also kept
   under `/var/lib/pantheon-dev-fe-deploy-evidence/` on the dev VM.
 
-The deployed-host probe must show Persona Fleet rows for US/TW/Crypto, shioaji
-/ qlib source evidence, no `NaN`, no old BFF URL, and no armed seed fallback.
+The release probe is intentionally unauthenticated and must observe the
+governed `401/AUTH_REQUIRED` boundary without sending an Authorization header
+or placing a bearer in browser storage. Persona Fleet may render only accepted
+production/live rows or an explicit auth/live-empty state; seed identities,
+fallback fixtures, `NaN`, old BFF URLs, an empty application root, uncaught page
+errors, or unexpected console/resource failures fail closed.
 
 ## Rollback And Drill
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
 
 // MGMT-OPS-003-GAP-001 — proves the hosted Portfolio Book renders every
 // degraded/missing-binding incident, all six required filters round-trip
@@ -37,7 +37,10 @@ const holdings = Array.from({ length: 14 }, (_, index) => ({
 
 test("renders every degraded incident and persists all six filters through reload", async ({ page }) => {
   const requests: string[] = [];
-  await installOidcDevLogin(page, { goto: false });
+  await installOidcDevLogin(page, {
+    goto: false,
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
+  });
   await page.route("**/bff/management/portfolio-book/holdings**", async (route) => {
     requests.push(route.request().url());
     await route.fulfill({

@@ -24,6 +24,8 @@ const FE_PATH = normalizePath(
 );
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const RELEASE_STRICT = process.env.PANTHEON_PROBE_RELEASE_STRICT === "1";
+const LEGACY_RELEASE_COMPAT =
+  process.env.PANTHEON_PROBE_LEGACY_RELEASE_COMPAT === "1";
 const EXPECTED_FE_SHA = String(
   process.env.PANTHEON_EXPECTED_FE_SHA || "",
 ).trim();
@@ -160,7 +162,7 @@ export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
 }
 
 function isBffUrl(url) {
-  return httpPathWithinBase(url, BFF_BASE) !== null;
+  return isBffRequestUrl(url, BFF_BASE);
 }
 
 function isCoreBffResponse(res, expectedPath) {
@@ -283,6 +285,46 @@ export function assessHostedUxProfile(result) {
   return { pass: failures.length === 0, checks, failures };
 }
 
+export function assessPersonaFleetSafety(result) {
+  const evidence =
+    result && typeof result === "object" && !Array.isArray(result)
+      ? result
+      : {};
+  const rowCountValid =
+    Number.isInteger(evidence.rowCount) && evidence.rowCount >= 0;
+  const rowCount = rowCountValid ? evidence.rowCount : -1;
+  const productionRows =
+    rowCount > 0 &&
+    evidence.rowsValid === true &&
+    evidence.hasAuthRequiredState === false &&
+    evidence.hasLiveEmptyState === false;
+  const authRequiredEmpty =
+    rowCount === 0 && evidence.hasAuthRequiredState === true;
+  const liveEmpty =
+    rowCount === 0 &&
+    evidence.hasLiveEmptyState === true &&
+    evidence.rowsValid === true;
+  const checks = {
+    rowCountValid,
+    nanAbsent: evidence.hasNaN === false,
+    nonProductionRowsAbsent: evidence.hasNonProductionRows === false,
+    seedFallbackAbsent: evidence.hasSeedFallbackArmed === false,
+    liveBannerValid: evidence.liveBannerValid === true,
+    explicitSafeState: productionRows || authRequiredEmpty || liveEmpty,
+  };
+  const failures = Object.entries(checks)
+    .filter(([, passed]) => !passed)
+    .map(([check]) => check);
+  const state = productionRows
+    ? "production_rows"
+    : authRequiredEmpty
+      ? "auth_required_empty"
+      : liveEmpty
+        ? "live_empty"
+        : "ambiguous";
+  return { pass: failures.length === 0, state, checks, failures };
+}
+
 async function waitForCoreBffResponse(
   page,
   expectedPath,
@@ -356,7 +398,11 @@ function positiveRunId(value) {
 
 export function inspectDeploymentMetadata(
   metadata,
-  { expectedSha = "", expectedArtifactDigest = "" } = {},
+  {
+    expectedSha = "",
+    expectedArtifactDigest = "",
+    allowLegacyRelease = false,
+  } = {},
 ) {
   const payload =
     metadata && typeof metadata === "object" && !Array.isArray(metadata)
@@ -383,7 +429,7 @@ export function inspectDeploymentMetadata(
     commitIsExactSha: Boolean(observedCommit),
     commitMatchesExpected:
       Boolean(expectedCommit) && observedCommit === expectedCommit,
-    artifactDigestPresent: Boolean(observedDigest),
+    artifactDigestPresent: allowLegacyRelease || Boolean(observedDigest),
     artifactDigestFieldValid:
       payload.artifactDigest == null ||
       payload.artifactDigest === "" ||
@@ -395,9 +441,11 @@ export function inspectDeploymentMetadata(
     artifactDigestFieldsAgree:
       !primaryDigest || !sha256Digest || primaryDigest === sha256Digest,
     artifactDigestMatchesExpected:
-      !String(expectedArtifactDigest || "").trim() ||
-      (Boolean(expectedDigest) && observedDigest === expectedDigest),
-    integrationGateRunIdValid: Boolean(gateRunId),
+      allowLegacyRelease && !observedDigest
+        ? true
+        : !String(expectedArtifactDigest || "").trim() ||
+          (Boolean(expectedDigest) && observedDigest === expectedDigest),
+    integrationGateRunIdValid: allowLegacyRelease || Boolean(gateRunId),
     bffCommitEvidence: payload.bffCommitEvidence === true,
     bffCommitIsExactSha: Boolean(canonicalizeCommitSha(payload.bffCommit)),
     liveBffMode: String(buildMode.VITE_BFF_MODE || "") === "live",
@@ -419,6 +467,7 @@ export function inspectDeploymentMetadata(
     checks,
     failures,
     deployment: {
+      legacyReleaseCompatibility: allowLegacyRelease,
       app: String(payload.app || ""),
       environment: String(payload.environment || ""),
       commit: observedCommit,
@@ -1477,6 +1526,11 @@ async function runProbe() {
       "PANTHEON_CANDIDATE_DIR requires PANTHEON_PROBE_RELEASE_STRICT=1",
     );
   }
+  if (LEGACY_RELEASE_COMPAT && !RELEASE_STRICT) {
+    strictConfigurationFailures.push(
+      "PANTHEON_PROBE_LEGACY_RELEASE_COMPAT requires PANTHEON_PROBE_RELEASE_STRICT=1",
+    );
+  }
   if (strictConfigurationFailures.length > 0) {
     throw new Error(strictConfigurationFailures.join("; "));
   }
@@ -1526,6 +1580,11 @@ async function runProbe() {
   let bundleText = "";
   let personaFleetChecks = null;
   let shellStatus = 0;
+  let rootChecks = {
+    bodyTextLength: 0,
+    childElementCount: 0,
+    rootTextLength: 0,
+  };
   let storageInspection = {
     ok: !RELEASE_STRICT,
     localKeys: [],
@@ -1664,6 +1723,32 @@ async function runProbe() {
       timeout: remainingTimeoutMs(),
     });
     shellStatus = shellResponse?.status() ?? 0;
+    await page
+      .waitForFunction(
+        () => {
+          const root = document.querySelector("#root");
+          return Boolean(
+            root && (root.childElementCount > 0 || root.textContent?.trim()),
+          );
+        },
+        undefined,
+        { timeout: Math.min(10_000, remainingTimeoutMs()) },
+      )
+      .catch(() => {});
+    rootChecks = await page
+      .evaluate(() => {
+        const root = document.querySelector("#root");
+        return {
+          bodyTextLength: (document.body.innerText || "").trim().length,
+          childElementCount: root?.childElementCount ?? 0,
+          rootTextLength: (root?.textContent || "").trim().length,
+        };
+      })
+      .catch(() => ({
+        bodyTextLength: 0,
+        childElementCount: 0,
+        rootTextLength: 0,
+      }));
     coreResponses.push(...(await Promise.all(optionalCoreResponsePromises)));
     coreResponses.push(...(await Promise.all(requiredCoreResponsePromises)));
 
@@ -1885,6 +1970,7 @@ async function runProbe() {
     ? inspectDeploymentMetadata(deploymentFetch.payload, {
         expectedSha: EXPECTED_FE_SHA,
         expectedArtifactDigest: EXPECTED_ARTIFACT_DIGEST,
+        allowLegacyRelease: LEGACY_RELEASE_COMPAT,
       })
     : {
         pass: false,
@@ -1934,6 +2020,10 @@ async function runProbe() {
     ),
   );
   const shellOk = shellStatus >= 200 && shellStatus < 400;
+  const rootRendered = Boolean(
+    rootChecks.bodyTextLength > 0 &&
+    (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0),
+  );
   const optionalCoreResponsesObserved = OPTIONAL_CORE_BFF_PATHS.every(
     (expectedPath) =>
       coreResponses.some(
@@ -1941,6 +2031,14 @@ async function runProbe() {
           response.path === expectedPath && isAcceptableCoreStatus(response),
       ),
   );
+  const personaFleetSafety = FE_PATH.includes("persona-fleet")
+    ? assessPersonaFleetSafety(personaFleetChecks)
+    : {
+        pass: true,
+        state: "not_applicable",
+        checks: { routeNotApplicable: true },
+        failures: [],
+      };
   const basePass =
     shellOk &&
     publicHealthOk &&
@@ -1950,13 +2048,18 @@ async function runProbe() {
     noAuthorizationRequests &&
     browserBffMethodPolicy.pass &&
     noEmbeddedDevBearer &&
+    personaFleetSafety.pass &&
+    rootRendered &&
+    pageErrors.length === 0 &&
     oldUrlHitCount === 0 &&
     requests.length > 0 &&
     failed.length === 0;
 
   const strictChecks = {
     existingAuthBoundaryAndBffChecks: basePass,
+    applicationRootRendered: rootRendered,
     noBrowserWriteMethods: browserBffMethodPolicy.pass,
+    personaFleetSafetyPassed: personaFleetSafety.pass,
     pageErrorsAbsent: pageErrors.length === 0,
     unexpectedConsoleErrorsAbsent: unexpectedConsoleErrors.length === 0,
     frontendResourceFailuresAbsent: frontendResourceFailures.length === 0,
@@ -2000,6 +2103,7 @@ async function runProbe() {
     "timeout ms: " + OVERALL_TIMEOUT_MS,
     "navigation waitUntil: " + NAVIGATION_WAIT_UNTIL,
     "release strict: " + RELEASE_STRICT,
+    "legacy release compatibility: " + LEGACY_RELEASE_COMPAT,
     "candidate directory routed: " + Boolean(candidateResolver),
     "core waitForResponse paths: " + CORE_BFF_PATHS.join(", "),
     "required core waitForResponse paths: " +
@@ -2011,6 +2115,10 @@ async function runProbe() {
     "",
     "- contains intended BFF URL: " + usesIntendedBff,
     "- frontend shell status: " + shellStatus,
+    "- application root rendered: " + rootRendered,
+    "- root child element count: " + rootChecks.childElementCount,
+    "- root text length: " + rootChecks.rootTextLength,
+    "- body text length: " + rootChecks.bodyTextLength,
     "- public health/ready responses valid: " + publicHealthOk,
     "- protected responses are 401/AUTH_REQUIRED: " +
       observedProtectedResponsesOk,
@@ -2046,6 +2154,8 @@ async function runProbe() {
             personaFleetChecks.rowsValid,
           "- persona fleet live banner valid (informational while unauthenticated): " +
             personaFleetChecks.liveBannerValid,
+          "- persona fleet strict safety passed: " + personaFleetSafety.pass,
+          "- persona fleet strict safety state: " + personaFleetSafety.state,
         ]
       : []),
     "- request count: " + requests.length,
@@ -2223,6 +2333,7 @@ async function runProbe() {
         upstreamBffBase: UPSTREAM_BFF_BASE,
         oldBffUrl: OLD_BFF_URL || null,
         candidateDirectoryRouted: Boolean(candidateResolver),
+        legacyReleaseCompatibility: LEGACY_RELEASE_COMPAT,
       },
       expectations: {
         frontendSha: canonicalizeCommitSha(EXPECTED_FE_SHA),
@@ -2238,6 +2349,9 @@ async function runProbe() {
           noAuthorizationRequests,
           noBrowserWriteMethods: browserBffMethodPolicy.pass,
           noEmbeddedDevBearer,
+          personaFleetSafetyPassed: personaFleetSafety.pass,
+          applicationRootRendered: rootRendered,
+          pageErrorsAbsent: pageErrors.length === 0,
           oldUrlAbsent: oldUrlHitCount === 0,
           bffRequestsObserved: requests.length > 0,
           bffRequestFailuresAbsent: failed.length === 0,
@@ -2268,6 +2382,7 @@ async function runProbe() {
       },
       browser: {
         shellStatus,
+        rootChecks,
         authorizationRequests,
         pageErrors,
         consoleErrors,
@@ -2277,6 +2392,8 @@ async function runProbe() {
         bundleFetches,
         candidateRouteErrors,
         hostedUxProfiles,
+        personaFleetChecks,
+        personaFleetSafety,
       },
       bff: {
         methodPolicy: browserBffMethodPolicy,

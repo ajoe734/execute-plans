@@ -2,13 +2,18 @@
  * AG-DYNUI-LIVE-WORKSHOP-FE-013 - hosted live Strategy Workshop tab proof.
  *
  * This spec uses the deployed FE and live BFF. It must not intercept or
- * synthesize Agora workshop responses.
+ * synthesize Agora workshop responses. Supplying both targets opts in and
+ * requires an explicit short-lived BFF auth token.
  */
 
 import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
+import {
+  devLoginSession,
+  installOidcDevLogin,
+  roleTokenFromEnv,
+} from "./helpers/auth";
 
 const FE_BASE_URL = trimTrailingSlash(
   process.env.AG_DYNUI_LIVE_WORKSHOP_FE_013_BASE_URL ||
@@ -23,9 +28,6 @@ const BFF_BASE_URL = trimTrailingSlash(
     process.env.VITE_BFF_BASE_URL ||
     "",
 );
-const IS_HOSTED_FE = Boolean(
-  FE_BASE_URL && !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/i.test(FE_BASE_URL),
-);
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",
@@ -33,6 +35,25 @@ const AUTH_TOKEN = roleTokenFromEnv("operator", [
 ]);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-dynui-live-tabs-013";
+const HOSTED_REQUESTED = Boolean(FE_BASE_URL && BFF_BASE_URL);
+
+if (HOSTED_REQUESTED && !AUTH_TOKEN) {
+  throw new Error(
+    "AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted acceptance requires an explicit short-lived BFF_AUTH_TOKEN",
+  );
+}
+if (HOSTED_REQUESTED) {
+  devLoginSession({
+    env: {
+      ...process.env,
+      PANTHEON_BFF_BASE_URL: BFF_BASE_URL,
+      PANTHEON_FE_BASE_URL: FE_BASE_URL,
+    },
+    goto: false,
+    pageBaseUrl: FE_BASE_URL,
+    token: AUTH_TOKEN,
+  });
+}
 const RAW_UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
 const VIEWPORTS = [
   { name: "desktop", size: { width: 1440, height: 960 } },
@@ -178,8 +199,8 @@ function assertRequiredNetwork(events: NetworkEvent[]): void {
 
 test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () => {
   test.skip(
-    !IS_HOSTED_FE || !BFF_BASE_URL || !AUTH_TOKEN,
-    "Requires hosted FE/BFF URLs and an explicit/RBAC-matrix operator token.",
+    !HOSTED_REQUESTED,
+    "Set the hosted FE and BFF URLs to enable this acceptance probe.",
   );
   test.setTimeout(120_000);
 
