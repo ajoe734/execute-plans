@@ -15,6 +15,8 @@ import {
   HOSTED_UX_PROFILES,
   assessHostedUxProfile,
   canonicalizeSha256,
+  cssBoxShadowHasVisibleLayer,
+  cssColorHasVisibleAlpha,
   createCandidateResolver,
   httpPathWithinBase,
   inspectBrowserBffMethods,
@@ -97,6 +99,21 @@ afterEach(() => {
 });
 
 describe("hosted browser strict release policy", () => {
+  it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
+    expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);
+    expect(cssColorHasVisibleAlpha("rgba(0, 0, 0, 0)")).toBe(false);
+    expect(cssColorHasVisibleAlpha("rgb(60 131 246 / 0%)")).toBe(false);
+    expect(cssColorHasVisibleAlpha("rgb(60 131 246 / 35%)")).toBe(true);
+    expect(
+      cssBoxShadowHasVisibleLayer(
+        "rgba(0, 0, 0, 0) 0 0 0 0, rgb(60, 131, 246) 0 0 0 4px",
+      ),
+    ).toBe(true);
+    expect(cssBoxShadowHasVisibleLayer("rgba(0, 0, 0, 0) 0 0 0 2px")).toBe(
+      false,
+    );
+  });
+
   it("accepts an exact gated, tokenless, safe-write deployment manifest", () => {
     const frontendSha = "a".repeat(40);
     const backendSha = "b".repeat(40);

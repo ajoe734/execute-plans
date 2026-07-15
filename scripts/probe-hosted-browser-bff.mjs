@@ -973,11 +973,48 @@ function sortedDiagnostics(entries) {
   );
 }
 
+function cssAlphaIsVisible(value) {
+  const token = String(value || "").trim();
+  if (!token) return false;
+  const numeric = Number.parseFloat(token);
+  if (!Number.isFinite(numeric)) return true;
+  return token.endsWith("%") ? numeric > 0 : numeric > 0;
+}
+
+export function cssColorHasVisibleAlpha(value) {
+  const color = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!color || color === "transparent") return false;
+  const functional = /^(rgba?)\((.*)\)$/u.exec(color);
+  if (!functional) return true;
+
+  const body = functional[2];
+  const slashIndex = body.lastIndexOf("/");
+  if (slashIndex >= 0) {
+    return cssAlphaIsVisible(body.slice(slashIndex + 1));
+  }
+  if (functional[1] === "rgba") {
+    const channels = body.split(",");
+    if (channels.length >= 4) return cssAlphaIsVisible(channels.at(-1));
+  }
+  return true;
+}
+
+export function cssBoxShadowHasVisibleLayer(value) {
+  const shadow = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!shadow || shadow === "none") return false;
+  const colors = shadow.match(/rgba?\([^)]*\)/gu) || [];
+  return colors.length === 0 || colors.some(cssColorHasVisibleAlpha);
+}
+
 async function inspectKeyboardFocus(page) {
   const observed = new Map();
   for (let attempt = 0; attempt < KEYBOARD_FOCUS_ATTEMPTS; attempt += 1) {
     await page.keyboard.press("Tab");
-    const sample = await page.evaluate(() => {
+    const rawSample = await page.evaluate(() => {
       const element = document.activeElement;
       if (!(element instanceof Element) || element === document.body) {
         return { domIndex: -1, reached: false, visibleCue: false };
@@ -996,28 +1033,30 @@ async function inspectKeyboardFocus(page) {
         rect.left < window.innerWidth &&
         style.display !== "none" &&
         style.visibility !== "hidden";
-      const outlineVisible =
-        style.outlineStyle !== "none" &&
-        Number.parseFloat(style.outlineWidth || "0") >= 1 &&
-        style.outlineColor !== "transparent" &&
-        !/rgba?\([^)]*,\s*0(?:\.0+)?\s*\)$/iu.test(style.outlineColor);
-      const boxShadowVisible =
-        style.boxShadow !== "none" &&
-        !/^rgba?\([^)]*,\s*0(?:\.0+)?\s*\)\s+0px\s+0px\s+0px/iu.test(
-          style.boxShadow,
-        );
       return {
         domIndex: Array.prototype.indexOf.call(
           document.querySelectorAll("*"),
           element,
         ),
         reached,
-        visibleCue:
-          reached &&
-          element.matches(":focus-visible") &&
-          (outlineVisible || boxShadowVisible),
+        focusVisible: element.matches(":focus-visible"),
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+        outlineColor: style.outlineColor,
+        boxShadow: style.boxShadow,
       };
     });
+    const outlineVisible =
+      rawSample.outlineStyle !== "none" &&
+      Number.parseFloat(rawSample.outlineWidth || "0") >= 1 &&
+      cssColorHasVisibleAlpha(rawSample.outlineColor);
+    const sample = {
+      ...rawSample,
+      visibleCue:
+        rawSample.reached &&
+        rawSample.focusVisible &&
+        (outlineVisible || cssBoxShadowHasVisibleLayer(rawSample.boxShadow)),
+    };
     if (sample.reached && !observed.has(sample.domIndex)) {
       observed.set(sample.domIndex, sample.visibleCue);
     }
