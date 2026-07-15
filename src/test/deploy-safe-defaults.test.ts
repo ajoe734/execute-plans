@@ -27,6 +27,10 @@ const hostedBrowserProbe = readFileSync(
   resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
   "utf8",
 );
+const releaseCandidate = readFileSync(
+  resolve(root, "scripts/release-candidate.mjs"),
+  "utf8",
+);
 
 function rejectedDeploy(extraEnv: Record<string, string>) {
   return spawnSync("bash", [deployScriptPath], {
@@ -42,70 +46,67 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
 }
 
 describe("Pantheon dev frontend deploy safety boundary", () => {
-  it("builds without a browser bearer token and with safe write flags", () => {
-    expect(deployScript).toContain(
-      'DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"',
-    );
-    expect(deployScript).toContain('if [[ -n "${DEV_BEARER_TOKEN}" ]]');
-    expect(deployScript).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
+  it("creates only strict, read-only, credential-free release candidates", () => {
+    expect(integrationWorkflow).toContain("VITE_BFF_MODE: live");
+    expect(integrationWorkflow).toContain("VITE_BFF_FALLBACK: strict");
+    expect(integrationWorkflow).toContain('VITE_BFF_REAL_WRITES: "false"');
+    expect(integrationWorkflow).toContain('VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"');
+    expect(integrationWorkflow).toContain('VITE_BFF_DEV_BEARER_TOKEN: ""');
+    expect(integrationWorkflow).toContain("node scripts/release-candidate.mjs prepare");
     expect(deployScript).toContain('REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
     expect(deployScript).toContain(
       'ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
     );
-    expect(deployScript).toContain('VITE_BFF_REAL_WRITES="${REAL_WRITES}"');
-    expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"',
-    );
+    expect(deployScript).toContain('if [[ -n "${VITE_BFF_DEV_BEARER_TOKEN:-}" ]]');
+    expect(deployScript).toContain("VITE_*CLIENT_SECRET*");
+    expect(deployScript).toContain("VITE_*PRIVATE_KEY*");
+    expect(deployScript).toContain("VITE_*SERVICE_ROLE*");
     expect(deployScript).not.toMatch(/pantheon-dev-browser:operator/u);
     expect(deployScript).not.toMatch(/pantheon-dev-browser:viewer/u);
     expect(deployScript).not.toMatch(/VITE_BFF_REAL_WRITES=true/u);
     expect(deployScript).not.toMatch(/VITE_BFF_ALLOW_DEV_STUB_WRITES=true/u);
-    expect(deployScript).toContain(
-      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false"',
-    );
-    expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
-    );
-    expect(deployScript).toContain(
-      "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
-    );
-    expect(deployScript).toContain(
-      "bffCommitEvidence: true",
-    );
-    expect(deployScript).toContain(
-      "bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE",
-    );
-    expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
-    expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
-    expect(integrationWorkflow.match(
-      /VITE_BFF_DEV_BEARER_TOKEN=""/gu,
-    )).toHaveLength(2);
-    expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
+    expect(releaseCandidate).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
+    expect(releaseCandidate).toContain("collectEnvironmentSecretSentinels");
+    expect(releaseCandidate).toContain("CREDENTIAL_PATTERNS");
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
     expect(localEnv).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
     expect(localEnv).not.toMatch(/pantheon-dev-browser:viewer/gu);
   });
 
-  it("requires explicit BFF provenance for manual final-proof deployments", () => {
-    expect(deployWorkflow).toContain("bff_commit:");
-    expect(deployWorkflow).toContain("inputs.bff_commit || vars.PANTHEON_BFF_SHA || ''");
-    expect(deployScript).toContain('BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"');
+  it("deploys only the immutable artifact from one exact successful dev gate", () => {
+    expect(deployWorkflow).toContain("workflow_run:");
+    expect(deployWorkflow).toContain("Pantheon FE-BFF Integration Gate");
+    expect(deployWorkflow).toContain("github.rest.actions.getWorkflowRun");
+    expect(deployWorkflow).toContain('runPath === ".github/workflows/pantheon-integration-gate.yml"');
+    expect(deployWorkflow).toContain('run.event === "push"');
+    expect(deployWorkflow).toContain('run.head_branch === "dev"');
+    expect(deployWorkflow).toContain('run.conclusion === "success"');
+    expect(deployWorkflow).toContain("github.rest.actions.listWorkflowRunArtifacts");
+    expect(deployWorkflow).toContain("artifact.name === \"pantheon-fe-release-candidate\"");
+    expect(deployWorkflow).toContain("actions/download-artifact@v4");
+    expect(deployWorkflow).toContain("run-id: ${{ steps.gate.outputs.gate_run_id }}");
+    expect(deployScript).toContain("node scripts/release-candidate.mjs verify");
+    expect(deployScript).toContain('--expected-frontend-sha "${SHA}"');
+    expect(deployScript).toContain('--expected-gate-run-id "${GATE_RUN_ID}"');
+    expect(deployScript).toContain('BFF_COMMIT="$(node -e');
     expect(deployScript).toContain('payload.source_commit_known !== true');
-    expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
+    expect(integrationWorkflow).toContain("Upload deployable immutable candidate");
+    expect(integrationWorkflow).toContain("steps.aggregate.outcome == 'success'");
+  });
 
-    const result = rejectedDeploy({
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_BFF_COMMIT: "",
-    });
-    expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
-
-    const abbreviated = rejectedDeploy({
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_BFF_COMMIT: "deadbeef",
-    });
-    expect(abbreviated.status).toBe(2);
-    expect(abbreviated.stderr).toMatch(/exact 40-character SHA/u);
+  it("pre-probes, atomically switches, and conditionally restores and re-probes", () => {
+    expect(deployScript).toContain("flock -n 9");
+    expect(deployScript).toContain("candidate.order_at_switch");
+    expect(deployScript).toContain("candidate pre-switch browser/auth probe");
+    expect(deployScript).toContain('run_release_probe candidate_pre_switch "${RELEASE_DIR}"');
+    expect(deployScript).toContain('sudo mv -Tf "${DEPLOY_ROOT}.next" "${DEPLOY_ROOT}"');
+    expect(deployScript).toContain("post-switch manifest, BFF, and browser/auth probe");
+    expect(deployScript).toContain("rollback_release");
+    expect(deployScript).toContain('run_release_probe rollback ""');
+    expect(deployScript).toContain("rollback.reprobe");
+    expect(deployScript).toContain("Same-SHA artifact replacement rejected");
+    expect(deployScript).toContain("exact live candidate no-op revalidation");
+    expect(deployWorkflow).not.toContain("skip_probe:");
   });
 
   it("keeps every post-deploy acceptance probe read-only", () => {
@@ -154,6 +155,23 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toMatch(/any browser bearer token/u);
     expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
+  });
+
+  it("does not let emergency dispatch bypass probes or leak a generic Vite credential", () => {
+    expect(deployWorkflow).toContain("emergency_override:");
+    expect(deployWorkflow).toContain("override_reason:");
+    expect(deployWorkflow).toContain("integrity, auth, and rollback probes still run");
+    expect(deployScript).toContain("Candidate, auth, post-switch, and rollback probes cannot be skipped");
+
+    const skipped = rejectedDeploy({ PANTHEON_DEPLOY_SKIP_PROBE: "true" });
+    expect(skipped.status).toBe(2);
+    expect(skipped.stderr).toMatch(/cannot be skipped/u);
+
+    const sentinel = "service-role-sentinel-must-not-leak";
+    const credential = rejectedDeploy({ VITE_SERVICE_ROLE_TOKEN: sentinel });
+    expect(credential.status).toBe(2);
+    expect(credential.stderr).toMatch(/non-public Vite credential variable/u);
+    expect(`${credential.stdout}${credential.stderr}`).not.toContain(sentinel);
   });
 
   it.each([

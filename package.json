@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:deploy-release": "bash scripts/test-deploy-dev-vm.sh",
     "contract:drift": "node scripts/contract-drift-check.mjs",
     "contract:drift:update": "node scripts/contract-drift-check.mjs --write",
     "test:contract": "npm run contract:drift && vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",

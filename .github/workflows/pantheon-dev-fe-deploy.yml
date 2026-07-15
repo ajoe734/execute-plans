@@ -1,30 +1,35 @@
 name: Pantheon Dev FE Deploy
 
 on:
-  # Auto-deploy on every merge/push to dev. Decoupled from the FE-BFF
-  # integration gate (which keeps running as an informational PR/push check):
-  # "merge to dev" now == "deploy to dev FE", no manual workflow_dispatch needed.
-  # dev-only target; staging/prod still go through their own promotion path.
-  push:
+  workflow_run:
+    workflows:
+      - Pantheon FE-BFF Integration Gate
+    types:
+      - completed
     branches:
       - dev
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Commit SHA, branch, or tag to deploy. Defaults to dev."
-        required: false
-        default: "dev"
-        type: string
-      bff_commit:
-        description: "Exact Pantheon BFF merge SHA paired with this frontend deployment. Required for manual final proof."
+      candidate_sha:
+        description: "Exact 40-character dev candidate SHA."
         required: false
         default: ""
         type: string
-      skip_probe:
-        description: "Emergency only: deploy without the browser/BFF probe."
+      gate_run_id:
+        description: "Successful Pantheon FE-BFF Integration Gate push run for candidate_sha."
+        required: false
+        default: ""
+        type: string
+      emergency_override:
+        description: "Allow an older gated candidate; integrity, auth, and rollback probes still run."
         required: false
         default: false
         type: boolean
+      override_reason:
+        description: "Audited incident/change reason required for an emergency override."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -36,11 +41,15 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy execute-plans to Pantheon dev VM
+    name: Deploy exact gated candidate to Pantheon dev VM
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'push'
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'dev'
+        )
       }}
     runs-on:
       - self-hosted
@@ -49,27 +58,136 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
-      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
       PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
       PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
-      PANTHEON_DEPLOY_BFF_COMMIT: ${{ inputs.bff_commit || vars.PANTHEON_BFF_SHA || '' }}
-      PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
 
     steps:
-      - name: Checkout target ref
+      - name: Validate exact gate run and immutable artifact
+        id: gate
+        uses: actions/github-script@v7
+        env:
+          REQUESTED_GATE_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.gate_run_id }}
+          REQUESTED_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.candidate_sha }}
+          EMERGENCY_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override || false }}
+          OVERRIDE_REASON: ${{ github.event_name == 'workflow_dispatch' && inputs.override_reason || '' }}
+        with:
+          script: |
+            const shaPattern = /^[0-9a-f]{40}$/i;
+            const runPattern = /^[1-9][0-9]*$/;
+            const digestPattern = /^sha256:[0-9a-f]{64}$/i;
+            const gateRunIdText = String(process.env.REQUESTED_GATE_RUN_ID || "").trim();
+            const requestedSha = String(process.env.REQUESTED_CANDIDATE_SHA || "").trim().toLowerCase();
+            const emergencyOverride = String(process.env.EMERGENCY_OVERRIDE || "false") === "true";
+            const overrideReason = String(process.env.OVERRIDE_REASON || "").trim();
+
+            if (!runPattern.test(gateRunIdText)) {
+              core.setFailed("gate_run_id must identify one exact successful integration-gate run");
+              return;
+            }
+            if (!shaPattern.test(requestedSha)) {
+              core.setFailed("candidate_sha must be one exact 40-character commit SHA");
+              return;
+            }
+            if (emergencyOverride && overrideReason.length < 20) {
+              core.setFailed("emergency_override requires an audited reason of at least 20 characters");
+              return;
+            }
+            if (!emergencyOverride && overrideReason) {
+              core.setFailed("override_reason is only valid with emergency_override=true");
+              return;
+            }
+
+            const gateRunId = Number(gateRunIdText);
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: gateRunId,
+            });
+            const runPath = String(run.path || "").split("@")[0];
+            const runRepo = run.head_repository?.full_name || run.repository?.full_name || "";
+            const validRun =
+              runPath === ".github/workflows/pantheon-integration-gate.yml" &&
+              runRepo.toLowerCase() === `${context.repo.owner}/${context.repo.repo}`.toLowerCase() &&
+              run.event === "push" &&
+              run.head_branch === "dev" &&
+              run.status === "completed" &&
+              run.conclusion === "success" &&
+              String(run.head_sha || "").toLowerCase() === requestedSha;
+            if (!validRun) {
+              core.setFailed(`run ${gateRunId} is not the successful dev push integration gate for ${requestedSha}`);
+              return;
+            }
+
+            const { data: artifactPage } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: gateRunId,
+              name: "pantheon-fe-release-candidate",
+              per_page: 100,
+            });
+            const artifacts = artifactPage.artifacts.filter(
+              (artifact) => artifact.name === "pantheon-fe-release-candidate" && !artifact.expired,
+            );
+            if (artifacts.length !== 1 || !digestPattern.test(String(artifacts[0]?.digest || ""))) {
+              core.setFailed(`run ${gateRunId} must expose one unexpired immutable candidate artifact with a SHA-256 digest`);
+              return;
+            }
+
+            const { data: devRef } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "heads/dev",
+            });
+            const currentDevSha = String(devRef.object.sha || "").toLowerCase();
+            const outOfOrder = currentDevSha !== requestedSha;
+            if (outOfOrder && !emergencyOverride) {
+              core.setFailed(`out-of-order candidate rejected: current dev is ${currentDevSha}, candidate is ${requestedSha}`);
+              return;
+            }
+
+            core.setOutput("candidate_sha", requestedSha);
+            core.setOutput("gate_run_id", gateRunIdText);
+            core.setOutput("github_artifact_digest", String(artifacts[0].digest).toLowerCase());
+            core.setOutput("current_dev_sha", currentDevSha);
+            core.setOutput("emergency_override", emergencyOverride ? "true" : "false");
+            core.setOutput("override_reason", overrideReason);
+            core.setOutput("override_actor", emergencyOverride ? context.actor : "");
+
+      - name: Checkout exact gated candidate
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.TARGET_REF || 'dev' }}
+          ref: ${{ steps.gate.outputs.candidate_sha }}
           fetch-depth: 0
 
-      - name: Resolve deployment SHA
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Recheck candidate order at runner
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "$checkout_sha" != "$CANDIDATE_SHA" ]]; then
+            echo "Checkout mismatch: expected $CANDIDATE_SHA, got $checkout_sha" >&2
+            exit 1
+          fi
+          current_dev_sha="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+          if [[ "$current_dev_sha" != "$CANDIDATE_SHA" && "$EMERGENCY_OVERRIDE" != "true" ]]; then
+            echo "Out-of-order candidate rejected at runner: dev=$current_dev_sha candidate=$CANDIDATE_SHA" >&2
+            exit 1
+          fi
+
+      - name: Download exact gate artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pantheon-fe-release-candidate
+          path: .release-candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.gate.outputs.gate_run_id }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -82,11 +200,26 @@ jobs:
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
 
-      - name: Deploy static build
+      - name: Validate rollback controller on target VM
+        id: rollback_drill
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/test-deploy-dev-vm.sh 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/target-vm-rollback-drill.log"
+
+      - name: Deploy verified candidate
+        id: deploy
         env:
-          PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
-          PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
-          GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+          GITHUB_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_REF: ${{ steps.gate.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
+          PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
+          PANTHEON_DEPLOY_OVERRIDE_ACTOR: ${{ steps.gate.outputs.override_actor }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Upload deploy evidence
@@ -94,6 +227,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-dev-fe-deploy-evidence
+          if-no-files-found: warn
+          include-hidden-files: true
           path: |
             .lovable/audits/current-run/**/*.md
             .lovable/audits/current-run/**/*.json
@@ -101,13 +236,21 @@ jobs:
 
       - name: Summarize deployment
         if: always()
+        env:
+          CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
         run: |
           {
             echo "## Pantheon Dev FE Deploy"
-            echo "- target ref: \`${TARGET_REF}\`"
-            echo "- deployed sha: \`${{ steps.sha.outputs.sha }}\`"
+            echo "- candidate SHA: \`${CANDIDATE_SHA}\`"
+            echo "- integration gate run: \`${GATE_RUN_ID}\`"
+            echo "- GitHub artifact digest: \`${GITHUB_ARTIFACT_DIGEST}\`"
+            echo "- emergency override: \`${EMERGENCY_OVERRIDE}\`"
+            echo "- target VM rollback drill: \`${{ steps.rollback_drill.outcome || 'not-attempted' }}\`"
+            echo "- deployment outcome: \`${{ steps.deploy.outcome || 'not-attempted' }}\`"
             echo "- FE: ${PANTHEON_DEV_FE_HOST}"
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
-            echo "- BFF commit: ${PANTHEON_DEPLOY_BFF_COMMIT:-unknown}"
             echo "- evidence: pantheon-dev-fe-deploy-evidence"
           } >> "$GITHUB_STEP_SUMMARY"
