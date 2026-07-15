@@ -11,7 +11,7 @@ import { ArrowUpRight, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import type { QuarterlyRankingFormula, QuarterlyRankingRow, QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
@@ -580,21 +580,31 @@ export const PersonaFleetPage = () => {
           <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
         </div>
       </header>
-      <div className="flex shrink-0 items-center justify-between">
-        <Tabs
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+        <ToggleGroup
+          type="single"
           value={currentTab}
-          onValueChange={(val) => setActiveTab(val as "production" | "non-production")}
-          className="w-auto"
+          onValueChange={(val) => {
+            if (val === "production" || val === "non-production") {
+              setActiveTab(val);
+            }
+          }}
+          aria-label={t("mgmt.fleet.filter.dataScope")}
+          className="grid w-full max-w-[400px] grid-cols-2 rounded-md bg-muted p-1 text-muted-foreground"
         >
-          <TabsList className="grid w-[400px] grid-cols-2">
-            <TabsTrigger value="production">
-              {t("mgmt.fleet.production")} ({productionCount})
-            </TabsTrigger>
-            <TabsTrigger value="non-production">
-              {t("mgmt.fleet.nonProduction")} ({nonProductionCount})
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+          <ToggleGroupItem
+            value="production"
+            className="h-auto rounded-sm px-3 py-1.5 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+          >
+            {t("mgmt.fleet.production")} ({productionCount})
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="non-production"
+            className="h-auto rounded-sm px-3 py-1.5 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+          >
+            {t("mgmt.fleet.nonProduction")} ({nonProductionCount})
+          </ToggleGroupItem>
+        </ToggleGroup>
         <div className="flex items-center gap-2 text-xs">
           <Button
             size="sm"

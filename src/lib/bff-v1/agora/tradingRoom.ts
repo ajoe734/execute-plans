@@ -37,7 +37,8 @@ export interface TradingRoomStrategyEntry {
   title: string;
   readiness_state: "blocked" | "conditional" | "ready" | "stale";
   dashboard_recipe_id?: string;
-  monitoring_state: "inactive" | "shadow" | "paper_requested" | "monitoring" | "paused";
+  monitoring_state:
+    "inactive" | "shadow" | "paper_requested" | "monitoring" | "paused";
   candidate_count?: number;
   position_count?: number;
   pending_event_counts: {
@@ -206,7 +207,12 @@ export interface TradingDecisionEvent {
   decision_event_id: string;
   dedupe_key?: string;
   event_kind: "entry" | "add" | "reduce" | "exit" | "review";
-  origin: "strategy_signal" | "risk_rule" | "position_rule" | "servant_analysis" | "trader_request";
+  origin:
+    | "strategy_signal"
+    | "risk_rule"
+    | "position_rule"
+    | "servant_analysis"
+    | "trader_request";
   strategy_id: string;
   strategy_spec_registry_id: string;
   candidate_ref?: string;
@@ -275,7 +281,8 @@ export interface TradingDecisionEvent {
     current_state: "valid" | "watch" | "invalidated";
     last_checked_at?: string;
   };
-  suggested_action: "enter" | "add" | "reduce" | "exit" | "review" | "no_action";
+  suggested_action:
+    "enter" | "add" | "reduce" | "exit" | "review" | "no_action";
   suggested_size?: {
     size_hint?: "small" | "medium" | "large" | "full_position";
     portfolio_pct?: number;
@@ -382,8 +389,9 @@ function resolvedBase(baseUrl?: string): string {
  * side (see AG-BE-TR-002) and 401s with AUTH_REQUIRED when the Authorization
  * header is absent. `credentials: "include"` alone does not satisfy that —
  * the BFF checks for a Bearer token, not a cookie. Reuse `buildHeaders()` so
- * live auth transport stays aligned with the shared BFF client, including the
- * VITE_BFF_DEV_BEARER_TOKEN fallback used by hosted dev.
+ * live auth transport stays aligned with the shared BFF client. Hosted dev
+ * authentication must come from an interactive browser session, never a
+ * credential compiled into the public bundle.
  */
 function authHeaders(): Record<string, string> {
   const shared = buildHeaders({ method: "GET" });
@@ -408,7 +416,9 @@ function numberFrom(value: unknown, fallback = 0): number {
 }
 
 function optionalNumberFrom(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function stringFrom(value: unknown, fallback = ""): string {
@@ -416,7 +426,9 @@ function stringFrom(value: unknown, fallback = ""): string {
 }
 
 function stringArrayFrom(value: unknown): string[] {
-  return arrayFrom(value).filter((item): item is string => typeof item === "string");
+  return arrayFrom(value).filter(
+    (item): item is string => typeof item === "string",
+  );
 }
 
 async function parseJson(res: Response): Promise<unknown> {
@@ -441,10 +453,18 @@ function normalizeQueueSummary(value: unknown): TradingRoomQueueSummary {
 }
 
 const READINESS_STATES = new Set(["blocked", "conditional", "ready", "stale"]);
-const MONITORING_STATES = new Set(["inactive", "shadow", "paper_requested", "monitoring", "paused"]);
+const MONITORING_STATES = new Set([
+  "inactive",
+  "shadow",
+  "paper_requested",
+  "monitoring",
+  "paused",
+]);
 const RISK_STATES = new Set(["normal", "watch", "warning", "critical"]);
 
-function normalizeStrategyEntry(value: unknown): TradingRoomStrategyEntry | null {
+function normalizeStrategyEntry(
+  value: unknown,
+): TradingRoomStrategyEntry | null {
   const record = recordFrom(value);
   const strategyId = stringFrom(record.strategy_id ?? record.id);
   if (!strategyId) return null;
@@ -452,7 +472,10 @@ function normalizeStrategyEntry(value: unknown): TradingRoomStrategyEntry | null
   const monitoring = stringFrom(record.monitoring_state);
   return {
     strategy_id: strategyId,
-    strategy_spec_registry_id: stringFrom(record.strategy_spec_registry_id ?? record.registry_id, strategyId),
+    strategy_spec_registry_id: stringFrom(
+      record.strategy_spec_registry_id ?? record.registry_id,
+      strategyId,
+    ),
     title: stringFrom(record.title ?? record.name, strategyId),
     readiness_state: READINESS_STATES.has(readiness)
       ? (readiness as TradingRoomStrategyEntry["readiness_state"])
@@ -474,7 +497,9 @@ function normalizeRiskSummary(value: unknown): TradingRoomRiskSummary {
   const record = recordFrom(value);
   const state = stringFrom(record.state);
   return {
-    state: RISK_STATES.has(state) ? (state as TradingRoomRiskSummary["state"]) : "normal",
+    state: RISK_STATES.has(state)
+      ? (state as TradingRoomRiskSummary["state"])
+      : "normal",
     summary: stringFrom(record.summary) || undefined,
     alerts: stringArrayFrom(record.alerts),
   };
@@ -492,7 +517,9 @@ function extractAggregate(value: unknown): TradingRoomAggregate {
     user_scope_ref: stringFrom(data.user_scope_ref, "unknown"),
     strategies,
     queue_summary: normalizeQueueSummary(data.queue_summary),
-    top_decision_events: arrayFrom(data.top_decision_events) as TradingDecisionEvent[],
+    top_decision_events: arrayFrom(
+      data.top_decision_events,
+    ) as TradingDecisionEvent[],
     position_summaries: arrayFrom(data.position_summaries),
     risk_summary: normalizeRiskSummary(data.risk_summary),
     snapshot_at: stringFrom(data.snapshot_at),
@@ -528,7 +555,9 @@ function extractDetail<T>(value: unknown): T {
  * escape into render-time status maps (and legacy persisted responses remain
  * readable during the migration window).
  */
-function normalizeDataAvailabilityStatus(value: unknown): DataAvailabilityStatus {
+function normalizeDataAvailabilityStatus(
+  value: unknown,
+): DataAvailabilityStatus {
   if (value === "full" || value === "complete") return "complete";
   if (value === "partial") return "partial";
   return "unavailable";
@@ -536,28 +565,44 @@ function normalizeDataAvailabilityStatus(value: unknown): DataAvailabilityStatus
 
 function normalizeWidgetAvailability(value: unknown): TradingRoomWidgetSpec {
   const widget = recordFrom(value);
-  const hasAvailability = Object.prototype.hasOwnProperty.call(widget, "dataAvailability");
+  const hasAvailability = Object.prototype.hasOwnProperty.call(
+    widget,
+    "dataAvailability",
+  );
   return {
     ...(widget as unknown as TradingRoomWidgetSpec),
     ...(hasAvailability
-      ? { dataAvailability: normalizeDataAvailabilityStatus(widget.dataAvailability) }
+      ? {
+          dataAvailability: normalizeDataAvailabilityStatus(
+            widget.dataAvailability,
+          ),
+        }
       : {}),
   };
 }
 
 function normalizeViewAvailability(value: unknown): TradingRoomViewSpec {
   const view = recordFrom(value);
-  const hasAvailability = Object.prototype.hasOwnProperty.call(view, "dataAvailability");
+  const hasAvailability = Object.prototype.hasOwnProperty.call(
+    view,
+    "dataAvailability",
+  );
   return {
     ...(view as unknown as TradingRoomViewSpec),
     ...(hasAvailability
-      ? { dataAvailability: normalizeDataAvailabilityStatus(view.dataAvailability) }
+      ? {
+          dataAvailability: normalizeDataAvailabilityStatus(
+            view.dataAvailability,
+          ),
+        }
       : {}),
     widgets: arrayFrom(view.widgets).map(normalizeWidgetAvailability),
   };
 }
 
-function normalizeWorkspaceProposal(value: unknown): TradingRoomWorkspaceProposal {
+function normalizeWorkspaceProposal(
+  value: unknown,
+): TradingRoomWorkspaceProposal {
   const proposal = recordFrom(extractDetail<unknown>(value));
   const availability = recordFrom(proposal.dataAvailability);
   return {
@@ -577,14 +622,18 @@ function normalizeWorkspaceProposal(value: unknown): TradingRoomWorkspaceProposa
   };
 }
 
-function normalizeWorkspaceAvailability(workspace: TradingRoomWorkspace): TradingRoomWorkspace {
+function normalizeWorkspaceAvailability(
+  workspace: TradingRoomWorkspace,
+): TradingRoomWorkspace {
   return {
     ...workspace,
     views: arrayFrom(workspace.views).map(normalizeViewAvailability),
   };
 }
 
-function normalizeDashboardVersionAvailability(value: unknown): TradingRoomDashboardVersion {
+function normalizeDashboardVersionAvailability(
+  value: unknown,
+): TradingRoomDashboardVersion {
   const version = recordFrom(value);
   return {
     ...(version as unknown as TradingRoomDashboardVersion),
@@ -592,12 +641,16 @@ function normalizeDashboardVersionAvailability(value: unknown): TradingRoomDashb
   };
 }
 
-function normalizeWidgetRevisionAvailability(proposal: WidgetRevisionProposal): WidgetRevisionProposal {
+function normalizeWidgetRevisionAvailability(
+  proposal: WidgetRevisionProposal,
+): WidgetRevisionProposal {
   return {
     ...proposal,
     beforeSpec: normalizeWidgetAvailability(proposal.beforeSpec),
     proposedSpec: normalizeWidgetAvailability(proposal.proposedSpec),
-    dataAvailability: normalizeDataAvailabilityStatus(proposal.dataAvailability),
+    dataAvailability: normalizeDataAvailabilityStatus(
+      proposal.dataAvailability,
+    ),
   };
 }
 
@@ -616,8 +669,10 @@ function fallbackErrorCode(status: number): ErrorCode {
 function errorMessageFrom(value: unknown, fallback: string): string {
   const root = recordFrom(value);
   const error = recordFrom(root.error);
-  if (typeof error.message === "string" && error.message.trim()) return error.message;
-  if (typeof root.message === "string" && root.message.trim()) return root.message;
+  if (typeof error.message === "string" && error.message.trim())
+    return error.message;
+  if (typeof root.message === "string" && root.message.trim())
+    return root.message;
   return fallback;
 }
 
@@ -630,7 +685,11 @@ function errorDetailsFrom(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function makeTypedBffError(res: Response, body: unknown, fallbackMessage: string): BffError {
+function makeTypedBffError(
+  res: Response,
+  body: unknown,
+  fallbackMessage: string,
+): BffError {
   const correlationId = res.headers.get("X-Correlation-Id") ?? undefined;
   const normalized = normalizeBffErrorEnvelope(body, res.status, correlationId);
   if (normalized) return new BffError(res.status, normalized);
@@ -643,14 +702,19 @@ function makeTypedBffError(res: Response, body: unknown, fallbackMessage: string
       message: errorMessageFrom(body, fallbackMessage),
       retryable: res.status === 0 || res.status === 429 || res.status >= 500,
       userActionable: res.status >= 400 && res.status < 500,
-      correlationId: correlationId ?? `corr_${Math.random().toString(36).slice(2, 10)}`,
+      correlationId:
+        correlationId ?? `corr_${Math.random().toString(36).slice(2, 10)}`,
       details: errorDetailsFrom(body),
     },
   };
   return new BffError(res.status, envelope);
 }
 
-async function throwTypedBffError(res: Response, method: string, url: string): Promise<never> {
+async function throwTypedBffError(
+  res: Response,
+  method: string,
+  url: string,
+): Promise<never> {
   const body = await parseJson(res);
   throw makeTypedBffError(res, body, `${method} ${url} failed ${res.status}`);
 }
@@ -684,23 +748,31 @@ function extractAcceptedWorkspace(value: unknown): {
     const version = recordFrom(data.version);
     return {
       workspace: normalizeWorkspaceAvailability(data.workspace),
-      version: version.id ? normalizeDashboardVersionAvailability(version) : undefined,
+      version: version.id
+        ? normalizeDashboardVersionAvailability(version)
+        : undefined,
     };
   }
   if (isTradingRoomWorkspace(data)) {
     return {
-      workspace: normalizeWorkspaceAvailability(data as unknown as TradingRoomWorkspace),
+      workspace: normalizeWorkspaceAvailability(
+        data as unknown as TradingRoomWorkspace,
+      ),
     };
   }
   return {
-    workspaceId: typeof data.workspaceId === "string" ? data.workspaceId : undefined,
+    workspaceId:
+      typeof data.workspaceId === "string" ? data.workspaceId : undefined,
     version: recordFrom(data.version).id
       ? normalizeDashboardVersionAvailability(data.version)
       : undefined,
   };
 }
 
-function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoomWorkspaceResult {
+function extractWorkspaceResult(
+  value: unknown,
+  etag: string | null,
+): TradingRoomWorkspaceResult {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   const meta = recordFrom(root.meta);
@@ -718,68 +790,100 @@ function extractWorkspaceResult(value: unknown, etag: string | null): TradingRoo
   if (isTradingRoomWorkspace(data)) {
     return {
       etag,
-      versionId: typeof meta.version_id === "string" ? meta.version_id : undefined,
-      workspace: normalizeWorkspaceAvailability(data as unknown as TradingRoomWorkspace),
+      versionId:
+        typeof meta.version_id === "string" ? meta.version_id : undefined,
+      workspace: normalizeWorkspaceAvailability(
+        data as unknown as TradingRoomWorkspace,
+      ),
     };
   }
-  throw makeMalformedBffEnvelope("Trading Room workspace response did not include a workspace.");
+  throw makeMalformedBffEnvelope(
+    "Trading Room workspace response did not include a workspace.",
+  );
 }
 
-function extractWidgetRevisionProposal(value: unknown, etag: string | null): WidgetRevisionProposalResult {
+function extractWidgetRevisionProposal(
+  value: unknown,
+  etag: string | null,
+): WidgetRevisionProposalResult {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   const proposal = recordFrom(data.proposal ?? data);
-  if (!proposal.id || !recordFrom(proposal.beforeSpec).id || !recordFrom(proposal.proposedSpec).id) {
-    throw makeMalformedBffEnvelope("Widget revision proposal response did not include before/after specs.");
+  if (
+    !proposal.id ||
+    !recordFrom(proposal.beforeSpec).id ||
+    !recordFrom(proposal.proposedSpec).id
+  ) {
+    throw makeMalformedBffEnvelope(
+      "Widget revision proposal response did not include before/after specs.",
+    );
   }
   return {
     etag,
-    proposal: normalizeWidgetRevisionAvailability(proposal as unknown as WidgetRevisionProposal),
+    proposal: normalizeWidgetRevisionAvailability(
+      proposal as unknown as WidgetRevisionProposal,
+    ),
   };
 }
 
-function extractWidgetRevisionAcceptResult(value: unknown, etag: string | null): WidgetRevisionAcceptResult {
+function extractWidgetRevisionAcceptResult(
+  value: unknown,
+  etag: string | null,
+): WidgetRevisionAcceptResult {
   const root = recordFrom(value);
   const data = recordFrom(root.data ?? root);
   const workspaceResult = extractWorkspaceResult(value, etag);
   const proposal = recordFrom(data.proposal);
   if (!proposal.id) {
-    throw makeMalformedBffEnvelope("Widget revision accept response did not include a proposal.");
+    throw makeMalformedBffEnvelope(
+      "Widget revision accept response did not include a proposal.",
+    );
   }
-  const appliedAction = typeof data.appliedAction === "string"
-    ? data.appliedAction as WidgetRevisionAcceptResult["appliedAction"]
-    : undefined;
-  const copiedWidgetId = typeof data.copiedWidgetId === "string" ? data.copiedWidgetId : null;
+  const appliedAction =
+    typeof data.appliedAction === "string"
+      ? (data.appliedAction as WidgetRevisionAcceptResult["appliedAction"])
+      : undefined;
+  const copiedWidgetId =
+    typeof data.copiedWidgetId === "string" ? data.copiedWidgetId : null;
   return {
     ...workspaceResult,
     appliedAction,
     copiedWidgetId,
-    proposal: normalizeWidgetRevisionAvailability(proposal as unknown as WidgetRevisionProposal),
+    proposal: normalizeWidgetRevisionAvailability(
+      proposal as unknown as WidgetRevisionProposal,
+    ),
   };
 }
 
-function extractWorkspaceVersions(value: unknown): TradingRoomDashboardVersion[] {
+function extractWorkspaceVersions(
+  value: unknown,
+): TradingRoomDashboardVersion[] {
   const root = recordFrom(value);
   const data = root.data ?? root;
   if (!Array.isArray(data)) return [];
   return data.map(normalizeDashboardVersionAvailability);
 }
 
-function mutationHeaders(options?: TradingRoomWorkspaceMutationOptions): Record<string, string> {
+function mutationHeaders(
+  options?: TradingRoomWorkspaceMutationOptions,
+): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
     ...authHeaders(),
   };
   if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  if (options?.idempotencyKey)
+    headers["Idempotency-Key"] = options.idempotencyKey;
   return headers;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Get the user-scoped Trading Room aggregate (all strategies, queue summary, risk). */
-export async function getTradingRoom(baseUrl?: string): Promise<TradingRoomAggregate> {
+export async function getTradingRoom(
+  baseUrl?: string,
+): Promise<TradingRoomAggregate> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room`;
   const res = await fetch(url, {
@@ -789,7 +893,9 @@ export async function getTradingRoom(baseUrl?: string): Promise<TradingRoomAggre
   });
   if (!res.ok) {
     const body = await parseJson(res);
-    const message = recordFrom(recordFrom(body).error).message ?? `GET ${url} failed ${res.status}`;
+    const message =
+      recordFrom(recordFrom(body).error).message ??
+      `GET ${url} failed ${res.status}`;
     throw new Error(String(message));
   }
   const body = await parseJson(res);
@@ -811,7 +917,9 @@ export async function getTradingRoomStrategy(
   if (res.status === 404) return null;
   if (!res.ok) {
     const body = await parseJson(res);
-    const message = recordFrom(recordFrom(body).error).message ?? `GET ${url} failed ${res.status}`;
+    const message =
+      recordFrom(recordFrom(body).error).message ??
+      `GET ${url} failed ${res.status}`;
     throw new Error(String(message));
   }
   const body = await parseJson(res);
@@ -848,7 +956,9 @@ export async function listDecisionEvents(
   });
   if (!res.ok) {
     const body = await parseJson(res);
-    const message = recordFrom(recordFrom(body).error).message ?? `GET ${url} failed ${res.status}`;
+    const message =
+      recordFrom(recordFrom(body).error).message ??
+      `GET ${url} failed ${res.status}`;
     throw new Error(String(message));
   }
   const body = await parseJson(res);
@@ -896,7 +1006,9 @@ export async function getDecisionEvent(
   if (res.status === 404) return null;
   if (!res.ok) {
     const body = await parseJson(res);
-    const message = recordFrom(recordFrom(body).error).message ?? `GET ${url} failed ${res.status}`;
+    const message =
+      recordFrom(recordFrom(body).error).message ??
+      `GET ${url} failed ${res.status}`;
     throw new Error(String(message));
   }
   const body = await parseJson(res);
@@ -917,7 +1029,8 @@ export async function createTradingRoomWorkspaceProposal(
     "Content-Type": "application/json",
     ...authHeaders(),
   };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  if (options?.idempotencyKey)
+    headers["Idempotency-Key"] = options.idempotencyKey;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
@@ -955,7 +1068,9 @@ export async function getTradingRoomWorkspaceProposal(
 export async function acceptTradingRoomWorkspaceProposal(
   strategyId: string,
   proposalId: string,
-  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  body: AcceptTradingRoomWorkspaceProposalRequest = {
+    expectedStatus: "preview",
+  },
   options?: { idempotencyKey?: string },
   baseUrl?: string,
 ): Promise<TradingRoomWorkspace> {
@@ -973,7 +1088,9 @@ export async function acceptTradingRoomWorkspaceProposal(
 export async function acceptTradingRoomWorkspaceProposalWithMeta(
   strategyId: string,
   proposalId: string,
-  body: AcceptTradingRoomWorkspaceProposalRequest = { expectedStatus: "preview" },
+  body: AcceptTradingRoomWorkspaceProposalRequest = {
+    expectedStatus: "preview",
+  },
   options?: { idempotencyKey?: string },
   baseUrl?: string,
 ): Promise<TradingRoomWorkspaceResult> {
@@ -984,7 +1101,8 @@ export async function acceptTradingRoomWorkspaceProposalWithMeta(
     "Content-Type": "application/json",
     ...authHeaders(),
   };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  if (options?.idempotencyKey)
+    headers["Idempotency-Key"] = options.idempotencyKey;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
@@ -1006,7 +1124,9 @@ export async function acceptTradingRoomWorkspaceProposalWithMeta(
   if (accepted.workspaceId) {
     return getTradingRoomWorkspaceWithMeta(accepted.workspaceId, baseUrl);
   }
-  throw makeMalformedBffEnvelope("Trading Room accept response did not include a workspace.");
+  throw makeMalformedBffEnvelope(
+    "Trading Room accept response did not include a workspace.",
+  );
 }
 
 /** Get an accepted Trading Room workspace by ID. */
@@ -1143,7 +1263,10 @@ export async function acceptWidgetRevisionProposal(
     await throwTypedBffError(res, "POST", url);
   }
   const responseBody = await parseJson(res);
-  return extractWidgetRevisionAcceptResult(responseBody, res.headers.get("ETag"));
+  return extractWidgetRevisionAcceptResult(
+    responseBody,
+    res.headers.get("ETag"),
+  );
 }
 
 /**
@@ -1168,7 +1291,8 @@ export async function decideOnEvent(
     ...authHeaders(),
   };
   if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  if (options?.idempotencyKey)
+    headers["Idempotency-Key"] = options.idempotencyKey;
   if (options?.requestId) headers["X-Request-Id"] = options.requestId;
   const res = await fetch(url, {
     method: "POST",

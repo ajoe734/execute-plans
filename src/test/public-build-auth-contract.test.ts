@@ -16,13 +16,11 @@ import {
   bearerAuthorization as scriptBearerAuthorization,
   normalizeBearerToken as normalizeScriptBearerToken,
 } from "../../scripts/lib/bearer-token.mjs";
-import {
-  PUBLIC_DEV_VIEWER_BEARER_TOKEN,
-  validatePublicBuildBearerToken,
-} from "@/config/publicBuildAuth";
+import { validatePublicBuildBearerToken } from "@/config/publicBuildAuth";
 import { validatePublicSupabaseConfig } from "@/config/publicSupabase";
 
 const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
+const trackedViewerIdentity = ["pantheon-dev-browser", "viewer"].join(":");
 // These two subprocess checks are optional in a browser-free unit-test phase;
 // the workflow provisions Chromium separately before its Playwright phase.
 const chromiumInstalled = existsSync(chromium.executablePath());
@@ -47,18 +45,22 @@ afterEach(() => {
 
 describe("public frontend build auth boundary", () => {
   it("requires valid public Supabase client configuration without accepting secret keys", () => {
-    expect(validatePublicSupabaseConfig(
-      "https://project.supabase.example",
-      "sb_publishable_test-key",
-    )).toEqual({
+    expect(
+      validatePublicSupabaseConfig(
+        "https://project.supabase.example",
+        "sb_publishable_test-key",
+      ),
+    ).toEqual({
       publishableKey: "sb_publishable_test-key",
       url: "https://project.supabase.example",
     });
     const legacyAnonKey = syntheticSupabaseJwt("anon");
-    expect(validatePublicSupabaseConfig(
-      "https://project.supabase.example",
-      legacyAnonKey,
-    )).toEqual({
+    expect(
+      validatePublicSupabaseConfig(
+        "https://project.supabase.example",
+        legacyAnonKey,
+      ),
+    ).toEqual({
       publishableKey: legacyAnonKey,
       url: "https://project.supabase.example",
     });
@@ -67,10 +69,19 @@ describe("public frontend build auth boundary", () => {
       ["https://project.supabase.example", undefined],
       [" project.supabase.example", "sb_publishable_test-key"],
       ["ftp://project.supabase.example", "sb_publishable_test-key"],
-      ["https://user:password@project.supabase.example", "sb_publishable_test-key"],
+      [
+        "https://user:password@project.supabase.example",
+        "sb_publishable_test-key",
+      ],
       ["https://project.supabase.example", "sb_secret_service-role-key"],
-      ["https://project.supabase.example", syntheticSupabaseJwt("service_role")],
-      ["https://project.supabase.example", syntheticSupabaseJwt("authenticated")],
+      [
+        "https://project.supabase.example",
+        syntheticSupabaseJwt("service_role"),
+      ],
+      [
+        "https://project.supabase.example",
+        syntheticSupabaseJwt("authenticated"),
+      ],
       ["https://project.supabase.example", "not.a.valid-jwt"],
     ] as const) {
       expect(() => validatePublicSupabaseConfig(url, publishableKey)).toThrow(
@@ -79,67 +90,59 @@ describe("public frontend build auth boundary", () => {
     }
   });
 
-  it("accepts only empty or the canonical dev viewer identity", () => {
+  it("accepts only an empty public build bearer", () => {
     expect(validatePublicBuildBearerToken("")).toBe("");
     expect(validatePublicBuildBearerToken(undefined)).toBe("");
-    expect(validatePublicBuildBearerToken(PUBLIC_DEV_VIEWER_BEARER_TOKEN)).toBe(
-      PUBLIC_DEV_VIEWER_BEARER_TOKEN,
-    );
     for (const rejected of [
       " ",
-      ` ${PUBLIC_DEV_VIEWER_BEARER_TOKEN}`,
-      `${PUBLIC_DEV_VIEWER_BEARER_TOKEN} `,
-      PUBLIC_DEV_VIEWER_BEARER_TOKEN.toUpperCase(),
+      trackedViewerIdentity,
+      ` ${trackedViewerIdentity}`,
+      `${trackedViewerIdentity} `,
+      trackedViewerIdentity.toUpperCase(),
       "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
     ]) {
       expect(() => validatePublicBuildBearerToken(rejected)).toThrow(
-        /canonical public dev viewer identity/,
+        /must be empty; browser bearer credentials are forbidden/,
       );
     }
   });
 
-  it(
-    "rejects a privileged token at the standard Vite build boundary",
-    () => {
-      const result = spawnSync("npm", ["run", "build"], {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          VITE_BFF_DEV_BEARER_TOKEN:
-            "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
-        },
-      });
+  it("rejects a privileged token at the standard Vite build boundary", () => {
+    const result = spawnSync("npm", ["run", "build"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        VITE_BFF_DEV_BEARER_TOKEN:
+          "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+      },
+    });
 
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}\n${result.stderr}`).toMatch(
-        /canonical public dev viewer identity/,
-      );
-    },
-    30_000,
-  );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /must be empty; browser bearer credentials are forbidden/,
+    );
+  }, 30_000);
 
-  it(
-    "rejects a build before bundling when public Supabase configuration is missing",
-    () => {
-      const result = spawnSync("npm", ["run", "build"], {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          VITE_BFF_DEV_BEARER_TOKEN: "",
-          VITE_SUPABASE_PUBLISHABLE_KEY: "",
-          VITE_SUPABASE_URL: "",
-        },
-      });
-      const output = `${result.stdout}\n${result.stderr}`;
+  it("rejects a build before bundling when public Supabase configuration is missing", () => {
+    const result = spawnSync("npm", ["run", "build"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        VITE_BFF_DEV_BEARER_TOKEN: "",
+        VITE_SUPABASE_PUBLISHABLE_KEY: "",
+        VITE_SUPABASE_URL: "",
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
 
-      expect(result.status).not.toBe(0);
-      expect(output).toMatch(/VITE_SUPABASE_URL is required public browser configuration/);
-      expect(output).not.toMatch(/supabaseUrl is required/);
-    },
-    30_000,
-  );
+    expect(result.status).not.toBe(0);
+    expect(output).toMatch(
+      /VITE_SUPABASE_URL is required public browser configuration/,
+    );
+    expect(output).not.toMatch(/supabaseUrl is required/);
+  }, 30_000);
 
   it("rejects a privileged token before the standard Vite dev server can bind", () => {
     const result = spawnSync(
@@ -169,15 +172,16 @@ describe("public frontend build auth boundary", () => {
     expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /canonical public dev viewer identity/,
+      /must be empty; browser bearer credentials are forbidden/,
     );
     expect(`${result.stdout}\n${result.stderr}`).not.toMatch(/Local:\s+http/i);
   });
 
   it.each([
     " ",
-    ` ${PUBLIC_DEV_VIEWER_BEARER_TOKEN}`,
-    `${PUBLIC_DEV_VIEWER_BEARER_TOKEN} `,
+    trackedViewerIdentity,
+    ` ${trackedViewerIdentity}`,
+    `${trackedViewerIdentity} `,
   ])(
     "rejects raw whitespace variant %j at the Vite build boundary",
     (token) => {
@@ -192,23 +196,29 @@ describe("public frontend build auth boundary", () => {
 
       expect(result.status).not.toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toMatch(
-        /canonical public dev viewer identity/,
+        /must be empty; browser bearer credentials are forbidden/,
       );
     },
     30_000,
   );
 
   it("requires an explicit credential for hosted or external E2E", () => {
-    expect(() => authToken({
-      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
-    })).toThrow(/short-lived BFF_AUTH_TOKEN/);
-    expect(authToken({
-      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
-      token: "signed-short-lived-test-token",
-    })).toBe("signed-short-lived-test-token");
-    expect(authToken({
-      env: { PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173" },
-    })).toMatch(/^op-fe-gate:/);
+    expect(() =>
+      authToken({
+        env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+      }),
+    ).toThrow(/short-lived BFF_AUTH_TOKEN/);
+    expect(
+      authToken({
+        env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+        token: "signed-short-lived-test-token",
+      }),
+    ).toBe("signed-short-lived-test-token");
+    expect(
+      authToken({
+        env: { PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173" },
+      }),
+    ).toMatch(/^op-fe-gate:/);
   });
 
   it.each([
@@ -226,51 +236,82 @@ describe("public frontend build auth boundary", () => {
     "Bearer Bearer",
     "Bearer Bearer signed-token",
     "signed-token\nworkflow-command",
-  ])("rejects blank or Bearer-only explicit credentials before network access (%j)", (token) => {
-    expect(() => authToken({ env: {}, token })).toThrow(/non-blank bearer token/);
-    expect(() => bearerHeader(token)).toThrow(/non-blank bearer token/);
-    expect(() => devLoginSession({ token })).toThrow(/non-blank bearer token/);
-  });
+  ])(
+    "rejects blank or Bearer-only explicit credentials before network access (%j)",
+    (token) => {
+      expect(() => authToken({ env: {}, token })).toThrow(
+        /non-blank bearer token/,
+      );
+      expect(() => bearerHeader(token)).toThrow(/non-blank bearer token/);
+      expect(() => devLoginSession({ token })).toThrow(
+        /non-blank bearer token/,
+      );
+    },
+  );
 
   it("does not silently replace a whitespace credential environment variable with fixture auth", () => {
-    expect(() => authToken({
-      env: {
-        BFF_AUTH_TOKEN: " ",
-        PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9000",
-      },
-    })).toThrow(/non-blank bearer token/);
+    expect(() =>
+      authToken({
+        env: {
+          BFF_AUTH_TOKEN: " ",
+          PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9000",
+        },
+      }),
+    ).toThrow(/non-blank bearer token/);
   });
 
   it("selects explicit and RBAC-matrix role tokens without trimming credentials", () => {
-    expect(roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
-      PANTHEON_BFF_OPERATOR_A_TOKEN: "operator-a-token",
-    })).toBe("operator-a-token");
-    expect(roleTokenFromEnv("operator", [], {
-      PANTHEON_BFF_OPERATOR_TOKEN: "generic-operator-token",
-    })).toBe("generic-operator-token");
-    expect(roleTokenFromEnv("operator", [], {
-      PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({ operator: "matrix-operator-token" }),
-    })).toBe("matrix-operator-token");
+    expect(
+      roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
+        PANTHEON_BFF_OPERATOR_A_TOKEN: "operator-a-token",
+      }),
+    ).toBe("operator-a-token");
+    expect(
+      roleTokenFromEnv("operator", [], {
+        PANTHEON_BFF_OPERATOR_TOKEN: "generic-operator-token",
+      }),
+    ).toBe("generic-operator-token");
+    expect(
+      roleTokenFromEnv("operator", [], {
+        PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({
+          operator: "matrix-operator-token",
+        }),
+      }),
+    ).toBe("matrix-operator-token");
 
-    for (const token of [" operator-token", "operator-token ", "operator token"]) {
-      expect(() => roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
-        PANTHEON_BFF_OPERATOR_A_TOKEN: token,
-      })).toThrow(/non-blank bearer token/);
-      expect(() => roleTokenFromEnv("operator", [], {
-        PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({ operator: token }),
-      })).toThrow(/non-blank bearer token/);
+    for (const token of [
+      " operator-token",
+      "operator-token ",
+      "operator token",
+    ]) {
+      expect(() =>
+        roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
+          PANTHEON_BFF_OPERATOR_A_TOKEN: token,
+        }),
+      ).toThrow(/non-blank bearer token/);
+      expect(() =>
+        roleTokenFromEnv("operator", [], {
+          PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({ operator: token }),
+        }),
+      ).toThrow(/non-blank bearer token/);
     }
   });
 
   it("accepts one exact Bearer scheme separator and returns the opaque credential", () => {
-    expect(authToken({ env: {}, token: "Bearer signed-token" })).toBe("signed-token");
+    expect(authToken({ env: {}, token: "Bearer signed-token" })).toBe(
+      "signed-token",
+    );
     expect(bearerHeader("Bearer signed-token")).toBe("Bearer signed-token");
   });
 
   it("applies the same strict normalization to changed Node live probes", () => {
     expect(normalizeScriptBearerToken("signed-token")).toBe("signed-token");
-    expect(normalizeScriptBearerToken("Bearer signed-token")).toBe("signed-token");
-    expect(scriptBearerAuthorization("Bearer signed-token")).toBe("Bearer signed-token");
+    expect(normalizeScriptBearerToken("Bearer signed-token")).toBe(
+      "signed-token",
+    );
+    expect(scriptBearerAuthorization("Bearer signed-token")).toBe(
+      "Bearer signed-token",
+    );
     for (const rejected of [
       "",
       " signed-token",
@@ -293,41 +334,57 @@ describe("public frontend build auth boundary", () => {
   it("does not let an explicit local fixture token bypass an external frontend origin", async () => {
     const browserOperations: string[] = [];
     const page = {
-      addInitScript: async () => { browserOperations.push("addInitScript"); },
-      evaluate: async () => { browserOperations.push("evaluate"); },
-      goto: async () => { browserOperations.push("goto"); },
+      addInitScript: async () => {
+        browserOperations.push("addInitScript");
+      },
+      evaluate: async () => {
+        browserOperations.push("evaluate");
+      },
+      goto: async () => {
+        browserOperations.push("goto");
+      },
     } as unknown as Parameters<typeof installOidcDevLogin>[0];
 
-    await expect(installOidcDevLogin(page, {
-      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
-      goto: false,
-      token: LOCAL_FIXTURE_AUTH_TOKEN,
-    })).rejects.toThrow(/proven loopback-only E2E target/);
+    await expect(
+      installOidcDevLogin(page, {
+        env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+        goto: false,
+        token: LOCAL_FIXTURE_AUTH_TOKEN,
+      }),
+    ).rejects.toThrow(/proven loopback-only E2E target/);
     expect(browserOperations).toEqual([]);
 
-    expect(devLoginSession({
-      env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
-      token: "signed-short-lived-test-token",
-    }).token).toBe("signed-short-lived-test-token");
-    expect(() => devLoginSession({
-      env: {},
-      pageBaseUrl: "https://fe.example.test",
-      roles: ["viewer"],
-    })).toThrow(/proven loopback-only E2E target/);
-    expect(() => devLoginSession({
-      env: {
-        PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test",
-        PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
-      },
-      token: LOCAL_FIXTURE_AUTH_TOKEN,
-    })).toThrow(/proven loopback-only E2E target/);
+    expect(
+      devLoginSession({
+        env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
+        token: "signed-short-lived-test-token",
+      }).token,
+    ).toBe("signed-short-lived-test-token");
+    expect(() =>
+      devLoginSession({
+        env: {},
+        pageBaseUrl: "https://fe.example.test",
+        roles: ["viewer"],
+      }),
+    ).toThrow(/proven loopback-only E2E target/);
+    expect(() =>
+      devLoginSession({
+        env: {
+          PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test",
+          PANTHEON_FE_BASE_URL: "http://127.0.0.1:5173",
+        },
+        token: LOCAL_FIXTURE_AUTH_TOKEN,
+      }),
+    ).toThrow(/proven loopback-only E2E target/);
   });
 
   it("rejects an explicit local fixture token for an external browser-visible BFF", () => {
-    expect(() => authToken({
-      env: { PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test" },
-      token: LOCAL_FIXTURE_AUTH_TOKEN,
-    })).toThrow(/tracked fixture credentials are local-only/);
+    expect(() =>
+      authToken({
+        env: { PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test" },
+        token: LOCAL_FIXTURE_AUTH_TOKEN,
+      }),
+    ).toThrow(/tracked fixture credentials are local-only/);
   });
 
   it.each([
@@ -360,9 +417,10 @@ describe("public frontend build auth boundary", () => {
     expect(authToken({ env, token: LOCAL_FIXTURE_AUTH_TOKEN })).toBe(
       LOCAL_FIXTURE_AUTH_TOKEN,
     );
-    expect(devLoginSession({ env, goto: false, token: LOCAL_FIXTURE_AUTH_TOKEN }).token).toBe(
-      LOCAL_FIXTURE_AUTH_TOKEN,
-    );
+    expect(
+      devLoginSession({ env, goto: false, token: LOCAL_FIXTURE_AUTH_TOKEN })
+        .token,
+    ).toBe(LOCAL_FIXTURE_AUTH_TOKEN);
   });
 
   it("classifies the integration-gate process env from browser-visible targets", () => {
@@ -418,16 +476,20 @@ describe("public frontend build auth boundary", () => {
   });
 
   it("uses the canonical frontend target before compatibility aliases", () => {
-    expect(targetsExternalE2eEnvironment({
-      PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
-      FRONTEND_BASE_URL: "https://stale-fe.example.test",
-      PLAYWRIGHT_BASE_URL: "https://stale-playwright.example.test",
-    })).toBe(false);
-    expect(targetsExternalE2eEnvironment({
-      PANTHEON_FE_BASE_URL: "",
-      FRONTEND_BASE_URL: "https://fe.example.test",
-      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4173",
-    })).toBe(true);
+    expect(
+      targetsExternalE2eEnvironment({
+        PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
+        FRONTEND_BASE_URL: "https://stale-fe.example.test",
+        PLAYWRIGHT_BASE_URL: "https://stale-playwright.example.test",
+      }),
+    ).toBe(false);
+    expect(
+      targetsExternalE2eEnvironment({
+        PANTHEON_FE_BASE_URL: "",
+        FRONTEND_BASE_URL: "https://fe.example.test",
+        PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4173",
+      }),
+    ).toBe(true);
   });
 
   it.each([
@@ -440,7 +502,9 @@ describe("public frontend build auth boundary", () => {
   ])("recognizes exact loopback target %s", (target) => {
     const env = { PANTHEON_FE_BASE_URL: target };
     expect(targetsExternalE2eEnvironment(env)).toBe(false);
-    expect(authToken({ env })).toBe("op-fe-gate:operator,reviewer,approver:mfa");
+    expect(authToken({ env })).toBe(
+      "op-fe-gate:operator,reviewer,approver:mfa",
+    );
   });
 
   it("treats the alternate F08 live-write opt-in as external", () => {
@@ -450,8 +514,9 @@ describe("public frontend build auth boundary", () => {
   });
 
   it("keeps tracked privileged fallbacks out of every network-capable E2E probe", () => {
-    const allNetworkE2ePaths = filesRecursively("e2e")
-      .filter((file) => /\.spec\.ts$/u.test(file));
+    const allNetworkE2ePaths = filesRecursively("e2e").filter((file) =>
+      /\.spec\.ts$/u.test(file),
+    );
     const hostedE2ePaths = allNetworkE2ePaths.filter((file) =>
       /hosted.*\.spec\.ts$/u.test(file),
     );
@@ -483,7 +548,9 @@ describe("public frontend build auth boundary", () => {
     ]) {
       const probeSource = readFileSync(file, "utf8");
       expect(probeSource).toContain("./lib/bearer-token.mjs");
-      expect(probeSource).not.toMatch(/Authorization:\s*`Bearer \$\{BEARER_TOKEN\}`/u);
+      expect(probeSource).not.toMatch(
+        /Authorization:\s*`Bearer \$\{BEARER_TOKEN\}`/u,
+      );
     }
   });
 
@@ -566,7 +633,9 @@ describe("public frontend build auth boundary", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/08-create-intent|20-portfolio-book-monitor/);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /08-create-intent|20-portfolio-book-monitor/,
+    );
   }, 30_000);
 
   it.skipIf(!chromiumInstalled)(
@@ -659,7 +728,9 @@ describe("public frontend build auth boundary", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/live readiness cards to Trading Room workspace/);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /live readiness cards to Trading Room workspace/,
+    );
   }, 30_000);
 
   it.each([
@@ -685,7 +756,8 @@ describe("public frontend build auth boundary", () => {
       name: "Agora hosted responsive parity",
       script: "e2e/agora-narrow-responsive-hosted.spec.ts",
       optIn: {
-        AG_UIPOL_011_EXPECTED_FE_SHA: "0123456789abcdef0123456789abcdef01234567",
+        AG_UIPOL_011_EXPECTED_FE_SHA:
+          "0123456789abcdef0123456789abcdef01234567",
         AG_UIPOL_011_FE_BASE_URL: "https://fe.example.test",
       },
     },
@@ -699,34 +771,40 @@ describe("public frontend build auth boundary", () => {
       script: "e2e/evochain009.spec.ts",
       optIn: { PANTHEON_HOSTED_E2E: "1" },
     },
-  ])("fails $name before test execution without an explicit token", ({ script, optIn }) => {
-    const env = {
-      ...process.env,
-      PANTHEON_HOSTED_E2E: "",
-      FE_INT_GATE_LIVE_BFF: "",
-      RUN_LIVE_BFF_CONTRACTS: "",
-      ...optIn,
-    };
-    for (const key of [
-      "BFF_AUTH_TOKEN",
-      "PANTHEON_BFF_OPERATOR_A_TOKEN",
-      "PANTHEON_BFF_OPERATOR_TOKEN",
-      "PANTHEON_BFF_RBAC_TOKENS_JSON",
-      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-      "PANTHEON_BFF_SMOKE_TOKEN",
-      "VITE_BFF_DEV_BEARER_TOKEN",
-    ]) {
-      delete env[key];
-    }
-    const result = spawnSync(
-      "npx",
-      ["playwright", "test", script, "--list", "--reporter=line"],
-      { cwd: process.cwd(), encoding: "utf8", env },
-    );
+  ])(
+    "fails $name before test execution without an explicit token",
+    ({ script, optIn }) => {
+      const env = {
+        ...process.env,
+        PANTHEON_HOSTED_E2E: "",
+        FE_INT_GATE_LIVE_BFF: "",
+        RUN_LIVE_BFF_CONTRACTS: "",
+        ...optIn,
+      };
+      for (const key of [
+        "BFF_AUTH_TOKEN",
+        "PANTHEON_BFF_OPERATOR_A_TOKEN",
+        "PANTHEON_BFF_OPERATOR_TOKEN",
+        "PANTHEON_BFF_RBAC_TOKENS_JSON",
+        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+        "PANTHEON_BFF_SMOKE_TOKEN",
+        "VITE_BFF_DEV_BEARER_TOKEN",
+      ]) {
+        delete env[key];
+      }
+      const result = spawnSync(
+        "npx",
+        ["playwright", "test", script, "--list", "--reporter=line"],
+        { cwd: process.cwd(), encoding: "utf8", env },
+      );
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/explicit short-lived BFF_AUTH_TOKEN|short-lived BFF_AUTH_TOKEN/);
-  }, 30_000);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(
+        /explicit short-lived BFF_AUTH_TOKEN|short-lived BFF_AUTH_TOKEN/,
+      );
+    },
+    30_000,
+  );
 
   it.each([
     {
@@ -750,38 +828,43 @@ describe("public frontend build auth boundary", () => {
       name: "Agora hosted responsive parity",
       script: "e2e/agora-narrow-responsive-hosted.spec.ts",
       optIn: {
-        AG_UIPOL_011_EXPECTED_FE_SHA: "0123456789abcdef0123456789abcdef01234567",
+        AG_UIPOL_011_EXPECTED_FE_SHA:
+          "0123456789abcdef0123456789abcdef01234567",
         AG_UIPOL_011_FE_BASE_URL: "https://fe.example.test",
       },
     },
-  ])("rejects the tracked fixture token in $name before any hosted request", ({ script, optIn }) => {
-    const env = {
-      ...process.env,
-      PANTHEON_HOSTED_E2E: "",
-      BFF_AUTH_TOKEN: LOCAL_FIXTURE_AUTH_TOKEN,
-      ...optIn,
-    };
-    for (const key of [
-      "PANTHEON_BFF_OPERATOR_A_TOKEN",
-      "PANTHEON_BFF_OPERATOR_TOKEN",
-      "PANTHEON_BFF_RBAC_TOKENS_JSON",
-      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-      "PANTHEON_BFF_SMOKE_TOKEN",
-      "VITE_BFF_DEV_BEARER_TOKEN",
-    ]) {
-      delete env[key];
-    }
-    const result = spawnSync(
-      "npx",
-      ["playwright", "test", script, "--list", "--reporter=line"],
-      { cwd: process.cwd(), encoding: "utf8", env },
-    );
+  ])(
+    "rejects the tracked fixture token in $name before any hosted request",
+    ({ script, optIn }) => {
+      const env = {
+        ...process.env,
+        PANTHEON_HOSTED_E2E: "",
+        BFF_AUTH_TOKEN: LOCAL_FIXTURE_AUTH_TOKEN,
+        ...optIn,
+      };
+      for (const key of [
+        "PANTHEON_BFF_OPERATOR_A_TOKEN",
+        "PANTHEON_BFF_OPERATOR_TOKEN",
+        "PANTHEON_BFF_RBAC_TOKENS_JSON",
+        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+        "PANTHEON_BFF_SMOKE_TOKEN",
+        "VITE_BFF_DEV_BEARER_TOKEN",
+      ]) {
+        delete env[key];
+      }
+      const result = spawnSync(
+        "npx",
+        ["playwright", "test", script, "--list", "--reporter=line"],
+        { cwd: process.cwd(), encoding: "utf8", env },
+      );
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /LOCAL_FIXTURE_AUTH_TOKEN.*loopback-only E2E target/,
-    );
-  }, 30_000);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(
+        /LOCAL_FIXTURE_AUTH_TOKEN.*loopback-only E2E target/,
+      );
+    },
+    30_000,
+  );
 
   it.each([
     "scripts/probe-bff-write-paths.mjs",
@@ -814,28 +897,31 @@ describe("public frontend build auth boundary", () => {
     "scripts/probe-bff-write-paths.mjs",
     "scripts/probe-create-persona-then-fleet.mjs",
     "scripts/probe-persona-onboarding-endpoints.mjs",
-  ])("fails closed before network access when %s has a target but no credential", (script) => {
-    const env = {
-      ...process.env,
-      PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9",
-    };
-    for (const key of [
-      "VITE_BFF_BASE_URL",
-      "PANTHEON_BFF_WRITE_PROBE_BEARER_TOKEN",
-      "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-      "BFF_AUTH_TOKEN",
-    ]) {
-      delete env[key];
-    }
-    const result = spawnSync("node", [script], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env,
-    });
+  ])(
+    "fails closed before network access when %s has a target but no credential",
+    (script) => {
+      const env = {
+        ...process.env,
+        PANTHEON_BFF_BASE_URL: "http://127.0.0.1:9",
+      };
+      for (const key of [
+        "VITE_BFF_BASE_URL",
+        "PANTHEON_BFF_WRITE_PROBE_BEARER_TOKEN",
+        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+        "BFF_AUTH_TOKEN",
+      ]) {
+        delete env[key];
+      }
+      const result = spawnSync("node", [script], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env,
+      });
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /short-lived BFF_AUTH_TOKEN is required/,
-    );
-  });
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toMatch(
+        /short-lived BFF_AUTH_TOKEN is required/,
+      );
+    },
+  );
 });
