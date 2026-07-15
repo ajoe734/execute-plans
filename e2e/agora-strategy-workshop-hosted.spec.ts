@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import {
   devLoginSession,
   installOidcDevLogin,
-  normalizeBearerToken,
+  roleTokenFromEnv,
 } from "./helpers/auth";
 
 const FE_BASE_URL = trimTrailingSlash(
@@ -28,11 +28,11 @@ const BFF_BASE_URL = trimTrailingSlash(
     process.env.VITE_BFF_BASE_URL ||
     "",
 );
-const RAW_AUTH_TOKEN =
-  process.env.BFF_AUTH_TOKEN ||
-  process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  "";
-const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-dynui-live-tabs-013";
 const HOSTED_REQUESTED = Boolean(FE_BASE_URL && BFF_BASE_URL);
@@ -235,6 +235,13 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       } else {
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
       }
+      await expect(page.getByTestId("context-bar")).toBeVisible();
+      await expect(page.getByTestId("mode-selector")).toBeVisible();
+      await expect(page.getByTestId("participant-picker")).toBeVisible();
+      await expect(page.getByTestId("eligibility-explanation")).toBeVisible();
+      await expect(page.getByTestId("eligibility-explanation")).toContainText(
+        /eligible|eligibility|opinion authority|unavailable/i,
+      );
       await expect(page.getByTestId("workshop-card-summary")).toContainText(/Cards: \d+/);
       await expect(page.getByTestId("workshop-event-summary")).toContainText(/Events: \d+/);
       await expect(page.getByTestId("workshop-readiness-summary")).toContainText(/Readiness:/);

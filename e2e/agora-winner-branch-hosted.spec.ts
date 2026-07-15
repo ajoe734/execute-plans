@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import {
   devLoginSession,
   installOidcDevLogin,
-  normalizeBearerToken,
+  roleTokenFromEnv,
 } from "./helpers/auth";
 
 const FE_BASE_URL =
@@ -24,11 +24,11 @@ const BFF_BASE_URL =
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
   "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
-const RAW_AUTH_TOKEN =
-  process.env.BFF_AUTH_TOKEN ||
-  process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  "";
-const AUTH_TOKEN = RAW_AUTH_TOKEN ? normalizeBearerToken(RAW_AUTH_TOKEN) : "";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const HOSTED_REQUESTED =
   process.env.AG_DYNUI_FULL_006_HOSTED === "1" ||
   process.env.PANTHEON_HOSTED_E2E === "1";

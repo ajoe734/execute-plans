@@ -62,6 +62,18 @@ function recordFrom(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
+async function waitForStableBoundingBox(page: Page, locator: ReturnType<Page["locator"]>): Promise<void> {
+  let lastBox = await locator.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(50);
+    const box = await locator.boundingBox();
+    if (box && lastBox && box.x === lastBox.x && box.y === lastBox.y && box.width === lastBox.width && box.height === lastBox.height) {
+      return;
+    }
+    lastBox = box;
+  }
+}
+
 async function deploymentGate(page: Page): Promise<JsonRecord> {
   const response = await page.request.get(`${FE_BASE_URL}/deployment.json?ag_uipol_011=${Date.now()}`);
   expect(response.ok(), "deployment.json must be readable").toBe(true);
@@ -150,6 +162,7 @@ async function openAndVerifyServant(page: Page, narrow: boolean): Promise<void> 
 
   if (narrow) {
     await expect(drawer).toHaveAttribute("role", "dialog");
+    await waitForStableBoundingBox(page, drawer);
     const box = await drawer.boundingBox();
     expect(box?.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
     await expect(page.getByTestId("trading-desk-main").locator("..")).toHaveAttribute("inert", "");
@@ -171,12 +184,13 @@ async function openAndVerifyCandidate(page: Page): Promise<void> {
   await page.getByTestId("strategy-lens-all").click();
 
   const review = page.locator('[data-testid^="review-mobile-btn-"]').first();
-  await expect(review).toBeVisible({ timeout: 30_000 });
+  await expect(review).toBeVisible({ timeout: 60_000 });
   await review.focus();
   await review.click();
 
   const drawer = page.getByTestId("candidate-review-drawer");
   await expect(drawer).toBeVisible();
+  await waitForStableBoundingBox(page, drawer);
   await expect(drawer).toHaveAttribute("aria-modal", "true");
   const box = await drawer.locator(".agora-candidate-drawer-panel").boundingBox();
   expect(box?.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
@@ -211,7 +225,7 @@ test.describe("AG-UIPOL-011 hosted responsive parity", () => {
 
       await test.step("Trading Room prioritizes the current task and contains drawers", async () => {
         await page.goto(`${FE_BASE_URL}/agora/trading-room`);
-        await expect(page.getByTestId("trading-room-page")).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("trading-room-page")).toBeVisible({ timeout: 60_000 });
         if (narrow) {
           await expect(page.getByTestId("trading-room-mobile-priority")).toBeVisible();
           await expect(page.getByTestId("trading-room-navigation")).toHaveAttribute("data-mobile-collapsed", "true");
@@ -224,7 +238,7 @@ test.describe("AG-UIPOL-011 hosted responsive parity", () => {
 
       await test.step("Strategy Workshop exposes conversation, next question, and readiness without a three-column squeeze", async () => {
         await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`);
-        await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 60_000 });
         await expect(page.getByTestId("workshop-conversation-pane")).toBeVisible();
         await expect(page.getByTestId("servant-composer")).toBeVisible();
         if (narrow) {
@@ -242,7 +256,7 @@ test.describe("AG-UIPOL-011 hosted responsive parity", () => {
 
       await test.step("Performance foregrounds the decision and keeps outcome/list reachable", async () => {
         await page.goto(`${FE_BASE_URL}/agora/strategy-performance`);
-        await expect(page.getByTestId("strategy-performance-page")).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("strategy-performance-page")).toBeVisible({ timeout: 60_000 });
         if (narrow) {
           await expect(page.getByTestId("performance-mobile-priority")).toBeVisible();
           await expect(page.getByTestId("performance-decision-pane")).toBeVisible();

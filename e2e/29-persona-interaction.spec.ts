@@ -313,6 +313,7 @@ function governedProposalFixture(state: FixtureState) {
     required_permissions: ["strategy.review"],
     required_reviewers: ["risk", "human"],
     human_gate: true,
+    execution_authority: "none",
     revision: state.proposal.revision,
     state: state.proposal.state,
     expires_at: "2026-08-01T00:00:00Z",
@@ -338,7 +339,8 @@ function workshopMessageCount(state: FixtureState): number {
   return state.requests.filter(
     (request) =>
       request.method === "POST" &&
-      request.path === `/bff/agora/workshops/${WORKSHOP_ID}/messages`,
+      request.path === "/bff/agora/interactions" &&
+      (request.body as JsonRecord | null)?.workshop_id === WORKSHOP_ID,
   ).length;
 }
 
@@ -356,6 +358,10 @@ async function installFixture(
     requests: [],
     unexpected: [],
   };
+
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
+  });
 
   await installOidcDevLogin(page, {
     goto: false,
@@ -405,11 +411,30 @@ async function installFixture(
             },
             roles: options.roles ?? ["operator", "reviewer", "approver"],
             capabilities: ["management.read", "persona.view", "archive"],
+            session: { authenticated: true, session_kind: "bearer" },
             env: "dev",
             featureFlags: {},
             serverTime: NOW,
             sessionExpiresAt: "2026-07-15T12:00:00Z",
             permissionsVersion: "pint-010-v1",
+          },
+        });
+      }
+      if (method === "GET" && path === "/bff/agora/capabilities") {
+        return json(route, {
+          data: {
+            capabilities: [
+              {
+                name: "agora.workshop.v1",
+                auth_level: "operator",
+                route_prefixes: ["/bff/agora/workshops"],
+              },
+              {
+                name: "agora.persona.interaction.v1",
+                auth_level: "operator",
+                route_prefixes: ["/bff/agora/interactions"],
+              },
+            ],
           },
         });
       }
@@ -624,9 +649,17 @@ async function installFixture(
 
       if (method === "POST" && path === "/bff/agora/interactions/context:resolve") {
         const captured = state.requests.at(-1)?.body as JsonRecord;
+        const contextRefs = Array.isArray(captured.context_refs)
+          ? captured.context_refs as JsonRecord[]
+          : [];
+        const workshopId = typeof captured.workshop_id === "string"
+          ? captured.workshop_id
+          : contextRefs.some((ref) => ref.type === "decision_event")
+            ? TRADING_CONSULT_WORKSHOP_ID
+            : JOURNAL_WORKSHOP_ID;
         return json(route, {
           data: {
-            workshop_id: JOURNAL_WORKSHOP_ID,
+            workshop_id: workshopId,
             context_refs: captured.context_refs ?? [],
             context_digest: "sha256:pint-010-journal",
             environment: captured.environment ?? "paper",
@@ -636,18 +669,46 @@ async function installFixture(
         });
       }
       if (method === "POST" && path === "/bff/agora/interactions/participants:eligible") {
+        const captured = state.requests.at(-1)?.body as JsonRecord;
+        const challenge = captured.mode === "challenge";
+        const consult = captured.mode === "consult";
+        const quant = {
+          persona_id: "per_quant",
+          display_name: "Quant Architect",
+          eligible: true,
+          reasons: [],
+          recommended: challenge || consult,
+          capability_snapshot_id: "snap-quant-pint-010",
+        };
+        const macro = {
+          persona_id: "per_macro",
+          display_name: "Macro Strategist",
+          eligible: true,
+          reasons: [],
+          recommended: consult,
+          capability_snapshot_id: "snap-macro-pint-010",
+        };
+        const risk = {
+          persona_id: "per_risk",
+          display_name: "Risk Officer Bot",
+          eligible: true,
+          reasons: [],
+          recommended: consult,
+          capability_snapshot_id: "snap-risk-pint-010",
+        };
+        const redTeam = {
+          persona_id: "per_red",
+          display_name: "Red Team Adversary",
+          eligible: true,
+          reasons: [],
+          recommended: challenge,
+          capability_snapshot_id: "snap-red-pint-010",
+        };
         return json(route, {
           data: {
-            included: [
-              {
-                persona_id: "per_red",
-                display_name: "Red Team Adversary",
-                eligible: true,
-                reasons: [],
-                recommended: true,
-                capability_snapshot_id: "snap-red-pint-010",
-              },
-            ],
+            included: challenge
+              ? [redTeam, quant, macro, risk]
+              : [quant, macro, risk, redTeam],
             excluded: [],
           },
         });
@@ -774,6 +835,8 @@ test("one named Persona ask and red-team challenge render a visible disagreement
   await selectOption(page, "participant-picker", "Named Personas (Select)");
   const namedPanel = page.getByTestId("named-checkbox-panel");
   await expect(namedPanel.getByRole("checkbox", { name: "Quant Architect" })).toBeChecked();
+  await namedPanel.getByRole("checkbox", { name: "Macro Strategist" }).uncheck();
+  await namedPanel.getByRole("checkbox", { name: "Risk Officer Bot" }).uncheck();
   await expect(namedPanel.locator("input:checked")).toHaveCount(1);
 
   await page.getByTestId("servant-composer-input").fill("Explain the liquidity assumption.");
@@ -782,26 +845,21 @@ test("one named Persona ask and red-team challenge render a visible disagreement
     "Named Quant Architect requires fresher liquidity evidence.",
   );
 
-  const firstMessage = mutationRequests(
-    state,
-    `/bff/agora/workshops/${WORKSHOP_ID}/messages`,
-  )[0];
+  const firstMessage = mutationRequests(state, "/bff/agora/interactions")[0];
   expect(firstMessage?.body).toEqual({
-    content: "Explain the liquidity assumption.",
-    metadata: {
-      mode: "ask",
-      participant_persona_ids: ["per_quant"],
-      focused_ref: null,
-      subject_kind: "strategy_spec",
-      subject_ref: "strategy-pint-010",
-      picker_type: "named",
-    },
+    workshop_id: WORKSHOP_ID,
+    mode: "ask",
+    environment: "paper",
+    required_capability: "persona_opinion",
+    topic: "Explain the liquidity assumption.",
+    participant_persona_ids: ["per_quant"],
+    context_refs: [{ type: "persona", id: "per_quant" }],
   });
 
   await selectOption(page, "mode-selector", "Challenge (Attack assumptions)");
-  await selectOption(page, "participant-picker", "Red Team");
+  await selectOption(page, "participant-picker", "First Eligible Persona");
   await expect(page.getByTestId("eligibility-explanation")).toContainText(
-    "Restricted to research/paper environment. Eligible.",
+    "First Eligible Persona — 1 selected in canonical eligibility order.",
   );
   await page
     .getByTestId("servant-composer-input")
@@ -815,21 +873,16 @@ test("one named Persona ask and red-team challenge render a visible disagreement
     "Red Team rejects the liquidity assumption; Quant retains it.",
   );
 
-  const messages = mutationRequests(
-    state,
-    `/bff/agora/workshops/${WORKSHOP_ID}/messages`,
-  );
+  const messages = mutationRequests(state, "/bff/agora/interactions");
   expect(messages).toHaveLength(2);
   expect(messages[1].body).toEqual({
-    content: "Attack the closing-auction liquidity assumption.",
-    metadata: {
-      mode: "challenge",
-      participant_persona_ids: ["per_red"],
-      focused_ref: null,
-      subject_kind: "strategy_spec",
-      subject_ref: "strategy-pint-010",
-      picker_type: "red-team",
-    },
+    workshop_id: WORKSHOP_ID,
+    mode: "challenge",
+    environment: "paper",
+    required_capability: "persona_opinion",
+    topic: "Attack the closing-auction liquidity assumption.",
+    participant_persona_ids: ["per_red"],
+    context_refs: [{ type: "persona", id: "per_red" }],
   });
   expect(state.unexpected).toEqual([]);
   expectAuthorityNegative(state);
@@ -946,14 +999,33 @@ test("viewer proposal mutation fails closed without changing the revision", asyn
   );
   const proposalCard = page.getByTestId(`governed-proposal-${GOVERNED_PROPOSAL_ID}`);
   await expect(proposalCard).toContainText("revision 1");
-  await proposalCard.getByLabel("Decision reason").fill("Viewer bypass must fail.");
-  await proposalCard.getByRole("button", { name: "Modify" }).click();
-  await proposalCard.getByLabel("Proposed value").fill('{"liquidity_limit":1}');
-  await proposalCard.getByRole("button", { name: "Save new revision" }).click();
+  const modifyButton = proposalCard.getByRole("button", { name: "Modify" });
+  await expect(modifyButton).toBeDisabled();
+  await expect(modifyButton).toHaveAttribute("title", /require an operator/i);
 
-  await expect(proposalCard.getByRole("alert")).toHaveText(
-    "You do not have permission for this governance action.",
-  );
+  const bypassStatus = await page.evaluate(async (proposalId) => {
+    const token = window.sessionStorage.getItem("pantheon.bff.bearerToken") ?? "";
+    const tenantId = window.sessionStorage.getItem("pantheon.bff.tenantId") ?? "";
+    const response = await window.fetch(`/bff/agora/proposals/${proposalId}/actions`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "pint-010-viewer-bypass",
+        "If-Match": '"proposal-v1"',
+        "X-Tenant-Id": tenantId,
+      },
+      body: JSON.stringify({
+        action: "modify",
+        reason: "Viewer bypass must fail.",
+        proposed_value: { liquidity_limit: 1 },
+      }),
+    });
+    return response.status;
+  }, GOVERNED_PROPOSAL_ID);
+
+  expect(bypassStatus).toBe(403);
   await expect(proposalCard).toContainText("revision 1");
   expect(state.proposal.revision).toBe(1);
   const attempted = mutationRequests(
@@ -989,44 +1061,39 @@ test("Trading Room Ask Personas preserves context and modify preserves proposal 
   const consultPanel = page.getByTestId(`consult-panel-${DECISION_EVENT_ID}`);
   await expect(consultPanel).toContainText(DECISION_EVENT_ID);
   await expect(consultPanel).toContainText(STRATEGY_VERSION);
-  await consultPanel.getByRole("checkbox", { name: "Red Team" }).check();
+  await expect(consultPanel).toContainText("canonical eligibility service");
   await consultPanel
     .getByPlaceholder("Ask your question to the selected personas...")
     .fill("Compare the paper liquidity risk before modifying this proposal.");
   await page.getByTestId(`consult-panel-submit-${DECISION_EVENT_ID}`).click();
   await expect(page).toHaveURL(
-    new RegExp(`/agora/strategy-workshop/${TRADING_CONSULT_WORKSHOP_ID}$`),
+    new RegExp(`/agora/strategy-workshop/${TRADING_CONSULT_WORKSHOP_ID}(?:\\?|$)`),
   );
 
-  const workshopCreate = mutationRequests(state, "/bff/agora/workshops")[0];
-  expect(workshopCreate?.body).toEqual({
-    subject: {
-      kind: "candidate_artifact",
-      ref: DECISION_EVENT_ID,
-      title: "Contextual Consult: 2330.TW reduce",
-    },
-    participant_persona_ids: ["per_quant", "per_risk", "per_macro", "per_red"],
-    metadata: {
-      decision_event_id: DECISION_EVENT_ID,
-      strategy_id: STRATEGY_ID,
-      strategy_version: STRATEGY_VERSION,
-      position_snapshot: decisionEvent.position_snapshot,
-      risk_notes: decisionEvent.risk_notes,
-      evidence_refs: decisionEvent.evidence_refs,
-      context_type: "decision_event_consultation",
-    },
+  const contextRefs = [
+    { type: "strategy", id: STRATEGY_ID, version_id: STRATEGY_VERSION },
+    { type: "decision_event", id: DECISION_EVENT_ID },
+  ];
+  expect(mutationRequests(state, "/bff/agora/interactions/context:resolve")[0]?.body).toEqual({
+    context_refs: contextRefs,
+    environment: "paper",
   });
   expect(
-    mutationRequests(
-      state,
-      `/bff/agora/workshops/${TRADING_CONSULT_WORKSHOP_ID}/messages`,
-    )[0]?.body,
+    mutationRequests(state, "/bff/agora/interactions/participants:eligible")[0]?.body,
   ).toEqual({
-    content: "Compare the paper liquidity risk before modifying this proposal.",
-    metadata: {
-      mode: "consult",
-      participant_persona_ids: ["per_quant", "per_risk", "per_macro", "per_red"],
-    },
+    workshop_id: TRADING_CONSULT_WORKSHOP_ID,
+    mode: "consult",
+    environment: "paper",
+    required_capability: "persona_opinion",
+  });
+  expect(mutationRequests(state, "/bff/agora/interactions")[0]?.body).toEqual({
+    workshop_id: TRADING_CONSULT_WORKSHOP_ID,
+    mode: "consult",
+    environment: "paper",
+    required_capability: "persona_opinion",
+    topic: "Compare the paper liquidity risk before modifying this proposal.",
+    participant_persona_ids: ["per_quant", "per_macro", "per_risk"],
+    context_refs: contextRefs,
   });
 
   await page.goto(tradingRoomUrl);
@@ -1085,7 +1152,7 @@ test("Persona Trade Journal starts an authority-negative original-Persona reflec
   await expect(
     page.getByRole("heading", { name: "Reflect with Personas (Strategy Workshop)" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Red Team Review" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Challenge Persona Review" })).toBeEnabled();
   await page.getByRole("button", { name: "Original Persona Review" }).click();
   await expect(page).toHaveURL(new RegExp(`/agora/strategy-workshop/${JOURNAL_WORKSHOP_ID}$`));
 

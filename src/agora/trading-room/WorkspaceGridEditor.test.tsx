@@ -402,7 +402,7 @@ describe("WorkspaceGridEditor component", () => {
     // 3. Find input and type command
     const commandInput = screen.getByTestId("workspace-ask-servant-widget-input");
     const submitBtn = screen.getByTestId("workspace-ask-servant-widget-submit");
-    
+
     fireEvent.change(commandInput, { target: { value: "新增報酬折線圖" } });
     fireEvent.click(submitBtn);
 
@@ -418,7 +418,7 @@ describe("WorkspaceGridEditor component", () => {
     // Type adjustment and apply
     fireEvent.change(screen.getByTestId("workspace-widget-proposal-adjust-input"), { target: { value: "change type to bar" } });
     fireEvent.click(screen.getByTestId("workspace-widget-proposal-adjust-submit"));
-    
+
     await screen.findByText("Servant adjusted the widget spec according to your feedback.");
 
     // Test Plugin Request

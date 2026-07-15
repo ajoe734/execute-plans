@@ -8,16 +8,12 @@ const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
 const deployScript = readFileSync(deployScriptPath, "utf8");
 const localEnvPath = resolve(root, ".env");
 const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
-const hostedProbeScript = readFileSync(
-  resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
+const integrationWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
   "utf8",
 );
 const deployWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-dev-fe-deploy.yml"),
-  "utf8",
-);
-const integrationWorkflow = readFileSync(
-  resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
   "utf8",
 );
 const branchWorkflow = readFileSync(
@@ -28,6 +24,14 @@ const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
 );
+const hostedPersonaInteractionSpec = readFileSync(
+  resolve(root, "e2e/persona-interaction-cross-repo-hosted.spec.ts"),
+  "utf8",
+);
+const hostedBrowserProbe = readFileSync(
+  resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
+  "utf8",
+);
 
 function rejectedDeploy(extraEnv: Record<string, string>) {
   return spawnSync("bash", [deployScriptPath], {
@@ -35,7 +39,11 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
     encoding: "utf8",
     env: {
       ...process.env,
+      GITHUB_EVENT_NAME: "",
       PANTHEON_DEPLOY_ALLOW_DIRTY: "true",
+      VITE_BFF_DEV_BEARER_TOKEN: "",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_deploy_test",
+      VITE_SUPABASE_URL: "https://deploy-test.supabase.co",
       ...extraEnv,
     },
   });
@@ -67,8 +75,19 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT',
+      "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
     );
+    expect(deployScript).toContain(
+      "bffCommitEvidence: true",
+    );
+    expect(deployScript).toContain(
+      "bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE",
+    );
+    expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
+    expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
+    expect(integrationWorkflow.match(
+      /VITE_BFF_DEV_BEARER_TOKEN=""/gu,
+    )).toHaveLength(2);
     expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
     expect(existsSync(localEnvPath)).toBe(false);
@@ -92,9 +111,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
       );
     }
-    expect(deployWorkflow).toContain(
-      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}",
-    );
+    expect(deployWorkflow).not.toContain("PANTHEON_HOSTED_BROWSER_BEARER_TOKEN");
 
     const result = rejectedDeploy({
       VITE_SUPABASE_PUBLISHABLE_KEY: "",
@@ -106,40 +123,84 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
+  it("requires explicit BFF provenance for manual final-proof deployments", () => {
+    expect(deployWorkflow).toContain("bff_commit:");
+    expect(deployWorkflow).toContain(
+      "github.event_name == 'workflow_dispatch' && inputs.bff_commit || ''",
+    );
+    expect(deployWorkflow).not.toContain("vars.PANTHEON_BFF_SHA");
+    expect(deployScript).toContain(
+      'EXPECTED_BFF_COMMIT="${PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT:-}"',
+    );
+    expect(deployScript).toContain("scripts/release-identity.mjs source-version");
+    expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
+    expect(deployScript).toContain("Pantheon BFF commit mismatch");
+    expect(deployScript).toContain('verify_live_bff_identity "before-switch"');
+    expect(deployScript).toContain('verify_live_bff_identity "after-switch"');
+    expect(deployScript).toContain("rolling back");
+    expect(deployScript).toContain("flock -n 9");
+
+    const result = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "",
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
+
+    const abbreviated = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "deadbeef",
+    });
+    expect(abbreviated.status).toBe(2);
+    expect(abbreviated.stderr).toMatch(/exact 40-character SHA/u);
+  });
+
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
     expect(deployScript).not.toContain("npx playwright test");
     expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
-    expect(deployScript).toContain(
-      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/health',
-    );
-    expect(deployWorkflow).toContain(
-      "PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /health",
+    expect(hostedPersonaSpec).toContain('roleTokenFromEnv("viewer"');
+    expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
+    expect(hostedPersonaSpec).toContain("token: VIEWER_TOKEN");
+  });
+
+  it("hard-gates the real hosted Persona write proof without credential skips", () => {
+    expect(integrationWorkflow).toContain(
+      "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
     );
     expect(integrationWorkflow).toContain(
-      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/health"',
+      "node scripts/validate-persona-hosted-proof-env.mjs",
     );
-    expect(hostedProbeScript).not.toContain("PANTHEON_HOSTED_ACCEPT_AUTH_CHALLENGE");
-    expect(hostedProbeScript).toContain('page.on("pageerror"');
-    expect(hostedProbeScript).toContain("rootRendered");
-    expect(hostedProbeScript).toContain("pageErrors.length === 0");
-    expect(hostedProbeScript).toContain(
+    expect(hostedPersonaInteractionSpec).toContain(
+      "expect(denied.status()).toBe(403)",
+    );
+  });
+
+  it("defines the deployed-host contract as an unauthenticated strict auth boundary", () => {
+    expect(hostedBrowserProbe).toContain('const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]');
+    expect(hostedBrowserProbe).toContain("response.status === 401");
+    expect(hostedBrowserProbe).toMatch(/AUTH_REQUIRED\|authentication required/u);
+    expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
+    expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
+    expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("BROWSER_AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("window.sessionStorage.setItem");
+    expect(hostedBrowserProbe).toContain('page.on("pageerror"');
+    expect(hostedBrowserProbe).toContain("rootRendered");
+    expect(hostedBrowserProbe).toContain("pageErrors.length === 0");
+    expect(hostedBrowserProbe).toContain(
       "candidate.origin !== BFF_TARGET.origin",
     );
-    expect(hostedProbeScript).not.toContain("url.startsWith(BFF_BASE)");
-    expect(hostedProbeScript).toContain("rows.length >= 3");
-    expect(hostedProbeScript).toContain("hasRequiredPersonaCoverage");
-    expect(hostedProbeScript).toContain("hasRequiredSourceEvidence");
-    expect(hostedProbeScript).toContain("personaFleetResponseOk");
-    expect(hostedProbeScript).toContain(
-      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN is required",
+    expect(hostedBrowserProbe).not.toContain("url.startsWith(BFF_BASE)");
+    expect(deployScript).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}"',
     );
-    expect(hostedProbeScript).toContain("window.sessionStorage.setItem");
-    expect(hostedPersonaSpec).toContain(
-      'const PUBLIC_VIEWER_TOKEN = "pantheon-dev-browser:viewer"',
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"',
     );
-    expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
-    expect(hostedPersonaSpec).toContain("token: PUBLIC_VIEWER_TOKEN");
+    expect(deployWorkflow).toContain(
+      "PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me",
+    );
   });
 
   it("fails closed on any build-time token without echoing it", () => {

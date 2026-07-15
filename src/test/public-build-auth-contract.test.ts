@@ -9,6 +9,7 @@ import {
   bearerHeader,
   devLoginSession,
   installOidcDevLogin,
+  roleTokenFromEnv,
   targetsExternalE2eEnvironment,
 } from "../../e2e/helpers/auth";
 import {
@@ -240,6 +241,27 @@ describe("public frontend build auth boundary", () => {
     })).toThrow(/non-blank bearer token/);
   });
 
+  it("selects explicit and RBAC-matrix role tokens without trimming credentials", () => {
+    expect(roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
+      PANTHEON_BFF_OPERATOR_A_TOKEN: "operator-a-token",
+    })).toBe("operator-a-token");
+    expect(roleTokenFromEnv("operator", [], {
+      PANTHEON_BFF_OPERATOR_TOKEN: "generic-operator-token",
+    })).toBe("generic-operator-token");
+    expect(roleTokenFromEnv("operator", [], {
+      PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({ operator: "matrix-operator-token" }),
+    })).toBe("matrix-operator-token");
+
+    for (const token of [" operator-token", "operator-token ", "operator token"]) {
+      expect(() => roleTokenFromEnv("operator", ["PANTHEON_BFF_OPERATOR_A_TOKEN"], {
+        PANTHEON_BFF_OPERATOR_A_TOKEN: token,
+      })).toThrow(/non-blank bearer token/);
+      expect(() => roleTokenFromEnv("operator", [], {
+        PANTHEON_BFF_RBAC_TOKENS_JSON: JSON.stringify({ operator: token }),
+      })).toThrow(/non-blank bearer token/);
+    }
+  });
+
   it("accepts one exact Bearer scheme separator and returns the opaque credential", () => {
     expect(authToken({ env: {}, token: "Bearer signed-token" })).toBe("signed-token");
     expect(bearerHeader("Bearer signed-token")).toBe("Bearer signed-token");
@@ -361,6 +383,9 @@ describe("public frontend build auth boundary", () => {
     };
     for (const key of [
       "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_OPERATOR_A_TOKEN",
+      "PANTHEON_BFF_OPERATOR_TOKEN",
+      "PANTHEON_BFF_RBAC_TOKENS_JSON",
       "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
       "PANTHEON_BFF_SMOKE_TOKEN",
     ]) {
@@ -516,6 +541,9 @@ describe("public frontend build auth boundary", () => {
     };
     for (const key of [
       "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_OPERATOR_A_TOKEN",
+      "PANTHEON_BFF_OPERATOR_TOKEN",
+      "PANTHEON_BFF_RBAC_TOKENS_JSON",
       "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
       "PANTHEON_BFF_SMOKE_TOKEN",
       "VITE_BFF_DEV_BEARER_TOKEN",
@@ -681,6 +709,9 @@ describe("public frontend build auth boundary", () => {
     };
     for (const key of [
       "BFF_AUTH_TOKEN",
+      "PANTHEON_BFF_OPERATOR_A_TOKEN",
+      "PANTHEON_BFF_OPERATOR_TOKEN",
+      "PANTHEON_BFF_RBAC_TOKENS_JSON",
       "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
       "PANTHEON_BFF_SMOKE_TOKEN",
       "VITE_BFF_DEV_BEARER_TOKEN",
@@ -731,6 +762,9 @@ describe("public frontend build auth boundary", () => {
       ...optIn,
     };
     for (const key of [
+      "PANTHEON_BFF_OPERATOR_A_TOKEN",
+      "PANTHEON_BFF_OPERATOR_TOKEN",
+      "PANTHEON_BFF_RBAC_TOKENS_JSON",
       "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
       "PANTHEON_BFF_SMOKE_TOKEN",
       "VITE_BFF_DEV_BEARER_TOKEN",

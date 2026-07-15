@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
-import { personaHumanInboxUrl } from "./PersonaDetail";
+import { personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
 import type { Persona } from "@/lib/bff/types";
 import { getPersona } from "@/lib/bff-v1/personas";
 
@@ -39,5 +39,21 @@ describe("PersonaDetail", () => {
     expect(personaHumanInboxUrl("persona/tw equity")).toBe(
       "/management/human-inbox?persona=persona%2Ftw%20equity",
     );
+  });
+
+  it("builds a focus-preserving canonical Workshop interaction entry", () => {
+    const url = personaWorkshopEntryUrl({
+      workshopId: "ws/persona 1",
+      mode: "consult",
+      participantIds: ["persona-a", "persona-b"],
+      picker: "named",
+      returnTo: "/management/personas/persona-a?tab=tradeJournal",
+      returnLabel: "Persona A",
+    });
+    const parsed = new URL(url, "https://example.test");
+    expect(parsed.pathname).toBe("/agora/strategy-workshop/ws%2Fpersona%201");
+    expect(parsed.searchParams.get("mode")).toBe("consult");
+    expect(parsed.searchParams.get("participants")).toBe("persona-a,persona-b");
+    expect(parsed.searchParams.get("return_to")).toBe("/management/personas/persona-a?tab=tradeJournal");
   });
 });

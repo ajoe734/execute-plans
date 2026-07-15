@@ -32,6 +32,7 @@ import {
   type HumanInboxDetail,
   type HumanInboxItem,
   type HumanInboxKind,
+  type HumanInboxList,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -2474,7 +2475,7 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
 
 // ---------- PM-6 Human Inbox ----------
 
-const emptyHumanInbox = (): HumanInboxItem[] => [];
+const emptyHumanInbox = (): HumanInboxList => [];
 const missingHumanInboxDetail = (): HumanInboxDetail | undefined => undefined;
 
 export type PromotionReviewDecisionValue = "approve" | "approve_with_conditions" | "reject";
@@ -2752,14 +2753,17 @@ const adaptDecisionHistory = (raw: unknown): HumanInboxDecisionRecord[] => {
   }));
 };
 
-export function adaptHumanInboxList(raw: unknown): HumanInboxItem[] | null {
+export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
   const data = unwrap(raw);
   const arr =
     asArray<Record<string, unknown>>(data) ??
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
-  const items = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  return items.length ? items : null;
+  const items: HumanInboxList = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
+  if (isObject(data) && data.meta) {
+    items.meta = isObject(data.meta) ? data.meta : undefined;
+  }
+  return items;
 }
 export function adaptHumanInboxDetail(raw: unknown): HumanInboxDetail | null {
   const data = unwrap(raw);
@@ -3807,16 +3811,24 @@ export const mgmt = {
   },
 
   humanInbox: {
-    list: (): Promise<HumanInboxItem[]> => {
+    list: (opts?: { signal?: AbortSignal }): Promise<HumanInboxList> => {
       // Human Inbox is a strict-live surface. Revalidate it independently when
       // entering the page so a transient failure from a previously visited
       // surface cannot leave a stale fail-closed banner over a successful
       // inbox response. A failure from this request reports fallback again.
       liveStatus.retry();
-      return withStrictLiveOrMock<HumanInboxItem[], unknown>(
-        { method: "GET", path: paths.mgmtHumanInbox() },
+      return withStrictLiveOrMock<HumanInboxList, unknown>(
+        { method: "GET", path: paths.mgmtHumanInbox(), signal: opts?.signal },
         async () => emptyHumanInbox(),
-        (raw) => adaptHumanInboxList(raw) ?? emptyHumanInbox(),
+        (raw) => {
+          const adapted = adaptHumanInboxList(raw);
+          if (adapted) return adapted;
+          const empty = emptyHumanInbox();
+          if (isObject(raw) && raw.meta) {
+            empty.meta = isObject(raw.meta) ? raw.meta : undefined;
+          }
+          return empty;
+        },
       );
     },
     get: (id: string): Promise<HumanInboxDetail | undefined> =>

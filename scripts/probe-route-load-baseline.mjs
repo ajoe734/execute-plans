@@ -23,6 +23,7 @@ const CONTENT_TIMEOUT_MS = 15_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
 const SSE_PATH = "/bff/events/stream";
 const BEARER_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";
+const TENANT_ID = process.env.PANTHEON_TENANT_ID || process.env.BFF_TENANT_ID || "pantheon-dev";
 
 function trimTrailingSlash(value) {
   return String(value || "").replace(/\/+$/, "");
@@ -76,6 +77,35 @@ const probeTimestamp = new Date().toISOString();
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
+if (BEARER_TOKEN) {
+  const normalizedToken = BEARER_TOKEN.replace(/^Bearer\s+/i, "").trim();
+  const tokenParts = normalizedToken.split(":");
+  const operatorId = tokenParts[0] || "op-route-load";
+  const roles = (tokenParts[1] || "operator")
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean);
+  await context.addInitScript(
+    ({ operatorId: subject, roles: sessionRoles, tenantId, token }) => {
+      const session = JSON.stringify({
+        aud: "pantheon-bff",
+        auth_time: Math.floor(Date.now() / 1000),
+        iss: "pantheon-route-load-probe",
+        roles: sessionRoles,
+        sub: subject,
+        tenant_id: tenantId,
+      });
+      for (const storage of [window.sessionStorage, window.localStorage]) {
+        storage.setItem("pantheon.bff.bearerToken", token);
+        storage.setItem("pantheon_operator_token", token);
+        storage.setItem("pantheon.bff.tenantId", tenantId);
+        storage.setItem("pantheon_tenant_id", tenantId);
+        storage.setItem("pantheon.e2e.devOidcSession", session);
+      }
+    },
+    { operatorId, roles, tenantId: TENANT_ID, token: normalizedToken },
+  );
+}
 const page = await context.newPage();
 page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
 page.setDefaultNavigationTimeout(OVERALL_TIMEOUT_MS);
@@ -155,7 +185,9 @@ try {
   navStartMs = Date.now();
   const primaryApiPromise = page
     .waitForResponse(
-      (res) => pathnameOf(res.url()) === PRIMARY_API_PATH && res.request().method() === "GET",
+      (res) => pathnameOf(res.url()) === PRIMARY_API_PATH
+        && res.request().method() === "GET"
+        && res.ok(),
       { timeout: CONTENT_TIMEOUT_MS },
     )
     .then((res) => {

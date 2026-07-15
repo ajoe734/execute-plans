@@ -1,5 +1,7 @@
 import { BffError, makeBffError, normalizeBffErrorEnvelope, type BffErrorEnvelope } from "../errors";
 import { buildHeaders } from "../headers";
+import { detectBaseUrl } from "../client";
+import { liveWriteGated } from "../writeGate";
 
 export type ProposalAction =
   | "request_review" | "request_research" | "modify" | "validate"
@@ -18,6 +20,15 @@ export interface GovernedProposal {
   environment_ceiling: "analysis" | "research" | "shadow" | "paper" | "canary" | "live";
   required_permissions: string[];
   required_reviewers: string[];
+  proposer?: string;
+  available_approval_decision_refs?: string[];
+  approval_decision_refs_authority?: "canonical_read_store";
+  approval_decision_readiness?: {
+    ready: boolean;
+    reason?: string | null;
+    missing_required_reviewers?: string[];
+    [key: string]: unknown;
+  };
   human_gate: boolean;
   revision: number;
   state: string;
@@ -25,6 +36,8 @@ export interface GovernedProposal {
   validation?: { valid?: boolean; status?: string; errors?: string[]; warnings?: string[]; [key: string]: unknown };
   audit: Array<{ action: string; actor: string; at: string; reason?: string; approval_refs?: string[] }>;
   governed_action_link?: { route?: string; target_type?: string; target_id?: string; execution_authority?: string } | null;
+  execution_authority?: "none";
+  no_capital_authority_proof?: string;
 }
 
 export interface ProposalSnapshot { proposal: GovernedProposal; etag: string }
@@ -37,7 +50,7 @@ export interface ProposalActionBody {
   validation_result?: Record<string, unknown>;
 }
 
-const baseUrl = () => (import.meta.env.VITE_BFF_BASE_URL ?? "").replace(/\/$/, "");
+const baseUrl = () => detectBaseUrl().replace(/\/$/, "");
 
 async function decode<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null) as { data?: T } | BffErrorEnvelope | null;
@@ -87,6 +100,13 @@ export async function getProposalRevisions(proposalId: string): Promise<Governed
 export async function actOnGovernedProposal(
   proposalId: string, body: ProposalActionBody, etag: string,
 ): Promise<ProposalSnapshot> {
+  if (!(await liveWriteGated())) {
+    throw makeBffError({
+      code: "PERMISSION_DENIED",
+      message: "Governance writes are disabled by deployment policy or session-kind policy.",
+      details: { reason: "live_write_gate_closed" },
+    });
+  }
   const response = await fetch(`${baseUrl()}/bff/agora/proposals/${encodeURIComponent(proposalId)}/actions`, {
     method: "POST", credentials: "include",
     headers: buildHeaders({ method: "POST", extra: { "If-Match": etag } }),

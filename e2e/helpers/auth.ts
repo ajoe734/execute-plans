@@ -67,6 +67,17 @@ function envValue(env: Record<string, string | undefined>, keys: string[]): stri
   return undefined;
 }
 
+function credentialEnvValue(
+  env: Record<string, string | undefined>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = env[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
 function defaultEnv(): Record<string, string | undefined> {
   return typeof process === "undefined" ? {} : process.env;
 }
@@ -175,6 +186,33 @@ function localFixtureExternalFrontend(): Error {
 
 export function normalizeBearerToken(token: string): string {
   return normalizeStrictBearerToken(token, "Explicit BFF credential");
+}
+
+export function roleTokenFromEnv(
+  role: string,
+  explicitKeys: string[] = [],
+  env: Record<string, string | undefined> = defaultEnv(),
+): string {
+  const normalizedRole = role.trim().toLowerCase().replaceAll("-", "_");
+  const explicit = credentialEnvValue(env, [
+    ...explicitKeys,
+    `PANTHEON_BFF_${normalizedRole.toUpperCase()}_TOKEN`,
+  ]);
+  if (explicit) return normalizeBearerToken(explicit);
+
+  const encoded = env.PANTHEON_BFF_RBAC_TOKENS_JSON?.trim();
+  if (!encoded) return "";
+  let tokens: Record<string, unknown>;
+  try {
+    tokens = JSON.parse(encoded) as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+  for (const [candidateRole, token] of Object.entries(tokens)) {
+    if (candidateRole.trim().toLowerCase().replaceAll("-", "_") !== normalizedRole) continue;
+    return typeof token === "string" ? normalizeBearerToken(token) : "";
+  }
+  return "";
 }
 
 export function makeDevAuthToken(options: {

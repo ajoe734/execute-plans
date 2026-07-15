@@ -23,7 +23,8 @@ export type WorkshopCardType =
   | "readiness_gate"
   | "persona_opinion"
   | "opinion"
-  | "debate";
+  | "debate"
+  | "governed_proposal";
 
 export type WorkshopCardStatus =
   | "informational"

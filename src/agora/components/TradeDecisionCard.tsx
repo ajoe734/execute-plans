@@ -17,7 +17,8 @@ import {
   type TradingDecisionEvent,
   type DecisionChoice,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
+import { interaction } from "@/lib/bff-v1/agora/interaction";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -109,13 +110,13 @@ export function TradeDecisionCard({
   onDecisionRecorded,
 }: TradeDecisionCardProps): JSX.Element {
   const navigate = useNavigate();
+  const writeAccess = useAgoraWriteAccess();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
 
   // Consultation states
   const [showConsultPanel, setShowConsultPanel] = useState(false);
-  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
   const [consultQuery, setConsultQuery] = useState("");
   const [consultLoading, setConsultLoading] = useState(false);
   const [consultError, setConsultError] = useState<string | null>(null);
@@ -585,6 +586,8 @@ export function TradeDecisionCard({
               <button
                 type="button"
                 data-testid={`ask-personas-${ev.decision_event_id}`}
+                disabled={!writeAccess.interactionAllowed}
+                title={writeAccess.interactionDisabledReason ?? undefined}
                 onClick={() => {
                   setShowConsultPanel(!showConsultPanel);
                   setShowModifyLinkage(false);
@@ -594,13 +597,14 @@ export function TradeDecisionCard({
                   fontSize: 12,
                   border: "1px solid #6366f1",
                   borderRadius: 4,
-                  cursor: "pointer",
+                  cursor: writeAccess.interactionAllowed ? "pointer" : "not-allowed",
                   background: "#e0e7ff",
                   color: "#4f46e5",
                   fontWeight: 500,
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 4
+                  gap: 4,
+                  opacity: writeAccess.interactionAllowed ? 1 : 0.55,
                 }}
               >
                 💬 Ask Personas
@@ -655,31 +659,11 @@ export function TradeDecisionCard({
               </div>
             </div>
 
-            {/* Persona Checklist */}
+            {/* Participant eligibility is authoritative and resolved at launch. */}
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Select Personas:</span>
-              <div style={{ display: "flex", gap: 12 }}>
-                {[
-                  { id: "per_quant", name: "Quant" },
-                  { id: "per_risk", name: "Risk" },
-                  { id: "per_macro", name: "Macro" },
-                  { id: "per_red", name: "Red Team" }
-                ].map(p => (
-                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#c4ccda" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPersonas.includes(p.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPersonas([...selectedPersonas, p.id]);
-                        } else {
-                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
-                        }
-                      }}
-                    />
-                    {p.name}
-                  </label>
-                ))}
+              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Participants:</span>
+              <div data-testid="consult-authoritative-eligibility" style={{ color: "#8c96a6" }}>
+                The canonical eligibility service will choose up to three recommended eligible Personas at launch. No Persona identity is inferred from a name or fixture.
               </div>
             </div>
 
@@ -691,7 +675,6 @@ export function TradeDecisionCard({
                   type="button"
                   onClick={() => {
                     setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
-                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -701,7 +684,6 @@ export function TradeDecisionCard({
                   type="button"
                   onClick={() => {
                     setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
-                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -711,7 +693,6 @@ export function TradeDecisionCard({
                   type="button"
                   onClick={() => {
                     setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
-                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
@@ -734,40 +715,54 @@ export function TradeDecisionCard({
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
-                disabled={consultLoading || selectedPersonas.length === 0}
+                disabled={consultLoading || !writeAccess.interactionAllowed}
+                title={writeAccess.interactionDisabledReason ?? undefined}
                 onClick={async () => {
                   setConsultLoading(true);
                   setConsultError(null);
                   try {
-                    const newWs = await createWorkshop({
-                      subject: {
-                        kind: "candidate_artifact",
-                        ref: ev.decision_event_id,
-                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
-                      },
-                      participant_persona_ids: selectedPersonas,
-                      metadata: {
-                        decision_event_id: ev.decision_event_id,
-                        strategy_id: ev.strategy_id,
-                        strategy_version: ev.strategy_spec_registry_id,
-                        position_snapshot: ev.position_snapshot,
-                        risk_notes: ev.risk_notes,
-                        evidence_refs: ev.evidence_refs,
-                        context_type: "decision_event_consultation",
-                      }
+                    const contextRefs = [
+                      { type: "strategy" as const, id: ev.strategy_id, version_id: ev.strategy_spec_registry_id },
+                      { type: "decision_event" as const, id: ev.decision_event_id },
+                    ];
+                    const resolved = await interaction.resolveContext({
+                      context_refs: contextRefs,
+                      environment: "paper",
                     });
-                    
-                    if (consultQuery.trim()) {
-                      await postWorkshopMessage(newWs.workshop_id, {
-                        content: consultQuery.trim(),
-                        metadata: {
-                          mode: "consult",
-                          participant_persona_ids: selectedPersonas,
-                        }
-                      });
+                    const eligibility = await interaction.participants({
+                      workshop_id: resolved.data.workshop_id,
+                      mode: "consult",
+                      environment: "paper",
+                      required_capability: "persona_opinion",
+                    });
+                    const recommended = eligibility.data.included.filter((item) => item.recommended);
+                    const eligiblePanel = (recommended.length ? recommended : eligibility.data.included)
+                      .slice(0, 3)
+                      .map((item) => item.persona_id);
+                    const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+                    if (eligiblePanel.length === 0 || !eligiblePanel.every((id) => eligibleIds.has(id))) {
+                      throw new Error("No eligible Persona is available for this paper consultation.");
                     }
-
-                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
+                    const submitted = await interaction.submit({
+                      workshop_id: resolved.data.workshop_id,
+                      mode: "consult",
+                      environment: "paper",
+                      required_capability: "persona_opinion",
+                      topic: consultQuery.trim() || `Review ${ev.subject.symbol} ${ev.event_kind} decision ${ev.decision_event_id}`,
+                      participant_persona_ids: eligiblePanel,
+                      context_refs: resolved.data.context_refs,
+                    });
+                    if (submitted.data.execution_authority !== "none") {
+                      throw new Error("Consultation response violated the no-execution authority boundary.");
+                    }
+                    const params = new URLSearchParams({
+                      mode: "consult",
+                      participants: eligiblePanel.join(","),
+                      picker: "named",
+                      return_to: `/agora/trading-room/${encodeURIComponent(ev.strategy_id)}`,
+                      return_label: "Trading Room",
+                    });
+                    navigate(`/agora/strategy-workshop/${resolved.data.workshop_id}?${params.toString()}`);
                   } catch (err) {
                     setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
                   } finally {
@@ -781,8 +776,8 @@ export function TradeDecisionCard({
                   border: "none",
                   borderRadius: 4,
                   fontWeight: 600,
-                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
-                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
+                  cursor: (consultLoading || !writeAccess.interactionAllowed) ? "not-allowed" : "pointer",
+                  opacity: (consultLoading || !writeAccess.interactionAllowed) ? 0.7 : 1
                 }}
                 data-testid={`consult-panel-submit-${ev.decision_event_id}`}
               >
@@ -797,6 +792,11 @@ export function TradeDecisionCard({
               </button>
               {consultError && (
                 <span style={{ color: "#f87171", fontSize: 11 }}>{consultError}</span>
+              )}
+              {writeAccess.interactionDisabledReason && (
+                <span data-testid="trading-room-interaction-disabled-reason" style={{ color: "#fbbf24", fontSize: 11 }}>
+                  {writeAccess.interactionDisabledReason}
+                </span>
               )}
             </div>
           </div>

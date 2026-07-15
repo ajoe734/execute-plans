@@ -1,5 +1,23 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/agora/useAgoraWriteAccess", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/agora/useAgoraWriteAccess")>();
+  return {
+    ...original,
+    useAgoraWriteAccess: () => ({
+      actorId: "operator-1",
+      agoraCapabilities: ["agora.workshop.v1"],
+      capabilities: ["risk.review"],
+      roles: ["operator"],
+      loading: false,
+      interactionAllowed: true,
+      interactionDisabledReason: null,
+      writeAllowed: true,
+      writeDisabledReason: null,
+    }),
+  };
+});
 
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
 import { WorkshopCardRenderer } from "./WorkshopCardRenderer";
@@ -141,6 +159,47 @@ describe("WorkshopCardRenderer", () => {
     expect(screen.getByText("Proceed only after liquidity checks.")).toBeInTheDocument();
     expect(screen.getByText("Research accepts proxy data; risk does not.")).toBeInTheDocument();
     expect(screen.getByText("Liquidity source is stale.")).toBeInTheDocument();
+  });
+
+  it("renders a governed proposal card with revision, paper validation, and no-execution truth", () => {
+    render(
+      <WorkshopCardRenderer
+        card={card({
+          card_type: "governed_proposal",
+          title: "Paper risk adjustment",
+          payload: {
+            etag: '"proposal-v2"',
+            validation_result: { valid: true },
+            proposal: {
+              proposal_id: "proposal-paper-1",
+              proposal_type: "risk_limit_recommendation",
+              target_kind: "strategy",
+              target_id: "strategy-1",
+              target_version: "version-7",
+              current_value: { limit: 5 },
+              proposed_value: { limit: 3 },
+              rationale: "Reduce paper drawdown",
+              evidence_refs: ["evidence-paper-1"],
+              environment_ceiling: "paper",
+              required_permissions: ["risk.review"],
+              required_reviewers: ["human", "risk"],
+              human_gate: true,
+              revision: 2,
+              state: "draft",
+              expires_at: "2026-08-01T00:00:00Z",
+              audit: [{ action: "create", actor: "persona", at: "2026-07-14T00:00:00Z" }],
+              governed_action_link: { execution_authority: "none" },
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("governed-proposal-proposal-paper-1")).toBeInTheDocument();
+    expect(screen.getByText(/revision 2/i)).toBeInTheDocument();
+    expect(screen.getByText("paper")).toBeInTheDocument();
+    expect(screen.getByText(/no execution authority/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "validate" })).toBeEnabled();
   });
 });
 
