@@ -852,38 +852,43 @@ function analyzeMgmtHostedAccept(stepOutcomes) {
 
 function buildGate8(mgmtHostedAccept) {
   if (!mgmtHostedAccept.exists) {
+    const status = hostedStatus(mgmtHostedAccept.missingStatus);
     return [
       makeCheck(
         "Hosted management production-acceptance harness has run.",
-        mgmtHostedAccept.missingStatus,
+        status,
         {
-          owner: GATE_OWNERS[8],
+          owner: status === "pass" ? "" : GATE_OWNERS[8],
           evidence: mgmtHostedAccept.file,
-          note: mgmtHostedAccept.missingNote,
+          note: hostedNote(mgmtHostedAccept.missingNote),
         },
       ),
     ];
   }
   const evidence = mgmtHostedAccept.file;
-  const owner = (status) => (status === "pass" ? "" : GATE_OWNERS[8]);
+  const owner = (status) =>
+    hostedStatus(status) === "pass" ? "" : GATE_OWNERS[8];
   if (!mgmtHostedAccept.gateChecks.length) {
+    const status = hostedStatus("fail");
     return [
       makeCheck(
         "Hosted management production-acceptance harness reports its gate checks.",
-        "fail",
+        status,
         {
-          owner: GATE_OWNERS[8],
+          owner: status === "pass" ? "" : GATE_OWNERS[8],
           evidence,
-          note: "evidence JSON present but gateChecks[] is empty/malformed",
+          note: hostedNote(
+            "evidence JSON present but gateChecks[] is empty/malformed",
+          ),
         },
       ),
     ];
   }
   return mgmtHostedAccept.gateChecks.map((check) =>
-    makeCheck(`Hosted acceptance: ${check.label}`, check.status, {
+    makeCheck(`Hosted acceptance: ${check.label}`, hostedStatus(check.status), {
       owner: owner(check.status),
       evidence,
-      note: check.note || "",
+      note: hostedNote(check.note || "management hosted acceptance check"),
     }),
   );
 }

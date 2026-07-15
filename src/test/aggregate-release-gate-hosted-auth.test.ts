@@ -34,6 +34,38 @@ function gate4For(summaryLines: string[]) {
   }).gates["4"];
 }
 
+function gate8For(hardGate: "true" | "false") {
+  const auditDir = mkdtempSync(join(tmpdir(), "pantheon-gate8-hosted-"));
+  tempDirs.push(auditDir);
+  const jsonOut = join(auditDir, "summary.json");
+  writeFileSync(
+    join(auditDir, "release-gate-step-outcomes.json"),
+    `${JSON.stringify({ mgmt_hosted_accept: { outcome: "success", evidence: "management-hosted-acceptance.log" } })}\n`,
+  );
+  writeFileSync(
+    join(auditDir, "management-hosted-acceptance-2026-07-15.json"),
+    `${JSON.stringify({
+      result: { pass: false },
+      gateChecks: [
+        {
+          label: "No detail route shows raw undefined/NaN/Invalid Date.",
+          status: "fail",
+          note: "count:1",
+        },
+      ],
+    })}\n`,
+  );
+
+  spawnSync("node", [aggregateScript, "--audit-dir", auditDir, "--json-out", jsonOut], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: { ...process.env, PANTHEON_HOSTED_FE_HARD_GATE: hardGate },
+  });
+  return (JSON.parse(readFileSync(jsonOut, "utf8")) as {
+    gates: Record<string, Array<{ label: string; note: string; status: string }>>;
+  }).gates["8"];
+}
+
 const safeUnauthenticatedSummary = [
   "frontend shell status: 200",
   "application root rendered: true",
@@ -132,5 +164,25 @@ describe("release Gate 4 unauthenticated Persona Fleet contract", () => {
       checks.find((check) => check.label === "Browser receives required BFF responses.")
         ?.status,
     ).toBe("fail");
+  });
+});
+
+describe("release Gate 8 hosted management acceptance posture", () => {
+  it("downgrades hosted management readback failures when the hosted gate is advisory", () => {
+    const checks = gate8For("false");
+
+    expect(checks[0]).toMatchObject({
+      status: "warn",
+      note: "count:1; advisory on pull_request",
+    });
+  });
+
+  it("keeps hosted management readback failures hard when the hosted gate is enabled", () => {
+    const checks = gate8For("true");
+
+    expect(checks[0]).toMatchObject({
+      status: "fail",
+      note: "count:1",
+    });
   });
 });
