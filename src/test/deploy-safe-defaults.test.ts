@@ -256,6 +256,11 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'run_release_probe candidate_pre_switch "${RELEASE_DIR}"',
     );
+    expect(deployScript).toContain('local strict_env="0"');
+    expect(deployScript).toContain(
+      'if [[ "${strict}" == "true" || "${strict}" == "1" ]]',
+    );
+    expect(deployScript).toContain('PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"');
     expect(deployScript).toContain(
       'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
     );
