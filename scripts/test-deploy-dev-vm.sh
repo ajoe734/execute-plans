@@ -11,16 +11,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_SOURCE="${ROOT_DIR}/scripts/deploy-dev-vm.sh"
 CANDIDATE_SOURCE="${ROOT_DIR}/scripts/release-candidate.mjs"
 EVIDENCE_SOURCE="${ROOT_DIR}/scripts/release-evidence.mjs"
+CAS_SOURCE="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
 SYSTEM_PATH="${PATH}"
 REAL_NODE="$(command -v node)"
 
-for required_file in "${DEPLOY_SOURCE}" "${CANDIDATE_SOURCE}" "${EVIDENCE_SOURCE}"; do
+for required_file in "${DEPLOY_SOURCE}" "${CANDIDATE_SOURCE}" "${EVIDENCE_SOURCE}" "${CAS_SOURCE}"; do
   if [[ ! -f "${required_file}" ]]; then
     echo "missing test contract: ${required_file}" >&2
     exit 2
   fi
 done
-for required_command in git flock node; do
+for required_command in git flock node python3; do
   if ! command -v "${required_command}" >/dev/null 2>&1; then
     echo "missing test command: ${required_command}" >&2
     exit 2
@@ -33,7 +34,7 @@ BASE_SOURCE="${HARNESS_ROOT}/base-source"
 BASE_ORIGIN="${HARNESS_ROOT}/base-origin.git"
 GATE_RUN_ID="731"
 BFF_SHA="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-PREVIOUS_DIGEST="1111111111111111111111111111111111111111111111111111111111111111"
+PREVIOUS_DIGEST="auto"
 PASSED=0
 FAILED=0
 
@@ -109,6 +110,14 @@ case "${destination_path}" in
   "${MOCK_ALLOWED_ROOT}"/*) ;;
   *) echo "mock rsync destination escaped case root" >&2; exit 2 ;;
 esac
+if [[ "${MOCK_FAIL_DURABLE_RSYNC_ONCE:-false}" == "true" && "${destination_path}" == *"/durable-evidence/"* ]]; then
+  marker="${MOCK_ALLOWED_ROOT}/.durable-rsync-failed-once"
+  if [[ ! -e "${marker}" ]]; then
+    : > "${marker}"
+    echo "mock durable evidence rsync failure" >&2
+    exit 23
+  fi
+fi
 mkdir -p "${destination_path}"
 cp -a "${source_path}/." "${destination_path}/"
 printf 'rsync\n' >> "${MOCK_CALL_LOG:?}"
@@ -141,6 +150,9 @@ if [[ "${1:-}" == "install" ]]; then
   esac
   exit 0
 fi
+if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-symlink-cas.py ]]; then
+  printf 'atomic-cas:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
+fi
 exec "$@"
 MOCK
 
@@ -150,16 +162,48 @@ set -Eeuo pipefail
 url="${@: -1}"
 case "${url}" in
   */bff/version*)
+    call_index="$(grep -Fxc 'curl:bff-version' "${MOCK_CALL_LOG:?}" || true)"
+    IFS=',' read -r -a sha_sequence <<< "${MOCK_BFF_SHA_SEQUENCE:-${MOCK_BFF_SHA:?}}"
+    IFS=',' read -r -a commit_sequence <<< "${MOCK_BFF_COMMIT_SEQUENCE:-${MOCK_BFF_SHA_SEQUENCE:-${MOCK_BFF_SHA:?}}}"
+    IFS=',' read -r -a known_sequence <<< "${MOCK_BFF_KNOWN_SEQUENCE:-true}"
+    sequence_index="${call_index}"
+    if (( sequence_index >= ${#sha_sequence[@]} )); then
+      sequence_index=$((${#sha_sequence[@]} - 1))
+    fi
+    commit_index="${call_index}"
+    if (( commit_index >= ${#commit_sequence[@]} )); then
+      commit_index=$((${#commit_sequence[@]} - 1))
+    fi
+    known_index="${call_index}"
+    if (( known_index >= ${#known_sequence[@]} )); then
+      known_index=$((${#known_sequence[@]} - 1))
+    fi
     printf 'curl:bff-version\n' >> "${MOCK_CALL_LOG:?}"
-    printf '{"source_commit_known":true,"source_commit_sha":"%s","commit":"%s"}\n' \
-      "${MOCK_BFF_SHA:?}" "${MOCK_BFF_SHA}"
+    printf '{"source_commit_known":%s,"source_commit_sha":"%s","commit":"%s"}\n' \
+      "${known_sequence[${known_index}]}" \
+      "${sha_sequence[${sequence_index}]}" \
+      "${commit_sequence[${commit_index}]}"
     ;;
   */deployment.json*)
     printf 'curl:deployment\n' >> "${MOCK_CALL_LOG:?}"
+    if [[ -n "${MOCK_EXTERNAL_SWITCH_TARGET:-}" ]]; then
+      ln -sfn "${MOCK_EXTERNAL_SWITCH_TARGET}" "${PANTHEON_DEV_FE_ROOT:?}.external"
+      mv -Tf "${PANTHEON_DEV_FE_ROOT}.external" "${PANTHEON_DEV_FE_ROOT}"
+    fi
     manifest="${PANTHEON_DEV_FE_ROOT:?}/deployment.json"
     if [[ ! -f "${manifest}" ]]; then
       echo "mock public manifest is unavailable" >&2
       exit 22
+    fi
+    digest_marker="${MOCK_ALLOWED_ROOT}/.github-digest-tampered-once"
+    if [[ "${MOCK_BAD_GITHUB_DIGEST:-false}" == "true" && ! -e "${digest_marker}" ]]; then
+      : > "${digest_marker}"
+      node -e '
+        const fs=require("node:fs");const file=process.argv[1];
+        const value=JSON.parse(fs.readFileSync(file,"utf8"));
+        value.githubArtifactDigest=`sha256:${"0".repeat(64)}`;
+        fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`);
+      ' "${manifest}"
     fi
     cat "${manifest}"
     ;;
@@ -177,9 +221,11 @@ mkdir -p "${BASE_SOURCE}/scripts"
 cp "${DEPLOY_SOURCE}" "${BASE_SOURCE}/scripts/deploy-dev-vm.sh"
 cp "${CANDIDATE_SOURCE}" "${BASE_SOURCE}/scripts/release-candidate.mjs"
 cp "${EVIDENCE_SOURCE}" "${BASE_SOURCE}/scripts/release-evidence.mjs"
+cp "${CAS_SOURCE}" "${BASE_SOURCE}/scripts/atomic-symlink-cas.py"
 chmod +x "${BASE_SOURCE}/scripts/deploy-dev-vm.sh" \
   "${BASE_SOURCE}/scripts/release-candidate.mjs" \
-  "${BASE_SOURCE}/scripts/release-evidence.mjs"
+  "${BASE_SOURCE}/scripts/release-evidence.mjs" \
+  "${BASE_SOURCE}/scripts/atomic-symlink-cas.py"
 
 cat > "${BASE_SOURCE}/scripts/probe-hosted-browser-bff.mjs" <<'MOCK_PROBE'
 #!/usr/bin/env node
@@ -227,11 +273,15 @@ make_previous_manifest() {
   local output="$1"
   local commit="$2"
   local digest="$3"
-  "${REAL_NODE}" --input-type=module - "${output}" "${commit}" "${digest}" <<'NODE'
+  "${REAL_NODE}" --input-type=module - "${output}" "${commit}" "${digest}" "${BFF_SHA}" <<'NODE'
 import fs from "node:fs";
-const [output, commit, digest] = process.argv.slice(2);
+const [output, commit, digest, bffCommit] = process.argv.slice(2);
 const manifest = {
+  app: "execute-plans",
+  environment: "pantheon-dev-fe",
   commit,
+  bffCommit,
+  bffCommitEvidence: true,
   artifactDigest: digest,
   artifactDigestSha256: digest,
   buildMode: {
@@ -260,6 +310,7 @@ setup_case() {
   CASE_RELEASES="${CASE_DIR}/releases"
   CASE_LIVE="${CASE_DIR}/live"
   CASE_AUDIT="${CASE_DIR}/audit"
+  CASE_DURABLE="${CASE_DIR}/durable-evidence"
   CASE_LOCK="${CASE_DIR}/deploy.lock"
   CASE_CALL_LOG="${CASE_DIR}/calls.log"
   PREVIOUS_TARGET="${CASE_RELEASES}/previous"
@@ -276,6 +327,11 @@ setup_case() {
   git -C "${CASE_REPO}" config user.email "deploy-contract-test@example.invalid"
 
   printf '<!doctype html><html><body>previous</body></html>\n' > "${PREVIOUS_TARGET}/index.html"
+  if [[ "${previous_digest}" == "auto" ]]; then
+    previous_digest="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+      "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" digest \
+        --dist-dir "${PREVIOUS_TARGET}")"
+  fi
   make_previous_manifest "${PREVIOUS_TARGET}/deployment.json" "${previous_commit}" "${previous_digest}"
   ln -s "${PREVIOUS_TARGET}" "${CASE_LIVE}"
 
@@ -288,10 +344,34 @@ setup_case() {
       --frontend-sha "${CANDIDATE_SHA}" \
       --bff-sha "${BFF_SHA}" \
       --gate-run-id "${GATE_RUN_ID}" \
-      --gate-run-url "https://github.test/ajoe734/execute-plans/actions/runs/${GATE_RUN_ID}" \
+      --gate-run-url "https://github.com/ajoe734/execute-plans/actions/runs/${GATE_RUN_ID}" \
       --bff-base-url "https://bff.test")"
   [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || die "fixture candidate digest is invalid"
   : > "${CASE_CALL_LOG}"
+}
+
+select_interrupted_candidate() {
+  local interrupted_sha="${1:-${CANDIDATE_SHA}}"
+  local previous_digest
+  INTERRUPTED_TARGET="${CASE_RELEASES}/interrupted-candidate"
+  previous_digest="$(json_field "${PREVIOUS_TARGET}/deployment.json" artifactDigestSha256)"
+  mkdir -p "${INTERRUPTED_TARGET}"
+  cp -a "${CANDIDATE_DIR}/dist/." "${INTERRUPTED_TARGET}/"
+  "${REAL_NODE}" -e '
+    const fs = require("node:fs");
+    const file = process.argv[1];
+    const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+    payload.deploymentState = "candidate";
+    payload.releaseName = "interrupted-candidate";
+    payload.previousReleaseName = "previous";
+    payload.previousCommit = process.argv[2];
+    payload.previousArtifactDigest = process.argv[3];
+    payload.commit = process.argv[4];
+    payload.githubArtifactDigest = `sha256:${process.argv[5]}`;
+    fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}"
+  ln -sfn "${INTERRUPTED_TARGET}" "${CASE_LIVE}.interrupted"
+  mv -Tf "${CASE_LIVE}.interrupted" "${CASE_LIVE}"
 }
 
 run_deploy() {
@@ -305,15 +385,24 @@ run_deploy() {
       TMPDIR="${CASE_TMP}" \
       MOCK_ALLOWED_ROOT="${CASE_DIR}" \
       MOCK_BFF_SHA="${BFF_SHA}" \
+      MOCK_BFF_SHA_SEQUENCE="" \
+      MOCK_BFF_COMMIT_SEQUENCE="" \
+      MOCK_BFF_KNOWN_SEQUENCE="" \
+      MOCK_EXTERNAL_SWITCH_TARGET="" \
       MOCK_CALL_LOG="${CASE_CALL_LOG}" \
       MOCK_FAIL_PROBE_PHASES="" \
+      MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+      MOCK_BAD_GITHUB_DIGEST="false" \
       PANTHEON_DEV_FE_HOST="https://fe.test" \
       PANTHEON_BFF_BASE_URL="https://bff.test" \
       PANTHEON_OLD_BFF_URL="https://old-bff.test" \
       PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
       PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
       PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+      PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
       PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+      PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+      PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
       PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
       PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
       PANTHEON_DEPLOY_BRANCH="dev" \
@@ -321,6 +410,7 @@ run_deploy() {
       PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
       PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
       PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+      PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
       PANTHEON_DEPLOY_OVERRIDE_REASON="" \
       PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
       PANTHEON_DEPLOY_REAL_WRITES="false" \
@@ -328,6 +418,7 @@ run_deploy() {
       PANTHEON_DEPLOY_SKIP_PROBE="false" \
       PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
       PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+      PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
       PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
       PANTHEON_DEV_FE_KEEP_RELEASES="8" \
       VITE_BFF_DEV_BEARER_TOKEN="" \
@@ -383,6 +474,7 @@ assert_summary_outcome() {
 verify_evidence_pair() {
   local log="${CASE_AUDIT}/evidence.jsonl"
   local summary="${CASE_AUDIT}/evidence.json"
+  local durable="${CASE_DURABLE}/run-9001-attempt-1-${CASE_NAME}"
   local head
   [[ -s "${log}" && -s "${summary}" ]] || die "evidence pair is missing"
   head="$("${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" verify --log "${log}")"
@@ -403,6 +495,14 @@ if (summary.eventCount !== events.length || summary.events.length !== events.len
   throw new Error("summary event count mismatch");
 }
 NODE
+  [[ -s "${durable}/evidence.jsonl" && -s "${durable}/evidence.json" ]] || \
+    die "durable evidence pair is missing"
+  cmp -s "${log}" "${durable}/evidence.jsonl" || die "durable evidence log differs"
+  cmp -s "${summary}" "${durable}/evidence.json" || die "durable evidence summary differs"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" verify \
+    --log "${durable}/evidence.jsonl" \
+    --summary "${durable}/evidence.json" \
+    --root "${durable}" >/dev/null
 }
 
 test_valid_candidate_success() {
@@ -413,6 +513,8 @@ test_valid_candidate_success() {
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
   assert_probe_not_called rollback
+  grep -Fxq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "valid switch did not use atomic symlink exchange CAS"
   assert_summary_outcome accepted
   verify_evidence_pair
 }
@@ -451,6 +553,55 @@ test_pre_probe_failure_preserves_previous() {
   verify_evidence_pair
 }
 
+test_bff_identity_is_bound_before_and_after_switch() {
+  local different_bff_sha="cccccccccccccccccccccccccccccccccccccccc"
+
+  setup_case bff-unknown-before-candidate
+  run_deploy MOCK_BFF_KNOWN_SEQUENCE=false
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "unknown BFF identity unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  assert_summary_outcome rejected_before_switch
+
+  setup_case bff-alias-mismatch
+  run_deploy MOCK_BFF_COMMIT_SEQUENCE="${different_bff_sha}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "inconsistent BFF identity aliases unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+
+  setup_case bff-drift-before-switch
+  run_deploy MOCK_BFF_SHA_SEQUENCE="${BFF_SHA},${different_bff_sha}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "pre-switch BFF drift unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rejected_before_switch
+
+  setup_case bff-drift-after-switch
+  run_deploy MOCK_BFF_SHA_SEQUENCE="${BFF_SHA},${BFF_SHA},${different_bff_sha}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "post-switch BFF drift unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rollback_probe_failed
+  verify_evidence_pair
+
+  setup_case bff-drift-during-post-probe
+  run_deploy MOCK_BFF_SHA_SEQUENCE="${BFF_SHA},${BFF_SHA},${BFF_SHA},${different_bff_sha},${BFF_SHA}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "BFF drift during the post-switch probe unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_called post_switch
+  assert_probe_called rollback
+  local exchange_count
+  exchange_count="$(grep -Fxc 'atomic-cas:exchange' "${CASE_CALL_LOG}" || true)"
+  [[ "${exchange_count}" -ge 2 ]] || \
+    show_deploy_failure "rollback did not use atomic symlink exchange CAS"
+  assert_summary_outcome rolled_back
+  verify_evidence_pair
+}
+
 test_post_probe_failure_rolls_back_and_reprobes() {
   setup_case post-probe-rollback
   run_deploy MOCK_FAIL_PROBE_PHASES=post_switch
@@ -463,6 +614,105 @@ test_post_probe_failure_rolls_back_and_reprobes() {
   verify_evidence_pair
 }
 
+test_github_archive_digest_is_bound_in_public_manifest() {
+  setup_case github-digest-readback
+  run_deploy MOCK_BAD_GITHUB_DIGEST=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "wrong public GitHub artifact digest unexpectedly passed"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  grep -Fq "GitHub artifact digest mismatch" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing public GitHub artifact digest rejection"
+  verify_evidence_pair
+}
+
+test_external_restore_of_previous_is_reprobed() {
+  setup_case external-restored-previous
+  run_deploy MOCK_EXTERNAL_SWITCH_TARGET="${PREVIOUS_TARGET}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "external predecessor restore unexpectedly accepted candidate"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  grep -Fq '"type":"rollback.external_restore"' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "external predecessor restore was not audited"
+  verify_evidence_pair
+}
+
+test_durable_evidence_failure_rolls_back_and_refinalizes() {
+  setup_case durable-evidence-retry
+  run_deploy MOCK_FAIL_DURABLE_RSYNC_ONCE=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "durable evidence failure unexpectedly accepted candidate"
+  assert_previous_is_live
+  assert_probe_called post_switch
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  grep -Fq '"type":"release.completed"' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "acceptance terminal was not reached before durable failure"
+  grep -Fq '"type":"release.failed"' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "durable failure was not re-finalized as a rollback"
+  verify_evidence_pair
+}
+
+test_bootstrap_install_and_failed_release_removal_use_cas() {
+  setup_case bootstrap-success
+  rm "${CASE_LIVE}"
+  run_deploy PANTHEON_DEPLOY_ALLOW_BOOTSTRAP=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "atomic bootstrap should succeed when live is absent"
+  assert_candidate_is_live
+  grep -Fxq 'atomic-cas:install-if-absent' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "bootstrap did not use atomic NOREPLACE install"
+
+  setup_case bootstrap-post-failure
+  rm "${CASE_LIVE}"
+  run_deploy PANTHEON_DEPLOY_ALLOW_BOOTSTRAP=true MOCK_FAIL_PROBE_PHASES=post_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "failed bootstrap post-probe unexpectedly succeeded"
+  [[ ! -e "${CASE_LIVE}" && ! -L "${CASE_LIVE}" ]] || \
+    show_deploy_failure "failed bootstrap candidate remained live"
+  grep -Fxq 'atomic-cas:install-if-absent' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "failed bootstrap did not use atomic NOREPLACE install"
+  grep -Fxq 'atomic-cas:remove-if-target' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "failed bootstrap did not use atomic CAS removal"
+  assert_probe_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rollback_probe_failed
+  verify_evidence_pair
+}
+
+test_manual_rollback_drill_restores_and_reprobes() {
+  local drill_reason="approved target dev rollback readback drill"
+
+  setup_case manual-rollback-drill
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_ROLLBACK_DRILL=true \
+    PANTHEON_DEPLOY_OVERRIDE_ACTOR=test-operator \
+    PANTHEON_DEPLOY_OVERRIDE_REASON="${drill_reason}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "controlled rollback drill unexpectedly accepted the candidate"
+  assert_previous_is_live
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  grep -Fq '"type":"rollback.drill"' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "rollback drill evidence event missing"
+  verify_evidence_pair
+
+  setup_case nonmanual-rollback-drill
+  run_deploy \
+    GITHUB_EVENT_NAME=push \
+    PANTHEON_DEPLOY_ROLLBACK_DRILL=true \
+    PANTHEON_DEPLOY_OVERRIDE_ACTOR=test-operator \
+    PANTHEON_DEPLOY_OVERRIDE_REASON="${drill_reason}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "non-manual rollback drill unexpectedly ran"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "restricted to an explicit manual workflow dispatch" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing manual-only rollback drill rejection"
+}
+
 test_rollback_reprobe_failure_is_explicit() {
   setup_case rollback-reprobe-failure
   run_deploy MOCK_FAIL_PROBE_PHASES=post_switch,rollback
@@ -473,19 +723,40 @@ test_rollback_reprobe_failure_is_explicit() {
   verify_evidence_pair
 }
 
+test_external_live_switch_is_never_overwritten() {
+  setup_case external-live-switch
+  local external_target="${CASE_RELEASES}/external"
+  local external_digest
+  mkdir -p "${external_target}"
+  printf '<!doctype html><html><body>external</body></html>\n' > "${external_target}/index.html"
+  external_digest="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" digest --dist-dir "${external_target}")"
+  make_previous_manifest "${external_target}/deployment.json" "${PREVIOUS_SHA}" "${external_digest}"
+
+  run_deploy MOCK_EXTERNAL_SWITCH_TARGET="${external_target}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "externally changed live target unexpectedly succeeded"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${external_target}" ]] || \
+    show_deploy_failure "deploy overwrote an externally selected live release"
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rollback_failed
+  verify_evidence_pair
+}
+
 test_out_of_order_and_expected_dev_mismatch_rejected() {
   setup_case remote-dev-mismatch
   git --git-dir="${CASE_ORIGIN}" update-ref refs/heads/dev "${PREVIOUS_SHA}"
   run_deploy
   [[ "${RUN_STATUS}" -ne 0 ]] || die "out-of-order remote dev candidate unexpectedly succeeded"
   assert_previous_is_live
-  grep -Fq "Out-of-order candidate rejected" "${RUN_OUTPUT}" || show_deploy_failure "missing out-of-order rejection"
+  grep -Fq "stale deploy controller" "${RUN_OUTPUT}" || show_deploy_failure "missing stale-controller rejection"
 
   setup_case expected-dev-mismatch
   run_deploy PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${PREVIOUS_SHA}"
   [[ "${RUN_STATUS}" -ne 0 ]] || die "stale expected dev identity unexpectedly succeeded"
   assert_previous_is_live
-  grep -Fq "Dev advanced after workflow validation" "${RUN_OUTPUT}" || show_deploy_failure "missing expected-dev rejection"
+  grep -Fq "Trusted controller checkout" "${RUN_OUTPUT}" || show_deploy_failure "missing expected-dev rejection"
 }
 
 test_concurrent_flock_rejected() {
@@ -503,8 +774,8 @@ test_concurrent_flock_rejected() {
 
 test_same_sha_different_digest_rejected() {
   local different_digest
-  different_digest="$(repeat_character 2 64)"
-  setup_case same-sha-different-digest "${CANDIDATE_SHA}" "${different_digest}"
+  setup_case same-sha-different-digest "${CANDIDATE_SHA}" auto
+  different_digest="$(json_field "${PREVIOUS_TARGET}/deployment.json" artifactDigestSha256)"
   [[ "${different_digest}" != "${CANDIDATE_DIGEST}" ]] || die "test digest unexpectedly equals candidate digest"
   run_deploy
   [[ "${RUN_STATUS}" -ne 0 ]] || die "same-SHA replacement unexpectedly succeeded"
@@ -514,7 +785,15 @@ test_same_sha_different_digest_rejected() {
 
 test_exact_candidate_noop_revalidates_live_release() {
   setup_case exact-candidate-noop
-  cp "${CANDIDATE_DIR}/dist/deployment.json" "${PREVIOUS_TARGET}/deployment.json"
+  rm -rf "${PREVIOUS_TARGET:?}"/*
+  cp -a "${CANDIDATE_DIR}/dist/." "${PREVIOUS_TARGET}/"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const value=JSON.parse(fs.readFileSync(file,"utf8"));
+    value.githubArtifactDigest=`sha256:${process.argv[2]}`;
+    value.deploymentState="accepted";
+    fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json" "${CANDIDATE_DIGEST}"
 
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "exact live candidate no-op should pass revalidation"
@@ -532,6 +811,40 @@ test_exact_candidate_noop_revalidates_live_release() {
   verify_evidence_pair
 }
 
+test_interrupted_candidate_recovers_or_rolls_back() {
+  setup_case interrupted-roll-forward
+  select_interrupted_candidate
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "interrupted candidate did not roll forward"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || die "recovery changed the valid candidate target"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "accepted" ]] || die "recovery did not repair deploymentState"
+  assert_probe_called noop
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case interrupted-rollback
+  select_interrupted_candidate
+  run_deploy MOCK_FAIL_PROBE_PHASES=noop
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "failed interrupted candidate probe unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_called noop
+  assert_probe_called recovery_rollback
+  assert_summary_outcome recovery_rolled_back
+  verify_evidence_pair
+
+  setup_case interrupted-before-different-candidate
+  select_interrupted_candidate "$(repeat_character 4 40)"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "different candidate deployed over an interrupted candidate"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  assert_probe_called recovery_rollback
+  assert_summary_outcome recovery_rolled_back
+  grep -Fq "must be restored before a different candidate" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing interrupted predecessor recovery message"
+  verify_evidence_pair
+}
+
 test_emergency_override_cannot_skip_integrity_or_probes() {
   local override_reason="approved emergency regression override"
 
@@ -546,7 +859,6 @@ test_emergency_override_cannot_skip_integrity_or_probes() {
   assert_probe_not_called candidate_pre_switch
 
   setup_case emergency-valid
-  git --git-dir="${CASE_ORIGIN}" update-ref refs/heads/dev "${PREVIOUS_SHA}"
   run_deploy \
     PANTHEON_DEPLOY_EMERGENCY_OVERRIDE=true \
     PANTHEON_DEPLOY_OVERRIDE_ACTOR=test-operator \
@@ -612,12 +924,20 @@ run_test() {
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
 run_test "candidate asset and digest tampering reject before switch" test_tampered_candidate_and_digest_rejected
 run_test "candidate pre-probe failure preserves exact previous" test_pre_probe_failure_preserves_previous
+run_test "BFF identity is exact and stable across the switch" test_bff_identity_is_bound_before_and_after_switch
 run_test "post-switch failure rolls back and re-probes" test_post_probe_failure_rolls_back_and_reprobes
+run_test "public manifest binds the GitHub archive digest" test_github_archive_digest_is_bound_in_public_manifest
+run_test "external predecessor restore is fully re-probed" test_external_restore_of_previous_is_reprobed
+run_test "durable evidence failure rolls back and re-finalizes" test_durable_evidence_failure_rolls_back_and_refinalizes
+run_test "bootstrap installs only if absent and CAS-removes a failed candidate" test_bootstrap_install_and_failed_release_removal_use_cas
+run_test "manual rollback drill restores and re-probes exact previous release" test_manual_rollback_drill_restores_and_reprobes
 run_test "rollback re-probe failure stays nonzero with previous live" test_rollback_reprobe_failure_is_explicit
+run_test "external live switch is preserved by rollback CAS" test_external_live_switch_is_never_overwritten
 run_test "out-of-order and expected-dev mismatches reject" test_out_of_order_and_expected_dev_mismatch_rejected
 run_test "concurrent flock rejects" test_concurrent_flock_rejected
 run_test "same SHA with a different digest rejects" test_same_sha_different_digest_rejected
 run_test "exact same SHA and digest revalidates the live release" test_exact_candidate_noop_revalidates_live_release
+run_test "interrupted candidate rolls forward or restores its exact predecessor" test_interrupted_candidate_recovers_or_rolls_back
 run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_cannot_skip_integrity_or_probes
 run_test "write, bearer, and skip-probe inputs fail closed" test_write_token_and_skip_flags_fail_closed
 

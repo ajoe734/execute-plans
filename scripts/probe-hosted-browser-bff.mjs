@@ -24,15 +24,37 @@ const FE_PATH = normalizePath(
 );
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const RELEASE_STRICT = process.env.PANTHEON_PROBE_RELEASE_STRICT === "1";
-const EXPECTED_FE_SHA = String(process.env.PANTHEON_EXPECTED_FE_SHA || "").trim();
+const EXPECTED_FE_SHA = String(
+  process.env.PANTHEON_EXPECTED_FE_SHA || "",
+).trim();
 const EXPECTED_ARTIFACT_DIGEST = String(
   process.env.PANTHEON_EXPECTED_ARTIFACT_DIGEST || "",
 ).trim();
 const PROBE_JSON_OUT = String(process.env.PANTHEON_PROBE_JSON_OUT || "").trim();
 const CANDIDATE_DIR = String(process.env.PANTHEON_CANDIDATE_DIR || "").trim();
-const OVERALL_TIMEOUT_MS = 90_000;
+const OVERALL_TIMEOUT_MS = 120_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
+const REQUIRED_CORE_TIMEOUT_MS = 20_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
+export const HOSTED_UX_PROFILES = Object.freeze([
+  Object.freeze({
+    id: "desktop-1440",
+    width: 1440,
+    height: 900,
+    mobile: false,
+  }),
+  Object.freeze({ id: "mobile-390", width: 390, height: 844, mobile: true }),
+]);
+export const HOSTED_UX_PERFORMANCE_BUDGETS = Object.freeze({
+  responseEndMs: 3_000,
+  domContentLoadedMs: 4_000,
+  loadEventMs: 8_000,
+  firstContentfulPaintMs: 4_000,
+  totalTransferBytes: 8 * 1024 * 1024,
+});
+const AXE_BLOCKING_IMPACTS = new Set(["critical", "serious"]);
+const REDUCED_MOTION_MAX_TRANSITION_MS = 150;
+const KEYBOARD_FOCUS_ATTEMPTS = 12;
 const REQUIRED_CORE_BFF_PATHS = parsePathList(
   process.env.PANTHEON_HOSTED_REQUIRED_BFF_PATHS,
   ["/bff/me"],
@@ -40,10 +62,7 @@ const REQUIRED_CORE_BFF_PATHS = parsePathList(
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/management/persona-fleet"].filter(
   (pathname) => !REQUIRED_CORE_BFF_PATHS.includes(pathname),
 );
-const CORE_BFF_PATHS = [
-  ...OPTIONAL_CORE_BFF_PATHS,
-  ...REQUIRED_CORE_BFF_PATHS,
-];
+const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"];
 const FRONTEND_RESOURCE_TYPES = new Set([
   "document",
@@ -95,10 +114,7 @@ function normalizePath(value) {
 
 function parsePathList(value, fallback) {
   if (!value) return fallback;
-  const parsed = value
-    .split(",")
-    .map(normalizePath)
-    .filter(Boolean);
+  const parsed = value.split(",").map(normalizePath).filter(Boolean);
   return parsed.length ? parsed : fallback;
 }
 
@@ -107,8 +123,23 @@ function matchesUrlNeedle(url, needle) {
   const cleanNeedle = trimTrailingSlash(needle.trim());
   if (!cleanNeedle) return false;
   return cleanNeedle.startsWith("http")
-    ? url.startsWith(cleanNeedle)
+    ? httpPathWithinBase(url, cleanNeedle) !== null
     : url.includes(cleanNeedle);
+}
+
+export function httpPathWithinBase(value, baseValue) {
+  try {
+    const target = new URL(String(value || ""));
+    const base = new URL(String(baseValue || ""));
+    if (target.origin !== base.origin) return null;
+    const basePath = base.pathname.replace(/\/+$/u, "") || "/";
+    if (basePath === "/") return target.pathname;
+    if (target.pathname === basePath) return "/";
+    if (!target.pathname.startsWith(basePath + "/")) return null;
+    return target.pathname.slice(basePath.length);
+  } catch {
+    return null;
+  }
 }
 
 function pathnameOf(url) {
@@ -119,20 +150,24 @@ function pathnameOf(url) {
   }
 }
 
-function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
-  const pathname = pathnameOf(url);
+export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
+  const pathname = httpPathWithinBase(url, baseUrl);
+  if (pathname === null) return false;
   return (
     pathname.startsWith("/bff/") ||
     ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname)
   );
 }
 
+function isBffUrl(url) {
+  return httpPathWithinBase(url, BFF_BASE) !== null;
+}
+
 function isCoreBffResponse(res, expectedPath) {
   const url = res.url();
   return (
     isBffUrl(url) &&
-    pathnameOf(url) === expectedPath &&
+    httpPathWithinBase(url, BFF_BASE) === expectedPath &&
     res.request().method() === "GET"
   );
 }
@@ -152,10 +187,106 @@ function remainingTimeoutMs() {
   return Math.max(1, OVERALL_TIMEOUT_MS - (Date.now() - probeStartedAt));
 }
 
+function finitePositive(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+export function summarizeAxeViolations(violations) {
+  return (Array.isArray(violations) ? violations : [])
+    .filter((violation) =>
+      AXE_BLOCKING_IMPACTS.has(String(violation?.impact || "")),
+    )
+    .map((violation) => ({
+      id: /^[a-z0-9-]{1,120}$/u.test(String(violation?.id || ""))
+        ? String(violation.id)
+        : "unknown",
+      impact: String(violation?.impact || "unknown").slice(0, 20),
+      nodeCount: Array.isArray(violation?.nodes) ? violation.nodes.length : 0,
+    }))
+    .sort(
+      (left, right) =>
+        left.id.localeCompare(right.id) ||
+        left.impact.localeCompare(right.impact),
+    );
+}
+
+export function assessHostedUxProfile(result) {
+  const profile = HOSTED_UX_PROFILES.find(
+    (entry) => entry.id === String(result?.profile || ""),
+  );
+  const metrics = result?.performance || {};
+  const performanceMetricsComplete = [
+    "responseEndMs",
+    "domContentLoadedMs",
+    "loadEventMs",
+    "firstContentfulPaintMs",
+    "totalTransferBytes",
+  ].every((key) => finitePositive(metrics[key]));
+  const performanceMilestonesOrdered =
+    performanceMetricsComplete &&
+    metrics.responseEndMs <= metrics.domContentLoadedMs &&
+    metrics.domContentLoadedMs <= metrics.loadEventMs;
+  const performanceWithinBudget =
+    performanceMetricsComplete &&
+    performanceMilestonesOrdered &&
+    Object.entries(HOSTED_UX_PERFORMANCE_BUDGETS).every(
+      ([key, maximum]) => metrics[key] <= maximum,
+    );
+
+  const checks = {
+    knownProfile: Boolean(profile),
+    executionCompleted: result?.executionCompleted === true,
+    exactViewport:
+      Boolean(profile) &&
+      result?.viewport?.width === profile.width &&
+      result?.viewport?.height === profile.height,
+    shellLoaded:
+      Number.isInteger(result?.shellStatus) &&
+      result.shellStatus >= 200 &&
+      result.shellStatus < 400,
+    requiredCoreResponsesObserved:
+      result?.requiredCoreResponsesObserved === true,
+    routeContentReady: result?.routeContentReady === true,
+    axeCompleted: result?.axe?.completed === true,
+    axeBlockingViolationsAbsent:
+      Array.isArray(result?.axe?.blockingViolations) &&
+      result.axe.blockingViolations.length === 0,
+    pageErrorsAbsent: result?.diagnostics?.pageErrorCount === 0,
+    unexpectedConsoleErrorsAbsent:
+      result?.diagnostics?.unexpectedConsoleErrorCount === 0,
+    frontendResourceFailuresAbsent:
+      result?.diagnostics?.frontendResourceFailureCount === 0,
+    frontendResourceHttpErrorsAbsent:
+      result?.diagnostics?.frontendResourceHttpErrorCount === 0,
+    authorizationHeadersAbsent:
+      result?.diagnostics?.authorizationRequestCount === 0,
+    browserWriteMethodsAbsent:
+      result?.diagnostics?.browserWriteMethodCount === 0,
+    keyboardFocusReached: result?.keyboardFocus?.reachedCount > 0,
+    keyboardFocusVisible:
+      result?.keyboardFocus?.reachedCount > 0 &&
+      result?.keyboardFocus?.missingVisibleCueCount === 0,
+    reducedMotionPreferenceActive:
+      result?.reducedMotion?.preferenceActive === true,
+    reducedMotionScanComplete: result?.reducedMotion?.scanComplete === true,
+    reducedMotionAnimationsAbsent:
+      result?.reducedMotion?.activeAnimationCount === 0,
+    reducedMotionLongTransitionsAbsent:
+      result?.reducedMotion?.longTransitionCount === 0,
+    performanceMetricsComplete,
+    performanceMilestonesOrdered,
+    performanceWithinBudget,
+  };
+  const failures = Object.entries(checks)
+    .filter(([, passed]) => !passed)
+    .map(([check]) => check);
+  return { pass: failures.length === 0, checks, failures };
+}
+
 async function waitForCoreBffResponse(
   page,
   expectedPath,
-  timeoutMs = remainingTimeoutMs(),
+  timeoutMs = Math.min(REQUIRED_CORE_TIMEOUT_MS, remainingTimeoutMs()),
 ) {
   try {
     const res = await page.waitForResponse(
@@ -204,14 +335,18 @@ export function canonicalizeSha256(value) {
 }
 
 export function canonicalizeCommitSha(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return /^[a-f0-9]{40}$/u.test(normalized) ? normalized : "";
 }
 
 function booleanString(value) {
   if (value === true) return "true";
   if (value === false) return "false";
-  return String(value == null ? "" : value).trim().toLowerCase();
+  return String(value == null ? "" : value)
+    .trim()
+    .toLowerCase();
 }
 
 function positiveRunId(value) {
@@ -294,9 +429,7 @@ export function inspectDeploymentMetadata(
       buildMode: {
         VITE_BFF_MODE: String(buildMode.VITE_BFF_MODE || ""),
         VITE_BFF_FALLBACK: String(buildMode.VITE_BFF_FALLBACK || ""),
-        VITE_BFF_REAL_WRITES: booleanString(
-          buildMode.VITE_BFF_REAL_WRITES,
-        ),
+        VITE_BFF_REAL_WRITES: booleanString(buildMode.VITE_BFF_REAL_WRITES),
         VITE_BFF_ALLOW_DEV_STUB_WRITES: booleanString(
           buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES,
         ),
@@ -311,8 +444,7 @@ export function inspectDeploymentMetadata(
 const SENSITIVE_VALUE_PATTERNS = [
   {
     category: "private_key",
-    pattern:
-      /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/giu,
+    pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/giu,
   },
   {
     category: "bearer_credential",
@@ -324,8 +456,7 @@ const SENSITIVE_VALUE_PATTERNS = [
   },
   {
     category: "client_secret_literal",
-    pattern:
-      /\bclient[_-]?secret\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/giu,
+    pattern: /\bclient[_-]?secret\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/giu,
   },
   {
     category: "service_role_literal",
@@ -334,8 +465,7 @@ const SENSITIVE_VALUE_PATTERNS = [
   },
   {
     category: "private_key_literal",
-    pattern:
-      /\bprivate[_-]?key\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/giu,
+    pattern: /\bprivate[_-]?key\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/giu,
   },
   {
     category: "access_token_literal",
@@ -442,10 +572,40 @@ export function redactUrl(value) {
   }
 }
 
+export function inspectBrowserBffMethods(requests) {
+  const observed = (Array.isArray(requests) ? requests : []).map((request) => ({
+    method: canonicalBrowserMethod(request?.method),
+    url: redactUrl(request?.url || ""),
+  }));
+  const writeRequests = observed
+    .filter((request) => !["GET", "HEAD"].includes(request.method))
+    .sort(
+      (left, right) =>
+        left.method.localeCompare(right.method) ||
+        left.url.localeCompare(right.url),
+    );
+  return {
+    pass: writeRequests.length === 0,
+    observedRequestCount: observed.length,
+    writeRequestCount: writeRequests.length,
+    writeRequests,
+  };
+}
+
+function canonicalBrowserMethod(value) {
+  const method = String(value || "")
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{1,20}$/u.test(method) ? method : "INVALID";
+}
+
 export function isAllowlistedConsoleError(entry) {
   const text = String(entry?.text || "");
+  if (scanTextForSensitiveValues("console", text).length > 0) return false;
   if (
-    /AUTH_REQUIRED|authentication required|missing Bearer token/iu.test(text)
+    /AUTH_REQUIRED|authentication required|missing (?:or invalid )?(?:Bearer token|Authorization header)/iu.test(
+      text,
+    )
   ) {
     return true;
   }
@@ -516,8 +676,7 @@ function mimeType(filePath) {
 function rawPathFromUrl(requestUrl) {
   const raw = String(requestUrl || "");
   const schemeIndex = raw.indexOf("://");
-  const pathStart =
-    schemeIndex === -1 ? 0 : raw.indexOf("/", schemeIndex + 3);
+  const pathStart = schemeIndex === -1 ? 0 : raw.indexOf("/", schemeIndex + 3);
   return (pathStart === -1 ? "/" : raw.slice(pathStart)).split(/[?#]/u, 1)[0];
 }
 
@@ -533,7 +692,9 @@ export function createCandidateResolver(candidateDir) {
 
     let pathname;
     try {
-      pathname = decodeURIComponent(new URL(requestUrl, "https://candidate.invalid").pathname);
+      pathname = decodeURIComponent(
+        new URL(requestUrl, "https://candidate.invalid").pathname,
+      );
     } catch {
       throw new Error("candidate request path is not valid UTF-8");
     }
@@ -689,10 +850,9 @@ function evidencePath(timestamp) {
 
 async function readDeploymentJson(candidateResolver) {
   if (candidateResolver) {
-    const resolved = candidateResolver.resolve(
-      FE_BASE + "/deployment.json",
-      { spaFallback: false },
-    );
+    const resolved = candidateResolver.resolve(FE_BASE + "/deployment.json", {
+      spaFallback: false,
+    });
     if (resolved.status !== 200) {
       return {
         ok: false,
@@ -781,8 +941,7 @@ async function installCandidateRoute(page, candidateResolver, routeErrors) {
           "Cache-Control": "no-store",
           "X-Pantheon-Candidate-Release": "1",
         },
-        body:
-          method === "HEAD" ? "" : fs.readFileSync(resolved.filePath),
+        body: method === "HEAD" ? "" : fs.readFileSync(resolved.filePath),
       });
     } catch (error) {
       routeErrors.push({
@@ -798,6 +957,466 @@ async function installCandidateRoute(page, candidateResolver, routeErrors) {
       });
     }
   });
+}
+
+function isFrontendOriginUrl(value) {
+  try {
+    return new URL(value).origin === new URL(FE_BASE).origin;
+  } catch {
+    return false;
+  }
+}
+
+function sortedDiagnostics(entries) {
+  return [...entries].sort((left, right) =>
+    JSON.stringify(left).localeCompare(JSON.stringify(right)),
+  );
+}
+
+async function inspectKeyboardFocus(page) {
+  const observed = new Map();
+  for (let attempt = 0; attempt < KEYBOARD_FOCUS_ATTEMPTS; attempt += 1) {
+    await page.keyboard.press("Tab");
+    const sample = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (!(element instanceof Element) || element === document.body) {
+        return { domIndex: -1, reached: false, visibleCue: false };
+      }
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const reached =
+        element.matches(
+          'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])',
+        ) &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.top < window.innerHeight &&
+        rect.left < window.innerWidth &&
+        style.display !== "none" &&
+        style.visibility !== "hidden";
+      const outlineVisible =
+        style.outlineStyle !== "none" &&
+        Number.parseFloat(style.outlineWidth || "0") >= 1 &&
+        style.outlineColor !== "transparent" &&
+        !/rgba?\([^)]*,\s*0(?:\.0+)?\s*\)$/iu.test(style.outlineColor);
+      const boxShadowVisible =
+        style.boxShadow !== "none" &&
+        !/^rgba?\([^)]*,\s*0(?:\.0+)?\s*\)\s+0px\s+0px\s+0px/iu.test(
+          style.boxShadow,
+        );
+      return {
+        domIndex: Array.prototype.indexOf.call(
+          document.querySelectorAll("*"),
+          element,
+        ),
+        reached,
+        visibleCue:
+          reached &&
+          element.matches(":focus-visible") &&
+          (outlineVisible || boxShadowVisible),
+      };
+    });
+    if (sample.reached && !observed.has(sample.domIndex)) {
+      observed.set(sample.domIndex, sample.visibleCue);
+    }
+  }
+  const samples = [...observed.values()];
+  return {
+    attemptedCount: KEYBOARD_FOCUS_ATTEMPTS,
+    reachedCount: samples.length,
+    visibleCueCount: samples.filter(Boolean).length,
+    missingVisibleCueCount: samples.filter((visible) => !visible).length,
+  };
+}
+
+async function waitForHostedRouteContent(page) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const root = document.querySelector("#root");
+        return Boolean(
+          root &&
+          root.childElementCount > 0 &&
+          (document.body.innerText || "").trim(),
+        );
+      },
+      undefined,
+      { timeout: Math.min(10_000, remainingTimeoutMs()) },
+    );
+    return await page.evaluate(
+      ({ quietMs, maximumMs }) =>
+        new Promise((resolve) => {
+          const root = document.querySelector("#root");
+          if (!root) {
+            resolve(false);
+            return;
+          }
+          let quietTimer;
+          let maximumTimer;
+          const finish = (settled) => {
+            clearTimeout(quietTimer);
+            clearTimeout(maximumTimer);
+            observer.disconnect();
+            resolve(settled);
+          };
+          const markMutation = () => {
+            clearTimeout(quietTimer);
+            quietTimer = setTimeout(() => finish(true), quietMs);
+          };
+          const observer = new MutationObserver(markMutation);
+          observer.observe(root, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true,
+          });
+          maximumTimer = setTimeout(() => finish(false), maximumMs);
+          markMutation();
+        }),
+      { quietMs: 400, maximumMs: 5_000 },
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function inspectReducedMotion(page) {
+  return page.evaluate((maximumTransitionMs) => {
+    const allElements = Array.from(document.querySelectorAll("*"));
+    const maximumElements = 5_000;
+    let observedElementCount = 0;
+    let activeAnimationCount = 0;
+    let longTransitionCount = 0;
+
+    const milliseconds = (value) => {
+      const clean = String(value || "").trim();
+      if (clean.endsWith("ms")) return Number.parseFloat(clean) || 0;
+      if (clean.endsWith("s")) return (Number.parseFloat(clean) || 0) * 1_000;
+      return 0;
+    };
+    const list = (value) =>
+      String(value || "")
+        .split(",")
+        .map((item) => item.trim());
+
+    for (const element of allElements.slice(0, maximumElements)) {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      if (
+        rect.width <= 0 ||
+        rect.height <= 0 ||
+        style.display === "none" ||
+        style.visibility === "hidden"
+      ) {
+        continue;
+      }
+      observedElementCount += 1;
+
+      const animationNames = list(style.animationName);
+      const animationDurations = list(style.animationDuration).map(
+        milliseconds,
+      );
+      const animationDelays = list(style.animationDelay).map(milliseconds);
+      const animationIterations = list(style.animationIterationCount).map(
+        (value) =>
+          value === "infinite"
+            ? Number.POSITIVE_INFINITY
+            : Number.parseFloat(value) || 0,
+      );
+      if (
+        animationNames.some(
+          (name, index) =>
+            name !== "none" &&
+            (animationDurations[index % animationDurations.length] || 0) +
+              (animationDelays[index % animationDelays.length] || 0) >
+              1 &&
+            (animationIterations[index % animationIterations.length] || 0) > 0,
+        )
+      ) {
+        activeAnimationCount += 1;
+      }
+
+      const transitionDurations = list(style.transitionDuration).map(
+        milliseconds,
+      );
+      const transitionDelays = list(style.transitionDelay).map(milliseconds);
+      if (
+        transitionDurations.some(
+          (duration, index) =>
+            duration +
+              (transitionDelays[index % transitionDelays.length] || 0) >
+            maximumTransitionMs,
+        )
+      ) {
+        longTransitionCount += 1;
+      }
+    }
+
+    return {
+      preferenceActive: window.matchMedia("(prefers-reduced-motion: reduce)")
+        .matches,
+      scanComplete: allElements.length <= maximumElements,
+      scannedElementCount: Math.min(allElements.length, maximumElements),
+      observedElementCount,
+      activeAnimationCount,
+      longTransitionCount,
+      maximumTransitionMs,
+    };
+  }, REDUCED_MOTION_MAX_TRANSITION_MS);
+}
+
+async function inspectPerformance(page) {
+  return page.evaluate(() => {
+    const rounded = (value) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.max(0, Math.round(value))
+        : null;
+    const navigation = performance.getEntriesByType("navigation")[0];
+    const firstContentfulPaint = performance
+      .getEntriesByType("paint")
+      .find((entry) => entry.name === "first-contentful-paint");
+    const sameOriginResources = performance
+      .getEntriesByType("resource")
+      .filter((entry) => {
+        try {
+          return new URL(entry.name).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      });
+    const totalTransferBytes = sameOriginResources.reduce(
+      (total, entry) =>
+        total +
+        (entry.transferSize > 0
+          ? entry.transferSize
+          : entry.encodedBodySize || 0),
+      navigation
+        ? navigation.transferSize > 0
+          ? navigation.transferSize
+          : navigation.encodedBodySize || 0
+        : 0,
+    );
+    return {
+      responseEndMs: navigation ? rounded(navigation.responseEnd) : null,
+      domContentLoadedMs: navigation
+        ? rounded(navigation.domContentLoadedEventEnd)
+        : null,
+      loadEventMs: navigation ? rounded(navigation.loadEventEnd) : null,
+      firstContentfulPaintMs: firstContentfulPaint
+        ? rounded(firstContentfulPaint.startTime)
+        : null,
+      totalTransferBytes: rounded(totalTransferBytes),
+    };
+  });
+}
+
+async function runHostedUxProfile({
+  browser,
+  AxeBuilder,
+  profile,
+  pageUrl,
+  candidateResolver,
+  candidateRouteErrors,
+}) {
+  const result = {
+    profile: profile.id,
+    viewport: { width: profile.width, height: profile.height },
+    executionCompleted: false,
+    shellStatus: 0,
+    requiredCoreResponsesObserved: false,
+    routeContentReady: false,
+    axe: { completed: false, blockingViolations: [] },
+    keyboardFocus: {
+      attemptedCount: KEYBOARD_FOCUS_ATTEMPTS,
+      reachedCount: 0,
+      visibleCueCount: 0,
+      missingVisibleCueCount: 0,
+    },
+    reducedMotion: {
+      preferenceActive: false,
+      scanComplete: false,
+      scannedElementCount: 0,
+      observedElementCount: 0,
+      activeAnimationCount: 0,
+      longTransitionCount: 0,
+      maximumTransitionMs: REDUCED_MOTION_MAX_TRANSITION_MS,
+    },
+    performance: {
+      responseEndMs: null,
+      domContentLoadedMs: null,
+      loadEventMs: null,
+      firstContentfulPaintMs: null,
+      totalTransferBytes: null,
+    },
+    diagnostics: {
+      pageErrorCount: 0,
+      unexpectedConsoleErrorCount: 0,
+      frontendResourceFailureCount: 0,
+      frontendResourceHttpErrorCount: 0,
+      authorizationRequestCount: 0,
+      browserWriteMethodCount: 0,
+      pageErrors: [],
+      unexpectedConsoleErrors: [],
+      frontendResourceFailures: [],
+      frontendResourceHttpErrors: [],
+      browserWriteRequests: [],
+    },
+    error: "",
+  };
+  const pageErrors = [];
+  const unexpectedConsoleErrors = [];
+  const frontendResourceFailures = [];
+  const frontendResourceHttpErrors = [];
+  const browserWriteRequests = [];
+  let authorizationRequestCount = 0;
+  let context;
+
+  try {
+    context = await browser.newContext({
+      viewport: { width: profile.width, height: profile.height },
+      screen: { width: profile.width, height: profile.height },
+      isMobile: profile.mobile,
+      hasTouch: profile.mobile,
+      reducedMotion: "reduce",
+      serviceWorkers: "block",
+      colorScheme: "dark",
+      locale: "en-US",
+      timezoneId: "UTC",
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(Math.min(30_000, remainingTimeoutMs()));
+    page.setDefaultNavigationTimeout(Math.min(30_000, remainingTimeoutMs()));
+
+    if (candidateResolver) {
+      await installCandidateRoute(
+        page,
+        candidateResolver,
+        candidateRouteErrors,
+      );
+    }
+    page.on("request", (request) => {
+      if (request.headers().authorization) authorizationRequestCount += 1;
+      const method = canonicalBrowserMethod(request.method());
+      if (isBffUrl(request.url()) && !["GET", "HEAD"].includes(method)) {
+        browserWriteRequests.push({
+          method,
+          url: redactUrl(request.url()),
+        });
+      }
+    });
+    page.on("requestfailed", (request) => {
+      if (!isFrontendOriginUrl(request.url())) return;
+      frontendResourceFailures.push({
+        resourceType: request.resourceType(),
+        url: redactUrl(request.url()),
+        error: redactDiagnosticText(
+          request.failure()?.errorText || "request failed",
+          240,
+        ),
+      });
+    });
+    page.on("response", (response) => {
+      if (!isFrontendOriginUrl(response.url()) || response.status() < 400)
+        return;
+      frontendResourceHttpErrors.push({
+        status: response.status(),
+        resourceType: response.request().resourceType(),
+        url: redactUrl(response.url()),
+      });
+    });
+    page.on("pageerror", (error) => {
+      pageErrors.push(redactDiagnosticText(error, 500));
+    });
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      const raw = { text: message.text(), url: message.location().url || "" };
+      if (isAllowlistedConsoleError(raw)) return;
+      unexpectedConsoleErrors.push({
+        text: redactDiagnosticText(raw.text, 500),
+        url: redactUrl(raw.url),
+      });
+    });
+
+    const requiredCoreResponsePromises = REQUIRED_CORE_BFF_PATHS.map(
+      (expectedPath) =>
+        waitForCoreBffResponse(
+          page,
+          expectedPath,
+          Math.min(10_000, remainingTimeoutMs()),
+        ),
+    );
+    const response = await page.goto(pageUrl, {
+      waitUntil: NAVIGATION_WAIT_UNTIL,
+      timeout: Math.min(30_000, remainingTimeoutMs()),
+    });
+    result.shellStatus = response?.status() ?? 0;
+    const requiredCoreResponses = await Promise.all(
+      requiredCoreResponsePromises,
+    );
+    result.requiredCoreResponsesObserved = requiredCoreResponses.every(
+      (entry) => entry.status > 0,
+    );
+    await page.waitForLoadState("load", {
+      timeout: Math.min(10_000, remainingTimeoutMs()),
+    });
+    await page.locator("body").waitFor({
+      state: "visible",
+      timeout: Math.min(10_000, remainingTimeoutMs()),
+    });
+    result.routeContentReady =
+      result.requiredCoreResponsesObserved &&
+      (await waitForHostedRouteContent(page));
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    await page
+      .waitForFunction(
+        () =>
+          performance
+            .getEntriesByType("paint")
+            .some((entry) => entry.name === "first-contentful-paint"),
+        undefined,
+        { timeout: Math.min(5_000, remainingTimeoutMs()) },
+      )
+      .catch(() => {});
+
+    const axeResults = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    result.axe = {
+      completed: true,
+      blockingViolations: summarizeAxeViolations(axeResults.violations),
+    };
+    result.keyboardFocus = await inspectKeyboardFocus(page);
+    result.reducedMotion = await inspectReducedMotion(page);
+    result.performance = await inspectPerformance(page);
+    result.executionCompleted = true;
+  } catch (error) {
+    result.error = redactDiagnosticText(error, 1_000);
+  } finally {
+    result.diagnostics = {
+      pageErrorCount: pageErrors.length,
+      unexpectedConsoleErrorCount: unexpectedConsoleErrors.length,
+      frontendResourceFailureCount: frontendResourceFailures.length,
+      frontendResourceHttpErrorCount: frontendResourceHttpErrors.length,
+      authorizationRequestCount,
+      browserWriteMethodCount: browserWriteRequests.length,
+      pageErrors: sortedDiagnostics(pageErrors),
+      unexpectedConsoleErrors: sortedDiagnostics(unexpectedConsoleErrors),
+      frontendResourceFailures: sortedDiagnostics(frontendResourceFailures),
+      frontendResourceHttpErrors: sortedDiagnostics(frontendResourceHttpErrors),
+      browserWriteRequests: sortedDiagnostics(browserWriteRequests),
+    };
+    await context?.close().catch(() => {});
+  }
+
+  result.assessment = assessHostedUxProfile(result);
+  return result;
 }
 
 async function runProbe() {
@@ -827,11 +1446,15 @@ async function runProbe() {
   if (CANDIDATE_DIR) candidateResolver = createCandidateResolver(CANDIDATE_DIR);
 
   let chromium;
+  let AxeBuilder;
   try {
     ({ chromium } = await import("@playwright/test"));
+    if (RELEASE_STRICT) {
+      ({ default: AxeBuilder } = await import("@axe-core/playwright"));
+    }
   } catch {
     throw new Error(
-      "Missing @playwright/test. Install it and Playwright Chromium.",
+      "Missing Playwright or axe. Install dependencies and Playwright Chromium.",
     );
   }
 
@@ -859,6 +1482,7 @@ async function runProbe() {
   const frontendAssetUrls = new Set();
   const candidateRouteErrors = [];
   const scannedTexts = [];
+  const hostedUxProfiles = [];
   let html = "";
   let bundleText = "";
   let personaFleetChecks = null;
@@ -877,16 +1501,17 @@ async function runProbe() {
 
   page.on("request", (request) => {
     const url = request.url();
+    const method = canonicalBrowserMethod(request.method());
     const authorizationPresent = Boolean(request.headers().authorization);
     if (authorizationPresent) {
       authorizationRequests.push({
-        method: request.method(),
+        method,
         url: redactUrl(url),
       });
     }
     if (isBffUrl(url)) {
       requests.push({
-        method: request.method(),
+        method,
         url: redactUrl(url),
         authorizationPresent,
       });
@@ -894,7 +1519,7 @@ async function runProbe() {
     if (matchesUrlNeedle(url, OLD_BFF_URL)) {
       oldUrlHits.push({
         source: "request",
-        method: request.method(),
+        method,
         url: redactUrl(url),
       });
     }
@@ -902,11 +1527,12 @@ async function runProbe() {
   page.on("response", (response) => {
     const url = response.url();
     const request = response.request();
+    const method = canonicalBrowserMethod(request.method());
     const resourceType = request.resourceType();
     if (isBffUrl(url)) {
       responses.push({
         status: response.status(),
-        method: request.method(),
+        method,
         url: redactUrl(url),
       });
     }
@@ -914,7 +1540,7 @@ async function runProbe() {
       oldUrlHits.push({
         source: "response",
         status: response.status(),
-        method: request.method(),
+        method,
         url: redactUrl(url),
       });
     }
@@ -929,7 +1555,7 @@ async function runProbe() {
       if (response.status() >= 400) {
         frontendResourceBadResponses.push({
           status: response.status(),
-          method: request.method(),
+          method,
           resourceType,
           url: redactUrl(url),
         });
@@ -938,12 +1564,13 @@ async function runProbe() {
   });
   page.on("requestfailed", (request) => {
     const url = request.url();
+    const method = canonicalBrowserMethod(request.method());
     const failure = redactDiagnosticText(
       request.failure()?.errorText || "request failed",
     );
     if (isBffUrl(url)) {
       failed.push({
-        method: request.method(),
+        method,
         url: redactUrl(url),
         failure,
       });
@@ -951,14 +1578,14 @@ async function runProbe() {
     if (matchesUrlNeedle(url, OLD_BFF_URL)) {
       oldUrlHits.push({
         source: "failed",
-        method: request.method(),
+        method,
         url: redactUrl(url),
         failure,
       });
     }
     if (isFrontendResource(url, request.resourceType())) {
       frontendResourceFailures.push({
-        method: request.method(),
+        method,
         resourceType: request.resourceType(),
         url: redactUrl(url),
         failure,
@@ -1173,6 +1800,19 @@ async function runProbe() {
           error: redactDiagnosticText(error),
         };
       }
+
+      for (const profile of HOSTED_UX_PROFILES) {
+        hostedUxProfiles.push(
+          await runHostedUxProfile({
+            browser,
+            AxeBuilder,
+            profile,
+            pageUrl,
+            candidateResolver,
+            candidateRouteErrors,
+          }),
+        );
+      }
     }
   } finally {
     await browser.close();
@@ -1182,9 +1822,7 @@ async function runProbe() {
     try {
       const response = await fetch(BFF_BASE + healthPath, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(
-          Math.min(10_000, remainingTimeoutMs()),
-        ),
+        signal: AbortSignal.timeout(Math.min(10_000, remainingTimeoutMs())),
       });
       publicHealthResponses.push({
         path: healthPath,
@@ -1226,8 +1864,8 @@ async function runProbe() {
   const observedIntendedBff =
     requests.some((request) => isBffUrl(request.url)) ||
     responses.some((response) => isBffUrl(response.url)) ||
-    coreResponses.some((response) => response.url?.startsWith(BFF_BASE));
-  const usesIntendedBff = containsBffStatic || observedIntendedBff;
+    coreResponses.some((response) => isBffUrl(response.url));
+  const usesIntendedBff = observedIntendedBff;
   const containsOld =
     Boolean(OLD_BFF_URL) &&
     (bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL));
@@ -1237,20 +1875,20 @@ async function runProbe() {
     (total, hit) => total + (hit.count ?? 1),
     0,
   );
-  const requiredCoreResponseOk = REQUIRED_CORE_BFF_PATHS.every(
-    (expectedPath) =>
-      coreResponses.some(
-        (response) =>
-          response.path === expectedPath &&
-          isAcceptableCoreStatus(response),
-      ),
+  const requiredCoreResponseOk = REQUIRED_CORE_BFF_PATHS.every((expectedPath) =>
+    coreResponses.some(
+      (response) =>
+        response.path === expectedPath && isAcceptableCoreStatus(response),
+    ),
   );
   const observedProtectedResponsesOk = coreResponses
     .filter((response) => response.status > 0)
     .every(isAcceptableCoreStatus);
   const noAuthorizationRequests = authorizationRequests.length === 0;
-  const noEmbeddedDevBearer =
-    !/pantheon-dev-browser\s*:/iu.test(html + "\n" + bundleText);
+  const browserBffMethodPolicy = inspectBrowserBffMethods(requests);
+  const noEmbeddedDevBearer = !/pantheon-dev-browser\s*:/iu.test(
+    html + "\n" + bundleText,
+  );
   const publicHealthOk = PUBLIC_HEALTH_PATHS.every((expectedPath) =>
     publicHealthResponses.some(
       (response) => response.path === expectedPath && response.ok,
@@ -1261,8 +1899,7 @@ async function runProbe() {
     (expectedPath) =>
       coreResponses.some(
         (response) =>
-          response.path === expectedPath &&
-          isAcceptableCoreStatus(response),
+          response.path === expectedPath && isAcceptableCoreStatus(response),
       ),
   );
   const basePass =
@@ -1272,6 +1909,7 @@ async function runProbe() {
     requiredCoreResponseOk &&
     observedProtectedResponsesOk &&
     noAuthorizationRequests &&
+    browserBffMethodPolicy.pass &&
     noEmbeddedDevBearer &&
     oldUrlHitCount === 0 &&
     requests.length > 0 &&
@@ -1279,29 +1917,31 @@ async function runProbe() {
 
   const strictChecks = {
     existingAuthBoundaryAndBffChecks: basePass,
+    noBrowserWriteMethods: browserBffMethodPolicy.pass,
     pageErrorsAbsent: pageErrors.length === 0,
     unexpectedConsoleErrorsAbsent: unexpectedConsoleErrors.length === 0,
-    frontendResourceFailuresAbsent:
-      frontendResourceFailures.length === 0,
-    frontendResourceHttpErrorsAbsent:
-      frontendResourceBadResponses.length === 0,
+    frontendResourceFailuresAbsent: frontendResourceFailures.length === 0,
+    frontendResourceHttpErrorsAbsent: frontendResourceBadResponses.length === 0,
     bundleFetchesComplete:
       bundleFetches.length > 0 &&
       bundleFetches.every(
         (entry) =>
-          entry.ok &&
-          entry.status >= 200 &&
-          entry.status < 300 &&
-          !entry.error,
+          entry.ok && entry.status >= 200 && entry.status < 300 && !entry.error,
       ),
     deploymentJsonFetched: Boolean(deploymentFetch?.ok),
     deploymentPolicyPassed: deploymentPolicy.pass,
     freshStorageInspected: storageInspection.ok,
-    freshStorageSensitiveValuesAbsent:
-      storageInspection.findings.length === 0,
-    htmlAndAssetSensitiveValuesAbsent:
-      sensitiveFindings.length === 0,
+    freshStorageSensitiveValuesAbsent: storageInspection.findings.length === 0,
+    htmlAndAssetSensitiveValuesAbsent: sensitiveFindings.length === 0,
     candidateRouteErrorsAbsent: candidateRouteErrors.length === 0,
+    hostedUxProfileSetComplete:
+      hostedUxProfiles.length === HOSTED_UX_PROFILES.length &&
+      HOSTED_UX_PROFILES.every(
+        (expected, index) => hostedUxProfiles[index]?.profile === expected.id,
+      ),
+    hostedUxProfilesPassed:
+      hostedUxProfiles.length === HOSTED_UX_PROFILES.length &&
+      hostedUxProfiles.every((profile) => profile.assessment?.pass === true),
   };
   const strictFailures = Object.entries(strictChecks)
     .filter(([, passed]) => !passed)
@@ -1339,15 +1979,16 @@ async function runProbe() {
       noAuthorizationRequests,
     "- all browser requests with Authorization header: " +
       authorizationRequests.length,
-    "- bundle contains no embedded dev bearer literal: " +
-      noEmbeddedDevBearer,
+    "- browser BFF requests use only GET/HEAD: " + browserBffMethodPolicy.pass,
+    "- browser BFF write-method request count: " +
+      browserBffMethodPolicy.writeRequestCount,
+    "- bundle contains no embedded dev bearer literal: " + noEmbeddedDevBearer,
     "- contains intended BFF URL in html/bundle: " + containsBffStatic,
     "- intended BFF runtime request count: " + requests.length,
     "- contains old BFF URL: " + containsOld,
     "- old BFF URL hit count: " + oldUrlHitCount,
     "- required core BFF responses complete: " + requiredCoreResponseOk,
-    "- optional core BFF responses observed: " +
-      optionalCoreResponsesObserved,
+    "- optional core BFF responses observed: " + optionalCoreResponsesObserved,
     ...(personaFleetChecks
       ? [
           "- persona fleet row count: " + personaFleetChecks.rowCount,
@@ -1372,19 +2013,27 @@ async function runProbe() {
     "- response count: " + responses.length,
     "- failed count: " + failed.length,
     "- pageerror count: " + pageErrors.length,
-    "- unexpected console.error count: " +
-      unexpectedConsoleErrors.length,
+    "- unexpected console.error count: " + unexpectedConsoleErrors.length,
     "- FE document/script/style request failure count: " +
       frontendResourceFailures.length,
     "- FE document/script/style HTTP >=400 count: " +
       frontendResourceBadResponses.length,
     "- bundle fetch failure count: " +
       bundleFetches.filter((entry) => !entry.ok).length,
-    "- storage sensitive finding count: " +
-      storageInspection.findings.length,
-    "- HTML/JS/CSS sensitive finding count: " +
-      sensitiveFindings.length,
+    "- storage sensitive finding count: " + storageInspection.findings.length,
+    "- HTML/JS/CSS sensitive finding count: " + sensitiveFindings.length,
     "- deployment policy passed: " + deploymentPolicy.pass,
+    "- hosted UX profile count: " + hostedUxProfiles.length,
+    ...hostedUxProfiles.map(
+      (profile) =>
+        "- hosted UX " +
+        profile.profile +
+        " passed: " +
+        profile.assessment.pass +
+        (profile.assessment.failures.length
+          ? " (" + profile.assessment.failures.join(", ") + ")"
+          : ""),
+    ),
     "- strict failures: " +
       (strictFailures.length ? strictFailures.join(", ") : "none"),
     "- pass: " + pass,
@@ -1482,12 +2131,7 @@ async function runProbe() {
       ? failed
           .map(
             (entry) =>
-              "- " +
-              entry.method +
-              " " +
-              entry.url +
-              ": " +
-              entry.failure,
+              "- " + entry.method + " " + entry.url + ": " + entry.failure,
           )
           .join("\n")
       : "None",
@@ -1495,7 +2139,10 @@ async function runProbe() {
     "## Page errors",
     "",
     pageErrors.length
-      ? pageErrors.slice(0, 20).map((error) => "- " + error).join("\n")
+      ? pageErrors
+          .slice(0, 20)
+          .map((error) => "- " + error)
+          .join("\n")
       : "None",
     "",
     "## Console errors",
@@ -1540,9 +2187,7 @@ async function runProbe() {
       },
       expectations: {
         frontendSha: canonicalizeCommitSha(EXPECTED_FE_SHA),
-        artifactDigest: canonicalizeSha256(
-          EXPECTED_ARTIFACT_DIGEST,
-        ),
+        artifactDigest: canonicalizeSha256(EXPECTED_ARTIFACT_DIGEST),
       },
       checks: {
         base: {
@@ -1552,6 +2197,7 @@ async function runProbe() {
           requiredCoreResponseOk,
           observedProtectedResponsesOk,
           noAuthorizationRequests,
+          noBrowserWriteMethods: browserBffMethodPolicy.pass,
           noEmbeddedDevBearer,
           oldUrlAbsent: oldUrlHitCount === 0,
           bffRequestsObserved: requests.length > 0,
@@ -1591,8 +2237,10 @@ async function runProbe() {
         frontendResourceBadResponses,
         bundleFetches,
         candidateRouteErrors,
+        hostedUxProfiles,
       },
       bff: {
+        methodPolicy: browserBffMethodPolicy,
         requests,
         responses,
         failures: failed,

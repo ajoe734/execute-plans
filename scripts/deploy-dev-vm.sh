@@ -10,21 +10,24 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
+SYMLINK_CAS_HELPER="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
 
 FE_HOST="${PANTHEON_DEV_FE_HOST:-https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io}"
 BFF_HOST="${PANTHEON_BFF_BASE_URL:-https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io}"
+BFF_HOST="${BFF_HOST%/}"
 OLD_BFF_HOST="${PANTHEON_OLD_BFF_URL:-https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io}"
 DEPLOY_ROOT="${PANTHEON_DEV_FE_ROOT:-/var/www/pantheon-dev-fe}"
 RELEASES_DIR="${PANTHEON_DEV_FE_RELEASES_DIR:-/var/www/pantheon-dev-fe-releases}"
 STRICT_DIR_PREFIX="${PANTHEON_DEV_FE_ROOT_PREFIX:-/var/www/pantheon-dev-fe}"
+STRICT_RELEASES_PREFIX="${PANTHEON_DEV_FE_RELEASES_PREFIX:-/var/www/pantheon-dev-fe-releases}"
 AUDIT_DIR="${PANTHEON_AUDIT_OUT_DIR:-.lovable/audits/current-run}"
 CANDIDATE_INPUT="${PANTHEON_DEPLOY_CANDIDATE_DIR:-}"
-SOURCE_REF="${PANTHEON_DEPLOY_REF:-${GITHUB_SHA:-}}"
 SOURCE_BRANCH="${PANTHEON_DEPLOY_BRANCH:-dev}"
 GATE_RUN_ID="${PANTHEON_DEPLOY_GATE_RUN_ID:-}"
 GITHUB_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST:-}"
 EXPECTED_DEV_SHA="${PANTHEON_DEPLOY_EXPECTED_DEV_SHA:-}"
 EMERGENCY_OVERRIDE="${PANTHEON_DEPLOY_EMERGENCY_OVERRIDE:-false}"
+ROLLBACK_DRILL="${PANTHEON_DEPLOY_ROLLBACK_DRILL:-false}"
 OVERRIDE_REASON="${PANTHEON_DEPLOY_OVERRIDE_REASON:-}"
 OVERRIDE_ACTOR="${PANTHEON_DEPLOY_OVERRIDE_ACTOR:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
@@ -33,12 +36,20 @@ SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 ALLOW_BOOTSTRAP="${PANTHEON_DEPLOY_ALLOW_BOOTSTRAP:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
+STRICT_LOCK_PREFIX="${PANTHEON_DEPLOY_LOCK_PREFIX:-/tmp}"
+DURABLE_EVIDENCE_ROOT="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT:-/var/lib/pantheon-dev-fe-deploy-evidence}"
+STRICT_DURABLE_EVIDENCE_PREFIX="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX:-/var/lib/pantheon-dev-fe-deploy-evidence}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-SHA="$(git rev-parse HEAD)"
+CONTROLLER_SHA="$(git rev-parse HEAD)"
+SHA="${PANTHEON_DEPLOY_CANDIDATE_SHA:-${GITHUB_SHA:-${CONTROLLER_SHA}}}"
+SOURCE_REF="${PANTHEON_DEPLOY_REF:-${SHA}}"
 SHORT_SHA="${SHA:0:12}"
 RELEASE_INSTANCE="${PANTHEON_DEPLOY_RELEASE_INSTANCE:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}}"
 RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-gate-${GATE_RUN_ID}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
+DURABLE_EVIDENCE_DIR="${DURABLE_EVIDENCE_ROOT}/run-${GITHUB_RUN_ID:-local}-attempt-${GITHUB_RUN_ATTEMPT:-1}-${RELEASE_INSTANCE}"
+NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"
+ROLLBACK_LINK="${DEPLOY_ROOT}.rollback-${RELEASE_INSTANCE}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/execute-plans-dev-fe.XXXXXX")"
 EVIDENCE_LOG="${AUDIT_DIR}/evidence.jsonl"
 EVIDENCE_SUMMARY="${AUDIT_DIR}/evidence.json"
@@ -49,19 +60,59 @@ BFF_COMMIT=""
 PREVIOUS_TARGET=""
 PREVIOUS_COMMIT=""
 PREVIOUS_DIGEST=""
+PREVIOUS_MANIFEST_DIGEST=""
+PREVIOUS_GATE_RUN_ID=""
+PREVIOUS_GITHUB_ARTIFACT_DIGEST=""
+PREVIOUS_DEPLOYMENT_STATE=""
+PREVIOUS_RELEASE_NAME=""
+RECOVERY_ATTEMPTED=false
+RECOVERY_RELEASE_NAME=""
+RECOVERY_TARGET=""
+RECOVERY_COMMIT=""
+RECOVERY_DIGEST=""
+RECOVERY_MANIFEST_DIGEST=""
+RECOVERY_GATE_RUN_ID=""
+RECOVERY_GITHUB_ARTIFACT_DIGEST=""
 LOCK_ACQUIRED=false
 EVIDENCE_INITIALIZED=false
-DEPLOY_SWITCHED=false
+EVIDENCE_FINALIZED=false
+SWITCH_ATTEMPTED=false
 DEPLOY_ACCEPTED=false
 ROLLBACK_RESTORED=false
 ROLLBACK_REPROBED=false
 NOOP_DEPLOY=false
+NEXT_LINK_CREATED=false
+ROLLBACK_LINK_CREATED=false
+RELEASE_CREATED=false
+DURABLE_EVIDENCE_PERSISTED=false
 
 bool_value() {
   local name="$1"
   local value="${!name}"
   if [[ "${value}" != "true" && "${value}" != "false" ]]; then
     echo "${name} must be true or false" >&2
+    exit 2
+  fi
+}
+
+canonical_path() {
+  node -e 'const path=require("node:path");process.stdout.write(path.resolve(process.argv[1]))' "$1"
+}
+
+assert_scoped_path() {
+  local label="$1"
+  local candidate="$2"
+  local prefix="$3"
+  local normalized_candidate
+  local normalized_prefix
+  normalized_candidate="$(canonical_path "${candidate}")"
+  normalized_prefix="$(canonical_path "${prefix}")"
+  if [[ "${candidate}" != "${normalized_candidate}" || "${prefix}" != "${normalized_prefix}" || "${normalized_prefix}" == "/" ]]; then
+    echo "${label} and its allowed prefix must be canonical absolute paths." >&2
+    exit 2
+  fi
+  if [[ "${normalized_candidate}" != "${normalized_prefix}" && "${normalized_candidate}" != "${normalized_prefix}/"* ]]; then
+    echo "${label} is outside its allowed prefix: ${normalized_candidate}" >&2
     exit 2
   fi
 }
@@ -81,12 +132,69 @@ evidence_append() {
   node scripts/release-evidence.mjs "${args[@]}" >/dev/null
 }
 
+finalize_evidence() {
+  local outcome="$1"
+  if ! node scripts/release-evidence.mjs finalize \
+    --log "${EVIDENCE_LOG}" \
+    --summary "${EVIDENCE_SUMMARY}" \
+    --root "${AUDIT_DIR}" \
+    --outcome "${outcome}" >/dev/null; then
+    return 1
+  fi
+  if ! node scripts/release-evidence.mjs verify \
+    --log "${EVIDENCE_LOG}" \
+    --summary "${EVIDENCE_SUMMARY}" \
+    --root "${AUDIT_DIR}" >/dev/null; then
+    return 1
+  fi
+  EVIDENCE_FINALIZED=true
+}
+
+persist_durable_evidence() {
+  local node_bin
+  node_bin="$(command -v node)"
+  sudo install -d -o root -g root -m 750 \
+    "${DURABLE_EVIDENCE_ROOT}" "${DURABLE_EVIDENCE_DIR}"
+  sudo rsync -a --delete \
+    --chown=root:root \
+    --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= \
+    "${AUDIT_DIR}/" "${DURABLE_EVIDENCE_DIR}/"
+  if ! sudo "${node_bin}" "${ROOT_DIR}/scripts/release-evidence.mjs" verify \
+    --log "${DURABLE_EVIDENCE_DIR}/evidence.jsonl" \
+    --summary "${DURABLE_EVIDENCE_DIR}/evidence.json" \
+    --root "${DURABLE_EVIDENCE_DIR}" >/dev/null; then
+    return 1
+  fi
+  DURABLE_EVIDENCE_PERSISTED=true
+}
+
+accept_deployment() {
+  # Once terminal acceptance starts, do not let INT/TERM split the finalized
+  # evidence, durable copy, and in-memory accepted state.
+  trap '' INT TERM
+  evidence_append release.completed passed "outcome=accepted"
+  finalize_evidence accepted
+  persist_durable_evidence
+  DEPLOY_ACCEPTED=true
+}
+
 current_live_target() {
   readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true
 }
 
+verify_dist_digest() {
+  local release_root="$1"
+  local expected_digest="$2"
+  node scripts/release-candidate.mjs digest \
+    --dist-dir "${release_root}" \
+    --expected-artifact-digest "${expected_digest}"
+}
+
 remove_candidate_release() {
   local live_target
+  if [[ "${RELEASE_CREATED}" != "true" ]]; then
+    return 0
+  fi
   live_target="$(current_live_target)"
   if [[ -n "${RELEASE_DIR}" && "${live_target}" != "${RELEASE_DIR}" ]]; then
     case "${RELEASE_DIR}" in
@@ -100,22 +208,90 @@ verify_public_manifest() {
   local expected_digest="${2:-}"
   local expected_gate="${3:-}"
   local output_file="$4"
-  curl --fail --silent --show-error --location \
+  local expected_bff="${5:-${BFF_COMMIT}}"
+  local expected_state="${6:-}"
+  local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
+  if ! curl --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-    "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"
-  node --input-type=module - "${output_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" <<'NODE'
+    "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"; then
+    return 1
+  fi
+  if ! node --input-type=module - "${output_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" <<'NODE'
 import fs from "node:fs";
-const [file, expectedSha, expectedDigest, expectedGate] = process.argv.slice(2);
+const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
-if (String(payload.commit || "").toLowerCase() !== expectedSha.toLowerCase()) {
+const modernIdentity = Boolean(expectedGithubDigest);
+if (
+  payload.app !== "execute-plans" ||
+  payload.environment !== "pantheon-dev-fe" ||
+  String(payload.commit || "").toLowerCase() !== expectedSha.toLowerCase()
+) {
   throw new Error("deployment manifest commit mismatch");
+}
+if (
+  modernIdentity &&
+  (payload.schemaVersion !== 1 ||
+    payload.repository !== "ajoe734/execute-plans" ||
+    String(payload.frontendSha || "").toLowerCase() !== expectedSha.toLowerCase() ||
+    payload.frontend?.repository !== "ajoe734/execute-plans" ||
+    String(payload.frontend?.commitSha || "").toLowerCase() !== expectedSha.toLowerCase())
+) {
+  throw new Error("deployment manifest frontend identity mismatch");
+}
+if (!modernIdentity && payload.repository && payload.repository !== "ajoe734/execute-plans") {
+  throw new Error("legacy deployment manifest repository mismatch");
 }
 if (expectedDigest && digest !== expectedDigest.toLowerCase()) {
   throw new Error("deployment manifest artifact digest mismatch");
 }
-if (expectedGate && String(payload.integrationGateRunId || "") !== String(expectedGate)) {
-  throw new Error("deployment manifest gate run mismatch");
+if (expectedGate) {
+  let gateUrl;
+  try {
+    gateUrl = new URL(String(payload.gate?.runUrl || ""));
+  } catch {
+    throw new Error("deployment manifest gate URL is invalid");
+  }
+  if (
+    String(payload.integrationGateRunId || "") !== String(expectedGate) ||
+    payload.gate?.workflow !== "pantheon-integration-gate.yml" ||
+    String(payload.gate?.runId || "") !== String(expectedGate) ||
+    gateUrl.protocol !== "https:" ||
+    gateUrl.hostname !== "github.com" ||
+    gateUrl.username ||
+    gateUrl.password ||
+    gateUrl.search ||
+    gateUrl.hash ||
+    gateUrl.pathname.replace(/\/$/u, "") !== `/ajoe734/execute-plans/actions/runs/${expectedGate}`
+  ) {
+    throw new Error("deployment manifest gate run mismatch");
+  }
+}
+const observedGithubDigest = String(payload.githubArtifactDigest || "").toLowerCase();
+if (
+  (expectedGithubDigest && observedGithubDigest !== expectedGithubDigest.toLowerCase()) ||
+  (!expectedGithubDigest && observedGithubDigest)
+) {
+  throw new Error("deployment manifest GitHub artifact digest mismatch");
+}
+if (
+  expectedBff &&
+  (String(payload.bffCommit || "").toLowerCase() !== expectedBff.toLowerCase() ||
+    payload.bffCommitEvidence !== true ||
+    (modernIdentity &&
+      (String(payload.bffSourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
+        payload.bffHost !== expectedBffHost ||
+        payload.bff?.baseUrl !== expectedBffHost ||
+        String(payload.bff?.sourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
+        payload.bff?.sourceCommitKnown !== true)))
+) {
+  throw new Error("deployment manifest BFF identity mismatch");
+}
+if (expectedState && String(payload.deploymentState || "") !== expectedState) {
+  throw new Error("deployment manifest state mismatch");
+}
+if (!expectedState && payload.deploymentState && payload.deploymentState !== "accepted") {
+  throw new Error("deployment manifest is not an accepted release");
 }
 if (payload.buildMode?.VITE_BFF_MODE !== "live" || payload.buildMode?.VITE_BFF_FALLBACK !== "strict") {
   throw new Error("deployment manifest is not strict live mode");
@@ -127,15 +303,21 @@ if (payload.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN !== "false") {
   throw new Error("deployment manifest bearer posture is unsafe");
 }
 NODE
+  then
+    return 1
+  fi
 }
 
 verify_bff_identity() {
   local stage="$1"
   local output_file="${AUDIT_DIR}/bff-version-${stage}.json"
-  curl --fail --silent --show-error --location \
+  if ! curl --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-    "${BFF_HOST%/}/bff/version" > "${output_file}"
-  node --input-type=module - "${output_file}" "${BFF_COMMIT}" <<'NODE'
+    "${BFF_HOST%/}/bff/version" > "${output_file}"; then
+    evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
+    return 1
+  fi
+  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" <<'NODE'
 import fs from "node:fs";
 const [file, expected] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -148,6 +330,10 @@ if (source !== alias || source !== expected.toLowerCase()) {
   throw new Error("live BFF identity differs from gated candidate identity");
 }
 NODE
+  then
+    evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
+    return 1
+  fi
   evidence_append "bff.identity.${stage}" passed "bffCommit=${BFF_COMMIT}"
 }
 
@@ -182,9 +368,39 @@ run_release_probe() {
   evidence_append "browser.probe.${phase}" passed "frontendSha=${expected_sha}" "artifactDigestSha256=${expected_digest:-legacy}"
 }
 
+verify_restored_previous() {
+  local rollback_strict=false
+  if [[ "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
+    evidence_append rollback.switch failed
+    return 1
+  fi
+  if ! verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_DIGEST}" >/dev/null; then
+    evidence_append rollback.assets failed "previousCommit=${PREVIOUS_COMMIT}"
+    return 1
+  fi
+  evidence_append rollback.assets passed "previousCommit=${PREVIOUS_COMMIT}"
+  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${BFF_COMMIT}" "" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"; then
+    evidence_append rollback.manifest failed "previousCommit=${PREVIOUS_COMMIT}"
+    return 1
+  fi
+  evidence_append rollback.manifest passed "previousCommit=${PREVIOUS_COMMIT}"
+  if ! verify_bff_identity rollback; then
+    evidence_append rollback.bff failed "previousCommit=${PREVIOUS_COMMIT}"
+    return 1
+  fi
+  if [[ "${PREVIOUS_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ && "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
+    rollback_strict=true
+  fi
+  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" "${rollback_strict}"; then
+    evidence_append rollback.reprobe failed "previousCommit=${PREVIOUS_COMMIT}"
+    return 1
+  fi
+  ROLLBACK_REPROBED=true
+  evidence_append rollback.reprobe passed "previousCommit=${PREVIOUS_COMMIT}"
+}
+
 rollback_release() {
   local current_target
-  local rollback_strict=false
   evidence_append rollback.started pending "previousCommit=${PREVIOUS_COMMIT:-unknown}"
   current_target="$(current_live_target)"
   if [[ "${current_target}" != "${RELEASE_DIR}" ]]; then
@@ -193,7 +409,14 @@ rollback_release() {
     return 1
   fi
   if [[ -z "${PREVIOUS_TARGET}" || ! -d "${PREVIOUS_TARGET}" ]]; then
-    sudo rm -f -- "${DEPLOY_ROOT}"
+    if ! sudo python3 "${SYMLINK_CAS_HELPER}" remove-if-target \
+      --live-link "${DEPLOY_ROOT}" \
+      --staged-link "${ROLLBACK_LINK}" \
+      --expected-live-target "${RELEASE_DIR}" >/dev/null; then
+      evidence_append rollback.bootstrap_remove failed
+      echo "Rollback failed: bootstrap candidate CAS removal was rejected." >&2
+      return 1
+    fi
     if [[ -e "${DEPLOY_ROOT}" || -L "${DEPLOY_ROOT}" ]]; then
       evidence_append rollback.bootstrap_remove failed
       echo "Rollback failed: bootstrap candidate could not be removed." >&2
@@ -205,69 +428,210 @@ rollback_release() {
     return 1
   fi
 
-  sudo ln -sfn "${PREVIOUS_TARGET}" "${DEPLOY_ROOT}.rollback"
-  if [[ "$(current_live_target)" != "${RELEASE_DIR}" ]]; then
-    sudo rm -f -- "${DEPLOY_ROOT}.rollback"
-    evidence_append rollback.cas_rejected failed "observedTarget=$(current_live_target)"
-    echo "Rollback refused: live target changed before rollback commit." >&2
+  if ! verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_DIGEST}" >/dev/null; then
+    evidence_append rollback.assets_pre_switch failed "previousCommit=${PREVIOUS_COMMIT}"
+    echo "Rollback refused: previous release assets no longer match their qualified digest." >&2
     return 1
   fi
-  sudo mv -Tf "${DEPLOY_ROOT}.rollback" "${DEPLOY_ROOT}"
-  if [[ "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
-    evidence_append rollback.switch failed
+  evidence_append rollback.assets_pre_switch passed "previousCommit=${PREVIOUS_COMMIT}"
+
+  sudo ln -s -- "${PREVIOUS_TARGET}" "${ROLLBACK_LINK}"
+  ROLLBACK_LINK_CREATED=true
+  if ! sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
+    --live-link "${DEPLOY_ROOT}" \
+    --staged-link "${ROLLBACK_LINK}" \
+    --expected-live-target "${RELEASE_DIR}" \
+    --expected-staged-target "${PREVIOUS_TARGET}" >/dev/null; then
+    sudo rm -f -- "${ROLLBACK_LINK}"
+    ROLLBACK_LINK_CREATED=false
+    evidence_append rollback.cas_rejected failed "observedTarget=$(current_live_target)"
+    echo "Rollback refused: atomic symlink CAS rejected the live predecessor." >&2
+    return 1
+  fi
+  ROLLBACK_LINK_CREATED=false
+  ROLLBACK_RESTORED=true
+  evidence_append rollback.switch passed "previousCommit=${PREVIOUS_COMMIT}"
+  verify_restored_previous
+}
+
+restore_interrupted_release() {
+  local strict=false
+  local observed_target
+  observed_target="$(current_live_target)"
+  if ! verify_dist_digest "${RECOVERY_TARGET}" "${RECOVERY_DIGEST}" >/dev/null; then
+    evidence_append recovery.rollback_assets failed "previousCommit=${RECOVERY_COMMIT}"
+    return 1
+  fi
+
+  if [[ "${observed_target}" == "${RECOVERY_TARGET}" ]]; then
+    evidence_append recovery.rollback_external passed "previousCommit=${RECOVERY_COMMIT}"
+  elif [[ "${observed_target}" == "${PREVIOUS_TARGET}" ]]; then
+    sudo ln -s -- "${RECOVERY_TARGET}" "${ROLLBACK_LINK}"
+    ROLLBACK_LINK_CREATED=true
+    if ! sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
+      --live-link "${DEPLOY_ROOT}" \
+      --staged-link "${ROLLBACK_LINK}" \
+      --expected-live-target "${PREVIOUS_TARGET}" \
+      --expected-staged-target "${RECOVERY_TARGET}" >/dev/null; then
+      sudo rm -f -- "${ROLLBACK_LINK}"
+      ROLLBACK_LINK_CREATED=false
+      evidence_append recovery.rollback_cas failed "observedTarget=$(current_live_target)"
+      return 1
+    fi
+    ROLLBACK_LINK_CREATED=false
+  else
+    evidence_append recovery.rollback_cas failed "observedTarget=${observed_target:-missing}"
+    return 1
+  fi
+  if [[ "$(current_live_target)" != "${RECOVERY_TARGET}" ]]; then
+    evidence_append recovery.rollback_switch failed
     return 1
   fi
   ROLLBACK_RESTORED=true
-  evidence_append rollback.switch passed "previousCommit=${PREVIOUS_COMMIT}"
+  evidence_append recovery.rollback_switch passed "previousCommit=${RECOVERY_COMMIT}"
 
-  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" "" "${AUDIT_DIR}/rollback-deployment.json"; then
-    evidence_append rollback.manifest failed "previousCommit=${PREVIOUS_COMMIT}"
+  if ! verify_dist_digest "${RECOVERY_TARGET}" "${RECOVERY_DIGEST}" >/dev/null; then
+    evidence_append recovery.rollback_assets failed "previousCommit=${RECOVERY_COMMIT}"
     return 1
   fi
-  evidence_append rollback.manifest passed "previousCommit=${PREVIOUS_COMMIT}"
-  if [[ "${PREVIOUS_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
-    rollback_strict=true
+  evidence_append recovery.rollback_assets passed "previousCommit=${RECOVERY_COMMIT}"
+
+  if ! verify_public_manifest "${RECOVERY_COMMIT}" "${RECOVERY_MANIFEST_DIGEST}" "${RECOVERY_GATE_RUN_ID}" "${AUDIT_DIR}/recovery-rollback-deployment.json" "${BFF_COMMIT}" "" "${RECOVERY_GITHUB_ARTIFACT_DIGEST}"; then
+    evidence_append recovery.rollback_manifest failed "previousCommit=${RECOVERY_COMMIT}"
+    return 1
   fi
-  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" "${rollback_strict}"; then
-    evidence_append rollback.reprobe failed "previousCommit=${PREVIOUS_COMMIT}"
+  if ! verify_bff_identity recovery_rollback; then
+    evidence_append recovery.rollback_bff failed "previousCommit=${RECOVERY_COMMIT}"
+    return 1
+  fi
+  if [[ "${RECOVERY_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ && "${RECOVERY_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
+    strict=true
+  fi
+  if ! run_release_probe recovery_rollback "" "${RECOVERY_COMMIT}" "${RECOVERY_DIGEST}" "${strict}"; then
+    evidence_append recovery.rollback_reprobe failed "previousCommit=${RECOVERY_COMMIT}"
     return 1
   fi
   ROLLBACK_REPROBED=true
-  evidence_append rollback.reprobe passed "previousCommit=${PREVIOUS_COMMIT}"
+  evidence_append recovery.rollback_reprobe passed "previousCommit=${RECOVERY_COMMIT}"
+}
+
+prepare_interrupted_recovery() {
+  local interrupted_manifest="${PREVIOUS_TARGET}/deployment.json"
+  RECOVERY_RELEASE_NAME="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.previousReleaseName||"");if(!/^[A-Za-z0-9._-]+$/.test(s))process.exit(1);process.stdout.write(s)' "${interrupted_manifest}")"
+  RECOVERY_COMMIT="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.previousCommit||"").toLowerCase();if(!/^[0-9a-f]{40}$/.test(s))process.exit(1);process.stdout.write(s)' "${interrupted_manifest}")"
+  RECOVERY_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.previousArtifactDigest||"").toLowerCase();if(!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${interrupted_manifest}")"
+  RECOVERY_TARGET="$(readlink -f "${RELEASES_DIR}/${RECOVERY_RELEASE_NAME}" 2>/dev/null || true)"
+  if [[ "${RECOVERY_TARGET}" != "${RELEASES_DIR}/${RECOVERY_RELEASE_NAME}" || "${RECOVERY_TARGET}" == "${PREVIOUS_TARGET}" || ! -f "${RECOVERY_TARGET}/deployment.json" ]]; then
+    echo "Interrupted candidate does not name a qualified previous release." >&2
+    return 1
+  fi
+  RECOVERY_MANIFEST_DIGEST="$(node -e '
+    const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+    const expectedCommit=process.argv[2],expectedBff=process.argv[3];
+    const digest=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();
+    const safe=String(p.commit||"").toLowerCase()===expectedCommit&&p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
+      p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
+      p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
+      p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&String(p.bffCommit||"").toLowerCase()===expectedBff&&
+      p.bffCommitEvidence===true&&["","accepted"].includes(String(p.deploymentState||""));
+    if(!safe||(digest&&!/^[0-9a-f]{64}$/.test(digest)))process.exit(1);process.stdout.write(digest);
+  ' "${RECOVERY_TARGET}/deployment.json" "${RECOVERY_COMMIT}" "${BFF_COMMIT}")"
+  RECOVERY_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${RECOVERY_TARGET}/deployment.json")"
+  RECOVERY_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${RECOVERY_TARGET}/deployment.json")"
+  verify_dist_digest "${RECOVERY_TARGET}" "${RECOVERY_DIGEST}" >/dev/null
+  if [[ -n "${RECOVERY_MANIFEST_DIGEST}" && "${RECOVERY_MANIFEST_DIGEST}" != "${RECOVERY_DIGEST}" ]]; then
+    echo "Interrupted candidate previous-release digest evidence disagrees." >&2
+    return 1
+  fi
+  RECOVERY_ATTEMPTED=true
+  evidence_append recovery.prepared passed "previousCommit=${RECOVERY_COMMIT}" "previousArtifactDigest=${RECOVERY_DIGEST}"
 }
 
 cleanup() {
   local status=$?
   local outcome=accepted
+  local observed_target=""
   set +e
-  trap - EXIT INT TERM
+  trap - EXIT
+  trap '' INT TERM
 
-  sudo rm -f -- "${DEPLOY_ROOT}.next" "${DEPLOY_ROOT}.rollback" 2>/dev/null || true
+  if [[ "${NEXT_LINK_CREATED}" == "true" ]]; then
+    sudo rm -f -- "${NEXT_LINK}" 2>/dev/null || true
+    NEXT_LINK_CREATED=false
+  fi
+  if [[ "${ROLLBACK_LINK_CREATED}" == "true" ]]; then
+    sudo rm -f -- "${ROLLBACK_LINK}" 2>/dev/null || true
+    ROLLBACK_LINK_CREATED=false
+  fi
 
-  if [[ "${status}" -ne 0 && "${DEPLOY_SWITCHED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
-    if rollback_release; then
-      outcome=rolled_back
+  if [[ "${status}" -ne 0 && "${DEPLOY_ACCEPTED}" == "true" ]]; then
+    echo "Deployment was already durably accepted; preserving accepted live state and terminal evidence." >&2
+    rm -rf "${TMP_DIR}"
+    exit "${status}"
+  fi
+
+  if [[ "${status}" -ne 0 && "${RECOVERY_ATTEMPTED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
+    if restore_interrupted_release; then
+      outcome=recovery_rolled_back
     elif [[ "${ROLLBACK_RESTORED}" == "true" ]]; then
+      outcome=recovery_rollback_probe_failed
+    else
+      outcome=recovery_rollback_failed
+    fi
+  elif [[ "${status}" -ne 0 && "${SWITCH_ATTEMPTED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
+    observed_target="$(current_live_target)"
+    if [[ "${observed_target}" == "${RELEASE_DIR}" ]]; then
+      if rollback_release; then
+        outcome=rolled_back
+      elif [[ "${ROLLBACK_RESTORED}" == "true" ]]; then
+        outcome=rollback_probe_failed
+      else
+        outcome=rollback_failed
+      fi
+    elif [[ -n "${PREVIOUS_TARGET}" && "${observed_target}" == "${PREVIOUS_TARGET}" ]]; then
+      ROLLBACK_RESTORED=true
+      evidence_append rollback.external_restore pending "previousCommit=${PREVIOUS_COMMIT}"
+      if verify_restored_previous; then
+        evidence_append rollback.external_restore passed "previousCommit=${PREVIOUS_COMMIT}"
+        outcome=rolled_back
+      else
+        evidence_append rollback.external_restore failed "previousCommit=${PREVIOUS_COMMIT}"
+        outcome=rollback_probe_failed
+      fi
+    elif [[ -z "${PREVIOUS_TARGET}" && -z "${observed_target}" ]]; then
+      ROLLBACK_RESTORED=true
+      evidence_append rollback.bootstrap_remove passed
       outcome=rollback_probe_failed
     else
       outcome=rollback_failed
+      evidence_append rollback.cas_rejected failed "observedTarget=${observed_target:-missing}"
     fi
   elif [[ "${status}" -ne 0 ]]; then
     outcome=rejected_before_switch
   fi
 
   if [[ "${status}" -ne 0 ]]; then
+    if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
+      if [[ "${outcome}" == "rolled_back" ]]; then
+        evidence_append rollback.drill passed "outcome=${outcome}"
+      else
+        evidence_append rollback.drill failed "outcome=${outcome}"
+      fi
+    fi
     evidence_append release.failed failed "outcome=${outcome}"
     remove_candidate_release
-  else
-    evidence_append release.completed passed "outcome=accepted"
-  fi
-
-  if [[ "${EVIDENCE_INITIALIZED}" == "true" ]]; then
-    node scripts/release-evidence.mjs finalize \
-      --log "${EVIDENCE_LOG}" \
-      --summary "${EVIDENCE_SUMMARY}" \
-      --outcome "${outcome}" >/dev/null || status=1
+    if [[ "${EVIDENCE_INITIALIZED}" == "true" ]]; then
+      EVIDENCE_FINALIZED=false
+      DURABLE_EVIDENCE_PERSISTED=false
+      if finalize_evidence "${outcome}"; then
+        persist_durable_evidence || status=1
+      else
+        status=1
+      fi
+    fi
+  elif [[ "${EVIDENCE_FINALIZED}" != "true" || "${DURABLE_EVIDENCE_PERSISTED}" != "true" ]]; then
+    echo "Deployment reached a success exit without finalized, durable evidence." >&2
+    status=1
   fi
   rm -rf "${TMP_DIR}"
   exit "${status}"
@@ -276,7 +640,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for boolean_name in EMERGENCY_OVERRIDE REAL_WRITES ALLOW_DEV_STUB_WRITES SKIP_PROBE ALLOW_BOOTSTRAP; do
+for boolean_name in EMERGENCY_OVERRIDE ROLLBACK_DRILL REAL_WRITES ALLOW_DEV_STUB_WRITES SKIP_PROBE ALLOW_BOOTSTRAP; do
   bool_value "${boolean_name}"
 done
 
@@ -303,12 +667,21 @@ while IFS= read -r variable_name; do
   esac
 done < <(compgen -e)
 
-if [[ "${DEPLOY_ROOT}" != "${STRICT_DIR_PREFIX}" && "${DEPLOY_ROOT}" != "${STRICT_DIR_PREFIX}/"* ]]; then
-  echo "Refusing to deploy outside allowed root prefix: ${DEPLOY_ROOT}" >&2
+assert_scoped_path "Deploy root" "${DEPLOY_ROOT}" "${STRICT_DIR_PREFIX}"
+assert_scoped_path "Release store" "${RELEASES_DIR}" "${STRICT_RELEASES_PREFIX}"
+assert_scoped_path "Deployment lock" "${LOCK_FILE}" "${STRICT_LOCK_PREFIX}"
+assert_scoped_path "Durable evidence root" "${DURABLE_EVIDENCE_ROOT}" "${STRICT_DURABLE_EVIDENCE_PREFIX}"
+assert_scoped_path "Durable evidence run" "${DURABLE_EVIDENCE_DIR}" "${DURABLE_EVIDENCE_ROOT}"
+if [[ ! "${SHA}" =~ ^[0-9a-f]{40}$ || "${SOURCE_REF}" != "${SHA}" ]]; then
+  echo "Deployment source ref must equal the exact candidate SHA." >&2
   exit 2
 fi
-if [[ ! "${SHA}" =~ ^[0-9a-f]{40}$ || "${SOURCE_REF}" != "${SHA}" ]]; then
-  echo "Deployment checkout must equal the exact candidate SHA." >&2
+if [[ ! "${CONTROLLER_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Deployment controller must be an exact trusted commit SHA." >&2
+  exit 2
+fi
+if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+  echo "Candidate SHA is not available as a commit in the trusted controller checkout." >&2
   exit 2
 fi
 if [[ ! "${GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
@@ -319,16 +692,20 @@ if [[ ! "${GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   echo "Deployment requires GitHub's immutable artifact SHA-256 digest." >&2
   exit 2
 fi
-if [[ -n "${EXPECTED_DEV_SHA}" && ! "${EXPECTED_DEV_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Expected dev identity must be an exact SHA." >&2
+if [[ ! "${EXPECTED_DEV_SHA}" =~ ^[0-9a-f]{40}$ || "${CONTROLLER_SHA}" != "${EXPECTED_DEV_SHA}" ]]; then
+  echo "Trusted controller checkout must equal the exact validated dev SHA." >&2
   exit 2
 fi
-if [[ "${EMERGENCY_OVERRIDE}" == "true" && ( ${#OVERRIDE_REASON} -lt 20 || -z "${OVERRIDE_ACTOR}" ) ]]; then
-  echo "Emergency override requires an actor and an audited reason." >&2
+if [[ ( "${EMERGENCY_OVERRIDE}" == "true" || "${ROLLBACK_DRILL}" == "true" ) && ( ${#OVERRIDE_REASON} -lt 20 || -z "${OVERRIDE_ACTOR}" ) ]]; then
+  echo "Emergency override and rollback drill require an actor and an audited reason." >&2
   exit 2
 fi
-if [[ "${EMERGENCY_OVERRIDE}" != "true" && ( -n "${OVERRIDE_REASON}" || -n "${OVERRIDE_ACTOR}" ) ]]; then
-  echo "Override metadata is invalid without emergency_override=true." >&2
+if [[ "${EMERGENCY_OVERRIDE}" != "true" && "${ROLLBACK_DRILL}" != "true" && ( -n "${OVERRIDE_REASON}" || -n "${OVERRIDE_ACTOR}" ) ]]; then
+  echo "Override metadata is invalid without emergency_override=true or rollback_drill=true." >&2
+  exit 2
+fi
+if [[ "${ROLLBACK_DRILL}" == "true" && "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]]; then
+  echo "Rollback drill is restricted to an explicit manual workflow dispatch." >&2
   exit 2
 fi
 if [[ ! "${RELEASE_INSTANCE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -341,7 +718,12 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   exit 2
 fi
 
-for command_name in npm node rsync sudo curl flock git readlink; do
+if [[ ! -f "${SYMLINK_CAS_HELPER}" ]]; then
+  echo "Missing atomic symlink CAS helper: ${SYMLINK_CAS_HELPER}" >&2
+  exit 2
+fi
+
+for command_name in npm node python3 rsync sudo curl flock git readlink; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "Missing required command: ${command_name}" >&2
     exit 2
@@ -362,7 +744,8 @@ fi
 ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify \
   --candidate-dir "${CANDIDATE_DIR}" \
   --expected-frontend-sha "${SHA}" \
-  --expected-gate-run-id "${GATE_RUN_ID}")"
+  --expected-gate-run-id "${GATE_RUN_ID}" \
+  --expected-bff-base-url "${BFF_HOST}")"
 if [[ ! "${ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
   echo "Candidate verifier did not return one exact artifact digest." >&2
   exit 2
@@ -375,11 +758,13 @@ if [[ -n "${OVERRIDE_REASON}" ]]; then
 fi
 node scripts/release-evidence.mjs init \
   --log "${EVIDENCE_LOG}" \
+  --detail "controllerSha=${CONTROLLER_SHA}" \
   --detail "candidateSha=${SHA}" \
   --detail "integrationGateRunId=${GATE_RUN_ID}" \
   --detail "artifactDigestSha256=${ARTIFACT_DIGEST}" \
   --detail "githubArtifactDigest=${GITHUB_ARTIFACT_DIGEST}" \
   --detail "emergencyOverride=${EMERGENCY_OVERRIDE}" \
+  --detail "rollbackDrill=${ROLLBACK_DRILL}" \
   --detail "overrideActor=${OVERRIDE_ACTOR:-none}" \
   --detail "overrideReasonSha256=${OVERRIDE_REASON_SHA256:-none}" >/dev/null
 EVIDENCE_INITIALIZED=true
@@ -399,17 +784,21 @@ if [[ ! "${REMOTE_DEV_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Unable to resolve current origin/dev." >&2
   exit 2
 fi
+if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
+  echo "Dev advanced after controller validation; refusing to run a stale deploy controller." >&2
+  evidence_append controller.order failed "currentDevSha=${REMOTE_DEV_SHA}" "validatedDevSha=${CONTROLLER_SHA}"
+  exit 2
+fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
   evidence_append candidate.order failed "currentDevSha=${REMOTE_DEV_SHA}"
   exit 2
 fi
-if [[ -n "${EXPECTED_DEV_SHA}" && "${EXPECTED_DEV_SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  echo "Dev advanced after workflow validation; refusing stale deployment." >&2
-  evidence_append candidate.order failed "currentDevSha=${REMOTE_DEV_SHA}" "validatedDevSha=${EXPECTED_DEV_SHA}"
-  exit 2
+if [[ "${SHA}" != "${REMOTE_DEV_SHA}" ]]; then
+  evidence_append candidate.order overridden "currentDevSha=${REMOTE_DEV_SHA}"
+else
+  evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
 fi
-evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
 
 if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_TARGET="$(current_live_target)"
@@ -417,12 +806,37 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
     "${RELEASES_DIR}"/*) ;;
     *) echo "Current deploy symlink is outside the release store." >&2; exit 2 ;;
   esac
+  PREVIOUS_RELEASE_NAME="$(basename -- "${PREVIOUS_TARGET}")"
+  if [[ ! "${PREVIOUS_RELEASE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Current release name contains unsafe path characters." >&2
+    exit 2
+  fi
   if [[ ! -d "${PREVIOUS_TARGET}" || ! -f "${PREVIOUS_TARGET}/deployment.json" ]]; then
     echo "Current deploy target is not a qualified release." >&2
     exit 2
   fi
-  PREVIOUS_COMMIT="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.commit||"").toLowerCase();if(!/^[0-9a-f]{40}$/.test(s))process.exit(1);if(p.buildMode?.VITE_BFF_REAL_WRITES!=="false"||p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES!=="false"||p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN!=="false")process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
-  PREVIOUS_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_COMMIT="$(node -e '
+    const fs=require("node:fs");
+    const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+    const expectedBff=process.argv[2].toLowerCase();
+    const commit=String(p.commit||"").toLowerCase();
+    const state=String(p.deploymentState||"");
+    const safe=p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
+      p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
+      p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&
+      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
+      p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&
+      String(p.bffCommit||"").toLowerCase()===expectedBff&&p.bffCommitEvidence===true&&
+      ["","accepted","candidate"].includes(state);
+    if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
+    process.stdout.write(commit);
+  ' "${PREVIOUS_TARGET}/deployment.json" "${BFF_COMMIT}")"
+  PREVIOUS_MANIFEST_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_DEPLOYMENT_STATE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(p.deploymentState||""))' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_DIGEST="$(verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_MANIFEST_DIGEST}")"
+  evidence_append previous_release qualified "previousCommit=${PREVIOUS_COMMIT}" "previousArtifactDigest=${PREVIOUS_DIGEST}"
 elif [[ ! -e "${DEPLOY_ROOT}" && "${ALLOW_BOOTSTRAP}" == "true" ]]; then
   evidence_append previous_release bootstrap "deployRoot=${DEPLOY_ROOT}"
 elif [[ ! -e "${DEPLOY_ROOT}" ]]; then
@@ -434,10 +848,24 @@ else
 fi
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
+  if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" != "${SHA}" ]]; then
+    prepare_interrupted_recovery
+    evidence_append recovery.new_candidate rejected "previousCommit=${PREVIOUS_COMMIT}"
+    echo "An interrupted candidate must be restored before a different candidate can deploy." >&2
+    exit 2
+  fi
   if [[ "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
     if [[ -n "${PREVIOUS_DIGEST}" && "${PREVIOUS_DIGEST}" == "${ARTIFACT_DIGEST}" ]]; then
       NOOP_DEPLOY=true
+      if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+        prepare_interrupted_recovery
+      fi
       evidence_append candidate.noop pending "previousCommit=${PREVIOUS_COMMIT}"
+      if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
+        evidence_append rollback.drill rejected "previousCommit=${PREVIOUS_COMMIT}"
+        echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
+        exit 2
+      fi
     else
       echo "Same-SHA artifact replacement rejected because the served digest differs or is unproven." >&2
       evidence_append candidate.reproducibility failed "previousCommit=${PREVIOUS_COMMIT}"
@@ -463,9 +891,34 @@ verify_bff_identity pre_candidate
 
 if [[ "${NOOP_DEPLOY}" == "true" ]]; then
   echo "=== exact live candidate no-op revalidation ==="
-  verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json"
+  verify_dist_digest "${PREVIOUS_TARGET}" "${ARTIFACT_DIGEST}" >/dev/null
+  if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${BFF_COMMIT}" candidate
+  else
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json"
+  fi
   run_release_probe noop "" "${SHA}" "${ARTIFACT_DIGEST}" true
   verify_bff_identity noop_final
+  if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
+    node --input-type=module - "${PREVIOUS_TARGET}/deployment.json" "${TMP_DIR}/recovered-deployment.json" <<'NODE'
+import fs from "node:fs";
+const [source, output] = process.argv.slice(2);
+const manifest = JSON.parse(fs.readFileSync(source, "utf8"));
+manifest.deploymentState = "accepted";
+manifest.acceptedAt = new Date().toISOString();
+manifest.probes = {
+  ...(manifest.probes || {}),
+  candidatePreSwitch: "passed-before-interruption",
+  postSwitch: "passed-during-recovery",
+  rollbackRequired: false,
+  recoveredAfterInterruption: true,
+};
+fs.writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+NODE
+    sudo install -o root -g root -m 664 "${TMP_DIR}/recovered-deployment.json" "${PREVIOUS_TARGET}/deployment.json"
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${BFF_COMMIT}" accepted
+    evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
+  fi
   evidence_append candidate.noop passed "previousCommit=${PREVIOUS_COMMIT}"
   cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 # Pantheon Dev FE Deploy
@@ -486,7 +939,7 @@ if [[ "${NOOP_DEPLOY}" == "true" ]]; then
 - evidence_log: evidence.jsonl
 - evidence_summary: evidence.json
 EOF
-  DEPLOY_ACCEPTED=true
+  accept_deployment
   echo "OK: exact candidate ${SHA} (${ARTIFACT_DIGEST}) was already live and passed full revalidation."
   exit 0
 fi
@@ -504,6 +957,7 @@ PANTHEON_RUNTIME_DEPLOYED_AT="${TIMESTAMP}" \
 PANTHEON_RUNTIME_RELEASE_NAME="${RELEASE_NAME}" \
 PANTHEON_RUNTIME_PREVIOUS_COMMIT="${PREVIOUS_COMMIT}" \
 PANTHEON_RUNTIME_PREVIOUS_DIGEST="${PREVIOUS_DIGEST}" \
+PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME="${PREVIOUS_RELEASE_NAME}" \
 PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
 PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
 PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
@@ -517,6 +971,7 @@ manifest.releaseName = process.env.PANTHEON_RUNTIME_RELEASE_NAME;
 manifest.deployedAt = process.env.PANTHEON_RUNTIME_DEPLOYED_AT;
 manifest.previousCommit = process.env.PANTHEON_RUNTIME_PREVIOUS_COMMIT || null;
 manifest.previousArtifactDigest = process.env.PANTHEON_RUNTIME_PREVIOUS_DIGEST || null;
+manifest.previousReleaseName = process.env.PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME || null;
 manifest.githubArtifactDigest = process.env.PANTHEON_RUNTIME_GITHUB_DIGEST;
 manifest.emergencyOverride = {
   enabled: process.env.PANTHEON_RUNTIME_EMERGENCY_OVERRIDE === "true",
@@ -525,9 +980,14 @@ manifest.emergencyOverride = {
 };
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
+verify_dist_digest "${TMP_DIR}/release" "${ARTIFACT_DIGEST}" >/dev/null
+evidence_append candidate.staged_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+RELEASE_CREATED=true
 sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
 sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
   "${TMP_DIR}/release/" "${RELEASE_DIR}/"
+verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
 
 echo "=== candidate pre-switch browser/auth probe ==="
 run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
@@ -535,10 +995,20 @@ evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
 
 verify_bff_identity pre_switch
 REMOTE_DEV_SHA_AT_SWITCH="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
+  echo "Dev advanced after candidate probe; refusing a switch from a stale controller." >&2
+  evidence_append controller.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
+  exit 2
+fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   echo "Dev advanced after candidate probe; refusing stale switch." >&2
   evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
   exit 2
+fi
+if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
+  evidence_append candidate.order_at_switch overridden "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
+else
+  evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
 fi
 if [[ -n "${PREVIOUS_TARGET}" && "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
   echo "Live release changed during candidate probe; refusing to overwrite it." >&2
@@ -547,15 +1017,30 @@ if [[ -n "${PREVIOUS_TARGET}" && "$(current_live_target)" != "${PREVIOUS_TARGET}
 fi
 
 echo "=== atomic live switch ==="
-sudo ln -sfn "${RELEASE_DIR}" "${DEPLOY_ROOT}.next"
-if [[ -n "${PREVIOUS_TARGET}" && "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
-  sudo rm -f -- "${DEPLOY_ROOT}.next"
-  echo "Live release changed before switch commit; refusing to overwrite it." >&2
-  evidence_append switch.cas failed "observedTarget=$(current_live_target)"
-  exit 2
+sudo ln -s -- "${RELEASE_DIR}" "${NEXT_LINK}"
+NEXT_LINK_CREATED=true
+SWITCH_ATTEMPTED=true
+if [[ -n "${PREVIOUS_TARGET}" ]]; then
+  if ! sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
+    --live-link "${DEPLOY_ROOT}" \
+    --staged-link "${NEXT_LINK}" \
+    --expected-live-target "${PREVIOUS_TARGET}" \
+    --expected-staged-target "${RELEASE_DIR}" >/dev/null; then
+    echo "Atomic switch rejected: the exchanged live predecessor did not match." >&2
+    evidence_append switch.cas failed "observedTarget=$(current_live_target)"
+    exit 2
+  fi
+else
+  if ! sudo python3 "${SYMLINK_CAS_HELPER}" install-if-absent \
+    --live-link "${DEPLOY_ROOT}" \
+    --staged-link "${NEXT_LINK}" \
+    --expected-staged-target "${RELEASE_DIR}" >/dev/null; then
+    echo "Atomic bootstrap rejected: the live path was not absent." >&2
+    evidence_append switch.cas failed "observedTarget=$(current_live_target)"
+    exit 2
+  fi
 fi
-sudo mv -Tf "${DEPLOY_ROOT}.next" "${DEPLOY_ROOT}"
-DEPLOY_SWITCHED=true
+NEXT_LINK_CREATED=false
 if [[ "$(current_live_target)" != "${RELEASE_DIR}" ]]; then
   echo "Atomic switch did not select the candidate release." >&2
   evidence_append switch.commit failed
@@ -564,9 +1049,16 @@ fi
 evidence_append switch.commit passed "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
 
 echo "=== post-switch manifest, BFF, and browser/auth probe ==="
-verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/post-switch-deployment.json"
+verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/post-switch-deployment.json" "${BFF_COMMIT}" candidate
 verify_bff_identity post_switch
 run_release_probe post_switch "" "${SHA}" "${ARTIFACT_DIGEST}" true
+verify_bff_identity accepted_final
+
+if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
+  evidence_append rollback.drill pending "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
+  echo "Controlled rollback drill: verified candidate switch complete; restoring and re-probing the exact previous release." >&2
+  exit 86
+fi
 
 PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
 PANTHEON_RUNTIME_ACCEPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -584,20 +1076,8 @@ manifest.probes = {
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
 sudo install -o root -g root -m 664 "${TMP_DIR}/release/deployment.json" "${RELEASE_DIR}/deployment.json"
-verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json"
+verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted
 evidence_append release.accepted passed "releaseDir=${RELEASE_DIR}" "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
-
-if [[ "${KEEP_RELEASES}" =~ ^[0-9]+$ && "${KEEP_RELEASES}" -gt 1 ]]; then
-  mapfile -t old_releases < <(sudo find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -n | awk '{print $2}' | head -n "-${KEEP_RELEASES}" || true)
-  for old_release in "${old_releases[@]}"; do
-    if [[ "${old_release}" == "${RELEASE_DIR}" || "${old_release}" == "${PREVIOUS_TARGET}" ]]; then
-      continue
-    fi
-    case "${old_release}" in
-      "${RELEASES_DIR}"/*) sudo rm -rf -- "${old_release}" ;;
-    esac
-  done
-fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 # Pantheon Dev FE Deploy
@@ -623,5 +1103,26 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - evidence_summary: evidence.json
 EOF
 
-DEPLOY_ACCEPTED=true
+accept_deployment
+
+if [[ "${KEEP_RELEASES}" =~ ^[0-9]+$ && "${KEEP_RELEASES}" -gt 1 ]]; then
+  mapfile -d '' release_entries < <(
+    sudo find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\0' | sort -z -n || true
+  )
+  remove_count=$((${#release_entries[@]} - KEEP_RELEASES))
+  if [[ "${remove_count}" -gt 0 ]]; then
+    for ((release_index = 0; release_index < remove_count; release_index += 1)); do
+      old_release="${release_entries[${release_index}]#* }"
+      if [[ "${old_release}" == "${RELEASE_DIR}" || "${old_release}" == "${PREVIOUS_TARGET}" ]]; then
+        continue
+      fi
+      case "${old_release}" in
+        "${RELEASES_DIR}"/*)
+          sudo rm -rf -- "${old_release}" || echo "Warning: unable to prune ${old_release}." >&2
+          ;;
+      esac
+    done
+  fi
+fi
+
 echo "OK: deployed gated candidate ${SHA} (${ARTIFACT_DIGEST}) to ${FE_HOST}"

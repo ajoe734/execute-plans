@@ -77,27 +77,38 @@ function normalizeHttpUrl(value, label, { gateRunId = "" } = {}) {
     throw new Error(`${label} must use HTTP or HTTPS`);
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error(`${label} must not contain credentials, a query, or a fragment`);
+    throw new Error(
+      `${label} must not contain credentials, a query, or a fragment`,
+    );
   }
   parsed.pathname = parsed.pathname.replace(/\/+$/u, "") || "/";
   if (gateRunId && !parsed.pathname.endsWith(`/actions/runs/${gateRunId}`)) {
     throw new Error(`${label} does not match the gate run ID`);
   }
-  return parsed.pathname === "/" ? parsed.origin : `${parsed.origin}${parsed.pathname}`;
+  return parsed.pathname === "/"
+    ? parsed.origin
+    : `${parsed.origin}${parsed.pathname}`;
 }
 
 function normalizeBuildMode(buildMode = SAFE_BUILD_MODE) {
   const keys = Object.keys(buildMode || {}).sort();
   const expectedKeys = Object.keys(SAFE_BUILD_MODE).sort();
   if (keys.join(",") !== expectedKeys.join(",")) {
-    throw new Error("unsafe release candidate build mode: fields must match the strict safe contract");
+    throw new Error(
+      "unsafe release candidate build mode: fields must match the strict safe contract",
+    );
   }
   const normalized = Object.fromEntries(
-    Object.keys(SAFE_BUILD_MODE).map((key) => [key, String(buildMode?.[key] ?? "").trim()]),
+    Object.keys(SAFE_BUILD_MODE).map((key) => [
+      key,
+      String(buildMode?.[key] ?? "").trim(),
+    ]),
   );
   for (const [key, expected] of Object.entries(SAFE_BUILD_MODE)) {
     if (normalized[key] !== expected) {
-      throw new Error(`unsafe release candidate build mode: ${key} must be ${expected}`);
+      throw new Error(
+        `unsafe release candidate build mode: ${key} must be ${expected}`,
+      );
     }
   }
   return normalized;
@@ -117,7 +128,9 @@ function canonicalRelativePath(relativePath, label = "asset path") {
     !normalized ||
     normalized.startsWith("/") ||
     normalized.includes("\\") ||
-    normalized.split("/").some((part) => !part || part === "." || part === "..") ||
+    normalized
+      .split("/")
+      .some((part) => !part || part === "." || part === "..") ||
     path.posix.normalize(normalized) !== normalized
   ) {
     throw new Error(`${label} must be a canonical relative path`);
@@ -127,7 +140,12 @@ function canonicalRelativePath(relativePath, label = "asset path") {
 
 function isWithin(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);
-  return relative !== "" && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
+  return (
+    relative !== "" &&
+    !relative.startsWith(`..${path.sep}`) &&
+    relative !== ".." &&
+    !path.isAbsolute(relative)
+  );
 }
 
 function assertDirectoryRoot(rootPath, label) {
@@ -151,22 +169,35 @@ function assertSafeOutputPath(sourceRoot, outputRoot) {
     isWithin(sourceRoot, outputRoot) ||
     isWithin(outputRoot, sourceRoot)
   ) {
-    throw new Error("output directory must be a separate, non-ancestor directory");
+    throw new Error(
+      "output directory must be a separate, non-ancestor directory",
+    );
   }
   if (fs.existsSync(outputRoot)) {
     const stat = fs.lstatSync(outputRoot);
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      throw new Error("output directory must be a real directory, not a symlink");
+      throw new Error(
+        "output directory must be a real directory, not a symlink",
+      );
     }
   }
 }
 
 function normalizeSentinels(values) {
-  return [...new Set((values || [])
-    .filter((value) => typeof value === "string")
-    .map((value) => value.trim())
-    .filter((value) => value.length >= 8 && !["undefined", "password", "changeme"].includes(value.toLowerCase()))
-  )];
+  return [
+    ...new Set(
+      (values || [])
+        .filter((value) => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(
+          (value) =>
+            value.length >= 8 &&
+            !["undefined", "password", "changeme"].includes(
+              value.toLowerCase(),
+            ),
+        ),
+    ),
+  ];
 }
 
 function isTextAsset(relativePath) {
@@ -192,11 +223,13 @@ const CREDENTIAL_PATTERNS = Object.freeze([
   },
   {
     kind: "service-role credential",
-    pattern: /\bservice[_-]?role[_-]?(?:key|secret|token)\b["'`]?\s*[:=]\s*["'`]?[a-z0-9._~+/=-]{4,}/iu,
+    pattern:
+      /\bservice[_-]?role[_-]?(?:key|secret|token)\b["'`]?\s*[:=]\s*["'`]?[a-z0-9._~+/=-]{4,}/iu,
   },
   {
     kind: "token sentinel",
-    pattern: /\b(?:access|refresh|auth|api|dev|browser|service[_-]?role)?[_-]?token\b["'`]?\s*[:=]\s*["'`][^"'`\r\n]{0,128}sentinel[^"'`\r\n]*/iu,
+    pattern:
+      /\b(?:access|refresh|auth|api|dev|browser|service[_-]?role)?[_-]?token\b["'`]?\s*[:=]\s*["'`][^"'`\r\n]{0,128}sentinel[^"'`\r\n]*/iu,
   },
 ]);
 
@@ -211,49 +244,73 @@ function scanTextBytes(bytes, relativePath, secretSentinels) {
 
   for (const sentinel of secretSentinels) {
     if (text.includes(sentinel)) {
-      throw new Error(`${relativePath}: configured secret sentinel is embedded in a browser asset`);
+      throw new Error(
+        `${relativePath}: configured secret sentinel is embedded in a browser asset`,
+      );
     }
   }
   for (const { kind, pattern } of CREDENTIAL_PATTERNS) {
     if (pattern.test(text)) {
-      throw new Error(`${relativePath}: forbidden ${kind} is embedded in a browser asset`);
+      throw new Error(
+        `${relativePath}: forbidden ${kind} is embedded in a browser asset`,
+      );
     }
   }
 }
 
-function collectFiles(rootPath, { secretSentinels = [], excludeDeployment = false } = {}) {
+function collectFiles(
+  rootPath,
+  { secretSentinels = [], excludeDeployment = false } = {},
+) {
   assertDirectoryRoot(rootPath, "asset root");
   const rootRealPath = fs.realpathSync(rootPath);
   const records = [];
 
   function visit(directoryPath) {
-    const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
-      .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    const entries = fs
+      .readdirSync(directoryPath, { withFileTypes: true })
+      .sort((left, right) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+      );
     for (const entry of entries) {
       const absolutePath = path.join(directoryPath, entry.name);
       const stat = fs.lstatSync(absolutePath);
-      const relativePath = canonicalRelativePath(path.relative(rootPath, absolutePath));
+      const relativePath = canonicalRelativePath(
+        path.relative(rootPath, absolutePath),
+      );
       if (stat.isSymbolicLink()) {
-        throw new Error(`${relativePath}: symlinks are forbidden in a release candidate`);
+        throw new Error(
+          `${relativePath}: symlinks are forbidden in a release candidate`,
+        );
       }
       if (stat.isDirectory()) {
         const realDirectory = fs.realpathSync(absolutePath);
-        if (realDirectory !== rootRealPath && !isWithin(rootRealPath, realDirectory)) {
-          throw new Error(`${relativePath}: directory escapes the release candidate root`);
+        if (
+          realDirectory !== rootRealPath &&
+          !isWithin(rootRealPath, realDirectory)
+        ) {
+          throw new Error(
+            `${relativePath}: directory escapes the release candidate root`,
+          );
         }
         visit(absolutePath);
         continue;
       }
       if (!stat.isFile()) {
-        throw new Error(`${relativePath}: only regular files are allowed in a release candidate`);
+        throw new Error(
+          `${relativePath}: only regular files are allowed in a release candidate`,
+        );
       }
       const realFile = fs.realpathSync(absolutePath);
       if (!isWithin(rootRealPath, realFile)) {
-        throw new Error(`${relativePath}: file escapes the release candidate root`);
+        throw new Error(
+          `${relativePath}: file escapes the release candidate root`,
+        );
       }
       const bytes = fs.readFileSync(absolutePath);
       scanTextBytes(bytes, relativePath, secretSentinels);
-      if (excludeDeployment && relativePath === DEPLOYMENT_MANIFEST_PATH) continue;
+      if (excludeDeployment && relativePath === DEPLOYMENT_MANIFEST_PATH)
+        continue;
       records.push({
         path: relativePath,
         sha256: sha256(bytes),
@@ -271,11 +328,15 @@ export function canonicalAssetManifestBytes(files) {
   const normalizedFiles = files.map((file, index) => {
     const filePath = canonicalRelativePath(file?.path, `files[${index}].path`);
     if (filePath === DEPLOYMENT_MANIFEST_PATH) {
-      throw new Error("deployment.json must be excluded from the canonical asset manifest");
+      throw new Error(
+        "deployment.json must be excluded from the canonical asset manifest",
+      );
     }
     const digest = normalizeDigest(file?.sha256, `files[${index}].sha256`);
     if (!Number.isSafeInteger(file?.size) || file.size < 0) {
-      throw new Error(`files[${index}].size must be a non-negative safe integer`);
+      throw new Error(
+        `files[${index}].size must be a non-negative safe integer`,
+      );
     }
     return { path: filePath, sha256: digest, size: file.size };
   });
@@ -288,7 +349,10 @@ export function canonicalAssetManifestBytes(files) {
       throw new Error("canonical asset manifest contains a duplicate path");
     }
   }
-  return Buffer.from(`${JSON.stringify({ schemaVersion: SCHEMA_VERSION, files: normalizedFiles })}\n`, "utf8");
+  return Buffer.from(
+    `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, files: normalizedFiles })}\n`,
+    "utf8",
+  );
 }
 
 function publicFileRecords(records) {
@@ -299,7 +363,47 @@ function publicFileRecords(records) {
   }));
 }
 
-function makeCandidate({ frontendSha, bffSha, bffBaseUrl, gateRunId, gateRunUrl, buildMode, files, artifactDigest }) {
+export function digestReleaseDist({
+  distDir,
+  expectedArtifactDigest = "",
+  secretSentinels = [],
+}) {
+  const distRoot = path.resolve(requiredString(distDir, "dist directory"));
+  const normalizedSentinels = normalizeSentinels(secretSentinels);
+  const records = collectFiles(distRoot, {
+    secretSentinels: normalizedSentinels,
+    excludeDeployment: true,
+  });
+  const files = publicFileRecords(records);
+  const artifactDigestSha256 = sha256(canonicalAssetManifestBytes(files));
+
+  if (
+    expectedArtifactDigest &&
+    artifactDigestSha256 !==
+      normalizeDigest(expectedArtifactDigest, "expected artifact digest")
+  ) {
+    throw new Error(
+      "release dist canonical asset digest does not match the expected digest",
+    );
+  }
+
+  return {
+    artifactDigestSha256,
+    fileCount: files.length,
+    files,
+  };
+}
+
+function makeCandidate({
+  frontendSha,
+  bffSha,
+  bffBaseUrl,
+  gateRunId,
+  gateRunUrl,
+  buildMode,
+  files,
+  artifactDigest,
+}) {
   return {
     schemaVersion: SCHEMA_VERSION,
     repository: FRONTEND_REPOSITORY,
@@ -349,49 +453,101 @@ function makeDeploymentManifest(candidate) {
 
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o644 });
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o644,
+  });
 }
 
 function validateExpectedCandidate(candidate, expectations) {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     throw new Error("candidate.json must contain a JSON object");
   }
-  if (candidate.schemaVersion !== SCHEMA_VERSION || candidate.repository !== FRONTEND_REPOSITORY) {
+  if (
+    candidate.schemaVersion !== SCHEMA_VERSION ||
+    candidate.repository !== FRONTEND_REPOSITORY
+  ) {
     throw new Error("candidate.json has an unsupported schema or repository");
   }
-  const frontendSha = normalizeSha(candidate.frontendSha, "candidate frontend SHA");
+  const frontendSha = normalizeSha(
+    candidate.frontendSha,
+    "candidate frontend SHA",
+  );
   const bffSha = normalizeSha(candidate.bffSha, "candidate BFF SHA");
-  const gateRunId = normalizeGateRunId(candidate.gate?.runId, "candidate gate run ID");
-  const bffBaseUrl = normalizeHttpUrl(candidate.bffBaseUrl, "candidate BFF base URL");
-  const gateRunUrl = normalizeHttpUrl(candidate.gate?.runUrl, "candidate gate run URL", { gateRunId });
+  const gateRunId = normalizeGateRunId(
+    candidate.gate?.runId,
+    "candidate gate run ID",
+  );
+  const bffBaseUrl = normalizeHttpUrl(
+    candidate.bffBaseUrl,
+    "candidate BFF base URL",
+  );
+  const gateRunUrl = normalizeHttpUrl(
+    candidate.gate?.runUrl,
+    "candidate gate run URL",
+    { gateRunId },
+  );
   if (candidate.gate?.workflow !== GATE_WORKFLOW) {
     throw new Error("candidate gate workflow is not the integration gate");
   }
   const buildMode = normalizeBuildMode(candidate.buildMode);
-  const artifactDigest = normalizeDigest(candidate.artifactDigestSha256, "candidate artifact digest");
+  const artifactDigest = normalizeDigest(
+    candidate.artifactDigestSha256,
+    "candidate artifact digest",
+  );
   if (candidate.artifactDigest !== artifactDigest) {
     throw new Error("candidate artifact digest aliases do not match");
   }
 
-  const expectedFrontendSha = normalizeSha(expectations.frontendSha, "expected frontend SHA");
-  const expectedGateRunId = normalizeGateRunId(expectations.gateRunId, "expected gate run ID");
-  if (frontendSha !== expectedFrontendSha) throw new Error("candidate frontend SHA does not match the expected SHA");
-  if (gateRunId !== expectedGateRunId) throw new Error("candidate gate run ID does not match the expected run");
-  if (expectations.bffSha && bffSha !== normalizeSha(expectations.bffSha, "expected BFF SHA")) {
+  const expectedFrontendSha = normalizeSha(
+    expectations.frontendSha,
+    "expected frontend SHA",
+  );
+  const expectedGateRunId = normalizeGateRunId(
+    expectations.gateRunId,
+    "expected gate run ID",
+  );
+  if (frontendSha !== expectedFrontendSha)
+    throw new Error("candidate frontend SHA does not match the expected SHA");
+  if (gateRunId !== expectedGateRunId)
+    throw new Error("candidate gate run ID does not match the expected run");
+  if (
+    expectations.bffSha &&
+    bffSha !== normalizeSha(expectations.bffSha, "expected BFF SHA")
+  ) {
     throw new Error("candidate BFF SHA does not match the expected SHA");
   }
-  if (expectations.bffBaseUrl && bffBaseUrl !== normalizeHttpUrl(expectations.bffBaseUrl, "expected BFF base URL")) {
+  if (
+    expectations.bffBaseUrl &&
+    bffBaseUrl !==
+      normalizeHttpUrl(expectations.bffBaseUrl, "expected BFF base URL")
+  ) {
     throw new Error("candidate BFF base URL does not match the expected URL");
   }
-  if (expectations.artifactDigest && artifactDigest !== normalizeDigest(expectations.artifactDigest, "expected artifact digest")) {
-    throw new Error("candidate artifact digest does not match the expected digest");
+  if (
+    expectations.artifactDigest &&
+    artifactDigest !==
+      normalizeDigest(expectations.artifactDigest, "expected artifact digest")
+  ) {
+    throw new Error(
+      "candidate artifact digest does not match the expected digest",
+    );
   }
 
-  return { frontendSha, bffSha, bffBaseUrl, gateRunId, gateRunUrl, buildMode, artifactDigest };
+  return {
+    frontendSha,
+    bffSha,
+    bffBaseUrl,
+    gateRunId,
+    gateRunUrl,
+    buildMode,
+    artifactDigest,
+  };
 }
 
 function validateDeclaredFiles(files) {
-  if (!Array.isArray(files)) throw new Error("candidate files must be an array");
+  if (!Array.isArray(files))
+    throw new Error("candidate files must be an array");
   const normalized = files.map((file, index) => {
     if (!file || typeof file !== "object" || Array.isArray(file)) {
       throw new Error(`files[${index}] must be an object`);
@@ -411,7 +567,11 @@ function validateDeclaredFiles(files) {
 }
 
 function validateDeploymentManifest(deployment, candidate, normalized) {
-  if (!deployment || typeof deployment !== "object" || Array.isArray(deployment)) {
+  if (
+    !deployment ||
+    typeof deployment !== "object" ||
+    Array.isArray(deployment)
+  ) {
     throw new Error("deployment.json must contain a JSON object");
   }
   const consistent =
@@ -436,10 +596,17 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
     String(deployment.integrationGateRunId) === normalized.gateRunId &&
     deployment.artifactDigest === normalized.artifactDigest &&
     deployment.artifactDigestSha256 === normalized.artifactDigest &&
-    Object.entries(normalized.buildMode).every(([key, value]) => deployment.buildMode?.[key] === value) &&
-    Object.keys(deployment.buildMode || {}).sort().join(",") === Object.keys(SAFE_BUILD_MODE).sort().join(",") &&
+    Object.entries(normalized.buildMode).every(
+      ([key, value]) => deployment.buildMode?.[key] === value,
+    ) &&
+    Object.keys(deployment.buildMode || {})
+      .sort()
+      .join(",") === Object.keys(SAFE_BUILD_MODE).sort().join(",") &&
     candidate.artifactDigestSha256 === normalized.artifactDigest;
-  if (!consistent) throw new Error("deployment.json is inconsistent with the verified release candidate");
+  if (!consistent)
+    throw new Error(
+      "deployment.json is inconsistent with the verified release candidate",
+    );
 }
 
 export function verifyReleaseCandidate({
@@ -451,16 +618,24 @@ export function verifyReleaseCandidate({
   expectedArtifactDigest = "",
   secretSentinels = [],
 }) {
-  const candidateRoot = path.resolve(requiredString(candidateDir, "candidate directory"));
+  const candidateRoot = path.resolve(
+    requiredString(candidateDir, "candidate directory"),
+  );
   assertDirectoryRoot(candidateRoot, "candidate directory");
-  const envelopeEntries = fs.readdirSync(candidateRoot, { withFileTypes: true });
+  const envelopeEntries = fs.readdirSync(candidateRoot, {
+    withFileTypes: true,
+  });
   const envelopeNames = envelopeEntries.map((entry) => entry.name).sort();
   if (envelopeNames.join(",") !== "candidate.json,dist") {
-    throw new Error("candidate directory must contain exactly candidate.json and dist");
+    throw new Error(
+      "candidate directory must contain exactly candidate.json and dist",
+    );
   }
   for (const entry of envelopeEntries) {
     if (entry.isSymbolicLink()) {
-      throw new Error(`${entry.name}: symlinks are forbidden in a release candidate`);
+      throw new Error(
+        `${entry.name}: symlinks are forbidden in a release candidate`,
+      );
     }
   }
   const normalizedSentinels = normalizeSentinels(secretSentinels);
@@ -499,7 +674,9 @@ export function verifyReleaseCandidate({
   });
   const actualFiles = publicFileRecords(actualRecords);
   if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
-    throw new Error("release candidate asset manifest does not match the files on disk");
+    throw new Error(
+      "release candidate asset manifest does not match the files on disk",
+    );
   }
   const observedDigest = sha256(canonicalAssetManifestBytes(actualFiles));
   if (observedDigest !== normalized.artifactDigest) {
@@ -514,7 +691,9 @@ export function verifyReleaseCandidate({
     throw new Error("dist/deployment.json is missing");
   }
   if (deploymentStat.isSymbolicLink() || !deploymentStat.isFile()) {
-    throw new Error("dist/deployment.json must be a regular file, not a symlink");
+    throw new Error(
+      "dist/deployment.json must be a regular file, not a symlink",
+    );
   }
   let deployment;
   try {
@@ -544,7 +723,9 @@ export function prepareReleaseCandidate({
   secretSentinels = [],
 }) {
   const sourceRoot = path.resolve(requiredString(distDir, "dist directory"));
-  const outputRoot = path.resolve(requiredString(outputDir, "output directory"));
+  const outputRoot = path.resolve(
+    requiredString(outputDir, "output directory"),
+  );
   assertDirectoryRoot(sourceRoot, "dist directory");
   assertSafeOutputPath(sourceRoot, outputRoot);
 
@@ -577,14 +758,24 @@ export function prepareReleaseCandidate({
   const temporaryRoot = `${outputRoot}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
 
   try {
-    fs.mkdirSync(path.join(temporaryRoot, "dist"), { recursive: true, mode: 0o755 });
+    fs.mkdirSync(path.join(temporaryRoot, "dist"), {
+      recursive: true,
+      mode: 0o755,
+    });
     for (const record of sourceRecords) {
-      const destination = path.join(temporaryRoot, "dist", ...record.path.split("/"));
+      const destination = path.join(
+        temporaryRoot,
+        "dist",
+        ...record.path.split("/"),
+      );
       fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o755 });
       fs.copyFileSync(record.absolutePath, destination);
       fs.chmodSync(destination, 0o644);
     }
-    writeJson(path.join(temporaryRoot, "dist", DEPLOYMENT_MANIFEST_PATH), deployment);
+    writeJson(
+      path.join(temporaryRoot, "dist", DEPLOYMENT_MANIFEST_PATH),
+      deployment,
+    );
     writeJson(path.join(temporaryRoot, "candidate.json"), candidate);
 
     verifyReleaseCandidate({
@@ -597,14 +788,20 @@ export function prepareReleaseCandidate({
       secretSentinels: normalizedSentinels,
     });
 
-    if (fs.existsSync(outputRoot)) fs.rmSync(outputRoot, { recursive: true, force: true });
+    if (fs.existsSync(outputRoot))
+      fs.rmSync(outputRoot, { recursive: true, force: true });
     fs.renameSync(temporaryRoot, outputRoot);
   } catch (error) {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
     throw error;
   }
 
-  return { candidate, deployment, outputDir: outputRoot, artifactDigestSha256: artifactDigest };
+  return {
+    candidate,
+    deployment,
+    outputDir: outputRoot,
+    artifactDigestSha256: artifactDigest,
+  };
 }
 
 function parseOptions(rawArgs, allowedFlags) {
@@ -612,8 +809,14 @@ function parseOptions(rawArgs, allowedFlags) {
   for (let index = 0; index < rawArgs.length; index += 2) {
     const flag = rawArgs[index];
     const value = rawArgs[index + 1];
-    if (!flag?.startsWith("--") || value === undefined || value.startsWith("--")) {
-      throw new Error(`invalid option sequence near ${flag || "end of command"}`);
+    if (
+      !flag?.startsWith("--") ||
+      value === undefined ||
+      value.startsWith("--")
+    ) {
+      throw new Error(
+        `invalid option sequence near ${flag || "end of command"}`,
+      );
     }
     if (!allowedFlags.has(flag)) throw new Error(`unknown option: ${flag}`);
     if (options.has(flag)) throw new Error(`duplicate option: ${flag}`);
@@ -631,10 +834,15 @@ function parseOptions(rawArgs, allowedFlags) {
 
 function collectEnvironmentSecretSentinels(environment) {
   const sentinels = [];
-  const secretName = /(?:^|_)(?:BEARER|TOKEN|SECRET|PRIVATE_KEY|SERVICE_ROLE(?:_KEY)?|CLIENT_SECRET)(?:_|$)/iu;
+  const secretName =
+    /(?:^|_)(?:BEARER|TOKEN|SECRET|PRIVATE_KEY|SERVICE_ROLE(?:_KEY)?|CLIENT_SECRET)(?:_|$)/iu;
   const explicitlyPublic = /(?:PUBLISHABLE|PUBLIC|ANON)/iu;
   for (const [name, value] of Object.entries(environment)) {
-    if (secretName.test(name) && !explicitlyPublic.test(name) && typeof value === "string") {
+    if (
+      secretName.test(name) &&
+      !explicitlyPublic.test(name) &&
+      typeof value === "string"
+    ) {
       sentinels.push(value);
     }
   }
@@ -654,35 +862,75 @@ function collectEnvironmentSecretSentinels(environment) {
 function cliBuildMode(options, environment) {
   const browserBearer = String(environment.VITE_BFF_DEV_BEARER_TOKEN || "");
   if (browserBearer) {
-    throw new Error("browser bearer environment input must be empty for a release candidate");
+    throw new Error(
+      "browser bearer environment input must be empty for a release candidate",
+    );
   }
   return {
-    VITE_BFF_MODE: options.get("--vite-bff-mode") || environment.VITE_BFF_MODE || "live",
-    VITE_BFF_FALLBACK: options.get("--vite-bff-fallback") || environment.VITE_BFF_FALLBACK || "strict",
-    VITE_BFF_REAL_WRITES: options.get("--vite-bff-real-writes", "--real-writes") || environment.VITE_BFF_REAL_WRITES || "false",
-    VITE_BFF_ALLOW_DEV_STUB_WRITES: options.get("--vite-bff-allow-dev-stub-writes", "--allow-dev-stub-writes") || environment.VITE_BFF_ALLOW_DEV_STUB_WRITES || "false",
-    VITE_BFF_EMBEDDED_BEARER_TOKEN: options.get("--vite-bff-embedded-bearer-token", "--embedded-bearer-token") || "false",
+    VITE_BFF_MODE:
+      options.get("--vite-bff-mode") || environment.VITE_BFF_MODE || "live",
+    VITE_BFF_FALLBACK:
+      options.get("--vite-bff-fallback") ||
+      environment.VITE_BFF_FALLBACK ||
+      "strict",
+    VITE_BFF_REAL_WRITES:
+      options.get("--vite-bff-real-writes", "--real-writes") ||
+      environment.VITE_BFF_REAL_WRITES ||
+      "false",
+    VITE_BFF_ALLOW_DEV_STUB_WRITES:
+      options.get(
+        "--vite-bff-allow-dev-stub-writes",
+        "--allow-dev-stub-writes",
+      ) ||
+      environment.VITE_BFF_ALLOW_DEV_STUB_WRITES ||
+      "false",
+    VITE_BFF_EMBEDDED_BEARER_TOKEN:
+      options.get(
+        "--vite-bff-embedded-bearer-token",
+        "--embedded-bearer-token",
+      ) || "false",
   };
 }
 
 export function main(argv = process.argv.slice(2), environment = process.env) {
   const [command, ...rawOptions] = argv;
   const commonExpectedFlags = new Set([
-    "--candidate-dir", "--candidate",
-    "--expected-frontend-sha", "--frontend-sha",
-    "--expected-gate-run-id", "--gate-run-id",
-    "--expected-bff-sha", "--bff-sha",
-    "--expected-bff-base-url", "--bff-base-url",
-    "--expected-artifact-digest", "--artifact-digest",
+    "--candidate-dir",
+    "--candidate",
+    "--expected-frontend-sha",
+    "--frontend-sha",
+    "--expected-gate-run-id",
+    "--gate-run-id",
+    "--expected-bff-sha",
+    "--bff-sha",
+    "--expected-bff-base-url",
+    "--bff-base-url",
+    "--expected-artifact-digest",
+    "--artifact-digest",
   ]);
   if (command === "prepare") {
-    const options = parseOptions(rawOptions, new Set([
-      "--dist-dir", "--dist", "--output-dir", "--out",
-      "--frontend-sha", "--bff-sha", "--gate-run-id", "--gate-run-url", "--bff-base-url",
-      "--vite-bff-mode", "--vite-bff-fallback", "--vite-bff-real-writes", "--real-writes",
-      "--vite-bff-allow-dev-stub-writes", "--allow-dev-stub-writes",
-      "--vite-bff-embedded-bearer-token", "--embedded-bearer-token",
-    ]));
+    const options = parseOptions(
+      rawOptions,
+      new Set([
+        "--dist-dir",
+        "--dist",
+        "--output-dir",
+        "--out",
+        "--frontend-sha",
+        "--bff-sha",
+        "--gate-run-id",
+        "--gate-run-url",
+        "--bff-base-url",
+        "--vite-bff-mode",
+        "--vite-bff-fallback",
+        "--vite-bff-real-writes",
+        "--real-writes",
+        "--vite-bff-allow-dev-stub-writes",
+        "--allow-dev-stub-writes",
+        "--vite-bff-embedded-bearer-token",
+        "--embedded-bearer-token",
+      ]),
+    );
     const result = prepareReleaseCandidate({
       distDir: options.get("--dist-dir", "--dist") || "dist",
       outputDir: options.get("--output-dir", "--out") || ".release-candidate",
@@ -700,22 +948,56 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
   if (command === "verify") {
     const options = parseOptions(rawOptions, commonExpectedFlags);
     const result = verifyReleaseCandidate({
-      candidateDir: options.get("--candidate-dir", "--candidate") || ".release-candidate",
-      expectedFrontendSha: options.get("--expected-frontend-sha", "--frontend-sha"),
+      candidateDir:
+        options.get("--candidate-dir", "--candidate") || ".release-candidate",
+      expectedFrontendSha: options.get(
+        "--expected-frontend-sha",
+        "--frontend-sha",
+      ),
       expectedGateRunId: options.get("--expected-gate-run-id", "--gate-run-id"),
       expectedBffSha: options.get("--expected-bff-sha", "--bff-sha"),
-      expectedBffBaseUrl: options.get("--expected-bff-base-url", "--bff-base-url"),
-      expectedArtifactDigest: options.get("--expected-artifact-digest", "--artifact-digest"),
+      expectedBffBaseUrl: options.get(
+        "--expected-bff-base-url",
+        "--bff-base-url",
+      ),
+      expectedArtifactDigest: options.get(
+        "--expected-artifact-digest",
+        "--artifact-digest",
+      ),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.artifactDigestSha256}\n`);
     return result;
   }
-  throw new Error("usage: release-candidate.mjs <prepare|verify> [options]");
+  if (command === "digest") {
+    const options = parseOptions(
+      rawOptions,
+      new Set([
+        "--dist-dir",
+        "--dist",
+        "--expected-artifact-digest",
+        "--artifact-digest",
+      ]),
+    );
+    const result = digestReleaseDist({
+      distDir: options.get("--dist-dir", "--dist") || "dist",
+      expectedArtifactDigest: options.get(
+        "--expected-artifact-digest",
+        "--artifact-digest",
+      ),
+      secretSentinels: collectEnvironmentSecretSentinels(environment),
+    });
+    process.stdout.write(`${result.artifactDigestSha256}\n`);
+    return result;
+  }
+  throw new Error(
+    "usage: release-candidate.mjs <prepare|verify|digest> [options]",
+  );
 }
 
 const invokedAsScript =
-  process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 if (invokedAsScript) {
   try {
     main();
