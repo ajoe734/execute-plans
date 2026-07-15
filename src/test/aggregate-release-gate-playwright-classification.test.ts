@@ -68,12 +68,86 @@ describe("release gate Playwright classification", () => {
     ).toBe("fail");
   });
 
-  it("classifies focus and performance only from their owned specs", () => {
+  it("does not let an a11y suite ancestor turn focus evidence into axe evidence", () => {
     const gates = aggregatePlaywright([
       {
         file: "17-a11y-v5.spec.ts",
         status: "expected",
         title: "drawer focus returns to the trigger",
+      },
+    ]);
+
+    expect(
+      gates["6"].find((check) =>
+        check.label === "v5 axe smoke critical/serious = 0.",
+      )?.status,
+    ).toBe("missing");
+    expect(
+      gates["6"].find((check) => check.label === "overlay focus handling works.")
+        ?.status,
+    ).toBe("missing");
+  });
+
+  it("fails closed when a required performance spec is skipped", () => {
+    const gates = aggregatePlaywright([
+      {
+        file: "18-perf.spec.ts",
+        status: "expected",
+        title: "keeps Cockpit load and SSE rerender proxy within soft budgets",
+      },
+      {
+        file: "18-perf.spec.ts",
+        status: "expected",
+        title: "keeps entity registry first page budget and DataTable density stable",
+      },
+      {
+        file: "18-perf.spec.ts",
+        status: "expected",
+        title: "keeps Sentinel list load within soft budget",
+      },
+      {
+        file: "18-perf.spec.ts",
+        status: "skipped",
+        title: "warns when LineageGraph receives more than 500 nodes",
+      },
+    ]);
+
+    expect(
+      gates["6"].find((check) =>
+        check.label.includes("within performance budget"),
+      )?.status,
+    ).toBe("fail");
+  });
+
+  it("passes only with complete owned accessibility and performance evidence", () => {
+    const axeScenarios = [
+      "control room",
+      "research loop",
+      "execution loop PersonaHealthMatrix",
+      "optimization loop",
+      "sentinel",
+      "interventions",
+    ].map((scenario) => ({
+      file: "17-a11y-v5.spec.ts",
+      status: "expected" as const,
+      title: `critical/serious axe violations are zero on ${scenario}`,
+    }));
+    const gates = aggregatePlaywright([
+      ...axeScenarios,
+      {
+        file: "17-a11y-v5.spec.ts",
+        status: "expected",
+        title: "drawer focus returns to the trigger after keyboard close",
+      },
+      {
+        file: "17-a11y-v5.spec.ts",
+        status: "expected",
+        title: "ESC closes the Sentinel drawer and restores focus",
+      },
+      {
+        file: "17-a11y-v5.spec.ts",
+        status: "expected",
+        title: "motion-safe indicators respect reduced motion",
       },
       {
         file: "18-perf.spec.ts",
@@ -82,8 +156,18 @@ describe("release gate Playwright classification", () => {
       },
       {
         file: "18-perf.spec.ts",
-        status: "skipped",
-        title: "optional performance measurement",
+        status: "expected",
+        title: "keeps entity registry first page budget and DataTable density stable",
+      },
+      {
+        file: "18-perf.spec.ts",
+        status: "expected",
+        title: "keeps Sentinel list load within soft budget",
+      },
+      {
+        file: "18-perf.spec.ts",
+        status: "expected",
+        title: "warns when LineageGraph receives more than 500 nodes",
       },
       {
         file: "25-persona-fleet-live-linked-pages.spec.ts",
@@ -97,6 +181,11 @@ describe("release gate Playwright classification", () => {
       },
     ]);
 
+    expect(
+      gates["6"].find((check) =>
+        check.label === "v5 axe smoke critical/serious = 0.",
+      )?.status,
+    ).toBe("pass");
     expect(
       gates["6"].find((check) => check.label === "overlay focus handling works.")
         ?.status,
