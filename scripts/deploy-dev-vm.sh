@@ -417,8 +417,12 @@ run_release_probe() {
   local legacy_compat="${6:-false}"
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
   local candidate_env=""
+  local strict_env="0"
   if [[ -n "${candidate_dir}" ]]; then
     candidate_env="${candidate_dir}"
+  fi
+  if [[ "${strict}" == "true" || "${strict}" == "1" ]]; then
+    strict_env="1"
   fi
   if ! PANTHEON_FE_BASE_URL="${FE_HOST}" \
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
@@ -429,7 +433,7 @@ run_release_probe() {
     PANTHEON_PROBE_NOCACHE_SHA="${expected_sha}" \
     PANTHEON_EXPECTED_FE_SHA="${expected_sha}" \
     PANTHEON_EXPECTED_ARTIFACT_DIGEST="${expected_digest}" \
-    PANTHEON_PROBE_RELEASE_STRICT="${strict}" \
+    PANTHEON_PROBE_RELEASE_STRICT="${strict_env}" \
     PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
     PANTHEON_CANDIDATE_DIR="${candidate_env}" \
     PANTHEON_PROBE_JSON_OUT="${json_out}" \
