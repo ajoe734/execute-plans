@@ -232,6 +232,15 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
         await page.getByRole("button", { name: "Conversation" }).click();
         await expect(page.getByTestId("workshop-conversation")).toBeVisible();
+
+        const composerOptionsToggle = page.getByTestId("workshop-composer-options-toggle");
+        await expect(composerOptionsToggle).toHaveAttribute("aria-expanded", "false");
+        await composerOptionsToggle.click();
+        await expect(composerOptionsToggle).toHaveAttribute("aria-expanded", "true");
+        await expect(page.getByTestId("workshop-composer-options")).toHaveAttribute(
+          "data-mobile-collapsed",
+          "false",
+        );
       } else {
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
       }
