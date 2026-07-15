@@ -250,6 +250,11 @@ const phase = match?.[1] || "unknown";
 const log = process.env.MOCK_CALL_LOG;
 if (!log) throw new Error("MOCK_CALL_LOG is required");
 fs.appendFileSync(log, `probe:${phase}\n`, "utf8");
+fs.appendFileSync(
+  log,
+  `probe-source-scan:${phase}:${process.env.PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN || "unset"}\n`,
+  "utf8",
+);
 if (phase === "recovery_rollback") {
   const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
   const probeIndex = calls.lastIndexOf(`probe:${phase}`);
@@ -554,6 +559,13 @@ assert_probe_not_called() {
   fi
 }
 
+assert_probe_source_scan() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-source-scan:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use source scan ${expected}"
+}
+
 assert_summary_outcome() {
   local expected="$1"
   local observed
@@ -601,7 +613,10 @@ test_valid_candidate_success() {
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "valid candidate should succeed"
   assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
   assert_probe_called post_switch
   assert_probe_not_called rollback
   grep -Fxq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
@@ -624,7 +639,9 @@ test_valid_candidate_success() {
     show_deploy_failure "explicit legacy predecessor compatibility should succeed"
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -648,7 +665,9 @@ test_valid_candidate_success() {
     show_deploy_failure "transitional legacy predecessor BFF fields should not require full modern identity"
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -660,7 +679,9 @@ test_valid_candidate_success() {
     show_deploy_failure "candidate with a fully qualified modern predecessor should succeed"
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair

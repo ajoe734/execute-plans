@@ -415,6 +415,7 @@ run_release_probe() {
   local expected_digest="$4"
   local strict="$5"
   local legacy_compat="${6:-false}"
+  local candidate_source_scan="${7:-all}"
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
   local candidate_env=""
   local strict_env="0"
@@ -436,6 +437,7 @@ run_release_probe() {
     PANTHEON_PROBE_RELEASE_STRICT="${strict_env}" \
     PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
     PANTHEON_CANDIDATE_DIR="${candidate_env}" \
+    PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}" \
     PANTHEON_PROBE_JSON_OUT="${json_out}" \
     PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
     node scripts/probe-hosted-browser-bff.mjs; then
@@ -470,7 +472,7 @@ prequalify_rollback_target() {
     return 1
   fi
   evidence_append "rollback_target.manifest.${phase}" passed "frontendSha=${release_commit}"
-  if ! run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" true "${legacy_compat}"; then
+  if ! run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" true "${legacy_compat}" loaded; then
     evidence_append "rollback_target.${phase}" failed "frontendSha=${release_commit}"
     return 1
   fi

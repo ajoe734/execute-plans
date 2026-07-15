@@ -34,6 +34,11 @@ const EXPECTED_ARTIFACT_DIGEST = String(
 ).trim();
 const PROBE_JSON_OUT = String(process.env.PANTHEON_PROBE_JSON_OUT || "").trim();
 const CANDIDATE_DIR = String(process.env.PANTHEON_CANDIDATE_DIR || "").trim();
+const CANDIDATE_SOURCE_SCAN_MODE = String(
+  process.env.PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN || "all",
+)
+  .trim()
+  .toLowerCase();
 const OVERALL_TIMEOUT_MS = 120_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
@@ -71,6 +76,7 @@ const FRONTEND_RESOURCE_TYPES = new Set([
   "style",
   "stylesheet",
 ]);
+const CANDIDATE_SOURCE_SCAN_MODES = new Set(["all", "loaded"]);
 const MAX_SCANNED_ASSETS = 2_000;
 const MAX_SCANNED_BYTES = 128 * 1024 * 1024;
 const probeStartedAt = Date.now();
@@ -827,6 +833,54 @@ export function listCandidateScriptAndStyleFiles(candidateDir) {
   }));
 }
 
+export function listCandidateLoadedScriptAndStyleFiles(
+  candidateResolver,
+  assetUrls,
+) {
+  const filesByRelativePath = new Map();
+  const missing = [];
+
+  for (const assetUrl of assetUrls) {
+    let resolved;
+    try {
+      resolved = candidateResolver.resolve(assetUrl, { spaFallback: false });
+    } catch (error) {
+      missing.push({
+        source: redactUrl(assetUrl),
+        fetched: redactUrl(assetUrl),
+        status: 0,
+        ok: false,
+        error: redactDiagnosticText(error),
+      });
+      continue;
+    }
+
+    if (resolved.status !== 200) {
+      missing.push({
+        source: redactUrl(assetUrl),
+        fetched: redactUrl(assetUrl),
+        status: resolved.status,
+        ok: false,
+        error: "candidate asset is unavailable",
+      });
+      continue;
+    }
+
+    if (!/\.(?:css|js)$/iu.test(resolved.relativePath)) continue;
+    filesByRelativePath.set(resolved.relativePath, {
+      filePath: resolved.filePath,
+      relativePath: resolved.relativePath,
+    });
+  }
+
+  return {
+    files: [...filesByRelativePath.values()].sort((left, right) =>
+      left.relativePath.localeCompare(right.relativePath),
+    ),
+    missing,
+  };
+}
+
 function isFrontendResource(url, resourceType) {
   try {
     return (
@@ -1530,6 +1584,11 @@ async function runProbe() {
       "PANTHEON_PROBE_LEGACY_RELEASE_COMPAT requires PANTHEON_PROBE_RELEASE_STRICT=1",
     );
   }
+  if (!CANDIDATE_SOURCE_SCAN_MODES.has(CANDIDATE_SOURCE_SCAN_MODE)) {
+    strictConfigurationFailures.push(
+      "PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN must be all or loaded",
+    );
+  }
   if (strictConfigurationFailures.length > 0) {
     throw new Error(strictConfigurationFailures.join("; "));
   }
@@ -1838,9 +1897,18 @@ async function runProbe() {
     for (const url of assetUrls) frontendAssetUrls.add(url);
 
     if (candidateResolver) {
-      for (const asset of listCandidateScriptAndStyleFiles(
-        candidateResolver.root,
-      )) {
+      const candidateAssets =
+        CANDIDATE_SOURCE_SCAN_MODE === "all"
+          ? {
+              files: listCandidateScriptAndStyleFiles(candidateResolver.root),
+              missing: [],
+            }
+          : listCandidateLoadedScriptAndStyleFiles(
+              candidateResolver,
+              frontendAssetUrls,
+            );
+      bundleFetches.push(...candidateAssets.missing);
+      for (const asset of candidateAssets.files) {
         const text = fs.readFileSync(asset.filePath, "utf8");
         scannedTexts.push({ source: asset.relativePath, text });
         bundleText += text;
@@ -2104,6 +2172,7 @@ async function runProbe() {
     "release strict: " + RELEASE_STRICT,
     "legacy release compatibility: " + LEGACY_RELEASE_COMPAT,
     "candidate directory routed: " + Boolean(candidateResolver),
+    "candidate source scan: " + CANDIDATE_SOURCE_SCAN_MODE,
     "core waitForResponse paths: " + CORE_BFF_PATHS.join(", "),
     "required core waitForResponse paths: " +
       REQUIRED_CORE_BFF_PATHS.join(", "),
@@ -2332,6 +2401,7 @@ async function runProbe() {
         upstreamBffBase: UPSTREAM_BFF_BASE,
         oldBffUrl: OLD_BFF_URL || null,
         candidateDirectoryRouted: Boolean(candidateResolver),
+        candidateSourceScan: CANDIDATE_SOURCE_SCAN_MODE,
         legacyReleaseCompatibility: LEGACY_RELEASE_COMPAT,
       },
       expectations: {
