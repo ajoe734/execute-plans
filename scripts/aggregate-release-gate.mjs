@@ -621,6 +621,13 @@ function buildGate1(stepOutcomes) {
     ),
     requiredStepCheck(
       stepOutcomes,
+      "fixture_e2e",
+      "Isolated loopback fixture E2E passes.",
+      ".lovable/audits/playwright-fixture-e2e.log",
+      GATE_OWNERS[1],
+    ),
+    requiredStepCheck(
+      stepOutcomes,
       "release_identity_final",
       "BFF release identity was revalidated after validation.",
       ".lovable/audits/bff-version-final.json",

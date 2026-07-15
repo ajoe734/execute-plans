@@ -658,6 +658,157 @@ const TOPBAR_SHELL_SUMMARY_RESPONSE = {
   },
 };
 
+const ASSISTANT_PROVIDER_READY = {
+  provider: "codex_cli",
+  provider_name: "Codex CLI",
+  runtime: "openclaw_gateway_cli_mount",
+  ready: true,
+  status: "ready",
+  auth_status: "ready",
+  live_auth: true,
+  mount_mode: "service_user",
+  checked_at: nowIso(),
+  usage: {
+    status: "captured",
+    source: "provider_snapshot",
+    remaining: 42,
+    remaining_percent: 84,
+    limit: 50,
+    used: 8,
+    unit: "requests",
+    reset_at: nowIso(),
+  },
+};
+
+const ASSISTANT_ADAPTER_READY = {
+  provider: "openclaw",
+  provider_name: "OpenClaw Runtime",
+  runtime: "openclaw_gateway_agent_cli",
+  ready: true,
+  status: "ready",
+  auth_status: "ready",
+  mount_mode: "rw",
+  checked_at: nowIso(),
+  capabilities: { read: true, repair_write: false },
+  repair_workspace: {
+    root: "/tmp/pantheon-f18-fixture",
+    ready: true,
+    writable: false,
+    worktree_count: 0,
+  },
+};
+
+const ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE = {
+  data: {
+    status: "ready",
+    snapshot_at: nowIso(),
+    project: "pantheon",
+    sprint: "fe-int-gate-d05",
+    objective: "F18 exact-candidate performance gate",
+    provider_status: {
+      provider: "codex_cli",
+      runtime: "openclaw_gateway_cli_mount",
+      status: "completed",
+      used: true,
+      fallback: null,
+      run_id: "f18-perf-fixture",
+    },
+    openclawToolPolicy: {
+      status: "ready",
+      effectiveStatus: "ready",
+      upstreamStatus: "ready",
+      assistantCommandAllowed: true,
+      assistantCommandEffective: true,
+      assistantCommandUsable: true,
+      assistantCommandStatus: "usable",
+      effectiveTools: ["assistant.command"],
+    },
+    providerReadiness: ASSISTANT_ADAPTER_READY,
+    supervisor: {
+      lifecycle: "running",
+      mode_status: "idle",
+      focus_mode: "execution",
+      last_heartbeat_at: nowIso(),
+    },
+    tasks: [],
+    coordination: { file_count: 0, feature_count: 0, feature_ids: [] },
+  },
+};
+
+const ASSISTANT_PROVIDERS_RESPONSE = {
+  status: "ok",
+  data: [
+    ASSISTANT_ADAPTER_READY,
+    ASSISTANT_PROVIDER_READY,
+  ],
+  meta: { auth_probe: false, snapshot_at: nowIso() },
+};
+
+const ASSISTANT_PROVIDER_USAGE_RESPONSE = {
+  status: "ok",
+  data: {
+    providers: [
+      {
+        ...ASSISTANT_PROVIDER_READY,
+        calls: 8,
+        success_count: 8,
+        failed_count: 0,
+        prompt_bytes: 2048,
+        input_tokens: 1000,
+        output_tokens: 420,
+        total_tokens: 1420,
+        last_used_at: nowIso(),
+        last_status: "completed",
+        quota: ASSISTANT_PROVIDER_READY.usage,
+        observed_usage: {
+          source: "management_ai_bff_audit",
+          coverage: "bff_observed_management_ai_only",
+          coverage_label: "BFF observed",
+          stale: false,
+          calls: 8,
+          total_tokens: 1420,
+          last_observed_at: nowIso(),
+        },
+        models: [
+          {
+            model: "gpt-5-codex",
+            calls: 8,
+            success_count: 8,
+            failed_count: 0,
+            total_tokens: 1420,
+            last_used_at: nowIso(),
+            last_status: "completed",
+          },
+        ],
+      },
+    ],
+    totals: {
+      providers: 1,
+      live_auth_count: 1,
+      calls: 8,
+      success_count: 8,
+      failed_count: 0,
+      total_tokens: 1420,
+    },
+    quota: { truth_policy: "provider_snapshot_only" },
+  },
+  meta: { auth_probe: false, snapshot_at: nowIso() },
+};
+
+const ASSISTANT_MODE_RESPONSE = {
+  data: {
+    product_default_mode: "kernel_debug",
+    kernel_enabled: true,
+    control_mode: {
+      state: "inactive",
+      active: false,
+      configured: true,
+      mode: "kernel_debug",
+      command_classes: ["code_search", "file_slice"],
+    },
+  },
+};
+
 async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<void> {
   await page.route(/\/bff\/me(?:\?.*)?$/, async (route) => {
     counters.me += 1;
@@ -728,6 +879,18 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   });
   await page.route(/\/bff\/management\/shell-summary(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_SHELL_SUMMARY_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/orchestrator\/status(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/providers\/usage-summary(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_PROVIDER_USAGE_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/providers(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_PROVIDERS_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/mode(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_MODE_RESPONSE);
   });
   await page.route(/\/bff\/search(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, {
