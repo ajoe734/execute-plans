@@ -88,21 +88,31 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
 
   it("requires explicit BFF provenance for manual final-proof deployments", () => {
     expect(deployWorkflow).toContain("bff_commit:");
-    expect(deployWorkflow).toContain("inputs.bff_commit || vars.PANTHEON_BFF_SHA || ''");
-    expect(deployScript).toContain('BFF_COMMIT="${PANTHEON_DEPLOY_BFF_COMMIT:-}"');
-    expect(deployScript).toContain('payload.source_commit_known !== true');
+    expect(deployWorkflow).toContain(
+      "github.event_name == 'workflow_dispatch' && inputs.bff_commit || ''",
+    );
+    expect(deployWorkflow).not.toContain("vars.PANTHEON_BFF_SHA");
+    expect(deployScript).toContain(
+      'EXPECTED_BFF_COMMIT="${PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT:-}"',
+    );
+    expect(deployScript).toContain("scripts/release-identity.mjs source-version");
     expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
+    expect(deployScript).toContain("Pantheon BFF commit mismatch");
+    expect(deployScript).toContain('verify_live_bff_identity "before-switch"');
+    expect(deployScript).toContain('verify_live_bff_identity "after-switch"');
+    expect(deployScript).toContain("rolling back");
+    expect(deployScript).toContain("flock -n 9");
 
     const result = rejectedDeploy({
       GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_BFF_COMMIT: "",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "",
     });
     expect(result.status).toBe(2);
     expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
 
     const abbreviated = rejectedDeploy({
       GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_BFF_COMMIT: "deadbeef",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "deadbeef",
     });
     expect(abbreviated.status).toBe(2);
     expect(abbreviated.stderr).toMatch(/exact 40-character SHA/u);

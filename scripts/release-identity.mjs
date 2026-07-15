@@ -269,6 +269,14 @@ export function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  if (command === "source-version") {
+    const bffSha = sourceShaFromVersion(
+      readJson(option("--version-file", { required: true }), "BFF version file"),
+    );
+    process.stdout.write(`${bffSha}\n`);
+    return;
+  }
+
   if (command === "validate") {
     const identity = readJson(
       identityFile || option("--identity-file", { required: true }),
@@ -301,7 +309,9 @@ export function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  throw new Error("usage: release-identity.mjs <create|validate|verify-version> [options]");
+  throw new Error(
+    "usage: release-identity.mjs <create|source-version|validate|verify-version> [options]",
+  );
 }
 
 const invokedAsScript =
