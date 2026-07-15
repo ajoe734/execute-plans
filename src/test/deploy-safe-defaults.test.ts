@@ -124,6 +124,61 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
+  it("runs release-gate Playwright evidence against the exact candidate", () => {
+    const start = integrationWorkflow.indexOf(
+      "- name: Release-gate Playwright evidence against exact candidate",
+    );
+    const end = integrationWorkflow.indexOf(
+      "- name: Frontend browser BFF probe",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const fixtureBlock = integrationWorkflow.slice(start, end);
+
+    expect(fixtureBlock).toContain("if: steps.pr_preview.outcome == 'success'");
+    expect(fixtureBlock).toContain('PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"');
+    expect(fixtureBlock).toContain('PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"');
+    expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
+    expect(fixtureBlock).not.toContain("npm run dev --");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
+    expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
+    expect(fixtureBlock).toContain("BFF_FALLBACK: strict");
+    for (const credential of [
+      "BFF_AUTH_TOKEN",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      expect(fixtureBlock).not.toContain(`${credential}: $` + "{{");
+    }
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(fixtureBlock).toMatch(
+        new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
+      );
+    }
+    expect(integrationWorkflow).toContain(
+      '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
+    );
+  });
+
   it("publishes accepted manifests with a durable atomic replace", () => {
     expect(deployScript).toContain("publish_manifest_atomically");
     expect(deployScript).toContain("atomic-release-manifest.py");

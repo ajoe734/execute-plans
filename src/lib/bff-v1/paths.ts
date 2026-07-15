@@ -229,8 +229,13 @@ export const paths = {
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
   mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
-  mgmtQuarterlyRanking: (quarter?: string) =>
-    `${BASE}/management/quarterly-ranking${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRanking: (quarter?: string, filters?: { pageSize?: number; persona?: string }) => {
+    const params: string[] = [];
+    if (quarter) params.push(`quarter=${enc(quarter)}`);
+    if (filters?.pageSize !== undefined) params.push(`page_size=${enc(String(filters.pageSize))}`);
+    if (filters?.persona) params.push(`persona=${enc(filters.persona)}`);
+    return `${BASE}/management/quarterly-ranking${params.length ? `?${params.join("&")}` : ""}`;
+  },
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
   mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
     `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,

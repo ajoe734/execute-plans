@@ -106,6 +106,8 @@ const governanceDestinationsFromRow = (row: QuarterlyRecommendationRow): string[
 type SortField = "rank" | "prevRank" | "delta" | "score" | "pnl" | "sharpe";
 type SortOrder = "asc" | "desc";
 
+const FOCUSED_RANKING_PAGE_SIZE = 200;
+
 export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -119,7 +121,11 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
 
   // Fetch Live Data
   const { data: rows, loading: rowsLoading } = useV5Live(
-    () => mgmt.quarterlyRanking.listLiveOnly(currentQuarter), [currentQuarter],
+    () => mgmt.quarterlyRanking.listLiveOnly(
+      personaFocus ? undefined : currentQuarter,
+      personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE, persona: personaFocus } : undefined,
+    ),
+    [currentQuarter, personaFocus],
   );
   const { data: formula } = useV5Live(
     () => mgmt.quarterlyRanking.formulaLiveOnly(), [],

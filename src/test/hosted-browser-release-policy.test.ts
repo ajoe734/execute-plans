@@ -112,6 +112,19 @@ describe("hosted browser strict release policy", () => {
     liveBannerValid: true,
   };
 
+  it("keeps the required cold-start response within the overall probe budget", () => {
+    const probeSource = readFileSync(
+      resolve("scripts/probe-hosted-browser-bff.mjs"),
+      "utf8",
+    );
+
+    expect(probeSource).toContain("timeoutMs = remainingTimeoutMs()");
+    expect(probeSource).toContain(
+      "waitForCoreBffResponse(page, expectedPath, OPTIONAL_CORE_TIMEOUT_MS)",
+    );
+    expect(probeSource).not.toContain("REQUIRED_CORE_TIMEOUT_MS");
+  });
+
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);
     expect(cssColorHasVisibleAlpha("rgba(0, 0, 0, 0)")).toBe(false);

@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 // MGMT-OPS-003-GAP-001 — proves the hosted Portfolio Book renders every
 // degraded/missing-binding incident, all six required filters round-trip
@@ -36,6 +40,10 @@ const holdings = Array.from({ length: 14 }, (_, index) => ({
 }));
 
 test("renders every degraded incident and persists all six filters through reload", async ({ page }) => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
   const requests: string[] = [];
   await installOidcDevLogin(page, {
     goto: false,

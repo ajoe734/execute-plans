@@ -4163,14 +4163,21 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
-    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+    listLiveOnly: (
+      quarter?: string,
+      filters?: { pageSize?: number; persona?: string },
+    ): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) },
         adaptQuarterlyRankingRows,
       ),
-    list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
+    list: (
+      quarter: string | undefined,
+      seedFn: () => QuarterlyRankingRow[],
+      filters?: { pageSize?: number; persona?: string },
+    ): Promise<QuarterlyRankingRow[]> =>
       withLiveOrMock<QuarterlyRankingRow[]>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) },
         async () => seedFn(),
         safeAdapt(adaptQuarterlyRankingRows, seedFn),
       ),

@@ -277,6 +277,14 @@ function parseNumberAfter(text, label) {
   return match ? Number(match[1]) : null;
 }
 
+function parseSummaryNumber(text, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(
+    new RegExp(`^\\s*(?:-\\s*)?${escaped}\\s*:?\\s*(-?\\d+)\\s*$`, "im"),
+  );
+  return match ? Number(match[1]) : null;
+}
+
 function parseBoolAfter(text, label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = text.match(new RegExp(`${escaped}\\s*:?\\s*(true|false)`, "i"));
@@ -609,6 +617,13 @@ function buildGate1(stepOutcomes) {
       "mgmt_persona_3000",
       "`npm run validate:mgmt-persona:3000` passes.",
       ".lovable/audits/mgmt-persona-3000-validation.log",
+      GATE_OWNERS[1],
+    ),
+    requiredStepCheck(
+      stepOutcomes,
+      "fixture_e2e",
+      "Isolated loopback fixture E2E passes.",
+      ".lovable/audits/playwright-fixture-e2e.log",
       GATE_OWNERS[1],
     ),
     requiredStepCheck(
@@ -1249,15 +1264,20 @@ function analyzeHostedProbe(stepOutcomes) {
   );
   const file = latestAuditFile([/^hosted-browser-bff-probe-.*\.md$/]);
   const text = readText(file);
-  const requestCount = parseNumberAfter(text, "request count");
-  const responseCount = parseNumberAfter(text, "response count");
-  const failedCount = parseNumberAfter(text, "failed count");
-  const oldHitCount = parseNumberAfter(text, "old BFF URL hit count");
+  const requestCount = parseSummaryNumber(text, "request count");
+  const responseCount = parseSummaryNumber(text, "response count");
+  const failedCount = parseSummaryNumber(text, "failed count");
+  const oldHitCount = parseSummaryNumber(text, "old BFF URL hit count");
   const containsBff = parseBoolAfter(text, "contains intended BFF URL");
   const containsOld = parseBoolAfter(text, "contains old BFF URL");
   const requiredCoreResponsesComplete = parseBoolAfter(
     text,
     "required core BFF responses complete",
+  );
+  const frontendShellStatus = parseSummaryNumber(text, "frontend shell status");
+  const applicationRootRendered = parseBoolAfter(
+    text,
+    "application root rendered",
   );
   const personaFleetRowCount = parseNumberAfter(
     text,
@@ -1306,6 +1326,8 @@ function analyzeHostedProbe(stepOutcomes) {
     containsBff,
     containsOld,
     requiredCoreResponsesComplete,
+    frontendShellStatus,
+    applicationRootRendered,
     personaFleetRowCount,
     personaFleetRowsValid,
     personaFleetLiveBannerValid,
@@ -1325,16 +1347,15 @@ function analyzeHostedProbe(stepOutcomes) {
 
 function buildGate4(hosted) {
   const evidence = hosted.file || hosted.stepEvidence;
-  const loaded = hosted.exists && hosted.pass === true;
+  const loaded =
+    hosted.frontendShellStatus >= 200 &&
+    hosted.frontendShellStatus < 400 &&
+    hosted.applicationRootRendered === true;
   const noOld = hosted.oldHitCount === 0 && hosted.containsOld !== true;
-  const responsesMatch =
-    hosted.requestCount !== null &&
-    hosted.requestCount > 0 &&
-    hosted.responseCount === hosted.requestCount;
   const noFailed = hosted.failedCount === 0;
   const requiredResponsesComplete =
     Boolean(hosted.requiredCoreResponsesComplete) && noFailed;
-  const responsesComplete = responsesMatch || requiredResponsesComplete;
+  const responsesComplete = requiredResponsesComplete;
   const statusForHosted = (condition) =>
     hostedStatus(
       hosted.exists ? (condition ? "pass" : "fail") : hosted.missingStatus,
@@ -1367,7 +1388,9 @@ function buildGate4(hosted) {
     makeCheck("Frontend page loads.", loadedStatus, {
       owner: hostedOwner(loadedStatus),
       evidence,
-      note: noteForHosted(`probe pass: ${hosted.pass}`),
+      note: noteForHosted(
+        `shell status: ${hosted.frontendShellStatus ?? "missing"}; application root rendered: ${hosted.applicationRootRendered ?? "missing"}`,
+      ),
     }),
     makeCheck("Frontend runtime uses intended BFF URL.", containsBffStatus, {
       owner: hostedOwner(containsBffStatus),
@@ -1470,6 +1493,7 @@ function analyzePlaywright() {
         : results.length > 0 && !failed && !skipped;
       specs.push({
         title: [...nextParents, spec.title].filter(Boolean).join(" > "),
+        leafTitle: spec.title || "",
         file: spec.file || suite.file || "",
         status: failed
           ? "fail"
@@ -1543,6 +1567,7 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
   }
   const noteParts = [`${matches.length} matching spec(s)`];
   if (passed.length) noteParts.push(`${passed.length} runnable passed`);
+  if (failed.length) noteParts.push(`${failed.length} unexpected or incomplete`);
   if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
   if (status === "warn")
     noteParts.push(`${flowId} marked by release-gate exception`);
@@ -1554,7 +1579,26 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
 }
 
 function buildGate5(playwright) {
+  const unexpectedSpecs = playwright.specs.filter((spec) =>
+    ["fail", "missing"].includes(spec.status),
+  );
+  const overallStatus = !playwright.jsonFile
+    ? "missing"
+    : unexpectedSpecs.length
+      ? "fail"
+      : "pass";
+  const evidence =
+    playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile;
   return [
+    makeCheck(
+      "No unexpected Playwright failures.",
+      overallStatus,
+      {
+        owner: overallStatus === "pass" ? "" : GATE_OWNERS[5],
+        evidence,
+        note: `${unexpectedSpecs.length} unexpected or incomplete spec(s)`,
+      },
+    ),
     checkFlow(
       playwright,
       "F01",
@@ -1624,7 +1668,12 @@ function buildGate5(playwright) {
       "F12 Approval Governance.",
       /\bf12\b|approval governance|12-approval/,
     ),
-    checkFlow(playwright, "F13", "F13 Agora.", /\bf13\b|13-agora|agora/),
+    checkFlow(
+      playwright,
+      "F13",
+      "F13 Agora.",
+      /13-agora\.spec\.[jt]s/,
+    ),
     checkFlow(
       playwright,
       "F14",
@@ -1641,7 +1690,7 @@ function buildGate5(playwright) {
       playwright,
       "F16",
       "F16 audit/correlation.",
-      /\bf16\b|audit.*correlation|correlation/,
+      /16-audit-correlation\.spec\.[jt]s/,
     ),
   ];
 }
@@ -1649,74 +1698,77 @@ function buildGate5(playwright) {
 function buildGate6(playwright) {
   const evidence =
     playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile;
-  const axeSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /\bf17\b|17-a11y|axe|a11y/),
+  const f17Specs = playwright.specs.filter((spec) =>
+    /(?:^|\/)17-a11y-v5\.spec\.[jt]s$/i.test(spec.file),
   );
+  function requiredStatus(matches, expectedCount) {
+    if (matches.length < expectedCount) return "missing";
+    if (matches.some((spec) => spec.status !== "pass")) return "fail";
+    return "pass";
+  }
+
+  const axeSpecs = f17Specs.filter((spec) => /axe/i.test(spec.leafTitle));
   const axeStatus = axeSpecs.length
-    ? worstStatus(axeSpecs.map((spec) => spec.status))
+    ? requiredStatus(axeSpecs, 6)
     : playwright.lastRun?.status === "failed"
       ? "fail"
       : "missing";
-  const focusSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /focus/),
-  );
-  const motionSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /reduced motion|motion/),
+  const focusSpecs = f17Specs.filter((spec) => /focus/i.test(spec.leafTitle));
+  const motionSpecs = f17Specs.filter((spec) =>
+    /reduced motion|motion/i.test(spec.leafTitle),
   );
   const perfSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /\bf18\b|18-perf|performance|budget/),
+    /(?:^|\/)18-perf\.spec\.[jt]s$/i.test(spec.file),
   );
-  const ssePerfSpecs = playwright.specs.filter((spec) =>
-    specMatches(spec, /sse.*rerender|rerender.*sse/),
+  const ssePerfSpecs = perfSpecs.filter((spec) =>
+    /sse.*rerender|rerender.*sse/i.test(spec.leafTitle),
   );
-
-  function statusFor(matches) {
-    return matches.length
-      ? worstStatus(matches.map((spec) => spec.status))
-      : "missing";
-  }
+  const focusStatus = requiredStatus(focusSpecs, 2);
+  const motionStatus = requiredStatus(motionSpecs, 1);
+  const perfStatus = requiredStatus(perfSpecs, 4);
+  const ssePerfStatus = requiredStatus(ssePerfSpecs, 1);
 
   return [
     makeCheck("v5 axe smoke critical/serious = 0.", axeStatus, {
       owner: axeStatus === "pass" ? "" : GATE_OWNERS[6],
       evidence,
       note: axeSpecs.length
-        ? `${axeSpecs.length} axe/a11y spec(s)`
+        ? `${axeSpecs.length}/6 required axe spec(s)`
         : "axe/a11y report missing or last run failed",
     }),
-    makeCheck("overlay focus handling works.", statusFor(focusSpecs), {
-      owner: statusFor(focusSpecs) === "pass" ? "" : GATE_OWNERS[6],
+    makeCheck("overlay focus handling works.", focusStatus, {
+      owner: focusStatus === "pass" ? "" : GATE_OWNERS[6],
       evidence,
       note: focusSpecs.length
-        ? `${focusSpecs.length} focus spec(s)`
+        ? `${focusSpecs.length}/2 required focus spec(s)`
         : "focus evidence missing",
     }),
-    makeCheck("reduced motion respected.", statusFor(motionSpecs), {
-      owner: statusFor(motionSpecs) === "pass" ? "" : GATE_OWNERS[6],
+    makeCheck("reduced motion respected.", motionStatus, {
+      owner: motionStatus === "pass" ? "" : GATE_OWNERS[6],
       evidence,
       note: motionSpecs.length
-        ? `${motionSpecs.length} reduced-motion spec(s)`
+        ? `${motionSpecs.length}/1 required reduced-motion spec(s)`
         : "reduced-motion evidence missing",
     }),
     makeCheck(
       "Control Room and entity list are within performance budget.",
-      statusFor(perfSpecs),
+      perfStatus,
       {
-        owner: statusFor(perfSpecs) === "pass" ? "" : GATE_OWNERS[6],
+        owner: perfStatus === "pass" ? "" : GATE_OWNERS[6],
         evidence,
         note: perfSpecs.length
-          ? `${perfSpecs.length} performance spec(s)`
+          ? `${perfSpecs.length}/4 required performance spec(s)`
           : "performance evidence missing",
       },
     ),
     makeCheck(
       "SSE stream does not trigger unbounded rerender.",
-      statusFor(ssePerfSpecs),
+      ssePerfStatus,
       {
-        owner: statusFor(ssePerfSpecs) === "pass" ? "" : GATE_OWNERS[6],
+        owner: ssePerfStatus === "pass" ? "" : GATE_OWNERS[6],
         evidence,
         note: ssePerfSpecs.length
-          ? `${ssePerfSpecs.length} SSE rerender spec(s)`
+          ? `${ssePerfSpecs.length}/1 required SSE rerender spec(s)`
           : "SSE rerender evidence missing",
       },
     ),

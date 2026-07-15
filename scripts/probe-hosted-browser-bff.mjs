@@ -36,7 +36,6 @@ const PROBE_JSON_OUT = String(process.env.PANTHEON_PROBE_JSON_OUT || "").trim();
 const CANDIDATE_DIR = String(process.env.PANTHEON_CANDIDATE_DIR || "").trim();
 const OVERALL_TIMEOUT_MS = 120_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
-const REQUIRED_CORE_TIMEOUT_MS = 20_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
 export const HOSTED_UX_PROFILES = Object.freeze([
   Object.freeze({
@@ -328,7 +327,7 @@ export function assessPersonaFleetSafety(result) {
 async function waitForCoreBffResponse(
   page,
   expectedPath,
-  timeoutMs = Math.min(REQUIRED_CORE_TIMEOUT_MS, remainingTimeoutMs()),
+  timeoutMs = remainingTimeoutMs(),
 ) {
   try {
     const res = await page.waitForResponse(
