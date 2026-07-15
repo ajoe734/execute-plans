@@ -100,6 +100,40 @@ describe("ranking recommendation submit pages", () => {
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
   });
 
+  it("Paper candidate tab preserves Fleet persona focus when live rows use the BFF persona alias", () => {
+    const focused = {
+      persona: "persona-live-smoke-b",
+      name: "Deploy Smoke Persona 2026-05-13 B Persisted",
+      rank: 7,
+      previous_quarter_rank: 9,
+      rank_delta: 2,
+      tier_label: "B",
+      score: 71.25,
+      eligibility: "eligible",
+      metrics: { pnl: 12500, sharpe: 1.42 },
+      evidence_refs: ["evidence:live-smoke-b"],
+      links: {},
+    };
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: [focused], loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    renderWithRoutes(
+      "/management/rankings?tab=quarterly&persona=persona-live-smoke-b",
+      <RankingsCenterPage />,
+      "/management/rankings"
+    );
+
+    expect(screen.getByText("Focused persona: persona-live-smoke-b · 1 quarterly ranking row(s)")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Deploy Smoke Persona 2026-05-13 B Persisted")).toBeInTheDocument();
+    expect(within(table).getByText("#7")).toBeInTheDocument();
+  });
+
   it("Persona League honors persona query focus from Fleet rank links", () => {
     const rows = defaultPersonaLeague();
     const focused = rows[1];

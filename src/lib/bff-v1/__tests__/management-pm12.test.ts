@@ -1,7 +1,7 @@
 // 2026-05-22 PM-12 facade tests.
 import { describe, it, expect } from "vitest";
 import { mgmt } from "@/lib/bff-v1";
-import { adaptPortfolioHoldingsMonitor } from "@/lib/bff-v1/management";
+import { adaptPortfolioHoldingsMonitor, adaptQuarterlyRankingRows } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -63,6 +63,44 @@ describe("portfolio holdings live monitor adapter", () => {
       expect(result?.surfaceStatus).toBe(status);
       expect(result?.items).toEqual([]);
     }
+  });
+});
+
+describe("quarterly ranking live adapter", () => {
+  it("keeps focused BFF rows that identify the persona with persona", () => {
+    const rows = adaptQuarterlyRankingRows({
+      data: {
+        items: [
+          {
+            persona: "persona-live-smoke-b",
+            name: "Deploy Smoke Persona 2026-05-13 B Persisted",
+            rank: 7,
+            previous_quarter_rank: 9,
+            rank_delta: 2,
+            tier_label: "B",
+            score: 71.25,
+            eligibility: "eligible",
+            metrics: { pnl: 12500, sharpe: 1.42 },
+            evidence_refs: ["evidence:live-smoke-b"],
+          },
+        ],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toEqual(expect.objectContaining({
+      personaId: "persona-live-smoke-b",
+      personaName: "Deploy Smoke Persona 2026-05-13 B Persisted",
+      currentRank: 7,
+      previousQuarterRank: 9,
+      rankDelta: 2,
+      tier: "B",
+      score: 71.25,
+      pnlQuarter: 12500,
+      sharpeQuarter: 1.42,
+      eligibility: "eligible",
+      evidenceRefs: ["evidence:live-smoke-b"],
+    }));
   });
 });
 
