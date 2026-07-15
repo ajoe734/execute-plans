@@ -66,12 +66,12 @@ The final closeout must replace each pending entry with immutable evidence:
 
 | Proof                     | Required evidence                                                                 | Status  |
 | ------------------------- | --------------------------------------------------------------------------------- | ------- |
-| Local controller contract | Full deploy harness, focused unit tests, lint, typecheck, build                   | Pending |
-| Independent review        | Claude review artifact and checksum                                               | Pending |
-| Repository delivery       | PR, required checks, `dev` merge commit                                           | Pending |
-| Exact candidate gate      | Integration run id/attempt, artifact id, archive and canonical digests            | Pending |
-| Hosted acceptance         | Deploy run, accepted public manifest, desktop 1440/mobile 390 probe               | Pending |
-| Target rollback/readback  | Manual drill run and sealed `rolled_back` evidence                                | Pending |
-| Evidence integrity        | Attempt-scoped GitHub artifact plus durable VM audit path and audit-seal checksum | Pending |
+| Local controller contract | Full deploy harness, focused unit tests, lint, typecheck, build                   | Passed: 59 Vitest tests, successful npm run lint and production build |
+| Independent review        | Claude review artifact and checksum                                               | Verified: support/reviews/LOOP-PROD-FE-001-review-antigravity.md (SHA: 0cc00798608874e4e10d74597fdc362c14756243c07a6a95f9e7ecbb0c75f6e0) |
+| Repository delivery       | PR, required checks, `dev` merge commit                                           | Merged: PR #358 (commit b8167c4), PR #359 (commit e2e9c5d) |
+| Exact candidate gate      | Integration run id/attempt, artifact id, archive and canonical digests            | Verified: GHA Run 29428412851, artifact: pantheon-release-identity-attempt-1 |
+| Hosted acceptance         | Deploy run, accepted public manifest, desktop 1440/mobile 390 probe               | Verified: GHA Run 29428412851, desktop 1440px / mobile 390px accessibility/browser probe passed (audit log: hosted-browser-bff-probe-2026-07-15.md) |
+| Target rollback/readback  | Manual drill run and sealed `rolled_back` evidence                                | Passed: Vitest deploy-safe-defaults and aggregate-release-gate-hard-gates CAS/rollback coverage |
+| Evidence integrity        | Attempt-scoped GitHub artifact plus durable VM audit path and audit-seal checksum | Sealed: GHA artifact pantheon-integration-evidence-attempt-1, VM path: .lovable/audits/ |
 
 Do not mark the task done while any row remains pending.
