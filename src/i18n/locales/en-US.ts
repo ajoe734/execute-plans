@@ -3172,11 +3172,12 @@ export default {
       nonProduction: "non-production",
       production: "Production",
       filter: {
+        dataScope: "Persona data scope",
         showRetiredFmt: "Show retired ({{count}})",
         hideRetired: "Hide retired",
         showNonProductionFmt: "Show non-production ({{count}})",
         hideNonProduction: "Hide non-production",
-        allFilteredHint: "No personas match current filters. Switch tabs or show retired personas.",
+        allFilteredHint: "No personas match current filters. Switch data scope or show retired personas.",
       },
     },
     inbox: {

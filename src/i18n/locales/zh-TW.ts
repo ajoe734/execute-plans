@@ -3153,11 +3153,12 @@ export default {
       nonProduction: "非正式資料",
       production: "正式資料",
       filter: {
+        dataScope: "Persona 資料範圍",
         showRetiredFmt: "顯示已封存 ({{count}})",
         hideRetired: "隱藏已封存",
         showNonProductionFmt: "顯示非正式資料 ({{count}})",
         hideNonProduction: "隱藏非正式資料",
-        allFilteredHint: "目前篩選下沒有 persona。請切換標籤頁或顯示已封存資料。",
+        allFilteredHint: "目前篩選下沒有 persona。請切換資料範圍或顯示已封存資料。",
       },
     },
     inbox: {
