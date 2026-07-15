@@ -88,6 +88,10 @@ jobs:
       # overrides are limited to an explicit manual gate run and can never
       # create a release artifact consumed by the deploy workflow.
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail || 'false' }}
+      # The integration gate proves the exact candidate before deploy. Current
+      # hosted FE readback is enforced by the deploy workflow after switch, so
+      # stale-host evidence must not deadlock candidate publication.
+      PANTHEON_HOSTED_FE_HARD_GATE: "false"
       PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
       FE_INT_GATE_PERF_STRICT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && '1' || '0' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset

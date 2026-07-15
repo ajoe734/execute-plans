@@ -192,6 +192,14 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(atomicManifest).toContain("os.fsync(store_fd)");
   });
 
+  it("keeps current hosted FE checks advisory while producing a deployable candidate", () => {
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_FE_HARD_GATE: "false"',
+    );
+    expect(deployWorkflow).toContain("Deploy exact gated candidate");
+    expect(deployScript).toContain("post-switch manifest, BFF, and browser/auth probe");
+  });
+
   it("deploys only the immutable artifact from one exact successful dev gate", () => {
     expect(deployWorkflow).toContain("workflow_run:");
     expect(deployWorkflow).toContain("Pantheon FE-BFF Integration Gate");
