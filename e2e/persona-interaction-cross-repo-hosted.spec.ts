@@ -16,6 +16,8 @@ const TENANT_ID = process.env.PANTHEON_TENANT_ID ?? "pantheon-dev";
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
+const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
+const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -52,6 +54,59 @@ function rolesFromMe(me: JsonRecord): string[] {
     : [];
 }
 
+function identityId(value: unknown): string {
+  const identity = record(value);
+  return String(identity.operator_id ?? identity.operatorId ?? identity.id ?? "").trim();
+}
+
+function stubTokenActor(token: string): string {
+  return token.replace(/^Bearer\s+/i, "").trim().split(":", 1)[0]?.trim() ?? "";
+}
+
+async function assertOperatorSession(request: APIRequestContext, token: string): Promise<{
+  operatorId: string;
+  roles: string[];
+}> {
+  const meResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(token) });
+  expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
+  const me = record(data(await meResponse.json()));
+  const roles = rolesFromMe(me);
+  expect(roles).toContain("operator");
+  const operatorId = String(me.operator_id ?? me.operatorId ?? "").trim();
+  expect(operatorId).not.toBe("");
+  const boundIdentities = [me.user, me.current_user, me.currentUser]
+    .map(identityId)
+    .filter(Boolean);
+  expect(boundIdentities.length, "/bff/me must expose an identity bound to the operator").toBeGreaterThan(0);
+  expect(boundIdentities.every((identity) => identity === operatorId)).toBe(true);
+  const session = record(me.session);
+  expect(session.authenticated).toBe(true);
+  const sessionKind = String(session.session_kind ?? session.sessionKind ?? me.session_kind ?? me.sessionKind).toLowerCase();
+  if (["bearer", "cookie"].includes(sessionKind)) return { operatorId, roles };
+
+  // Stub auth is accepted only for the exact, release-bound Pantheon dev posture.
+  // Never print or attach the token: only compare its normalized actor segment.
+  expect(sessionKind).toBe("stub");
+  expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
+  expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
+  expect(stubTokenActor(token)).toBe(operatorId);
+  expect(String(session.id ?? "")).toBe(`bff-session-${operatorId}`);
+  const meEnvironment = record(me.environment);
+  expect(meEnvironment.name).toBe("dev");
+  expect(meEnvironment.deployment_stage).toBe("dev");
+  expect(meEnvironment.auth_mode).toBe("stub");
+
+  const versionResponse = await request.get(`${BFF_BASE}/bff/version`, { headers: headers(token) });
+  expect(versionResponse.ok(), `/bff/version returned ${versionResponse.status()}`).toBe(true);
+  const version = record(data(await versionResponse.json()));
+  expect(String(version.source_commit_sha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  expect(version.environment).toBe("dev");
+  const posture = record(version.config_posture);
+  expect(posture.auth_stub).toBe(true);
+  expect(posture.auth_mode).toBe("permissive");
+  return { operatorId, roles };
+}
+
 async function discoverPersona(request: APIRequestContext, token: string): Promise<{ id: string; name: string }> {
   const response = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, {
     headers: headers(token),
@@ -68,24 +123,59 @@ async function discoverPersona(request: APIRequestContext, token: string): Promi
   return { id, name: String(row?.name ?? row?.persona_name ?? row?.personaName ?? id) };
 }
 
-async function discoverImmutableStrategyWorkshop(request: APIRequestContext, token: string): Promise<{
+async function prepareImmutableStrategyWorkshop(request: APIRequestContext, token: string, operatorId: string): Promise<{
   strategyId: string;
   strategyVersion: string;
   workshopId: string;
 }> {
-  const response = await request.get(`${BFF_BASE}/bff/agora/workshops?limit=100`, { headers: headers(token) });
-  expect(response.ok(), `Workshop discovery returned ${response.status()}`).toBe(true);
-  const candidates = items(await response.json())
-    .filter((candidate) => String(candidate.status ?? "open") === "open")
-    .map((candidate) => ({
-      strategyId: String(candidate.active_strategy_spec_registry_id ?? "").trim(),
-      strategyVersion: String(candidate.selected_version_id ?? "").trim(),
-      workshopId: String(candidate.workshop_id ?? "").trim(),
-    }))
-    .filter((candidate) => candidate.strategyId && candidate.strategyVersion && candidate.workshopId)
-    .sort((left, right) => left.workshopId.localeCompare(right.workshopId));
-  expect(candidates[0], "No operator-owned open Workshop exposes both canonical strategy registry and immutable selected-version pointers.").toBeTruthy();
-  return candidates[0];
+  const strategiesResponse = await request.get(`${BFF_BASE}/bff/strategies?limit=100`, { headers: headers(token) });
+  expect(strategiesResponse.ok(), `Strategy discovery returned ${strategiesResponse.status()}`).toBe(true);
+  const strategies = items(await strategiesResponse.json())
+    .map((candidate) => String(candidate.id ?? candidate.strategy_id ?? "").trim())
+    .filter(Boolean)
+    .sort();
+  expect(strategies.length, "Hosted BFF must expose a real stable Strategy identity").toBeGreaterThan(0);
+
+  let target: { strategyId: string; strategyVersion: string } | null = null;
+  for (const strategyId of strategies) {
+    const specsResponse = await request.get(`${BFF_BASE}/bff/strategies/${encodeURIComponent(strategyId)}/specs`, {
+      headers: headers(token),
+    });
+    if (!specsResponse.ok()) continue;
+    const strategyVersion = items(await specsResponse.json())
+      .map((candidate) => String(candidate.spec_version_id ?? candidate.strategy_spec_registry_id ?? candidate.id ?? "").trim())
+      .filter(Boolean)
+      .sort()[0];
+    if (strategyVersion && strategyVersion !== strategyId) {
+      target = { strategyId, strategyVersion };
+      break;
+    }
+  }
+  expect(target, "No real Strategy exposes an immutable Registry version through /bff/strategies/{id}/specs").toBeTruthy();
+  if (!target) throw new Error("unreachable: strategy/version assertion failed");
+
+  const resolveResponse = await request.post(`${BFF_BASE}/bff/agora/interactions/context:resolve`, {
+    headers: headers(token, { "Idempotency-Key": `persona-strategy-workshop-${randomUUID()}` }),
+    data: {
+      environment: "paper",
+      context_refs: [{ type: "strategy", id: target.strategyId, version_id: target.strategyVersion }],
+    },
+  });
+  expect(resolveResponse.ok(), `Strategy Workshop resolution returned ${resolveResponse.status()}: ${await resolveResponse.text()}`).toBe(true);
+  const resolved = record(data(await resolveResponse.json()));
+  const workshopId = String(resolved.workshop_id ?? "").trim();
+  expect(workshopId).not.toBe("");
+
+  const workshopResponse = await request.get(`${BFF_BASE}/bff/agora/workshops/${encodeURIComponent(workshopId)}`, {
+    headers: headers(token),
+  });
+  expect(workshopResponse.ok(), `Resolved Workshop readback returned ${workshopResponse.status()}`).toBe(true);
+  const workshop = record(data(await workshopResponse.json()));
+  expect(workshop.status).toBe("open");
+  expect(String(workshop.operator_id ?? workshop.operatorId ?? workshop.user_id ?? "")).toBe(operatorId);
+  expect(workshop.strategy_id).toBe(target.strategyId);
+  expect(workshop.active_strategy_spec_registry_id).toBe(target.strategyVersion);
+  return { ...target, workshopId };
 }
 
 async function readProposal(request: APIRequestContext, token: string, proposalId: string) {
@@ -128,14 +218,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
-    const meResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(OPERATOR_TOKEN) });
-    expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
-    const me = record(data(await meResponse.json()));
-    const operatorRoles = rolesFromMe(me);
-    expect(operatorRoles).toContain("operator");
-    const session = record(me.session);
-    expect(session.authenticated).not.toBe(false);
-    expect(["bearer", "cookie"]).toContain(String(session.session_kind ?? session.sessionKind).toLowerCase());
+    const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await discoverPersona(request, OPERATOR_TOKEN);
     await installOidcDevLogin(page, {
       goto: false,
@@ -205,14 +288,8 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("operator proposes a governed strategy measure, reads canonical state, and cannot self-approve", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(240_000);
-    const meResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(OPERATOR_TOKEN) });
-    expect(meResponse.ok(), `operator /bff/me returned ${meResponse.status()}`).toBe(true);
-    const operatorMe = record(data(await meResponse.json()));
-    const operatorRoles = rolesFromMe(operatorMe);
-    expect(operatorRoles).toContain("operator");
-    const operatorId = String(operatorMe.operator_id ?? operatorMe.operatorId ?? "");
-    expect(operatorId).not.toBe("");
-    const target = await discoverImmutableStrategyWorkshop(request, OPERATOR_TOKEN);
+    const { operatorId, roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
 
     await installOidcDevLogin(page, {
       goto: false,
