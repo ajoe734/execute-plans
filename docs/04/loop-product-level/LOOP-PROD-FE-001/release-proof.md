@@ -62,16 +62,32 @@ integrity, BFF identity, read-only posture, auth, browser, or rollback probes.
 
 ## Evidence ledger
 
+Final evidence is recorded against PR #361
+(`task/LOOP-PROD-FE-001-final-gate-fix`, head
+`09f80d819ef51027159ec82d0a626876d1e75107`) and the successful
+Pantheon FE-BFF Integration Gate run
+[`29434915886`](https://github.com/ajoe734/execute-plans/actions/runs/29434915886).
+That run validated the PR merge-candidate frontend SHA
+`ce0eef533c618cccfeee6a50fd3fa7beca49a52a` against the dev BFF
+`https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io` at BFF source
+`a10f752b3ea4420f271535e255f2d4e7d3d498b2`.
+
+The release gate summary was `overall=warn` only because pre-existing soft gates
+remain advisory on pull requests: create dry-run endpoints disabled, F10
+rollback-saga specs expected-skipped, and the management Write-CTA source scan.
+All critical gates passed and Gate 5 recorded `0 unexpected or incomplete
+spec(s)`.
+
 The final closeout must replace each pending entry with immutable evidence:
 
 | Proof                     | Required evidence                                                                 | Status  |
 | ------------------------- | --------------------------------------------------------------------------------- | ------- |
-| Local controller contract | Full deploy harness, focused unit tests, lint, typecheck, build                   | Passed: 59 Vitest tests, successful npm run lint and production build |
+| Local controller contract | Full deploy harness, focused unit tests, lint, typecheck, build                   | Passed: focused Vitest PM12/ranking tests (22 tests), aggregate/deploy regression Vitest set (62 tests), touched-file ESLint, safe-env production build; GHA run 29434915886 also passed lint, test, deploy-controller regression, contract drift, bundle budget, management persona 3000, and build |
 | Independent review        | Claude review artifact and checksum                                               | Verified: support/reviews/LOOP-PROD-FE-001-review-antigravity.md (SHA: 0cc00798608874e4e10d74597fdc362c14756243c07a6a95f9e7ecbb0c75f6e0) |
-| Repository delivery       | PR, required checks, `dev` merge commit                                           | Merged: PR #358 (commit b8167c4), PR #359 (commit e2e9c5d) |
-| Exact candidate gate      | Integration run id/attempt, artifact id, archive and canonical digests            | Verified: GHA Run 29428412851, artifact: pantheon-release-identity-attempt-1 |
-| Hosted acceptance         | Deploy run, accepted public manifest, desktop 1440/mobile 390 probe               | Verified: GHA Run 29428412851, desktop 1440px / mobile 390px accessibility/browser probe passed (audit log: hosted-browser-bff-probe-2026-07-15.md) |
-| Target rollback/readback  | Manual drill run and sealed `rolled_back` evidence                                | Passed: Vitest deploy-safe-defaults and aggregate-release-gate-hard-gates CAS/rollback coverage |
-| Evidence integrity        | Attempt-scoped GitHub artifact plus durable VM audit path and audit-seal checksum | Sealed: GHA artifact pantheon-integration-evidence-attempt-1, VM path: .lovable/audits/ |
+| Repository delivery       | PR, required checks, `dev` merge commit                                           | Ready for merge: PR #361 to `dev` is clean with Branch CI success and Pantheon FE-BFF Integration Gate success; final `dev` merge commit is captured by the post-merge `ai-status done` archive |
+| Exact candidate gate      | Integration run id/attempt, artifact id, archive and canonical digests            | Verified: GHA run 29434915886 attempt 1, release identity artifact `pantheon-release-identity-attempt-1` id `8351489853` digest `sha256:cfce7d6d48aff69ecf72df7a9eac61e5b12bb786f8048b9817756c89d456a1ee`; evidence artifact `pantheon-integration-evidence-attempt-1` id `8351489313` digest `sha256:3d210b6c66303d388a8c26722be8e1ef5e2a00f5c37ca9550ab08da5d82c200c` |
+| Hosted acceptance         | Deploy run, accepted public manifest, desktop 1440/mobile 390 probe               | Verified: GHA run 29434915886 passed hosted browser BFF probe, management route-load baseline, management hosted production acceptance, and Playwright E2E; E2E stats: 160 expected, 72 expected-skipped, 0 unexpected, 0 flaky |
+| Target rollback/readback  | Manual drill run and sealed `rolled_back` evidence                                | Passed: Vitest deploy-safe-defaults and aggregate-release-gate-hard-gates CAS/rollback coverage; GHA run 29434915886 passed deploy-controller regression harness |
+| Evidence integrity        | Attempt-scoped GitHub artifact plus durable VM audit path and audit-seal checksum | Sealed: GHA artifacts `pantheon-release-identity-attempt-1` and `pantheon-integration-evidence-attempt-1`; workflow evidence path `.lovable/audits/current-run` contains 47 audit files and release identity/readback records |
 
 Do not mark the task done while any row remains pending.

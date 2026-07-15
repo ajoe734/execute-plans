@@ -103,6 +103,27 @@ type QuarterlyRecommendationRow = QuarterlyRankingRow & {
 const governanceDestinationsFromRow = (row: QuarterlyRecommendationRow): string[] | undefined =>
   row.governanceDestinations ?? row.governance_destinations;
 
+type RawQuarterlyRankingRow = QuarterlyRankingRow & {
+  id?: string;
+  persona?: string;
+  persona_id?: string;
+  persona_name?: string;
+  name?: string;
+  display_name?: string;
+  rank?: number;
+  current_rank?: number;
+  previous_quarter_rank?: number;
+  rank_delta?: number;
+  overallScore?: number;
+  overall_score?: number;
+  tierLabel?: string;
+  tier_label?: string;
+  pnl_quarter?: number;
+  sharpe_quarter?: number;
+  evidence_refs?: string[];
+  metrics?: { pnl?: number | null; sharpe?: number | null };
+};
+
 type SortField = "rank" | "prevRank" | "delta" | "score" | "pnl" | "sharpe";
 type SortOrder = "asc" | "desc";
 
@@ -123,7 +144,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const { data: rows, loading: rowsLoading } = useV5Live(
     () => mgmt.quarterlyRanking.listLiveOnly(
       personaFocus ? undefined : currentQuarter,
-      personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE, persona: personaFocus } : undefined,
+      personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE } : undefined,
     ),
     [currentQuarter, personaFocus],
   );
@@ -146,21 +167,22 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   // Normalize live rows
   const ranking = useMemo(() => {
     return rawRanking.map((raw, i) => {
-      const r = raw as QuarterlyRankingRow & {
-        overallScore?: number; tierLabel?: string; name?: string; rank?: number;
-        metrics?: { pnl?: number | null; sharpe?: number | null };
-      };
-      if (typeof r.eligibility === "string" && typeof r.score === "number") return r as QuarterlyRankingRow;
+      const r = raw as RawQuarterlyRankingRow;
+      if (r.personaId && typeof r.eligibility === "string" && typeof r.score === "number") return r as QuarterlyRankingRow;
+      const personaId = r.personaId ?? r.persona_id ?? r.persona ?? r.id ?? "";
       return {
         ...r,
+        personaId,
         eligibility: r.eligibility ?? "eligible",
-        currentRank: r.currentRank ?? r.rank ?? i + 1,
-        personaName: r.personaName ?? r.name ?? r.personaId ?? r.id,
-        score: r.score ?? r.overallScore ?? NaN,
-        tier: r.tier ?? r.tierLabel ?? "—",
-        pnlQuarter: r.pnlQuarter ?? r.metrics?.pnl ?? NaN,
-        sharpeQuarter: r.sharpeQuarter ?? r.metrics?.sharpe ?? NaN,
-        evidenceRefs: r.evidenceRefs ?? [],
+        currentRank: r.currentRank ?? r.current_rank ?? r.rank ?? i + 1,
+        previousQuarterRank: r.previousQuarterRank ?? r.previous_quarter_rank,
+        rankDelta: r.rankDelta ?? r.rank_delta,
+        personaName: r.personaName ?? r.persona_name ?? r.name ?? r.display_name ?? r.persona ?? personaId,
+        score: r.score ?? r.overallScore ?? r.overall_score ?? NaN,
+        tier: r.tier ?? r.tierLabel ?? r.tier_label ?? "—",
+        pnlQuarter: r.pnlQuarter ?? r.pnl_quarter ?? r.metrics?.pnl ?? NaN,
+        sharpeQuarter: r.sharpeQuarter ?? r.sharpe_quarter ?? r.metrics?.sharpe ?? NaN,
+        evidenceRefs: r.evidenceRefs ?? r.evidence_refs ?? [],
       } as QuarterlyRankingRow;
     });
   }, [rawRanking]);
@@ -602,7 +624,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                   </td>
                 </tr>
               ))}
-              {paginatedRanking.length === 0 && (
+              {!rowsLoading && paginatedRanking.length === 0 && (
                 <tr>
                   <td className="px-3 py-8 text-center text-muted-foreground" colSpan={10}>
                     {t("mgmt.pulse.noRows")}
