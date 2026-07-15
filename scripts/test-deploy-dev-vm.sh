@@ -629,6 +629,30 @@ test_valid_candidate_success() {
   assert_summary_outcome accepted
   verify_evidence_pair
 
+  setup_case valid-transitional-legacy-bff-fields
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    delete payload.artifactDigest;
+    delete payload.artifactDigestSha256;
+    payload.deployedAt="20260715T072629Z";
+    payload.sourceRef=payload.commit;
+    payload.sourceBranch="dev";
+    payload.feHost="https://fe.test";
+    payload.bffHost="https://bff.test";
+    payload.bffCommitSource="bff_version";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "transitional legacy predecessor BFF fields should not require full modern identity"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
   setup_case valid-modern-previous
   upgrade_previous_manifest_to_modern "${PREVIOUS_TARGET}/deployment.json"
   run_deploy
@@ -756,6 +780,21 @@ test_bff_identity_is_bound_before_and_after_switch() {
   assert_probe_called previous_target_pre_switch
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
+
+  setup_case previous-manifest-bff-host-mismatch
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.bffHost="https://wrong-bff.test";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    die "legacy predecessor with mismatched BFF host unexpectedly switched"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "deployment manifest BFF identity mismatch" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing transitional BFF host mismatch rejection"
 }
 
 test_post_probe_failure_rolls_back_and_reprobes() {
