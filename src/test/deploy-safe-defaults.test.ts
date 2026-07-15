@@ -69,9 +69,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'REQUESTED_ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
     );
-    expect(deployScript).toContain('VITE_BFF_REAL_WRITES="${REAL_WRITES}"');
+    expect(deployScript).toContain('VITE_BFF_REAL_WRITES="${real_writes}"');
     expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"',
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES="${stub_writes}"',
     );
     expect(deployScript).not.toMatch(/pantheon-dev-browser:operator/u);
     expect(deployScript).not.toMatch(/pantheon-dev-browser:viewer/u);
@@ -81,7 +81,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false"',
     );
     expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
+      'process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
     );
     expect(deployScript).toContain(
       "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
@@ -300,7 +300,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   it("bounds the manual proof window with an exact external gate and fail-closed restore", () => {
     expect(deployWorkflow).toContain("actions: write");
     expect(deployWorkflow).toContain("timeout-minutes: 145");
-    expect(deployWorkflow).toContain("timeout-minutes: 190");
+    expect(deployWorkflow).toContain("timeout-minutes: 215");
+    expect(deployWorkflow).toContain("timeout-minutes: 25");
     expect(deployWorkflow).toContain(
       "gh workflow run pantheon-integration-gate.yml",
     );
@@ -316,6 +317,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployWorkflow).toContain("-f persona_interaction_write_proof=true");
     expect(deployWorkflow).toContain("-f pint_hosted_probe=true");
     expect(deployWorkflow).toContain("gh run watch");
+    expect(deployWorkflow).toContain('require("node:crypto").randomUUID()');
+    expect(deployWorkflow).toContain("gh run cancel");
+    expect(deployWorkflow).toContain(
+      "Expected exactly one correlated hosted integration",
+    );
+    expect(deployWorkflow).toContain("persist-credentials: false");
+    expect(deployWorkflow).toContain(
+      "Require exact trusted dev tip for write proof",
+    );
     expect(deployWorkflow).toContain(
       "if: always() && steps.deploy.outcome == 'success' && env.PANTHEON_DEPLOY_PROFILE == 'persona-interaction-write-proof'",
     );
@@ -325,6 +335,30 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       "keeping the fail-closed read-only candidate live and refusing rollback",
     );
+    expect(deployScript).toContain("SAFE_FALLBACK_MARKER");
+    expect(deployScript).toContain("chmod 600");
+    expect(deployScript).toContain(
+      "prepare exact prebuilt read-only fallback before opening writes",
+    );
+    expect(deployScript).toContain(
+      "atomically activate prebuilt read-only fallback before network/npm checks",
+    );
+    expect(
+      deployScript.indexOf(
+        'build_deployment_bundle "persona-interaction-read-only-restore"',
+      ),
+    ).toBeLessThan(
+      deployScript.indexOf(
+        'build_deployment_bundle "${DEPLOY_PROFILE}" "${REAL_WRITES}"',
+      ),
+    );
+    expect(
+      deployWorkflow.indexOf("Restore exact Persona pair read-only"),
+    ).toBeLessThan(
+      deployWorkflow.indexOf(
+        "Cancel or confirm correlated hosted integration terminal",
+      ),
+    );
   });
 
   it("binds hosted PINT proof to deployment.json before and after mutation", () => {
@@ -332,7 +366,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "Verify exact hosted deployment before PINT proof",
     );
     expect(integrationWorkflow).toContain(
-      "Verify exact hosted deployment after PINT proof",
+      "Verify exact hosted deployment after all mutating proof steps",
     );
     expect(
       integrationWorkflow.match(
@@ -345,12 +379,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       ),
     ).toHaveLength(2);
     expect(integrationWorkflow).toContain("deployment-before-pint.json");
-    expect(integrationWorkflow).toContain("deployment-after-pint.json");
+    expect(integrationWorkflow).toContain(
+      "deployment-after-all-proof-steps.json",
+    );
     expect(integrationWorkflow).toContain(
       "PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha || github.sha }}",
     );
     expect(integrationWorkflow).toContain(
       "format('PINT proof {0}', inputs.proof_correlation_id)",
+    );
+    expect(integrationWorkflow).toContain("timeout-minutes: 135");
+    expect(integrationWorkflow).toContain(
+      "unique RFC 4122 version-4 UUID correlation id",
     );
     expect(integrationWorkflow).toContain(
       "ref: ${{ inputs.fe_sha || github.sha }}",
@@ -359,6 +399,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       '--frontend-sha "$PANTHEON_FRONTEND_SHA"',
     );
     expect(integrationWorkflow).toContain('--bff-sha "$PANTHEON_BFF_SHA"');
+    expect(
+      integrationWorkflow.indexOf(
+        "npx playwright test --reporter=list,html,json",
+      ),
+    ).toBeLessThan(
+      integrationWorkflow.indexOf(
+        "Verify exact hosted deployment after all mutating proof steps",
+      ),
+    );
+    expect(
+      integrationWorkflow.match(/persist-credentials: false/gu),
+    ).toHaveLength(2);
     expect(branchWorkflow).toContain(
       "node scripts/test-hosted-deployment-identity.mjs",
     );

@@ -63,6 +63,10 @@ if [[ "${1:-}" == "ci" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "run" && "${2:-}" == "build" ]]; then
+  if [[ "${DEPLOY_TEST_FAIL_BUILD:-false}" == "true" ]]; then
+    echo "injected build failure" >&2
+    exit 86
+  fi
   if [[ "${VITE_BFF_REAL_WRITES:-}" != "false" || "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" != "false" ]]; then
     [[ "${VITE_BFF_REAL_WRITES:-}" == "true" && "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" == "true" ]] || {
       echo "deploy harness refuses non-atomic write flags" >&2
@@ -129,6 +133,9 @@ set -euo pipefail
 url="${!#}"
 
 if [[ "${url}" == */bff/version ]]; then
+  if [[ "${DEPLOY_TEST_BFF_CURL_FAIL:-false}" == "true" ]]; then
+    exit 22
+  fi
   count_file="${DEPLOY_TEST_BFF_COUNT_FILE:?}"
   count=0
   if [[ -f "${count_file}" ]]; then
@@ -259,6 +266,21 @@ run_deploy() {
     bash "${DEPLOY_SCRIPT}"
 }
 
+run_proof_deploy() {
+  local case_root="$1"
+  local instance="$2"
+  run_deploy "${case_root}" \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_PROFILE=persona-interaction-write-proof \
+    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+    PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+    PANTHEON_DEPLOY_RELEASE_INSTANCE="${instance}" \
+    PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+    PANTHEON_DEPLOY_SKIP_PROBE=false \
+    PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+    PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+}
+
 case_root="$(prepare_case success)"
 run_deploy "${case_root}"
 assert_eq "false false " "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "tokenless read-only build flags"
@@ -274,22 +296,26 @@ assert_eq "3" "$(cat "${case_root}/bff-version-count")" "initial/before-switch/a
   fail "successful deploy did not switch releases"
 
 case_root="$(prepare_case proof-profile)"
-run_deploy "${case_root}" \
-  GITHUB_EVENT_NAME=workflow_dispatch \
-  PANTHEON_DEPLOY_PROFILE=persona-interaction-write-proof \
-  PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
-  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
-  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
-  PANTHEON_DEPLOY_SKIP_PROBE=false \
-  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
-  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+run_proof_deploy "${case_root}" proof-profile
+assert_eq "false false " "$(tail -n 2 "${LOG_DIR}/build-flags.log" | head -n 1)" \
+  "prebuilt exact read-only fallback flags"
 assert_eq "true true " "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "atomic Persona proof build flags"
 assert_eq "persona-interaction-write-proof" \
   "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
   "proof deployment manifest profile"
+assert_eq "false" \
+  "$("${REAL_NODE}" -e 'console.log(Object.hasOwn(require(process.argv[1]), "safeFallbackRelease"))' "${case_root}/live/deployment.json")" \
+  "public manifest does not disclose its server-private fallback locator"
+assert_exists "${case_root}/live/.pantheon-safe-fallback"
+assert_eq "600" "$(stat -c '%a' "${case_root}/live/.pantheon-safe-fallback")" \
+  "server-private fallback locator permissions"
+safe_release_name="$(cat "${case_root}/live/.pantheon-safe-fallback")"
+assert_exists "${case_root}/releases/${safe_release_name}/deployment.json"
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/releases/${safe_release_name}/deployment.json")" \
+  "prebuilt fallback exact read-only manifest"
 
-# The release procedure restores the same exact FE/BFF pair through an
-# explicit read-only dispatch immediately after the external pinned proof.
+build_count_before_restore="$(wc -l < "${LOG_DIR}/build-flags.log")"
 run_deploy "${case_root}" \
   GITHUB_EVENT_NAME=workflow_dispatch \
   PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
@@ -298,30 +324,24 @@ run_deploy "${case_root}" \
   PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
   PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
   PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
-assert_eq "false false " "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "explicit read-only restore flags"
+assert_eq "${build_count_before_restore}" "$(wc -l < "${LOG_DIR}/build-flags.log")" \
+  "restore performs no build before its safe switch"
 assert_eq "persona-interaction-read-only-restore" \
   "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
   "restored deployment manifest profile"
 
 case_root="$(prepare_case restore-post-switch-drift)"
-cat > "${case_root}/releases/previous/deployment.json" <<EOF
-{"commit":"${CURRENT_FE_SHA}","deploymentProfile":"persona-interaction-write-proof","buildMode":{"VITE_BFF_REAL_WRITES":"true","VITE_BFF_ALLOW_DEV_STUB_WRITES":"true"}}
-EOF
+run_proof_deploy "${case_root}" restore-post-switch-drift-proof
 if run_deploy "${case_root}" \
   GITHUB_EVENT_NAME=workflow_dispatch \
   PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
   PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
   PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
-  PANTHEON_DEPLOY_RELEASE_INSTANCE=restore-post-switch-drift-candidate \
   PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
   PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
-  DEPLOY_TEST_BFF_AFTER_SHA="${OTHER_BFF_SHA}"; then
+  DEPLOY_TEST_BFF_INITIAL_SHA="${OTHER_BFF_SHA}"; then
   fail "read-only restore with post-switch BFF drift unexpectedly succeeded"
 fi
-assert_eq "2" "$(find "${case_root}/releases" -mindepth 1 -maxdepth 1 -type d | wc -l)" \
-  "failed restore retains its safer candidate"
-[[ "$(readlink -f "${case_root}/live")" != "${case_root}/releases/previous" ]] || \
-  fail "failed restore rolled back to the prior potentially write-enabled release"
 assert_eq "persona-interaction-read-only-restore" \
   "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
   "failed restore keeps the fail-closed deployment profile"
@@ -331,7 +351,66 @@ assert_eq "false" \
 assert_eq "false" \
   "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES)' "${case_root}/live/deployment.json")" \
   "failed restore keeps dev-stub writes disabled"
-assert_no_passed_artifact "${case_root}/audit"
+case_root="$(prepare_case restore-bff-unavailable)"
+run_proof_deploy "${case_root}" restore-bff-unavailable-proof
+if run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+  DEPLOY_TEST_BFF_CURL_FAIL=true; then
+  fail "restore with unavailable BFF unexpectedly succeeded"
+fi
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "BFF-unavailable restore switches safe before its failing network check"
+
+case_root="$(prepare_case restore-build-failure-irrelevant)"
+run_proof_deploy "${case_root}" restore-build-failure-proof
+run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+  DEPLOY_TEST_FAIL_BUILD=true
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "restore does not depend on a working build toolchain before switching safe"
+
+case_root="$(prepare_case restore-marker-damaged)"
+run_proof_deploy "${case_root}" restore-marker-damaged-proof
+rm -f "${case_root}/live/.pantheon-safe-fallback"
+run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "restore derives the validated safe sibling when its private marker is damaged"
+
+case_root="$(prepare_case proof-write-switch-failure)"
+if run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-write-proof \
+  PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEPLOY_SKIP_PROBE=false \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+  DEPLOY_TEST_BFF_AFTER_SHA="${OTHER_BFF_SHA}"; then
+  fail "write-proof deploy with post-switch identity drift unexpectedly succeeded"
+fi
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "failed write switch activates its prevalidated safe candidate"
 
 case_root="$(prepare_case matching-expected)"
 run_deploy "${case_root}" PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}"

@@ -46,11 +46,15 @@ SHORT_SHA="${SHA:0:12}"
 RELEASE_INSTANCE="${PANTHEON_DEPLOY_RELEASE_INSTANCE:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}}"
 RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
+SAFE_RELEASE_NAME="${RELEASE_NAME}-safe-read-only"
+SAFE_RELEASE_DIR="${RELEASES_DIR}/${SAFE_RELEASE_NAME}"
+SAFE_FALLBACK_MARKER=".pantheon-safe-fallback"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/execute-plans-dev-fe.XXXXXX")"
 LOCK_ACQUIRED=false
 DEPLOY_SWITCHED=false
 LEGACY_ROOT_MOVED=false
 PREVIOUS_DEPLOY_TARGET=""
+SAFE_FALLBACK_PREPARED=false
 
 cleanup() {
   local status=$?
@@ -60,7 +64,16 @@ cleanup() {
 
   if [[ "${status}" -ne 0 && "${LOCK_ACQUIRED}" == "true" ]]; then
     current_target="$(readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true)"
-    if [[ "${DEPLOY_SWITCHED}" == "true" ]]; then
+    if [[ "${DEPLOY_PROFILE}" == "persona-interaction-write-proof" && \
+          "${SAFE_FALLBACK_PREPARED}" == "true" && \
+          "${current_target}" == "${RELEASE_DIR}" && -d "${SAFE_RELEASE_DIR}" ]]; then
+      echo "Write-proof deploy failed after its host switch; activating the prevalidated read-only fallback ${SAFE_RELEASE_DIR}." >&2
+      sudo ln -sfn "${SAFE_RELEASE_DIR}" "${DEPLOY_ROOT}.rollback" || rollback_status=$?
+      if [[ "${rollback_status}" -eq 0 ]]; then
+        sudo mv -Tf "${DEPLOY_ROOT}.rollback" "${DEPLOY_ROOT}" || rollback_status=$?
+      fi
+      current_target="$(readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true)"
+    elif [[ "${DEPLOY_SWITCHED}" == "true" ]]; then
       if [[ "${current_target}" == "${RELEASE_DIR}" && "${DEPLOY_PROFILE}" == "persona-interaction-read-only-restore" ]]; then
         # A restore candidate is intrinsically safer than the release it
         # replaced. Keep it live even when a post-switch identity/probe check
@@ -102,6 +115,9 @@ cleanup() {
         "${RELEASES_DIR}"/*) sudo rm -rf -- "${RELEASE_DIR}" ;;
       esac
     fi
+    # Once locally validated, retain the safe candidate even if activating it
+    # fails. A root/operator can still complete the fail-closed switch without
+    # rebuilding or contacting BFF; normal retention pruning removes orphans.
     if [[ "${rollback_status}" -ne 0 ]]; then
       echo "Rollback did not complete cleanly; inspect ${DEPLOY_ROOT} before another deployment." >&2
     fi
@@ -142,6 +158,179 @@ verify_live_bff_identity() {
   BFF_COMMIT="${actual_bff_commit,,}"
   export BFF_COMMIT
   echo "BFF identity ${phase}: ${BFF_COMMIT}"
+}
+
+validate_release_manifest() {
+  local manifest_file="$1"
+  local profile="$2"
+  node scripts/hosted-deployment-identity.mjs \
+    --manifest-file "${manifest_file}" \
+    --frontend-sha "${SHA}" \
+    --bff-sha "${EXPECTED_BFF_COMMIT:-${BFF_COMMIT}}" \
+    --fe-base-url "${FE_HOST}" \
+    --bff-base-url "${BFF_HOST}" \
+    --deployment-profile "${profile}" >/dev/null
+}
+
+run_deployed_host_probe() {
+  if [[ "${SKIP_PROBE}" == "true" ]]; then
+    return 0
+  fi
+  PANTHEON_FE_BASE_URL="${FE_HOST}" \
+  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+  PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
+  PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
+  PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
+  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
+  PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
+  PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
+  node scripts/probe-hosted-browser-bff.mjs
+}
+
+write_deploy_evidence() {
+  local profile="$1"
+  local release_dir="$2"
+  local real_writes="$3"
+  local stub_writes="$4"
+  cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}-${profile}.md" <<EOF
+# Pantheon Dev FE Deploy
+
+- deployed_at: ${TIMESTAMP}
+- commit: ${SHA}
+- source_ref: ${SOURCE_REF:-${SHA}}
+- source_branch: ${SOURCE_BRANCH}
+- fe_host: ${FE_HOST}
+- bff_host: ${BFF_HOST}
+- bff_commit: ${BFF_COMMIT}
+- bff_commit_source: ${BFF_COMMIT_SOURCE}
+- deployment_profile: ${profile}
+- release_dir: ${release_dir}
+- deploy_root: ${DEPLOY_ROOT}
+- preserve_assets: ${PRESERVE_ASSETS}
+- real_writes: ${real_writes}
+- allow_dev_stub_writes: ${stub_writes}
+- embedded_bearer_token: false
+- probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
+EOF
+}
+
+build_deployment_bundle() {
+  local profile="$1"
+  local real_writes="$2"
+  local stub_writes="$3"
+
+  echo "=== build strict live bundle: ${profile} ==="
+  VITE_BFF_MODE=live \
+  VITE_BFF_BASE_URL="${BFF_HOST}" \
+  VITE_BFF_FALLBACK=strict \
+  VITE_BFF_REAL_WRITES="${real_writes}" \
+  VITE_BFF_ALLOW_DEV_STUB_WRITES="${stub_writes}" \
+  VITE_BFF_DEV_BEARER_TOKEN="" \
+  VITE_SUPABASE_URL="${SUPABASE_URL}" \
+  VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}" \
+  npm run build
+
+  PANTHEON_DEPLOY_PROFILE="${profile}" \
+  PANTHEON_DEPLOY_REAL_WRITES="${real_writes}" \
+  PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${stub_writes}" \
+  node --input-type=module <<'NODE'
+import fs from "node:fs";
+
+const metadata = {
+  app: "execute-plans",
+  environment: "pantheon-dev-fe",
+  deployedAt: process.env.PANTHEON_DEPLOYED_AT,
+  commit: process.env.PANTHEON_DEPLOY_COMMIT,
+  sourceRef: process.env.PANTHEON_DEPLOY_SOURCE_REF,
+  sourceBranch: process.env.PANTHEON_DEPLOY_SOURCE_BRANCH,
+  feHost: process.env.PANTHEON_DEPLOY_FE_HOST,
+  bffHost: process.env.PANTHEON_DEPLOY_BFF_HOST,
+  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT,
+  bffCommitEvidence: true,
+  bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE,
+  deploymentProfile: process.env.PANTHEON_DEPLOY_PROFILE || "read-only",
+  buildMode: {
+    VITE_BFF_MODE: "live",
+    VITE_BFF_FALLBACK: "strict",
+    VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false",
+    VITE_BFF_ALLOW_DEV_STUB_WRITES:
+      process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false",
+    VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+  },
+};
+
+fs.writeFileSync("dist/deployment.json", `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
+NODE
+}
+
+activate_prebuilt_safe_restore() {
+  local current_target current_manifest fallback_name fallback_dir
+
+  current_target="$(readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true)"
+  case "${current_target}" in
+    "${RELEASES_DIR}"/*) ;;
+    *)
+      echo "Read-only restore requires a live immutable release under ${RELEASES_DIR}; got ${current_target:-<unresolved>}." >&2
+      return 2
+      ;;
+  esac
+  current_manifest="${current_target}/deployment.json"
+
+  # Idempotent retry: an earlier attempt may already have switched safe and
+  # then failed only in a network-dependent verification step.
+  if validate_release_manifest "${current_manifest}" "persona-interaction-read-only-restore" 2>/dev/null; then
+    RELEASE_DIR="${current_target}"
+    BFF_COMMIT="${EXPECTED_BFF_COMMIT,,}"
+    DEPLOY_SWITCHED=true
+    echo "Exact read-only fallback is already live: ${RELEASE_DIR}"
+  else
+    # Do not depend on the public write manifest during emergency restore. The
+    # root-only marker is primary; the deterministic sibling name is a second
+    # local locator if that marker was damaged after the proof switch.
+    fallback_name="$(sudo cat "${current_target}/${SAFE_FALLBACK_MARKER}" 2>/dev/null || true)"
+    if [[ -z "${fallback_name}" ]]; then
+      fallback_name="$(basename "${current_target}")-safe-read-only"
+    fi
+    if [[ ! "${fallback_name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      echo "Invalid or missing server-private safe fallback locator." >&2
+      return 2
+    fi
+    fallback_dir="${RELEASES_DIR}/${fallback_name}"
+    case "${fallback_dir}" in
+      "${RELEASES_DIR}"/*) ;;
+      *) return 2 ;;
+    esac
+    if [[ ! -d "${fallback_dir}" ]]; then
+      echo "Prebuilt safe fallback is missing: ${fallback_dir}" >&2
+      return 2
+    fi
+    validate_release_manifest "${fallback_dir}/deployment.json" "persona-interaction-read-only-restore"
+
+    PREVIOUS_DEPLOY_TARGET="${current_target}"
+    RELEASE_DIR="${fallback_dir}"
+    SAFE_RELEASE_DIR="${fallback_dir}"
+    SAFE_FALLBACK_PREPARED=true
+    sudo ln -sfn "${fallback_dir}" "${DEPLOY_ROOT}.next"
+    DEPLOY_SWITCHED=true
+    sudo mv -Tf "${DEPLOY_ROOT}.next" "${DEPLOY_ROOT}"
+    BFF_COMMIT="${EXPECTED_BFF_COMMIT,,}"
+    echo "Fail-closed restore switched live frontend to prebuilt read-only release ${fallback_dir}."
+  fi
+
+  # Everything below is intentionally after the local atomic safe switch.
+  verify_live_bff_identity "restore-after-safe-switch"
+  curl -fsS "${FE_HOST}/" >/dev/null
+  curl -fsS "${FE_HOST}/deployment.json" > "${AUDIT_DIR}/deployment-restore-hosted.json"
+  validate_release_manifest "${AUDIT_DIR}/deployment-restore-hosted.json" "persona-interaction-read-only-restore"
+  run_deployed_host_probe
+  write_deploy_evidence "persona-interaction-read-only-restore" "${RELEASE_DIR}" "false" "false"
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    {
+      echo "bff_commit=${BFF_COMMIT}"
+      echo "bff_commit_source=${BFF_COMMIT_SOURCE}"
+    } >> "${GITHUB_OUTPUT}"
+  fi
+  echo "OK: restored ${SHA} to fail-closed read-only mode at ${FE_HOST}"
 }
 
 if [[ -n "${DEV_BEARER_TOKEN}" ]]; then
@@ -193,11 +382,6 @@ case "${DEPLOY_PROFILE}" in
     ;;
 esac
 
-if [[ -z "${SUPABASE_URL}" || -z "${SUPABASE_PUBLISHABLE_KEY}" ]]; then
-  echo "VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required public browser configuration." >&2
-  exit 2
-fi
-
 if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && -z "${EXPECTED_BFF_COMMIT}" ]]; then
   echo "Manual final-proof deployment requires an exact Pantheon BFF commit SHA." >&2
   exit 2
@@ -228,12 +412,21 @@ if [[ "${ALLOW_DIRTY}" != "true" ]]; then
   fi
 fi
 
-for command_name in npm node rsync sudo curl flock; do
+for command_name in node sudo flock; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "Missing required command: ${command_name}" >&2
     exit 2
   fi
 done
+
+if [[ "${DEPLOY_PROFILE}" != "persona-interaction-read-only-restore" ]]; then
+  for command_name in npm rsync curl; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      echo "Missing required command: ${command_name}" >&2
+      exit 2
+    fi
+  done
+fi
 
 exec 9>"${LOCK_FILE}"
 if ! flock -n 9; then
@@ -241,6 +434,17 @@ if ! flock -n 9; then
   exit 2
 fi
 LOCK_ACQUIRED=true
+
+if [[ "${DEPLOY_PROFILE}" == "persona-interaction-read-only-restore" ]]; then
+  echo "=== atomically activate prebuilt read-only fallback before network/npm checks ==="
+  activate_prebuilt_safe_restore
+  exit 0
+fi
+
+if [[ -z "${SUPABASE_URL}" || -z "${SUPABASE_PUBLISHABLE_KEY}" ]]; then
+  echo "VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required public browser configuration." >&2
+  exit 2
+fi
 
 echo "Resolving active BFF commit from ${BFF_HOST}/bff/version..."
 verify_live_bff_identity "initial"
@@ -261,17 +465,6 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   npx playwright install chromium
 fi
 
-echo "=== build strict live dev bundle ==="
-VITE_BFF_MODE=live \
-VITE_BFF_BASE_URL="${BFF_HOST}" \
-VITE_BFF_FALLBACK=strict \
-VITE_BFF_REAL_WRITES="${REAL_WRITES}" \
-VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}" \
-VITE_BFF_DEV_BEARER_TOKEN="" \
-VITE_SUPABASE_URL="${SUPABASE_URL}" \
-VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}" \
-npm run build
-
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
 export PANTHEON_DEPLOY_COMMIT="${SHA}"
 export PANTHEON_DEPLOY_SOURCE_REF="${SOURCE_REF:-${SHA}}"
@@ -285,37 +478,24 @@ export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
 export PANTHEON_DEPLOY_BFF_COMMIT="${BFF_COMMIT}"
 export PANTHEON_DEPLOY_BFF_COMMIT_SOURCE="${BFF_COMMIT_SOURCE}"
 
-node --input-type=module <<'NODE'
-import fs from "node:fs";
+sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
 
-const metadata = {
-  app: "execute-plans",
-  environment: "pantheon-dev-fe",
-  deployedAt: process.env.PANTHEON_DEPLOYED_AT,
-  commit: process.env.PANTHEON_DEPLOY_COMMIT,
-  sourceRef: process.env.PANTHEON_DEPLOY_SOURCE_REF,
-  sourceBranch: process.env.PANTHEON_DEPLOY_SOURCE_BRANCH,
-  feHost: process.env.PANTHEON_DEPLOY_FE_HOST,
-  bffHost: process.env.PANTHEON_DEPLOY_BFF_HOST,
-  bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT,
-  bffCommitEvidence: true,
-  bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE,
-  deploymentProfile: process.env.PANTHEON_DEPLOY_PROFILE || "read-only",
-  buildMode: {
-    VITE_BFF_MODE: "live",
-    VITE_BFF_FALLBACK: "strict",
-    VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false",
-    VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false",
-    VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
-  },
-};
+if [[ "${DEPLOY_PROFILE}" == "persona-interaction-write-proof" ]]; then
+  echo "=== prepare exact prebuilt read-only fallback before opening writes ==="
+  build_deployment_bundle "persona-interaction-read-only-restore" "false" "false"
+  sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
+  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r dist/ "${SAFE_RELEASE_DIR}/"
+  validate_release_manifest "${SAFE_RELEASE_DIR}/deployment.json" "persona-interaction-read-only-restore"
+  SAFE_FALLBACK_PREPARED=true
+fi
 
-fs.writeFileSync("dist/deployment.json", `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
-NODE
+build_deployment_bundle "${DEPLOY_PROFILE}" "${REAL_WRITES}" "${ALLOW_DEV_STUB_WRITES}"
 
 echo "=== install release ==="
 rsync -a --delete dist/ "${TMP_DIR}/"
-sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
+if [[ "${SAFE_FALLBACK_PREPARED}" == "true" ]]; then
+  printf '%s\n' "${SAFE_RELEASE_NAME}" > "${TMP_DIR}/${SAFE_FALLBACK_MARKER}"
+fi
 sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
 
 if [[ "${PRESERVE_ASSETS}" == "true" ]]; then
@@ -338,6 +518,16 @@ if [[ "${PRESERVE_ASSETS}" == "true" ]]; then
 fi
 
 sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r "${TMP_DIR}/" "${RELEASE_DIR}/"
+validate_release_manifest "${RELEASE_DIR}/deployment.json" "${DEPLOY_PROFILE}"
+if [[ "${SAFE_FALLBACK_PREPARED}" == "true" ]]; then
+  sudo chmod 600 "${RELEASE_DIR}/${SAFE_FALLBACK_MARKER}"
+  validate_release_manifest "${SAFE_RELEASE_DIR}/deployment.json" "persona-interaction-read-only-restore"
+  marker_value="$(sudo cat "${RELEASE_DIR}/${SAFE_FALLBACK_MARKER}")"
+  if [[ "${marker_value}" != "${SAFE_RELEASE_NAME}" ]]; then
+    echo "Prebuilt safe fallback locator failed local validation." >&2
+    exit 2
+  fi
+fi
 
 echo "=== verify exact BFF identity before live switch ==="
 verify_live_bff_identity "before-switch"
@@ -375,48 +565,12 @@ verify_live_bff_identity "after-switch"
 
 echo "=== verify deployed host ==="
 curl -fsS "${FE_HOST}/" >/dev/null
-DEPLOYED_JSON="$(curl -fsS "${FE_HOST}/deployment.json")"
-node --input-type=module -e '
-const expectedFrontend = process.argv[1];
-const expectedBff = process.argv[2];
-const expectedProfile = process.argv[3];
-const expectedRealWrites = process.argv[4];
-const expectedDevStubWrites = process.argv[5];
-const payload = JSON.parse(process.argv[6]);
-if (payload.commit !== expectedFrontend) {
-  console.error(`deployment.json commit mismatch: expected ${expectedFrontend}, got ${payload.commit}`);
-  process.exit(1);
-}
-if (
-  payload.bffCommit !== expectedBff ||
-  payload.bffCommitEvidence !== true ||
-  payload.bffCommitSource !== "bff_version"
-) {
-  console.error(`deployment.json BFF identity mismatch: expected ${expectedBff}`);
-  process.exit(1);
-}
-if (
-  payload.deploymentProfile !== expectedProfile ||
-  payload.buildMode?.VITE_BFF_REAL_WRITES !== expectedRealWrites ||
-  payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== expectedDevStubWrites ||
-  payload.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN !== "false"
-) {
-  console.error("deployment.json does not match the selected deployment profile/token boundary");
-  process.exit(1);
-}
-' "${SHA}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" "${REAL_WRITES}" "${ALLOW_DEV_STUB_WRITES}" "${DEPLOYED_JSON}"
+curl -fsS "${FE_HOST}/deployment.json" > "${AUDIT_DIR}/deployment-hosted-${DEPLOY_PROFILE}.json"
+validate_release_manifest "${AUDIT_DIR}/deployment-hosted-${DEPLOY_PROFILE}.json" "${DEPLOY_PROFILE}"
 
 if [[ "${SKIP_PROBE}" != "true" ]]; then
   echo "=== run browser/BFF deployed-host probe ==="
-  PANTHEON_FE_BASE_URL="${FE_HOST}" \
-  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
-  PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
-  PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
-  PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
-  PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
-  PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
-  node scripts/probe-hosted-browser-bff.mjs
+  run_deployed_host_probe
 
   # The full Persona linked-page traversal belongs to the integration E2E gate:
   # it depends on mutable row/UI state and must not invalidate an otherwise
@@ -424,26 +578,7 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   echo "=== unauthenticated strict browser/BFF probe passed; token injection and mutation probes are disabled ==="
 fi
 
-cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
-# Pantheon Dev FE Deploy
-
-- deployed_at: ${TIMESTAMP}
-- commit: ${SHA}
-- source_ref: ${SOURCE_REF:-${SHA}}
-- source_branch: ${SOURCE_BRANCH}
-- fe_host: ${FE_HOST}
-- bff_host: ${BFF_HOST}
-- bff_commit: ${BFF_COMMIT}
-- bff_commit_source: ${BFF_COMMIT_SOURCE}
-- deployment_profile: ${DEPLOY_PROFILE}
-- release_dir: ${RELEASE_DIR}
-- deploy_root: ${DEPLOY_ROOT}
-- preserve_assets: ${PRESERVE_ASSETS}
-- real_writes: ${REAL_WRITES}
-- allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
-- embedded_bearer_token: false
-- probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
-EOF
+write_deploy_evidence "${DEPLOY_PROFILE}" "${RELEASE_DIR}" "${REAL_WRITES}" "${ALLOW_DEV_STUB_WRITES}"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
@@ -456,7 +591,7 @@ if [[ "${KEEP_RELEASES}" =~ ^[0-9]+$ && "${KEEP_RELEASES}" -gt 0 ]]; then
   mapfile -t old_releases < <(sudo find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -n | awk '{print $2}' | head -n "-${KEEP_RELEASES}" || true)
   for old_release in "${old_releases[@]}"; do
     case "${old_release}" in
-      "${RELEASE_DIR}"|"${PREVIOUS_DEPLOY_TARGET}") continue ;;
+      "${RELEASE_DIR}"|"${PREVIOUS_DEPLOY_TARGET}"|"${SAFE_RELEASE_DIR}") continue ;;
       "${RELEASES_DIR}"/*) sudo rm -rf -- "${old_release}" ;;
     esac
   done
