@@ -194,8 +194,20 @@ describe("PersonaFleetPage", () => {
     expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
 
-    const nonProdTab = screen.getByRole("tab", { name: "non-production (2)" });
-    expect(nonProdTab).toBeInTheDocument();
+    const nonProdFilter = screen.getByRole("radio", {
+      name: "non-production (2)", checked: false,
+    });
+    expect(nonProdFilter).not.toHaveAttribute("aria-controls");
+    expect(screen.getByRole("group", { name: "Persona data scope" })).toContainElement(nonProdFilter);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+
+    fireEvent.click(nonProdFilter);
+
+    expect(screen.getByText("Crypto Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Gold Futures Persona")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", {
+      name: "non-production (2)", checked: true,
+    })).toBeInTheDocument();
   });
 
   it("shows non-production rows when the tab query param is set", () => {
@@ -215,8 +227,9 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByText("Dry Run Probe Persona")).toBeInTheDocument();
     expect(screen.queryByText("Gold Futures Persona")).not.toBeInTheDocument();
 
-    const prodTab = screen.getByRole("tab", { name: "Production (1)" });
-    expect(prodTab).toBeInTheDocument();
+    expect(screen.getByRole("radio", {
+      name: "Production (1)", checked: false,
+    })).toBeInTheDocument();
   });
 
   it("automatically defaults to non-production tab when focusing on a non-production persona without explicit tab parameter", () => {
@@ -248,7 +261,9 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
-    expect(screen.getByRole("tab", { name: "Production (0)", selected: true })).toBeInTheDocument();
+    expect(screen.getByRole("radio", {
+      name: "Production (0)", checked: true,
+    })).toBeInTheDocument();
     expect(screen.queryByText("Crypto Persona")).not.toBeInTheDocument();
     expect(screen.queryByText("Dry Run Probe Persona")).not.toBeInTheDocument();
   });

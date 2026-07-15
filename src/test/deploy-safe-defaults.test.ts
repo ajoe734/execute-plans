@@ -32,6 +32,18 @@ const hostedBrowserProbe = readFileSync(
   resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
   "utf8",
 );
+const releaseCandidate = readFileSync(
+  resolve(root, "scripts/release-candidate.mjs"),
+  "utf8",
+);
+const atomicManifest = readFileSync(
+  resolve(root, "scripts/atomic-release-manifest.py"),
+  "utf8",
+);
+const browserAuthRuntime = [
+  readFileSync(resolve(root, "src/config/publicBuildAuth.ts"), "utf8"),
+  readFileSync(resolve(root, "src/lib/bff-v1/headers.ts"), "utf8"),
+].join("\n");
 
 function rejectedDeploy(extraEnv: Record<string, string>) {
   return spawnSync("bash", [deployScriptPath], {
@@ -42,123 +54,174 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
       GITHUB_EVENT_NAME: "",
       PANTHEON_DEPLOY_ALLOW_DIRTY: "true",
       VITE_BFF_DEV_BEARER_TOKEN: "",
-      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_deploy_test",
-      VITE_SUPABASE_URL: "https://deploy-test.supabase.co",
       ...extraEnv,
     },
   });
 }
 
 describe("Pantheon dev frontend deploy safety boundary", () => {
-  it("builds without a browser bearer token and with safe write flags", () => {
-    expect(deployScript).toContain(
-      'DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"',
+  it("creates only strict, read-only, credential-free release candidates", () => {
+    expect(integrationWorkflow).toContain("VITE_BFF_MODE: live");
+    expect(integrationWorkflow).toContain("VITE_BFF_FALLBACK: strict");
+    expect(integrationWorkflow).toContain('VITE_BFF_REAL_WRITES: "false"');
+    expect(integrationWorkflow).toContain(
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"',
     );
-    expect(deployScript).toContain('if [[ -n "${DEV_BEARER_TOKEN}" ]]');
-    expect(deployScript).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
-    expect(deployScript).toContain('REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
+    expect(integrationWorkflow).toContain('VITE_BFF_DEV_BEARER_TOKEN: ""');
+    expect(integrationWorkflow).toContain(
+      "node scripts/release-candidate.mjs prepare",
+    );
+    expect(deployScript).toContain(
+      'REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"',
+    );
     expect(deployScript).toContain(
       'ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
     );
-    expect(deployScript).toContain('VITE_BFF_REAL_WRITES="${REAL_WRITES}"');
     expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"',
+      'if [[ -n "${VITE_BFF_DEV_BEARER_TOKEN:-}" ]]',
     );
+    expect(deployScript).toContain("VITE_*CLIENT_SECRET*");
+    expect(deployScript).toContain("VITE_*PRIVATE_KEY*");
+    expect(deployScript).toContain("VITE_*SERVICE_ROLE*");
     expect(deployScript).not.toMatch(/pantheon-dev-browser:operator/u);
     expect(deployScript).not.toMatch(/pantheon-dev-browser:viewer/u);
     expect(deployScript).not.toMatch(/VITE_BFF_REAL_WRITES=true/u);
     expect(deployScript).not.toMatch(/VITE_BFF_ALLOW_DEV_STUB_WRITES=true/u);
-    expect(deployScript).toContain(
-      'VITE_BFF_REAL_WRITES: process.env.PANTHEON_DEPLOY_REAL_WRITES || "false"',
+    expect(releaseCandidate).toContain(
+      'VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"',
     );
-    expect(deployScript).toContain(
-      'VITE_BFF_ALLOW_DEV_STUB_WRITES: process.env.PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES || "false"',
-    );
-    expect(deployScript).toContain(
-      "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
-    );
-    expect(deployScript).toContain(
-      "bffCommitEvidence: true",
-    );
-    expect(deployScript).toContain(
-      "bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE",
-    );
-    expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
-    expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
-    expect(integrationWorkflow.match(
-      /VITE_BFF_DEV_BEARER_TOKEN=""/gu,
-    )).toHaveLength(2);
-    expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
+    expect(releaseCandidate).toContain("collectEnvironmentSecretSentinels");
+    expect(releaseCandidate).toContain("CREDENTIAL_PATTERNS");
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(browserAuthRuntime).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(browserAuthRuntime).not.toContain(
+      "import.meta.env.VITE_BFF_DEV_BEARER_TOKEN",
+    );
     expect(existsSync(localEnvPath)).toBe(false);
     expect(gitignore).toMatch(/^\.env\*$/mu);
     expect(gitignore).toMatch(/^!\.env\*\.example$/mu);
   });
 
-  it("injects public Supabase config explicitly and fails closed when it is missing", () => {
-    expect(deployScript).toContain('SUPABASE_URL="${VITE_SUPABASE_URL:-}"');
-    expect(deployScript).toContain(
-      'SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-}"',
-    );
-    expect(deployScript).toContain(
-      'VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"',
-    );
-    for (const workflow of [branchWorkflow, deployWorkflow, integrationWorkflow]) {
+  it("injects public Supabase config only while building a gated candidate", () => {
+    for (const workflow of [branchWorkflow, integrationWorkflow]) {
       expect(workflow).toContain(
-        'VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}',
+        "VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
       );
       expect(workflow).toContain(
-        'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
+        "VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
+      );
+      expect(workflow.match(/VITE_SUPABASE_URL:/gu)).toHaveLength(1);
+      expect(workflow.match(/VITE_SUPABASE_PUBLISHABLE_KEY:/gu)).toHaveLength(
+        1,
       );
     }
-    expect(deployWorkflow).not.toContain("PANTHEON_HOSTED_BROWSER_BEARER_TOKEN");
-
-    const result = rejectedDeploy({
-      VITE_SUPABASE_PUBLISHABLE_KEY: "",
-      VITE_SUPABASE_URL: "",
-    });
-    expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(
-      /VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required/,
+    expect(deployWorkflow).not.toContain("VITE_SUPABASE_URL");
+    expect(deployWorkflow).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
+    expect(deployScript).not.toContain("VITE_SUPABASE_URL");
+    expect(deployScript).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
+    expect(deployWorkflow).not.toContain(
+      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN",
     );
   });
 
-  it("requires explicit BFF provenance for manual final-proof deployments", () => {
-    expect(deployWorkflow).toContain("bff_commit:");
+  it("publishes accepted manifests with a durable atomic replace", () => {
+    expect(deployScript).toContain("publish_manifest_atomically");
+    expect(deployScript).toContain("atomic-release-manifest.py");
+    expect(deployScript).not.toMatch(
+      /sudo install[^\n]+deployment\.json[^\n]+\/deployment\.json/u,
+    );
+    expect(atomicManifest).toContain("os.O_EXCL");
+    expect(atomicManifest).toContain('getattr(os, "O_NOFOLLOW", 0)');
+    expect(atomicManifest).toContain("os.replace(");
+    expect(atomicManifest).toContain("os.fsync(release_fd)");
+    expect(atomicManifest).toContain("os.fsync(store_fd)");
+  });
+
+  it("deploys only the immutable artifact from one exact successful dev gate", () => {
+    expect(deployWorkflow).toContain("workflow_run:");
+    expect(deployWorkflow).toContain("Pantheon FE-BFF Integration Gate");
+    expect(deployWorkflow).toContain("github.rest.actions.getWorkflowRun");
     expect(deployWorkflow).toContain(
-      "github.event_name == 'workflow_dispatch' && inputs.bff_commit || ''",
+      'runPath === ".github/workflows/pantheon-integration-gate.yml"',
     );
-    expect(deployWorkflow).not.toContain("vars.PANTHEON_BFF_SHA");
-    expect(deployScript).toContain(
-      'EXPECTED_BFF_COMMIT="${PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT:-}"',
+    expect(deployWorkflow).toContain('run.event === "push"');
+    expect(deployWorkflow).toContain('run.head_branch === "dev"');
+    expect(deployWorkflow).toContain('run.conclusion === "success"');
+    expect(deployWorkflow).toContain(
+      "github.rest.actions.listWorkflowRunArtifacts",
     );
-    expect(deployScript).toContain("scripts/release-identity.mjs source-version");
-    expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
-    expect(deployScript).toContain("Pantheon BFF commit mismatch");
-    expect(deployScript).toContain('verify_live_bff_identity "before-switch"');
-    expect(deployScript).toContain('verify_live_bff_identity "after-switch"');
-    expect(deployScript).toContain("rolling back");
+    expect(deployWorkflow).toContain(
+      "`pantheon-fe-release-candidate-attempt-${run.run_attempt}`",
+    );
+    expect(deployWorkflow).toContain("artifact.name === artifactName");
+    expect(integrationWorkflow).toContain(
+      "name: pantheon-fe-release-candidate-attempt-${{ github.run_attempt }}",
+    );
+    expect(integrationWorkflow).toContain(
+      "name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}",
+    );
+    expect(deployWorkflow).toContain(
+      "name: pantheon-dev-fe-deploy-evidence-attempt-${{ github.run_attempt }}",
+    );
+    expect(`${integrationWorkflow}\n${deployWorkflow}`).not.toContain(
+      "overwrite: true",
+    );
+    expect(deployWorkflow).toContain("actions/artifacts/${ARTIFACT_ID}/zip");
+    expect(deployWorkflow).toContain(
+      'actual_archive_digest="sha256:$(sha256sum',
+    );
+    expect(deployWorkflow).toContain(
+      "artifact archive contains a non-regular entry",
+    );
+    expect(deployScript).toContain("node scripts/release-candidate.mjs verify");
+    expect(deployScript).toContain('--expected-frontend-sha "${SHA}"');
+    expect(deployScript).toContain('--expected-gate-run-id "${GATE_RUN_ID}"');
+    expect(deployScript).toContain('BFF_COMMIT="$(node -e');
+    expect(deployScript).toContain("payload.source_commit_known !== true");
+    expect(integrationWorkflow).toContain(
+      "Upload deployable immutable candidate",
+    );
+    expect(integrationWorkflow).toContain(
+      "steps.aggregate.outcome == 'success'",
+    );
+  });
+
+  it("pre-probes, atomically switches, and conditionally restores and re-probes", () => {
     expect(deployScript).toContain("flock -n 9");
-
-    const result = rejectedDeploy({
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "",
-    });
-    expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/requires an exact Pantheon BFF commit SHA/u);
-
-    const abbreviated = rejectedDeploy({
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "deadbeef",
-    });
-    expect(abbreviated.status).toBe(2);
-    expect(abbreviated.stderr).toMatch(/exact 40-character SHA/u);
+    expect(deployScript).toContain("candidate.order_at_switch");
+    expect(deployScript).toContain("candidate pre-switch browser/auth probe");
+    expect(deployScript).toContain(
+      'run_release_probe candidate_pre_switch "${RELEASE_DIR}"',
+    );
+    expect(deployScript).toContain(
+      'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
+    );
+    expect(deployScript).toContain(
+      'SYMLINK_CAS_HELPER="${ROOT_DIR}/scripts/atomic-symlink-cas.py"',
+    );
+    expect(deployScript).toContain(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" exchange',
+    );
+    expect(deployScript).toContain(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" install-if-absent',
+    );
+    expect(deployScript).toContain(
+      "post-switch manifest, BFF, and browser/auth probe",
+    );
+    expect(deployScript).toContain("rollback_release");
+    expect(deployScript).toContain('run_release_probe rollback ""');
+    expect(deployScript).toContain("rollback.reprobe");
+    expect(deployScript).toContain("Same-SHA artifact replacement rejected");
+    expect(deployScript).toContain("exact live candidate no-op revalidation");
+    expect(deployWorkflow).not.toContain("skip_probe:");
   });
 
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
     expect(deployScript).not.toContain("npx playwright test");
-    expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
+    expect(deployScript).not.toContain(
+      "scripts/probe-hosted-management-writes.mjs",
+    );
     expect(hostedPersonaSpec).toContain('roleTokenFromEnv("viewer"');
     expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
     expect(hostedPersonaSpec).toContain("token: VIEWER_TOKEN");
@@ -177,9 +240,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   });
 
   it("defines the deployed-host contract as an unauthenticated strict auth boundary", () => {
-    expect(hostedBrowserProbe).toContain('const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]');
+    expect(hostedBrowserProbe).toContain(
+      'const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]',
+    );
     expect(hostedBrowserProbe).toContain("response.status === 401");
-    expect(hostedBrowserProbe).toMatch(/AUTH_REQUIRED\|authentication required/u);
+    expect(hostedBrowserProbe).toMatch(
+      /AUTH_REQUIRED\|authentication required/u,
+    );
     expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
     expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
     expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
@@ -188,8 +255,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedBrowserProbe).toContain('page.on("pageerror"');
     expect(hostedBrowserProbe).toContain("rootRendered");
     expect(hostedBrowserProbe).toContain("pageErrors.length === 0");
+    expect(hostedBrowserProbe).toContain("target.origin !== base.origin");
     expect(hostedBrowserProbe).toContain(
-      "candidate.origin !== BFF_TARGET.origin",
+      "applicationRootRendered: rootRendered",
+    );
+    expect(hostedBrowserProbe).toContain(
+      "pageErrorsAbsent: pageErrors.length === 0",
     );
     expect(hostedBrowserProbe).not.toContain("url.startsWith(BFF_BASE)");
     expect(deployScript).toContain(
@@ -210,6 +281,42 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toMatch(/any browser bearer token/u);
     expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
+  });
+
+  it("does not let emergency dispatch bypass probes or leak a generic Vite credential", () => {
+    expect(deployWorkflow).toContain("emergency_override:");
+    expect(deployWorkflow).toContain("rollback_drill:");
+    expect(deployWorkflow).toContain("override_reason:");
+    expect(deployWorkflow).toContain("PANTHEON_DEV_FE_DEPLOY_OPERATORS");
+    expect(deployWorkflow).toContain("require an authorized deploy operator");
+    expect(deployWorkflow).toContain(
+      "integrity, auth, and rollback probes still run",
+    );
+    expect(deployScript).toContain(
+      "Candidate, auth, post-switch, and rollback probes cannot be skipped",
+    );
+
+    const skipped = rejectedDeploy({ PANTHEON_DEPLOY_SKIP_PROBE: "true" });
+    expect(skipped.status).toBe(2);
+    expect(skipped.stderr).toMatch(/cannot be skipped/u);
+
+    const sentinel = "service-role-sentinel-must-not-leak";
+    const credential = rejectedDeploy({ VITE_SERVICE_ROLE_TOKEN: sentinel });
+    expect(credential.status).toBe(2);
+    expect(credential.stderr).toMatch(/non-public Vite credential variable/u);
+    expect(`${credential.stdout}${credential.stderr}`).not.toContain(sentinel);
+  });
+
+  it("seals, verifies, and durably retains every run-attempt audit file", () => {
+    expect(deployWorkflow).toContain(
+      '"schemaVersion": "pantheon.dev-fe.workflow-audit-seal.v1"',
+    );
+    expect(deployWorkflow).toContain("workflow audit checksum mismatch");
+    expect(deployWorkflow).toContain(
+      "/var/lib/pantheon-dev-fe-deploy-evidence",
+    );
+    expect(deployWorkflow).toContain("PANTHEON_AUDIT_RUN_ROOT");
+    expect(deployWorkflow).toContain('audit_dir="${audit_root}/controller"');
   });
 
   it.each([

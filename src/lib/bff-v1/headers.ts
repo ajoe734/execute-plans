@@ -10,8 +10,6 @@
 // real credentials. Live deployments register real providers via
 // `setAuthProvider({ getToken, getTenantId })`.
 
-import { validatePublicBuildBearerToken } from "@/config/publicBuildAuth";
-
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function isMutation(method: string): boolean {
@@ -40,7 +38,8 @@ export function ifMatch(lockVersion: number | string): string {
 
 export function acceptLanguage(locale?: string): string {
   if (locale) return locale;
-  if (typeof navigator !== "undefined" && navigator.language) return navigator.language;
+  if (typeof navigator !== "undefined" && navigator.language)
+    return navigator.language;
   return "en-US";
 }
 
@@ -70,12 +69,6 @@ export const BFF_AUTH_STORAGE_KEYS = {
   legacyTenantId: "pantheon_tenant_id",
 } as const;
 
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
 function browserStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -87,33 +80,18 @@ function browserStorageGet(key: string): string | null {
   }
 }
 
-export function readBrowserAuthStorage(): { token: string | null; tenantId: string | null } {
+export function readBrowserAuthStorage(): {
+  token: string | null;
+  tenantId: string | null;
+} {
   return {
-    token: browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
-    tenantId: browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
+    token:
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ??
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
+    tenantId:
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ??
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
   };
-}
-
-function devBearerTokenFromEnv(): string | null {
-  const env = readEnv();
-  if (env.VITE_BFF_MODE !== "live") return null;
-  // Prioritize env object so that tests can stub it successfully.
-  // Fallback to direct import.meta.env reference for Vite build-time static replacement.
-  let token = env.VITE_BFF_DEV_BEARER_TOKEN;
-  if (!token) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore: import.meta is not allowed under some tsc targets but Vite requires this literal for static replacement
-      token = import.meta.env.VITE_BFF_DEV_BEARER_TOKEN;
-    } catch {
-      // ignore
-    }
-  }
-  try {
-    return validatePublicBuildBearerToken(token) || null;
-  } catch {
-    return null;
-  }
 }
 
 const browserProvider: AuthProvider = {
@@ -147,7 +125,7 @@ export interface BuildHeadersInput {
 export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   const correlationId = input.correlationId ?? newCorrelationId();
   const headers: Record<string, string> = {
-    "Accept": "application/json",
+    Accept: "application/json",
     "Accept-Language": acceptLanguage(input.locale),
     "X-Request-Id": xRequestId(),
     "X-Correlation-Id": correlationId,
@@ -155,7 +133,7 @@ export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   };
   // Auth / tenant injection (live mode). Mock / test providers return null → headers omitted.
   try {
-    const token = authProvider.getToken() || devBearerTokenFromEnv();
+    const token = authProvider.getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const tenant = authProvider.getTenantId();
     if (tenant) headers["X-Tenant-Id"] = tenant;

@@ -55,6 +55,10 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: pantheon-fe-bff-integration-${{ github.event_name == 'push' && github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   integration-gate:
     runs-on: ubuntu-latest
@@ -80,8 +84,12 @@ jobs:
       PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
+      # A deployable dev candidate is always hard-gated. Observation-mode
+      # overrides are limited to an explicit manual gate run and can never
+      # create a release artifact consumed by the deploy workflow.
+      PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail || 'false' }}
       PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
+      FE_INT_GATE_PERF_STRICT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && '1' || '0' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
       # at job level so unit tests can exercise hybrid/auto fallback paths.
       # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
@@ -163,15 +171,42 @@ jobs:
           set -o pipefail
           npm run test 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-test.log"
 
+      - name: Deploy controller regression harness
+        id: deploy_controller
+        run: |
+          set -euo pipefail
+          npm run test:deploy-release 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/deploy-controller-regression.log"
+
       - name: Build
         id: build
         continue-on-error: true
         env:
+          VITE_BFF_MODE: live
+          VITE_BFF_BASE_URL: ${{ env.PANTHEON_BFF_BASE_URL }}
+          VITE_BFF_FALLBACK: strict
+          VITE_BFF_REAL_WRITES: "false"
+          VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"
+          VITE_BFF_DEV_BEARER_TOKEN: ""
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -o pipefail
-          VITE_BFF_DEV_BEARER_TOKEN="" npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
+          npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
+
+      - name: Prepare immutable release candidate
+        id: candidate
+        if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success'
+        run: |
+          node scripts/release-candidate.mjs prepare \
+            --dist dist \
+            --out .release-candidate \
+            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --bff-sha "$PANTHEON_BFF_SHA" \
+            --gate-run-id "$GITHUB_RUN_ID" \
+            --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL"
+          candidate_digest="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(".release-candidate/candidate.json","utf8")); const d=String(p.artifactDigestSha256||p.artifactDigest||""); if(!/^[0-9a-f]{64}$/i.test(d)) process.exit(1); process.stdout.write(d.toLowerCase())')"
+          echo "PANTHEON_EXPECTED_ARTIFACT_DIGEST=${candidate_digest}" >> "$GITHUB_ENV"
 
       - name: Bundle-size budget check
         id: bundle_budget
@@ -253,16 +288,11 @@ jobs:
         id: pr_preview
         if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
         continue-on-error: true
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -o pipefail
-          VITE_BFF_MODE=live \
-          VITE_BFF_BASE_URL="" \
-          VITE_BFF_FALLBACK=strict \
-          VITE_BFF_DEV_BEARER_TOKEN="" \
-          npm run dev -- --host 127.0.0.1 --port 4173 > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
+          PANTHEON_CANDIDATE_PORT=4173 \
+          PANTHEON_CANDIDATE_SERVER_INFO="$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.json" \
+          node scripts/serve-release-candidate.mjs .release-candidate/dist > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
           echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
           for i in {1..60}; do
             if curl -fsS "$PANTHEON_FE_BASE_URL/" >/dev/null; then
@@ -277,13 +307,15 @@ jobs:
       - name: Frontend browser BFF probe
         id: browser_probe
         continue-on-error: true
+        env:
+          PANTHEON_CANDIDATE_DIR: .release-candidate/dist
+          PANTHEON_EXPECTED_FE_SHA: ${{ env.PANTHEON_FRONTEND_SHA }}
+          PANTHEON_PROBE_RELEASE_STRICT: "1"
+          PANTHEON_PROBE_JSON_OUT: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/hosted-browser-bff-probe.json
         run: |
           set -o pipefail
-          BROWSER_BFF_BASE="$PANTHEON_BFF_BASE_URL"
-          if [ "$PANTHEON_FE_BASE_URL" = "http://127.0.0.1:4173" ]; then
-            BROWSER_BFF_BASE="$PANTHEON_FE_BASE_URL"
-          fi
-          PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
+          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io" \
+          PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
       - name: Management route-load baseline
@@ -339,14 +371,10 @@ jobs:
         run: |
           set -o pipefail
           FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
-          BROWSER_BFF_BASE="$PANTHEON_BFF_BASE_URL"
-          if [ "$FE_UNDER_TEST" = "http://127.0.0.1:4173" ]; then
-            BROWSER_BFF_BASE="$FE_UNDER_TEST"
-          fi
           FRONTEND_BASE_URL="$FE_UNDER_TEST" \
           PLAYWRIGHT_BASE_URL="$FE_UNDER_TEST" \
           PANTHEON_FE_BASE_URL="$FE_UNDER_TEST" \
-          PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
+          PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           PANTHEON_SSE_ORIGIN_URL="$FE_UNDER_TEST" \
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
@@ -376,6 +404,33 @@ jobs:
             kill "$(cat "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid")" 2>/dev/null || true
           fi
 
+      - name: Final verify immutable candidate
+        id: candidate_final
+        if: >-
+          ${{
+            always() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/dev' &&
+            steps.deploy_controller.outcome == 'success' &&
+            steps.candidate.outcome == 'success' &&
+            steps.release_identity_final.outcome == 'success' &&
+            env.PANTHEON_RELEASE_GATE_SOFT_FAIL != 'true'
+          }}
+        run: |
+          set -euo pipefail
+          verified_digest="$(node scripts/release-candidate.mjs verify \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --expected-bff-sha "$PANTHEON_BFF_SHA" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$GITHUB_RUN_ID" \
+            --expected-artifact-digest "$PANTHEON_EXPECTED_ARTIFACT_DIGEST")"
+          if [[ "$verified_digest" != "$PANTHEON_EXPECTED_ARTIFACT_DIGEST" ]]; then
+            echo "Final candidate digest mismatch: expected=$PANTHEON_EXPECTED_ARTIFACT_DIGEST verified=$verified_digest" >&2
+            exit 1
+          fi
+          printf '%s\n' "$verified_digest" > "$PANTHEON_AUDIT_OUT_DIR/final-candidate-digest.txt"
+
       - name: Record gate step outcomes
         if: always()
         run: |
@@ -386,7 +441,10 @@ jobs:
             "install": { "outcome": "${{ steps.install.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-ci.log" },
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
+            "deploy_controller": { "outcome": "${{ steps.deploy_controller.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deploy-controller-regression.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
+            "candidate": { "outcome": "${{ steps.candidate.outcome }}", "evidence": ".release-candidate/candidate.json" },
+            "candidate_final": { "outcome": "${{ steps.candidate_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/final-candidate-digest.txt" },
             "bundle_budget": { "outcome": "${{ steps.bundle_budget.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bundle-budget-check.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
             "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
@@ -408,8 +466,42 @@ jobs:
       - name: Aggregate release gate
         id: aggregate
         if: always()
-        continue-on-error: ${{ (inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false') == 'true' }}
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail == 'true' }}
         run: node scripts/aggregate-release-gate.mjs
+
+      - name: Upload deployable immutable candidate
+        id: candidate_upload
+        if: >-
+          ${{
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/dev' &&
+            steps.aggregate.outcome == 'success' &&
+            steps.deploy_controller.outcome == 'success' &&
+            steps.candidate.outcome == 'success' &&
+            steps.candidate_final.outcome == 'success' &&
+            steps.release_identity_final.outcome == 'success' &&
+            env.PANTHEON_RELEASE_GATE_SOFT_FAIL != 'true'
+          }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantheon-fe-release-candidate-attempt-${{ github.run_attempt }}
+          path: .release-candidate
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Record deployable candidate identity
+        if: steps.candidate_upload.outcome == 'success'
+        run: |
+          {
+            echo "## Deployable frontend candidate"
+            echo "- frontend SHA: \`${PANTHEON_FRONTEND_SHA}\`"
+            echo "- BFF SHA: \`${PANTHEON_BFF_SHA}\`"
+            echo "- gate run: \`${GITHUB_RUN_ID}\`"
+            echo "- gate attempt: \`${GITHUB_RUN_ATTEMPT}\`"
+            echo "- artifact: \`pantheon-fe-release-candidate-attempt-${GITHUB_RUN_ATTEMPT}\`"
+            echo "- GitHub artifact digest: \`${{ steps.candidate_upload.outputs.artifact-digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare evidence artifact paths
         if: always()
@@ -424,7 +516,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pantheon-integration-evidence
+          name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}
           include-hidden-files: true
           path: |
             pantheon-audits/current-run
@@ -435,7 +527,7 @@ jobs:
         if: always() && steps.release_identity.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: pantheon-release-identity
+          name: pantheon-release-identity-attempt-${{ github.run_attempt }}
           if-no-files-found: error
           include-hidden-files: true
           path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-identity.json

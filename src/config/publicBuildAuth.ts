@@ -1,13 +1,11 @@
-export const PUBLIC_DEV_VIEWER_BEARER_TOKEN = "pantheon-dev-browser:viewer";
-
 export function validatePublicBuildBearerToken(
   value: string | null | undefined,
 ): string {
   const token = value ?? "";
-  if (token && token !== PUBLIC_DEV_VIEWER_BEARER_TOKEN) {
+  if (token) {
     throw new Error(
-      "VITE_BFF_DEV_BEARER_TOKEN must be empty or the canonical public dev viewer identity",
+      "VITE_BFF_DEV_BEARER_TOKEN must be empty; browser bearer credentials are forbidden",
     );
   }
-  return token;
+  return "";
 }

@@ -32,14 +32,22 @@ import { getAuthProvider, setAuthProvider } from "../headers";
 
 const BASE = "https://test.example";
 
-function ok(body: unknown, status = 200, extraHeaders?: Record<string, string>): Response {
+function ok(
+  body: unknown,
+  status = 200,
+  extraHeaders?: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...extraHeaders },
   });
 }
 
-function bffErrorResponse(status: number, code: string, message: string): Response {
+function bffErrorResponse(
+  status: number,
+  code: string,
+  message: string,
+): Response {
   return new Response(
     JSON.stringify({
       error: {
@@ -61,7 +69,11 @@ afterEach(() => {
 
 describe("decideOnEvent — If-Match, Idempotency-Key, X-Request-Id", () => {
   it("forwards all three headers when provided", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { decision_state: "approved_by_trader" } }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ data: { decision_state: "approved_by_trader" } }),
+      );
     globalThis.fetch = fetchMock;
 
     await decideOnEvent(
@@ -75,7 +87,10 @@ describe("decideOnEvent — If-Match, Idempotency-Key, X-Request-Id", () => {
       BASE,
     );
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["If-Match"]).toBe('"evt-etag-v1"');
     expect(headers["Idempotency-Key"]).toBe("idem-decide-1");
     expect(headers["X-Request-Id"]).toBe("req-decide-1");
@@ -92,7 +107,10 @@ describe("decideOnEvent — If-Match, Idempotency-Key, X-Request-Id", () => {
       BASE,
     );
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["X-Request-Id"]).toBe("req-2");
     expect(headers["Idempotency-Key"]).toBe("idem-2");
     expect(headers["If-Match"]).toBeUndefined();
@@ -104,7 +122,10 @@ describe("decideOnEvent — If-Match, Idempotency-Key, X-Request-Id", () => {
 
     await decideOnEvent("evt-003", { decision: "defer" }, undefined, BASE);
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["If-Match"]).toBeUndefined();
     expect(headers["Idempotency-Key"]).toBeUndefined();
     expect(headers["X-Request-Id"]).toBeUndefined();
@@ -131,9 +152,17 @@ describe("decideOnEvent — If-Match, Idempotency-Key, X-Request-Id", () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: {} }));
     globalThis.fetch = fetchMock;
 
-    await decideOnEvent("evt-004", { decision: "approve" }, { requestId: "req-4" }, BASE);
+    await decideOnEvent(
+      "evt-004",
+      { decision: "approve" },
+      { requestId: "req-4" },
+      BASE,
+    );
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["Content-Type"]).toBe("application/json");
   });
 });
@@ -153,7 +182,14 @@ describe("listDecisionEvents — ETag in response", () => {
     triggered_at: "2026-06-22T10:00:00Z",
     confidence: { value: 0.7, basis: "model", calibration_state: "calibrated" },
     probability: { value: 0.6, target_outcome: "price_up", horizon: "5d" },
-    expected_value: { horizon: "5d", unit: "pct_return", gross: 0.05, cost: 0.002, net: 0.048, downside: -0.01 },
+    expected_value: {
+      horizon: "5d",
+      unit: "pct_return",
+      gross: 0.05,
+      cost: 0.002,
+      net: 0.048,
+      downside: -0.01,
+    },
     rationale: [],
     risk_notes: [],
     evidence_refs: [],
@@ -163,9 +199,11 @@ describe("listDecisionEvents — ETag in response", () => {
   };
 
   it("returns items and etag from response header", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok({ items: [mockEvent] }, 200, { ETag: '"events-etag-v1"' }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ items: [mockEvent] }, 200, { ETag: '"events-etag-v1"' }),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await listDecisionEvents(undefined, BASE);
@@ -193,9 +231,15 @@ describe("listDecisionEvents — ETag in response", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("GET");
-    expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["X-Request-Id"]).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["If-Match"],
+    ).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["Idempotency-Key"],
+    ).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["X-Request-Id"],
+    ).toBeUndefined();
   });
 
   it("appends event_kind filter to query string", async () => {
@@ -230,9 +274,15 @@ describe("getTradingRoom — read-only, no mutation headers", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("GET");
-    expect((init.headers as Record<string, string>)["X-Request-Id"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["X-Request-Id"],
+    ).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["If-Match"],
+    ).toBeUndefined();
+    expect(
+      (init.headers as Record<string, string>)["Idempotency-Key"],
+    ).toBeUndefined();
   });
 
   it("normalizes missing live aggregate sections to safe UI defaults", async () => {
@@ -252,8 +302,18 @@ describe("getTradingRoom — read-only, no mutation headers", () => {
 
     const aggregate = await getTradingRoom(BASE);
 
-    expect(aggregate.queue_summary).toEqual({ entry: 0, add: 0, reduce: 0, exit: 0, review: 0 });
-    expect(aggregate.risk_summary).toEqual({ state: "normal", summary: undefined, alerts: [] });
+    expect(aggregate.queue_summary).toEqual({
+      entry: 0,
+      add: 0,
+      reduce: 0,
+      exit: 0,
+      review: 0,
+    });
+    expect(aggregate.risk_summary).toEqual({
+      state: "normal",
+      summary: undefined,
+      alerts: [],
+    });
     expect(aggregate.strategies[0]).toMatchObject({
       strategy_id: "strategy-live-1",
       strategy_spec_registry_id: "strategy-live-1",
@@ -274,7 +334,10 @@ describe("getTradingRoom — read-only, no mutation headers", () => {
 
 describe("Authorization header forwarding", () => {
   it("getTradingRoom sends Authorization and X-Tenant-Id when the auth provider has a token", async () => {
-    setAuthProvider({ getToken: () => "live-token-1", getTenantId: () => "tenant-dev" });
+    setAuthProvider({
+      getToken: () => "live-token-1",
+      getTenantId: () => "tenant-dev",
+    });
     const fetchMock = vi.fn().mockResolvedValue(
       ok({
         data: {
@@ -288,7 +351,10 @@ describe("Authorization header forwarding", () => {
 
     await getTradingRoom(BASE);
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBe("Bearer live-token-1");
     expect(headers["X-Tenant-Id"]).toBe("tenant-dev");
   });
@@ -308,23 +374,32 @@ describe("Authorization header forwarding", () => {
 
     await getTradingRoom(BASE);
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBeUndefined();
     expect(headers["X-Tenant-Id"]).toBeUndefined();
   });
 
   it("listDecisionEvents forwards Authorization", async () => {
-    setAuthProvider({ getToken: () => "live-token-2", getTenantId: () => null });
+    setAuthProvider({
+      getToken: () => "live-token-2",
+      getTenantId: () => null,
+    });
     const fetchMock = vi.fn().mockResolvedValue(ok({ items: [] }));
     globalThis.fetch = fetchMock;
 
     await listDecisionEvents(undefined, BASE);
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBe("Bearer live-token-2");
   });
 
-  it("listDecisionEvents uses the shared live dev bearer fallback when browser auth storage is empty", async () => {
+  it("listDecisionEvents ignores a public build bearer when browser auth storage is empty", async () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
     vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:viewer");
     const fetchMock = vi.fn().mockResolvedValue(ok({ items: [] }));
@@ -332,23 +407,40 @@ describe("Authorization header forwarding", () => {
 
     await listDecisionEvents(undefined, BASE);
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer pantheon-dev-browser:viewer");
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
+    expect(headers.Authorization).toBeUndefined();
   });
 
   it("decideOnEvent forwards Authorization alongside If-Match/Idempotency-Key/X-Request-Id", async () => {
-    setAuthProvider({ getToken: () => "live-token-3", getTenantId: () => null });
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { decision_state: "approved_by_trader" } }));
+    setAuthProvider({
+      getToken: () => "live-token-3",
+      getTenantId: () => null,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ data: { decision_state: "approved_by_trader" } }),
+      );
     globalThis.fetch = fetchMock;
 
     await decideOnEvent(
       "evt-1",
       { decision: "approve" },
-      { ifMatch: '"evt-etag-v1"', idempotencyKey: "idem-decide-1", requestId: "req-decide-1" },
+      {
+        ifMatch: '"evt-etag-v1"',
+        idempotencyKey: "idem-decide-1",
+        requestId: "req-decide-1",
+      },
       BASE,
     );
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBe("Bearer live-token-3");
     expect(headers["If-Match"]).toBe('"evt-etag-v1"');
     expect(headers["Idempotency-Key"]).toBe("idem-decide-1");
@@ -356,18 +448,34 @@ describe("Authorization header forwarding", () => {
   });
 
   it("createTradingRoomWorkspaceProposal forwards Authorization", async () => {
-    setAuthProvider({ getToken: () => "live-token-4", getTenantId: () => null });
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { id: "proposal-1" } }));
+    setAuthProvider({
+      getToken: () => "live-token-4",
+      getTenantId: () => null,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(ok({ data: { id: "proposal-1" } }));
     globalThis.fetch = fetchMock;
 
-    await createTradingRoomWorkspaceProposal("strat-001", { strategyVersion: "v1" }, undefined, BASE);
+    await createTradingRoomWorkspaceProposal(
+      "strat-001",
+      { strategyVersion: "v1" },
+      undefined,
+      BASE,
+    );
 
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBe("Bearer live-token-4");
   });
 
   it("getAuthProvider reflects the provider set via setAuthProvider", () => {
-    setAuthProvider({ getToken: () => "probe-token", getTenantId: () => "probe-tenant" });
+    setAuthProvider({
+      getToken: () => "probe-token",
+      getTenantId: () => "probe-tenant",
+    });
     expect(getAuthProvider().getToken()).toBe("probe-token");
     expect(getAuthProvider().getTenantId()).toBe("probe-tenant");
   });
@@ -375,7 +483,10 @@ describe("Authorization header forwarding", () => {
 
 describe("getTradingRoomPerformanceAttribution", () => {
   it("reads strategy attribution through the BFF with auth headers and no mutation headers", async () => {
-    setAuthProvider({ getToken: () => "live-token-performance", getTenantId: () => "tenant-performance" });
+    setAuthProvider({
+      getToken: () => "live-token-performance",
+      getTenantId: () => "tenant-performance",
+    });
     const fetchMock = vi.fn().mockResolvedValue(
       ok({
         data: {
@@ -402,13 +513,19 @@ describe("getTradingRoomPerformanceAttribution", () => {
     );
     globalThis.fetch = fetchMock;
 
-    const result = await getTradingRoomPerformanceAttribution({ pageSize: 25, period: "latest" }, BASE);
+    const result = await getTradingRoomPerformanceAttribution(
+      { pageSize: 25, period: "latest" },
+      BASE,
+    );
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       `${BASE}/bff/management/performance-attribution/by-strategy?period=latest&page_size=25`,
     );
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers.Authorization).toBe("Bearer live-token-performance");
     expect(headers["X-Tenant-Id"]).toBe("tenant-performance");
     expect(headers["If-Match"]).toBeUndefined();
@@ -418,13 +535,22 @@ describe("getTradingRoomPerformanceAttribution", () => {
   });
 
   it("forwards page token and throws typed BffError for attribution errors", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      bffErrorResponse(503, "BACKEND_UNAVAILABLE", "attribution source unavailable"),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        bffErrorResponse(
+          503,
+          "BACKEND_UNAVAILABLE",
+          "attribution source unavailable",
+        ),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
-      getTradingRoomPerformanceAttribution({ pageSize: 10, pageToken: "cursor-2", period: "30d" }, BASE),
+      getTradingRoomPerformanceAttribution(
+        { pageSize: 10, pageToken: "cursor-2", period: "30d" },
+        BASE,
+      ),
     ).rejects.toMatchObject({
       code: "BACKEND_UNAVAILABLE",
       message: "attribution source unavailable",
@@ -438,7 +564,9 @@ describe("getTradingRoomPerformanceAttribution", () => {
 
 describe("getDecisionEvent — returns null on 404", () => {
   it("returns null for 404", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 404 }));
     globalThis.fetch = fetchMock;
 
     const result = await getDecisionEvent("missing-evt", BASE);
@@ -525,10 +653,21 @@ describe("Trading Room workspace proposal routes", () => {
       BASE,
     );
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat%2F001/trading-room/proposals`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/strategies/strat%2F001/trading-room/proposals`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ strategyVersion: "winner-branch-v4", tradingRoomReady: true }));
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-proposal-1");
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({
+        strategyVersion: "winner-branch-v4",
+        tradingRoomReady: true,
+      }),
+    );
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBe("idem-proposal-1");
     expect(result.proposalId).toBe("proposal-001");
   });
 
@@ -558,7 +697,9 @@ describe("Trading Room workspace proposal routes", () => {
         },
       ],
     };
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: canonicalProposal }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(ok({ data: canonicalProposal }));
     globalThis.fetch = fetchMock;
 
     const result = await createTradingRoomWorkspaceProposal(
@@ -569,45 +710,65 @@ describe("Trading Room workspace proposal routes", () => {
     );
 
     expect(result.dataAvailability.status).toBe("complete");
-    expect(result.dataAvailability.sources.map((source) => source.status)).toEqual([
-      "unavailable",
-      "partial",
-    ]);
+    expect(
+      result.dataAvailability.sources.map((source) => source.status),
+    ).toEqual(["unavailable", "partial"]);
     expect(result.views[0].dataAvailability).toBe("unavailable");
-    expect(result.views[0].widgets.map((widget) => widget.dataAvailability)).toEqual([
-      "complete",
-      "unavailable",
-    ]);
+    expect(
+      result.views[0].widgets.map((widget) => widget.dataAvailability),
+    ).toEqual(["complete", "unavailable"]);
   });
 
   it("gets a workspace proposal and sends no mutation headers", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: mockProposal }));
     globalThis.fetch = fetchMock;
 
-    const result = await getTradingRoomWorkspaceProposal("strat-001", "proposal/001", BASE);
+    const result = await getTradingRoomWorkspaceProposal(
+      "strat-001",
+      "proposal/001",
+      BASE,
+    );
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal%2F001`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal%2F001`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBeUndefined();
     expect(result?.proposalId).toBe("proposal-001");
   });
 
   it("throws typed BffError when a workspace proposal is missing", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "proposal missing"));
+      .mockResolvedValue(
+        bffErrorResponse(404, "RESOURCE_NOT_FOUND", "proposal missing"),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspaceProposal("strat-001", "missing", BASE)).rejects.toMatchObject({
+    await expect(
+      getTradingRoomWorkspaceProposal("strat-001", "missing", BASE),
+    ).rejects.toMatchObject({
       code: "RESOURCE_NOT_FOUND",
       status: 404,
     });
   });
 
   it("accepts a workspace proposal real BFF envelope and returns data.workspace", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok({ data: { workspaceId: "workspace-001", workspace: mockWorkspace, version: { version: 1 } } }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({
+          data: {
+            workspaceId: "workspace-001",
+            workspace: mockWorkspace,
+            version: { version: 1 },
+          },
+        }),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await acceptTradingRoomWorkspaceProposal(
@@ -618,10 +779,18 @@ describe("Trading Room workspace proposal routes", () => {
       BASE,
     );
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal-001/accept`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/strategies/strat-001/trading-room/proposals/proposal-001/accept`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ expectedStatus: "preview" }));
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-accept-1");
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({ expectedStatus: "preview" }),
+    );
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBe("idem-accept-1");
     expect(result.id).toBe("workspace-001");
     expect(result.views).toEqual([]);
   });
@@ -632,13 +801,21 @@ describe("Trading Room workspace proposal routes", () => {
       dashboardVersion: 1,
       changeLog: { reason: "initial proposal" },
     };
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok(
-        { data: { workspaceId: "workspace-001", workspace: mockWorkspace, version } },
-        200,
-        { ETag: '"workspace-etag-v1"' },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok(
+          {
+            data: {
+              workspaceId: "workspace-001",
+              workspace: mockWorkspace,
+              version,
+            },
+          },
+          200,
+          { ETag: '"workspace-etag-v1"' },
+        ),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await acceptTradingRoomWorkspaceProposalWithMeta(
@@ -657,7 +834,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("fetches the accepted workspace by workspaceId when accept omits embedded workspace", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(ok({ data: { workspaceId: "workspace-001", version: { version: 1 } } }))
+      .mockResolvedValueOnce(
+        ok({ data: { workspaceId: "workspace-001", version: { version: 1 } } }),
+      )
       .mockResolvedValueOnce(ok({ data: mockWorkspace }));
     globalThis.fetch = fetchMock;
 
@@ -670,33 +849,47 @@ describe("Trading Room workspace proposal routes", () => {
     );
 
     expect(result.id).toBe("workspace-001");
-    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace-001`);
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace-001`,
+    );
   });
 
   it("gets an accepted workspace and throws typed BffError on 404", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(ok({ data: mockWorkspace }))
-      .mockResolvedValueOnce(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "workspace missing"));
+      .mockResolvedValueOnce(
+        bffErrorResponse(404, "RESOURCE_NOT_FOUND", "workspace missing"),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspace("workspace/001", BASE)).resolves.toMatchObject({ id: "workspace-001" });
-    await expect(getTradingRoomWorkspace("missing", BASE)).rejects.toMatchObject({
+    await expect(
+      getTradingRoomWorkspace("workspace/001", BASE),
+    ).resolves.toMatchObject({ id: "workspace-001" });
+    await expect(
+      getTradingRoomWorkspace("missing", BASE),
+    ).rejects.toMatchObject({
       code: "RESOURCE_NOT_FOUND",
       status: 404,
     });
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`,
+    );
   });
 
   it("gets an accepted workspace with current ETag metadata", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok({ data: mockWorkspace }, 200, { ETag: '"workspace-etag-v1"' }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ data: mockWorkspace }, 200, { ETag: '"workspace-etag-v1"' }),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await getTradingRoomWorkspaceWithMeta("workspace/001", BASE);
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace%2F001`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
     expect(result.workspace.id).toBe("workspace-001");
     expect(result.etag).toBe('"workspace-etag-v1"');
@@ -718,47 +911,84 @@ describe("Trading Room workspace proposal routes", () => {
         },
       ],
     };
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: canonicalWorkspace }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(ok({ data: canonicalWorkspace }));
     globalThis.fetch = fetchMock;
 
     const result = await getTradingRoomWorkspaceWithMeta("workspace-001", BASE);
 
     expect(result.workspace.views[0].dataAvailability).toBe("unavailable");
-    expect(result.workspace.views[0].widgets[0].dataAvailability).toBe("complete");
+    expect(result.workspace.views[0].widgets[0].dataAvailability).toBe(
+      "complete",
+    );
   });
 
   it("patches workspace layout with If-Match and Idempotency-Key", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok(
-        { data: { ...mockWorkspace, dashboardVersion: 2 }, meta: { version_id: "version-002" } },
-        200,
-        { ETag: '"workspace-etag-v2"' },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok(
+          {
+            data: { ...mockWorkspace, dashboardVersion: 2 },
+            meta: { version_id: "version-002" },
+          },
+          200,
+          { ETag: '"workspace-etag-v2"' },
+        ),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await patchTradingRoomWorkspaceLayout(
       "workspace/001",
       {
         operations: [
-          { kind: "move_widget", widgetId: "widget-001", payload: { x: 1, y: 2 } },
-          { kind: "resize_widget", widgetId: "widget-001", payload: { width: 4, height: 3 } },
+          {
+            kind: "move_widget",
+            widgetId: "widget-001",
+            payload: { x: 1, y: 2 },
+          },
+          {
+            kind: "resize_widget",
+            widgetId: "widget-001",
+            payload: { width: 4, height: 3 },
+          },
         ],
       },
       { ifMatch: '"workspace-etag-v1"', idempotencyKey: "idem-layout-1" },
       BASE,
     );
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace%2F001/layout`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace%2F001/layout`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("PATCH");
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
-      operations: [
-        { kind: "move_widget", widgetId: "widget-001", payload: { x: 1, y: 2 } },
-        { kind: "resize_widget", widgetId: "widget-001", payload: { width: 4, height: 3 } },
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({
+        operations: [
+          {
+            kind: "move_widget",
+            widgetId: "widget-001",
+            payload: { x: 1, y: 2 },
+          },
+          {
+            kind: "resize_widget",
+            widgetId: "widget-001",
+            payload: { width: 4, height: 3 },
+          },
+        ],
+      }),
+    );
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "If-Match"
       ],
-    }));
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["If-Match"]).toBe('"workspace-etag-v1"');
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-layout-1");
+    ).toBe('"workspace-etag-v1"');
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBe("idem-layout-1");
     expect(result.workspace.dashboardVersion).toBe(2);
     expect(result.etag).toBe('"workspace-etag-v2"');
     expect(result.versionId).toBe("version-002");
@@ -778,7 +1008,11 @@ describe("Trading Room workspace proposal routes", () => {
           },
         ],
       },
-      { id: "version-002", dashboardVersion: 2, changeSummary: "layout changed" },
+      {
+        id: "version-002",
+        dashboardVersion: 2,
+        changeSummary: "layout changed",
+      },
     ];
     const rollbackVersion = { id: "version-003", dashboardVersion: 3 };
     const fetchMock = vi
@@ -788,7 +1022,11 @@ describe("Trading Room workspace proposal routes", () => {
         ok(
           {
             data: {
-              workspace: { ...mockWorkspace, dashboardVersion: 3, generatedBy: "user_modified" },
+              workspace: {
+                ...mockWorkspace,
+                dashboardVersion: 3,
+                generatedBy: "user_modified",
+              },
               version: rollbackVersion,
               rollbackOfVersion: versions[0],
             },
@@ -800,10 +1038,15 @@ describe("Trading Room workspace proposal routes", () => {
       );
     globalThis.fetch = fetchMock;
 
-    const listedVersions = await listTradingRoomWorkspaceVersions("workspace-001", BASE);
+    const listedVersions = await listTradingRoomWorkspaceVersions(
+      "workspace-001",
+      BASE,
+    );
     expect(listedVersions).toHaveLength(2);
     expect(listedVersions[0].views[0].dataAvailability).toBe("unavailable");
-    expect(listedVersions[0].views[0].widgets[0].dataAvailability).toBe("complete");
+    expect(listedVersions[0].views[0].widgets[0].dataAvailability).toBe(
+      "complete",
+    );
     const result = await rollbackTradingRoomWorkspaceVersion(
       "workspace-001",
       "version-001",
@@ -812,14 +1055,32 @@ describe("Trading Room workspace proposal routes", () => {
       BASE,
     );
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace-001/versions`);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace-001/versions`,
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["If-Match"]).toBeUndefined();
-    expect(fetchMock.mock.calls[1][0]).toBe(`${BASE}/bff/agora/trading-room/workspaces/workspace-001/versions/version-001/rollback`);
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "If-Match"
+      ],
+    ).toBeUndefined();
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      `${BASE}/bff/agora/trading-room/workspaces/workspace-001/versions/version-001/rollback`,
+    );
     expect(fetchMock.mock.calls[1][1].method).toBe("POST");
-    expect(fetchMock.mock.calls[1][1].body).toBe(JSON.stringify({ reason: "restore initial layout" }));
-    expect((fetchMock.mock.calls[1][1].headers as Record<string, string>)["If-Match"]).toBe('"workspace-etag-v2"');
-    expect((fetchMock.mock.calls[1][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-rollback-1");
+    expect(fetchMock.mock.calls[1][1].body).toBe(
+      JSON.stringify({ reason: "restore initial layout" }),
+    );
+    expect(
+      (fetchMock.mock.calls[1][1].headers as Record<string, string>)[
+        "If-Match"
+      ],
+    ).toBe('"workspace-etag-v2"');
+    expect(
+      (fetchMock.mock.calls[1][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBe("idem-rollback-1");
     expect(result.workspace.dashboardVersion).toBe(3);
     expect(result.version?.id).toBe("version-003");
     expect(result.etag).toBe('"workspace-etag-v3"');
@@ -828,13 +1089,23 @@ describe("Trading Room workspace proposal routes", () => {
   it("creates a widget revision proposal with proposedSpec and Idempotency-Key", async () => {
     const canonicalRevisionProposal = {
       ...mockWidgetRevisionProposal,
-      beforeSpec: { ...mockWidgetRevisionProposal.beforeSpec, dataAvailability: "full" },
-      proposedSpec: { ...mockWidgetRevisionProposal.proposedSpec, dataAvailability: "partial" },
+      beforeSpec: {
+        ...mockWidgetRevisionProposal.beforeSpec,
+        dataAvailability: "full",
+      },
+      proposedSpec: {
+        ...mockWidgetRevisionProposal.proposedSpec,
+        dataAvailability: "partial",
+      },
       dataAvailability: "missing",
     };
-    const fetchMock = vi.fn().mockResolvedValue(
-      ok({ data: canonicalRevisionProposal }, 201, { ETag: '"revision-etag-v1"' }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ data: canonicalRevisionProposal }, 201, {
+          ETag: '"revision-etag-v1"',
+        }),
+      );
     globalThis.fetch = fetchMock;
 
     const result = await createWidgetRevisionProposal(
@@ -856,16 +1127,26 @@ describe("Trading Room workspace proposal routes", () => {
       `${BASE}/bff/agora/trading-room/workspaces/workspace%2F001/widgets/widget%2F001/revision-proposals`,
     );
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
-      dataAvailability: "complete",
-      instruction: "改成表格",
-      proposedSpec: mockWidgetRevisionProposal.proposedSpec,
-      rationale: "Table is better for direct comparison.",
-      viewId: "overview",
-      warnings: [],
-    }));
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-revision-create-1");
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)["If-Match"]).toBeUndefined();
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({
+        dataAvailability: "complete",
+        instruction: "改成表格",
+        proposedSpec: mockWidgetRevisionProposal.proposedSpec,
+        rationale: "Table is better for direct comparison.",
+        viewId: "overview",
+        warnings: [],
+      }),
+    );
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "Idempotency-Key"
+      ],
+    ).toBe("idem-revision-create-1");
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Record<string, string>)[
+        "If-Match"
+      ],
+    ).toBeUndefined();
     expect(result.proposal.id).toBe("wrp-001");
     expect(result.proposal.dataAvailability).toBe("unavailable");
     expect(result.proposal.beforeSpec.dataAvailability).toBe("complete");
@@ -874,8 +1155,15 @@ describe("Trading Room workspace proposal routes", () => {
   });
 
   it("accepts a widget revision proposal with If-Match and keep-copy action", async () => {
-    const version = { id: "version-002", dashboardVersion: 2, changeLog: { sourceRevisionProposalId: "wrp-001" } };
-    const acceptedProposal = { ...mockWidgetRevisionProposal, status: "accepted" };
+    const version = {
+      id: "version-002",
+      dashboardVersion: 2,
+      changeLog: { sourceRevisionProposalId: "wrp-001" },
+    };
+    const acceptedProposal = {
+      ...mockWidgetRevisionProposal,
+      status: "accepted",
+    };
     const fetchMock = vi.fn().mockResolvedValue(
       ok(
         {
@@ -896,8 +1184,14 @@ describe("Trading Room workspace proposal routes", () => {
 
     const result = await acceptWidgetRevisionProposal(
       "wrp/001",
-      { acceptanceAction: "keep_original_add_modified_copy", copyWidgetId: "widget-001-copy" },
-      { ifMatch: '"workspace-etag-v1"', idempotencyKey: "idem-revision-accept-1" },
+      {
+        acceptanceAction: "keep_original_add_modified_copy",
+        copyWidgetId: "widget-001-copy",
+      },
+      {
+        ifMatch: '"workspace-etag-v1"',
+        idempotencyKey: "idem-revision-accept-1",
+      },
       BASE,
     );
 
@@ -905,11 +1199,16 @@ describe("Trading Room workspace proposal routes", () => {
       `${BASE}/bff/agora/trading-room/widget-revision-proposals/wrp%2F001/accept`,
     );
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
-      acceptanceAction: "keep_original_add_modified_copy",
-      copyWidgetId: "widget-001-copy",
-    }));
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({
+        acceptanceAction: "keep_original_add_modified_copy",
+        copyWidgetId: "widget-001-copy",
+      }),
+    );
+    const headers = fetchMock.mock.calls[0][1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["If-Match"]).toBe('"workspace-etag-v1"');
     expect(headers["Idempotency-Key"]).toBe("idem-revision-accept-1");
     expect(result.workspace.dashboardVersion).toBe(2);
@@ -922,7 +1221,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 403 widget revision creation failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"));
+      .mockResolvedValue(
+        bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -949,7 +1250,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 404 widget revision creation failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(404, "RESOURCE_NOT_FOUND", "widget missing"));
+      .mockResolvedValue(
+        bffErrorResponse(404, "RESOURCE_NOT_FOUND", "widget missing"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -976,7 +1279,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 412 widget revision accept failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(412, "STATE_CONFLICT", "workspace etag stale"));
+      .mockResolvedValue(
+        bffErrorResponse(412, "STATE_CONFLICT", "workspace etag stale"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -995,7 +1300,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 422 widget revision validation failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(422, "VALIDATION_FAILED", "invalid widget spec"));
+      .mockResolvedValue(
+        bffErrorResponse(422, "VALIDATION_FAILED", "invalid widget spec"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1020,7 +1327,9 @@ describe("Trading Room workspace proposal routes", () => {
   });
 
   it("fails closed on malformed widget revision proposal envelopes", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(ok({ data: { id: "wrp-001" } }, 201));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(ok({ data: { id: "wrp-001" } }, 201));
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1047,7 +1356,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 403 proposal creation failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"));
+      .mockResolvedValue(
+        bffErrorResponse(403, "TENANT_SCOPE_MISMATCH", "wrong tenant"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1066,10 +1377,14 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 409 proposal read failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(409, "STATE_CONFLICT", "proposal state changed"));
+      .mockResolvedValue(
+        bffErrorResponse(409, "STATE_CONFLICT", "proposal state changed"),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspaceProposal("strat-001", "proposal-001", BASE)).rejects.toMatchObject({
+    await expect(
+      getTradingRoomWorkspaceProposal("strat-001", "proposal-001", BASE),
+    ).rejects.toMatchObject({
       code: "STATE_CONFLICT",
       status: 409,
     });
@@ -1078,7 +1393,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 412 accept failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(412, "STATE_CONFLICT", "proposal stale"));
+      .mockResolvedValue(
+        bffErrorResponse(412, "STATE_CONFLICT", "proposal stale"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1098,7 +1415,9 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 422 accept validation failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(422, "VALIDATION_FAILED", "proposal invalid"));
+      .mockResolvedValue(
+        bffErrorResponse(422, "VALIDATION_FAILED", "proposal invalid"),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1118,10 +1437,18 @@ describe("Trading Room workspace proposal routes", () => {
   it("preserves typed 501 workspace load capability failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(bffErrorResponse(501, "CAPABILITY_MISSING", "workspace route not ready"));
+      .mockResolvedValue(
+        bffErrorResponse(
+          501,
+          "CAPABILITY_MISSING",
+          "workspace route not ready",
+        ),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toMatchObject({
+    await expect(
+      getTradingRoomWorkspace("workspace-001", BASE),
+    ).rejects.toMatchObject({
       code: "CAPABILITY_MISSING",
       status: 501,
     });
@@ -1130,11 +1457,19 @@ describe("Trading Room workspace proposal routes", () => {
   it("creates a typed fallback BffError when BFF omits an error envelope", async () => {
     const fetchMock = vi
       .fn()
-      .mockImplementation(() => Promise.resolve(new Response("capability route not implemented", { status: 501 })));
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response("capability route not implemented", { status: 501 }),
+        ),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toBeInstanceOf(BffError);
-    await expect(getTradingRoomWorkspace("workspace-001", BASE)).rejects.toMatchObject({
+    await expect(
+      getTradingRoomWorkspace("workspace-001", BASE),
+    ).rejects.toBeInstanceOf(BffError);
+    await expect(
+      getTradingRoomWorkspace("workspace-001", BASE),
+    ).rejects.toMatchObject({
       code: "CAPABILITY_MISSING",
       status: 501,
     });
@@ -1145,31 +1480,39 @@ describe("Trading Room workspace proposal routes", () => {
 
 describe("error handling", () => {
   it("decideOnEvent throws on 412 with message from error envelope", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: "etag mismatch" } }),
-        { status: 412, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "etag mismatch" } }), {
+          status: 412,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
       decideOnEvent(
         "evt-001",
         { decision: "approve" },
-        { ifMatch: '"stale-etag"', idempotencyKey: "idem-1", requestId: "req-1" },
+        {
+          ifMatch: '"stale-etag"',
+          idempotencyKey: "idem-1",
+          requestId: "req-1",
+        },
         BASE,
       ),
     ).rejects.toThrow("etag mismatch");
   });
 
   it("decideOnEvent throws on 409 (idempotency replay conflict)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: "idempotency key conflict" } }),
-        { status: 409, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: "idempotency key conflict" } }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      );
     globalThis.fetch = fetchMock;
 
     await expect(
@@ -1183,14 +1526,18 @@ describe("error handling", () => {
   });
 
   it("listDecisionEvents throws on non-2xx", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: "unauthorized" } }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "unauthorized" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     globalThis.fetch = fetchMock;
 
-    await expect(listDecisionEvents(undefined, BASE)).rejects.toThrow("unauthorized");
+    await expect(listDecisionEvents(undefined, BASE)).rejects.toThrow(
+      "unauthorized",
+    );
   });
 });
