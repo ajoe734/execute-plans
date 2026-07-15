@@ -26,6 +26,9 @@ const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const RELEASE_STRICT = process.env.PANTHEON_PROBE_RELEASE_STRICT === "1";
 const LEGACY_RELEASE_COMPAT =
   process.env.PANTHEON_PROBE_LEGACY_RELEASE_COMPAT === "1";
+const LEGACY_ROLLBACK_TARGET_COMPAT =
+  LEGACY_RELEASE_COMPAT &&
+  process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT === "1";
 const EXPECTED_FE_SHA = String(
   process.env.PANTHEON_EXPECTED_FE_SHA || "",
 ).trim();
@@ -2106,6 +2109,7 @@ async function runProbe() {
         checks: { routeNotApplicable: true },
         failures: [],
       };
+  const noEmbeddedDevBearerRequired = !LEGACY_ROLLBACK_TARGET_COMPAT;
   const basePass =
     shellOk &&
     publicHealthOk &&
@@ -2114,7 +2118,7 @@ async function runProbe() {
     observedProtectedResponsesOk &&
     noAuthorizationRequests &&
     browserBffMethodPolicy.pass &&
-    noEmbeddedDevBearer &&
+    (!noEmbeddedDevBearerRequired || noEmbeddedDevBearer) &&
     personaFleetSafety.pass &&
     rootRendered &&
     pageErrors.length === 0 &&
@@ -2171,6 +2175,8 @@ async function runProbe() {
     "navigation waitUntil: " + NAVIGATION_WAIT_UNTIL,
     "release strict: " + RELEASE_STRICT,
     "legacy release compatibility: " + LEGACY_RELEASE_COMPAT,
+    "legacy rollback target compatibility: " +
+      LEGACY_ROLLBACK_TARGET_COMPAT,
     "candidate directory routed: " + Boolean(candidateResolver),
     "candidate source scan: " + CANDIDATE_SOURCE_SCAN_MODE,
     "core waitForResponse paths: " + CORE_BFF_PATHS.join(", "),
@@ -2197,6 +2203,7 @@ async function runProbe() {
     "- browser BFF requests use only GET/HEAD: " + browserBffMethodPolicy.pass,
     "- browser BFF write-method request count: " +
       browserBffMethodPolicy.writeRequestCount,
+    "- embedded dev bearer check required: " + noEmbeddedDevBearerRequired,
     "- bundle contains no embedded dev bearer literal: " + noEmbeddedDevBearer,
     "- contains intended BFF URL in html/bundle: " + containsBffStatic,
     "- intended BFF runtime request count: " + requests.length,
@@ -2403,6 +2410,7 @@ async function runProbe() {
         candidateDirectoryRouted: Boolean(candidateResolver),
         candidateSourceScan: CANDIDATE_SOURCE_SCAN_MODE,
         legacyReleaseCompatibility: LEGACY_RELEASE_COMPAT,
+        legacyRollbackTargetCompatibility: LEGACY_ROLLBACK_TARGET_COMPAT,
       },
       expectations: {
         frontendSha: canonicalizeCommitSha(EXPECTED_FE_SHA),
@@ -2417,6 +2425,7 @@ async function runProbe() {
           observedProtectedResponsesOk,
           noAuthorizationRequests,
           noBrowserWriteMethods: browserBffMethodPolicy.pass,
+          noEmbeddedDevBearerRequired,
           noEmbeddedDevBearer,
           personaFleetSafetyPassed: personaFleetSafety.pass,
           applicationRootRendered: rootRendered,

@@ -663,6 +663,7 @@ describe("hosted browser strict release policy", () => {
     );
 
     expect(source).toContain("PANTHEON_PROBE_RELEASE_STRICT");
+    expect(source).toContain("PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT");
     expect(source).toContain("PANTHEON_EXPECTED_FE_SHA");
     expect(source).toContain("PANTHEON_EXPECTED_ARTIFACT_DIGEST");
     expect(source).toContain("PANTHEON_PROBE_JSON_OUT");
@@ -680,6 +681,7 @@ describe("hosted browser strict release policy", () => {
     expect(source).toContain('element.matches(":focus-visible")');
     expect(source).toContain("HOSTED_UX_PERFORMANCE_BUDGETS");
     expect(source).toContain("personaFleetSafety.pass &&");
+    expect(source).toContain("!noEmbeddedDevBearerRequired || noEmbeddedDevBearer");
     expect(source).toContain(
       "personaFleetSafetyPassed: personaFleetSafety.pass",
     );

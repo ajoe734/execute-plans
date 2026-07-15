@@ -262,11 +262,16 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployScript).toContain('PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"');
     expect(deployScript).toContain(
+      'PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)"',
+    );
+    expect(deployScript).toContain(
       'PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}"',
     );
     expect(deployScript).toContain(
-      'run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" true "${legacy_compat}" loaded',
+      'run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" "${probe_strict}" "${legacy_compat}" loaded "${rollback_compat}"',
     );
+    expect(deployScript).toContain('probe_strict=false');
+    expect(deployScript).toContain('rollback_compat=true');
     expect(deployScript).toContain(
       'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
     );

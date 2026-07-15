@@ -255,6 +255,16 @@ fs.appendFileSync(
   `probe-source-scan:${phase}:${process.env.PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN || "unset"}\n`,
   "utf8",
 );
+fs.appendFileSync(
+  log,
+  `probe-strict:${phase}:${process.env.PANTHEON_PROBE_RELEASE_STRICT || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-legacy-rollback-compat:${phase}:${process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT || "unset"}\n`,
+  "utf8",
+);
 if (phase === "recovery_rollback") {
   const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
   const probeIndex = calls.lastIndexOf(`probe:${phase}`);
@@ -566,6 +576,20 @@ assert_probe_source_scan() {
     show_deploy_failure "expected probe phase ${phase} to use source scan ${expected}"
 }
 
+assert_probe_strict() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-strict:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use strict mode ${expected}"
+}
+
+assert_probe_legacy_rollback_compat() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-legacy-rollback-compat:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use legacy rollback compatibility ${expected}"
+}
+
 assert_summary_outcome() {
   local expected="$1"
   local observed
@@ -615,8 +639,12 @@ test_valid_candidate_success() {
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
   assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
   assert_probe_called candidate_pre_switch
   assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_probe_not_called rollback
   grep -Fxq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
@@ -640,8 +668,12 @@ test_valid_candidate_success() {
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
   assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
   assert_probe_called candidate_pre_switch
   assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -666,8 +698,12 @@ test_valid_candidate_success() {
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
   assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
   assert_probe_called candidate_pre_switch
   assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -680,8 +716,12 @@ test_valid_candidate_success() {
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
   assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 1
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 0
   assert_probe_called candidate_pre_switch
   assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
