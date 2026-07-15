@@ -28,6 +28,8 @@ describe("PM12 paths", () => {
     expect(paths.mgmtQuarterlyRanking("2026-Q2")).toContain("quarter=2026-Q2");
     expect(paths.mgmtQuarterlyRanking("2026-Q2", { pageSize: 200, persona: "persona/live alpha" }))
       .toBe("/bff/management/quarterly-ranking?quarter=2026-Q2&page_size=200&persona=persona%2Flive%20alpha");
+    expect(paths.mgmtQuarterlyRanking(undefined, { pageSize: 200, persona: "persona/live alpha" }))
+      .toBe("/bff/management/quarterly-ranking?page_size=200&persona=persona%2Flive%20alpha");
     expect(paths.mgmtQuarterlyRankingFormula()).toBe("/bff/management/quarterly-ranking/formula");
     expect(paths.mgmtQuarterlyRankingRecommendationSubmit("pm12-rec-1"))
       .toBe("/bff/management/quarterly-ranking/recommendations/pm12-rec-1/submit");

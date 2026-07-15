@@ -122,7 +122,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   // Fetch Live Data
   const { data: rows, loading: rowsLoading } = useV5Live(
     () => mgmt.quarterlyRanking.listLiveOnly(
-      currentQuarter,
+      personaFocus ? undefined : currentQuarter,
       personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE, persona: personaFocus } : undefined,
     ),
     [currentQuarter, personaFocus],
