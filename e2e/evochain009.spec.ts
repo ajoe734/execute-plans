@@ -16,11 +16,27 @@ type FleetPersona = {
 };
 
 type EvolutionJournalItem = {
+  id?: string;
   target?: { id?: string };
+  route?: string;
 };
 
 type FleetResponseBody = { data?: { items?: FleetPersona[] } };
-type JournalResponseBody = { data?: { items?: EvolutionJournalItem[] } } | EvolutionJournalItem[];
+
+type JournalEnvelope = {
+  data?: {
+    id?: string;
+    items?: EvolutionJournalItem[];
+  };
+  page_info?: {
+    next_page_token?: string | null;
+    total?: number;
+    page_size?: number;
+  };
+  meta?: Record<string, unknown>;
+};
+
+type JournalResponseBody = JournalEnvelope | EvolutionJournalItem[];
 
 // Fetches and parses a BFF JSON endpoint with bounded retry: hosted-run flakiness
 // (cold-start 5xx, transiently empty/malformed bodies) previously surfaced as an
@@ -69,26 +85,63 @@ async function fetchJsonWithRetry<T>(
 }
 
 // Navigates and waits for the target region, retrying the navigation itself
-// (not just the assertion) so a single slow/failed hosted page load doesn't
-// fail the whole run outright.
+// within a 60s total budget.
 async function gotoWithRegionRetry(
   page: Page,
   url: string,
   region: Locator,
-  { attempts = 2, timeoutMs = 20000 }: { attempts?: number; timeoutMs?: number } = {},
+  { attempts = 3, timeoutMs = 20000 }: { attempts?: number; timeoutMs?: number } = {},
 ): Promise<void> {
+  const startTime = Date.now();
+  const totalBudget = 60000;
+
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    await page.goto(url, { waitUntil: "domcontentloaded" });
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= totalBudget) {
+      throw new Error(`Navigation failed: 60s budget exceeded.`);
+    }
+
+    const remainingBudget = totalBudget - elapsed;
+    const gotoTimeout = Math.min(20000, remainingBudget);
+
     try {
-      await expect(region).toBeVisible({ timeout: timeoutMs });
+      console.log(`[Navigation Attempt ${attempt}/${attempts}] Navigating to ${url} with timeout ${gotoTimeout}ms`);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: gotoTimeout });
+
+      const expectTimeout = Math.min(timeoutMs, totalBudget - (Date.now() - startTime));
+      if (expectTimeout <= 0) {
+        throw new Error(`Navigation failed: 60s budget exceeded before checking visibility.`);
+      }
+
+      await expect(region).toBeVisible({ timeout: expectTimeout });
       return;
     } catch (err) {
-      console.log(`[Navigation Retry ${attempt}/${attempts}] region not visible: ${(err as Error).message}`);
+      console.log(`[Navigation Retry ${attempt}/${attempts}] failed: ${(err as Error).message}`);
       if (attempt === attempts) {
         throw err;
       }
+      await page.waitForTimeout(2000);
     }
   }
+}
+
+function doesJournalItemReferencePersona(item: EvolutionJournalItem, personaId: string): boolean {
+  const targetId = item.target?.id;
+  if (targetId && (targetId === personaId || targetId.includes(personaId))) {
+    return true;
+  }
+  if (item.route && item.route.includes(personaId)) {
+    return true;
+  }
+  try {
+    const serialized = JSON.stringify(item);
+    if (serialized.includes(personaId)) {
+      return true;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return false;
 }
 
 test("capture evolution journal fallback-state hosted evidence", async ({ page, request }) => {
@@ -99,13 +152,16 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
     console.log(`[Browser PageError] ${err.message}`);
   });
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  const projectName = test.info().project.name ? test.info().project.name.toLowerCase() : "";
+  const isMobile = projectName.includes("mobile") || (page.viewportSize()?.width ? page.viewportSize()!.width < 768 : false);
+  if (!isMobile) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+
   await installOidcDevLogin(page, { tenantId: "pantheon-dev", goto: false });
   await installQuietEventSource(page);
 
   // Fetch live fleet personas and evolution journal entries with bounded retry
-  // and status/body validation so a transient hosted-run hiccup produces a
-  // clear diagnostic failure instead of a silent empty-array fallback.
   const headers = authHeaders({ tenantId: "pantheon-dev" });
   const fleetData = await fetchJsonWithRetry<FleetResponseBody>(
     request,
@@ -113,41 +169,86 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
     headers,
     "persona-fleet fetch",
     {
-      validate: (data) => Array.isArray(data?.data?.items) && data.data.items.length > 0,
+      validate: (data) => data && typeof data === "object" && data.data && Array.isArray(data.data.items) && data.data.items.length > 0,
     },
   );
   const fleetItems: FleetPersona[] = fleetData.data?.items ?? [];
 
-  const journalData = await fetchJsonWithRetry<JournalResponseBody>(
-    request,
-    `${BFF_BASE}/bff/management/evolution-journal`,
-    headers,
-    "evolution-journal fetch",
-  );
-  const journalItems: EvolutionJournalItem[] = Array.isArray(journalData)
-    ? journalData
-    : journalData.data?.items ?? [];
+  // Fetch all pages of the evolution journal (to inspect all pages)
+  const journalItems: EvolutionJournalItem[] = [];
+  let nextPageToken: string | null | undefined = undefined;
+
+  do {
+    const url = `${BFF_BASE}/bff/management/evolution-journal` +
+      (nextPageToken ? `?page_token=${encodeURIComponent(nextPageToken)}` : "");
+
+    const journalPage = await fetchJsonWithRetry<JournalResponseBody>(
+      request,
+      url,
+      headers,
+      "evolution-journal fetch",
+      {
+        validate: (data) => {
+          if (!data) return false;
+          if (Array.isArray(data)) return true;
+          return typeof data === "object" && (!data.data || Array.isArray(data.data.items));
+        },
+      }
+    );
+
+    if (Array.isArray(journalPage)) {
+      journalItems.push(...journalPage);
+      nextPageToken = null;
+    } else {
+      const items = journalPage?.data?.items ?? [];
+      journalItems.push(...items);
+      nextPageToken = journalPage?.page_info?.next_page_token;
+    }
+  } while (nextPageToken);
 
   // Find a persona ID in the fleet that does not have any evolution journal entry (otherwise fail with diagnostics)
-  const journalPersonaIds = new Set(
-    journalItems
-      .map((item) => item.target?.id)
-      .filter(Boolean)
-  );
+  let targetPersona: FleetPersona | undefined = undefined;
 
-  const targetPersona = fleetItems.find((item) => {
+  for (const item of fleetItems) {
     const id = item.id ?? item.persona_id ?? item.personaId;
-    return id && !journalPersonaIds.has(id);
-  });
+    if (!id) continue;
+
+    // Substring matching of the persona ID against the journal items
+    const hasJournalEntry = journalItems.some(jItem => doesJournalItemReferencePersona(jItem, id));
+    if (!hasJournalEntry) {
+      // Query candidate persona filter on the BFF to confirm it's truly empty (double check/fail closed)
+      try {
+        const filterUrl = `${BFF_BASE}/bff/management/evolution-journal?persona=${encodeURIComponent(id)}`;
+        const filterData = await fetchJsonWithRetry<JournalResponseBody>(
+          request,
+          filterUrl,
+          headers,
+          `evolution-journal filtered fetch for ${id}`,
+          {
+            validate: (data) => {
+              if (!data) return false;
+              if (Array.isArray(data)) return true;
+              return typeof data === "object" && (!data.data || Array.isArray(data.data.items));
+            },
+          }
+        );
+        const filteredItems = Array.isArray(filterData) ? filterData : (filterData?.data?.items ?? []);
+        if (filteredItems.length === 0) {
+          targetPersona = item;
+          break;
+        } else {
+          console.log(`BFF query returned ${filteredItems.length} items for persona ${id} despite not being matched in all-pages fetch.`);
+        }
+      } catch (err) {
+        console.log(`Failed to verify filter for persona ${id}: ${(err as Error).message}`);
+      }
+    }
+  }
 
   if (!targetPersona) {
-    const allPersonaIds = fleetItems.map((item) => item.id ?? item.persona_id ?? item.personaId).join(", ");
-    const targetIds = Array.from(journalPersonaIds).join(", ");
     throw new Error(
-      `No persona found without journal entries. ` +
-      `Available fleet personas: [${allPersonaIds}]. ` +
-      `Journal targets: [${targetIds}]. ` +
-      `Cannot execute fallback-state assertion deterministically.`
+      `No persona found without journal entries (failed closed). ` +
+      `Tested ${fleetItems.length} fleet personas against ${journalItems.length} journal items.`
     );
   }
 
@@ -208,7 +309,8 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   // Take screenshot of the entire page and save to the documented fallback-state evidence path
   // in the pantheon repo. This is deliberately a DISTINCT file from the formal-state evidence
   // (evolution_journal_hosted_evidence.png) so this fallback capture never clobbers it.
-  const screenshotPath = "/tmp/pantheon-worker-worktrees/pantheon/evochain-009/docs/bff/execution-tasks/2026-07-13-evolution-journal-producer-gap/evolution_journal_hosted_evidence_fallback.png";
+  const suffix = projectName.includes("mobile") ? "_mobile" : "";
+  const screenshotPath = `/tmp/pantheon-worker-worktrees/pantheon/evochain-009/docs/bff/execution-tasks/2026-07-13-evolution-journal-producer-gap/evolution_journal_hosted_evidence_fallback${suffix}.png`;
   await page.screenshot({
     path: screenshotPath,
     fullPage: true
