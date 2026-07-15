@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { installOidcDevLogin, authHeaders } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
@@ -18,6 +19,78 @@ type EvolutionJournalItem = {
   target?: { id?: string };
 };
 
+type FleetResponseBody = { data?: { items?: FleetPersona[] } };
+type JournalResponseBody = { data?: { items?: EvolutionJournalItem[] } } | EvolutionJournalItem[];
+
+// Fetches and parses a BFF JSON endpoint with bounded retry: hosted-run flakiness
+// (cold-start 5xx, transiently empty/malformed bodies) previously surfaced as an
+// opaque JSON.parse crash instead of a diagnosable failure, especially on the
+// mobile-chromium project.
+async function fetchJsonWithRetry<T>(
+  request: APIRequestContext,
+  url: string,
+  headers: Record<string, string>,
+  label: string,
+  { retries = 3, delayMs = 2000, validate }: { retries?: number; delayMs?: number; validate?: (data: T) => boolean } = {},
+): Promise<T> {
+  let lastError = "unknown error";
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await request.get(url, { headers });
+      const status = response.status();
+      const bodyText = await response.text();
+
+      if (!response.ok()) {
+        lastError = `${label} returned HTTP ${status}: ${bodyText.slice(0, 500)}`;
+      } else {
+        try {
+          const parsed = JSON.parse(bodyText) as T;
+          if (validate && !validate(parsed)) {
+            lastError = `${label} returned HTTP ${status} but validation failed: ${bodyText.slice(0, 500)}`;
+          } else {
+            return parsed;
+          }
+        } catch (parseError) {
+          lastError = `${label} returned HTTP ${status} but body failed to parse as JSON (${(parseError as Error).message}): ${bodyText.slice(0, 500)}`;
+        }
+      }
+    } catch (requestError) {
+      lastError = `${label} request threw: ${(requestError as Error).message}`;
+    }
+
+    console.log(`[BFF Retry ${attempt}/${retries}] ${lastError}`);
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error(`${label} failed after ${retries} attempts. Last error: ${lastError}`);
+}
+
+// Navigates and waits for the target region, retrying the navigation itself
+// (not just the assertion) so a single slow/failed hosted page load doesn't
+// fail the whole run outright.
+async function gotoWithRegionRetry(
+  page: Page,
+  url: string,
+  region: Locator,
+  { attempts = 2, timeoutMs = 20000 }: { attempts?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    try {
+      await expect(region).toBeVisible({ timeout: timeoutMs });
+      return;
+    } catch (err) {
+      console.log(`[Navigation Retry ${attempt}/${attempts}] region not visible: ${(err as Error).message}`);
+      if (attempt === attempts) {
+        throw err;
+      }
+    }
+  }
+}
+
 test("capture evolution journal fallback-state hosted evidence", async ({ page, request }) => {
   page.on("console", (msg) => {
     console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`);
@@ -30,47 +103,67 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   await installOidcDevLogin(page, { tenantId: "pantheon-dev", goto: false });
   await installQuietEventSource(page);
 
-  // Fetch live fleet personas and evolution journal entries
+  // Fetch live fleet personas and evolution journal entries with bounded retry
+  // and status/body validation so a transient hosted-run hiccup produces a
+  // clear diagnostic failure instead of a silent empty-array fallback.
   const headers = authHeaders({ tenantId: "pantheon-dev" });
-  const fleetResponse = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, { headers });
-  const fleetData = await fleetResponse.json();
-  const fleetItems = (fleetData.data?.items ?? []) as FleetPersona[];
+  const fleetData = await fetchJsonWithRetry<FleetResponseBody>(
+    request,
+    `${BFF_BASE}/bff/management/persona-fleet?page_size=100`,
+    headers,
+    "persona-fleet fetch",
+    {
+      validate: (data) => Array.isArray(data?.data?.items) && data.data.items.length > 0,
+    },
+  );
+  const fleetItems: FleetPersona[] = fleetData.data?.items ?? [];
 
-  const journalResponse = await request.get(`${BFF_BASE}/bff/management/evolution-journal`, { headers });
-  const journalData = await journalResponse.json();
-  const journalItems = (journalData.data?.items ?? journalData ?? []) as EvolutionJournalItem[];
+  const journalData = await fetchJsonWithRetry<JournalResponseBody>(
+    request,
+    `${BFF_BASE}/bff/management/evolution-journal`,
+    headers,
+    "evolution-journal fetch",
+  );
+  const journalItems: EvolutionJournalItem[] = Array.isArray(journalData)
+    ? journalData
+    : journalData.data?.items ?? [];
 
-  // Find a persona ID in the fleet that does not have any evolution journal entry (or fallback to any persona in the fleet)
+  // Find a persona ID in the fleet that does not have any evolution journal entry (otherwise fail with diagnostics)
   const journalPersonaIds = new Set(
     journalItems
       .map((item) => item.target?.id)
       .filter(Boolean)
   );
 
-  let targetPersona = fleetItems.find((item) => {
+  const targetPersona = fleetItems.find((item) => {
     const id = item.id ?? item.persona_id ?? item.personaId;
     return id && !journalPersonaIds.has(id);
   });
 
-  if (!targetPersona && fleetItems.length > 0) {
-    targetPersona = fleetItems[0];
+  if (!targetPersona) {
+    const allPersonaIds = fleetItems.map((item) => item.id ?? item.persona_id ?? item.personaId).join(", ");
+    const targetIds = Array.from(journalPersonaIds).join(", ");
+    throw new Error(
+      `No persona found without journal entries. ` +
+      `Available fleet personas: [${allPersonaIds}]. ` +
+      `Journal targets: [${targetIds}]. ` +
+      `Cannot execute fallback-state assertion deterministically.`
+    );
   }
 
-  const personaId = targetPersona
-    ? (targetPersona.id ?? targetPersona.persona_id ?? targetPersona.personaId)
-    : "persona-20260528-04688755";
-  const personaName = targetPersona
-    ? (targetPersona.name ?? targetPersona.personaName ?? targetPersona.persona_name)
-    : "Test Persona";
+  const personaId = targetPersona.id ?? targetPersona.persona_id ?? targetPersona.personaId;
+  const personaName = targetPersona.name ?? targetPersona.personaName ?? targetPersona.persona_name;
 
   console.log(`Using target persona ID: ${personaId} (${personaName})`);
 
-  // Navigate to the evolution journal with the persona parameter
-  await page.goto(`${FE_BASE}/management/evolution-journal?persona=${encodeURIComponent(personaId)}`);
-
-  // Wait for the region to render
+  // Navigate to the evolution journal with the persona parameter, retrying the
+  // navigation (not just the assertion) if the region fails to render.
   const region = page.getByRole('region', { name: /演化日誌|Evolution Journal/i });
-  await expect(region).toBeVisible({ timeout: 20000 });
+  await gotoWithRegionRetry(
+    page,
+    `${FE_BASE}/management/evolution-journal?persona=${encodeURIComponent(personaId)}`,
+    region,
+  );
 
   // Wait for the loading placeholder to clear (bounds the positive assertions
   // below to the actually-loaded fallback card, instead of a blind timeout
