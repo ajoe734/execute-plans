@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
 import { mkdirSync } from "node:fs";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
@@ -380,7 +380,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await installOidcDevLogin(page, {
       goto: false,
       roles: ["operator", "reviewer", "approver"],
-      tenantId: "pantheon-dev"
+      tenantId: "pantheon-dev",
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
   });
 

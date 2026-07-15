@@ -1,18 +1,23 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
 const deployScript = readFileSync(deployScriptPath, "utf8");
-const localEnv = readFileSync(resolve(root, ".env"), "utf8");
+const localEnvPath = resolve(root, ".env");
+const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
 const integrationWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
   "utf8",
 );
 const deployWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-dev-fe-deploy.yml"),
+  "utf8",
+);
+const branchWorkflow = readFileSync(
+  resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
 const hostedPersonaSpec = readFileSync(
@@ -34,8 +39,11 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
     encoding: "utf8",
     env: {
       ...process.env,
+      GITHUB_EVENT_NAME: "",
       PANTHEON_DEPLOY_ALLOW_DIRTY: "true",
       VITE_BFF_DEV_BEARER_TOKEN: "",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_deploy_test",
+      VITE_SUPABASE_URL: "https://deploy-test.supabase.co",
       ...extraEnv,
     },
   });
@@ -82,8 +90,37 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     )).toHaveLength(2);
     expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
-    expect(localEnv).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
-    expect(localEnv).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(existsSync(localEnvPath)).toBe(false);
+    expect(gitignore).toMatch(/^\.env\*$/mu);
+    expect(gitignore).toMatch(/^!\.env\*\.example$/mu);
+  });
+
+  it("injects public Supabase config explicitly and fails closed when it is missing", () => {
+    expect(deployScript).toContain('SUPABASE_URL="${VITE_SUPABASE_URL:-}"');
+    expect(deployScript).toContain(
+      'SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-}"',
+    );
+    expect(deployScript).toContain(
+      'VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"',
+    );
+    for (const workflow of [branchWorkflow, deployWorkflow, integrationWorkflow]) {
+      expect(workflow).toContain(
+        'VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}',
+      );
+      expect(workflow).toContain(
+        'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
+      );
+    }
+    expect(deployWorkflow).not.toContain("PANTHEON_HOSTED_BROWSER_BEARER_TOKEN");
+
+    const result = rejectedDeploy({
+      VITE_SUPABASE_PUBLISHABLE_KEY: "",
+      VITE_SUPABASE_URL: "",
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(
+      /VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required/,
+    );
   });
 
   it("requires explicit BFF provenance for manual final-proof deployments", () => {
@@ -146,6 +183,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
     expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
     expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("BROWSER_AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("window.sessionStorage.setItem");
+    expect(hostedBrowserProbe).toContain('page.on("pageerror"');
+    expect(hostedBrowserProbe).toContain("rootRendered");
+    expect(hostedBrowserProbe).toContain("pageErrors.length === 0");
+    expect(hostedBrowserProbe).toContain(
+      "candidate.origin !== BFF_TARGET.origin",
+    );
+    expect(hostedBrowserProbe).not.toContain("url.startsWith(BFF_BASE)");
     expect(deployScript).toContain(
       'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}"',
     );

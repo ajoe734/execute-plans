@@ -1,9 +1,12 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import { bearerHeader, installOidcDevLogin } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const HOSTED = process.env.PANTHEON_HOSTED_E2E === "1";
 const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const AUTH_TOKEN = process.env.BFF_AUTH_TOKEN
+  ?? process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN
+  ?? "";
 
 type Holding = {
   holding_id: string;
@@ -52,14 +55,22 @@ for (const viewport of [
 ]) {
   test(`hosted Portfolio Book workflow preserves live context on ${viewport.name}`, async ({ page, request }, testInfo) => {
     test.skip(!HOSTED, "Set PANTHEON_HOSTED_E2E=1 to run against hosted dev.");
+    expect(
+      AUTH_TOKEN,
+      "Hosted Portfolio E2E requires an explicit short-lived BFF_AUTH_TOKEN",
+    ).not.toBe("");
     await page.setViewportSize(viewport);
-    await installOidcDevLogin(page, { tenantId: "pantheon-dev", goto: false });
+    await installOidcDevLogin(page, {
+      tenantId: "pantheon-dev",
+      goto: false,
+      token: AUTH_TOKEN,
+    });
     await installQuietEventSource(page);
     const failures = await captureFailures(page);
 
     const apiResponse = await request.get(`${BFF_BASE}/bff/management/portfolio-book/holdings`, {
       headers: {
-        Authorization: "Bearer op-fe-gate:operator,reviewer,approver:mfa",
+        Authorization: bearerHeader(AUTH_TOKEN),
         "X-Tenant-Id": "pantheon-dev",
       },
     });

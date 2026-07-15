@@ -70,13 +70,25 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     expect(h["X-Tenant-Id"]).toBeUndefined();
   });
 
-  it("injects non-secret dev bearer fallback only in live mode", () => {
+  it("injects only the canonical public viewer fallback in live mode", () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:viewer");
 
     const h = buildHeaders({ method: "GET" });
 
-    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
+    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:viewer");
+  });
+
+  it("does not inject a privileged public build fallback", () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv(
+      "VITE_BFF_DEV_BEARER_TOKEN",
+      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair",
+    );
+
+    const h = buildHeaders({ method: "GET" });
+
+    expect(h["Authorization"]).toBeUndefined();
   });
 
   it("does not inject dev bearer fallback in mock mode", () => {

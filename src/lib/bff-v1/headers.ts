@@ -10,6 +10,8 @@
 // real credentials. Live deployments register real providers via
 // `setAuthProvider({ getToken, getTenantId })`.
 
+import { validatePublicBuildBearerToken } from "@/config/publicBuildAuth";
+
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function isMutation(method: string): boolean {
@@ -107,7 +109,11 @@ function devBearerTokenFromEnv(): string | null {
       // ignore
     }
   }
-  return token?.trim() || null;
+  try {
+    return validatePublicBuildBearerToken(token) || null;
+  } catch {
+    return null;
+  }
 }
 
 const browserProvider: AuthProvider = {

@@ -248,6 +248,8 @@ run_deploy() {
     PANTHEON_DEV_FE_KEEP_RELEASES=8 \
     PANTHEON_DEV_FE_HOST=https://deploy.test \
     PANTHEON_BFF_BASE_URL=https://bff.test \
+    VITE_SUPABASE_URL=https://deploy-test.supabase.co \
+    VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_deploy_test \
     DEPLOY_TEST_BFF_COUNT_FILE="${case_root}/bff-version-count" \
     "$@" \
     bash "${DEPLOY_SCRIPT}"

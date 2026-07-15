@@ -326,14 +326,14 @@ describe("Authorization header forwarding", () => {
 
   it("listDecisionEvents uses the shared live dev bearer fallback when browser auth storage is empty", async () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "dev-live-token");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:viewer");
     const fetchMock = vi.fn().mockResolvedValue(ok({ items: [] }));
     globalThis.fetch = fetchMock;
 
     await listDecisionEvents(undefined, BASE);
 
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer dev-live-token");
+    expect(headers.Authorization).toBe("Bearer pantheon-dev-browser:viewer");
   });
 
   it("decideOnEvent forwards Authorization alongside If-Match/Idempotency-Key/X-Request-Id", async () => {

@@ -12,9 +12,23 @@
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer,approver:mfa";
+const CONFIGURED_FRONTEND_BASE_URL =
+  process.env.FRONTEND_BASE_URL ||
+  process.env.PANTHEON_FE_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  DEFAULT_FRONTEND_BASE_URL;
+const EXTERNAL_FIXTURE_TARGET = targetsExternalE2eEnvironment({
+  PANTHEON_FE_BASE_URL: CONFIGURED_FRONTEND_BASE_URL,
+});
+const FIXTURE_FRONTEND_BASE_URL = EXTERNAL_FIXTURE_TARGET
+  ? DEFAULT_FRONTEND_BASE_URL
+  : CONFIGURED_FRONTEND_BASE_URL;
 const SENTINEL_PATH = "/management/sentinel";
 const SENTINEL_FINDING_ID = "finding-b04-confirm-token";
 const TARGET_PERSONA_ID = "persona-b04-risk";
@@ -34,17 +48,7 @@ type RouteCalls = {
 };
 
 function frontendUrl(path = "/"): string {
-  const base =
-    process.env.FRONTEND_BASE_URL ||
-    process.env.PANTHEON_FE_BASE_URL ||
-    process.env.PLAYWRIGHT_BASE_URL ||
-    DEFAULT_FRONTEND_BASE_URL;
-  return `${base.replace(/\/$/, "")}${path}`;
-}
-
-function authToken(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token.slice("Bearer ".length) : token;
+  return `${FIXTURE_FRONTEND_BASE_URL.replace(/\/$/, "")}${path}`;
 }
 
 function nowIso(): string {
@@ -158,7 +162,7 @@ async function installB04Routes(page: Page): Promise<RouteCalls> {
     window.localStorage.setItem("pantheon.bff.bearerToken", token);
     window.sessionStorage.setItem("pantheon.integration.realWrites", "true");
     window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
-  }, authToken());
+  }, LOCAL_FIXTURE_AUTH_TOKEN);
 
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -306,6 +310,10 @@ async function expectNoMutation(calls: RouteCalls): Promise<void> {
 }
 
 test.describe("F05 Sentinel investigation workspace", () => {
+  test.skip(
+    EXTERNAL_FIXTURE_TARGET,
+    "F05 is a fully intercepted local fixture and never installs fixture auth on an external origin.",
+  );
   test("renders evidence, blast radius, and advisory recommendations without executable remediation", async ({
     page,
   }) => {

@@ -19,15 +19,17 @@
  *   PANTHEON_SSE_BROWSER_BFF_BASE_URL
  *     optional browser-observed SSE BFF base. Defaults to the direct BFF URL so
  *     this probe is not coupled to dev-server event-stream buffering.
- *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *   PANTHEON_BFF_OPERATOR_A_TOKEN, BFF_AUTH_TOKEN, or
+ *   PANTHEON_BFF_SMOKE_BEARER_TOKEN
+ *     required; use an explicit short-lived operator credential for the live
+ *     BFF contract. The RBAC token matrix may provide the operator token too.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
  *     default: strict
  */
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { roleTokenFromEnv } from "./helpers/auth";
+import { bearerHeader, roleTokenFromEnv } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -100,7 +102,12 @@ function bffBaseUrl(): string {
 }
 
 function authHeader(): string {
-  return `Bearer ${AUTH_TOKEN}`;
+  if (!AUTH_TOKEN) {
+    throw new Error(
+      "F01 live session contract requires an explicit short-lived operator token",
+    );
+  }
+  return bearerHeader(AUTH_TOKEN);
 }
 
 function strictFallbackMode(): string {
@@ -228,7 +235,6 @@ async function requestMeWithTransientRetry(
 }
 
 test.describe("F01 startup session", () => {
-  test.skip(!AUTH_TOKEN, "Requires an explicit or RBAC-matrix operator token.");
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
   }, testInfo) => {

@@ -9,7 +9,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { installOidcDevLogin } from "./helpers/auth";
+import { devLoginSession, installOidcDevLogin } from "./helpers/auth";
 
 const FE_BASE_URL = (
   process.env.AG_UIPOL_011_FE_BASE_URL ||
@@ -27,10 +27,27 @@ const EXPECTED_FE_SHA = process.env.AG_UIPOL_011_EXPECTED_FE_SHA || "";
 const AUTH_TOKEN =
   process.env.BFF_AUTH_TOKEN ||
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
-  process.env.VITE_BFF_DEV_BEARER_TOKEN ||
-  "pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa";
+  "";
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/ag-uipol-011";
+const HOSTED_REQUESTED = Boolean(FE_BASE_URL && EXPECTED_FE_SHA);
+
+if (HOSTED_REQUESTED && !AUTH_TOKEN) {
+  throw new Error(
+    "AG-UIPOL-011 hosted responsive parity requires an explicit short-lived BFF_AUTH_TOKEN",
+  );
+}
+if (HOSTED_REQUESTED) {
+  devLoginSession({
+    env: {
+      ...process.env,
+      PANTHEON_FE_BASE_URL: FE_BASE_URL,
+    },
+    goto: false,
+    pageBaseUrl: FE_BASE_URL,
+    token: AUTH_TOKEN,
+  });
+}
 
 const VIEWPORTS = [
   { height: 844, name: "phone-390", width: 390 },
@@ -187,7 +204,7 @@ async function openAndVerifyCandidate(page: Page): Promise<void> {
 
 test.describe("AG-UIPOL-011 hosted responsive parity", () => {
   test.skip(
-    !FE_BASE_URL || !EXPECTED_FE_SHA,
+    !HOSTED_REQUESTED,
     "Set AG_UIPOL_011_FE_BASE_URL/PANTHEON_FE_BASE_URL and AG_UIPOL_011_EXPECTED_FE_SHA.",
   );
   test.setTimeout(180_000);

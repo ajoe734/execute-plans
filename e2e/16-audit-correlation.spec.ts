@@ -21,7 +21,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { mutationAuthHeaders } from "./helpers/auth";
+import { LOCAL_FIXTURE_AUTH_TOKEN, mutationAuthHeaders } from "./helpers/auth";
 import {
   OPERATOR_DEV_ID,
   STRATEGY_DEV_ID,
@@ -420,6 +420,7 @@ function auditEntryFromResponse(value: unknown): AuditEntry {
 function headersFor(sourceMode: SourceMode, suffix: string): Record<string, string> {
   const correlationId = seededCorrelationId(`f16-${suffix}`);
   return mutationAuthHeaders({
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
     extra: {
       "Idempotency-Key": seededIdempotencyKey("strategies", `f16-${suffix}`),
       "X-Correlation-Id": correlationId,

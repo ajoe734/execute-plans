@@ -6,6 +6,7 @@ import path from "node:path";
 const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
 const UPSTREAM_BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE);
+const BFF_TARGET = new URL(BFF_BASE);
 const OLD_BFF_URL = normalizeOldBffUrl(process.env.PANTHEON_OLD_BFF_URL || "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io");
 const FE_PATH = normalizePath(process.env.PANTHEON_HOSTED_PROBE_PATH || "/management/persona-fleet");
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
@@ -80,8 +81,14 @@ function pathnameOf(url) {
 }
 
 function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
-  const pathname = pathnameOf(url);
+  let candidate;
+  try {
+    candidate = new URL(url);
+  } catch {
+    return false;
+  }
+  if (candidate.origin !== BFF_TARGET.origin) return false;
+  const pathname = candidate.pathname;
   return pathname.startsWith("/bff/") || ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname);
 }
 
@@ -156,10 +163,12 @@ const responses = [];
 const failed = [];
 const oldUrlHits = [];
 const consoleErrors = [];
+const pageErrors = [];
 const coreResponses = [];
 let html = "";
 let bundleText = "";
 let personaFleetChecks = null;
+let rootChecks = null;
 const bundleFetches = [];
 const publicHealthResponses = [];
 let shellStatus = 0;
@@ -186,6 +195,9 @@ page.on("requestfailed", req => {
 page.on("console", msg => {
   if (msg.type() === "error") consoleErrors.push(msg.text());
 });
+page.on("pageerror", error => {
+  pageErrors.push(error.message);
+});
 
 const pageUrl = withNoCache(`${FE_BASE}${FE_PATH}`);
 try {
@@ -196,8 +208,23 @@ try {
     waitForCoreBffResponse(page, expectedPath, OPTIONAL_CORE_TIMEOUT_MS)
   );
 
-  const shellResponse = await page.goto(pageUrl, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: remainingTimeoutMs() });
+  const shellResponse = await page.goto(pageUrl, {
+    waitUntil: NAVIGATION_WAIT_UNTIL,
+    timeout: remainingTimeoutMs(),
+  });
   shellStatus = shellResponse?.status() ?? 0;
+  await page.waitForFunction(() => {
+    const root = document.querySelector("#root");
+    return Boolean(root && (root.childElementCount > 0 || root.textContent?.trim()));
+  }, undefined, { timeout: Math.min(10_000, remainingTimeoutMs()) }).catch(() => {});
+  rootChecks = await page.evaluate(() => {
+    const root = document.querySelector("#root");
+    return {
+      bodyTextLength: (document.body.innerText || "").trim().length,
+      childElementCount: root?.childElementCount ?? 0,
+      rootTextLength: (root?.textContent || "").trim().length,
+    };
+  });
   coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
   coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
 
@@ -285,7 +312,7 @@ const containsBffStatic = bundleText.includes(BFF_BASE) || html.includes(BFF_BAS
 const observedIntendedBff =
   requests.some((request) => isBffUrl(request.url)) ||
   responses.some((response) => isBffUrl(response.url)) ||
-  coreResponses.some((response) => response.url?.startsWith(BFF_BASE));
+  coreResponses.some((response) => response.url && isBffUrl(response.url));
 const usesIntendedBff = containsBffStatic || observedIntendedBff;
 const containsOld = Boolean(OLD_BFF_URL) && (bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL));
 oldUrlHits.push(...textHits("html", html, OLD_BFF_URL));
@@ -308,9 +335,15 @@ const optionalCoreResponsesObserved =
   OPTIONAL_CORE_BFF_PATHS.every(expectedPath =>
     coreResponses.some(response => response.path === expectedPath && isAcceptableCoreStatus(response))
   );
+const rootRendered = Boolean(
+  rootChecks
+  && rootChecks.bodyTextLength > 0
+  && (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0),
+);
 const pass = shellOk && publicHealthOk && usesIntendedBff && requiredCoreResponseOk
   && observedProtectedResponsesOk && noAuthorizationRequests && noEmbeddedDevBearer
-  && oldUrlHitCount === 0 && requests.length > 0 && failed.length === 0;
+  && rootRendered && pageErrors.length === 0 && oldUrlHitCount === 0
+  && requests.length > 0 && failed.length === 0;
 
 const now = new Date().toISOString().slice(0, 10);
 const md = [
@@ -343,6 +376,11 @@ const md = [
   `- old BFF URL hit count: ${oldUrlHitCount}`,
   `- required core BFF responses complete: ${requiredCoreResponseOk}`,
   `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
+  `- root rendered: ${rootRendered}`,
+  `- root child element count: ${rootChecks?.childElementCount ?? 0}`,
+  `- root text length: ${rootChecks?.rootTextLength ?? 0}`,
+  `- body text length: ${rootChecks?.bodyTextLength ?? 0}`,
+  `- page error count: ${pageErrors.length}`,
   ...(personaFleetChecks ? [
     `- persona fleet row count: ${personaFleetChecks.rowCount}`,
     `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
@@ -396,6 +434,10 @@ const md = [
   `## Console errors`,
   ``,
   consoleErrors.length ? consoleErrors.slice(0, 20).map(e => `- ${e}`).join("\n") : "None",
+  ``,
+  `## Page errors`,
+  ``,
+  pageErrors.length ? pageErrors.slice(0, 20).map(e => `- ${e}`).join("\n") : "None",
 ].join("\n");
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
