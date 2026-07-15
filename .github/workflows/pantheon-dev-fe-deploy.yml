@@ -20,6 +20,20 @@ on:
         required: false
         default: ""
         type: string
+      deployment_profile:
+        description: "Keep read-only unless opening the bounded Persona interaction proof window. Restore read-only immediately after the pinned integration proof."
+        required: true
+        default: "read-only"
+        type: choice
+        options:
+          - "read-only"
+          - "persona-interaction-write-proof"
+          - "persona-interaction-read-only-restore"
+      proof_window_ack:
+        description: "I acknowledge the Persona proof profile enables dev writes temporarily and must be followed immediately by an exact-SHA read-only restore."
+        required: true
+        default: false
+        type: boolean
       skip_probe:
         description: "Emergency only: deploy without the browser/BFF probe."
         required: false
@@ -61,6 +75,10 @@ jobs:
       # Push deploys leave this empty and resolve /bff/version directly.
       # Never inherit the mutable repo variable as deployment evidence.
       PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.bff_commit || '' }}
+      # Push/autodeploy is always read-only. The write-proof profile is exposed
+      # only by manual dispatch and is further guarded by the deploy script.
+      PANTHEON_DEPLOY_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_profile || 'read-only' }}
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK: ${{ github.event_name == 'workflow_dispatch' && inputs.proof_window_ack || false }}
       PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
 
     steps:
@@ -116,5 +134,11 @@ jobs:
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
             echo "- BFF commit: \`${{ steps.deploy.outputs.bff_commit || 'unknown' }}\`"
             echo "- BFF commit source: \`${{ steps.deploy.outputs.bff_commit_source || 'unknown' }}\`"
+            echo "- deployment profile: \`${PANTHEON_DEPLOY_PROFILE}\`"
+            if [ "$PANTHEON_DEPLOY_PROFILE" = "persona-interaction-write-proof" ]; then
+              echo "- **ACTION REQUIRED:** run the pinned full Integration Gate now, then immediately dispatch this workflow for the same FE/BFF SHAs with \`deployment_profile=persona-interaction-read-only-restore\`."
+            elif [ "$PANTHEON_DEPLOY_PROFILE" = "persona-interaction-read-only-restore" ]; then
+              echo "- Persona proof window restored to exact-pair read-only mode."
+            fi
             echo "- evidence: pantheon-dev-fe-deploy-evidence"
           } >> "$GITHUB_STEP_SUMMARY"

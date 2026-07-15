@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
 const deployScript = readFileSync(deployScriptPath, "utf8");
+const frontendSha = spawnSync("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+  encoding: "utf8",
+}).stdout.trim();
 const localEnvPath = resolve(root, ".env");
 const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
 const integrationWorkflow = readFileSync(
@@ -56,9 +60,10 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployScript).toContain('if [[ -n "${DEV_BEARER_TOKEN}" ]]');
     expect(deployScript).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
-    expect(deployScript).toContain('REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
+    expect(deployScript).toContain('DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"');
+    expect(deployScript).toContain('REQUESTED_REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
     expect(deployScript).toContain(
-      'ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
+      'REQUESTED_ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
     );
     expect(deployScript).toContain('VITE_BFF_REAL_WRITES="${REAL_WRITES}"');
     expect(deployScript).toContain(
@@ -89,6 +94,10 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       /VITE_BFF_DEV_BEARER_TOKEN=""/gu,
     )).toHaveLength(2);
     expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
+    expect(deployScript).toContain(
+      'deploymentProfile: process.env.PANTHEON_DEPLOY_PROFILE || "read-only"',
+    );
+    expect(deployWorkflow).toContain('PANTHEON_DEPLOY_PROFILE: ${{ github.event_name == \'workflow_dispatch\' && inputs.deployment_profile || \'read-only\' }}');
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
     expect(existsSync(localEnvPath)).toBe(false);
     expect(gitignore).toMatch(/^\.env\*$/mu);
@@ -219,6 +228,48 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const result = rejectedDeploy(extraEnv);
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/deployment is read-only/u);
+    expect(result.stderr).toMatch(/Direct write-flag overrides are prohibited/u);
+  });
+
+  it("admits the atomic Persona proof profile only through an acknowledged exact dev dispatch", () => {
+    expect(deployWorkflow).toContain('"persona-interaction-write-proof"');
+    expect(deployWorkflow).toContain('"persona-interaction-read-only-restore"');
+    expect(deployWorkflow).toContain("proof_window_ack:");
+    expect(deployScript).toContain('REAL_WRITES="true"');
+    expect(deployScript).toContain('ALLOW_DEV_STUB_WRITES="true"');
+    expect(deployScript).toContain(
+      '"${SOURCE_REF,,}" != "${SHA,,}"',
+    );
+    expect(deployScript).toContain(
+      "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
+    );
+    expect(deployScript).toContain(
+      "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io",
+    );
+
+    const nonDispatch = rejectedDeploy({
+      PANTHEON_DEPLOY_PROFILE: "persona-interaction-write-proof",
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true",
+    });
+    expect(nonDispatch.status).toBe(2);
+    expect(nonDispatch.stderr).toMatch(/only for an explicit workflow_dispatch/u);
+
+    const unacknowledged = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_PROFILE: "persona-interaction-write-proof",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "a".repeat(40),
+      PANTHEON_DEPLOY_REF: frontendSha,
+    });
+    expect(unacknowledged.status).toBe(2);
+    expect(unacknowledged.stderr).toMatch(/requires explicit proof-window acknowledgement/u);
+
+    const nonExactFrontend = rejectedDeploy({
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_DEPLOY_PROFILE: "persona-interaction-read-only-restore",
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: "a".repeat(40),
+      PANTHEON_DEPLOY_REF: "dev",
+    });
+    expect(nonExactFrontend.status).toBe(2);
+    expect(nonExactFrontend.stderr).toMatch(/exact 40-character frontend SHA/u);
   });
 });

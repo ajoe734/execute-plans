@@ -63,12 +63,14 @@ if [[ "${1:-}" == "ci" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "run" && "${2:-}" == "build" ]]; then
-  [[ "${VITE_BFF_REAL_WRITES:-}" == "false" ]] || {
-    echo "deploy harness refuses real writes" >&2
-    exit 81
-  }
-  [[ "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" == "false" ]] || {
-    echo "deploy harness refuses dev-stub writes" >&2
+  if [[ "${VITE_BFF_REAL_WRITES:-}" != "false" || "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" != "false" ]]; then
+    [[ "${VITE_BFF_REAL_WRITES:-}" == "true" && "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" == "true" ]] || {
+      echo "deploy harness refuses non-atomic write flags" >&2
+      exit 81
+    }
+  fi
+  [[ "${VITE_BFF_REAL_WRITES:-}" == "${VITE_BFF_ALLOW_DEV_STUB_WRITES:-}" ]] || {
+    echo "deploy harness refuses non-atomic write flags" >&2
     exit 82
   }
   [[ -z "${VITE_BFF_DEV_BEARER_TOKEN:-}" ]] || {
@@ -233,6 +235,8 @@ run_deploy() {
     -u PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT \
     -u PANTHEON_DEPLOY_REAL_WRITES \
     -u PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES \
+    -u PANTHEON_DEPLOY_PROFILE \
+    -u PANTHEON_DEPLOY_PROOF_WINDOW_ACK \
     -u VITE_BFF_DEV_BEARER_TOKEN \
     PATH="${MOCK_BIN}:${PATH}" \
     DEPLOY_TEST_LOG_DIR="${LOG_DIR}" \
@@ -268,6 +272,36 @@ assert_eq "bff_version" "$("${REAL_NODE}" -e 'console.log(require(process.argv[1
 assert_eq "3" "$(cat "${case_root}/bff-version-count")" "initial/before-switch/after-switch BFF reads"
 [[ "$(readlink -f "${case_root}/live")" != "${case_root}/releases/previous" ]] || \
   fail "successful deploy did not switch releases"
+
+case_root="$(prepare_case proof-profile)"
+run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-write-proof \
+  PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEPLOY_SKIP_PROBE=false \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+assert_eq "true true " "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "atomic Persona proof build flags"
+assert_eq "persona-interaction-write-proof" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "proof deployment manifest profile"
+
+# The release procedure restores the same exact FE/BFF pair through an
+# explicit read-only dispatch immediately after the external pinned proof.
+run_deploy "${case_root}" \
+  GITHUB_EVENT_NAME=workflow_dispatch \
+  PANTHEON_DEPLOY_PROFILE=persona-interaction-read-only-restore \
+  PANTHEON_DEPLOY_REF="${CURRENT_FE_SHA}" \
+  PANTHEON_DEPLOY_RELEASE_INSTANCE=proof-profile-restore \
+  PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}" \
+  PANTHEON_DEV_FE_HOST=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+  PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+assert_eq "false false " "$(tail -n 1 "${LOG_DIR}/build-flags.log")" "explicit read-only restore flags"
+assert_eq "persona-interaction-read-only-restore" \
+  "$("${REAL_NODE}" -e 'console.log(require(process.argv[1]).deploymentProfile)' "${case_root}/live/deployment.json")" \
+  "restored deployment manifest profile"
 
 case_root="$(prepare_case matching-expected)"
 run_deploy "${case_root}" PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT="${RUNTIME_BFF_SHA}"

@@ -31,8 +31,12 @@ LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
 DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-}"
 SUPABASE_URL="${VITE_SUPABASE_URL:-}"
 SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-}"
-REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
-ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
+DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"
+PROOF_WINDOW_ACK="${PANTHEON_DEPLOY_PROOF_WINDOW_ACK:-false}"
+REQUESTED_REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
+REQUESTED_ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
+REAL_WRITES="false"
+ALLOW_DEV_STUB_WRITES="false"
 EXPECTED_BFF_COMMIT="${PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT:-}"
 BFF_COMMIT=""
 BFF_COMMIT_SOURCE="bff_version"
@@ -139,10 +143,49 @@ if [[ -n "${DEV_BEARER_TOKEN}" ]]; then
   exit 2
 fi
 
-if [[ "${REAL_WRITES}" != "false" || "${ALLOW_DEV_STUB_WRITES}" != "false" ]]; then
-  echo "Automated dev frontend deployment is read-only; real and dev-stub writes must remain disabled." >&2
+if [[ "${REQUESTED_REAL_WRITES}" != "false" || "${REQUESTED_ALLOW_DEV_STUB_WRITES}" != "false" ]]; then
+  echo "Direct write-flag overrides are prohibited; select the guarded deployment profile instead." >&2
   exit 2
 fi
+
+case "${DEPLOY_PROFILE}" in
+  read-only)
+    ;;
+  persona-interaction-write-proof|persona-interaction-read-only-restore)
+    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]]; then
+      echo "Persona proof-window profiles are allowed only for an explicit workflow_dispatch." >&2
+      exit 2
+    fi
+    if [[ "${FE_HOST}" != "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io" || \
+          "${BFF_HOST}" != "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io" ]]; then
+      echo "Persona proof-window profiles are restricted to the canonical Pantheon dev FE/BFF hosts." >&2
+      exit 2
+    fi
+    if [[ ! "${SOURCE_REF}" =~ ^[0-9a-fA-F]{40}$ || "${SOURCE_REF,,}" != "${SHA,,}" ]]; then
+      echo "Persona proof-window profile requires an exact 40-character frontend SHA matching the checkout." >&2
+      exit 2
+    fi
+    if [[ "${DEPLOY_PROFILE}" == "persona-interaction-write-proof" ]]; then
+      if [[ "${PROOF_WINDOW_ACK}" != "true" ]]; then
+        echo "Persona write-proof profile requires explicit proof-window acknowledgement." >&2
+        exit 2
+      fi
+      if [[ "${SKIP_PROBE}" == "true" ]]; then
+        echo "Persona write-proof profile cannot skip the deployed-host browser/BFF probe." >&2
+        exit 2
+      fi
+      REAL_WRITES="true"
+      ALLOW_DEV_STUB_WRITES="true"
+      echo "WARNING: activating bounded Pantheon dev Persona write-proof profile; dispatch the full pinned proof, then immediately redeploy this exact FE/BFF pair with profile persona-interaction-read-only-restore." >&2
+    else
+      echo "Restoring the exact Pantheon dev Persona proof pair to the read-only profile." >&2
+    fi
+    ;;
+  *)
+    echo "Unknown deployment profile: ${DEPLOY_PROFILE}. Expected read-only, persona-interaction-write-proof, or persona-interaction-read-only-restore." >&2
+    exit 2
+    ;;
+esac
 
 if [[ -z "${SUPABASE_URL}" || -z "${SUPABASE_PUBLISHABLE_KEY}" ]]; then
   echo "VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required public browser configuration." >&2
@@ -229,6 +272,7 @@ export PANTHEON_DEPLOY_SOURCE_REF="${SOURCE_REF:-${SHA}}"
 export PANTHEON_DEPLOY_SOURCE_BRANCH="${SOURCE_BRANCH}"
 export PANTHEON_DEPLOY_FE_HOST="${FE_HOST}"
 export PANTHEON_DEPLOY_BFF_HOST="${BFF_HOST}"
+export PANTHEON_DEPLOY_PROFILE="${DEPLOY_PROFILE}"
 export PANTHEON_DEPLOY_REAL_WRITES="${REAL_WRITES}"
 export PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="${ALLOW_DEV_STUB_WRITES}"
 
@@ -250,6 +294,7 @@ const metadata = {
   bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT,
   bffCommitEvidence: true,
   bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE,
+  deploymentProfile: process.env.PANTHEON_DEPLOY_PROFILE || "read-only",
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",
@@ -328,7 +373,10 @@ DEPLOYED_JSON="$(curl -fsS "${FE_HOST}/deployment.json")"
 node --input-type=module -e '
 const expectedFrontend = process.argv[1];
 const expectedBff = process.argv[2];
-const payload = JSON.parse(process.argv[3]);
+const expectedProfile = process.argv[3];
+const expectedRealWrites = process.argv[4];
+const expectedDevStubWrites = process.argv[5];
+const payload = JSON.parse(process.argv[6]);
 if (payload.commit !== expectedFrontend) {
   console.error(`deployment.json commit mismatch: expected ${expectedFrontend}, got ${payload.commit}`);
   process.exit(1);
@@ -342,14 +390,15 @@ if (
   process.exit(1);
 }
 if (
-  payload.buildMode?.VITE_BFF_REAL_WRITES !== "false" ||
-  payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== "false" ||
+  payload.deploymentProfile !== expectedProfile ||
+  payload.buildMode?.VITE_BFF_REAL_WRITES !== expectedRealWrites ||
+  payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== expectedDevStubWrites ||
   payload.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN !== "false"
 ) {
-  console.error("deployment.json does not preserve safe write/token defaults");
+  console.error("deployment.json does not match the selected deployment profile/token boundary");
   process.exit(1);
 }
-' "${SHA}" "${BFF_COMMIT}" "${DEPLOYED_JSON}"
+' "${SHA}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" "${REAL_WRITES}" "${ALLOW_DEV_STUB_WRITES}" "${DEPLOYED_JSON}"
 
 if [[ "${SKIP_PROBE}" != "true" ]]; then
   echo "=== run browser/BFF deployed-host probe ==="
@@ -380,6 +429,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - bff_host: ${BFF_HOST}
 - bff_commit: ${BFF_COMMIT}
 - bff_commit_source: ${BFF_COMMIT_SOURCE}
+- deployment_profile: ${DEPLOY_PROFILE}
 - release_dir: ${RELEASE_DIR}
 - deploy_root: ${DEPLOY_ROOT}
 - preserve_assets: ${PRESERVE_ASSETS}
