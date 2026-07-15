@@ -42,7 +42,9 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  # The guarded write-proof profile dispatches the exact hosted integration
+  # workflow and waits for it before restoring the same FE/BFF pair read-only.
+  actions: write
 
 concurrency:
   group: pantheon-dev-fe-deploy
@@ -51,6 +53,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy execute-plans to Pantheon dev VM
+    timeout-minutes: 190
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -105,9 +108,76 @@ jobs:
 
       - name: Deploy static build
         id: deploy
+        timeout-minutes: 18
         env:
           PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
           PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
+          GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: bash scripts/deploy-dev-vm.sh
+
+      - name: Dispatch exact hosted Persona integration
+        id: proof_gate
+        if: steps.deploy.outcome == 'success' && env.PANTHEON_DEPLOY_PROFILE == 'persona-interaction-write-proof'
+        timeout-minutes: 145
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXACT_FE_SHA: ${{ steps.sha.outputs.sha }}
+          EXACT_BFF_SHA: ${{ steps.deploy.outputs.bff_commit }}
+          WORKFLOW_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          proof_correlation_id="deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          expected_title="PINT proof ${proof_correlation_id}"
+          gh workflow run pantheon-integration-gate.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$WORKFLOW_REF" \
+            -f fe_base_url="$PANTHEON_DEV_FE_HOST" \
+            -f fe_sha="$EXACT_FE_SHA" \
+            -f proof_correlation_id="$proof_correlation_id" \
+            -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
+            -f bff_sha="$EXACT_BFF_SHA" \
+            -f pantheon_contract_ref="$EXACT_BFF_SHA" \
+            -f persona_interaction_write_proof=true \
+            -f pint_hosted_probe=true \
+            -f soft_fail=false
+
+          gate_run_id=""
+          for _ in $(seq 1 30); do
+            gate_run_id="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow pantheon-integration-gate.yml \
+              --event workflow_dispatch \
+              --branch "$WORKFLOW_REF" \
+              --limit 20 \
+              --json databaseId,createdAt,displayTitle \
+              --jq 'map(select(.createdAt >= "'"$dispatch_started"'" and .displayTitle == "'"$expected_title"'")) | .[0].databaseId // empty')"
+            [[ -n "$gate_run_id" ]] && break
+            sleep 2
+          done
+          if [[ -z "$gate_run_id" ]]; then
+            echo "Unable to resolve the dispatched exact hosted integration run." >&2
+            exit 1
+          fi
+
+          gate_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${gate_run_id}"
+          echo "integration_run_id=${gate_run_id}" >> "$GITHUB_OUTPUT"
+          echo "integration_run_url=${gate_url}" >> "$GITHUB_OUTPUT"
+          echo "Waiting for exact hosted integration: ${gate_url}"
+          gh run watch "$gate_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+
+      - name: Restore exact Persona pair read-only
+        id: restore
+        if: always() && steps.deploy.outcome == 'success' && env.PANTHEON_DEPLOY_PROFILE == 'persona-interaction-write-proof'
+        timeout-minutes: 20
+        env:
+          PANTHEON_DEPLOY_REF: ${{ steps.sha.outputs.sha }}
+          PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
+          PANTHEON_DEPLOY_PROFILE: persona-interaction-read-only-restore
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-restore
           GITHUB_SHA: ${{ steps.sha.outputs.sha }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -136,7 +206,8 @@ jobs:
             echo "- BFF commit source: \`${{ steps.deploy.outputs.bff_commit_source || 'unknown' }}\`"
             echo "- deployment profile: \`${PANTHEON_DEPLOY_PROFILE}\`"
             if [ "$PANTHEON_DEPLOY_PROFILE" = "persona-interaction-write-proof" ]; then
-              echo "- **ACTION REQUIRED:** run the pinned full Integration Gate now, then immediately dispatch this workflow for the same FE/BFF SHAs with \`deployment_profile=persona-interaction-read-only-restore\`."
+              echo "- hosted integration: ${{ steps.proof_gate.outputs.integration_run_url || 'dispatch failed' }}"
+              echo "- automatic read-only restore: \`${{ steps.restore.outcome }}\`"
             elif [ "$PANTHEON_DEPLOY_PROFILE" = "persona-interaction-read-only-restore" ]; then
               echo "- Persona proof window restored to exact-pair read-only mode."
             fi

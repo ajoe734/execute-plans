@@ -60,8 +60,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployScript).toContain('if [[ -n "${DEV_BEARER_TOKEN}" ]]');
     expect(deployScript).toContain('VITE_BFF_DEV_BEARER_TOKEN=""');
-    expect(deployScript).toContain('DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"');
-    expect(deployScript).toContain('REQUESTED_REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"');
+    expect(deployScript).toContain(
+      'DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"',
+    );
+    expect(deployScript).toContain(
+      'REQUESTED_REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"',
+    );
     expect(deployScript).toContain(
       'REQUESTED_ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
     );
@@ -82,22 +86,24 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       "bffCommit: process.env.PANTHEON_DEPLOY_BFF_COMMIT",
     );
-    expect(deployScript).toContain(
-      "bffCommitEvidence: true",
-    );
+    expect(deployScript).toContain("bffCommitEvidence: true");
     expect(deployScript).toContain(
       "bffCommitSource: process.env.PANTHEON_DEPLOY_BFF_COMMIT_SOURCE",
     );
-    expect(deployScript).not.toContain("27cd46529c29801db02818aafe4df723cc0f8666");
+    expect(deployScript).not.toContain(
+      "27cd46529c29801db02818aafe4df723cc0f8666",
+    );
     expect(deployScript).not.toContain("pantheon-dev-browser:viewer");
-    expect(integrationWorkflow.match(
-      /VITE_BFF_DEV_BEARER_TOKEN=""/gu,
-    )).toHaveLength(2);
+    expect(
+      integrationWorkflow.match(/VITE_BFF_DEV_BEARER_TOKEN=""/gu),
+    ).toHaveLength(2);
     expect(deployScript).toContain('VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"');
     expect(deployScript).toContain(
       'deploymentProfile: process.env.PANTHEON_DEPLOY_PROFILE || "read-only"',
     );
-    expect(deployWorkflow).toContain('PANTHEON_DEPLOY_PROFILE: ${{ github.event_name == \'workflow_dispatch\' && inputs.deployment_profile || \'read-only\' }}');
+    expect(deployWorkflow).toContain(
+      "PANTHEON_DEPLOY_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_profile || 'read-only' }}",
+    );
     expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
     expect(existsSync(localEnvPath)).toBe(false);
     expect(gitignore).toMatch(/^\.env\*$/mu);
@@ -112,15 +118,21 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'VITE_SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"',
     );
-    for (const workflow of [branchWorkflow, deployWorkflow, integrationWorkflow]) {
+    for (const workflow of [
+      branchWorkflow,
+      deployWorkflow,
+      integrationWorkflow,
+    ]) {
       expect(workflow).toContain(
-        'VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}',
+        "VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
       );
       expect(workflow).toContain(
-        'VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}',
+        "VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
       );
     }
-    expect(deployWorkflow).not.toContain("PANTHEON_HOSTED_BROWSER_BEARER_TOKEN");
+    expect(deployWorkflow).not.toContain(
+      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN",
+    );
 
     const result = rejectedDeploy({
       VITE_SUPABASE_PUBLISHABLE_KEY: "",
@@ -141,7 +153,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'EXPECTED_BFF_COMMIT="${PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT:-}"',
     );
-    expect(deployScript).toContain("scripts/release-identity.mjs source-version");
+    expect(deployScript).toContain(
+      "scripts/release-identity.mjs source-version",
+    );
     expect(deployScript).toContain('BFF_COMMIT_SOURCE="bff_version"');
     expect(deployScript).toContain("Pantheon BFF commit mismatch");
     expect(deployScript).toContain('verify_live_bff_identity "before-switch"');
@@ -167,7 +181,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   it("keeps every post-deploy acceptance probe read-only", () => {
     expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
     expect(deployScript).not.toContain("npx playwright test");
-    expect(deployScript).not.toContain("scripts/probe-hosted-management-writes.mjs");
+    expect(deployScript).not.toContain(
+      "scripts/probe-hosted-management-writes.mjs",
+    );
     expect(hostedPersonaSpec).toContain('roleTokenFromEnv("viewer"');
     expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
     expect(hostedPersonaSpec).toContain("token: VIEWER_TOKEN");
@@ -186,9 +202,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   });
 
   it("defines the deployed-host contract as an unauthenticated strict auth boundary", () => {
-    expect(hostedBrowserProbe).toContain('const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]');
+    expect(hostedBrowserProbe).toContain(
+      'const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]',
+    );
     expect(hostedBrowserProbe).toContain("response.status === 401");
-    expect(hostedBrowserProbe).toMatch(/AUTH_REQUIRED\|authentication required/u);
+    expect(hostedBrowserProbe).toMatch(
+      /AUTH_REQUIRED\|authentication required/u,
+    );
     expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
     expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
     expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
@@ -228,7 +248,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const result = rejectedDeploy(extraEnv);
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/Direct write-flag overrides are prohibited/u);
+    expect(result.stderr).toMatch(
+      /Direct write-flag overrides are prohibited/u,
+    );
   });
 
   it("admits the atomic Persona proof profile only through an acknowledged exact dev dispatch", () => {
@@ -237,9 +259,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployWorkflow).toContain("proof_window_ack:");
     expect(deployScript).toContain('REAL_WRITES="true"');
     expect(deployScript).toContain('ALLOW_DEV_STUB_WRITES="true"');
-    expect(deployScript).toContain(
-      '"${SOURCE_REF,,}" != "${SHA,,}"',
-    );
+    expect(deployScript).toContain('"${SOURCE_REF,,}" != "${SHA,,}"');
     expect(deployScript).toContain(
       "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
     );
@@ -252,7 +272,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true",
     });
     expect(nonDispatch.status).toBe(2);
-    expect(nonDispatch.stderr).toMatch(/only for an explicit workflow_dispatch/u);
+    expect(nonDispatch.stderr).toMatch(
+      /only for an explicit workflow_dispatch/u,
+    );
 
     const unacknowledged = rejectedDeploy({
       GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -261,7 +283,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       PANTHEON_DEPLOY_REF: frontendSha,
     });
     expect(unacknowledged.status).toBe(2);
-    expect(unacknowledged.stderr).toMatch(/requires explicit proof-window acknowledgement/u);
+    expect(unacknowledged.stderr).toMatch(
+      /requires explicit proof-window acknowledgement/u,
+    );
 
     const nonExactFrontend = rejectedDeploy({
       GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -271,5 +295,73 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     });
     expect(nonExactFrontend.status).toBe(2);
     expect(nonExactFrontend.stderr).toMatch(/exact 40-character frontend SHA/u);
+  });
+
+  it("bounds the manual proof window with an exact external gate and fail-closed restore", () => {
+    expect(deployWorkflow).toContain("actions: write");
+    expect(deployWorkflow).toContain("timeout-minutes: 145");
+    expect(deployWorkflow).toContain("timeout-minutes: 190");
+    expect(deployWorkflow).toContain(
+      "gh workflow run pantheon-integration-gate.yml",
+    );
+    expect(deployWorkflow).toContain('-f fe_base_url="$PANTHEON_DEV_FE_HOST"');
+    expect(deployWorkflow).toContain('-f fe_sha="$EXACT_FE_SHA"');
+    expect(deployWorkflow).toContain(
+      '-f proof_correlation_id="$proof_correlation_id"',
+    );
+    expect(deployWorkflow).toContain(
+      '.displayTitle == "\'"$expected_title"\'"',
+    );
+    expect(deployWorkflow).toContain('-f bff_sha="$EXACT_BFF_SHA"');
+    expect(deployWorkflow).toContain("-f persona_interaction_write_proof=true");
+    expect(deployWorkflow).toContain("-f pint_hosted_probe=true");
+    expect(deployWorkflow).toContain("gh run watch");
+    expect(deployWorkflow).toContain(
+      "if: always() && steps.deploy.outcome == 'success' && env.PANTHEON_DEPLOY_PROFILE == 'persona-interaction-write-proof'",
+    );
+    expect(deployWorkflow).toContain(
+      "PANTHEON_DEPLOY_PROFILE: persona-interaction-read-only-restore",
+    );
+    expect(deployScript).toContain(
+      "keeping the fail-closed read-only candidate live and refusing rollback",
+    );
+  });
+
+  it("binds hosted PINT proof to deployment.json before and after mutation", () => {
+    expect(integrationWorkflow).toContain(
+      "Verify exact hosted deployment before PINT proof",
+    );
+    expect(integrationWorkflow).toContain(
+      "Verify exact hosted deployment after PINT proof",
+    );
+    expect(
+      integrationWorkflow.match(
+        /node scripts\/hosted-deployment-identity\.mjs/gu,
+      ),
+    ).toHaveLength(2);
+    expect(
+      integrationWorkflow.match(
+        /--deployment-profile persona-interaction-write-proof/gu,
+      ),
+    ).toHaveLength(2);
+    expect(integrationWorkflow).toContain("deployment-before-pint.json");
+    expect(integrationWorkflow).toContain("deployment-after-pint.json");
+    expect(integrationWorkflow).toContain(
+      "PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha || github.sha }}",
+    );
+    expect(integrationWorkflow).toContain(
+      "format('PINT proof {0}', inputs.proof_correlation_id)",
+    );
+    expect(integrationWorkflow).toContain(
+      "ref: ${{ inputs.fe_sha || github.sha }}",
+    );
+    expect(integrationWorkflow).toContain(
+      '--frontend-sha "$PANTHEON_FRONTEND_SHA"',
+    );
+    expect(integrationWorkflow).toContain('--bff-sha "$PANTHEON_BFF_SHA"');
+    expect(branchWorkflow).toContain(
+      "node scripts/test-hosted-deployment-identity.mjs",
+    );
+    expect(branchWorkflow).toContain("bash scripts/test-deploy-dev-vm.sh");
   });
 });

@@ -1,4 +1,5 @@
 name: Pantheon FE-BFF Integration Gate
+run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -13,6 +14,14 @@ on:
         description: "Frontend URL. Defaults to the repo dev server on the runner."
         required: false
         default: "http://127.0.0.1:4173"
+      fe_sha:
+        description: "Exact deployed execute-plans SHA. Hosted PINT proof requires this explicit 40-character SHA."
+        required: false
+        default: ""
+      proof_correlation_id:
+        description: "Exact caller correlation used to bind an automatic proof deploy to this run."
+        required: false
+        default: ""
       bff_base_url:
         description: "BFF base URL"
         required: false
@@ -72,7 +81,7 @@ jobs:
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"
-      PANTHEON_FRONTEND_SHA: ${{ github.sha }}
+      PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha || github.sha }}
       # Only workflow_dispatch may provide an optional expectation. Push/PR
       # gates must never inherit a stale repository variable: live
       # /bff/version is the exact release identity source of truth.
@@ -82,6 +91,7 @@ jobs:
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
       PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
+      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ inputs.persona_interaction_write_proof || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
       # at job level so unit tests can exercise hybrid/auto fallback paths.
       # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
@@ -100,6 +110,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.fe_sha || github.sha }}
 
       - name: Checkout Pantheon contract bundle
         uses: actions/checkout@v4
@@ -225,6 +237,31 @@ jobs:
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
 
+      - name: Verify exact hosted deployment before PINT proof
+        id: pint_manifest_before
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true' || env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$PANTHEON_PINT_HOSTED_PROBE" != "true" || "$PANTHEON_PERSONA_INTERACTION_WRITE_PROOF" != "true" ]]; then
+            echo "Hosted PINT proof requires both explicit workflow opt-ins." >&2
+            exit 2
+          fi
+          if [[ "${PANTHEON_FE_BASE_URL%/}" == "http://127.0.0.1:4173" ]]; then
+            echo "Hosted PINT proof cannot use the local preview frontend." >&2
+            exit 2
+          fi
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-before-pint.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?gate=${GITHUB_RUN_ID}&phase=before" > "$manifest_file"
+          node scripts/hosted-deployment-identity.mjs \
+            --manifest-file "$manifest_file" \
+            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --bff-sha "$PANTHEON_BFF_SHA" \
+            --fe-base-url "$PANTHEON_FE_BASE_URL" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --deployment-profile persona-interaction-write-proof
+
       - name: PINT hosted governed-proposal smoke
         id: pint_hosted_governance
         if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
@@ -329,6 +366,27 @@ jobs:
           node scripts/validate-persona-hosted-proof-env.mjs
           npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
+      - name: Verify exact hosted deployment after PINT proof
+        id: pint_manifest_after
+        if: always() && (env.PANTHEON_PINT_HOSTED_PROBE == 'true' || env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true')
+        run: |
+          set -euo pipefail
+          if [[ "$PANTHEON_PINT_HOSTED_PROBE" != "true" || "$PANTHEON_PERSONA_INTERACTION_WRITE_PROOF" != "true" ]]; then
+            echo "Hosted PINT proof requires both explicit workflow opt-ins." >&2
+            exit 2
+          fi
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-after-pint.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?gate=${GITHUB_RUN_ID}&phase=after" > "$manifest_file"
+          node scripts/hosted-deployment-identity.mjs \
+            --manifest-file "$manifest_file" \
+            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --bff-sha "$PANTHEON_BFF_SHA" \
+            --fe-base-url "$PANTHEON_FE_BASE_URL" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --deployment-profile persona-interaction-write-proof
+
       - name: Playwright E2E
         id: e2e
         continue-on-error: true
@@ -393,6 +451,7 @@ jobs:
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
             "write_probe": { "outcome": "${{ steps.write_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-write-path-probe.log" },
+            "pint_manifest_before": { "outcome": "${{ steps.pint_manifest_before.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deployment-before-pint.json" },
             "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
@@ -400,6 +459,7 @@ jobs:
             "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
             "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
             "pint_hosted_e2e": { "outcome": "${{ steps.pint_hosted_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-hosted-desktop-mobile-e2e.log" },
+            "pint_manifest_after": { "outcome": "${{ steps.pint_manifest_after.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deployment-after-pint.json" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }

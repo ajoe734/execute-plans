@@ -113,7 +113,10 @@ jobs:
         run: npm ci
 
       - name: Deploy safety contract
-        run: npx vitest run src/test/deploy-safe-defaults.test.ts
+        run: |
+          npx vitest run src/test/deploy-safe-defaults.test.ts
+          node scripts/test-hosted-deployment-identity.mjs
+          bash scripts/test-deploy-dev-vm.sh
 
       - name: Build
         env:

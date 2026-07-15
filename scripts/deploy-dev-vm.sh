@@ -61,7 +61,13 @@ cleanup() {
   if [[ "${status}" -ne 0 && "${LOCK_ACQUIRED}" == "true" ]]; then
     current_target="$(readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true)"
     if [[ "${DEPLOY_SWITCHED}" == "true" ]]; then
-      if [[ "${current_target}" == "${RELEASE_DIR}" && -n "${PREVIOUS_DEPLOY_TARGET}" && -d "${PREVIOUS_DEPLOY_TARGET}" ]]; then
+      if [[ "${current_target}" == "${RELEASE_DIR}" && "${DEPLOY_PROFILE}" == "persona-interaction-read-only-restore" ]]; then
+        # A restore candidate is intrinsically safer than the release it
+        # replaced. Keep it live even when a post-switch identity/probe check
+        # fails: rolling back here could silently re-enable the write-proof
+        # bundle that this operation exists to retire.
+        echo "Read-only restore failed after the host switch; keeping the fail-closed read-only candidate live and refusing rollback to ${PREVIOUS_DEPLOY_TARGET:-<none>}." >&2
+      elif [[ "${current_target}" == "${RELEASE_DIR}" && -n "${PREVIOUS_DEPLOY_TARGET}" && -d "${PREVIOUS_DEPLOY_TARGET}" ]]; then
         echo "Deploy failed after the host switch; rolling back to ${PREVIOUS_DEPLOY_TARGET}." >&2
         sudo ln -sfn "${PREVIOUS_DEPLOY_TARGET}" "${DEPLOY_ROOT}.rollback" || rollback_status=$?
         if [[ "${rollback_status}" -eq 0 ]]; then
