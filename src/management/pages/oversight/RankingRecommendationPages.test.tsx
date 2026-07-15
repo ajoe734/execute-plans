@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { mgmt } from "@/lib/bff-v1";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
@@ -47,6 +48,7 @@ function renderWithRoutes(initialEntry: string, element: ReactElement, routePath
 
 describe("ranking recommendation submit pages", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mocks.useV5Live.mockReset();
     mocks.sendRankingRecommendation.mockReset();
   });
@@ -132,6 +134,23 @@ describe("ranking recommendation submit pages", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("Deploy Smoke Persona 2026-05-13 B Persisted")).toBeInTheDocument();
     expect(within(table).getByText("#7")).toBeInTheDocument();
+  });
+
+  it("Quarterly Ranking focused route fetches a bounded snapshot before client-side focus filtering", async () => {
+    const listLiveOnly = vi.spyOn(mgmt.quarterlyRanking, "listLiveOnly").mockResolvedValue([]);
+    mocks.useV5Live.mockReturnValue({ data: undefined, loading: true, refresh: vi.fn() });
+
+    renderWithRoutes(
+      "/management/quarterly-ranking?persona=persona-live-smoke-b",
+      <QuarterlyRankingPage />,
+    );
+    const rankingLoader = mocks.useV5Live.mock.calls[0]?.[0] as (() => Promise<unknown>) | undefined;
+    expect(rankingLoader).toBeDefined();
+    await rankingLoader?.();
+
+    expect(listLiveOnly).toHaveBeenCalledWith(undefined, { pageSize: 200 });
+    expect(listLiveOnly).not.toHaveBeenCalledWith(undefined, expect.objectContaining({ persona: "persona-live-smoke-b" }));
+    expect(screen.queryByText("No data.")).not.toBeInTheDocument();
   });
 
   it("Persona League honors persona query focus from Fleet rank links", () => {

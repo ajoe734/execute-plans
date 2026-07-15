@@ -144,7 +144,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const { data: rows, loading: rowsLoading } = useV5Live(
     () => mgmt.quarterlyRanking.listLiveOnly(
       personaFocus ? undefined : currentQuarter,
-      personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE, persona: personaFocus } : undefined,
+      personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE } : undefined,
     ),
     [currentQuarter, personaFocus],
   );
@@ -624,7 +624,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                   </td>
                 </tr>
               ))}
-              {paginatedRanking.length === 0 && (
+              {!rowsLoading && paginatedRanking.length === 0 && (
                 <tr>
                   <td className="px-3 py-8 text-center text-muted-foreground" colSpan={10}>
                     {t("mgmt.pulse.noRows")}
