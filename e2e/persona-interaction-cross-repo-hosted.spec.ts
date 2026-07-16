@@ -16,6 +16,7 @@ const TENANT_ID = process.env.PANTHEON_TENANT_ID ?? "pantheon-dev";
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
+const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
 
@@ -107,20 +108,76 @@ async function assertOperatorSession(request: APIRequestContext, token: string):
   return { operatorId, roles };
 }
 
-async function discoverPersona(request: APIRequestContext, token: string): Promise<{ id: string; name: string }> {
+function personaId(row: JsonRecord): string {
+  return String(row.id ?? row.persona_id ?? row.personaId ?? "").trim();
+}
+
+function sanitizedExcludedReasonCounts(rows: JsonRecord[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const reasons = Array.isArray(row.reasons) ? row.reasons : [];
+    for (const reason of reasons) {
+      const code = String(reason).toLowerCase().replace(/[^a-z0-9_.:-]+/gu, "_").slice(0, 80) || "unspecified";
+      counts[code] = (counts[code] ?? 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+async function discoverEligiblePersona(
+  request: APIRequestContext,
+  token: string,
+): Promise<{ id: string; name: string }> {
+  expect(ENSURED_PERSONA_ID, "authorized proof preflight must export the ensured Persona ID").not.toBe("");
+  const resolveResponse = await request.post(`${BFF_BASE}/bff/agora/interactions/context:resolve`, {
+    headers: headers(token, { "Idempotency-Key": `persona-eligibility-${randomUUID()}` }),
+    data: {
+      context_refs: [{ type: "persona", id: ENSURED_PERSONA_ID }],
+      environment: "paper",
+    },
+  });
+  expect(resolveResponse.ok(), `Persona eligibility context returned ${resolveResponse.status()}`).toBe(true);
+  const workshopId = String(record(data(await resolveResponse.json())).workshop_id ?? "").trim();
+  expect(workshopId).not.toBe("");
+
+  const eligibilityResponse = await request.post(`${BFF_BASE}/bff/agora/interactions/participants:eligible`, {
+    headers: headers(token),
+    data: {
+      workshop_id: workshopId,
+      mode: "ask",
+      environment: "paper",
+      required_capability: "persona_opinion",
+    },
+  });
+  expect(eligibilityResponse.ok(), `Authoritative Persona eligibility returned ${eligibilityResponse.status()}`).toBe(true);
+  const eligibility = record(data(await eligibilityResponse.json()));
+  const included = items({ data: { items: eligibility.included } });
+  const excluded = items({ data: { items: eligibility.excluded } });
+  const selected = included.find((row) => String(row.persona_id ?? "").trim() === ENSURED_PERSONA_ID);
+  if (!selected) {
+    throw new Error(`No ensured Persona is included by authoritative eligibility; excluded_reason_counts=${JSON.stringify(sanitizedExcludedReasonCounts(excluded))}`);
+  }
+  return matchEnsuredPersonaFromFleet(request, token);
+}
+
+async function matchEnsuredPersonaFromFleet(
+  request: APIRequestContext,
+  token: string,
+): Promise<{ id: string; name: string }> {
+  expect(ENSURED_PERSONA_ID, "authorized proof preflight must export the ensured Persona ID").not.toBe("");
   const response = await request.get(`${BFF_BASE}/bff/management/persona-fleet?page_size=100`, {
     headers: headers(token),
   });
-  expect(response.ok(), `Persona Fleet discovery returned ${response.status()}`).toBe(true);
+  expect(response.ok(), `Persona Fleet match returned ${response.status()}`).toBe(true);
   const rows = items(await response.json());
-  const row = rows.find((candidate) => {
-    const id = String(candidate.id ?? candidate.persona_id ?? candidate.personaId ?? "").trim();
-    const state = String(candidate.lifecycle_state ?? candidate.state ?? "active").toLowerCase();
-    return Boolean(id) && !["retired", "archived", "suspended"].includes(state);
-  });
-  expect(row, "hosted BFF must expose an active Persona for the interaction proof").toBeTruthy();
-  const id = String(row?.id ?? row?.persona_id ?? row?.personaId);
-  return { id, name: String(row?.name ?? row?.persona_name ?? row?.personaName ?? id) };
+  const row = rows.find((candidate) => personaId(candidate) === ENSURED_PERSONA_ID);
+  expect(row, "Persona Fleet must expose the exact user-private Persona ensured by proof preflight").toBeTruthy();
+  const state = String(row?.lifecycle_state ?? row?.state ?? "active").toLowerCase();
+  expect(["retired", "archived", "suspended"]).not.toContain(state);
+  return {
+    id: ENSURED_PERSONA_ID,
+    name: String(row?.name ?? row?.display_name ?? row?.persona_name ?? row?.personaName ?? ENSURED_PERSONA_ID),
+  };
 }
 
 async function prepareImmutableStrategyWorkshop(request: APIRequestContext, token: string, operatorId: string): Promise<{
@@ -229,7 +286,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
     const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
-    const persona = await discoverPersona(request, OPERATOR_TOKEN);
+    const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
     await installOidcDevLogin(page, {
       goto: false,
       pageBaseUrl: FE_BASE,
@@ -276,6 +333,9 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     const submittedHttp = await submitResponse;
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
     const submitted = record(data(await submittedHttp.json()));
+    const submittedRequest = record(submittedHttp.request().postDataJSON());
+    expect(submittedRequest.participant_persona_ids).toEqual([ENSURED_PERSONA_ID]);
+    expect(submitted.participants).toEqual([ENSURED_PERSONA_ID]);
     expect(submitted.execution_authority).toBe("none");
     expect(String(submitted.no_capital_authority_proof ?? "")).not.toBe("");
     const interactionId = String(submitted.interaction_id ?? "");
@@ -320,7 +380,15 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await revealWorkshopComposerOptions(page);
     await page.getByTestId("mode-selector").click();
     await page.getByRole("option", { name: /Propose \(Candidate Measure\)/i }).click();
-    expect((await proposeEligibility).ok()).toBe(true);
+    const proposeEligibilityHttp = await proposeEligibility;
+    expect(proposeEligibilityHttp.ok()).toBe(true);
+    const proposeEligibilityBody = record(data(await proposeEligibilityHttp.json()));
+    const proposedParticipants = items({ data: { items: proposeEligibilityBody.included } });
+    expect(proposedParticipants.length).toBeGreaterThanOrEqual(1);
+    expect(proposedParticipants.some((row) => row.persona_id === ENSURED_PERSONA_ID)).toBe(true);
+    await expect(page.getByTestId("eligibility-explanation")).toContainText(
+      /(?:up to )?[1-9]\d* canonical eligible selected/i,
+    );
 
     const topic = `Hosted governed candidate ${randomUUID()}`;
     await page.getByTestId("servant-composer-input").fill(topic);
@@ -333,6 +401,10 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     const submittedHttp = await submitResponse;
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
     const submitted = record(data(await submittedHttp.json()));
+    const submittedRequest = record(submittedHttp.request().postDataJSON());
+    expect(Array.isArray(submittedRequest.participant_persona_ids)).toBe(true);
+    expect(submittedRequest.participant_persona_ids).toContain(ENSURED_PERSONA_ID);
+    expect(submitted.participants).toContain(ENSURED_PERSONA_ID);
     expect(submitted.execution_authority).toBe("none");
     expect(record(submitted.proposal).execution_authority).toBe("none");
     const proposalId = String(submitted.proposal_id ?? "");
@@ -433,7 +505,12 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(viewerRoles).toContain("viewer");
     expect(viewerRoles).not.toContain("operator");
     expect(viewerRoles).not.toContain("admin");
-    const persona = await discoverPersona(request, VIEWER_TOKEN);
+    const deniedEnsure = await request.post(`${BFF_BASE}/bff/agora/servant/ensure`, {
+      headers: headers(VIEWER_TOKEN, { "Idempotency-Key": randomUUID() }),
+      data: { display_name: "Viewer must not ensure a Persona", locale: "en-US", timezone: "UTC" },
+    });
+    expect(deniedEnsure.status()).toBe(403);
+    const persona = await matchEnsuredPersonaFromFleet(request, VIEWER_TOKEN);
     const browserInteractionPosts: string[] = [];
     page.on("request", (browserRequest) => {
       const path = new URL(browserRequest.url()).pathname;
