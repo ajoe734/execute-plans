@@ -1445,6 +1445,7 @@ jobs:
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
           PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
           PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
