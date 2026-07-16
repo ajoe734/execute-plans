@@ -1,4 +1,5 @@
 name: Pantheon FE-BFF Integration Gate
+run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -13,6 +14,38 @@ on:
         description: "Frontend URL. Defaults to the repo dev server on the runner."
         required: false
         default: "http://127.0.0.1:4173"
+      fe_sha:
+        description: "Exact deployed execute-plans SHA. Required for the hosted write proof."
+        required: false
+        default: ""
+      proof_correlation_id:
+        description: "Unique correlation binding the bounded deploy to this hosted proof."
+        required: false
+        default: ""
+      source_gate_run_id:
+        description: "Successful dev-push gate run that produced the deployed candidate pair."
+        required: false
+        default: ""
+      source_artifact_id:
+        description: "Exact immutable paired-candidate artifact id from source_gate_run_id."
+        required: false
+        default: ""
+      source_artifact_digest:
+        description: "GitHub SHA-256 digest for the exact paired-candidate artifact."
+        required: false
+        default: ""
+      expected_pair_id:
+        description: "Authenticated paired-candidate id expected on the hosted deployment."
+        required: false
+        default: ""
+      expected_read_only_digest:
+        description: "Expected read-only profile content digest."
+        required: false
+        default: ""
+      expected_write_proof_digest:
+        description: "Expected write-proof profile content digest."
+        required: false
+        default: ""
       bff_base_url:
         description: "BFF base URL"
         required: false
@@ -52,6 +85,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   issues: write
   pull-requests: write
 
@@ -62,6 +96,7 @@ concurrency:
 jobs:
   integration-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 145
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
@@ -76,7 +111,7 @@ jobs:
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"
-      PANTHEON_FRONTEND_SHA: ${{ github.sha }}
+      PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha || github.sha }}
       # Only workflow_dispatch may provide an optional expectation. Push/PR
       # gates must never inherit a stale repository variable: live
       # /bff/version is the exact release identity source of truth.
@@ -93,6 +128,8 @@ jobs:
       # stale-host evidence must not deadlock candidate publication.
       PANTHEON_HOSTED_FE_HARD_GATE: "false"
       PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
+      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof || 'false' }}
+      PANTHEON_PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id || '' }}
       FE_INT_GATE_PERF_STRICT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && '1' || '0' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
       # at job level so unit tests can exercise hybrid/auto fallback paths.
@@ -109,9 +146,94 @@ jobs:
       PANTHEON_BFF_OPERATOR_A_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
       PANTHEON_BFF_OPERATOR_B_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_B_TOKEN }}
       PANTHEON_LIVE_DEEP_SSE_MS: ${{ vars.PANTHEON_LIVE_DEEP_SSE_MS || '65000' }}
+      PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.fe_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate exact hosted proof source before credentials
+        id: proof_source
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true' || env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        with:
+          script: |
+            const sha = /^[0-9a-f]{40}$/i;
+            const digest = /^(?:sha256:)?[0-9a-f]{64}$/i;
+            const numeric = /^[1-9][0-9]*$/;
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            const required = (name) => String(process.env[name] || "").trim();
+            const fail = (message) => { core.setFailed(message); return false; };
+
+            if (context.eventName !== "workflow_dispatch" ||
+                process.env.PANTHEON_PINT_HOSTED_PROBE !== "true" ||
+                process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF !== "true") {
+              fail("Hosted PINT proof requires one explicit workflow_dispatch with both proof opt-ins");
+              return;
+            }
+            const frontendSha = String(process.env.PANTHEON_FRONTEND_SHA || "").toLowerCase();
+            const correlation = String(process.env.PANTHEON_PROOF_CORRELATION_ID || "");
+            const gateRunText = required("SOURCE_GATE_RUN_ID");
+            const artifactIdText = required("SOURCE_ARTIFACT_ID");
+            const artifactDigest = required("SOURCE_ARTIFACT_DIGEST").toLowerCase();
+            const pairId = required("EXPECTED_PAIR_ID").toLowerCase();
+            const readOnlyDigest = required("EXPECTED_READ_ONLY_DIGEST").replace(/^sha256:/i, "").toLowerCase();
+            const writeProofDigest = required("EXPECTED_WRITE_PROOF_DIGEST").replace(/^sha256:/i, "").toLowerCase();
+            if (!sha.test(frontendSha) || !uuid.test(correlation) ||
+                !numeric.test(gateRunText) || !numeric.test(artifactIdText) ||
+                !digest.test(artifactDigest) || !digest.test(pairId) ||
+                !digest.test(readOnlyDigest) || !digest.test(writeProofDigest)) {
+              fail("Hosted PINT proof source identity is incomplete or malformed");
+              return;
+            }
+
+            const runId = Number(gateRunText);
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: runId,
+            });
+            const runPath = String(run.path || "").split("@")[0];
+            const runRepo = String(run.head_repository?.full_name || run.repository?.full_name || "").toLowerCase();
+            if (runPath !== ".github/workflows/pantheon-integration-gate.yml" ||
+                runRepo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
+                run.event !== "push" || run.head_branch !== "dev" ||
+                run.status !== "completed" || run.conclusion !== "success" ||
+                String(run.head_sha || "").toLowerCase() !== frontendSha) {
+              fail(`run ${runId} is not the exact successful dev-push gate for ${frontendSha}`);
+              return;
+            }
+            const { data: dev } = await github.rest.git.getRef({
+              owner: context.repo.owner, repo: context.repo.repo, ref: "heads/dev",
+            });
+            if (String(dev.object.sha || "").toLowerCase() !== frontendSha) {
+              fail("Hosted write proof requires the exact current dev tip");
+              return;
+            }
+            const artifactName = `pantheon-fe-release-candidate-attempt-${run.run_attempt}`;
+            const { data: page } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: runId,
+              name: artifactName, per_page: 100,
+            });
+            const matches = page.artifacts.filter((artifact) =>
+              String(artifact.id) === artifactIdText && artifact.name === artifactName &&
+              !artifact.expired && String(artifact.digest || "").toLowerCase() === artifactDigest,
+            );
+            if (matches.length !== 1) {
+              fail("Hosted PINT proof source artifact does not match the exact immutable dev-push pair");
+              return;
+            }
+            core.setOutput("pair_id", pairId);
+            core.setOutput("source_gate_run_id", gateRunText);
+            core.setOutput("source_artifact_id", artifactIdText);
 
       - name: Checkout Pantheon contract bundle
         uses: actions/checkout@v4
@@ -120,6 +242,7 @@ jobs:
           ref: ${{ env.PANTHEON_AGORA_CONTRACT_REF }}
           path: pantheon-contract
           token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -131,6 +254,113 @@ jobs:
         run: |
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+
+      - name: Download and authenticate exact source candidate pair
+        id: proof_source_pair
+        if: env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP%/}/pint-source-pair-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
+          extract_dir="${RUNNER_TEMP%/}/pint-source-pair-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.extract"
+          pair_dir="${RUNNER_TEMP%/}/pint-source-pair-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -f "$archive"
+          rm -rf "$extract_dir" "$pair_dir"
+          mkdir -p "$extract_dir"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 180 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output "$archive"
+          actual_digest="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "${actual_digest,,}" != "${SOURCE_ARTIFACT_DIGEST,,}" ]]; then
+            echo "Hosted proof source archive digest mismatch." >&2
+            exit 1
+          fi
+          python3 - "$archive" "$extract_dir" <<'PY'
+          import pathlib
+          import shutil
+          import stat
+          import sys
+          import zipfile
+
+          archive = pathlib.Path(sys.argv[1])
+          root = pathlib.Path(sys.argv[2]).resolve()
+          seen = set()
+          total_size = 0
+          with zipfile.ZipFile(archive) as bundle:
+              entries = bundle.infolist()
+              if not entries or len(entries) > 100_000:
+                  raise SystemExit("source pair archive has an invalid entry count")
+              for entry in entries:
+                  name = entry.filename
+                  path = pathlib.PurePosixPath(name)
+                  if (not name or "\\" in name or "\x00" in name or path.is_absolute()
+                          or any(part in ("", ".", "..") for part in path.parts)):
+                      raise SystemExit("source pair archive contains an unsafe path")
+                  normalized = path.as_posix().rstrip("/")
+                  if normalized in seen:
+                      raise SystemExit("source pair archive contains a duplicate path")
+                  seen.add(normalized)
+                  mode = entry.external_attr >> 16
+                  is_directory = entry.is_dir() or name.endswith("/")
+                  allowed_kind = stat.S_IFDIR if is_directory else stat.S_IFREG
+                  if stat.S_IFMT(mode) not in (0, allowed_kind):
+                      raise SystemExit("source pair archive contains a non-regular entry")
+                  total_size += entry.file_size
+                  if total_size > 1_073_741_824:
+                      raise SystemExit("source pair archive expands beyond the 1 GiB limit")
+                  destination = root.joinpath(*path.parts)
+                  if is_directory:
+                      destination.mkdir(parents=True, exist_ok=True)
+                  else:
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      with bundle.open(entry) as source, destination.open("xb") as target:
+                          shutil.copyfileobj(source, target, length=1024 * 1024)
+          PY
+          if [[ -f "$extract_dir/pair.json" ]]; then
+            mv "$extract_dir" "$pair_dir"
+          elif [[ -f "$extract_dir/.release-candidate/pair.json" ]]; then
+            mv "$extract_dir/.release-candidate" "$pair_dir"
+            rm -rf "$extract_dir"
+          else
+            echo "Hosted proof source artifact has no paired-candidate root." >&2
+            exit 1
+          fi
+          read_only_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir "$pair_dir" \
+            --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
+            --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile read-only)"
+          write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir "$pair_dir" \
+            --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
+            --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile write-proof)"
+          if [[ "$read_only_digest" != "$EXPECTED_READ_ONLY_DIGEST" || \
+                "$write_proof_digest" != "$EXPECTED_WRITE_PROOF_DIGEST" ]]; then
+            echo "Hosted proof source pair profile digests do not match the dispatch." >&2
+            exit 1
+          fi
+          printf 'artifactId=%s\narchiveDigest=%s\npairId=%s\nreadOnlyArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
+            "$SOURCE_ARTIFACT_ID" "$actual_digest" "$EXPECTED_PAIR_ID" \
+            "$read_only_digest" "$write_proof_digest" \
+            > "$PANTHEON_AUDIT_OUT_DIR/pint-source-pair.txt"
 
       - name: Resolve exact live BFF release identity
         id: release_identity
@@ -181,7 +411,7 @@ jobs:
           set -euo pipefail
           npm run test:deploy-release 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/deploy-controller-regression.log"
 
-      - name: Build
+      - name: Build read-only release profile
         id: build
         continue-on-error: true
         env:
@@ -197,20 +427,50 @@ jobs:
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
 
-      - name: Prepare immutable release candidate
-        id: candidate
-        if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success'
+      - name: Build bounded write-proof release profile
+        id: build_write_proof
+        continue-on-error: true
+        env:
+          VITE_BFF_MODE: live
+          VITE_BFF_BASE_URL: ${{ env.PANTHEON_BFF_BASE_URL }}
+          VITE_BFF_FALLBACK: strict
+          VITE_BFF_REAL_WRITES: "true"
+          VITE_BFF_ALLOW_DEV_STUB_WRITES: "true"
+          VITE_BFF_DEV_BEARER_TOKEN: ""
         run: |
-          node scripts/release-candidate.mjs prepare \
-            --dist dist \
-            --out .release-candidate \
+          set -o pipefail
+          VITE_SUPABASE_URL="$PANTHEON_PUBLIC_SUPABASE_URL" \
+          VITE_SUPABASE_PUBLISHABLE_KEY="$PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+          npm run build -- --outDir dist-write-proof 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build-write-proof.log"
+
+      - name: Prepare authenticated immutable candidate pair
+        id: candidate
+        if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_write_proof.outcome == 'success'
+        run: |
+          node scripts/release-candidate.mjs prepare-pair \
+            --read-only-dist-dir dist \
+            --write-proof-dist-dir dist-write-proof \
+            --output-dir .release-candidate \
             --frontend-sha "$PANTHEON_FRONTEND_SHA" \
             --bff-sha "$PANTHEON_BFF_SHA" \
             --gate-run-id "$GITHUB_RUN_ID" \
             --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
             --bff-base-url "$PANTHEON_BFF_BASE_URL"
-          candidate_digest="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(".release-candidate/candidate.json","utf8")); const d=String(p.artifactDigestSha256||p.artifactDigest||""); if(!/^[0-9a-f]{64}$/i.test(d)) process.exit(1); process.stdout.write(d.toLowerCase())')"
-          echo "PANTHEON_EXPECTED_ARTIFACT_DIGEST=${candidate_digest}" >> "$GITHUB_ENV"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const pair = JSON.parse(fs.readFileSync(".release-candidate/pair.json", "utf8"));
+          const digest = (value, label) => {
+            const normalized = String(value || "").replace(/^sha256:/i, "").toLowerCase();
+            if (!/^[0-9a-f]{64}$/u.test(normalized)) throw new Error(`invalid ${label}`);
+            return normalized;
+          };
+          const lines = [
+            `PANTHEON_CANDIDATE_PAIR_ID=${digest(pair.pairId, "pair id")}`,
+            `PANTHEON_EXPECTED_ARTIFACT_DIGEST=${digest(pair.profiles?.readOnly?.artifactDigestSha256, "read-only digest")}`,
+            `PANTHEON_EXPECTED_WRITE_PROOF_DIGEST=${digest(pair.profiles?.writeProof?.artifactDigestSha256, "write-proof digest")}`,
+          ];
+          fs.appendFileSync(process.env.GITHUB_ENV, `${lines.join("\n")}\n`, "utf8");
+          NODE
 
       - name: Bundle-size budget check
         id: bundle_budget
@@ -263,6 +523,58 @@ jobs:
         run: |
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
+
+      - name: Verify exact paired hosted deployment before PINT proof
+        id: pint_manifest_before
+        if: env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true'
+        env:
+          EXPECTED_SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          EXPECTED_SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          EXPECTED_SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        run: |
+          set -euo pipefail
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-before-pint.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?proof=${PANTHEON_PROOF_CORRELATION_ID}&phase=before" > "$manifest_file"
+          node --input-type=module - "$manifest_file" <<'NODE'
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const normalizedDigest = (value) => String(value || "").replace(/^sha256:/i, "").toLowerCase();
+          const checks = [
+            [manifest.commit === process.env.PANTHEON_FRONTEND_SHA, "frontend SHA"],
+            [manifest.bffCommit === process.env.PANTHEON_BFF_SHA, "BFF SHA"],
+            [String(manifest.gate?.runId) === process.env.EXPECTED_SOURCE_GATE_RUN_ID, "source gate"],
+            [manifest.profile === "write-proof" && manifest.deploymentProfile === "write-proof", "write-proof profile"],
+            [manifest.pairId === process.env.EXPECTED_PAIR_ID && manifest.pair?.pairId === process.env.EXPECTED_PAIR_ID, "pair id"],
+            [normalizedDigest(manifest.artifactDigestSha256) === normalizedDigest(process.env.EXPECTED_WRITE_PROOF_DIGEST), "selected digest"],
+            [normalizedDigest(manifest.pair?.readOnlyArtifactDigestSha256) === normalizedDigest(process.env.EXPECTED_READ_ONLY_DIGEST), "read-only pair digest"],
+            [normalizedDigest(manifest.pair?.writeProofArtifactDigestSha256) === normalizedDigest(process.env.EXPECTED_WRITE_PROOF_DIGEST), "write-proof pair digest"],
+            [String(manifest.githubArtifactDigest || "").toLowerCase() === String(process.env.EXPECTED_SOURCE_ARTIFACT_DIGEST || "").toLowerCase(), "GitHub artifact digest"],
+            [manifest.buildMode?.VITE_BFF_REAL_WRITES === "true" && manifest.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES === "true", "write posture"],
+            [manifest.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN === "false", "bearer posture"],
+            [manifest.deploymentState === "accepted", "deployment state"],
+          ];
+          const failed = checks.filter(([pass]) => !pass).map(([, label]) => label);
+          if (failed.length) throw new Error(`hosted write-proof manifest mismatch: ${failed.join(", ")}`);
+          fs.writeFileSync(
+            `${process.env.PANTHEON_AUDIT_OUT_DIR}/pint-proof-correlation.json`,
+            `${JSON.stringify({
+              correlationId: process.env.PANTHEON_PROOF_CORRELATION_ID,
+              frontendSha: process.env.PANTHEON_FRONTEND_SHA,
+              bffSha: process.env.PANTHEON_BFF_SHA,
+              sourceGateRunId: process.env.EXPECTED_SOURCE_GATE_RUN_ID,
+              sourceArtifactId: process.env.EXPECTED_SOURCE_ARTIFACT_ID,
+              sourceArtifactDigest: process.env.EXPECTED_SOURCE_ARTIFACT_DIGEST,
+              pairId: process.env.EXPECTED_PAIR_ID,
+              status: "before-proof-verified",
+            }, null, 2)}\n`,
+            "utf8",
+          );
+          NODE
 
       - name: PINT hosted governed-proposal smoke
         id: pint_hosted_governance
@@ -429,6 +741,50 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
           npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
+      - name: Verify exact paired hosted deployment after all PINT proof steps
+        id: pint_manifest_after
+        if: always() && env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF == 'true'
+        env:
+          EXPECTED_SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          EXPECTED_SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        run: |
+          set -euo pipefail
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-after-all-proof-steps.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?proof=${PANTHEON_PROOF_CORRELATION_ID}&phase=after" > "$manifest_file"
+          node --input-type=module - "$manifest_file" <<'NODE'
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const digest = (value) => String(value || "").replace(/^sha256:/i, "").toLowerCase();
+          const valid =
+            manifest.commit === process.env.PANTHEON_FRONTEND_SHA &&
+            manifest.bffCommit === process.env.PANTHEON_BFF_SHA &&
+            String(manifest.gate?.runId) === process.env.EXPECTED_SOURCE_GATE_RUN_ID &&
+            manifest.profile === "write-proof" && manifest.deploymentProfile === "write-proof" &&
+            manifest.pairId === process.env.EXPECTED_PAIR_ID &&
+            manifest.pair?.pairId === process.env.EXPECTED_PAIR_ID &&
+            digest(manifest.artifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST) &&
+            digest(manifest.pair?.readOnlyArtifactDigestSha256) === digest(process.env.EXPECTED_READ_ONLY_DIGEST) &&
+            digest(manifest.pair?.writeProofArtifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST) &&
+            String(manifest.githubArtifactDigest || "").toLowerCase() === String(process.env.EXPECTED_SOURCE_ARTIFACT_DIGEST || "").toLowerCase() &&
+            manifest.buildMode?.VITE_BFF_REAL_WRITES === "true" &&
+            manifest.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES === "true" &&
+            manifest.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN === "false" &&
+            manifest.deploymentState === "accepted";
+          if (!valid) throw new Error("hosted write-proof pair changed during the correlated proof");
+          const correlationFile = `${process.env.PANTHEON_AUDIT_OUT_DIR}/pint-proof-correlation.json`;
+          const correlation = JSON.parse(fs.readFileSync(correlationFile, "utf8"));
+          if (correlation.correlationId !== process.env.PANTHEON_PROOF_CORRELATION_ID) {
+            throw new Error("hosted proof correlation changed before final manifest verification");
+          }
+          correlation.status = "after-proof-verified";
+          fs.writeFileSync(correlationFile, `${JSON.stringify(correlation, null, 2)}\n`, "utf8");
+          NODE
+
       - name: Verify live BFF release identity remained stable
         id: release_identity_final
         if: always() && steps.release_identity.outcome == 'success'
@@ -466,18 +822,32 @@ jobs:
           }}
         run: |
           set -euo pipefail
-          verified_digest="$(node scripts/release-candidate.mjs verify \
+          verified_read_only_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
             --expected-bff-sha "$PANTHEON_BFF_SHA" \
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$GITHUB_RUN_ID" \
-            --expected-artifact-digest "$PANTHEON_EXPECTED_ARTIFACT_DIGEST")"
-          if [[ "$verified_digest" != "$PANTHEON_EXPECTED_ARTIFACT_DIGEST" ]]; then
-            echo "Final candidate digest mismatch: expected=$PANTHEON_EXPECTED_ARTIFACT_DIGEST verified=$verified_digest" >&2
+            --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
+            --profile read-only)"
+          verified_write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --expected-bff-sha "$PANTHEON_BFF_SHA" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$GITHUB_RUN_ID" \
+            --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
+            --profile write-proof)"
+          if [[ "$verified_read_only_digest" != "$PANTHEON_EXPECTED_ARTIFACT_DIGEST" || \
+                "$verified_write_proof_digest" != "$PANTHEON_EXPECTED_WRITE_PROOF_DIGEST" ]]; then
+            echo "Final paired candidate digest mismatch." >&2
             exit 1
           fi
-          printf '%s\n' "$verified_digest" > "$PANTHEON_AUDIT_OUT_DIR/final-candidate-digest.txt"
+          printf 'pairId=%s\nreadOnlyArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
+            "$PANTHEON_CANDIDATE_PAIR_ID" \
+            "$verified_read_only_digest" \
+            "$verified_write_proof_digest" \
+            > "$PANTHEON_AUDIT_OUT_DIR/final-candidate-pair.txt"
 
       - name: Record gate step outcomes
         if: always()
@@ -485,20 +855,23 @@ jobs:
           cat > "$PANTHEON_AUDIT_OUT_DIR/release-gate-step-outcomes.json" <<JSON
           {
             "release_identity": { "outcome": "${{ steps.release_identity.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-identity.json" },
+            "proof_source_pair": { "outcome": "${{ steps.proof_source_pair.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-source-pair.txt" },
             "release_identity_final": { "outcome": "${{ steps.release_identity_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-version-final.json" },
             "install": { "outcome": "${{ steps.install.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-ci.log" },
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "deploy_controller": { "outcome": "${{ steps.deploy_controller.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deploy-controller-regression.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
+            "build_write_proof": { "outcome": "${{ steps.build_write_proof.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build-write-proof.log" },
             "candidate": { "outcome": "${{ steps.candidate.outcome }}", "evidence": ".release-candidate/candidate.json" },
-            "candidate_final": { "outcome": "${{ steps.candidate_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/final-candidate-digest.txt" },
+            "candidate_final": { "outcome": "${{ steps.candidate_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/final-candidate-pair.txt" },
             "bundle_budget": { "outcome": "${{ steps.bundle_budget.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bundle-budget-check.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
             "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
             "auth_smoke": { "outcome": "${{ steps.auth_smoke.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-authenticated-live-smoke.log" },
             "write_probe": { "outcome": "${{ steps.write_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-write-path-probe.log" },
+            "pint_manifest_before": { "outcome": "${{ steps.pint_manifest_before.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deployment-before-pint.json" },
             "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-fixture-e2e.log" },
@@ -507,6 +880,7 @@ jobs:
             "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
             "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
             "pint_hosted_e2e": { "outcome": "${{ steps.pint_hosted_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-hosted-desktop-mobile-e2e.log" },
+            "pint_manifest_after": { "outcome": "${{ steps.pint_manifest_after.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deployment-after-all-proof-steps.json" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
@@ -518,7 +892,7 @@ jobs:
         continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail == 'true' }}
         run: node scripts/aggregate-release-gate.mjs
 
-      - name: Upload deployable immutable candidate
+      - name: Upload deployable immutable candidate pair
         id: candidate_upload
         if: >-
           ${{
@@ -548,6 +922,9 @@ jobs:
             echo "- BFF SHA: \`${PANTHEON_BFF_SHA}\`"
             echo "- gate run: \`${GITHUB_RUN_ID}\`"
             echo "- gate attempt: \`${GITHUB_RUN_ATTEMPT}\`"
+            echo "- pair id: \`${PANTHEON_CANDIDATE_PAIR_ID}\`"
+            echo "- read-only digest: \`${PANTHEON_EXPECTED_ARTIFACT_DIGEST}\`"
+            echo "- write-proof digest: \`${PANTHEON_EXPECTED_WRITE_PROOF_DIGEST}\`"
             echo "- artifact: \`pantheon-fe-release-candidate-attempt-${GITHUB_RUN_ATTEMPT}\`"
             echo "- GitHub artifact digest: \`${{ steps.candidate_upload.outputs.artifact-digest }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
