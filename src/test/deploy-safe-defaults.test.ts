@@ -141,8 +141,10 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
     expect(fixtureBlock).toContain('--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"');
     expect(fixtureBlock).toContain("--trace=off");
-    expect(fixtureBlock).toContain("--screenshot=off");
-    expect(fixtureBlock).toContain("--video=off");
+    // screenshot and video are Playwright config options, not `playwright test`
+    // CLI flags. Keep them out of this command so the gate cannot fail before
+    // collecting any tests with "unknown option".
+    expect(fixtureBlock).not.toMatch(/--(?:screenshot|video)(?:=|\s)/u);
     expect(fixtureBlock).not.toContain("npm run dev --");
     expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
     expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");

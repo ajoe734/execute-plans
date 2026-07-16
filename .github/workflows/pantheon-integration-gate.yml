@@ -350,8 +350,6 @@ jobs:
             --retries=0 \
             --output "$PANTHEON_AUDIT_OUT_DIR/playwright-output" \
             --trace=off \
-            --screenshot=off \
-            --video=off \
             --reporter=list,json \
             2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log"
 
