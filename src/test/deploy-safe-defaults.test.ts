@@ -475,6 +475,27 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedPersonaServantPreflight).not.toMatch(
       /stableUuid\([^)]*operatorToken/u,
     );
+    const responseJsonBoundary = hostedPersonaServantPreflight.slice(
+      hostedPersonaServantPreflight.indexOf("function safeDiagnosticValue"),
+      hostedPersonaServantPreflight.indexOf("const devBffHost"),
+    );
+    expect(responseJsonBoundary).toContain("http_status: responseStatus");
+    expect(responseJsonBoundary).toContain("error.error_code");
+    expect(responseJsonBoundary).toContain("error.code");
+    expect(responseJsonBoundary).toContain("details.precondition_failed");
+    expect(responseJsonBoundary).toContain(
+      "/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u",
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /Authorization|operatorToken|raw_body|response_body/iu,
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /error\.message|details\.message|payload\.message|parsed\.message/u,
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /JSON\.stringify\((?:text|parsed|payload|detail|error)\)/u,
+    );
+    expect(responseJsonBoundary).not.toMatch(/\$\{text\}/u);
     expect(hostedPersonaServantPreflight).not.toContain("/bff/personas");
     expect(hostedPersonaServantPreflight).not.toMatch(/delete|cleanup/iu);
     expect(hostedPersonaInteractionSpec).toContain(

@@ -69,6 +69,37 @@ function proofHeaders(requestId, extra = {}) {
   };
 }
 
+function safeDiagnosticValue(value) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function safeErrorDiagnostics(responseStatus, parsed) {
+  const payload = record(parsed);
+  const detail = record(payload.detail);
+  const error = record(
+    payload.error ??
+      detail.error ??
+      (Object.keys(detail).length > 0 ? detail : payload),
+  );
+  const details = record(error.details);
+  const errorCode =
+    safeDiagnosticValue(error.error_code) ?? safeDiagnosticValue(error.code);
+  const preconditionFailed = safeDiagnosticValue(
+    details.precondition_failed,
+  );
+  return {
+    http_status: responseStatus,
+    ...(errorCode ? { error_code: errorCode } : {}),
+    ...(preconditionFailed
+      ? { precondition_failed: preconditionFailed }
+      : {}),
+  };
+}
+
 async function responseJson(response, label) {
   const text = await response.text();
   let parsed;
@@ -77,8 +108,10 @@ async function responseJson(response, label) {
   } catch {
     parsed = {};
   }
-  if (!response.ok)
-    throw new Error(`${label} returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const diagnostics = safeErrorDiagnostics(response.status, parsed);
+    throw new Error(`${label} failed: ${JSON.stringify(diagnostics)}.`);
+  }
   return parsed;
 }
 
