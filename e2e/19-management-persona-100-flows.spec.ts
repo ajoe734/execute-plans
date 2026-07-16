@@ -12,6 +12,7 @@ import {
   LOCAL_FIXTURE_AUTH_TOKEN,
   installOidcDevLogin,
   mutationAuthHeaders,
+  targetsExternalE2eEnvironment,
 } from "./helpers/auth";
 
 const SNAPSHOT_AT = "2026-06-13T00:00:00Z";
@@ -1218,6 +1219,10 @@ const flows: Flow[] = [...uiFlows, ...fetchFlows];
 test.setTimeout(180_000);
 
 test("runs 100 management/persona/trading interaction flows", async ({ page }) => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
   expect(flows).toHaveLength(100);
   expect(new Set(flows.map((flow) => flow.id)).size).toBe(100);
   expect(new Set(flows.map((flow) => `${flow.type}:${flow.category}:${"path" in flow ? flow.path : ""}`)).size).toBeGreaterThan(90);

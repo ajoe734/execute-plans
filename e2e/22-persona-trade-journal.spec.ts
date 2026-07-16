@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const PERSONA_ID = "per_quant";
 
@@ -144,6 +148,11 @@ const mockPatterns = [
 ];
 
 test.describe("Persona Trade Journal E2E Flows", () => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
+
   test.beforeEach(async ({ page }) => {
     await installOidcDevLogin(page, {
       goto: false,

@@ -124,6 +124,61 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
+  it("runs release-gate Playwright evidence against the exact candidate", () => {
+    const start = integrationWorkflow.indexOf(
+      "- name: Release-gate Playwright evidence against exact candidate",
+    );
+    const end = integrationWorkflow.indexOf(
+      "- name: Frontend browser BFF probe",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const fixtureBlock = integrationWorkflow.slice(start, end);
+
+    expect(fixtureBlock).toContain("if: steps.pr_preview.outcome == 'success'");
+    expect(fixtureBlock).toContain('PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"');
+    expect(fixtureBlock).toContain('PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"');
+    expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
+    expect(fixtureBlock).not.toContain("npm run dev --");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
+    expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
+    expect(fixtureBlock).toContain("BFF_FALLBACK: strict");
+    for (const credential of [
+      "BFF_AUTH_TOKEN",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      expect(fixtureBlock).not.toContain(`${credential}: $` + "{{");
+    }
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(fixtureBlock).toMatch(
+        new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
+      );
+    }
+    expect(integrationWorkflow).toContain(
+      '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
+    );
+  });
+
   it("publishes accepted manifests with a durable atomic replace", () => {
     expect(deployScript).toContain("publish_manifest_atomically");
     expect(deployScript).toContain("atomic-release-manifest.py");
@@ -135,6 +190,14 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(atomicManifest).toContain("os.replace(");
     expect(atomicManifest).toContain("os.fsync(release_fd)");
     expect(atomicManifest).toContain("os.fsync(store_fd)");
+  });
+
+  it("keeps current hosted FE checks advisory while producing a deployable candidate", () => {
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_FE_HARD_GATE: "false"',
+    );
+    expect(deployWorkflow).toContain("Deploy exact gated candidate");
+    expect(deployScript).toContain("post-switch manifest, BFF, and browser/auth probe");
   });
 
   it("deploys only the immutable artifact from one exact successful dev gate", () => {
@@ -193,6 +256,22 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'run_release_probe candidate_pre_switch "${RELEASE_DIR}"',
     );
+    expect(deployScript).toContain('local strict_env="0"');
+    expect(deployScript).toContain(
+      'if [[ "${strict}" == "true" || "${strict}" == "1" ]]',
+    );
+    expect(deployScript).toContain('PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"');
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)"',
+    );
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}"',
+    );
+    expect(deployScript).toContain(
+      'run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" "${probe_strict}" "${legacy_compat}" loaded "${rollback_compat}"',
+    );
+    expect(deployScript).toContain('probe_strict=false');
+    expect(deployScript).toContain('rollback_compat=true');
     expect(deployScript).toContain(
       'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
     );

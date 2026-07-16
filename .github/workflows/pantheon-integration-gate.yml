@@ -88,6 +88,10 @@ jobs:
       # overrides are limited to an explicit manual gate run and can never
       # create a release artifact consumed by the deploy workflow.
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail || 'false' }}
+      # The integration gate proves the exact candidate before deploy. Current
+      # hosted FE readback is enforced by the deploy workflow after switch, so
+      # stale-host evidence must not deadlock candidate publication.
+      PANTHEON_HOSTED_FE_HARD_GATE: "false"
       PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
       FE_INT_GATE_PERF_STRICT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && '1' || '0' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
@@ -304,6 +308,49 @@ jobs:
           cat "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log"
           exit 1
 
+      - name: Release-gate Playwright evidence against exact candidate
+        id: fixture_e2e
+        if: steps.pr_preview.outcome == 'success'
+        continue-on-error: true
+        env:
+          PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"
+          FRONTEND_BASE_URL: "http://127.0.0.1:4173"
+          PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4173"
+          PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"
+          PANTHEON_HOSTED_E2E: ""
+          FE_INT_GATE_LIVE_BFF: ""
+          F08_CREATE_INTENT_LIVE_BFF: ""
+          RUN_LIVE_BFF_CONTRACTS: ""
+          VITE_BFF_FALLBACK: strict
+          BFF_FALLBACK: strict
+          VITE_BFF_DEV_BEARER_TOKEN: ""
+        run: |
+          set -o pipefail
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
+          npx playwright test \
+            e2e/01-startup-session.spec.ts \
+            e2e/02-control-room.spec.ts \
+            e2e/03-execution-loop.spec.ts \
+            e2e/04-sentinel-remediation.spec.ts \
+            e2e/04b-optimization-loop.spec.ts \
+            e2e/05-interventions.spec.ts \
+            e2e/06-entity-registry.spec.ts \
+            e2e/07-high-risk-confirm.spec.ts \
+            e2e/08-create-intent.spec.ts \
+            e2e/08-sse-reconnect.spec.ts \
+            e2e/09-strict-vs-hybrid.spec.ts \
+            e2e/10-rollback-saga.spec.ts \
+            e2e/11-handoff-sla.spec.ts \
+            e2e/12-approvals.spec.ts \
+            e2e/13-agora.spec.ts \
+            e2e/16-audit-correlation.spec.ts \
+            e2e/17-a11y-v5.spec.ts \
+            e2e/18-perf.spec.ts \
+            --project=chromium \
+            --retries=0 \
+            --reporter=list,json \
+            2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log"
+
       - name: Frontend browser BFF probe
         id: browser_probe
         continue-on-error: true
@@ -341,6 +388,7 @@ jobs:
       - name: Management hosted production acceptance
         id: mgmt_hosted_accept
         continue-on-error: true
+        timeout-minutes: 8
         env:
           PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
           PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
@@ -453,6 +501,7 @@ jobs:
             "write_probe": { "outcome": "${{ steps.write_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-write-path-probe.log" },
             "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
+            "fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-fixture-e2e.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
             "route_load": { "outcome": "${{ steps.route_load.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/route-load-baseline.log" },
             "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },

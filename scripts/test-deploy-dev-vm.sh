@@ -250,6 +250,21 @@ const phase = match?.[1] || "unknown";
 const log = process.env.MOCK_CALL_LOG;
 if (!log) throw new Error("MOCK_CALL_LOG is required");
 fs.appendFileSync(log, `probe:${phase}\n`, "utf8");
+fs.appendFileSync(
+  log,
+  `probe-source-scan:${phase}:${process.env.PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-strict:${phase}:${process.env.PANTHEON_PROBE_RELEASE_STRICT || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-legacy-rollback-compat:${phase}:${process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT || "unset"}\n`,
+  "utf8",
+);
 if (phase === "recovery_rollback") {
   const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
   const probeIndex = calls.lastIndexOf(`probe:${phase}`);
@@ -554,6 +569,27 @@ assert_probe_not_called() {
   fi
 }
 
+assert_probe_source_scan() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-source-scan:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use source scan ${expected}"
+}
+
+assert_probe_strict() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-strict:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use strict mode ${expected}"
+}
+
+assert_probe_legacy_rollback_compat() {
+  local phase="$1"
+  local expected="$2"
+  grep -Fxq "probe-legacy-rollback-compat:${phase}:${expected}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} to use legacy rollback compatibility ${expected}"
+}
+
 assert_summary_outcome() {
   local expected="$1"
   local observed
@@ -601,7 +637,14 @@ test_valid_candidate_success() {
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "valid candidate should succeed"
   assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_probe_not_called rollback
   grep -Fxq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
@@ -624,7 +667,43 @@ test_valid_candidate_success() {
     show_deploy_failure "explicit legacy predecessor compatibility should succeed"
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
+  assert_probe_called post_switch
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case valid-transitional-legacy-bff-fields
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    delete payload.artifactDigest;
+    delete payload.artifactDigestSha256;
+    payload.deployedAt="20260715T072629Z";
+    payload.sourceRef=payload.commit;
+    payload.sourceBranch="dev";
+    payload.feHost="https://fe.test";
+    payload.bffHost="https://bff.test";
+    payload.bffCommitSource="bff_version";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "transitional legacy predecessor BFF fields should not require full modern identity"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 0
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 1
+  assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -636,7 +715,13 @@ test_valid_candidate_success() {
     show_deploy_failure "candidate with a fully qualified modern predecessor should succeed"
   assert_candidate_is_live
   assert_probe_called previous_target_pre_switch
+  assert_probe_source_scan previous_target_pre_switch loaded
+  assert_probe_strict previous_target_pre_switch 1
+  assert_probe_legacy_rollback_compat previous_target_pre_switch 0
   assert_probe_called candidate_pre_switch
+  assert_probe_source_scan candidate_pre_switch all
+  assert_probe_strict candidate_pre_switch 1
+  assert_probe_legacy_rollback_compat candidate_pre_switch 0
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
@@ -756,6 +841,21 @@ test_bff_identity_is_bound_before_and_after_switch() {
   assert_probe_called previous_target_pre_switch
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
+
+  setup_case previous-manifest-bff-host-mismatch
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.bffHost="https://wrong-bff.test";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    die "legacy predecessor with mismatched BFF host unexpectedly switched"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "deployment manifest BFF identity mismatch" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing transitional BFF host mismatch rejection"
 }
 
 test_post_probe_failure_rolls_back_and_reprobes() {

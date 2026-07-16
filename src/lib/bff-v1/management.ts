@@ -3308,7 +3308,7 @@ export function adaptQuarterlyRankingRows(raw: unknown): QuarterlyRankingRow[] |
   if (!items) return null;
 
   return items.flatMap((record, index) => {
-    const personaId = asString(record.personaId ?? record.persona_id ?? record.id);
+    const personaId = asString(record.personaId ?? record.persona_id ?? record.persona ?? record.id);
     if (!personaId) return [];
 
     const metrics = objectOrEmpty(record.metrics);
@@ -3331,12 +3331,12 @@ export function adaptQuarterlyRankingRows(raw: unknown): QuarterlyRankingRow[] |
       ...record,
       quarter: asString(record.quarter),
       personaId,
-      personaName: asString(record.personaName ?? record.persona_name ?? record.name, personaId),
+      personaName: asString(record.personaName ?? record.persona_name ?? record.name ?? record.display_name ?? record.persona, personaId),
       currentRank: numeric(record.currentRank ?? record.current_rank ?? record.rank ?? index + 1),
       previousQuarterRank: optionalFiniteNumber(record.previousQuarterRank ?? record.previous_quarter_rank),
       rankDelta: optionalFiniteNumber(record.rankDelta ?? record.rank_delta),
-      tier: asString(record.tier ?? record.tier_label, "disqualified") as QuarterlyRankingRow["tier"],
-      score: numeric(record.score ?? record.overall_score),
+      tier: asString(record.tier ?? record.tierLabel ?? record.tier_label, "disqualified") as QuarterlyRankingRow["tier"],
+      score: numeric(record.score ?? record.overallScore ?? record.overall_score),
       scoreBreakdown: {
         pnlScore: numeric(components.pnlScore ?? components.pnl_score),
         sharpeScore: numeric(components.sharpeScore ?? components.sharpe_score),
@@ -4163,14 +4163,21 @@ export const mgmt = {
   },
 
   quarterlyRanking: {
-    listLiveOnly: (quarter?: string): Promise<QuarterlyRankingRow[]> =>
+    listLiveOnly: (
+      quarter?: string,
+      filters?: { pageSize?: number; persona?: string },
+    ): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) },
         adaptQuarterlyRankingRows,
       ),
-    list: (quarter: string | undefined, seedFn: () => QuarterlyRankingRow[]): Promise<QuarterlyRankingRow[]> =>
+    list: (
+      quarter: string | undefined,
+      seedFn: () => QuarterlyRankingRow[],
+      filters?: { pageSize?: number; persona?: string },
+    ): Promise<QuarterlyRankingRow[]> =>
       withLiveOrMock<QuarterlyRankingRow[]>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) },
         async () => seedFn(),
         safeAdapt(adaptQuarterlyRankingRows, seedFn),
       ),

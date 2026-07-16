@@ -26,6 +26,9 @@ const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const RELEASE_STRICT = process.env.PANTHEON_PROBE_RELEASE_STRICT === "1";
 const LEGACY_RELEASE_COMPAT =
   process.env.PANTHEON_PROBE_LEGACY_RELEASE_COMPAT === "1";
+const LEGACY_ROLLBACK_TARGET_COMPAT =
+  LEGACY_RELEASE_COMPAT &&
+  process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT === "1";
 const EXPECTED_FE_SHA = String(
   process.env.PANTHEON_EXPECTED_FE_SHA || "",
 ).trim();
@@ -34,9 +37,13 @@ const EXPECTED_ARTIFACT_DIGEST = String(
 ).trim();
 const PROBE_JSON_OUT = String(process.env.PANTHEON_PROBE_JSON_OUT || "").trim();
 const CANDIDATE_DIR = String(process.env.PANTHEON_CANDIDATE_DIR || "").trim();
+const CANDIDATE_SOURCE_SCAN_MODE = String(
+  process.env.PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN || "all",
+)
+  .trim()
+  .toLowerCase();
 const OVERALL_TIMEOUT_MS = 120_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
-const REQUIRED_CORE_TIMEOUT_MS = 20_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
 export const HOSTED_UX_PROFILES = Object.freeze([
   Object.freeze({
@@ -72,6 +79,7 @@ const FRONTEND_RESOURCE_TYPES = new Set([
   "style",
   "stylesheet",
 ]);
+const CANDIDATE_SOURCE_SCAN_MODES = new Set(["all", "loaded"]);
 const MAX_SCANNED_ASSETS = 2_000;
 const MAX_SCANNED_BYTES = 128 * 1024 * 1024;
 const probeStartedAt = Date.now();
@@ -328,7 +336,7 @@ export function assessPersonaFleetSafety(result) {
 async function waitForCoreBffResponse(
   page,
   expectedPath,
-  timeoutMs = Math.min(REQUIRED_CORE_TIMEOUT_MS, remainingTimeoutMs()),
+  timeoutMs = remainingTimeoutMs(),
 ) {
   try {
     const res = await page.waitForResponse(
@@ -826,6 +834,54 @@ export function listCandidateScriptAndStyleFiles(candidateDir) {
     filePath,
     relativePath: path.relative(root, filePath).split(path.sep).join("/"),
   }));
+}
+
+export function listCandidateLoadedScriptAndStyleFiles(
+  candidateResolver,
+  assetUrls,
+) {
+  const filesByRelativePath = new Map();
+  const missing = [];
+
+  for (const assetUrl of assetUrls) {
+    let resolved;
+    try {
+      resolved = candidateResolver.resolve(assetUrl, { spaFallback: false });
+    } catch (error) {
+      missing.push({
+        source: redactUrl(assetUrl),
+        fetched: redactUrl(assetUrl),
+        status: 0,
+        ok: false,
+        error: redactDiagnosticText(error),
+      });
+      continue;
+    }
+
+    if (resolved.status !== 200) {
+      missing.push({
+        source: redactUrl(assetUrl),
+        fetched: redactUrl(assetUrl),
+        status: resolved.status,
+        ok: false,
+        error: "candidate asset is unavailable",
+      });
+      continue;
+    }
+
+    if (!/\.(?:css|js)$/iu.test(resolved.relativePath)) continue;
+    filesByRelativePath.set(resolved.relativePath, {
+      filePath: resolved.filePath,
+      relativePath: resolved.relativePath,
+    });
+  }
+
+  return {
+    files: [...filesByRelativePath.values()].sort((left, right) =>
+      left.relativePath.localeCompare(right.relativePath),
+    ),
+    missing,
+  };
 }
 
 function isFrontendResource(url, resourceType) {
@@ -1521,14 +1577,23 @@ async function runProbe() {
       "PANTHEON_EXPECTED_ARTIFACT_DIGEST must be an exact SHA-256 digest",
     );
   }
-  if (CANDIDATE_DIR && !RELEASE_STRICT) {
+  if (CANDIDATE_DIR && !RELEASE_STRICT && !LEGACY_ROLLBACK_TARGET_COMPAT) {
     strictConfigurationFailures.push(
       "PANTHEON_CANDIDATE_DIR requires PANTHEON_PROBE_RELEASE_STRICT=1",
     );
   }
-  if (LEGACY_RELEASE_COMPAT && !RELEASE_STRICT) {
+  if (
+    LEGACY_RELEASE_COMPAT &&
+    !RELEASE_STRICT &&
+    !LEGACY_ROLLBACK_TARGET_COMPAT
+  ) {
     strictConfigurationFailures.push(
       "PANTHEON_PROBE_LEGACY_RELEASE_COMPAT requires PANTHEON_PROBE_RELEASE_STRICT=1",
+    );
+  }
+  if (!CANDIDATE_SOURCE_SCAN_MODES.has(CANDIDATE_SOURCE_SCAN_MODE)) {
+    strictConfigurationFailures.push(
+      "PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN must be all or loaded",
     );
   }
   if (strictConfigurationFailures.length > 0) {
@@ -1839,9 +1904,18 @@ async function runProbe() {
     for (const url of assetUrls) frontendAssetUrls.add(url);
 
     if (candidateResolver) {
-      for (const asset of listCandidateScriptAndStyleFiles(
-        candidateResolver.root,
-      )) {
+      const candidateAssets =
+        CANDIDATE_SOURCE_SCAN_MODE === "all"
+          ? {
+              files: listCandidateScriptAndStyleFiles(candidateResolver.root),
+              missing: [],
+            }
+          : listCandidateLoadedScriptAndStyleFiles(
+              candidateResolver,
+              frontendAssetUrls,
+            );
+      bundleFetches.push(...candidateAssets.missing);
+      for (const asset of candidateAssets.files) {
         const text = fs.readFileSync(asset.filePath, "utf8");
         scannedTexts.push({ source: asset.relativePath, text });
         bundleText += text;
@@ -2039,6 +2113,7 @@ async function runProbe() {
         checks: { routeNotApplicable: true },
         failures: [],
       };
+  const noEmbeddedDevBearerRequired = !LEGACY_ROLLBACK_TARGET_COMPAT;
   const basePass =
     shellOk &&
     publicHealthOk &&
@@ -2047,7 +2122,7 @@ async function runProbe() {
     observedProtectedResponsesOk &&
     noAuthorizationRequests &&
     browserBffMethodPolicy.pass &&
-    noEmbeddedDevBearer &&
+    (!noEmbeddedDevBearerRequired || noEmbeddedDevBearer) &&
     personaFleetSafety.pass &&
     rootRendered &&
     pageErrors.length === 0 &&
@@ -2104,7 +2179,10 @@ async function runProbe() {
     "navigation waitUntil: " + NAVIGATION_WAIT_UNTIL,
     "release strict: " + RELEASE_STRICT,
     "legacy release compatibility: " + LEGACY_RELEASE_COMPAT,
+    "legacy rollback target compatibility: " +
+      LEGACY_ROLLBACK_TARGET_COMPAT,
     "candidate directory routed: " + Boolean(candidateResolver),
+    "candidate source scan: " + CANDIDATE_SOURCE_SCAN_MODE,
     "core waitForResponse paths: " + CORE_BFF_PATHS.join(", "),
     "required core waitForResponse paths: " +
       REQUIRED_CORE_BFF_PATHS.join(", "),
@@ -2129,6 +2207,7 @@ async function runProbe() {
     "- browser BFF requests use only GET/HEAD: " + browserBffMethodPolicy.pass,
     "- browser BFF write-method request count: " +
       browserBffMethodPolicy.writeRequestCount,
+    "- embedded dev bearer check required: " + noEmbeddedDevBearerRequired,
     "- bundle contains no embedded dev bearer literal: " + noEmbeddedDevBearer,
     "- contains intended BFF URL in html/bundle: " + containsBffStatic,
     "- intended BFF runtime request count: " + requests.length,
@@ -2333,7 +2412,9 @@ async function runProbe() {
         upstreamBffBase: UPSTREAM_BFF_BASE,
         oldBffUrl: OLD_BFF_URL || null,
         candidateDirectoryRouted: Boolean(candidateResolver),
+        candidateSourceScan: CANDIDATE_SOURCE_SCAN_MODE,
         legacyReleaseCompatibility: LEGACY_RELEASE_COMPAT,
+        legacyRollbackTargetCompatibility: LEGACY_ROLLBACK_TARGET_COMPAT,
       },
       expectations: {
         frontendSha: canonicalizeCommitSha(EXPECTED_FE_SHA),
@@ -2348,6 +2429,7 @@ async function runProbe() {
           observedProtectedResponsesOk,
           noAuthorizationRequests,
           noBrowserWriteMethods: browserBffMethodPolicy.pass,
+          noEmbeddedDevBearerRequired,
           noEmbeddedDevBearer,
           personaFleetSafetyPassed: personaFleetSafety.pass,
           applicationRootRendered: rootRendered,

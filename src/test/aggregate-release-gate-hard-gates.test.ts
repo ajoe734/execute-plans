@@ -26,6 +26,7 @@ const hardGateKeys = [
   "release_identity",
   "deploy_controller",
   "candidate",
+  "fixture_e2e",
   "release_identity_final",
 ] as const;
 
@@ -40,6 +41,7 @@ const gate1Keys = [
   "bundle_budget",
   "contract",
   "mgmt_persona_3000",
+  "fixture_e2e",
   "release_identity_final",
 ] as const;
 
@@ -48,6 +50,7 @@ const hardGateLabels = {
   deploy_controller:
     "`npm run test:deploy-release` passes (deployment controller regression).",
   candidate: "Immutable release candidate was prepared.",
+  fixture_e2e: "Isolated loopback fixture E2E passes.",
   release_identity_final:
     "BFF release identity was revalidated after validation.",
 } as const;

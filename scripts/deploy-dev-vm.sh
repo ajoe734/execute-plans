@@ -221,16 +221,18 @@ const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedSta
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
 const modernIdentity = Boolean(expectedGithubDigest);
+const expectedBffSha = String(expectedBff || "").toLowerCase();
+const observedBffCommit = String(payload.bffCommit || "").toLowerCase();
+const observedBffSourceCommit = String(payload.bffSourceCommitSha || "").toLowerCase();
+const observedNestedBffSourceCommit = String(payload.bff?.sourceCommitSha || "").toLowerCase();
 const partialModernIdentity = !modernIdentity && Boolean(
   payload.schemaVersion != null ||
+  payload.repository ||
   payload.frontendSha ||
   payload.frontend ||
   payload.gate ||
   payload.integrationGateRunId ||
-  payload.githubArtifactDigest ||
-  payload.bffSourceCommitSha ||
-  payload.bffHost ||
-  payload.bff
+  payload.githubArtifactDigest
 );
 if (partialModernIdentity) {
   throw new Error("deployment manifest has incomplete modern release identity");
@@ -295,13 +297,19 @@ if (
 }
 if (
   expectedBff &&
-  (String(payload.bffCommit || "").toLowerCase() !== expectedBff.toLowerCase() ||
+  (observedBffCommit !== expectedBffSha ||
     payload.bffCommitEvidence !== true ||
+    (observedBffSourceCommit && observedBffSourceCommit !== expectedBffSha) ||
+    (payload.bffHost && payload.bffHost !== expectedBffHost) ||
+    (payload.bff?.baseUrl && payload.bff.baseUrl !== expectedBffHost) ||
+    (observedNestedBffSourceCommit && observedNestedBffSourceCommit !== expectedBffSha) ||
+    (payload.bff?.sourceCommitKnown !== undefined &&
+      payload.bff.sourceCommitKnown !== true) ||
     (modernIdentity &&
-      (String(payload.bffSourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
-        payload.bffHost !== expectedBffHost ||
-        payload.bff?.baseUrl !== expectedBffHost ||
-        String(payload.bff?.sourceCommitSha || "").toLowerCase() !== expectedBff.toLowerCase() ||
+      (!observedBffSourceCommit ||
+        !payload.bffHost ||
+        !payload.bff?.baseUrl ||
+        !observedNestedBffSourceCommit ||
         payload.bff?.sourceCommitKnown !== true)))
 ) {
   throw new Error("deployment manifest BFF identity mismatch");
@@ -407,10 +415,16 @@ run_release_probe() {
   local expected_digest="$4"
   local strict="$5"
   local legacy_compat="${6:-false}"
+  local candidate_source_scan="${7:-all}"
+  local legacy_rollback_target_compat="${8:-false}"
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
   local candidate_env=""
+  local strict_env="0"
   if [[ -n "${candidate_dir}" ]]; then
     candidate_env="${candidate_dir}"
+  fi
+  if [[ "${strict}" == "true" || "${strict}" == "1" ]]; then
+    strict_env="1"
   fi
   if ! PANTHEON_FE_BASE_URL="${FE_HOST}" \
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
@@ -421,9 +435,11 @@ run_release_probe() {
     PANTHEON_PROBE_NOCACHE_SHA="${expected_sha}" \
     PANTHEON_EXPECTED_FE_SHA="${expected_sha}" \
     PANTHEON_EXPECTED_ARTIFACT_DIGEST="${expected_digest}" \
-    PANTHEON_PROBE_RELEASE_STRICT="${strict}" \
+    PANTHEON_PROBE_RELEASE_STRICT="${strict_env}" \
     PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
+    PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)" \
     PANTHEON_CANDIDATE_DIR="${candidate_env}" \
+    PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}" \
     PANTHEON_PROBE_JSON_OUT="${json_out}" \
     PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
     node scripts/probe-hosted-browser-bff.mjs; then
@@ -446,6 +462,12 @@ prequalify_rollback_target() {
   if [[ "${manifest_digest}" =~ ^[0-9a-f]{64}$ && "${gate_run_id}" =~ ^[1-9][0-9]*$ ]]; then
     legacy_compat=false
   fi
+  local probe_strict=true
+  local rollback_compat=false
+  if [[ "${legacy_compat}" == "true" ]]; then
+    probe_strict=false
+    rollback_compat=true
+  fi
   if ! verify_manifest_file \
     "${release_root}/deployment.json" \
     "${release_commit}" \
@@ -458,7 +480,7 @@ prequalify_rollback_target() {
     return 1
   fi
   evidence_append "rollback_target.manifest.${phase}" passed "frontendSha=${release_commit}"
-  if ! run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" true "${legacy_compat}"; then
+  if ! run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" "${probe_strict}" "${legacy_compat}" loaded "${rollback_compat}"; then
     evidence_append "rollback_target.${phase}" failed "frontendSha=${release_commit}"
     return 1
   fi
@@ -490,7 +512,13 @@ verify_restored_previous() {
   if [[ "${PREVIOUS_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ && "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
     rollback_legacy=false
   fi
-  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" true "${rollback_legacy}"; then
+  local rollback_probe_strict=true
+  local rollback_compat=false
+  if [[ "${rollback_legacy}" == "true" ]]; then
+    rollback_probe_strict=false
+    rollback_compat=true
+  fi
+  if ! run_release_probe rollback "" "${PREVIOUS_COMMIT}" "${PREVIOUS_DIGEST}" "${rollback_probe_strict}" "${rollback_legacy}" all "${rollback_compat}"; then
     evidence_append rollback.reprobe failed "previousCommit=${PREVIOUS_COMMIT}"
     return 1
   fi

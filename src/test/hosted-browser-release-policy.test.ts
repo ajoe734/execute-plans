@@ -24,6 +24,7 @@ import {
   inspectDeploymentMetadata,
   isAllowlistedConsoleError,
   isBffRequestUrl,
+  listCandidateLoadedScriptAndStyleFiles,
   listCandidateScriptAndStyleFiles,
   redactDiagnosticText,
   scanTextForSensitiveValues,
@@ -111,6 +112,19 @@ describe("hosted browser strict release policy", () => {
     rowsValid: true,
     liveBannerValid: true,
   };
+
+  it("keeps the required cold-start response within the overall probe budget", () => {
+    const probeSource = readFileSync(
+      resolve("scripts/probe-hosted-browser-bff.mjs"),
+      "utf8",
+    );
+
+    expect(probeSource).toContain("timeoutMs = remainingTimeoutMs()");
+    expect(probeSource).toContain(
+      "waitForCoreBffResponse(page, expectedPath, OPTIONAL_CORE_TIMEOUT_MS)",
+    );
+    expect(probeSource).not.toContain("REQUIRED_CORE_TIMEOUT_MS");
+  });
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);
@@ -317,6 +331,29 @@ describe("hosted browser strict release policy", () => {
     );
 
     expect(files).toEqual(["assets/app.css", "assets/app.js"]);
+  });
+
+  it("can restrict candidate source scanning to browser-loaded assets", () => {
+    const root = temporaryCandidate();
+    const resolver = createCandidateResolver(root);
+    writeFileSync(join(root, "assets", "lazy.js"), "console.log('lazy');", "utf8");
+
+    const result = listCandidateLoadedScriptAndStyleFiles(resolver, [
+      "https://pantheon.example/assets/app.js",
+      "https://pantheon.example/assets/app.js?cache=bust",
+      "https://pantheon.example/assets/missing.css",
+    ]);
+
+    expect(result.files.map((entry) => entry.relativePath)).toEqual([
+      "assets/app.js",
+    ]);
+    expect(result.missing).toEqual([
+      expect.objectContaining({
+        source: "https://pantheon.example/assets/missing.css",
+        status: 404,
+        ok: false,
+      }),
+    ]);
   });
 
   it("defines exact desktop and mobile viewports with hard performance budgets", () => {
@@ -626,6 +663,13 @@ describe("hosted browser strict release policy", () => {
     );
 
     expect(source).toContain("PANTHEON_PROBE_RELEASE_STRICT");
+    expect(source).toContain("PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT");
+    expect(source).toContain(
+      "CANDIDATE_DIR && !RELEASE_STRICT && !LEGACY_ROLLBACK_TARGET_COMPAT",
+    );
+    expect(source).toContain(
+      "LEGACY_RELEASE_COMPAT &&\n    !RELEASE_STRICT &&\n    !LEGACY_ROLLBACK_TARGET_COMPAT",
+    );
     expect(source).toContain("PANTHEON_EXPECTED_FE_SHA");
     expect(source).toContain("PANTHEON_EXPECTED_ARTIFACT_DIGEST");
     expect(source).toContain("PANTHEON_PROBE_JSON_OUT");
@@ -643,6 +687,7 @@ describe("hosted browser strict release policy", () => {
     expect(source).toContain('element.matches(":focus-visible")');
     expect(source).toContain("HOSTED_UX_PERFORMANCE_BUDGETS");
     expect(source).toContain("personaFleetSafety.pass &&");
+    expect(source).toContain("!noEmbeddedDevBearerRequired || noEmbeddedDevBearer");
     expect(source).toContain(
       "personaFleetSafetyPassed: personaFleetSafety.pass",
     );

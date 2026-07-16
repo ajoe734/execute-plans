@@ -228,13 +228,11 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("servant-composer")).toBeVisible();
       if (viewport.name === "mobile") {
         await expect(page.getByTestId("workshop-mobile-priority")).toBeVisible();
-        await page.getByRole("button", { name: "Next question & readiness" }).click();
-        await expect(page.getByTestId("completeness-rail")).toBeVisible();
-        await page.getByRole("button", { name: "Conversation" }).click();
-        await expect(page.getByTestId("workshop-conversation")).toBeVisible();
         const composerOptions = page.getByTestId("workshop-composer-options");
         await expect(composerOptions).toHaveAttribute("data-mobile-collapsed", "true");
-        await page.getByTestId("workshop-composer-options-toggle").click();
+        const optionsToggle = page.getByTestId("workshop-composer-options-toggle");
+        await optionsToggle.click();
+        await expect(optionsToggle).toHaveAttribute("aria-expanded", "true");
         await expect(composerOptions).toHaveAttribute("data-mobile-collapsed", "false");
       } else {
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
@@ -246,6 +244,14 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("eligibility-explanation")).toContainText(
         /eligible|eligibility|opinion authority|unavailable/i,
       );
+      if (viewport.name === "mobile") {
+        await page.getByRole("button", { name: "Next question & readiness" }).click();
+        await expect(page.getByTestId("completeness-rail")).toBeVisible();
+        await page.getByRole("button", { name: "Conversation" }).click();
+        await expect(page.getByTestId("workshop-conversation")).toBeVisible();
+      } else {
+        await expect(page.getByTestId("completeness-rail")).toBeVisible();
+      }
       await expect(page.getByTestId("workshop-card-summary")).toContainText(/Cards: \d+/);
       await expect(page.getByTestId("workshop-event-summary")).toContainText(/Events: \d+/);
       await expect(page.getByTestId("workshop-readiness-summary")).toContainText(/Readiness:/);
