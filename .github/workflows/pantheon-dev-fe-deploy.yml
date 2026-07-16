@@ -920,6 +920,19 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Canonicalize parent proof binding artifact digest
+        id: binding_digest
+        env:
+          RAW_BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          canonical_digest="$(node scripts/normalize-github-artifact-digest.mjs "$RAW_BINDING_ARTIFACT_DIGEST")"
+          if [[ ! "$canonical_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Parent proof binding artifact digest is not canonical." >&2
+            exit 1
+          fi
+          echo "artifact_digest=$canonical_digest" >> "$GITHUB_OUTPUT"
+
       - name: Dispatch independent read-only restore watchdog
         id: watchdog_dispatch
         env:
@@ -927,7 +940,7 @@ jobs:
           CORRELATION_ID: ${{ steps.binding.outputs.correlation_id }}
           PROOF_NONCE: ${{ steps.binding.outputs.nonce }}
           BINDING_ARTIFACT_ID: ${{ steps.binding_upload.outputs.artifact-id }}
-          BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
+          BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}
         run: |
           set -euo pipefail
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1041,7 +1054,7 @@ jobs:
           CORRELATION_ID: ${{ steps.binding.outputs.correlation_id }}
           PROOF_NONCE: ${{ steps.binding.outputs.nonce }}
           BINDING_ARTIFACT_ID: ${{ steps.binding_upload.outputs.artifact-id }}
-          BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
+          BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}
         run: |
           set -euo pipefail
           rm -rf .proof-child-claim
