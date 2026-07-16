@@ -45,9 +45,9 @@ async function openFocusedFleetRow(page: Page, personaId: string) {
     waitUntil: "domcontentloaded",
   });
   await fleetRead;
-  const nonProductionTab = page.getByRole("tab", { name: /非正式資料|Non-production data/i });
-  await expect(nonProductionTab).toBeVisible({ timeout: 30_000 });
-  await nonProductionTab.click();
+  const nonProductionScope = page.getByRole("radio", { name: /非正式資料|Non-production data/i });
+  await expect(nonProductionScope).toBeVisible({ timeout: 30_000 });
+  await nonProductionScope.click();
   const row = page.locator("tr").filter({ hasText: personaId }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   return row;
