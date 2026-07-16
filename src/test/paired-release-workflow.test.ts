@@ -135,8 +135,9 @@ describe("paired Pantheon release workflow", () => {
       "actions/artifacts/${BINDING_ARTIFACT_ID}/zip",
     );
     expect(integration).toContain("needs: proof-authorization");
+    expect(integration).toContain("!cancelled()");
     expect(integration).toContain(
-      "needs.proof-authorization.result == 'success'",
+      "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')",
     );
     expect(integration.indexOf("needs: proof-authorization")).toBeLessThan(
       authorizedProof.indexOf("PANTHEON_BFF_OPERATOR_A_TOKEN"),
@@ -207,7 +208,7 @@ describe("paired Pantheon release workflow", () => {
       "Verify exact write-proof deployment before credentials",
     );
     expect(authorized).toContain(
-      "Run governed proposal with proof-only credentials",
+      "Run governed and Persona proof with proof-only credentials",
     );
     expect(authorized).toContain(
       "Fresh-check active parent and one-time child claim before credentials",
@@ -215,12 +216,17 @@ describe("paired Pantheon release workflow", () => {
     expect(authorized).toContain(
       "fresh child claim does not authorize this credentialed job attempt",
     );
-    expect(authorized).toContain(
-      "Recheck active parent immediately before Persona credentials",
-    );
     expect(
       authorized.match(/authorized parent coordinator is no longer active/gu),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
+    expect(authorized).toContain("!cancelled()");
+    expect(
+      authorized.indexOf("fresh child claim does not authorize"),
+    ).toBeLessThan(
+      authorized.indexOf(
+        "Run governed and Persona proof with proof-only credentials",
+      ),
+    );
     expect(authorized.slice(0, authorized.indexOf("    steps:"))).not.toContain(
       "secrets.PANTHEON_BFF_",
     );
@@ -342,7 +348,26 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(watchdogWorkflow).toContain("cancel_child_and_wait");
     expect(watchdogWorkflow).toContain('gh run cancel "$proof_run_id"');
-    expect(watchdogWorkflow).toContain("for _ in $(seq 1 1800)");
+    expect(watch).toContain(
+      'job.name==="Run authorized one-time Persona write proof"',
+    );
+    expect(watch).toContain(
+      "Exact credentialed hosted proof did not stop within the bounded cancellation deadline.",
+    );
+    const activeChildWatch = watch.slice(
+      watch.indexOf("for _ in $(seq 1 620)"),
+    );
+    expect(activeChildWatch.match(/cancel_child_and_wait/gu)).toHaveLength(2);
+    expect(activeChildWatch.indexOf("cancel_child_and_wait")).toBeLessThan(
+      activeChildWatch.indexOf(
+        "Parent proof coordinator ended while the hosted proof was active; restoring now.",
+      ),
+    );
+    expect(activeChildWatch.lastIndexOf("cancel_child_and_wait")).toBeLessThan(
+      activeChildWatch.indexOf(
+        "Hosted proof exceeded the bounded window; restoring independently.",
+      ),
+    );
     expect(watch).toContain("actions: write");
     expect(
       watchdogWorkflow.match(/\$\(parent_coordinator_terminal\)/gu),
