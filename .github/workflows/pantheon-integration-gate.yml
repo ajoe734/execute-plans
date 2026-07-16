@@ -431,7 +431,7 @@ jobs:
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
-          npx playwright test --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
+          npx playwright test --project=mobile-chromium --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
       - name: Verify live BFF release identity remained stable
         id: release_identity_final

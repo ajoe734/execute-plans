@@ -178,8 +178,28 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
       );
     }
+    expect(fixtureBlock).toContain("--project=chromium");
+    expect(fixtureBlock).not.toContain("--project=mobile-chromium");
     expect(integrationWorkflow).toContain(
       '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
+    );
+  });
+
+  it("splits exact-candidate Chromium from the later mobile-only suite", () => {
+    const start = integrationWorkflow.indexOf("- name: Playwright E2E");
+    const end = integrationWorkflow.indexOf(
+      "- name: Verify live BFF release identity remained stable",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const mobileBlock = integrationWorkflow.slice(start, end);
+
+    expect(mobileBlock).toContain(
+      "npx playwright test --project=mobile-chromium --reporter=list,html,json",
+    );
+    expect(mobileBlock).not.toContain("--project=chromium");
+    expect(mobileBlock).not.toContain(
+      "npx playwright test --reporter=list,html,json",
     );
   });
 
