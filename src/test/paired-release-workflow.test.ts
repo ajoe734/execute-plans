@@ -143,6 +143,9 @@ describe("paired Pantheon release workflow", () => {
       "Download and authenticate source pair before arming",
     );
     expect(watchdogWorkflow).toContain(
+      "Parent proof coordinator ended before an exact child appeared; restoring now.",
+    );
+    expect(watchdogWorkflow).toContain(
       "if: always() && needs.watch.outputs.authorized == 'true'",
     );
     expect(watchdogWorkflow).toContain("pantheon-dev-vm");
