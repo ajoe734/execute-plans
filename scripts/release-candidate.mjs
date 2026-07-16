@@ -544,6 +544,9 @@ function validateExpectedCandidate(candidate, expectations) {
   const pairId = candidate.pairId
     ? normalizeDigest(candidate.pairId, "candidate pair ID")
     : "";
+  if (!profileDeclared && (pairId || expectations.pairId)) {
+    throw new Error("paired candidate profile must be explicitly declared");
+  }
   if (expectations.pairId && pairId !== normalizeDigest(expectations.pairId, "expected pair ID")) {
     throw new Error("candidate pair ID does not match the expected pair");
   }

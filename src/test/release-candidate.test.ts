@@ -726,6 +726,38 @@ describe("paired release candidate preparation and verification", () => {
     fs.writeFileSync(candidatePath, `${JSON.stringify(candidate, null, 2)}\n`);
     expect(() => verifyPair(profileDir)).toThrow(/profile does not match/u);
 
+    const missingProfileRoot = temporaryRoot();
+    const missingProfileDir = path.join(missingProfileRoot, "candidate");
+    preparePair(missingProfileRoot, { outputDir: missingProfileDir });
+    const readOnlyCandidatePath = path.join(
+      missingProfileDir,
+      "candidate.json",
+    );
+    const readOnlyDeploymentPath = path.join(
+      missingProfileDir,
+      "dist",
+      "deployment.json",
+    );
+    const readOnlyCandidate = JSON.parse(
+      fs.readFileSync(readOnlyCandidatePath, "utf8"),
+    );
+    const readOnlyDeployment = JSON.parse(
+      fs.readFileSync(readOnlyDeploymentPath, "utf8"),
+    );
+    delete readOnlyCandidate.profile;
+    delete readOnlyDeployment.profile;
+    fs.writeFileSync(
+      readOnlyCandidatePath,
+      `${JSON.stringify(readOnlyCandidate, null, 2)}\n`,
+    );
+    fs.writeFileSync(
+      readOnlyDeploymentPath,
+      `${JSON.stringify(readOnlyDeployment, null, 2)}\n`,
+    );
+    expect(() => verifyPair(missingProfileDir)).toThrow(
+      /profile must be explicitly declared/u,
+    );
+
     const assetRoot = temporaryRoot();
     const assetDir = path.join(assetRoot, "candidate");
     preparePair(assetRoot, { outputDir: assetDir });
