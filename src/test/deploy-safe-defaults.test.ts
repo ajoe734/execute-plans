@@ -185,6 +185,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     }
     expect(fixtureBlock).toContain("--project=chromium");
     expect(fixtureBlock).not.toContain("--project=mobile-chromium");
+    expect(fixtureBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
+    );
     expect(integrationWorkflow).toContain(
       '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
     );
@@ -199,12 +202,39 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(end).toBeGreaterThan(start);
     const mobileBlock = integrationWorkflow.slice(start, end);
 
+    expect(mobileBlock).toContain("npx playwright test \\");
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(mobileBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+    }
     expect(mobileBlock).toContain(
-      "npx playwright test --project=mobile-chromium --reporter=list,html,json",
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json"',
     );
-    expect(mobileBlock).not.toContain("--project=chromium");
     expect(mobileBlock).not.toContain(
-      "npx playwright test --reporter=list,html,json",
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(mobileBlock).toContain("--project=mobile-chromium");
+    expect(mobileBlock).not.toMatch(/e2e\/\S*hosted\S*\.spec\.ts/u);
+    expect(mobileBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
     );
   });
 

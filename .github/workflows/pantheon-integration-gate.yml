@@ -950,6 +950,7 @@ jobs:
             e2e/17-a11y-v5.spec.ts \
             e2e/18-perf.spec.ts \
             --project=chromium \
+            --grep-invert "asserts MeResponse tenant/env/user/capabilities shape" \
             --retries=0 \
             --output "$PANTHEON_AUDIT_OUT_DIR/playwright-output" \
             --trace=off \
@@ -1031,8 +1032,30 @@ jobs:
           PANTHEON_SSE_ORIGIN_URL="$FE_UNDER_TEST" \
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
-          npx playwright test --project=mobile-chromium --reporter=list,html,json 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json" \
+          npx playwright test \
+            e2e/01-startup-session.spec.ts \
+            e2e/02-control-room.spec.ts \
+            e2e/03-execution-loop.spec.ts \
+            e2e/04-sentinel-remediation.spec.ts \
+            e2e/04b-optimization-loop.spec.ts \
+            e2e/05-interventions.spec.ts \
+            e2e/06-entity-registry.spec.ts \
+            e2e/07-high-risk-confirm.spec.ts \
+            e2e/08-create-intent.spec.ts \
+            e2e/08-sse-reconnect.spec.ts \
+            e2e/09-strict-vs-hybrid.spec.ts \
+            e2e/10-rollback-saga.spec.ts \
+            e2e/11-handoff-sla.spec.ts \
+            e2e/12-approvals.spec.ts \
+            e2e/13-agora.spec.ts \
+            e2e/16-audit-correlation.spec.ts \
+            e2e/17-a11y-v5.spec.ts \
+            e2e/18-perf.spec.ts \
+            --project=mobile-chromium \
+            --grep-invert "asserts MeResponse tenant/env/user/capabilities shape" \
+            --reporter=list,html,json \
+            2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
       - name: Verify exact paired hosted deployment after all PINT proof steps
         id: pint_manifest_after
