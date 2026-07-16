@@ -76,11 +76,18 @@ describe("paired Pantheon release workflow", () => {
       "  proof-authorization:",
     );
     const integrationStart = integrationWorkflow.indexOf("  integration-gate:");
+    const authorizedProofStart = integrationWorkflow.indexOf(
+      "  authorized-write-proof:",
+    );
     const authorization = integrationWorkflow.slice(
       authorizationStart,
       integrationStart,
     );
-    const integration = integrationWorkflow.slice(integrationStart);
+    const integration = integrationWorkflow.slice(
+      integrationStart,
+      authorizedProofStart,
+    );
+    const authorizedProof = integrationWorkflow.slice(authorizedProofStart);
 
     expect(authorization).toContain("PANTHEON_DEV_FE_DEPLOY_OPERATORS");
     expect(authorization).toContain(
@@ -97,6 +104,22 @@ describe("paired Pantheon release workflow", () => {
     expect(authorization).toContain(
       "parent proof nonce/correlation binding mismatch",
     );
+    expect(authorization).toContain(
+      "Hosted proof current child dispatch actor is not the authorized parent operator",
+    );
+    expect(authorization).toContain("childActor !== parentActor");
+    expect(authorization).toContain(
+      "Hosted proof current child run source is not the exact trusted dev dispatch",
+    );
+    expect(authorization).toContain(
+      "Authenticate one-time exact child proof claim",
+    );
+    expect(authorization).toContain(
+      "String(claim.child?.runId) === process.env.GITHUB_RUN_ID",
+    );
+    expect(authorization).toContain(
+      "one-time child proof claim does not authorize this exact run",
+    );
     expect(authorization).toContain("pantheon-proof-binding-attempt-");
     expect(authorization).toContain(
       "actions/artifacts/${BINDING_ARTIFACT_ID}/zip",
@@ -106,8 +129,91 @@ describe("paired Pantheon release workflow", () => {
       "needs.proof-authorization.result == 'success'",
     );
     expect(integration.indexOf("needs: proof-authorization")).toBeLessThan(
-      integration.indexOf("PANTHEON_BFF_OPERATOR_A_TOKEN"),
+      authorizedProof.indexOf("PANTHEON_BFF_OPERATOR_A_TOKEN"),
     );
+  });
+
+  it("registers one exact child run so an unallowlisted collaborator cannot replay the parent nonce", () => {
+    const dispatch = deployWorkflow.slice(
+      deployWorkflow.indexOf(
+        "Dispatch exact parent-bound hosted Persona proof",
+      ),
+      deployWorkflow.indexOf("Wait for hosted proof terminal"),
+    );
+    expect(dispatch).toContain("proof_run_id");
+    expect(dispatch).toContain("pantheon.pint-proof-child-claim.v1");
+    expect(dispatch).toContain("runId: process.env.PROOF_RUN_ID");
+    expect(dispatch).toContain("Upload one-time exact child proof claim");
+    expect(dispatch.indexOf("proof_run_id")).toBeLessThan(
+      dispatch.indexOf("Upload one-time exact child proof claim"),
+    );
+
+    const authorization = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  proof-authorization:"),
+      integrationWorkflow.indexOf("  integration-gate:"),
+    );
+    expect(authorization).toContain("operators.has(childActor)");
+    expect(authorization).toContain("childActor !== parentActor");
+    expect(authorization).toContain(
+      "String(claim.child?.runId) === process.env.GITHUB_RUN_ID",
+    );
+  });
+
+  it("keeps ordinary integration secretless and scopes write credentials to the authorized immutable proof", () => {
+    const integrationStart = integrationWorkflow.indexOf("  integration-gate:");
+    const authorizedStart = integrationWorkflow.indexOf(
+      "  authorized-write-proof:",
+    );
+    const commentStart = integrationWorkflow.indexOf("  pr-comment:");
+    const ordinary = integrationWorkflow.slice(
+      integrationStart,
+      authorizedStart,
+    );
+    const authorized = integrationWorkflow.slice(authorizedStart, commentStart);
+
+    expect(ordinary).toContain('PANTHEON_PINT_HOSTED_PROBE: "false"');
+    expect(ordinary).toContain(
+      'PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "false"',
+    );
+    expect(ordinary).not.toContain("secrets.PANTHEON_BFF_");
+    expect(authorized).toContain("needs: proof-authorization");
+    expect(authorized).toContain(
+      "needs.proof-authorization.result == 'success'",
+    );
+    expect(authorized).toContain("Checkout exact authorized immutable dev ref");
+    expect(authorized).toContain("ref: ${{ inputs.fe_sha }}");
+    expect(authorized).toContain(
+      "Verify exact write-proof deployment before credentials",
+    );
+    expect(authorized).toContain(
+      "Run governed proposal with proof-only credentials",
+    );
+    expect(authorized.slice(0, authorized.indexOf("    steps:"))).not.toContain(
+      "secrets.PANTHEON_BFF_",
+    );
+    expect(
+      authorized.match(/secrets\.PANTHEON_BFF_OPERATOR_A_TOKEN/gu),
+    ).toHaveLength(2);
+    expect(
+      authorized.match(/secrets\.PANTHEON_BFF_VIEWER_TOKEN/gu),
+    ).toHaveLength(2);
+    expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
+      4,
+    );
+    expect(integrationWorkflow).not.toContain(
+      "secrets.PANTHEON_BFF_ADMIN_TOKEN",
+    );
+    expect(integrationWorkflow).not.toContain(
+      "secrets.PANTHEON_BFF_APPROVER_TOKEN",
+    );
+    expect(integrationWorkflow).not.toContain(
+      "secrets.PANTHEON_BFF_RISK_OWNER_TOKEN",
+    );
+    expect(
+      authorized.indexOf(
+        "Verify exact write-proof deployment before credentials",
+      ),
+    ).toBeLessThan(authorized.indexOf("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN"));
   });
 
   it("arms an independent watchdog before enabling writes and restores the same pair", () => {
@@ -140,14 +246,40 @@ describe("paired Pantheon release workflow", () => {
     expect(watchdogWorkflow).toContain("runs-on: ubuntu-latest");
     expect(watchdogWorkflow).toContain("timeout-minutes: 190");
     expect(watchdogWorkflow).toContain(
+      "name: Authenticate exact parent restore authority",
+    );
+    const authorizeStart = watchdogWorkflow.indexOf("  authorize:");
+    const watchStart = watchdogWorkflow.indexOf("  watch:");
+    const restoreStart = watchdogWorkflow.indexOf("  restore:");
+    const authorize = watchdogWorkflow.slice(authorizeStart, watchStart);
+    const watch = watchdogWorkflow.slice(watchStart, restoreStart);
+    expect(authorize).toContain(
+      "Download and authenticate source pair before arming",
+    );
+    expect(authorize).not.toContain(
+      "Resolve and watch uniquely correlated hosted proof",
+    );
+    expect(watch).toContain("needs: authorize");
+    expect(deployWorkflow).toContain(
+      'authorize?.status==="completed" && authorize?.conclusion==="success"',
+    );
+    expect(watchdogWorkflow).toContain("needs: authorize");
+    expect(watchdogWorkflow).toContain(
+      "if: always() && needs.authorize.result == 'success'",
+    );
+    expect(watchdogWorkflow).not.toContain("needs.watch.outputs.authorized");
+    expect(watchdogWorkflow).toContain(
       "Download and authenticate source pair before arming",
     );
     expect(watchdogWorkflow).toContain(
       "Parent proof coordinator ended before an exact child appeared; restoring now.",
     );
     expect(watchdogWorkflow).toContain(
-      "if: always() && needs.watch.outputs.authorized == 'true'",
+      "Parent proof coordinator ended while the hosted proof was active; restoring now.",
     );
+    expect(
+      watchdogWorkflow.match(/\$\(parent_coordinator_terminal\)/gu),
+    ).toHaveLength(2);
     expect(watchdogWorkflow).toContain("pantheon-dev-vm");
     expect(watchdogWorkflow).toContain(
       "PANTHEON_DEPLOY_PROFILE: read-only-restore",
@@ -155,6 +287,22 @@ describe("paired Pantheon release workflow", () => {
     expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
     expect(watchdogWorkflow).toContain(
       'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"',
+    );
+    expect(watchdogWorkflow).toContain(
+      "group: pantheon-pint-proof-watchdog-restore",
+    );
+    expect(watchdogWorkflow).toContain("for attempt in $(seq 1 120)");
+    expect(watchdogWorkflow).toContain(
+      'PANTHEON_AUDIT_OUT_DIR="${audit_root}/attempt-${attempt}"',
+    );
+    expect(watchdogWorkflow).toContain(
+      'PANTHEON_DEPLOY_RELEASE_INSTANCE="${release_root}-attempt-${attempt}"',
+    );
+    expect(watchdogWorkflow).toContain(
+      "Another dev frontend deployment holds /tmp/pantheon-dev-fe-deploy.lock.",
+    );
+    expect(watchdogWorkflow).toContain(
+      "Timed out acquiring the shared dev frontend mutation lock for restore.",
     );
     expect(watchdogWorkflow).toContain(
       "PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}",
