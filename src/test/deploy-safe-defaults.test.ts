@@ -463,6 +463,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain("restore.safe_switch");
     expect(deployScript).toContain("restore.safe_preserved");
     expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PROFILE=write-proof"',
+    );
+    expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"',
+    );
+    expect(deployScript).toContain(
+      '( "${phase}" == "candidate_pre_switch" || "${phase}" == "post_switch" )',
+    );
+    expect(deployScript).toContain(
       "Same-SHA/profile artifact replacement rejected",
     );
     expect(deployScript).not.toContain("npm run build");
