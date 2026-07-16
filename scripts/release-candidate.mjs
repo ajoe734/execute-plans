@@ -35,6 +35,25 @@ export const SAFE_BUILD_MODE = Object.freeze({
   VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
 });
 
+export const WRITE_PROOF_BUILD_MODE = Object.freeze({
+  ...SAFE_BUILD_MODE,
+  VITE_BFF_REAL_WRITES: "true",
+  VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
+});
+
+export const RELEASE_PROFILES = Object.freeze({
+  READ_ONLY: "read-only",
+  WRITE_PROOF: "write-proof",
+});
+
+function normalizeProfile(value, label = "release profile") {
+  const normalized = requiredString(value, label);
+  if (!Object.values(RELEASE_PROFILES).includes(normalized)) {
+    throw new Error(`${label} must be read-only or write-proof`);
+  }
+  return normalized;
+}
+
 function requiredString(value, label) {
   const normalized = String(value ?? "").trim();
   if (!normalized) throw new Error(`${label} is required`);
@@ -90,21 +109,29 @@ function normalizeHttpUrl(value, label, { gateRunId = "" } = {}) {
     : `${parsed.origin}${parsed.pathname}`;
 }
 
-function normalizeBuildMode(buildMode = SAFE_BUILD_MODE) {
+function normalizeBuildMode(
+  buildMode = SAFE_BUILD_MODE,
+  profile = RELEASE_PROFILES.READ_ONLY,
+) {
+  const normalizedProfile = normalizeProfile(profile);
+  const expectedMode =
+    normalizedProfile === RELEASE_PROFILES.WRITE_PROOF
+      ? WRITE_PROOF_BUILD_MODE
+      : SAFE_BUILD_MODE;
   const keys = Object.keys(buildMode || {}).sort();
-  const expectedKeys = Object.keys(SAFE_BUILD_MODE).sort();
+  const expectedKeys = Object.keys(expectedMode).sort();
   if (keys.join(",") !== expectedKeys.join(",")) {
     throw new Error(
       "unsafe release candidate build mode: fields must match the strict safe contract",
     );
   }
   const normalized = Object.fromEntries(
-    Object.keys(SAFE_BUILD_MODE).map((key) => [
+    Object.keys(expectedMode).map((key) => [
       key,
       String(buildMode?.[key] ?? "").trim(),
     ]),
   );
-  for (const [key, expected] of Object.entries(SAFE_BUILD_MODE)) {
+  for (const [key, expected] of Object.entries(expectedMode)) {
     if (normalized[key] !== expected) {
       throw new Error(
         `unsafe release candidate build mode: ${key} must be ${expected}`,
@@ -160,14 +187,49 @@ function assertDirectoryRoot(rootPath, label) {
   }
 }
 
+function canonicalProspectivePath(targetPath, label) {
+  let cursor = targetPath;
+  const missingSegments = [];
+  let stat;
+  while (true) {
+    try {
+      stat = fs.lstatSync(cursor);
+      break;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) {
+        throw new Error(`${label} has no existing parent`);
+      }
+      missingSegments.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+  if (cursor === targetPath && stat.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory, not a symlink`);
+  }
+  const resolvedStat = stat.isSymbolicLink() ? fs.statSync(cursor) : stat;
+  if (!resolvedStat.isDirectory()) {
+    throw new Error(`${label} nearest existing parent must be a directory`);
+  }
+  return path.join(fs.realpathSync(cursor), ...missingSegments);
+}
+
 function assertSafeOutputPath(sourceRoot, outputRoot) {
-  const cwd = path.resolve(process.cwd());
+  assertDirectoryRoot(sourceRoot, "dist directory");
+  const sourceRealPath = fs.realpathSync(sourceRoot);
+  const outputRealPath = canonicalProspectivePath(
+    outputRoot,
+    "output directory",
+  );
+  const cwd = fs.realpathSync(process.cwd());
   if (
     outputRoot === path.parse(outputRoot).root ||
-    outputRoot === cwd ||
-    outputRoot === sourceRoot ||
-    isWithin(sourceRoot, outputRoot) ||
-    isWithin(outputRoot, sourceRoot)
+    outputRealPath === path.parse(outputRealPath).root ||
+    outputRealPath === cwd ||
+    outputRealPath === sourceRealPath ||
+    isWithin(sourceRealPath, outputRealPath) ||
+    isWithin(outputRealPath, sourceRealPath)
   ) {
     throw new Error(
       "output directory must be a separate, non-ancestor directory",
@@ -395,6 +457,8 @@ export function digestReleaseDist({
 }
 
 function makeCandidate({
+  profile,
+  pairId = "",
   frontendSha,
   bffSha,
   bffBaseUrl,
@@ -407,6 +471,8 @@ function makeCandidate({
   return {
     schemaVersion: SCHEMA_VERSION,
     repository: FRONTEND_REPOSITORY,
+    profile,
+    ...(pairId ? { pairId } : {}),
     frontendSha,
     bffSha,
     bffBaseUrl,
@@ -428,6 +494,8 @@ function makeDeploymentManifest(candidate) {
     app: "execute-plans",
     environment: "pantheon-dev-fe",
     repository: FRONTEND_REPOSITORY,
+    profile: candidate.profile,
+    ...(candidate.pairId ? { pairId: candidate.pairId } : {}),
     commit: candidate.frontendSha,
     frontendSha: candidate.frontendSha,
     frontend: {
@@ -469,6 +537,22 @@ function validateExpectedCandidate(candidate, expectations) {
   ) {
     throw new Error("candidate.json has an unsupported schema or repository");
   }
+  const profileDeclared = candidate.profile !== undefined;
+  const profile = profileDeclared
+    ? normalizeProfile(candidate.profile, "candidate profile")
+    : RELEASE_PROFILES.READ_ONLY;
+  const pairId = candidate.pairId
+    ? normalizeDigest(candidate.pairId, "candidate pair ID")
+    : "";
+  if (!profileDeclared && (pairId || expectations.pairId)) {
+    throw new Error("paired candidate profile must be explicitly declared");
+  }
+  if (expectations.pairId && pairId !== normalizeDigest(expectations.pairId, "expected pair ID")) {
+    throw new Error("candidate pair ID does not match the expected pair");
+  }
+  if (expectations.profile && profile !== normalizeProfile(expectations.profile, "expected profile")) {
+    throw new Error("candidate profile does not match the expected profile");
+  }
   const frontendSha = normalizeSha(
     candidate.frontendSha,
     "candidate frontend SHA",
@@ -490,7 +574,7 @@ function validateExpectedCandidate(candidate, expectations) {
   if (candidate.gate?.workflow !== GATE_WORKFLOW) {
     throw new Error("candidate gate workflow is not the integration gate");
   }
-  const buildMode = normalizeBuildMode(candidate.buildMode);
+  const buildMode = normalizeBuildMode(candidate.buildMode, profile);
   const artifactDigest = normalizeDigest(
     candidate.artifactDigestSha256,
     "candidate artifact digest",
@@ -535,6 +619,9 @@ function validateExpectedCandidate(candidate, expectations) {
   }
 
   return {
+    profile,
+    profileDeclared,
+    pairId,
     frontendSha,
     bffSha,
     bffBaseUrl,
@@ -579,6 +666,12 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
     deployment.app === "execute-plans" &&
     deployment.environment === "pantheon-dev-fe" &&
     deployment.repository === FRONTEND_REPOSITORY &&
+    (normalized.profileDeclared
+      ? deployment.profile === normalized.profile
+      : deployment.profile === undefined) &&
+    (normalized.pairId
+      ? deployment.pairId === normalized.pairId
+      : deployment.pairId === undefined) &&
     deployment.commit === normalized.frontendSha &&
     deployment.frontendSha === normalized.frontendSha &&
     deployment.frontend?.repository === FRONTEND_REPOSITORY &&
@@ -601,7 +694,7 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
     ) &&
     Object.keys(deployment.buildMode || {})
       .sort()
-      .join(",") === Object.keys(SAFE_BUILD_MODE).sort().join(",") &&
+      .join(",") === Object.keys(normalized.buildMode).sort().join(",") &&
     candidate.artifactDigestSha256 === normalized.artifactDigest;
   if (!consistent)
     throw new Error(
@@ -616,7 +709,10 @@ export function verifyReleaseCandidate({
   expectedBffSha = "",
   expectedBffBaseUrl = "",
   expectedArtifactDigest = "",
+  expectedProfile = RELEASE_PROFILES.READ_ONLY,
+  expectedPairId = "",
   secretSentinels = [],
+  allowPairEnvelope = false,
 }) {
   const candidateRoot = path.resolve(
     requiredString(candidateDir, "candidate directory"),
@@ -626,9 +722,14 @@ export function verifyReleaseCandidate({
     withFileTypes: true,
   });
   const envelopeNames = envelopeEntries.map((entry) => entry.name).sort();
-  if (envelopeNames.join(",") !== "candidate.json,dist") {
+  const expectedEnvelope = allowPairEnvelope
+    ? "candidate.json,dist,pair.json,write-proof"
+    : "candidate.json,dist";
+  if (envelopeNames.join(",") !== expectedEnvelope) {
     throw new Error(
-      "candidate directory must contain exactly candidate.json and dist",
+      allowPairEnvelope
+        ? "paired candidate directory must contain exactly candidate.json, dist, pair.json, and write-proof"
+        : "candidate directory must contain exactly candidate.json and dist",
     );
   }
   for (const entry of envelopeEntries) {
@@ -666,6 +767,8 @@ export function verifyReleaseCandidate({
     bffSha: expectedBffSha,
     bffBaseUrl: expectedBffBaseUrl,
     artifactDigest: expectedArtifactDigest,
+    profile: expectedProfile,
+    pairId: expectedPairId,
   });
   const declaredFiles = validateDeclaredFiles(candidate.files);
   const actualRecords = collectFiles(distRoot, {
@@ -745,6 +848,7 @@ export function prepareReleaseCandidate({
   const files = publicFileRecords(sourceRecords);
   const artifactDigest = sha256(canonicalAssetManifestBytes(files));
   const candidate = makeCandidate({
+    profile: RELEASE_PROFILES.READ_ONLY,
     frontendSha: normalizedFrontendSha,
     bffSha: normalizedBffSha,
     bffBaseUrl: normalizedBffBaseUrl,
@@ -788,6 +892,7 @@ export function prepareReleaseCandidate({
       secretSentinels: normalizedSentinels,
     });
 
+    assertSafeOutputPath(sourceRoot, outputRoot);
     if (fs.existsSync(outputRoot))
       fs.rmSync(outputRoot, { recursive: true, force: true });
     fs.renameSync(temporaryRoot, outputRoot);
@@ -801,6 +906,391 @@ export function prepareReleaseCandidate({
     deployment,
     outputDir: outputRoot,
     artifactDigestSha256: artifactDigest,
+  };
+}
+
+function pairIdentity({
+  frontendSha,
+  bffSha,
+  bffBaseUrl,
+  gateRunId,
+  gateRunUrl,
+  readOnlyDigest,
+  writeProofDigest,
+}) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    repository: FRONTEND_REPOSITORY,
+    frontendSha,
+    bffSha,
+    bffBaseUrl,
+    gate: {
+      workflow: GATE_WORKFLOW,
+      runId: gateRunId,
+      runUrl: gateRunUrl,
+    },
+    profiles: {
+      readOnly: {
+        profile: RELEASE_PROFILES.READ_ONLY,
+        relativePath: ".",
+        artifactDigestSha256: readOnlyDigest,
+      },
+      writeProof: {
+        profile: RELEASE_PROFILES.WRITE_PROOF,
+        relativePath: "write-proof",
+        artifactDigestSha256: writeProofDigest,
+      },
+    },
+  };
+}
+
+function pairIdFor(identity) {
+  return sha256(Buffer.from(`${JSON.stringify(identity)}\n`, "utf8"));
+}
+
+function copyCandidateDist(records, targetRoot, candidate) {
+  fs.mkdirSync(path.join(targetRoot, "dist"), {
+    recursive: true,
+    mode: 0o755,
+  });
+  for (const record of records) {
+    const destination = path.join(
+      targetRoot,
+      "dist",
+      ...record.path.split("/"),
+    );
+    fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o755 });
+    fs.copyFileSync(record.absolutePath, destination);
+    fs.chmodSync(destination, 0o644);
+  }
+  writeJson(
+    path.join(targetRoot, "dist", DEPLOYMENT_MANIFEST_PATH),
+    makeDeploymentManifest(candidate),
+  );
+  writeJson(path.join(targetRoot, "candidate.json"), candidate);
+}
+
+function validatePairManifest(pair, expectations) {
+  if (!pair || typeof pair !== "object" || Array.isArray(pair)) {
+    throw new Error("pair.json must contain a JSON object");
+  }
+  const expectedKeys = [
+    "bffBaseUrl",
+    "bffSha",
+    "frontendSha",
+    "gate",
+    "pairId",
+    "profiles",
+    "repository",
+    "schemaVersion",
+  ];
+  if (Object.keys(pair).sort().join(",") !== expectedKeys.join(",")) {
+    throw new Error("pair.json has unexpected fields");
+  }
+  if (
+    pair.schemaVersion !== SCHEMA_VERSION ||
+    pair.repository !== FRONTEND_REPOSITORY
+  ) {
+    throw new Error("pair.json has an unsupported schema or repository");
+  }
+  const frontendSha = normalizeSha(pair.frontendSha, "pair frontend SHA");
+  const bffSha = normalizeSha(pair.bffSha, "pair BFF SHA");
+  const bffBaseUrl = normalizeHttpUrl(pair.bffBaseUrl, "pair BFF base URL");
+  const gateRunId = normalizeGateRunId(pair.gate?.runId, "pair gate run ID");
+  const gateRunUrl = normalizeHttpUrl(pair.gate?.runUrl, "pair gate run URL", {
+    gateRunId,
+  });
+  if (pair.gate?.workflow !== GATE_WORKFLOW) {
+    throw new Error("pair gate workflow is not the integration gate");
+  }
+  if (
+    Object.keys(pair.gate || {}).sort().join(",") !==
+    "runId,runUrl,workflow"
+  ) {
+    throw new Error("pair gate has unexpected fields");
+  }
+  const readOnly = pair.profiles?.readOnly;
+  const writeProof = pair.profiles?.writeProof;
+  const validProfiles =
+    readOnly?.profile === RELEASE_PROFILES.READ_ONLY &&
+    readOnly?.relativePath === "." &&
+    writeProof?.profile === RELEASE_PROFILES.WRITE_PROOF &&
+    writeProof?.relativePath === "write-proof" &&
+    Object.keys(pair.profiles || {}).sort().join(",") ===
+      "readOnly,writeProof" &&
+    Object.keys(readOnly || {}).sort().join(",") ===
+      "artifactDigestSha256,profile,relativePath" &&
+    Object.keys(writeProof || {}).sort().join(",") ===
+      "artifactDigestSha256,profile,relativePath";
+  if (!validProfiles) throw new Error("pair profiles are invalid");
+  const readOnlyDigest = normalizeDigest(
+    readOnly.artifactDigestSha256,
+    "pair read-only artifact digest",
+  );
+  const writeProofDigest = normalizeDigest(
+    writeProof.artifactDigestSha256,
+    "pair write-proof artifact digest",
+  );
+  if (readOnlyDigest === writeProofDigest) {
+    throw new Error("paired profiles must have distinct artifact digests");
+  }
+  const identity = pairIdentity({
+    frontendSha,
+    bffSha,
+    bffBaseUrl,
+    gateRunId,
+    gateRunUrl,
+    readOnlyDigest,
+    writeProofDigest,
+  });
+  const pairId = normalizeDigest(pair.pairId, "pair ID");
+  if (pairId !== pairIdFor(identity)) {
+    throw new Error("pair ID does not match the canonical paired identity");
+  }
+  if (
+    frontendSha !== normalizeSha(expectations.frontendSha, "expected frontend SHA")
+  ) {
+    throw new Error("pair frontend SHA does not match the expected SHA");
+  }
+  if (
+    gateRunId !== normalizeGateRunId(expectations.gateRunId, "expected gate run ID")
+  ) {
+    throw new Error("pair gate run ID does not match the expected run");
+  }
+  if (
+    expectations.bffSha &&
+    bffSha !== normalizeSha(expectations.bffSha, "expected BFF SHA")
+  ) {
+    throw new Error("pair BFF SHA does not match the expected SHA");
+  }
+  if (
+    expectations.bffBaseUrl &&
+    bffBaseUrl !== normalizeHttpUrl(expectations.bffBaseUrl, "expected BFF base URL")
+  ) {
+    throw new Error("pair BFF base URL does not match the expected URL");
+  }
+  if (
+    expectations.pairId &&
+    pairId !== normalizeDigest(expectations.pairId, "expected pair ID")
+  ) {
+    throw new Error("pair ID does not match the expected pair");
+  }
+  return {
+    ...identity,
+    pairId,
+    readOnlyDigest,
+    writeProofDigest,
+  };
+}
+
+export function verifyPairedReleaseCandidate({
+  candidateDir,
+  expectedFrontendSha,
+  expectedGateRunId,
+  expectedBffSha = "",
+  expectedBffBaseUrl = "",
+  expectedPairId = "",
+  expectedArtifactDigest = "",
+  profile = RELEASE_PROFILES.READ_ONLY,
+  secretSentinels = [],
+}) {
+  const candidateRoot = path.resolve(
+    requiredString(candidateDir, "paired candidate directory"),
+  );
+  assertDirectoryRoot(candidateRoot, "paired candidate directory");
+  const normalizedSentinels = normalizeSentinels(secretSentinels);
+  const pairPath = path.join(candidateRoot, "pair.json");
+  let pairStat;
+  try {
+    pairStat = fs.lstatSync(pairPath);
+  } catch {
+    throw new Error("pair.json is missing");
+  }
+  if (pairStat.isSymbolicLink() || !pairStat.isFile()) {
+    throw new Error("pair.json must be a regular file, not a symlink");
+  }
+  const pairBytes = fs.readFileSync(pairPath);
+  scanTextBytes(pairBytes, "pair.json", normalizedSentinels);
+  let pair;
+  try {
+    pair = JSON.parse(pairBytes.toString("utf8"));
+  } catch {
+    throw new Error("pair.json is not valid JSON");
+  }
+  const normalized = validatePairManifest(pair, {
+    frontendSha: expectedFrontendSha,
+    gateRunId: expectedGateRunId,
+    bffSha: expectedBffSha,
+    bffBaseUrl: expectedBffBaseUrl,
+    pairId: expectedPairId,
+  });
+  const common = {
+    expectedFrontendSha: normalized.frontendSha,
+    expectedGateRunId: normalized.gate.runId,
+    expectedBffSha: normalized.bffSha,
+    expectedBffBaseUrl: normalized.bffBaseUrl,
+    expectedPairId: normalized.pairId,
+    secretSentinels: normalizedSentinels,
+  };
+  const readOnly = verifyReleaseCandidate({
+    candidateDir: candidateRoot,
+    ...common,
+    expectedArtifactDigest: normalized.readOnlyDigest,
+    expectedProfile: RELEASE_PROFILES.READ_ONLY,
+    allowPairEnvelope: true,
+  });
+  const writeProof = verifyReleaseCandidate({
+    candidateDir: path.join(candidateRoot, "write-proof"),
+    ...common,
+    expectedArtifactDigest: normalized.writeProofDigest,
+    expectedProfile: RELEASE_PROFILES.WRITE_PROOF,
+  });
+  const selectedProfile = normalizeProfile(profile, "selected profile");
+  const selectedArtifactDigest =
+    selectedProfile === RELEASE_PROFILES.WRITE_PROOF
+      ? writeProof.artifactDigestSha256
+      : readOnly.artifactDigestSha256;
+  if (
+    expectedArtifactDigest &&
+    selectedArtifactDigest !==
+      normalizeDigest(expectedArtifactDigest, "expected artifact digest")
+  ) {
+    throw new Error(
+      "selected pair artifact digest does not match the expected digest",
+    );
+  }
+  return {
+    pair,
+    pairId: normalized.pairId,
+    readOnly,
+    writeProof,
+    selectedProfile,
+    artifactDigestSha256: selectedArtifactDigest,
+  };
+}
+
+export function preparePairedReleaseCandidate({
+  readOnlyDistDir,
+  writeProofDistDir,
+  outputDir = ".release-candidate",
+  frontendSha,
+  bffSha,
+  gateRunId,
+  gateRunUrl,
+  bffBaseUrl,
+  secretSentinels = [],
+}) {
+  const readOnlyRoot = path.resolve(
+    requiredString(readOnlyDistDir, "read-only dist directory"),
+  );
+  const writeProofRoot = path.resolve(
+    requiredString(writeProofDistDir, "write-proof dist directory"),
+  );
+  const outputRoot = path.resolve(requiredString(outputDir, "output directory"));
+  assertDirectoryRoot(readOnlyRoot, "read-only dist directory");
+  assertDirectoryRoot(writeProofRoot, "write-proof dist directory");
+  if (
+    readOnlyRoot === writeProofRoot ||
+    fs.realpathSync(readOnlyRoot) === fs.realpathSync(writeProofRoot)
+  ) {
+    throw new Error("read-only and write-proof dist directories must be distinct");
+  }
+  assertSafeOutputPath(readOnlyRoot, outputRoot);
+  assertSafeOutputPath(writeProofRoot, outputRoot);
+
+  const normalizedFrontendSha = normalizeSha(frontendSha, "frontend SHA");
+  const normalizedBffSha = normalizeSha(bffSha, "BFF SHA");
+  const normalizedGateRunId = normalizeGateRunId(gateRunId);
+  const normalizedGateRunUrl = normalizeHttpUrl(gateRunUrl, "gate run URL", {
+    gateRunId: normalizedGateRunId,
+  });
+  const normalizedBffBaseUrl = normalizeHttpUrl(bffBaseUrl, "BFF base URL");
+  const normalizedSentinels = normalizeSentinels(secretSentinels);
+  const readOnlyRecords = collectFiles(readOnlyRoot, {
+    secretSentinels: normalizedSentinels,
+    excludeDeployment: true,
+  });
+  const writeProofRecords = collectFiles(writeProofRoot, {
+    secretSentinels: normalizedSentinels,
+    excludeDeployment: true,
+  });
+  const readOnlyFiles = publicFileRecords(readOnlyRecords);
+  const writeProofFiles = publicFileRecords(writeProofRecords);
+  const readOnlyDigest = sha256(canonicalAssetManifestBytes(readOnlyFiles));
+  const writeProofDigest = sha256(canonicalAssetManifestBytes(writeProofFiles));
+  const identity = pairIdentity({
+    frontendSha: normalizedFrontendSha,
+    bffSha: normalizedBffSha,
+    bffBaseUrl: normalizedBffBaseUrl,
+    gateRunId: normalizedGateRunId,
+    gateRunUrl: normalizedGateRunUrl,
+    readOnlyDigest,
+    writeProofDigest,
+  });
+  const pairId = pairIdFor(identity);
+  const pair = { ...identity, pairId };
+  const commonCandidate = {
+    pairId,
+    frontendSha: normalizedFrontendSha,
+    bffSha: normalizedBffSha,
+    bffBaseUrl: normalizedBffBaseUrl,
+    gateRunId: normalizedGateRunId,
+    gateRunUrl: normalizedGateRunUrl,
+  };
+  const readOnlyCandidate = makeCandidate({
+    ...commonCandidate,
+    profile: RELEASE_PROFILES.READ_ONLY,
+    buildMode: SAFE_BUILD_MODE,
+    files: readOnlyFiles,
+    artifactDigest: readOnlyDigest,
+  });
+  const writeProofCandidate = makeCandidate({
+    ...commonCandidate,
+    profile: RELEASE_PROFILES.WRITE_PROOF,
+    buildMode: WRITE_PROOF_BUILD_MODE,
+    files: writeProofFiles,
+    artifactDigest: writeProofDigest,
+  });
+  const temporaryRoot = `${outputRoot}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
+  try {
+    copyCandidateDist(readOnlyRecords, temporaryRoot, readOnlyCandidate);
+    copyCandidateDist(
+      writeProofRecords,
+      path.join(temporaryRoot, "write-proof"),
+      writeProofCandidate,
+    );
+    writeJson(path.join(temporaryRoot, "pair.json"), pair);
+    verifyPairedReleaseCandidate({
+      candidateDir: temporaryRoot,
+      expectedFrontendSha: normalizedFrontendSha,
+      expectedGateRunId: normalizedGateRunId,
+      expectedBffSha: normalizedBffSha,
+      expectedBffBaseUrl: normalizedBffBaseUrl,
+      expectedPairId: pairId,
+      secretSentinels: normalizedSentinels,
+    });
+    assertSafeOutputPath(readOnlyRoot, outputRoot);
+    assertSafeOutputPath(writeProofRoot, outputRoot);
+    if (fs.existsSync(outputRoot)) {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
+    fs.renameSync(temporaryRoot, outputRoot);
+  } catch (error) {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    pair,
+    pairId,
+    readOnly: {
+      candidate: readOnlyCandidate,
+      artifactDigestSha256: readOnlyDigest,
+    },
+    writeProof: {
+      candidate: writeProofCandidate,
+      artifactDigestSha256: writeProofDigest,
+    },
+    outputDir: outputRoot,
   };
 }
 
@@ -907,7 +1397,47 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
     "--bff-base-url",
     "--expected-artifact-digest",
     "--artifact-digest",
+    "--expected-pair-id",
+    "--pair-id",
+    "--profile",
   ]);
+  if (command === "prepare-pair") {
+    const options = parseOptions(
+      rawOptions,
+      new Set([
+        "--read-only-dist-dir",
+        "--write-proof-dist-dir",
+        "--output-dir",
+        "--out",
+        "--frontend-sha",
+        "--bff-sha",
+        "--gate-run-id",
+        "--gate-run-url",
+        "--bff-base-url",
+      ]),
+    );
+    cliBuildMode(
+      {
+        get() {
+          return "";
+        },
+      },
+      environment,
+    );
+    const result = preparePairedReleaseCandidate({
+      readOnlyDistDir: options.get("--read-only-dist-dir"),
+      writeProofDistDir: options.get("--write-proof-dist-dir"),
+      outputDir: options.get("--output-dir", "--out") || ".release-candidate",
+      frontendSha: options.get("--frontend-sha"),
+      bffSha: options.get("--bff-sha"),
+      gateRunId: options.get("--gate-run-id"),
+      gateRunUrl: options.get("--gate-run-url"),
+      bffBaseUrl: options.get("--bff-base-url"),
+      secretSentinels: collectEnvironmentSecretSentinels(environment),
+    });
+    process.stdout.write(`${result.pairId}\n`);
+    return result;
+  }
   if (command === "prepare") {
     const options = parseOptions(
       rawOptions,
@@ -964,6 +1494,35 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--expected-artifact-digest",
         "--artifact-digest",
       ),
+      expectedProfile:
+        options.get("--profile") || RELEASE_PROFILES.READ_ONLY,
+      expectedPairId: options.get("--expected-pair-id", "--pair-id"),
+      secretSentinels: collectEnvironmentSecretSentinels(environment),
+    });
+    process.stdout.write(`${result.artifactDigestSha256}\n`);
+    return result;
+  }
+  if (command === "verify-pair") {
+    const options = parseOptions(rawOptions, commonExpectedFlags);
+    const result = verifyPairedReleaseCandidate({
+      candidateDir:
+        options.get("--candidate-dir", "--candidate") || ".release-candidate",
+      expectedFrontendSha: options.get(
+        "--expected-frontend-sha",
+        "--frontend-sha",
+      ),
+      expectedGateRunId: options.get("--expected-gate-run-id", "--gate-run-id"),
+      expectedBffSha: options.get("--expected-bff-sha", "--bff-sha"),
+      expectedBffBaseUrl: options.get(
+        "--expected-bff-base-url",
+        "--bff-base-url",
+      ),
+      expectedPairId: options.get("--expected-pair-id", "--pair-id"),
+      expectedArtifactDigest: options.get(
+        "--expected-artifact-digest",
+        "--artifact-digest",
+      ),
+      profile: options.get("--profile") || RELEASE_PROFILES.READ_ONLY,
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.artifactDigestSha256}\n`);
@@ -991,7 +1550,7 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
     return result;
   }
   throw new Error(
-    "usage: release-candidate.mjs <prepare|verify|digest> [options]",
+    "usage: release-candidate.mjs <prepare|prepare-pair|verify|verify-pair|digest> [options]",
   );
 }
 
