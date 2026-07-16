@@ -325,11 +325,14 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
 
     const topic = `Hosted Persona reflection ${randomUUID()}`;
     await page.getByTestId("servant-composer-input").fill(topic);
+    await expect(page.getByTestId("workshop-session-loading")).toBeHidden({ timeout: 30_000 });
+    const submitButton = page.getByTestId("servant-composer-submit");
+    await expect(submitButton).toBeEnabled({ timeout: 30_000 });
     const submitResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname === "/bff/agora/interactions"
       && response.request().method() === "POST",
     );
-    await page.getByTestId("servant-composer-submit").click();
+    await submitButton.click();
     const submittedHttp = await submitResponse;
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
     const submitted = record(data(await submittedHttp.json()));

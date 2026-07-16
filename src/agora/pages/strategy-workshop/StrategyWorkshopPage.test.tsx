@@ -457,6 +457,46 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
   });
 
+  it("gates pointer and keyboard submission until the canonical Workshop is loaded", async () => {
+    let resolveWorkshop!: (workshop: StrategyWorkshop) => void;
+    const workshopPending = new Promise<StrategyWorkshop>((resolve) => {
+      resolveWorkshop = resolve;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockReturnValueOnce(workshopPending);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+
+    render(<StrategyWorkshopPage entry={{ mode: "ask", participantIds: ["per_quant"], picker: "named" }} workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    const submit = screen.getByTestId("servant-composer-submit");
+    expect(input).toBeDisabled();
+    expect(submit).toBeDisabled();
+
+    fireEvent.click(submit);
+    fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
+    expect(interaction.resolveContext).not.toHaveBeenCalled();
+    expect(interaction.submit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveWorkshop(MOCK_WORKSHOP);
+      await workshopPending;
+    });
+    await waitFor(() => expect(interaction.participants).toHaveBeenCalled());
+    await waitFor(() => expect(input).not.toBeDisabled());
+
+    fireEvent.change(input, { target: { value: "Submit only after the Workshop is ready" } });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
+
+    await waitFor(() => expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+      workshop_id: "ws-abc",
+      topic: "Submit only after the Workshop is ready",
+      participant_persona_ids: ["per_quant"],
+    })));
+  });
+
   it("uses the live session's immutable strategy pointers for propose-action context", async () => {
     const liveSession = {
       ...MOCK_WORKSHOP,
