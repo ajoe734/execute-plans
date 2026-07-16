@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   digestReleaseDist,
+  preparePairedReleaseCandidate,
   prepareReleaseCandidate,
+  RELEASE_PROFILES,
   SAFE_BUILD_MODE,
+  verifyPairedReleaseCandidate,
   verifyReleaseCandidate,
+  WRITE_PROOF_BUILD_MODE,
 } from "../../scripts/release-candidate.mjs";
 
 const FRONTEND_SHA = "1".repeat(40);
@@ -82,6 +86,41 @@ function prepare(root: string, overrides: Record<string, unknown> = {}) {
 
 function verify(candidateDir: string, overrides: Record<string, unknown> = {}) {
   return verifyReleaseCandidate({
+    candidateDir,
+    expectedFrontendSha: FRONTEND_SHA,
+    expectedGateRunId: GATE_RUN_ID,
+    expectedBffSha: BFF_SHA,
+    expectedBffBaseUrl: BFF_BASE_URL,
+    ...overrides,
+  });
+}
+
+function preparePair(root: string, overrides: Record<string, unknown> = {}) {
+  const readOnlyDistDir = String(
+    overrides.readOnlyDistDir || makeDist(path.join(root, "read-only")),
+  );
+  const writeProofDistDir = String(
+    overrides.writeProofDistDir ||
+      makeDist(path.join(root, "write-proof"), {
+        "assets/profile.json": `${JSON.stringify({ profile: "write-proof" })}\n`,
+      }),
+  );
+  const outputDir = String(overrides.outputDir || path.join(root, "candidate"));
+  return preparePairedReleaseCandidate({
+    readOnlyDistDir,
+    writeProofDistDir,
+    outputDir,
+    frontendSha: FRONTEND_SHA,
+    bffSha: BFF_SHA,
+    gateRunId: GATE_RUN_ID,
+    gateRunUrl: GATE_RUN_URL,
+    bffBaseUrl: BFF_BASE_URL,
+    ...overrides,
+  });
+}
+
+function verifyPair(candidateDir: string, overrides: Record<string, unknown> = {}) {
+  return verifyPairedReleaseCandidate({
     candidateDir,
     expectedFrontendSha: FRONTEND_SHA,
     expectedGateRunId: GATE_RUN_ID,
@@ -459,5 +498,212 @@ describe("release candidate preparation and verification", () => {
       /browser bearer environment input must be empty/u,
     );
     expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
+  });
+});
+
+describe("paired release candidate preparation and verification", () => {
+  it("creates one deterministic, profile-bound read-only/write-proof pair", () => {
+    const root = temporaryRoot();
+    const readOnlyDistDir = makeDist(path.join(root, "read-only"));
+    const writeProofDistDir = makeDist(path.join(root, "write-proof"), {
+      "assets/profile.json": `${JSON.stringify({ profile: "write-proof" })}\n`,
+    });
+    const firstDir = path.join(root, "candidate-a");
+    const secondDir = path.join(root, "candidate-b");
+    const first = preparePair(root, {
+      readOnlyDistDir,
+      writeProofDistDir,
+      outputDir: firstDir,
+    });
+    const second = preparePair(root, {
+      readOnlyDistDir,
+      writeProofDistDir,
+      outputDir: secondDir,
+    });
+
+    expect(first.pairId).toMatch(/^[a-f0-9]{64}$/u);
+    expect(second.pairId).toBe(first.pairId);
+    expect(fs.readdirSync(firstDir).sort()).toEqual([
+      "candidate.json",
+      "dist",
+      "pair.json",
+      "write-proof",
+    ]);
+    expect(fs.readdirSync(path.join(firstDir, "write-proof")).sort()).toEqual([
+      "candidate.json",
+      "dist",
+    ]);
+
+    const pair = JSON.parse(fs.readFileSync(path.join(firstDir, "pair.json"), "utf8"));
+    const readOnly = JSON.parse(
+      fs.readFileSync(path.join(firstDir, "candidate.json"), "utf8"),
+    );
+    const writeProof = JSON.parse(
+      fs.readFileSync(
+        path.join(firstDir, "write-proof", "candidate.json"),
+        "utf8",
+      ),
+    );
+    expect(pair.pairId).toBe(first.pairId);
+    expect(pair.frontendSha).toBe(FRONTEND_SHA);
+    expect(pair.bffSha).toBe(BFF_SHA);
+    expect(pair.gate.runId).toBe(GATE_RUN_ID);
+    expect(pair.profiles.readOnly.artifactDigestSha256).toBe(
+      first.readOnly.artifactDigestSha256,
+    );
+    expect(pair.profiles.writeProof.artifactDigestSha256).toBe(
+      first.writeProof.artifactDigestSha256,
+    );
+    expect(readOnly).toMatchObject({
+      profile: RELEASE_PROFILES.READ_ONLY,
+      pairId: first.pairId,
+      buildMode: SAFE_BUILD_MODE,
+    });
+    expect(writeProof).toMatchObject({
+      profile: RELEASE_PROFILES.WRITE_PROOF,
+      pairId: first.pairId,
+      buildMode: WRITE_PROOF_BUILD_MODE,
+    });
+    expect(readOnly.buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+    expect(writeProof.buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+
+    const verified = verifyPair(firstDir);
+    expect(verified.pairId).toBe(first.pairId);
+    expect(verified.readOnly.artifactDigestSha256).toBe(
+      first.readOnly.artifactDigestSha256,
+    );
+    expect(verified.writeProof.artifactDigestSha256).toBe(
+      first.writeProof.artifactDigestSha256,
+    );
+  });
+
+  it("supports prepare-pair and profile-selected verify-pair through the CLI", () => {
+    const root = temporaryRoot();
+    const readOnlyDistDir = makeDist(path.join(root, "read-only"));
+    const writeProofDistDir = makeDist(path.join(root, "write-proof"), {
+      "assets/profile.json": "{\"profile\":\"write-proof\"}\n",
+    });
+    const candidateDir = path.join(root, "candidate");
+    const prepared = cli([
+      "prepare-pair",
+      "--read-only-dist-dir",
+      readOnlyDistDir,
+      "--write-proof-dist-dir",
+      writeProofDistDir,
+      "--output-dir",
+      candidateDir,
+      "--frontend-sha",
+      FRONTEND_SHA,
+      "--bff-sha",
+      BFF_SHA,
+      "--gate-run-id",
+      GATE_RUN_ID,
+      "--gate-run-url",
+      GATE_RUN_URL,
+      "--bff-base-url",
+      BFF_BASE_URL,
+    ]);
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const pairId = prepared.stdout.trim();
+    expect(pairId).toMatch(/^[a-f0-9]{64}$/u);
+
+    const verified = cli([
+      "verify-pair",
+      "--candidate-dir",
+      candidateDir,
+      "--expected-frontend-sha",
+      FRONTEND_SHA,
+      "--expected-gate-run-id",
+      GATE_RUN_ID,
+      "--expected-bff-sha",
+      BFF_SHA,
+      "--expected-bff-base-url",
+      BFF_BASE_URL,
+      "--expected-pair-id",
+      pairId,
+      "--profile",
+      "write-proof",
+      "--expected-artifact-digest",
+      JSON.parse(fs.readFileSync(path.join(candidateDir, "pair.json"), "utf8"))
+        .profiles.writeProof.artifactDigestSha256,
+    ]);
+    expect(verified.status, verified.stderr).toBe(0);
+    const pair = JSON.parse(fs.readFileSync(path.join(candidateDir, "pair.json"), "utf8"));
+    expect(verified.stdout.trim()).toBe(
+      pair.profiles.writeProof.artifactDigestSha256,
+    );
+  });
+
+  it("rejects pair identity, digest, profile, and asset tampering", () => {
+    const identityRoot = temporaryRoot();
+    const identityDir = path.join(identityRoot, "candidate");
+    preparePair(identityRoot, { outputDir: identityDir });
+    const pairPath = path.join(identityDir, "pair.json");
+    const pair = JSON.parse(fs.readFileSync(pairPath, "utf8"));
+    pair.profiles.writeProof.artifactDigestSha256 = "f".repeat(64);
+    fs.writeFileSync(pairPath, `${JSON.stringify(pair, null, 2)}\n`);
+    expect(() => verifyPair(identityDir)).toThrow(/pair ID does not match/u);
+
+    const profileRoot = temporaryRoot();
+    const profileDir = path.join(profileRoot, "candidate");
+    preparePair(profileRoot, { outputDir: profileDir });
+    const candidatePath = path.join(profileDir, "write-proof", "candidate.json");
+    const candidate = JSON.parse(fs.readFileSync(candidatePath, "utf8"));
+    candidate.profile = "read-only";
+    fs.writeFileSync(candidatePath, `${JSON.stringify(candidate, null, 2)}\n`);
+    expect(() => verifyPair(profileDir)).toThrow(/profile does not match/u);
+
+    const assetRoot = temporaryRoot();
+    const assetDir = path.join(assetRoot, "candidate");
+    preparePair(assetRoot, { outputDir: assetDir });
+    fs.appendFileSync(
+      path.join(assetDir, "write-proof", "dist", "assets", "app.js"),
+      "// tampered\n",
+    );
+    expect(() => verifyPair(assetDir)).toThrow(/asset manifest does not match/u);
+  });
+
+  it("fails closed on wrong pair expectations and secrets in either profile", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    preparePair(root, { outputDir: candidateDir });
+    expect(() =>
+      verifyPair(candidateDir, { expectedPairId: "f".repeat(64) }),
+    ).toThrow(/expected pair/u);
+    expect(() => verifyPair(candidateDir, { profile: "read-only-restore" })).toThrow(
+      /must be read-only or write-proof/u,
+    );
+    expect(() =>
+      verifyPair(candidateDir, { expectedArtifactDigest: "f".repeat(64) }),
+    ).toThrow(/expected digest/u);
+
+    const duplicateRoot = temporaryRoot();
+    const duplicateReadOnly = makeDist(path.join(duplicateRoot, "read-only"));
+    const duplicateWriteProof = makeDist(path.join(duplicateRoot, "write-proof"));
+    expect(() =>
+      preparePair(duplicateRoot, {
+        readOnlyDistDir: duplicateReadOnly,
+        writeProofDistDir: duplicateWriteProof,
+      }),
+    ).toThrow(/distinct artifact digests/u);
+
+    const secretRoot = temporaryRoot();
+    const secret = "paired-release-secret-never-ship";
+    const readOnlyDistDir = makeDist(path.join(secretRoot, "read-only"));
+    const writeProofDistDir = makeDist(path.join(secretRoot, "write-proof"), {
+      "assets/leak.js": `globalThis.proofValue = '${secret}';\n`,
+    });
+    let message = "";
+    try {
+      preparePair(secretRoot, {
+        readOnlyDistDir,
+        writeProofDistDir,
+        secretSentinels: [secret],
+      });
+    } catch (error) {
+      message = String((error as Error).message);
+    }
+    expect(message).toMatch(/configured secret sentinel/u);
+    expect(message).not.toContain(secret);
   });
 });
