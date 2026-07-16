@@ -187,14 +187,49 @@ function assertDirectoryRoot(rootPath, label) {
   }
 }
 
+function canonicalProspectivePath(targetPath, label) {
+  let cursor = targetPath;
+  const missingSegments = [];
+  let stat;
+  while (true) {
+    try {
+      stat = fs.lstatSync(cursor);
+      break;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) {
+        throw new Error(`${label} has no existing parent`);
+      }
+      missingSegments.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+  if (cursor === targetPath && stat.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory, not a symlink`);
+  }
+  const resolvedStat = stat.isSymbolicLink() ? fs.statSync(cursor) : stat;
+  if (!resolvedStat.isDirectory()) {
+    throw new Error(`${label} nearest existing parent must be a directory`);
+  }
+  return path.join(fs.realpathSync(cursor), ...missingSegments);
+}
+
 function assertSafeOutputPath(sourceRoot, outputRoot) {
-  const cwd = path.resolve(process.cwd());
+  assertDirectoryRoot(sourceRoot, "dist directory");
+  const sourceRealPath = fs.realpathSync(sourceRoot);
+  const outputRealPath = canonicalProspectivePath(
+    outputRoot,
+    "output directory",
+  );
+  const cwd = fs.realpathSync(process.cwd());
   if (
     outputRoot === path.parse(outputRoot).root ||
-    outputRoot === cwd ||
-    outputRoot === sourceRoot ||
-    isWithin(sourceRoot, outputRoot) ||
-    isWithin(outputRoot, sourceRoot)
+    outputRealPath === path.parse(outputRealPath).root ||
+    outputRealPath === cwd ||
+    outputRealPath === sourceRealPath ||
+    isWithin(sourceRealPath, outputRealPath) ||
+    isWithin(outputRealPath, sourceRealPath)
   ) {
     throw new Error(
       "output directory must be a separate, non-ancestor directory",
@@ -502,7 +537,10 @@ function validateExpectedCandidate(candidate, expectations) {
   ) {
     throw new Error("candidate.json has an unsupported schema or repository");
   }
-  const profile = normalizeProfile(candidate.profile, "candidate profile");
+  const profileDeclared = candidate.profile !== undefined;
+  const profile = profileDeclared
+    ? normalizeProfile(candidate.profile, "candidate profile")
+    : RELEASE_PROFILES.READ_ONLY;
   const pairId = candidate.pairId
     ? normalizeDigest(candidate.pairId, "candidate pair ID")
     : "";
@@ -579,6 +617,7 @@ function validateExpectedCandidate(candidate, expectations) {
 
   return {
     profile,
+    profileDeclared,
     pairId,
     frontendSha,
     bffSha,
@@ -624,7 +663,9 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
     deployment.app === "execute-plans" &&
     deployment.environment === "pantheon-dev-fe" &&
     deployment.repository === FRONTEND_REPOSITORY &&
-    deployment.profile === normalized.profile &&
+    (normalized.profileDeclared
+      ? deployment.profile === normalized.profile
+      : deployment.profile === undefined) &&
     (normalized.pairId
       ? deployment.pairId === normalized.pairId
       : deployment.pairId === undefined) &&
@@ -848,6 +889,7 @@ export function prepareReleaseCandidate({
       secretSentinels: normalizedSentinels,
     });
 
+    assertSafeOutputPath(sourceRoot, outputRoot);
     if (fs.existsSync(outputRoot))
       fs.rmSync(outputRoot, { recursive: true, force: true });
     fs.renameSync(temporaryRoot, outputRoot);
@@ -1144,7 +1186,10 @@ export function preparePairedReleaseCandidate({
   const outputRoot = path.resolve(requiredString(outputDir, "output directory"));
   assertDirectoryRoot(readOnlyRoot, "read-only dist directory");
   assertDirectoryRoot(writeProofRoot, "write-proof dist directory");
-  if (readOnlyRoot === writeProofRoot) {
+  if (
+    readOnlyRoot === writeProofRoot ||
+    fs.realpathSync(readOnlyRoot) === fs.realpathSync(writeProofRoot)
+  ) {
     throw new Error("read-only and write-proof dist directories must be distinct");
   }
   assertSafeOutputPath(readOnlyRoot, outputRoot);
@@ -1221,6 +1266,8 @@ export function preparePairedReleaseCandidate({
       expectedPairId: pairId,
       secretSentinels: normalizedSentinels,
     });
+    assertSafeOutputPath(readOnlyRoot, outputRoot);
+    assertSafeOutputPath(writeProofRoot, outputRoot);
     if (fs.existsSync(outputRoot)) {
       fs.rmSync(outputRoot, { recursive: true, force: true });
     }
@@ -1444,6 +1491,9 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--expected-artifact-digest",
         "--artifact-digest",
       ),
+      expectedProfile:
+        options.get("--profile") || RELEASE_PROFILES.READ_ONLY,
+      expectedPairId: options.get("--expected-pair-id", "--pair-id"),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.artifactDigestSha256}\n`);

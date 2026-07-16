@@ -244,6 +244,56 @@ describe("release candidate preparation and verification", () => {
     expect(verified.stdout.trim()).toBe(digest);
   });
 
+  it("forwards single-candidate profile and pair expectations through the CLI", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    prepare(root, { outputDir: candidateDir });
+    const common = [
+      "verify",
+      "--candidate-dir",
+      candidateDir,
+      "--expected-frontend-sha",
+      FRONTEND_SHA,
+      "--expected-gate-run-id",
+      GATE_RUN_ID,
+    ];
+
+    const profileMismatch = cli([
+      ...common,
+      "--profile",
+      RELEASE_PROFILES.WRITE_PROOF,
+    ]);
+    expect(profileMismatch.status).toBe(1);
+    expect(profileMismatch.stderr).toMatch(/profile does not match/u);
+
+    const pairMismatch = cli([
+      ...common,
+      "--expected-pair-id",
+      "f".repeat(64),
+    ]);
+    expect(pairMismatch.status).toBe(1);
+    expect(pairMismatch.stderr).toMatch(/pair ID does not match/u);
+  });
+
+  it("accepts v1 unprofiled single candidates as implicit read-only", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    const prepared = prepare(root, { outputDir: candidateDir });
+    const candidatePath = path.join(candidateDir, "candidate.json");
+    const deploymentPath = path.join(candidateDir, "dist", "deployment.json");
+    const candidate = JSON.parse(fs.readFileSync(candidatePath, "utf8"));
+    const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+    delete candidate.profile;
+    delete deployment.profile;
+    fs.writeFileSync(candidatePath, `${JSON.stringify(candidate, null, 2)}\n`);
+    fs.writeFileSync(deploymentPath, `${JSON.stringify(deployment, null, 2)}\n`);
+
+    expect(verify(candidateDir)).toMatchObject({
+      artifactDigestSha256: prepared.artifactDigestSha256,
+      candidate: expect.not.objectContaining({ profile: expect.anything() }),
+    });
+  });
+
   it("computes and verifies a staged release dist digest while excluding deployment metadata", () => {
     const root = temporaryRoot();
     const distDir = makeDist(root);
@@ -469,6 +519,29 @@ describe("release candidate preparation and verification", () => {
     expect(() => verify(candidateDir)).toThrow(/canonical relative path/u);
   });
 
+  it("rejects an absent output reached through a source real-path alias", () => {
+    const root = temporaryRoot();
+    const distDir = makeDist(path.join(root, "source"));
+    const sourceAlias = path.join(root, "source-alias");
+    fs.symlinkSync(distDir, sourceAlias, "dir");
+
+    expect(() =>
+      prepare(root, {
+        distDir,
+        outputDir: path.join(sourceAlias, "candidate"),
+      }),
+    ).toThrow(/separate, non-ancestor directory/u);
+    expect(fs.existsSync(path.join(sourceAlias, "candidate"))).toBe(false);
+
+    const outputTarget = path.join(root, "existing-output");
+    const outputAlias = path.join(root, "output-alias");
+    fs.mkdirSync(outputTarget);
+    fs.symlinkSync(outputTarget, outputAlias, "dir");
+    expect(() =>
+      prepare(root, { distDir, outputDir: outputAlias }),
+    ).toThrow(/real directory, not a symlink/u);
+  });
+
   it("fails closed on a non-empty browser bearer environment input", () => {
     const root = temporaryRoot();
     const distDir = makeDist(root);
@@ -686,6 +759,18 @@ describe("paired release candidate preparation and verification", () => {
         writeProofDistDir: duplicateWriteProof,
       }),
     ).toThrow(/distinct artifact digests/u);
+
+    const aliasRoot = temporaryRoot();
+    const realParent = path.join(aliasRoot, "real");
+    const aliasedDist = makeDist(realParent);
+    const parentAlias = path.join(aliasRoot, "alias");
+    fs.symlinkSync(realParent, parentAlias, "dir");
+    expect(() =>
+      preparePair(aliasRoot, {
+        readOnlyDistDir: aliasedDist,
+        writeProofDistDir: path.join(parentAlias, "dist"),
+      }),
+    ).toThrow(/must be distinct/u);
 
     const secretRoot = temporaryRoot();
     const secret = "paired-release-secret-never-ship";
