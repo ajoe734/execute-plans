@@ -136,10 +136,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const fixtureBlock = integrationWorkflow.slice(start, end);
 
     expect(fixtureBlock).toContain("if: steps.pr_preview.outcome == 'success'");
-    expect(fixtureBlock).toContain('PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"');
-    expect(fixtureBlock).toContain('PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"');
-    expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
-    expect(fixtureBlock).toContain('--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"');
+    expect(fixtureBlock).toContain(
+      'PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(fixtureBlock).toContain(
+      '--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"',
+    );
     expect(fixtureBlock).toContain("--trace=off");
     // screenshot and video are Playwright config options, not `playwright test`
     // CLI flags. Keep them out of this command so the gate cannot fail before
@@ -246,8 +254,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(integrationWorkflow).toContain(
       "name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}",
     );
-    const evidenceStart = integrationWorkflow.indexOf("- name: Upload evidence");
-    const evidenceEnd = integrationWorkflow.indexOf("- name: Upload exact release identity");
+    const evidenceStart = integrationWorkflow.indexOf(
+      "- name: Upload evidence",
+    );
+    const evidenceEnd = integrationWorkflow.indexOf(
+      "- name: Upload exact release identity",
+    );
     expect(evidenceStart).toBeGreaterThan(-1);
     expect(evidenceEnd).toBeGreaterThan(evidenceStart);
     const evidenceBlock = integrationWorkflow.slice(evidenceStart, evidenceEnd);

@@ -781,7 +781,9 @@ export function isAllowlistedBffRequestFailure(entry) {
   if (scanTextForSensitiveValues("bff request failure", failure).length > 0) {
     return false;
   }
-  if (httpPathWithinBase(entry?.url || "", BFF_BASE) !== SSE_EVENT_STREAM_PATH) {
+  if (
+    httpPathWithinBase(entry?.url || "", BFF_BASE) !== SSE_EVENT_STREAM_PATH
+  ) {
     return false;
   }
   return /\bnet::ERR_NETWORK_CHANGED\b/iu.test(failure);
