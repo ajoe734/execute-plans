@@ -35,6 +35,20 @@ const EXPECTED_FE_SHA = String(
 const EXPECTED_ARTIFACT_DIGEST = String(
   process.env.PANTHEON_EXPECTED_ARTIFACT_DIGEST || "",
 ).trim();
+const EXPECTED_RELEASE_PROFILE = String(
+  process.env.PANTHEON_PROBE_EXPECTED_PROFILE || "",
+)
+  .trim()
+  .toLowerCase();
+const EXPECTED_PAIR_ID = String(
+  process.env.PANTHEON_PROBE_EXPECTED_PAIR_ID || "",
+).trim();
+const EXPECTED_READ_ONLY_DIGEST = String(
+  process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "",
+).trim();
+const EXPECTED_WRITE_PROOF_DIGEST = String(
+  process.env.PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST || "",
+).trim();
 const PROBE_JSON_OUT = String(process.env.PANTHEON_PROBE_JSON_OUT || "").trim();
 const CANDIDATE_DIR = String(process.env.PANTHEON_CANDIDATE_DIR || "").trim();
 const CANDIDATE_SOURCE_SCAN_MODE = String(
@@ -410,6 +424,10 @@ export function inspectDeploymentMetadata(
     expectedSha = "",
     expectedArtifactDigest = "",
     allowLegacyRelease = false,
+    expectedProfile = "",
+    expectedPairId = "",
+    expectedReadOnlyDigest = "",
+    expectedWriteProofDigest = "",
   } = {},
 ) {
   const payload =
@@ -423,6 +441,41 @@ export function inspectDeploymentMetadata(
   const sha256Digest = canonicalizeSha256(payload.artifactDigestSha256);
   const observedDigest = primaryDigest || sha256Digest;
   const gateRunId = positiveRunId(payload.integrationGateRunId);
+  const normalizedExpectedProfile = String(expectedProfile || "")
+    .trim()
+    .toLowerCase();
+  const expectedPair = canonicalizeSha256(expectedPairId);
+  const expectedReadOnly = canonicalizeSha256(expectedReadOnlyDigest);
+  const expectedWriteProof = canonicalizeSha256(expectedWriteProofDigest);
+  const observedProfile = String(
+    payload.deploymentProfile || payload.profile || "",
+  )
+    .trim()
+    .toLowerCase();
+  const observedPairId = canonicalizeSha256(payload.pairId);
+  const observedPair =
+    payload.pair &&
+    typeof payload.pair === "object" &&
+    !Array.isArray(payload.pair)
+      ? payload.pair
+      : {};
+  const observedPairReadOnly = canonicalizeSha256(
+    observedPair.readOnlyArtifactDigestSha256,
+  );
+  const observedPairWriteProof = canonicalizeSha256(
+    observedPair.writeProofArtifactDigestSha256,
+  );
+  const pairedProfileExpected = ["read-only", "write-proof"].includes(
+    normalizedExpectedProfile,
+  );
+  const pairedExpectationComplete =
+    pairedProfileExpected &&
+    Boolean(expectedPair) &&
+    Boolean(expectedReadOnly) &&
+    Boolean(expectedWriteProof) &&
+    expectedReadOnly !== expectedWriteProof;
+  const expectedWriteValue =
+    normalizedExpectedProfile === "write-proof" ? "true" : "false";
   const buildMode =
     payload.buildMode &&
     typeof payload.buildMode === "object" &&
@@ -458,10 +511,54 @@ export function inspectDeploymentMetadata(
     bffCommitIsExactSha: Boolean(canonicalizeCommitSha(payload.bffCommit)),
     liveBffMode: String(buildMode.VITE_BFF_MODE || "") === "live",
     strictBffFallback: String(buildMode.VITE_BFF_FALLBACK || "") === "strict",
+    expectedProfileValid: !normalizedExpectedProfile || pairedProfileExpected,
+    pairedExpectationComplete:
+      !normalizedExpectedProfile || pairedExpectationComplete,
+    deploymentProfileMatchesExpected:
+      !normalizedExpectedProfile ||
+      (pairedExpectationComplete &&
+        payload.profile === normalizedExpectedProfile &&
+        payload.deploymentProfile === normalizedExpectedProfile &&
+        observedProfile === normalizedExpectedProfile),
+    pairIdentityMatchesExpected:
+      !normalizedExpectedProfile ||
+      (pairedExpectationComplete &&
+        observedPairId === expectedPair &&
+        canonicalizeSha256(observedPair.pairId) === expectedPair &&
+        observedPairReadOnly === expectedReadOnly &&
+        observedPairWriteProof === expectedWriteProof),
+    selectedProfileDigestMatchesPair:
+      !normalizedExpectedProfile ||
+      (pairedExpectationComplete &&
+        observedDigest ===
+          (normalizedExpectedProfile === "write-proof"
+            ? expectedWriteProof
+            : expectedReadOnly)),
+    writeProofExpectationAuthenticated:
+      normalizedExpectedProfile !== "write-proof" ||
+      (pairedExpectationComplete &&
+        payload.profile === "write-proof" &&
+        payload.deploymentProfile === "write-proof" &&
+        observedPairId === expectedPair &&
+        canonicalizeSha256(observedPair.pairId) === expectedPair &&
+        observedPairReadOnly === expectedReadOnly &&
+        observedPairWriteProof === expectedWriteProof &&
+        observedDigest === expectedWriteProof),
     realWritesDisabled:
+      normalizedExpectedProfile === "write-proof" ||
       booleanString(buildMode.VITE_BFF_REAL_WRITES) === "false",
     stubWritesDisabled:
+      normalizedExpectedProfile === "write-proof" ||
       booleanString(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES) === "false",
+    writeProofRealWritesEnabled:
+      normalizedExpectedProfile !== "write-proof" ||
+      (pairedExpectationComplete &&
+        booleanString(buildMode.VITE_BFF_REAL_WRITES) === expectedWriteValue),
+    writeProofStubWritesEnabled:
+      normalizedExpectedProfile !== "write-proof" ||
+      (pairedExpectationComplete &&
+        booleanString(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES) ===
+          expectedWriteValue),
     embeddedBearerDisabled:
       booleanString(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN) === "false",
   };
@@ -481,6 +578,12 @@ export function inspectDeploymentMetadata(
       commit: observedCommit,
       artifactDigest: observedDigest,
       integrationGateRunId: gateRunId,
+      profile: observedProfile,
+      pairId: observedPairId,
+      pair: {
+        readOnlyArtifactDigestSha256: observedPairReadOnly,
+        writeProofArtifactDigestSha256: observedPairWriteProof,
+      },
       bffCommit: canonicalizeCommitSha(payload.bffCommit),
       bffCommitEvidence: payload.bffCommitEvidence === true,
       buildMode: {
@@ -2045,6 +2148,10 @@ async function runProbe() {
         expectedSha: EXPECTED_FE_SHA,
         expectedArtifactDigest: EXPECTED_ARTIFACT_DIGEST,
         allowLegacyRelease: LEGACY_RELEASE_COMPAT,
+        expectedProfile: EXPECTED_RELEASE_PROFILE,
+        expectedPairId: EXPECTED_PAIR_ID,
+        expectedReadOnlyDigest: EXPECTED_READ_ONLY_DIGEST,
+        expectedWriteProofDigest: EXPECTED_WRITE_PROOF_DIGEST,
       })
     : {
         pass: false,
@@ -2179,8 +2286,7 @@ async function runProbe() {
     "navigation waitUntil: " + NAVIGATION_WAIT_UNTIL,
     "release strict: " + RELEASE_STRICT,
     "legacy release compatibility: " + LEGACY_RELEASE_COMPAT,
-    "legacy rollback target compatibility: " +
-      LEGACY_ROLLBACK_TARGET_COMPAT,
+    "legacy rollback target compatibility: " + LEGACY_ROLLBACK_TARGET_COMPAT,
     "candidate directory routed: " + Boolean(candidateResolver),
     "candidate source scan: " + CANDIDATE_SOURCE_SCAN_MODE,
     "core waitForResponse paths: " + CORE_BFF_PATHS.join(", "),
@@ -2419,6 +2525,12 @@ async function runProbe() {
       expectations: {
         frontendSha: canonicalizeCommitSha(EXPECTED_FE_SHA),
         artifactDigest: canonicalizeSha256(EXPECTED_ARTIFACT_DIGEST),
+        profile: EXPECTED_RELEASE_PROFILE,
+        pairId: canonicalizeSha256(EXPECTED_PAIR_ID),
+        readOnlyArtifactDigest: canonicalizeSha256(EXPECTED_READ_ONLY_DIGEST),
+        writeProofArtifactDigest: canonicalizeSha256(
+          EXPECTED_WRITE_PROOF_DIGEST,
+        ),
       },
       checks: {
         base: {

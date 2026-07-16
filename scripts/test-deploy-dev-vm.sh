@@ -270,6 +270,26 @@ fs.appendFileSync(
   `probe-legacy-rollback-compat:${phase}:${process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT || "unset"}\n`,
   "utf8",
 );
+fs.appendFileSync(
+  log,
+  `probe-profile:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_PROFILE || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-pair:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_PAIR_ID || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-read-only-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-write-proof-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST || "unset"}\n`,
+  "utf8",
+);
 if (phase === "recovery_rollback") {
   const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
   const probeIndex = calls.lastIndexOf(`probe:${phase}`);
@@ -657,6 +677,22 @@ assert_probe_legacy_rollback_compat() {
   local expected="$2"
   grep -Fxq "probe-legacy-rollback-compat:${phase}:${expected}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} to use legacy rollback compatibility ${expected}"
+}
+
+assert_probe_pair_context() {
+  local phase="$1"
+  local expected_profile="$2"
+  local expected_pair="$3"
+  local expected_read_only_digest="$4"
+  local expected_write_proof_digest="$5"
+  grep -Fxq "probe-profile:${phase}:${expected_profile}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} profile context ${expected_profile}"
+  grep -Fxq "probe-pair:${phase}:${expected_pair}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} pair context ${expected_pair}"
+  grep -Fxq "probe-read-only-digest:${phase}:${expected_read_only_digest}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} read-only digest context"
+  grep -Fxq "probe-write-proof-digest:${phase}:${expected_write_proof_digest}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} write-proof digest context"
 }
 
 assert_summary_outcome() {
@@ -1313,6 +1349,13 @@ test_paired_write_installs_safe_sibling_and_private_locator() {
   assert_probe_called safe_sibling_pre_switch
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
+  assert_probe_pair_context safe_sibling_pre_switch unset unset unset unset
+  assert_probe_pair_context \
+    candidate_pre_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  assert_probe_pair_context \
+    post_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
   if grep -Eq '^npm-command:.*(^|[[:space:]])run[[:space:]]+build([[:space:]]|$)' "${CASE_CALL_LOG}"; then
     show_deploy_failure "deploy controller rebuilt browser assets on the VM"
   fi
@@ -1342,6 +1385,7 @@ test_write_failure_restores_paired_safe_sibling() {
     show_deploy_failure "write failure rolled back to the old predecessor instead of paired safe"
   assert_live_profile read-only standby
   assert_probe_called rollback
+  assert_probe_pair_context rollback unset unset unset unset
   grep -Fq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
     show_deploy_failure "write failure did not use CAS for safe restore"
   assert_summary_outcome rolled_back

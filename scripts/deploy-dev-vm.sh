@@ -467,13 +467,24 @@ run_release_probe() {
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
   local candidate_env=""
   local strict_env="0"
+  local probe_profile_env=()
   if [[ -n "${candidate_dir}" ]]; then
     candidate_env="${candidate_dir}"
   fi
   if [[ "${strict}" == "true" || "${strict}" == "1" ]]; then
     strict_env="1"
   fi
-  if ! PANTHEON_FE_BASE_URL="${FE_HOST}" \
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" &&
+    ( "${phase}" == "candidate_pre_switch" || "${phase}" == "post_switch" ) ]]; then
+    probe_profile_env+=(
+      "PANTHEON_PROBE_EXPECTED_PROFILE=write-proof"
+      "PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"
+      "PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST=${READ_ONLY_ARTIFACT_DIGEST}"
+      "PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST=${WRITE_PROOF_ARTIFACT_DIGEST}"
+    )
+  fi
+  if ! env "${probe_profile_env[@]}" \
+    PANTHEON_FE_BASE_URL="${FE_HOST}" \
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
     PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
     PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \

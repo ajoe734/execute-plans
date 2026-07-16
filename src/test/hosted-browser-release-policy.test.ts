@@ -175,6 +175,126 @@ describe("hosted browser strict release policy", () => {
     expect(policy.deployment?.integrationGateRunId).toBe("29328923603");
   });
 
+  it("admits true/true writes only for an exact authenticated paired write-proof expectation", () => {
+    const frontendSha = "a".repeat(40);
+    const backendSha = "b".repeat(40);
+    const readOnlyDigest = "c".repeat(64);
+    const writeProofDigest = "d".repeat(64);
+    const pairId = "e".repeat(64);
+    const manifest = {
+      app: "execute-plans",
+      environment: "pantheon-dev-fe",
+      commit: frontendSha,
+      artifactDigest: writeProofDigest,
+      artifactDigestSha256: writeProofDigest,
+      integrationGateRunId: 29328923603,
+      bffCommit: backendSha,
+      bffCommitEvidence: true,
+      profile: "write-proof",
+      deploymentProfile: "write-proof",
+      pairId,
+      pair: {
+        pairId,
+        readOnlyArtifactDigestSha256: readOnlyDigest,
+        writeProofArtifactDigestSha256: writeProofDigest,
+      },
+      buildMode: {
+        VITE_BFF_MODE: "live",
+        VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: "true",
+        VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+      },
+    };
+
+    const unauthenticated = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: writeProofDigest,
+    });
+    expect(unauthenticated.pass).toBe(false);
+    expect(unauthenticated.failures).toEqual(
+      expect.arrayContaining(["realWritesDisabled", "stubWritesDisabled"]),
+    );
+
+    const authenticated = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: writeProofDigest,
+      expectedProfile: "write-proof",
+      expectedPairId: pairId,
+      expectedReadOnlyDigest: readOnlyDigest,
+      expectedWriteProofDigest: writeProofDigest,
+    });
+    expect(authenticated.pass).toBe(true);
+    expect(authenticated.failures).toEqual([]);
+    expect(authenticated.deployment?.profile).toBe("write-proof");
+    expect(authenticated.deployment?.pairId).toBe(pairId);
+
+    const missingPairAuthentication = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: writeProofDigest,
+      expectedProfile: "write-proof",
+    });
+    expect(missingPairAuthentication.pass).toBe(false);
+    expect(missingPairAuthentication.failures).toEqual(
+      expect.arrayContaining([
+        "pairedExpectationComplete",
+        "deploymentProfileMatchesExpected",
+        "pairIdentityMatchesExpected",
+        "writeProofExpectationAuthenticated",
+        "writeProofRealWritesEnabled",
+        "writeProofStubWritesEnabled",
+      ]),
+    );
+
+    const collapsedProfiles = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: writeProofDigest,
+      expectedProfile: "write-proof",
+      expectedPairId: pairId,
+      expectedReadOnlyDigest: writeProofDigest,
+      expectedWriteProofDigest: writeProofDigest,
+    });
+    expect(collapsedProfiles.pass).toBe(false);
+    expect(collapsedProfiles.failures).toContain("pairedExpectationComplete");
+
+    const wrongPair = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: writeProofDigest,
+      expectedProfile: "write-proof",
+      expectedPairId: "f".repeat(64),
+      expectedReadOnlyDigest: readOnlyDigest,
+      expectedWriteProofDigest: writeProofDigest,
+    });
+    expect(wrongPair.pass).toBe(false);
+    expect(wrongPair.failures).toContain("pairIdentityMatchesExpected");
+
+    const disabledWriteBundle = inspectDeploymentMetadata(
+      {
+        ...manifest,
+        buildMode: {
+          ...manifest.buildMode,
+          VITE_BFF_REAL_WRITES: "false",
+          VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        },
+      },
+      {
+        expectedSha: frontendSha,
+        expectedArtifactDigest: writeProofDigest,
+        expectedProfile: "write-proof",
+        expectedPairId: pairId,
+        expectedReadOnlyDigest: readOnlyDigest,
+        expectedWriteProofDigest: writeProofDigest,
+      },
+    );
+    expect(disabledWriteBundle.pass).toBe(false);
+    expect(disabledWriteBundle.failures).toEqual(
+      expect.arrayContaining([
+        "writeProofRealWritesEnabled",
+        "writeProofStubWritesEnabled",
+      ]),
+    );
+  });
+
   it("fails closed on identity drift, unsafe writes, or missing gate evidence", () => {
     const frontendSha = "a".repeat(40);
     const digest = "c".repeat(64);
@@ -336,7 +456,11 @@ describe("hosted browser strict release policy", () => {
   it("can restrict candidate source scanning to browser-loaded assets", () => {
     const root = temporaryCandidate();
     const resolver = createCandidateResolver(root);
-    writeFileSync(join(root, "assets", "lazy.js"), "console.log('lazy');", "utf8");
+    writeFileSync(
+      join(root, "assets", "lazy.js"),
+      "console.log('lazy');",
+      "utf8",
+    );
 
     const result = listCandidateLoadedScriptAndStyleFiles(resolver, [
       "https://pantheon.example/assets/app.js",
@@ -687,7 +811,9 @@ describe("hosted browser strict release policy", () => {
     expect(source).toContain('element.matches(":focus-visible")');
     expect(source).toContain("HOSTED_UX_PERFORMANCE_BUDGETS");
     expect(source).toContain("personaFleetSafety.pass &&");
-    expect(source).toContain("!noEmbeddedDevBearerRequired || noEmbeddedDevBearer");
+    expect(source).toContain(
+      "!noEmbeddedDevBearerRequired || noEmbeddedDevBearer",
+    );
     expect(source).toContain(
       "personaFleetSafetyPassed: personaFleetSafety.pass",
     );
