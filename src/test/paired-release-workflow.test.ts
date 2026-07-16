@@ -66,7 +66,24 @@ describe("paired Pantheon release workflow", () => {
       "PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}",
     );
     expect(deployWorkflow).toContain(
+      "PANTHEON_DEPLOY_REAL_WRITES: ${{ steps.gate.outputs.deployment_profile == 'write-proof' && 'true' || 'false' }}",
+    );
+    expect(deployWorkflow).toContain(
+      "PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: ${{ steps.gate.outputs.deployment_profile == 'write-proof' && 'true' || 'false' }}",
+    );
+    expect(deployWorkflow).toContain(
       "PANTHEON_DEPLOY_PROFILE: read-only-restore",
+    );
+    const restoreStart = deployWorkflow.indexOf(
+      "- name: Restore the same authenticated pair read-only",
+    );
+    const restoreEnd = deployWorkflow.indexOf(
+      "- name: Cancel or confirm correlated proof terminal after safe restore",
+    );
+    const restoreBlock = deployWorkflow.slice(restoreStart, restoreEnd);
+    expect(restoreBlock).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
+    expect(restoreBlock).toContain(
+      'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"',
     );
     expect(deployWorkflow).toContain(
       "if: always() && steps.pair.outcome == 'success' && steps.gate.outputs.deployment_profile == 'write-proof'",
