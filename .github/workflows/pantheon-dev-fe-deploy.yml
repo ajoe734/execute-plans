@@ -466,6 +466,8 @@ jobs:
           PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
           PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: ${{ steps.gate.outputs.proof_window_ack }}
+          PANTHEON_DEPLOY_REAL_WRITES: ${{ steps.gate.outputs.deployment_profile == 'write-proof' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: ${{ steps.gate.outputs.deployment_profile == 'write-proof' && 'true' || 'false' }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Dispatch exact correlated hosted Persona proof
@@ -558,6 +560,8 @@ jobs:
           PANTHEON_DEPLOY_PROFILE: read-only-restore
           PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-restore
         run: bash scripts/deploy-dev-vm.sh
 
