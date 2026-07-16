@@ -20,6 +20,19 @@ on:
         required: false
         default: ""
         type: string
+      deployment_profile:
+        description: "read-only for normal deploys; write-proof only for the bounded Persona proof window."
+        required: true
+        default: "read-only"
+        type: choice
+        options:
+          - "read-only"
+          - "write-proof"
+      proof_window_ack:
+        description: "I acknowledge this temporarily enables governed dev writes and will automatically restore the authenticated pair read-only."
+        required: true
+        default: false
+        type: boolean
       emergency_override:
         description: "Allow an older gated candidate; integrity, auth, and rollback probes still run."
         required: false
@@ -38,7 +51,10 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  # Only the guarded write-proof step uses the write capability, to dispatch
+  # and terminate its uniquely correlated integration proof. Artifact reads
+  # and every workflow_run deployment remain read-only operations.
+  actions: write
 
 concurrency:
   group: pantheon-dev-fe-deploy
@@ -47,6 +63,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy exact gated candidate to Pantheon dev VM
+    timeout-minutes: 215
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -92,6 +109,9 @@ jobs:
           EMERGENCY_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override || false }}
           ROLLBACK_DRILL: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_drill || false }}
           OVERRIDE_REASON: ${{ github.event_name == 'workflow_dispatch' && inputs.override_reason || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOYMENT_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_profile || 'read-only' }}
+          PROOF_WINDOW_ACK: ${{ github.event_name == 'workflow_dispatch' && inputs.proof_window_ack || false }}
           AUTHORIZED_OPERATORS: ${{ vars.PANTHEON_DEV_FE_DEPLOY_OPERATORS }}
         with:
           script: |
@@ -103,6 +123,9 @@ jobs:
             const emergencyOverride = String(process.env.EMERGENCY_OVERRIDE || "false") === "true";
             const rollbackDrill = String(process.env.ROLLBACK_DRILL || "false") === "true";
             const overrideReason = String(process.env.OVERRIDE_REASON || "").trim();
+            const eventName = String(process.env.EVENT_NAME || "");
+            const deploymentProfile = String(process.env.DEPLOYMENT_PROFILE || "read-only");
+            const proofWindowAck = String(process.env.PROOF_WINDOW_ACK || "false") === "true";
             const authorizedOperators = new Set(
               String(process.env.AUTHORIZED_OPERATORS || "")
                 .split(",")
@@ -116,6 +139,31 @@ jobs:
             }
             if (!shaPattern.test(requestedSha)) {
               core.setFailed("candidate_sha must be one exact 40-character commit SHA");
+              return;
+            }
+            if (!["read-only", "write-proof"].includes(deploymentProfile)) {
+              core.setFailed("deployment_profile must be read-only or write-proof");
+              return;
+            }
+            if (eventName !== "workflow_dispatch" && deploymentProfile !== "read-only") {
+              core.setFailed("workflow_run deployments are always read-only");
+              return;
+            }
+            if (deploymentProfile === "write-proof") {
+              if (eventName !== "workflow_dispatch" || !proofWindowAck) {
+                core.setFailed("write-proof requires an explicit acknowledged workflow_dispatch");
+                return;
+              }
+              if (emergencyOverride || rollbackDrill) {
+                core.setFailed("write-proof cannot be combined with emergency_override or rollback_drill");
+                return;
+              }
+              if (!authorizedOperators.has(String(context.actor || "").toLowerCase())) {
+                core.setFailed("write-proof requires an authorized deploy operator");
+                return;
+              }
+            } else if (proofWindowAck) {
+              core.setFailed("proof_window_ack is valid only for deployment_profile=write-proof");
               return;
             }
             if ((emergencyOverride || rollbackDrill) && overrideReason.length < 20) {
@@ -205,12 +253,15 @@ jobs:
             core.setOutput("rollback_drill", rollbackDrill ? "true" : "false");
             core.setOutput("override_reason", overrideReason);
             core.setOutput("override_actor", emergencyOverride || rollbackDrill ? context.actor : "");
+            core.setOutput("deployment_profile", deploymentProfile);
+            core.setOutput("proof_window_ack", proofWindowAck ? "true" : "false");
 
       - name: Checkout trusted controller from exact current dev
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.gate.outputs.current_dev_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Recheck trusted controller identity at runner
         id: controller
@@ -309,13 +360,19 @@ jobs:
                       shutil.copyfileobj(source, target, length=1024 * 1024)
           PY
 
-          if [[ -f "$extract_dir/candidate.json" && -d "$extract_dir/dist" ]]; then
+          if [[ -f "$extract_dir/candidate.json" && -d "$extract_dir/dist" && \
+                -f "$extract_dir/pair.json" && -f "$extract_dir/write-proof/candidate.json" && \
+                -d "$extract_dir/write-proof/dist" ]]; then
             mv "$extract_dir" .release-candidate
-          elif [[ -f "$extract_dir/.release-candidate/candidate.json" && -d "$extract_dir/.release-candidate/dist" ]]; then
+          elif [[ -f "$extract_dir/.release-candidate/candidate.json" && \
+                  -d "$extract_dir/.release-candidate/dist" && \
+                  -f "$extract_dir/.release-candidate/pair.json" && \
+                  -f "$extract_dir/.release-candidate/write-proof/candidate.json" && \
+                  -d "$extract_dir/.release-candidate/write-proof/dist" ]]; then
             mv "$extract_dir/.release-candidate" .release-candidate
             rm -rf "$extract_dir"
           else
-            echo "Authenticated artifact does not contain one release-candidate root." >&2
+            echo "Authenticated artifact does not contain one exact paired release-candidate root." >&2
             exit 1
           fi
 
@@ -341,6 +398,50 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      - name: Verify authenticated paired candidate identity
+        id: pair
+        shell: bash
+        env:
+          EXPECTED_FRONTEND_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          EXPECTED_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+        run: |
+          set -euo pipefail
+          read_only_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
+            --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --profile read-only)"
+          write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
+            --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --profile write-proof)"
+          node --input-type=module - "$read_only_digest" "$write_proof_digest" <<'NODE'
+          import fs from "node:fs";
+          const [readOnlyDigest, writeProofDigest] = process.argv.slice(2);
+          const pair = JSON.parse(fs.readFileSync(".release-candidate/pair.json", "utf8"));
+          const digest = (value, label) => {
+            const normalized = String(value || "").replace(/^sha256:/i, "").toLowerCase();
+            if (!/^[0-9a-f]{64}$/u.test(normalized)) throw new Error(`invalid ${label}`);
+            return normalized;
+          };
+          const values = {
+            pair_id: digest(pair.pairId, "pair id"),
+            bff_sha: String(pair.bffSha || "").toLowerCase(),
+            read_only_digest: digest(readOnlyDigest, "verified read-only digest"),
+            write_proof_digest: digest(writeProofDigest, "verified write-proof digest"),
+          };
+          if (!/^[0-9a-f]{40}$/u.test(values.bff_sha) ||
+              values.read_only_digest !== digest(pair.profiles?.readOnly?.artifactDigestSha256, "pair read-only digest") ||
+              values.write_proof_digest !== digest(pair.profiles?.writeProof?.artifactDigestSha256, "pair write-proof digest")) {
+            throw new Error("verified paired candidate identity mismatch");
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n")}\n`, "utf8");
+          NODE
+
       - name: Run target-runner controller regression harness
         id: controller_regression
         shell: bash
@@ -350,6 +451,7 @@ jobs:
 
       - name: Deploy verified candidate
         id: deploy
+        timeout-minutes: 25
         env:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
@@ -361,7 +463,152 @@ jobs:
           PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
           PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
           PANTHEON_DEPLOY_OVERRIDE_ACTOR: ${{ steps.gate.outputs.override_actor }}
+          PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: ${{ steps.gate.outputs.proof_window_ack }}
         run: bash scripts/deploy-dev-vm.sh
+
+      - name: Dispatch exact correlated hosted Persona proof
+        id: proof_gate
+        if: steps.deploy.outcome == 'success' && steps.gate.outputs.deployment_profile == 'write-proof'
+        timeout-minutes: 145
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXACT_FE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          EXACT_BFF_SHA: ${{ steps.pair.outputs.bff_sha }}
+          SOURCE_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ steps.gate.outputs.artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
+        run: |
+          set -euo pipefail
+          dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          proof_correlation_id="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+          expected_title="PINT proof ${proof_correlation_id}"
+          correlation_file="${RUNNER_TEMP%/}/pint-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.correlation"
+          run_id_file="${RUNNER_TEMP%/}/pint-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.run-id"
+          printf '%s\n' "$proof_correlation_id" > "$correlation_file"
+          chmod 600 "$correlation_file"
+          rm -f "$run_id_file"
+
+          gh workflow run pantheon-integration-gate.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref dev \
+            -f fe_base_url="$PANTHEON_DEV_FE_HOST" \
+            -f fe_sha="$EXACT_FE_SHA" \
+            -f proof_correlation_id="$proof_correlation_id" \
+            -f source_gate_run_id="$SOURCE_GATE_RUN_ID" \
+            -f source_artifact_id="$SOURCE_ARTIFACT_ID" \
+            -f source_artifact_digest="$SOURCE_ARTIFACT_DIGEST" \
+            -f expected_pair_id="$EXPECTED_PAIR_ID" \
+            -f expected_read_only_digest="$EXPECTED_READ_ONLY_DIGEST" \
+            -f expected_write_proof_digest="$EXPECTED_WRITE_PROOF_DIGEST" \
+            -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
+            -f bff_sha="$EXACT_BFF_SHA" \
+            -f pantheon_contract_ref="$EXACT_BFF_SHA" \
+            -f persona_interaction_write_proof=true \
+            -f pint_hosted_probe=true \
+            -f soft_fail=false
+
+          gate_run_id=""
+          for _ in $(seq 1 45); do
+            matches_json="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow pantheon-integration-gate.yml \
+              --event workflow_dispatch \
+              --branch dev \
+              --limit 100 \
+              --json databaseId,createdAt,displayTitle,event,headBranch,headSha \
+              --jq 'map(select(.event == "workflow_dispatch" and .createdAt >= "'"$dispatch_started"'" and .headBranch == "dev" and .headSha == "'"$EXACT_FE_SHA"'" and .displayTitle == "'"$expected_title"'"))')"
+            match_count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches_json")"
+            if [[ "$match_count" == "1" ]]; then
+              gate_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches_json")"
+              break
+            fi
+            if [[ "$match_count" != "0" ]]; then
+              echo "Correlation resolved ${match_count} hosted proof runs; refusing ambiguity." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ -z "$gate_run_id" ]]; then
+            echo "Unable to resolve the exact correlated hosted proof run." >&2
+            exit 1
+          fi
+          printf '%s\n' "$gate_run_id" > "$run_id_file"
+          chmod 600 "$run_id_file"
+          gate_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${gate_run_id}"
+          echo "integration_run_id=${gate_run_id}" >> "$GITHUB_OUTPUT"
+          echo "integration_run_url=${gate_url}" >> "$GITHUB_OUTPUT"
+          gh run watch "$gate_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+
+      - name: Restore the same authenticated pair read-only
+        id: restore
+        if: always() && steps.pair.outcome == 'success' && steps.gate.outputs.deployment_profile == 'write-proof'
+        timeout-minutes: 25
+        env:
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_PROFILE: read-only-restore
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-restore
+        run: bash scripts/deploy-dev-vm.sh
+
+      - name: Cancel or confirm correlated proof terminal after safe restore
+        id: proof_gate_terminal
+        if: always() && steps.pair.outcome == 'success' && steps.gate.outputs.deployment_profile == 'write-proof'
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXACT_FE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          correlation_file="${RUNNER_TEMP%/}/pint-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.correlation"
+          run_id_file="${RUNNER_TEMP%/}/pint-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.run-id"
+          if [[ ! -f "$correlation_file" ]]; then
+            echo "No correlated proof was dispatched; safe restore was still attempted."
+            exit 0
+          fi
+          proof_correlation_id="$(cat "$correlation_file")"
+          expected_title="PINT proof ${proof_correlation_id}"
+          matches_json="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow pantheon-integration-gate.yml \
+            --event workflow_dispatch \
+            --branch dev \
+            --limit 100 \
+            --json databaseId,displayTitle,event,headBranch,headSha,status \
+            --jq 'map(select(.event == "workflow_dispatch" and .headBranch == "dev" and .headSha == "'"$EXACT_FE_SHA"'" and .displayTitle == "'"$expected_title"'"))')"
+          match_count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches_json")"
+          if [[ "$match_count" != "1" ]]; then
+            echo "Expected exactly one correlated proof run after restore, found ${match_count}." >&2
+            exit 1
+          fi
+          gate_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches_json")"
+          if [[ -f "$run_id_file" && "$(cat "$run_id_file")" != "$gate_run_id" ]]; then
+            echo "Persisted proof run id differs from the unique correlation." >&2
+            exit 1
+          fi
+          status="$(gh run view "$gate_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+          if [[ "$status" != "completed" ]]; then
+            gh run cancel "$gate_run_id" --repo "$GITHUB_REPOSITORY"
+            for _ in $(seq 1 60); do
+              status="$(gh run view "$gate_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+              [[ "$status" == "completed" ]] && break
+              sleep 5
+            done
+          fi
+          if [[ "$status" != "completed" ]]; then
+            echo "Correlated proof did not become terminal after safe restore." >&2
+            exit 1
+          fi
 
       - name: Write redacted workflow envelope
         if: always()
@@ -380,8 +627,17 @@ jobs:
           GATE_OUTCOME: ${{ steps.gate.outcome }}
           CONTROLLER_OUTCOME: ${{ steps.controller.outcome }}
           ARTIFACT_TRANSPORT_OUTCOME: ${{ steps.artifact_transport.outcome }}
+          PAIR_OUTCOME: ${{ steps.pair.outcome }}
           CONTROLLER_REGRESSION_OUTCOME: ${{ steps.controller_regression.outcome }}
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DEPLOYMENT_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
+          PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
+          WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
+          PROOF_GATE_RUN_ID: ${{ steps.proof_gate.outputs.integration_run_id }}
+          PROOF_GATE_OUTCOME: ${{ steps.proof_gate.outcome }}
+          RESTORE_OUTCOME: ${{ steps.restore.outcome }}
+          PROOF_TERMINAL_OUTCOME: ${{ steps.proof_gate_terminal.outcome }}
         run: |
           set -euo pipefail
           expected_audit_root="${RUNNER_TEMP%/}/pantheon-dev-fe-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -410,6 +666,13 @@ jobs:
               "artifactName": os.environ.get("ARTIFACT_NAME", ""),
               "githubArtifactDigest": os.environ.get("GITHUB_ARTIFACT_DIGEST", ""),
               "trustedControllerSha": os.environ.get("TRUSTED_CONTROLLER_SHA", ""),
+              "deploymentProfile": os.environ.get("DEPLOYMENT_PROFILE", ""),
+              "pairId": os.environ.get("PAIR_ID", ""),
+              "pair": {
+                  "readOnlyArtifactDigestSha256": os.environ.get("READ_ONLY_DIGEST", ""),
+                  "writeProofArtifactDigestSha256": os.environ.get("WRITE_PROOF_DIGEST", ""),
+              },
+              "proofIntegrationRunId": os.environ.get("PROOF_GATE_RUN_ID", ""),
               "emergencyOverride": os.environ.get("EMERGENCY_OVERRIDE", "") == "true",
               "rollbackDrill": os.environ.get("ROLLBACK_DRILL", "") == "true",
               "overrideActor": os.environ.get("OVERRIDE_ACTOR", ""),
@@ -418,8 +681,12 @@ jobs:
                   "gate": os.environ.get("GATE_OUTCOME", ""),
                   "controller": os.environ.get("CONTROLLER_OUTCOME", ""),
                   "artifactTransport": os.environ.get("ARTIFACT_TRANSPORT_OUTCOME", ""),
+                  "pair": os.environ.get("PAIR_OUTCOME", ""),
                   "controllerRegression": os.environ.get("CONTROLLER_REGRESSION_OUTCOME", ""),
                   "deploy": os.environ.get("DEPLOY_OUTCOME", ""),
+                  "proofGate": os.environ.get("PROOF_GATE_OUTCOME", ""),
+                  "restore": os.environ.get("RESTORE_OUTCOME", ""),
+                  "proofTerminal": os.environ.get("PROOF_TERMINAL_OUTCOME", ""),
               },
           }
           output = pathlib.Path(sys.argv[1])
@@ -544,6 +811,10 @@ jobs:
           TRUSTED_CONTROLLER_SHA: ${{ steps.gate.outputs.current_dev_sha }}
           EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
           ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
+          DEPLOYMENT_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
+          PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
+          WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
         run: |
           {
             echo "## Pantheon Dev FE Deploy"
@@ -554,8 +825,14 @@ jobs:
             echo "- trusted controller SHA: \`${TRUSTED_CONTROLLER_SHA}\`"
             echo "- emergency override: \`${EMERGENCY_OVERRIDE}\`"
             echo "- rollback drill: \`${ROLLBACK_DRILL}\`"
+            echo "- deployment profile: \`${DEPLOYMENT_PROFILE}\`"
+            echo "- pair id: \`${PAIR_ID}\`"
+            echo "- read-only digest: \`${READ_ONLY_DIGEST}\`"
+            echo "- write-proof digest: \`${WRITE_PROOF_DIGEST}\`"
             echo "- target-runner controller regression: \`${{ steps.controller_regression.outcome || 'not-attempted' }}\`"
             echo "- deployment outcome: \`${{ steps.deploy.outcome || 'not-attempted' }}\`"
+            echo "- hosted proof: \`${{ steps.proof_gate.outcome || 'not-requested' }}\` ${{ steps.proof_gate.outputs.integration_run_url }}"
+            echo "- automatic read-only restore: \`${{ steps.restore.outcome || 'not-requested' }}\`"
             echo "- FE: ${PANTHEON_DEV_FE_HOST}"
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
             echo "- evidence: pantheon-dev-fe-deploy-evidence-attempt-${GITHUB_RUN_ATTEMPT}"
