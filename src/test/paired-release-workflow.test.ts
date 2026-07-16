@@ -267,8 +267,11 @@ describe("paired Pantheon release workflow", () => {
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_VIEWER_TOKEN/gu),
     ).toHaveLength(2);
+    expect(
+      authorized.match(/secrets\.PANTHEON_BFF_RBAC_TOKENS_JSON/gu),
+    ).toHaveLength(1);
     expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      4,
+      5,
     );
     expect(integrationWorkflow).not.toContain(
       "secrets.PANTHEON_BFF_ADMIN_TOKEN",

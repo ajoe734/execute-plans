@@ -383,11 +383,33 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   });
 
   it("hard-gates the real hosted Persona write proof without credential skips", () => {
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+      integrationWorkflow.indexOf("  pr-comment:"),
+    );
     expect(integrationWorkflow).toContain(
       "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
     );
     expect(integrationWorkflow).toContain(
       "node scripts/validate-persona-hosted-proof-env.mjs",
+    );
+    expect(authorizedProof).toContain(
+      "PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}",
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/validate-persona-hosted-proof-env.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
+        "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
+      ),
+    );
+    expect(authorizedProof).toContain(
+      "--project=chromium --project=mobile-chromium",
+    );
+    expect(hostedPersonaInteractionSpec.match(/^\s*test\("/gmu)).toHaveLength(
+      3,
     );
     expect(hostedPersonaInteractionSpec).toContain(
       "expect(denied.status()).toBe(403)",
