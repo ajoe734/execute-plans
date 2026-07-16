@@ -212,6 +212,16 @@ async function openPersonaDetail(page: Page, persona: { id: string; name: string
   await expect(page.getByRole("heading", { level: 1, name: persona.name })).toBeAttached({ timeout: 30_000 });
 }
 
+async function revealWorkshopComposerOptions(page: Page): Promise<void> {
+  const modeSelector = page.getByTestId("mode-selector");
+  if (await modeSelector.isVisible()) return;
+
+  const optionsToggle = page.getByTestId("workshop-composer-options-toggle");
+  await expect(optionsToggle).toBeVisible();
+  await optionsToggle.click();
+  await expect(modeSelector).toBeVisible();
+}
+
 test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted Pantheon FE and BFF URLs");
 
@@ -307,6 +317,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       if (response.request().method() !== "POST") return false;
       try { return record(response.request().postDataJSON()).mode === "propose_action"; } catch { return false; }
     });
+    await revealWorkshopComposerOptions(page);
     await page.getByTestId("mode-selector").click();
     await page.getByRole("option", { name: /Propose \(Candidate Measure\)/i }).click();
     expect((await proposeEligibility).ok()).toBe(true);

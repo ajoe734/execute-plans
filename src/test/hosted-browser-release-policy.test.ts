@@ -22,6 +22,7 @@ import {
   httpPathWithinBase,
   inspectBrowserBffMethods,
   inspectDeploymentMetadata,
+  isAllowlistedBffRequestFailure,
   isAllowlistedConsoleError,
   isBffRequestUrl,
   listCandidateLoadedScriptAndStyleFiles,
@@ -638,7 +639,7 @@ describe("hosted browser strict release policy", () => {
     ).toBe(false);
   });
 
-  it("allowlists only explicit unauthenticated console failures", () => {
+  it("allowlists only explicit unauthenticated and transient SSE failures", () => {
     expect(
       isAllowlistedConsoleError({
         text: "BffError: Missing or invalid Authorization header",
@@ -652,6 +653,36 @@ describe("hosted browser strict release policy", () => {
     expect(
       isAllowlistedConsoleError({
         text: "AUTH_REQUIRED Bearer secret-material-123456",
+      }),
+    ).toBe(false);
+    expect(
+      isAllowlistedConsoleError({
+        text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream",
+      }),
+    ).toBe(true);
+    expect(
+      isAllowlistedConsoleError({
+        text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/me",
+      }),
+    ).toBe(false);
+    expect(
+      isAllowlistedBffRequestFailure({
+        failure: "net::ERR_NETWORK_CHANGED",
+        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream?channel=system",
+      }),
+    ).toBe(true);
+    expect(
+      isAllowlistedBffRequestFailure({
+        failure: "net::ERR_NETWORK_CHANGED",
+        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/me",
+      }),
+    ).toBe(false);
+    expect(
+      isAllowlistedBffRequestFailure({
+        failure: "net::ERR_NETWORK_CHANGED Bearer secret-material-123456",
+        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream",
       }),
     ).toBe(false);
   });

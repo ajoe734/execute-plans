@@ -228,9 +228,14 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       await expect(page.getByTestId("servant-composer")).toBeVisible();
       if (viewport.name === "mobile") {
         await expect(page.getByTestId("workshop-mobile-priority")).toBeVisible();
+        const composerOptions = page.getByTestId("workshop-composer-options");
+        await expect(composerOptions).toHaveAttribute("data-mobile-collapsed", "true");
         const optionsToggle = page.getByTestId("workshop-composer-options-toggle");
         await optionsToggle.click();
         await expect(optionsToggle).toHaveAttribute("aria-expanded", "true");
+        await expect(composerOptions).toHaveAttribute("data-mobile-collapsed", "false");
+      } else {
+        await expect(page.getByTestId("completeness-rail")).toBeVisible();
       }
       await expect(page.getByTestId("context-bar")).toBeVisible();
       await expect(page.getByTestId("mode-selector")).toBeVisible();

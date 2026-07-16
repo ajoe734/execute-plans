@@ -555,7 +555,7 @@ describe("public frontend build auth boundary", () => {
   });
 
   it.skipIf(!chromiumInstalled)(
-    "fails the fixture-only portfolio specs before navigation for an external frontend",
+    "skips fixture-only portfolio specs before navigation for an external frontend",
     () => {
       const env = {
         ...process.env,
@@ -567,6 +567,7 @@ describe("public frontend build auth boundary", () => {
         F08_CREATE_INTENT_LIVE_BFF: "",
         RUN_LIVE_BFF_CONTRACTS: "",
       };
+      expect(targetsExternalE2eEnvironment(env)).toBe(true);
       const result = spawnSync(
         "npx",
         [
@@ -583,10 +584,10 @@ describe("public frontend build auth boundary", () => {
       const output = `${result.stdout}\n${result.stderr}`;
 
       expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
-      expect(result.status).not.toBe(0);
+      expect(result.status).toBe(0);
       expect(output).toMatch(/20-portfolio-book-monitor/);
       expect(output).toMatch(/22-persona-trade-journal/);
-      expect(output).toMatch(/proven loopback-only E2E target/);
+      expect(output).toMatch(/2 skipped/);
       expect(output).not.toMatch(
         /ERR_NAME_NOT_RESOLVED|ENOTFOUND|fe\.example\.test\/management/,
       );

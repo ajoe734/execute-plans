@@ -73,6 +73,7 @@ const OPTIONAL_CORE_BFF_PATHS = ["/bff/management/persona-fleet"].filter(
 );
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"];
+const SSE_EVENT_STREAM_PATH = "/bff/events/stream";
 const FRONTEND_RESOURCE_TYPES = new Set([
   "document",
   "script",
@@ -659,6 +660,9 @@ function canonicalBrowserMethod(value) {
 export function isAllowlistedConsoleError(entry) {
   const text = String(entry?.text || "");
   if (scanTextForSensitiveValues("console", text).length > 0) return false;
+  if (isAllowlistedBffRequestFailure({ url: entry?.url, failure: text })) {
+    return true;
+  }
   if (
     /AUTH_REQUIRED|authentication required|missing (?:or invalid )?(?:Bearer token|Authorization header)/iu.test(
       text,
@@ -667,6 +671,17 @@ export function isAllowlistedConsoleError(entry) {
     return true;
   }
   return /Failed to load resource:.*(?:status of )?401/iu.test(text);
+}
+
+export function isAllowlistedBffRequestFailure(entry) {
+  const failure = String(entry?.failure || "");
+  if (scanTextForSensitiveValues("bff request failure", failure).length > 0) {
+    return false;
+  }
+  if (httpPathWithinBase(entry?.url || "", BFF_BASE) !== SSE_EVENT_STREAM_PATH) {
+    return false;
+  }
+  return /\bnet::ERR_NETWORK_CHANGED\b/iu.test(failure);
 }
 
 function isWithinRoot(root, target) {
@@ -1628,6 +1643,7 @@ async function runProbe() {
   const authorizationRequests = [];
   const responses = [];
   const failed = [];
+  const allowlistedFailed = [];
   const oldUrlHits = [];
   const consoleErrors = [];
   const unexpectedConsoleErrors = [];
@@ -1732,11 +1748,16 @@ async function runProbe() {
       request.failure()?.errorText || "request failed",
     );
     if (isBffUrl(url)) {
-      failed.push({
+      const entry = {
         method,
         url: redactUrl(url),
         failure,
-      });
+      };
+      if (isAllowlistedBffRequestFailure({ url, failure })) {
+        allowlistedFailed.push({ ...entry, allowlisted: true });
+      } else {
+        failed.push(entry);
+      }
     }
     if (matchesUrlNeedle(url, OLD_BFF_URL)) {
       oldUrlHits.push({
@@ -2240,6 +2261,7 @@ async function runProbe() {
     "- request count: " + requests.length,
     "- response count: " + responses.length,
     "- failed count: " + failed.length,
+    "- allowlisted BFF request failure count: " + allowlistedFailed.length,
     "- pageerror count: " + pageErrors.length,
     "- unexpected console.error count: " + unexpectedConsoleErrors.length,
     "- FE document/script/style request failure count: " +
@@ -2357,6 +2379,17 @@ async function runProbe() {
     "",
     failed.length
       ? failed
+          .map(
+            (entry) =>
+              "- " + entry.method + " " + entry.url + ": " + entry.failure,
+          )
+          .join("\n")
+      : "None",
+    "",
+    "## Allowlisted BFF failures",
+    "",
+    allowlistedFailed.length
+      ? allowlistedFailed
           .map(
             (entry) =>
               "- " + entry.method + " " + entry.url + ": " + entry.failure,
@@ -2482,6 +2515,7 @@ async function runProbe() {
         requests,
         responses,
         failures: failed,
+        allowlistedFailures: allowlistedFailed,
         coreResponses,
         publicHealthResponses,
         oldUrlHits,

@@ -133,14 +133,25 @@ test.describe("Persona Fleet live linked-page contract", () => {
     const rankLink = rankCell.locator(`[aria-label="${personaId} persona league ranking"]`);
     if (hasRankingTarget) {
       const rankingTab = capitalMode === "paper" ? "quarterly" : "rolling";
+      const rankingPath = capitalMode === "paper"
+        ? "/bff/management/quarterly-ranking"
+        : "/bff/management/persona-league";
       await expect(rankLink).toHaveAttribute(
         "href",
         new RegExp(`/management/rankings\\?tab=${rankingTab}&persona=${personaId}`),
       );
+      const rankingRead = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === rankingPath
+          && response.request().method() === "GET"
+          && response.status() === 200;
+      }, { timeout: 30_000 });
       await rankLink.click();
+      const rankingResponse = await rankingRead;
+      await rankingResponse.finished();
       const rankingTable = page.getByRole("table").first();
       await expect(rankingTable.locator("tbody tr")).toHaveCount(1, { timeout: 30_000 });
-      await expect(rankingTable).toContainText(personaName);
+      await expect(rankingTable).toContainText(personaName, { timeout: 30_000 });
     } else {
       await expect(rankLink).toHaveCount(0);
       await expect(rankCell).toHaveText("—");

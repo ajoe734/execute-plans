@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
     "test:watch": "vitest",
     "test:deploy-release": "python3 scripts/test-atomic-symlink-cas.py && python3 scripts/test-atomic-release-manifest.py && bash scripts/test-deploy-dev-vm.sh",
     "contract:drift": "node scripts/contract-drift-check.mjs",
