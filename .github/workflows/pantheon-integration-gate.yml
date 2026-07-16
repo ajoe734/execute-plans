@@ -1436,6 +1436,19 @@ jobs:
           if (!valid) throw new Error("fresh child claim does not authorize this credentialed job attempt");
           NODE
 
+      - name: Validate hosted proof credentials before writes
+        env:
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
+        run: node scripts/validate-persona-hosted-proof-env.mjs
+
+      - name: Ensure stable user-private Persona for hosted proof
+        env:
+          PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+        run: node scripts/ensure-persona-hosted-proof-servant.mjs
+
       - name: Run governed and Persona proof with proof-only credentials
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
@@ -1449,9 +1462,22 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
-          node scripts/validate-persona-hosted-proof-env.mjs
-          npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
-            --project=chromium --project=mobile-chromium
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-playwright-results.json" \
+            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+              --project=chromium --project=mobile-chromium \
+              --retries=0 --reporter=list,json
+          node --input-type=module - "$PANTHEON_AUDIT_OUT_DIR/persona-hosted-playwright-results.json" <<'NODE'
+          import fs from "node:fs";
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const stats = report.stats || {};
+          const expected = Number(stats.expected || 0);
+          const skipped = Number(stats.skipped || 0);
+          const unexpected = Number(stats.unexpected || 0);
+          const flaky = Number(stats.flaky || 0);
+          if (expected !== 6 || skipped !== 0 || unexpected !== 0 || flaky !== 0) {
+            throw new Error(`Persona hosted proof requires exactly 6 passed, 0 skipped/unexpected/flaky; got ${JSON.stringify({ expected, skipped, unexpected, flaky })}`);
+          }
+          NODE
 
       - name: Verify exact write-proof deployment after credentialed proof
         if: always()

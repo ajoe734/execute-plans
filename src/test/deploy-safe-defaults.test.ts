@@ -28,6 +28,10 @@ const hostedPersonaInteractionSpec = readFileSync(
   resolve(root, "e2e/persona-interaction-cross-repo-hosted.spec.ts"),
   "utf8",
 );
+const hostedPersonaServantPreflight = readFileSync(
+  resolve(root, "scripts/ensure-persona-hosted-proof-servant.mjs"),
+  "utf8",
+);
 const hostedBrowserProbe = readFileSync(
   resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
   "utf8",
@@ -402,11 +406,106 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       ),
     ).toBeLessThan(
       authorizedProof.indexOf(
+        "node scripts/ensure-persona-hosted-proof-servant.mjs",
+      ),
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/ensure-persona-hosted-proof-servant.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
+        "node scripts/probe-persona-governed-proposal-live.mjs",
+      ),
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/validate-persona-hosted-proof-env.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
         "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
       ),
     );
     expect(authorizedProof).toContain(
       "--project=chromium --project=mobile-chromium",
+    );
+    expect(authorizedProof).toContain(
+      "node scripts/ensure-persona-hosted-proof-servant.mjs",
+    );
+    expect(authorizedProof).toContain(
+      "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
+    );
+    expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
+    expect(authorizedProof).toContain("expected !== 6");
+    expect(authorizedProof).toContain("skipped !== 0");
+    expect(authorizedProof).toContain("unexpected !== 0");
+    expect(authorizedProof).toContain("flaky !== 0");
+    expect(
+      authorizedProof.match(/ensure-persona-hosted-proof-servant\.mjs/gu),
+    ).toHaveLength(1);
+    expect(hostedPersonaServantPreflight).toContain(
+      "/bff/agora/servant/ensure",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "process.env.PANTHEON_EXPECTED_BFF_SHA",
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/version")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/me"),
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/agora/servant/ensure"),
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "bffUrl.hostname !== devBffHost",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      '"Idempotency-Key": idempotencyKey',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      '"X-Request-Id": requestId',
+    );
+    expect(hostedPersonaServantPreflight).toContain('"X-Tenant-Id": tenantId');
+    expect(hostedPersonaServantPreflight).toMatch(
+      /stableUuid\(\s*`pantheon-persona-hosted-proof:v1:\$\{tenantId\}:\$\{operatorId\}`\s*,?\s*\)/u,
+    );
+    expect(hostedPersonaServantPreflight).not.toContain(
+      "stableUuid(`pantheon-persona-hosted-proof:${tenantId}:${correlationId}`)",
+    );
+    expect(hostedPersonaServantPreflight).not.toMatch(
+      /stableUuid\([^)]*operatorToken/u,
+    );
+    expect(hostedPersonaServantPreflight).not.toContain("/bff/personas");
+    expect(hostedPersonaServantPreflight).not.toMatch(/delete|cleanup/iu);
+    expect(hostedPersonaInteractionSpec).toContain(
+      "PANTHEON_PERSONA_INTERACTION_PERSONA_ID",
+    );
+    expect(hostedPersonaInteractionSpec).toContain("excluded_reason_counts=");
+    expect(
+      hostedPersonaInteractionSpec.indexOf("participants:eligible"),
+    ).toBeLessThan(
+      hostedPersonaInteractionSpec.indexOf("/bff/management/persona-fleet"),
+    );
+    expect(hostedPersonaInteractionSpec).toContain("proposedParticipants.some");
+    expect(hostedPersonaInteractionSpec).toContain(
+      "row.persona_id === ENSURED_PERSONA_ID",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "submittedRequest.participant_persona_ids",
+    );
+    expect(
+      hostedPersonaInteractionSpec.match(
+        /submitted\.participants\)\.to(?:Equal|Contain)\(\[?ENSURED_PERSONA_ID/gu,
+      ),
+    ).toHaveLength(2);
+    expect(hostedPersonaInteractionSpec).toContain(
+      "canonical eligible selected",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "`${BFF_BASE}/bff/agora/servant/ensure`",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "expect(deniedEnsure.status()).toBe(403)",
     );
     expect(hostedPersonaInteractionSpec.match(/^\s*test\("/gmu)).toHaveLength(
       3,
