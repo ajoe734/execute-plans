@@ -134,14 +134,12 @@ describe("paired Pantheon release workflow", () => {
     expect(authorization).toContain(
       "actions/artifacts/${BINDING_ARTIFACT_ID}/zip",
     );
-    expect(integration).toContain("needs: proof-authorization");
+    expect(integration).not.toContain("needs: proof-authorization");
     expect(integration).toContain("!cancelled()");
     expect(integration).toContain(
       "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')",
     );
-    expect(integration.indexOf("needs: proof-authorization")).toBeLessThan(
-      authorizedProof.indexOf("PANTHEON_BFF_OPERATOR_A_TOKEN"),
-    );
+    expect(authorizedProof).toContain("PANTHEON_BFF_OPERATOR_A_TOKEN");
   });
 
   it("registers one exact child run so an unallowlisted collaborator cannot replay the parent nonce", () => {
@@ -173,6 +171,39 @@ describe("paired Pantheon release workflow", () => {
     expect(authorization).toContain('String(childRun.run_attempt) !== "1"');
     expect(authorization).toContain(
       "String(claim.child?.runId) === process.env.GITHUB_RUN_ID",
+    );
+  });
+
+  it("rejects a targeted rerun of the previously authorized parent proof coordinator", () => {
+    const coordinator = deployWorkflow.slice(
+      deployWorkflow.indexOf("  proof-coordinator:"),
+      deployWorkflow.indexOf("  proof-restore-confirmation:"),
+    );
+    expect(deployWorkflow).toContain("RUN_ATTEMPT: ${{ github.run_attempt }}");
+    expect(deployWorkflow).toContain(
+      "TRIGGERING_ACTOR: ${{ github.triggering_actor }}",
+    );
+    expect(deployWorkflow).toContain('runAttempt !== "1"');
+    expect(deployWorkflow).toContain("triggeringActor !== actor");
+    expect(coordinator).toContain("github.run_attempt == 1");
+    expect(coordinator).toContain("github.triggering_actor == github.actor");
+    expect(coordinator).toContain(
+      "Reauthorize one-time parent proof coordinator",
+    );
+    expect(coordinator).toContain("PANTHEON_DEV_FE_DEPLOY_OPERATORS");
+    expect(
+      coordinator.indexOf("Reauthorize one-time parent proof coordinator"),
+    ).toBeLessThan(
+      coordinator.indexOf("Checkout exact trusted proof controller"),
+    );
+    expect(coordinator).toContain(
+      "triggeringActor: process.env.GITHUB_TRIGGERING_ACTOR",
+    );
+    expect(integrationWorkflow).toContain(
+      'String(run.triggering_actor?.login || "").toLowerCase() !== parentActor',
+    );
+    expect(watchdogWorkflow).toContain(
+      'String(run.triggering_actor?.login || "").toLowerCase() !== actor',
     );
   });
 
