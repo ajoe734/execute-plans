@@ -321,7 +321,7 @@ jobs:
     timeout-minutes: 190
     permissions:
       contents: read
-      actions: read
+      actions: write
     runs-on: ubuntu-latest
     outputs:
       proof_run_id: ${{ steps.proof.outputs.proof_run_id }}
@@ -349,6 +349,17 @@ jobs:
               process.stdout.write(coordinator?.status==="completed" ? "true" : "false");
             ' "$parent_jobs"
           }
+          cancel_child_and_wait() {
+            local status
+            for _ in $(seq 1 1800); do
+              status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+              [[ "$status" == "completed" ]] && return 0
+              gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+              sleep 5
+            done
+            echo "Exact hosted proof did not stop after parent termination." >&2
+            return 1
+          }
           for _ in $(seq 1 420); do
             matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
               --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
@@ -373,6 +384,7 @@ jobs:
           fi
           for _ in $(seq 1 620); do
             if [[ "$(parent_coordinator_terminal)" == "true" ]]; then
+              cancel_child_and_wait
               echo "Parent proof coordinator ended while the hosted proof was active; restoring now."
               exit 0
             fi
