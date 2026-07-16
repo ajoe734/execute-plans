@@ -22,6 +22,30 @@ on:
         description: "Unique correlation binding the bounded deploy to this hosted proof."
         required: false
         default: ""
+      parent_deploy_run_id:
+        description: "Exact authorized Pantheon Dev FE Deploy parent run."
+        required: false
+        default: ""
+      parent_deploy_run_attempt:
+        description: "Exact parent deploy run attempt."
+        required: false
+        default: ""
+      parent_deploy_actor:
+        description: "Authorized operator who initiated the parent deploy."
+        required: false
+        default: ""
+      parent_proof_nonce:
+        description: "Unpredictable nonce authenticated by the parent binding artifact."
+        required: false
+        default: ""
+      parent_binding_artifact_id:
+        description: "Exact parent-run proof binding artifact id."
+        required: false
+        default: ""
+      parent_binding_artifact_digest:
+        description: "GitHub SHA-256 digest of the parent proof binding artifact."
+        required: false
+        default: ""
       source_gate_run_id:
         description: "Successful dev-push gate run that produced the deployed candidate pair."
         required: false
@@ -86,17 +110,179 @@ on:
 permissions:
   contents: read
   actions: read
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: pantheon-fe-bff-integration-${{ github.event_name == 'push' && github.ref || github.run_id }}
   cancel-in-progress: false
 
 jobs:
+  proof-authorization:
+    name: Authorize parent-bound hosted write proof
+    if: github.event_name == 'workflow_dispatch' && (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate exact active authorized parent deploy
+        id: parent
+        uses: actions/github-script@v7
+        env:
+          AUTHORIZED_OPERATORS: ${{ vars.PANTHEON_DEV_FE_DEPLOY_OPERATORS }}
+          FRONTEND_SHA: ${{ inputs.fe_sha }}
+          PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          PARENT_PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+          BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
+          BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
+        with:
+          script: |
+            const numeric = /^[1-9][0-9]*$/;
+            const sha = /^[0-9a-f]{40}$/i;
+            const digest = /^sha256:[0-9a-f]{64}$/i;
+            const noncePattern = /^[0-9a-f]{64}$/i;
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            const value = (name) => String(process.env[name] || "").trim();
+            if (String(context.payload.inputs?.pint_hosted_probe) !== "true" ||
+                String(context.payload.inputs?.persona_interaction_write_proof) !== "true") {
+              core.setFailed("Hosted proof requires both explicit proof opt-ins");
+              return;
+            }
+            const frontendSha = value("FRONTEND_SHA").toLowerCase();
+            const correlation = value("PROOF_CORRELATION_ID");
+            const parentRunText = value("PARENT_RUN_ID");
+            const parentAttempt = value("PARENT_RUN_ATTEMPT");
+            const parentActor = value("PARENT_ACTOR").toLowerCase();
+            const nonce = value("PARENT_PROOF_NONCE").toLowerCase();
+            const artifactId = value("BINDING_ARTIFACT_ID");
+            const artifactDigest = value("BINDING_ARTIFACT_DIGEST").toLowerCase();
+            const operators = new Set(value("AUTHORIZED_OPERATORS").split(",")
+              .map((entry) => entry.trim().toLowerCase()).filter(Boolean));
+            if (!sha.test(frontendSha) || !uuid.test(correlation) || !noncePattern.test(nonce) ||
+                !numeric.test(parentRunText) || !numeric.test(parentAttempt) || !numeric.test(artifactId) ||
+                !digest.test(artifactDigest) || !operators.has(parentActor)) {
+              core.setFailed("Hosted proof parent binding is malformed or unauthorized");
+              return;
+            }
+            if (parentRunText === String(process.env.GITHUB_RUN_ID || "")) {
+              core.setFailed("Hosted proof cannot authorize itself as its parent deploy");
+              return;
+            }
+            const parentRunId = Number(parentRunText);
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: parentRunId,
+            });
+            const path = String(run.path || "").split("@")[0];
+            const repo = String(run.head_repository?.full_name || run.repository?.full_name || "").toLowerCase();
+            if (path !== ".github/workflows/pantheon-dev-fe-deploy.yml" ||
+                repo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
+                run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
+                run.status !== "in_progress" || run.conclusion != null ||
+                String(run.head_sha || "").toLowerCase() !== frontendSha ||
+                String(run.run_attempt) !== parentAttempt ||
+                String(run.actor?.login || "").toLowerCase() !== parentActor) {
+              core.setFailed("Hosted proof is not bound to the exact active authorized parent deploy run");
+              return;
+            }
+            const name = `pantheon-proof-binding-attempt-${parentAttempt}`;
+            const { data: page } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: parentRunId,
+              name, per_page: 100,
+            });
+            const matches = page.artifacts.filter((artifact) =>
+              String(artifact.id) === artifactId && artifact.name === name && !artifact.expired &&
+              String(artifact.digest || "").toLowerCase() === artifactDigest,
+            );
+            if (matches.length !== 1) {
+              core.setFailed("Hosted proof binding artifact is not the exact parent-run artifact");
+            }
+
+      - name: Authenticate parent nonce and correlation binding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
+          BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          PARENT_PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+          PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+          FRONTEND_SHA: ${{ inputs.fe_sha }}
+          BFF_SHA: ${{ inputs.bff_sha }}
+          SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP%/}/parent-proof-binding.zip"
+          rm -f "$archive" "$RUNNER_TEMP/proof-binding.json"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${BINDING_ARTIFACT_ID}/zip" \
+            --output "$archive"
+          actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "${actual,,}" == "${BINDING_ARTIFACT_DIGEST,,}" ]]
+          python3 - "$archive" "$RUNNER_TEMP/proof-binding.json" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-binding.json":
+                  raise SystemExit("parent binding artifact must contain exactly proof-binding.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("parent binding artifact entry is unsafe")
+              pathlib.Path(sys.argv[2]).write_bytes(bundle.read(entry))
+          PY
+          node --input-type=module - "$RUNNER_TEMP/proof-binding.json" <<'NODE'
+          import fs from "node:fs";
+          const b = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const valid = b.schemaVersion === "pantheon.pint-proof-binding.v1" &&
+            b.repository === process.env.GITHUB_REPOSITORY &&
+            b.parent?.workflowPath === ".github/workflows/pantheon-dev-fe-deploy.yml" &&
+            String(b.parent?.runId) === process.env.PARENT_RUN_ID &&
+            String(b.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
+            String(b.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            b.parent?.frontendSha === process.env.FRONTEND_SHA &&
+            b.nonce === process.env.PARENT_PROOF_NONCE && b.correlationId === process.env.PROOF_CORRELATION_ID &&
+            String(b.source?.gateRunId) === process.env.SOURCE_GATE_RUN_ID &&
+            String(b.source?.artifactId) === process.env.SOURCE_ARTIFACT_ID &&
+            b.source?.artifactDigest === process.env.SOURCE_ARTIFACT_DIGEST &&
+            b.pair?.pairId === process.env.EXPECTED_PAIR_ID && b.pair?.bffSha === process.env.BFF_SHA &&
+            b.pair?.readOnlyArtifactDigestSha256 === process.env.EXPECTED_READ_ONLY_DIGEST &&
+            b.pair?.writeProofArtifactDigestSha256 === process.env.EXPECTED_WRITE_PROOF_DIGEST;
+          if (!valid) throw new Error("parent proof nonce/correlation binding mismatch");
+          NODE
+
   integration-gate:
+    needs: proof-authorization
+    if: >-
+      ${{
+        always() &&
+        (
+          !(
+            github.event_name == 'workflow_dispatch' &&
+            (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')
+          ) ||
+          needs.proof-authorization.result == 'success'
+        )
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 145
+    permissions:
+      contents: read
+      actions: read
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
@@ -958,43 +1144,56 @@ jobs:
           include-hidden-files: true
           path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-identity.json
 
+  pr-comment:
+    name: Publish PR-only release gate comment
+    needs: integration-gate
+    if: always() && github.event_name == 'pull_request'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release gate evidence
+        id: evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}
+          path: pantheon-pr-comment-evidence
+
       - name: Comment release gate on PR
-        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          SUMMARY_PATH: pantheon-pr-comment-evidence/pantheon-audits/current-run/release-gate-summary.md
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
             const marker = '<!-- pantheon-release-gate-summary -->';
-            const summaryPath = path.join(process.env.PANTHEON_AUDIT_OUT_DIR || '.lovable/audits', 'release-gate-summary.md');
+            const summaryPath = process.env.SUMMARY_PATH;
             const fallback = `${marker}\n# Pantheon FE-BFF Release Gate Summary\n\nRelease gate summary was not generated. Check the workflow logs.`;
-            const summary = fs.existsSync(summaryPath)
+            const summary = summaryPath && fs.existsSync(summaryPath)
               ? fs.readFileSync(summaryPath, 'utf8')
               : fallback;
             const body = summary.length > 60000
               ? `${summary.slice(0, 59500)}\n\n...truncated; see uploaded pantheon-integration-evidence artifact.`
               : summary;
             const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
             });
-            const existing = comments.data.find(comment =>
-              comment.user?.type === 'Bot' && comment.body?.includes(marker)
-            );
+            const existing = comments.data.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker));
             if (existing) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
               });
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
               });
             }
