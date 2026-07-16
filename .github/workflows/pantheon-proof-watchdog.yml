@@ -108,7 +108,8 @@ jobs:
                 run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
                 String(run.head_sha || "").toLowerCase() !== candidateSha ||
                 String(run.run_attempt) !== parentAttempt ||
-                String(run.actor?.login || "").toLowerCase() !== actor) {
+                String(run.actor?.login || "").toLowerCase() !== actor ||
+                String(run.triggering_actor?.login || "").toLowerCase() !== actor) {
               core.setFailed("watchdog is not bound to the exact authorized parent deploy run");
               return;
             }
@@ -200,6 +201,7 @@ jobs:
             String(binding.parent?.runId) === expected.parentRunId &&
             String(binding.parent?.runAttempt) === expected.parentAttempt &&
             binding.parent?.actor === expected.actor && binding.parent?.frontendSha === expected.candidateSha &&
+            binding.parent?.triggeringActor === expected.actor &&
             binding.nonce === expected.nonce && binding.correlationId === expected.correlation &&
             String(binding.source?.gateRunId) === expected.gateRunId &&
             String(binding.source?.artifactId) === expected.artifactId &&
@@ -546,6 +548,7 @@ jobs:
             String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
             String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
             String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.parent?.triggeringActor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
             String(claim.child?.runId) === process.env.PROOF_RUN_ID &&
             String(claim.child?.runAttempt) === "1" &&
             String(claim.child?.actor).toLowerCase() === "github-actions[bot]" &&

@@ -191,7 +191,8 @@ jobs:
                 run.status !== "in_progress" || run.conclusion != null ||
                 String(run.head_sha || "").toLowerCase() !== frontendSha ||
                 String(run.run_attempt) !== parentAttempt ||
-                String(run.actor?.login || "").toLowerCase() !== parentActor) {
+                String(run.actor?.login || "").toLowerCase() !== parentActor ||
+                String(run.triggering_actor?.login || "").toLowerCase() !== parentActor) {
               core.setFailed("Hosted proof is not bound to the exact active authorized parent deploy run");
               return;
             }
@@ -279,6 +280,7 @@ jobs:
             String(b.parent?.runId) === process.env.PARENT_RUN_ID &&
             String(b.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
             String(b.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(b.parent?.triggeringActor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
             b.parent?.frontendSha === process.env.FRONTEND_SHA &&
             b.nonce === process.env.PARENT_PROOF_NONCE && b.correlationId === process.env.PROOF_CORRELATION_ID &&
             String(b.source?.gateRunId) === process.env.SOURCE_GATE_RUN_ID &&
@@ -367,6 +369,7 @@ jobs:
             String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
             String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
             String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.parent?.triggeringActor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
             claim.child?.workflowPath === ".github/workflows/pantheon-integration-gate.yml" &&
             String(claim.child?.runId) === process.env.GITHUB_RUN_ID &&
             String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT &&
@@ -379,10 +382,8 @@ jobs:
           NODE
 
   integration-gate:
-    needs: proof-authorization
     if: >-
       ${{
-        always() &&
         !cancelled() &&
         !(
           github.event_name == 'workflow_dispatch' &&
@@ -1398,6 +1399,7 @@ jobs:
             String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
             String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
             String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.parent?.triggeringActor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
             String(claim.child?.runId) === process.env.GITHUB_RUN_ID &&
             String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT &&
             String(claim.child?.actor).toLowerCase() === process.env.GITHUB_ACTOR.toLowerCase() &&
