@@ -948,15 +948,14 @@ jobs:
               "/repos/${GITHUB_REPOSITORY}/actions/runs/${WATCHDOG_RUN_ID}/jobs?per_page=100")"
             armed="$(node -e '
               const jobs=JSON.parse(process.argv[1]).jobs||[];
-              const watch=jobs.find((job)=>job.name==="Authenticate parent and watch bounded proof");
-              const binding=watch?.steps?.find((step)=>step.name==="Download and authenticate source pair before arming");
-              process.stdout.write(binding?.conclusion==="success" ? "true" : "false");
+              const authorize=jobs.find((job)=>job.name==="Authenticate exact parent restore authority");
+              process.stdout.write(authorize?.status==="completed" && authorize?.conclusion==="success" ? "true" : "false");
             ' "$jobs")"
             [[ "$armed" == "true" ]] && exit 0
             terminal_failure="$(node -e '
               const jobs=JSON.parse(process.argv[1]).jobs||[];
-              const watch=jobs.find((job)=>job.name==="Authenticate parent and watch bounded proof");
-              process.stdout.write(watch?.status==="completed" && watch?.conclusion!=="success" ? "true" : "false");
+              const authorize=jobs.find((job)=>job.name==="Authenticate exact parent restore authority");
+              process.stdout.write(authorize?.status==="completed" && authorize?.conclusion!=="success" ? "true" : "false");
             ' "$jobs")"
             if [[ "$terminal_failure" == "true" ]]; then
               echo "Independent restore watchdog failed before arming; refusing write activation." >&2
@@ -1001,6 +1000,8 @@ jobs:
           BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
         run: |
           set -euo pipefail
+          rm -rf .proof-child-claim
+          mkdir -p .proof-child-claim
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           gh workflow run pantheon-integration-gate.yml \
             --repo "$GITHUB_REPOSITORY" --ref dev \
@@ -1041,6 +1042,40 @@ jobs:
             sleep 2
           done
           [[ -n "${proof_run_id:-}" ]] || { echo "Unable to resolve hosted proof." >&2; exit 1; }
+          PROOF_RUN_ID="$proof_run_id" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const claim = {
+            schemaVersion: "pantheon.pint-proof-child-claim.v1",
+            repository: process.env.GITHUB_REPOSITORY,
+            parent: {
+              workflowPath: ".github/workflows/pantheon-dev-fe-deploy.yml",
+              runId: process.env.GITHUB_RUN_ID,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+              actor: process.env.GITHUB_ACTOR,
+            },
+            child: {
+              workflowPath: ".github/workflows/pantheon-integration-gate.yml",
+              runId: process.env.PROOF_RUN_ID,
+              actor: process.env.GITHUB_ACTOR,
+              frontendSha: process.env.EXACT_FE_SHA,
+            },
+            nonce: process.env.PROOF_NONCE,
+            correlationId: process.env.CORRELATION_ID,
+          };
+          fs.writeFileSync(
+            ".proof-child-claim/proof-child-claim.json",
+            `${JSON.stringify(claim, null, 2)}\n`,
+            { mode: 0o600 },
+          );
+          NODE
+
+      - name: Upload one-time exact child proof claim
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantheon-proof-child-claim-attempt-${{ github.run_attempt }}
+          path: .proof-child-claim/proof-child-claim.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Wait for hosted proof terminal
         timeout-minutes: 155

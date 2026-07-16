@@ -167,6 +167,11 @@ jobs:
               core.setFailed("Hosted proof parent binding is malformed or unauthorized");
               return;
             }
+            const childActor = String(context.actor || "").toLowerCase();
+            if (!operators.has(childActor) || childActor !== parentActor) {
+              core.setFailed("Hosted proof current child dispatch actor is not the authorized parent operator");
+              return;
+            }
             if (parentRunText === String(process.env.GITHUB_RUN_ID || "")) {
               core.setFailed("Hosted proof cannot authorize itself as its parent deploy");
               return;
@@ -185,6 +190,21 @@ jobs:
                 String(run.run_attempt) !== parentAttempt ||
                 String(run.actor?.login || "").toLowerCase() !== parentActor) {
               core.setFailed("Hosted proof is not bound to the exact active authorized parent deploy run");
+              return;
+            }
+            const childRunId = Number(process.env.GITHUB_RUN_ID);
+            const { data: childRun } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: childRunId,
+            });
+            const childPath = String(childRun.path || "").split("@")[0];
+            const childRepo = String(childRun.head_repository?.full_name || childRun.repository?.full_name || "").toLowerCase();
+            if (childPath !== ".github/workflows/pantheon-integration-gate.yml" ||
+                childRepo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
+                childRun.event !== "workflow_dispatch" || childRun.head_branch !== "dev" ||
+                childRun.status !== "in_progress" || childRun.conclusion != null ||
+                String(childRun.head_sha || "").toLowerCase() !== frontendSha ||
+                String(childRun.actor?.login || "").toLowerCase() !== childActor) {
+              core.setFailed("Hosted proof current child run source is not the exact trusted dev dispatch");
               return;
             }
             const name = `pantheon-proof-binding-attempt-${parentAttempt}`;
@@ -265,6 +285,92 @@ jobs:
           if (!valid) throw new Error("parent proof nonce/correlation binding mismatch");
           NODE
 
+      - name: Authenticate one-time exact child proof claim
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          PARENT_PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+          PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+          FRONTEND_SHA: ${{ inputs.fe_sha }}
+        run: |
+          set -euo pipefail
+          claim_name="pantheon-proof-child-claim-attempt-${PARENT_RUN_ATTEMPT}"
+          claim_artifact=""
+          for _ in $(seq 1 120); do
+            artifacts="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/artifacts?name=${claim_name}&per_page=100")"
+            count="$(node -e '
+              const artifacts=(JSON.parse(process.argv[1]).artifacts||[])
+                .filter((artifact)=>artifact.name===process.argv[2] && !artifact.expired);
+              process.stdout.write(String(artifacts.length));
+            ' "$artifacts" "$claim_name")"
+            if [[ "$count" == "1" ]]; then
+              claim_artifact="$artifacts"
+              break
+            fi
+            [[ "$count" == "0" ]] || { echo "Ambiguous one-time child proof claim." >&2; exit 1; }
+            sleep 2
+          done
+          [[ -n "$claim_artifact" ]] || { echo "Parent did not register this child proof run." >&2; exit 1; }
+          claim_id="$(node -e '
+            const artifact=(JSON.parse(process.argv[1]).artifacts||[])
+              .find((candidate)=>candidate.name===process.argv[2] && !candidate.expired);
+            process.stdout.write(String(artifact.id));
+          ' "$claim_artifact" "$claim_name")"
+          claim_digest="$(node -e '
+            const artifact=(JSON.parse(process.argv[1]).artifacts||[])
+              .find((candidate)=>candidate.name===process.argv[2] && !candidate.expired);
+            process.stdout.write(String(artifact.digest||"").toLowerCase());
+          ' "$claim_artifact" "$claim_name")"
+          [[ "$claim_id" =~ ^[1-9][0-9]*$ && "$claim_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          archive="${RUNNER_TEMP%/}/proof-child-claim.zip"
+          claim_file="${RUNNER_TEMP%/}/proof-child-claim.json"
+          rm -f "$archive" "$claim_file"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${claim_id}/zip" \
+            --output "$archive"
+          actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "${actual,,}" == "$claim_digest" ]]
+          python3 - "$archive" "$claim_file" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-child-claim.json":
+                  raise SystemExit("child claim artifact must contain exactly proof-child-claim.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("child claim artifact entry is unsafe")
+              pathlib.Path(sys.argv[2]).write_bytes(bundle.read(entry))
+          PY
+          node --input-type=module - "$claim_file" <<'NODE'
+          import fs from "node:fs";
+          const claim = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const valid = claim.schemaVersion === "pantheon.pint-proof-child-claim.v1" &&
+            claim.repository === process.env.GITHUB_REPOSITORY &&
+            claim.parent?.workflowPath === ".github/workflows/pantheon-dev-fe-deploy.yml" &&
+            String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
+            String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
+            String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            claim.child?.workflowPath === ".github/workflows/pantheon-integration-gate.yml" &&
+            String(claim.child?.runId) === process.env.GITHUB_RUN_ID &&
+            String(claim.child?.actor).toLowerCase() === process.env.GITHUB_ACTOR.toLowerCase() &&
+            claim.child?.frontendSha === process.env.FRONTEND_SHA &&
+            claim.nonce === process.env.PARENT_PROOF_NONCE &&
+            claim.correlationId === process.env.PROOF_CORRELATION_ID;
+          if (!valid) throw new Error("one-time child proof claim does not authorize this exact run");
+          NODE
+
   integration-gate:
     needs: proof-authorization
     if: >-
@@ -313,8 +419,10 @@ jobs:
       # hosted FE readback is enforced by the deploy workflow after switch, so
       # stale-host evidence must not deadlock candidate publication.
       PANTHEON_HOSTED_FE_HARD_GATE: "false"
-      PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
-      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof || 'false' }}
+      # Ordinary push/PR/manual integration is always credential-free. The
+      # parent-bound proof runs in authorized-write-proof after one-time auth.
+      PANTHEON_PINT_HOSTED_PROBE: "false"
+      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "false"
       PANTHEON_PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id || '' }}
       FE_INT_GATE_PERF_STRICT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && '1' || '0' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
@@ -322,15 +430,6 @@ jobs:
       # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
       PANTHEON_E2E_STRICT: "1"
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
-      PANTHEON_BFF_SMOKE_BEARER_TOKEN: ${{ secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN }}
-      PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
-      PANTHEON_BFF_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-      PANTHEON_BFF_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-      PANTHEON_BFF_APPROVER_TOKEN: ${{ secrets.PANTHEON_BFF_APPROVER_TOKEN }}
-      PANTHEON_BFF_RISK_OWNER_TOKEN: ${{ secrets.PANTHEON_BFF_RISK_OWNER_TOKEN }}
-      PANTHEON_BFF_ADMIN_TOKEN: ${{ secrets.PANTHEON_BFF_ADMIN_TOKEN }}
-      PANTHEON_BFF_OPERATOR_A_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-      PANTHEON_BFF_OPERATOR_B_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_B_TOKEN }}
       PANTHEON_LIVE_DEEP_SSE_MS: ${{ vars.PANTHEON_LIVE_DEEP_SSE_MS || '65000' }}
       PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -900,8 +999,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true'
         env:
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ""
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ""
         run: |
           set -o pipefail
           node scripts/validate-persona-hosted-proof-env.mjs
@@ -911,9 +1010,9 @@ jobs:
         id: e2e
         continue-on-error: true
         env:
-          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && '1' || '0' }}
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true' && secrets.PANTHEON_BFF_OPERATOR_A_TOKEN || '' }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "0"
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ""
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ""
         run: |
           set -o pipefail
           FE_UNDER_TEST="$PANTHEON_FE_BASE_URL"
@@ -1143,6 +1242,142 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-identity.json
+
+  authorized-write-proof:
+    name: Run authorized one-time Persona write proof
+    needs: proof-authorization
+    if: >-
+      ${{
+        needs.proof-authorization.result == 'success' &&
+        github.event_name == 'workflow_dispatch' &&
+        inputs.pint_hosted_probe == 'true' &&
+        inputs.persona_interaction_write_proof == 'true'
+      }}
+    timeout-minutes: 145
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    env:
+      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha }}
+      PANTHEON_BFF_SHA: ${{ inputs.bff_sha }}
+      PANTHEON_PROOF_CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+      PANTHEON_AUDIT_OUT_DIR: .lovable/audits/authorized-write-proof
+      EXPECTED_SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+      EXPECTED_SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+      EXPECTED_SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+      EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+      EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+      EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+    steps:
+      - name: Checkout exact authorized immutable dev ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.fe_sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install trusted proof dependencies
+        run: npm ci
+
+      - name: Install trusted proof browser
+        run: npx playwright install chromium --with-deps
+
+      - name: Verify exact write-proof deployment before credentials
+        run: |
+          set -euo pipefail
+          rm -rf "$PANTHEON_AUDIT_OUT_DIR"
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-before-pint.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?proof=${PANTHEON_PROOF_CORRELATION_ID}&phase=before" > "$manifest_file"
+          node --input-type=module - "$manifest_file" <<'NODE'
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const digest = (value) => String(value || "").replace(/^sha256:/i, "").toLowerCase();
+          const checks = [
+            [manifest.commit === process.env.PANTHEON_FRONTEND_SHA, "frontend SHA"],
+            [manifest.bffCommit === process.env.PANTHEON_BFF_SHA, "BFF SHA"],
+            [String(manifest.gate?.runId) === process.env.EXPECTED_SOURCE_GATE_RUN_ID, "source gate"],
+            [manifest.profile === "write-proof" && manifest.deploymentProfile === "write-proof", "write-proof profile"],
+            [manifest.pairId === process.env.EXPECTED_PAIR_ID && manifest.pair?.pairId === process.env.EXPECTED_PAIR_ID, "pair id"],
+            [digest(manifest.artifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST), "selected digest"],
+            [digest(manifest.pair?.readOnlyArtifactDigestSha256) === digest(process.env.EXPECTED_READ_ONLY_DIGEST), "read-only digest"],
+            [digest(manifest.pair?.writeProofArtifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST), "write-proof digest"],
+            [String(manifest.githubArtifactDigest || "").toLowerCase() === String(process.env.EXPECTED_SOURCE_ARTIFACT_DIGEST || "").toLowerCase(), "source artifact digest"],
+            [manifest.buildMode?.VITE_BFF_REAL_WRITES === "true" && manifest.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES === "true", "write posture"],
+            [manifest.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN === "false", "bearer posture"],
+            [manifest.deploymentState === "accepted", "deployment state"],
+          ];
+          const failed = checks.filter(([pass]) => !pass).map(([, label]) => label);
+          if (failed.length) throw new Error(`authorized write-proof manifest mismatch: ${failed.join(", ")}`);
+          NODE
+
+      - name: Run governed proposal with proof-only credentials
+        env:
+          PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
+          PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+          PANTHEON_PINT_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+          PANTHEON_PINT_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+        run: node scripts/probe-persona-governed-proposal-live.mjs
+
+      - name: Run desktop and mobile Persona proof with proof-only credentials
+        env:
+          PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
+          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
+          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
+        run: |
+          set -euo pipefail
+          node scripts/validate-persona-hosted-proof-env.mjs
+          npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+            --project=chromium --project=mobile-chromium
+
+      - name: Verify exact write-proof deployment after credentialed proof
+        if: always()
+        run: |
+          set -euo pipefail
+          manifest_file="$PANTHEON_AUDIT_OUT_DIR/deployment-after-pint.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            "${PANTHEON_FE_BASE_URL%/}/deployment.json?proof=${PANTHEON_PROOF_CORRELATION_ID}&phase=after" > "$manifest_file"
+          node --input-type=module - "$manifest_file" <<'NODE'
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const digest = (value) => String(value || "").replace(/^sha256:/i, "").toLowerCase();
+          const valid = manifest.commit === process.env.PANTHEON_FRONTEND_SHA &&
+            manifest.bffCommit === process.env.PANTHEON_BFF_SHA &&
+            String(manifest.gate?.runId) === process.env.EXPECTED_SOURCE_GATE_RUN_ID &&
+            manifest.profile === "write-proof" && manifest.deploymentProfile === "write-proof" &&
+            manifest.pairId === process.env.EXPECTED_PAIR_ID && manifest.pair?.pairId === process.env.EXPECTED_PAIR_ID &&
+            digest(manifest.artifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST) &&
+            digest(manifest.pair?.readOnlyArtifactDigestSha256) === digest(process.env.EXPECTED_READ_ONLY_DIGEST) &&
+            digest(manifest.pair?.writeProofArtifactDigestSha256) === digest(process.env.EXPECTED_WRITE_PROOF_DIGEST) &&
+            String(manifest.githubArtifactDigest || "").toLowerCase() === String(process.env.EXPECTED_SOURCE_ARTIFACT_DIGEST || "").toLowerCase() &&
+            manifest.buildMode?.VITE_BFF_REAL_WRITES === "true" &&
+            manifest.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES === "true" &&
+            manifest.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN === "false" &&
+            manifest.deploymentState === "accepted";
+          if (!valid) throw new Error("write-proof pair changed during authorized credentialed proof");
+          NODE
+
+      - name: Upload authorized proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantheon-authorized-write-proof-attempt-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .lovable/audits/authorized-write-proof
+            playwright-report
+            test-results
 
   pr-comment:
     name: Publish PR-only release gate comment
