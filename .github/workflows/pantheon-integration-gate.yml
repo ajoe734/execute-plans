@@ -348,6 +348,10 @@ jobs:
             e2e/18-perf.spec.ts \
             --project=chromium \
             --retries=0 \
+            --output "$PANTHEON_AUDIT_OUT_DIR/playwright-output" \
+            --trace=off \
+            --screenshot=off \
+            --video=off \
             --reporter=list,json \
             2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log"
 
@@ -560,6 +564,10 @@ jobs:
           if [ -d "$PANTHEON_AUDIT_OUT_DIR" ]; then
             cp -a "$PANTHEON_AUDIT_OUT_DIR"/. pantheon-audits/current-run/
           fi
+          if [ -d playwright-report ]; then
+            mkdir -p pantheon-audits/playwright-report
+            cp -a playwright-report/. pantheon-audits/playwright-report/
+          fi
 
       - name: Upload evidence
         if: always()
@@ -567,10 +575,7 @@ jobs:
         with:
           name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}
           include-hidden-files: true
-          path: |
-            pantheon-audits/current-run
-            playwright-report
-            test-results
+          path: pantheon-audits
 
       - name: Upload exact release identity
         if: always() && steps.release_identity.outcome == 'success'

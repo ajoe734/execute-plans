@@ -139,6 +139,10 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(fixtureBlock).toContain('PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"');
     expect(fixtureBlock).toContain('PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"');
     expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
+    expect(fixtureBlock).toContain('--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"');
+    expect(fixtureBlock).toContain("--trace=off");
+    expect(fixtureBlock).toContain("--screenshot=off");
+    expect(fixtureBlock).toContain("--video=off");
     expect(fixtureBlock).not.toContain("npm run dev --");
     expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
     expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
@@ -223,6 +227,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(integrationWorkflow).toContain(
       "name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}",
     );
+    const evidenceStart = integrationWorkflow.indexOf("- name: Upload evidence");
+    const evidenceEnd = integrationWorkflow.indexOf("- name: Upload exact release identity");
+    expect(evidenceStart).toBeGreaterThan(-1);
+    expect(evidenceEnd).toBeGreaterThan(evidenceStart);
+    const evidenceBlock = integrationWorkflow.slice(evidenceStart, evidenceEnd);
+    expect(evidenceBlock).toContain("path: pantheon-audits");
+    expect(evidenceBlock).not.toContain("test-results");
     expect(deployWorkflow).toContain(
       "name: pantheon-dev-fe-deploy-evidence-attempt-${{ github.run_attempt }}",
     );
