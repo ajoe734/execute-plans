@@ -318,6 +318,7 @@ describe("paired Pantheon release workflow", () => {
     const restoreStart = watchdogWorkflow.indexOf("  restore:");
     const authorize = watchdogWorkflow.slice(authorizeStart, watchStart);
     const watch = watchdogWorkflow.slice(watchStart, restoreStart);
+    const restore = watchdogWorkflow.slice(restoreStart);
     expect(authorize).toContain(
       "Download and authenticate source pair before arming",
     );
@@ -369,6 +370,27 @@ describe("paired Pantheon release workflow", () => {
       ),
     );
     expect(watch).toContain("actions: write");
+    expect(restore).toContain("actions: write");
+    expect(restore).not.toContain("needs.watch.outputs.proof_run_id");
+    expect(restore).toContain(
+      "Quiesce parent and terminalize exact credentialed child before restore",
+    );
+    expect(restore).toContain('gh run cancel "$PARENT_RUN_ID"');
+    expect(restore).toContain('expected_title="PINT proof ${CORRELATION_ID}"');
+    expect(restore).toContain(
+      "restore child claim does not match the exact correlated proof",
+    );
+    expect(restore).toContain(
+      "Restore refused: exact credentialed child is still nonterminal.",
+    );
+    expect(
+      restore.indexOf(
+        "Quiesce parent and terminalize exact credentialed child before restore",
+      ),
+    ).toBeLessThan(restore.indexOf("Checkout exact paired controller"));
+    expect(restore.indexOf("Checkout exact paired controller")).toBeLessThan(
+      restore.indexOf("Restore exact pair before any mutable successor action"),
+    );
     expect(
       watchdogWorkflow.match(/\$\(parent_coordinator_terminal\)/gu),
     ).toHaveLength(2);

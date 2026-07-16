@@ -411,10 +411,10 @@ jobs:
       - authorize
       - watch
     if: always() && needs.authorize.result == 'success'
-    timeout-minutes: 45
+    timeout-minutes: 75
     permissions:
       contents: read
-      actions: read
+      actions: write
     runs-on:
       - self-hosted
       - Linux
@@ -432,7 +432,153 @@ jobs:
       EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
       EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
       EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+      PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+      PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+      PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+      PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+      CORRELATION_ID: ${{ inputs.proof_correlation_id }}
     steps:
+      - name: Quiesce parent and terminalize exact credentialed child before restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          coordinator_status() {
+            local jobs
+            jobs="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+            node -e '
+              const jobs=JSON.parse(process.argv[1]).jobs||[];
+              const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
+              process.stdout.write(coordinator?.status||"missing");
+            ' "$jobs"
+          }
+          parent_status="$(coordinator_status)"
+          for _ in $(seq 1 30); do
+            [[ "$parent_status" != "in_progress" && "$parent_status" != "queued" ]] && break
+            sleep 2
+            parent_status="$(coordinator_status)"
+          done
+          if [[ "$parent_status" == "in_progress" || "$parent_status" == "queued" ]]; then
+            gh run cancel "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY"
+            for _ in $(seq 1 120); do
+              parent_status="$(coordinator_status)"
+              [[ "$parent_status" == "completed" ]] && break
+              sleep 2
+            done
+          fi
+          if [[ "$parent_status" != "completed" ]]; then
+            echo "Exact parent coordinator did not quiesce before restore." >&2
+            exit 1
+          fi
+
+          expected_title="PINT proof ${CORRELATION_ID}"
+          proof_run_id=""
+          for _ in $(seq 1 60); do
+            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
+              --json databaseId,displayTitle,headSha \
+              --jq 'map(select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'"))')"
+            count="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows.length))' "$matches")"
+            if [[ "$count" == "1" ]]; then
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows[0].databaseId))' "$matches")"
+              break
+            fi
+            [[ "$count" == "0" ]] || { echo "Ambiguous correlated child before restore." >&2; exit 1; }
+            sleep 2
+          done
+          if [[ -z "$proof_run_id" ]]; then
+            echo "No correlated child exists after the exact parent was quiesced."
+            exit 0
+          fi
+          gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+
+          claim_name="pantheon-proof-child-claim-attempt-${PARENT_RUN_ATTEMPT}"
+          artifacts="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/artifacts?name=${claim_name}&per_page=100")"
+          claim_count="$(node -e '
+            const rows=(JSON.parse(process.argv[1]).artifacts||[])
+              .filter((artifact)=>artifact.name===process.argv[2] && !artifact.expired);
+            process.stdout.write(String(rows.length));
+          ' "$artifacts" "$claim_name")"
+          if [[ "$claim_count" == "1" ]]; then
+            claim_metadata="$(node -e '
+              const artifact=(JSON.parse(process.argv[1]).artifacts||[])
+                .find((row)=>row.name===process.argv[2] && !row.expired);
+              process.stdout.write(`${artifact.id}\t${String(artifact.digest||"").toLowerCase()}`);
+            ' "$artifacts" "$claim_name")"
+            IFS=$'\t' read -r claim_id claim_digest <<< "$claim_metadata"
+            [[ "$claim_id" =~ ^[1-9][0-9]*$ && "$claim_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            archive="${RUNNER_TEMP%/}/restore-proof-child-claim.zip"
+            claim_file="${RUNNER_TEMP%/}/restore-proof-child-claim.json"
+            rm -f "$archive" "$claim_file"
+            curl --fail-with-body --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${claim_id}/zip" \
+              --output "$archive"
+            [[ "sha256:$(sha256sum "$archive" | awk '{print $1}')" == "$claim_digest" ]]
+            python3 - "$archive" "$claim_file" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-child-claim.json":
+                  raise SystemExit("child claim artifact must contain exactly proof-child-claim.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("child claim artifact entry is unsafe")
+              pathlib.Path(sys.argv[2]).write_bytes(bundle.read(entry))
+          PY
+            PROOF_RUN_ID="$proof_run_id" node --input-type=module - "$claim_file" <<'NODE'
+          import fs from "node:fs";
+          const claim = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const valid = claim.schemaVersion === "pantheon.pint-proof-child-claim.v1" &&
+            claim.repository === process.env.GITHUB_REPOSITORY &&
+            String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
+            String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
+            String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.child?.runId) === process.env.PROOF_RUN_ID &&
+            String(claim.child?.runAttempt) === "1" &&
+            String(claim.child?.actor).toLowerCase() === "github-actions[bot]" &&
+            String(claim.child?.triggeringActor).toLowerCase() === "github-actions[bot]" &&
+            claim.child?.frontendSha === process.env.CANDIDATE_SHA &&
+            claim.nonce === process.env.PROOF_NONCE &&
+            claim.correlationId === process.env.CORRELATION_ID;
+          if (!valid) throw new Error("restore child claim does not match the exact correlated proof");
+          NODE
+          elif [[ "$claim_count" != "0" ]]; then
+            echo "Ambiguous one-time child claim before restore." >&2
+            exit 1
+          fi
+
+          for _ in $(seq 1 120); do
+            gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+            run_status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+            [[ "$run_status" == "completed" ]] && exit 0
+            jobs="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${proof_run_id}/jobs?per_page=100")"
+            credential_status="$(node -e '
+              const jobs=JSON.parse(process.argv[1]).jobs||[];
+              const proof=jobs.find((job)=>job.name==="Run authorized one-time Persona write proof");
+              process.stdout.write(proof?.status||"missing");
+            ' "$jobs")"
+            [[ "$credential_status" == "completed" ]] && exit 0
+            sleep 5
+          done
+          echo "Restore refused: exact credentialed child is still nonterminal." >&2
+          exit 1
+
       - name: Checkout exact paired controller
         uses: actions/checkout@v4
         with:
