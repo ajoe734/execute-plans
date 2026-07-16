@@ -463,6 +463,44 @@ describe("paired Pantheon release workflow", () => {
     );
   });
 
+  it("canonicalizes the parent binding digest once for both strict consumers", () => {
+    const coordinator = deployWorkflow.slice(
+      deployWorkflow.indexOf("  proof-coordinator:"),
+      deployWorkflow.indexOf("  proof-restore-confirmation:"),
+    );
+    const normalization = coordinator.slice(
+      coordinator.indexOf("Canonicalize parent proof binding artifact digest"),
+      coordinator.indexOf("Dispatch independent read-only restore watchdog"),
+    );
+    const watchdogDispatch = coordinator.slice(
+      coordinator.indexOf("Dispatch independent read-only restore watchdog"),
+      coordinator.indexOf("Require independently armed watchdog before writes"),
+    );
+    const proofDispatch = coordinator.slice(
+      coordinator.indexOf("Dispatch exact parent-bound hosted Persona proof"),
+      coordinator.indexOf("Wait for hosted proof terminal"),
+    );
+
+    expect(normalization).toContain(
+      "node scripts/normalize-github-artifact-digest.mjs",
+    );
+    expect(normalization).toContain("^sha256:[0-9a-f]{64}$");
+    expect(normalization).not.toContain("secrets.");
+    expect(watchdogDispatch).toContain(
+      "BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}",
+    );
+    expect(proofDispatch).toContain(
+      "BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}",
+    );
+    expect(
+      coordinator.match(/steps\.binding_upload\.outputs\.artifact-digest/gu),
+    ).toHaveLength(1);
+    expect(deployWorkflow.match(/actions: write/gu)).toHaveLength(1);
+    expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
+      5,
+    );
+  });
+
   it("binds hosted proof and manifests to the exact source pair", () => {
     expect(integrationWorkflow).toContain(
       'runPath !== ".github/workflows/pantheon-integration-gate.yml"',
