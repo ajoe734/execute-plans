@@ -600,6 +600,17 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     ],
   );
 
+  const composerInputDisabled = !workshop
+    || sessionLoading
+    || sendLoading
+    || isDenied
+    || !writeAccess.interactionAllowed
+    || workshop.status === "concluded";
+  const canSubmitInteraction = !composerInputDisabled
+    && !eligibilityLoading
+    && Boolean(composerValue.trim())
+    && selectedParticipants.length > 0;
+
   return (
     <div
       data-testid="strategy-workshop-page-session"
@@ -987,24 +998,24 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             <textarea
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
-              disabled={sendLoading || isDenied || !writeAccess.interactionAllowed || workshop?.status === "concluded"}
+              disabled={composerInputDisabled}
               placeholder={isDenied || !writeAccess.interactionAllowed ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
               onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && composerValue.trim() && !sendLoading && !isDenied && writeAccess.interactionAllowed) {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canSubmitInteraction) {
                   e.preventDefault();
-                  handleSend(composerValue);
+                  void handleSend(composerValue);
                 }
               }}
             />
             <Button
               className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
               data-testid="servant-composer-submit"
-              disabled={sendLoading || eligibilityLoading || isDenied || !writeAccess.interactionAllowed || !composerValue.trim() || selectedParticipants.length === 0 || workshop?.status === "concluded"}
+              disabled={!canSubmitInteraction}
               title={writeAccess.interactionDisabledReason ?? undefined}
-              onClick={() => handleSend(composerValue)}
+              onClick={() => void handleSend(composerValue)}
               type="button"
             >
               {sendLoading ? (
