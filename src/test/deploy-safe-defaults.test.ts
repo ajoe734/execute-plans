@@ -136,10 +136,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const fixtureBlock = integrationWorkflow.slice(start, end);
 
     expect(fixtureBlock).toContain("if: steps.pr_preview.outcome == 'success'");
-    expect(fixtureBlock).toContain('PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"');
-    expect(fixtureBlock).toContain('PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"');
-    expect(fixtureBlock).toContain('PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"');
-    expect(fixtureBlock).toContain('--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"');
+    expect(fixtureBlock).toContain(
+      'PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(fixtureBlock).toContain(
+      '--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"',
+    );
     expect(fixtureBlock).toContain("--trace=off");
     // screenshot and video are Playwright config options, not `playwright test`
     // CLI flags. Keep them out of this command so the gate cannot fail before
@@ -150,10 +158,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
     expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
     expect(fixtureBlock).toContain("BFF_FALLBACK: strict");
-    for (const credential of [
-      "BFF_AUTH_TOKEN",
-      "VITE_BFF_DEV_BEARER_TOKEN",
-    ]) {
+    for (const credential of ["BFF_AUTH_TOKEN", "VITE_BFF_DEV_BEARER_TOKEN"]) {
       expect(fixtureBlock).not.toContain(`${credential}: $` + "{{");
     }
     for (const spec of [
@@ -176,12 +181,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "17-a11y-v5",
       "18-perf",
     ]) {
-      expect(fixtureBlock).toMatch(
-        new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
-      );
+      expect(fixtureBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
     }
     expect(fixtureBlock).toContain("--project=chromium");
     expect(fixtureBlock).not.toContain("--project=mobile-chromium");
+    expect(fixtureBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
+    );
     expect(integrationWorkflow).toContain(
       '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
     );
@@ -196,12 +202,39 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(end).toBeGreaterThan(start);
     const mobileBlock = integrationWorkflow.slice(start, end);
 
+    expect(mobileBlock).toContain("npx playwright test \\");
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(mobileBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+    }
     expect(mobileBlock).toContain(
-      "npx playwright test --project=mobile-chromium --reporter=list,html,json",
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json"',
     );
-    expect(mobileBlock).not.toContain("--project=chromium");
     expect(mobileBlock).not.toContain(
-      "npx playwright test --reporter=list,html,json",
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(mobileBlock).toContain("--project=mobile-chromium");
+    expect(mobileBlock).not.toMatch(/e2e\/\S*hosted\S*\.spec\.ts/u);
+    expect(mobileBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
     );
   });
 
@@ -223,7 +256,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'PANTHEON_HOSTED_FE_HARD_GATE: "false"',
     );
     expect(deployWorkflow).toContain("Deploy exact gated candidate");
-    expect(deployScript).toContain("post-switch manifest, BFF, and browser/auth probe");
+    expect(deployScript).toContain(
+      "post-switch manifest, BFF, and browser/auth probe",
+    );
   });
 
   it("deploys only the immutable artifact from one exact successful dev gate", () => {
@@ -249,8 +284,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(integrationWorkflow).toContain(
       "name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}",
     );
-    const evidenceStart = integrationWorkflow.indexOf("- name: Upload evidence");
-    const evidenceEnd = integrationWorkflow.indexOf("- name: Upload exact release identity");
+    const evidenceStart = integrationWorkflow.indexOf(
+      "- name: Upload evidence",
+    );
+    const evidenceEnd = integrationWorkflow.indexOf(
+      "- name: Upload exact release identity",
+    );
     expect(evidenceStart).toBeGreaterThan(-1);
     expect(evidenceEnd).toBeGreaterThan(evidenceStart);
     const evidenceBlock = integrationWorkflow.slice(evidenceStart, evidenceEnd);
@@ -293,7 +332,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'if [[ "${strict}" == "true" || "${strict}" == "1" ]]',
     );
-    expect(deployScript).toContain('PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"');
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"',
+    );
     expect(deployScript).toContain(
       'PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)"',
     );
@@ -303,8 +344,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" "${probe_strict}" "${legacy_compat}" loaded "${rollback_compat}"',
     );
-    expect(deployScript).toContain('probe_strict=false');
-    expect(deployScript).toContain('rollback_compat=true');
+    expect(deployScript).toContain("probe_strict=false");
+    expect(deployScript).toContain("rollback_compat=true");
     expect(deployScript).toContain(
       'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
     );
@@ -323,7 +364,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain("rollback_release");
     expect(deployScript).toContain('run_release_probe rollback ""');
     expect(deployScript).toContain("rollback.reprobe");
-    expect(deployScript).toContain("Same-SHA artifact replacement rejected");
+    expect(deployScript).toContain(
+      "Same-SHA/profile artifact replacement rejected",
+    );
     expect(deployScript).toContain("exact live candidate no-op revalidation");
     expect(deployWorkflow).not.toContain("skip_probe:");
   });
@@ -438,6 +481,55 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const result = rejectedDeploy(extraEnv);
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toMatch(/deployment is read-only/u);
+    expect(result.stderr).toMatch(
+      /read-only deployment requires false write flags/iu,
+    );
+  });
+
+  it("binds paired write proof to an exact safe sibling and fail-closed restore", () => {
+    expect(deployScript).toContain(
+      'DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"',
+    );
+    expect(deployScript).toContain(
+      'EXPECTED_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PAIR_ID:-}"',
+    );
+    expect(deployScript).toContain("read-only-restore");
+    expect(deployScript).toContain(
+      "node scripts/release-candidate.mjs verify-pair",
+    );
+    expect(deployScript).toContain("--profile read-only");
+    expect(deployScript).toContain("--profile write-proof");
+    expect(deployScript).toContain("safe_sibling.qualified");
+    expect(deployScript).toContain("safe_sibling.locator");
+    expect(deployScript).toContain("-m 600");
+    expect(deployScript).toContain("restore.safe_switch");
+    expect(deployScript).toContain("restore.safe_preserved");
+    expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PROFILE=write-proof"',
+    );
+    expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"',
+    );
+    expect(deployScript).toContain(
+      '( "${phase}" == "candidate_pre_switch" || "${phase}" == "post_switch" )',
+    );
+    expect(deployScript).toContain(
+      "Same-SHA/profile artifact replacement rejected",
+    );
+    expect(deployScript).not.toContain("npm run build");
+
+    const restoreStart = deployScript.indexOf("restore_paired_safe_release()");
+    const restoreEnd = deployScript.indexOf("\ncleanup()", restoreStart);
+    const restoreBlock = deployScript.slice(restoreStart, restoreEnd);
+    const safeSwitch = restoreBlock.indexOf(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" exchange',
+    );
+    const dependencyInstall = restoreBlock.indexOf("ensure_probe_dependencies");
+    const bffProbe = restoreBlock.indexOf(
+      "verify_bff_identity restore_after_safe_switch",
+    );
+    expect(safeSwitch).toBeGreaterThan(-1);
+    expect(dependencyInstall).toBeGreaterThan(safeSwitch);
+    expect(bffProbe).toBeGreaterThan(safeSwitch);
   });
 });

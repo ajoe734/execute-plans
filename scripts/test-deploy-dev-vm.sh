@@ -9,7 +9,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_SOURCE="${ROOT_DIR}/scripts/deploy-dev-vm.sh"
-CANDIDATE_SOURCE="${ROOT_DIR}/scripts/release-candidate.mjs"
+CANDIDATE_SOURCE="${PANTHEON_TEST_RELEASE_CANDIDATE_SOURCE:-${ROOT_DIR}/scripts/release-candidate.mjs}"
 EVIDENCE_SOURCE="${ROOT_DIR}/scripts/release-evidence.mjs"
 CAS_SOURCE="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
 ATOMIC_MANIFEST_SOURCE="${ROOT_DIR}/scripts/atomic-release-manifest.py"
@@ -45,6 +45,10 @@ PASSED=0
 FAILED=0
 
 cleanup_harness() {
+  if [[ "${PANTHEON_TEST_KEEP_HARNESS:-false}" == "true" ]]; then
+    echo "retained deploy contract harness: ${HARNESS_ROOT}" >&2
+    return 0
+  fi
   chmod -R u+w "${HARNESS_ROOT}" 2>/dev/null || true
   rm -rf "${HARNESS_ROOT}"
 }
@@ -90,6 +94,7 @@ cat > "${MOCK_BIN}/npm" <<'MOCK'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 printf 'npm\n' >> "${MOCK_CALL_LOG:?}"
+printf 'npm-command:%s\n' "$*" >> "${MOCK_CALL_LOG:?}"
 MOCK
 
 cat > "${MOCK_BIN}/npx" <<'MOCK'
@@ -265,6 +270,26 @@ fs.appendFileSync(
   `probe-legacy-rollback-compat:${phase}:${process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT || "unset"}\n`,
   "utf8",
 );
+fs.appendFileSync(
+  log,
+  `probe-profile:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_PROFILE || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-pair:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_PAIR_ID || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-read-only-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-write-proof-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST || "unset"}\n`,
+  "utf8",
+);
 if (phase === "recovery_rollback") {
   const calls = fs.readFileSync(log, "utf8").trim().split(/\r?\n/u);
   const probeIndex = calls.lastIndexOf(`probe:${phase}`);
@@ -417,13 +442,14 @@ setup_case() {
   CASE_LOCK="${CASE_DIR}/deploy.lock"
   CASE_CALL_LOG="${CASE_DIR}/calls.log"
   PREVIOUS_TARGET="${CASE_RELEASES}/previous"
-  CANDIDATE_DIST="${CASE_DIR}/candidate-dist"
+  CANDIDATE_DIST="${CASE_DIR}/candidate-dist-read-only"
+  WRITE_PROOF_DIST="${CASE_DIR}/candidate-dist-write-proof"
   CANDIDATE_DIR="${CASE_DIR}/candidate"
   RUN_OUTPUT="${CASE_DIR}/deploy.out"
   RUN_STATUS=255
 
   mkdir -p "${CASE_DIR}" "${CASE_HOME}" "${CASE_TMP}" "${CASE_RELEASES}" \
-    "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets"
+    "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets" "${WRITE_PROOF_DIST}/assets"
   cp -a "${BASE_ORIGIN}" "${CASE_ORIGIN}"
   git clone -q --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
   git -C "${CASE_REPO}" config user.name "deploy-contract-test"
@@ -440,16 +466,23 @@ setup_case() {
 
   printf '<!doctype html><html><body>candidate</body></html>\n' > "${CANDIDATE_DIST}/index.html"
   printf 'globalThis.__candidate = true;\n' > "${CANDIDATE_DIST}/assets/app-abcdef12.js"
-  CANDIDATE_DIGEST="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
-    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" prepare \
-      --dist-dir "${CANDIDATE_DIST}" \
+  printf '<!doctype html><html><body>write proof candidate</body></html>\n' > "${WRITE_PROOF_DIST}/index.html"
+  printf 'globalThis.__candidateWrites = true;\n' > "${WRITE_PROOF_DIST}/assets/app-abcdef12.js"
+  PAIR_ID="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" prepare-pair \
+      --read-only-dist-dir "${CANDIDATE_DIST}" \
+      --write-proof-dist-dir "${WRITE_PROOF_DIST}" \
       --output-dir "${CANDIDATE_DIR}" \
       --frontend-sha "${CANDIDATE_SHA}" \
       --bff-sha "${BFF_SHA}" \
       --gate-run-id "${GATE_RUN_ID}" \
       --gate-run-url "https://github.com/ajoe734/execute-plans/actions/runs/${GATE_RUN_ID}" \
       --bff-base-url "https://bff.test")"
-  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || die "fixture candidate digest is invalid"
+  [[ "${PAIR_ID}" =~ ^[0-9a-f]{64}$ ]] || die "fixture pair ID is invalid"
+  CANDIDATE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.readOnly.artifactDigestSha256)"
+  WRITE_PROOF_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.writeProof.artifactDigestSha256)"
+  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "fixture profile digest is invalid"
   : > "${CASE_CALL_LOG}"
 }
 
@@ -465,6 +498,12 @@ select_interrupted_candidate() {
     const file = process.argv[1];
     const payload = JSON.parse(fs.readFileSync(file, "utf8"));
     payload.deploymentState = "candidate";
+    payload.deploymentProfile = payload.profile;
+    payload.pair = {
+      pairId: payload.pairId,
+      readOnlyArtifactDigestSha256: process.argv[5],
+      writeProofArtifactDigestSha256: process.argv[6],
+    };
     payload.releaseName = "interrupted-candidate";
     payload.previousReleaseName = "previous";
     payload.previousCommit = process.argv[2];
@@ -472,7 +511,7 @@ select_interrupted_candidate() {
     payload.commit = process.argv[4];
     payload.githubArtifactDigest = `sha256:${process.argv[5]}`;
     fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}"
+  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
   ln -sfn "${INTERRUPTED_TARGET}" "${CASE_LIVE}.interrupted"
   mv -Tf "${CASE_LIVE}.interrupted" "${CASE_LIVE}"
 }
@@ -519,6 +558,9 @@ run_deploy() {
       PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
       PANTHEON_DEPLOY_OVERRIDE_REASON="" \
       PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+      PANTHEON_DEPLOY_PROFILE="read-only" \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+      PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
       PANTHEON_DEPLOY_REAL_WRITES="false" \
       PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
       PANTHEON_DEPLOY_SKIP_PROBE="false" \
@@ -535,6 +577,28 @@ run_deploy() {
   ) > "${RUN_OUTPUT}" 2>&1
   RUN_STATUS=$?
   set -e
+}
+
+run_write_deploy() {
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_PROFILE=write-proof \
+    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+    PANTHEON_DEPLOY_REAL_WRITES=true \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
+    "$@"
+}
+
+run_restore_deploy() {
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_PROFILE=read-only-restore \
+    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+    PANTHEON_DEPLOY_REAL_WRITES=false \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+    PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}-restore" \
+    PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-restore" \
+    "$@"
 }
 
 assert_previous_is_live() {
@@ -554,6 +618,31 @@ assert_candidate_is_live() {
   state="$(json_field "${observed}/deployment.json" deploymentState)"
   [[ "${commit}" == "${CANDIDATE_SHA}" ]] || die "live candidate commit mismatch"
   [[ "${state}" == "accepted" ]] || die "live candidate was not marked accepted"
+}
+
+assert_live_profile() {
+  local expected_profile="$1"
+  local expected_state="$2"
+  local observed manifest_profile manifest_state manifest_pair
+  observed="$(readlink -f "${CASE_LIVE}" 2>/dev/null || true)"
+  [[ "${observed}" == "${CASE_RELEASES}"/* ]] || \
+    show_deploy_failure "live profile target escaped the release store"
+  manifest_profile="$(json_field "${observed}/deployment.json" deploymentProfile)"
+  manifest_state="$(json_field "${observed}/deployment.json" deploymentState)"
+  manifest_pair="$(json_field "${observed}/deployment.json" pairId)"
+  [[ "${manifest_profile}" == "${expected_profile}" ]] || \
+    show_deploy_failure "expected live profile ${expected_profile}, observed ${manifest_profile}"
+  [[ "${manifest_state}" == "${expected_state}" ]] || \
+    show_deploy_failure "expected live state ${expected_state}, observed ${manifest_state}"
+  [[ "${manifest_pair}" == "${PAIR_ID}" ]] || \
+    show_deploy_failure "live pair identity mismatch"
+}
+
+live_locator_file() {
+  local observed
+  observed="$(readlink -f "${CASE_LIVE}" 2>/dev/null || true)"
+  printf '%s/.pantheon-safe-locators/%s.json' \
+    "${CASE_RELEASES}" "$(basename -- "${observed}")"
 }
 
 assert_probe_called() {
@@ -588,6 +677,22 @@ assert_probe_legacy_rollback_compat() {
   local expected="$2"
   grep -Fxq "probe-legacy-rollback-compat:${phase}:${expected}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} to use legacy rollback compatibility ${expected}"
+}
+
+assert_probe_pair_context() {
+  local phase="$1"
+  local expected_profile="$2"
+  local expected_pair="$3"
+  local expected_read_only_digest="$4"
+  local expected_write_proof_digest="$5"
+  grep -Fxq "probe-profile:${phase}:${expected_profile}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} profile context ${expected_profile}"
+  grep -Fxq "probe-pair:${phase}:${expected_pair}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} pair context ${expected_pair}"
+  grep -Fxq "probe-read-only-digest:${phase}:${expected_read_only_digest}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} read-only digest context"
+  grep -Fxq "probe-write-proof-digest:${phase}:${expected_write_proof_digest}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} write-proof digest context"
 }
 
 assert_summary_outcome() {
@@ -1078,7 +1183,7 @@ test_same_sha_different_digest_rejected() {
   run_deploy
   [[ "${RUN_STATUS}" -ne 0 ]] || die "same-SHA replacement unexpectedly succeeded"
   assert_previous_is_live
-  grep -Fq "Same-SHA artifact replacement rejected" "${RUN_OUTPUT}" || show_deploy_failure "missing reproducibility rejection"
+  grep -Fq "Same-SHA/profile artifact replacement rejected" "${RUN_OUTPUT}" || show_deploy_failure "missing reproducibility rejection"
 }
 
 test_exact_candidate_noop_revalidates_live_release() {
@@ -1092,9 +1197,15 @@ test_exact_candidate_noop_revalidates_live_release() {
     value.gate.runId="8999";
     value.gate.runUrl="https://github.com/ajoe734/execute-plans/actions/runs/8999";
     value.githubArtifactDigest=`sha256:${"e".repeat(64)}`;
+    value.deploymentProfile=value.profile;
+    value.pair={
+      pairId:value.pairId,
+      readOnlyArtifactDigestSha256:value.artifactDigestSha256,
+      writeProofArtifactDigestSha256:process.argv[2],
+    };
     value.deploymentState="accepted";
     fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`);
-  ' "${PREVIOUS_TARGET}/deployment.json"
+  ' "${PREVIOUS_TARGET}/deployment.json" "${WRITE_PROOF_DIGEST}"
 
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "exact live candidate no-op should pass revalidation"
@@ -1229,6 +1340,129 @@ test_write_token_and_skip_flags_fail_closed() {
   fi
 }
 
+test_paired_write_installs_safe_sibling_and_private_locator() {
+  local live locator safe_name safe_target
+  setup_case paired-write-success "${CANDIDATE_SHA}" auto
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "paired write-proof deploy should succeed"
+  assert_live_profile write-proof accepted
+  assert_probe_called safe_sibling_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_probe_pair_context safe_sibling_pre_switch unset unset unset unset
+  assert_probe_pair_context \
+    candidate_pre_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  assert_probe_pair_context \
+    post_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  if grep -Eq '^npm-command:.*(^|[[:space:]])run[[:space:]]+build([[:space:]]|$)' "${CASE_CALL_LOG}"; then
+    show_deploy_failure "deploy controller rebuilt browser assets on the VM"
+  fi
+  live="$(readlink -f "${CASE_LIVE}")"
+  locator="$(live_locator_file)"
+  [[ -f "${locator}" && "$(stat -c '%a' "${locator}")" == "600" ]] || \
+    show_deploy_failure "write release locator is missing or not private"
+  safe_name="$(json_field "${locator}" safeReleaseName)"
+  safe_target="${CASE_RELEASES}/${safe_name}"
+  [[ -d "${safe_target}" ]] || show_deploy_failure "paired safe sibling is missing"
+  [[ "$(json_field "${safe_target}/deployment.json" deploymentProfile)" == "read-only" ]] || \
+    show_deploy_failure "safe sibling is not read-only"
+  [[ "$(json_field "${safe_target}/deployment.json" deploymentState)" == "standby" ]] || \
+    show_deploy_failure "safe sibling is not qualified standby"
+  [[ "$(json_field "${safe_target}/deployment.json" pairId)" == "${PAIR_ID}" ]] || \
+    show_deploy_failure "safe sibling pair identity mismatch"
+  [[ "${live}" != "${safe_target}" ]] || show_deploy_failure "write proof never became live"
+}
+
+test_write_failure_restores_paired_safe_sibling() {
+  local observed
+  setup_case paired-write-post-failure
+  run_write_deploy MOCK_FAIL_PROBE_PHASES=post_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "failed write proof unexpectedly stayed accepted"
+  observed="$(readlink -f "${CASE_LIVE}")"
+  [[ "${observed}" != "${PREVIOUS_TARGET}" ]] || \
+    show_deploy_failure "write failure rolled back to the old predecessor instead of paired safe"
+  assert_live_profile read-only standby
+  assert_probe_called rollback
+  assert_probe_pair_context rollback unset unset unset unset
+  grep -Fq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "write failure did not use CAS for safe restore"
+  assert_summary_outcome rolled_back
+  verify_evidence_pair
+}
+
+test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write() {
+  local call_marker restore_calls safe_target
+  setup_case paired-explicit-restore
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write setup for restore should succeed"
+  [[ "$(json_field "$(readlink -f "${CASE_LIVE}")/deployment.json" deploymentProfile)" == "write-proof" ]] || \
+    die "restore setup is not write-proof"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.deploymentState="candidate";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "$(readlink -f "${CASE_LIVE}")/deployment.json"
+  printf 'restore-start\n' >> "${CASE_CALL_LOG}"
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "explicit paired safe restore should succeed"
+  assert_live_profile read-only accepted
+  restore_calls="${CASE_DIR}/restore-calls.log"
+  awk 'seen { print } $0 == "restore-start" { seen=1 }' "${CASE_CALL_LOG}" > "${restore_calls}"
+  "${REAL_NODE}" --input-type=module - "${restore_calls}" <<'NODE'
+import fs from "node:fs";
+const calls = fs.readFileSync(process.argv[2], "utf8").trim().split(/\r?\n/u);
+const safeCas = calls.indexOf("atomic-cas:exchange");
+const networkOrCancelSensitive = calls.findIndex((call) =>
+  call === "npm" || call === "npx" || call.startsWith("curl:") || call.startsWith("probe:"),
+);
+if (safeCas < 0 || (networkOrCancelSensitive >= 0 && safeCas > networkOrCancelSensitive)) {
+  throw new Error("restore did not CAS-select safe before network-dependent work");
+}
+NODE
+  safe_target="$(readlink -f "${CASE_LIVE}")"
+  printf 'restore-failure-start\n' >> "${CASE_CALL_LOG}"
+  # Re-running restore against an already-safe target must fail closed; it may
+  # never infer or reselect the former write-proof predecessor.
+  run_restore_deploy MOCK_BFF_KNOWN_SEQUENCE=false
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "restore against non-write live target unexpectedly succeeded"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${safe_target}" ]] || \
+    show_deploy_failure "restore retry reselected a write or unknown predecessor"
+}
+
+test_restore_network_failure_preserves_safe_release() {
+  local safe_target restore_summary
+  setup_case paired-restore-network-failure
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write setup for failed restore should succeed"
+  run_restore_deploy MOCK_BFF_KNOWN_SEQUENCE=false
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "restore network failure unexpectedly succeeded"
+  safe_target="$(readlink -f "${CASE_LIVE}")"
+  [[ "$(json_field "${safe_target}/deployment.json" deploymentProfile)" == "read-only" ]] || \
+    show_deploy_failure "restore network failure left write proof live"
+  restore_summary="${CASE_DIR}/audit-restore/evidence.json"
+  [[ "$(json_field "${restore_summary}" outcome)" == "rollback_probe_failed" ]] || \
+    show_deploy_failure "restore network failure evidence omitted fail-closed safe state"
+}
+
+test_restore_rejects_nonprivate_or_tampered_locator_before_switch() {
+  local write_target locator
+  setup_case paired-restore-locator-mode
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write setup for locator test should succeed"
+  write_target="$(readlink -f "${CASE_LIVE}")"
+  locator="$(live_locator_file)"
+  chmod 644 "${locator}"
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "nonprivate locator unexpectedly restored"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${write_target}" ]] || \
+    show_deploy_failure "invalid locator changed the live target"
+  grep -Fq 'must be mode 0600' "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing private locator rejection"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -1260,6 +1494,11 @@ run_test "exact same SHA and digest revalidates the live release" test_exact_can
 run_test "interrupted candidate rolls forward or restores its exact predecessor" test_interrupted_candidate_recovers_or_rolls_back
 run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_guards
 run_test "write, bearer, and skip-probe inputs fail closed" test_write_token_and_skip_flags_fail_closed
+run_test "paired write installs a qualified safe sibling and private locator" test_paired_write_installs_safe_sibling_and_private_locator
+run_test "write failure restores the paired safe sibling" test_write_failure_restores_paired_safe_sibling
+run_test "explicit restore switches safe before network and never rolls back to write" test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write
+run_test "restore network failure preserves the safe release" test_restore_network_failure_preserves_safe_release
+run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

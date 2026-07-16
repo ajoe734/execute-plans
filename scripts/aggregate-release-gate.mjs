@@ -462,6 +462,7 @@ function buildGate0(hosted) {
     "BFF_AUTH_TOKEN",
     "PANTHEON_TEST_OIDC_PATH",
   );
+  const authStatus = authPresent ? "pass" : hostedStatus("missing");
   const noOldUrl = hosted.exists
     ? hosted.oldHitCount === 0 && hosted.containsOld !== true
     : null;
@@ -535,13 +536,15 @@ function buildGate0(hosted) {
     ),
     makeCheck(
       "Auth token or test OIDC path available for authenticated smoke.",
-      authPresent ? "pass" : "missing",
+      authStatus,
       {
-        owner: authPresent ? "" : GATE_OWNERS[3],
+        owner: authStatus === "pass" ? "" : GATE_OWNERS[3],
         evidence: RUN_URL || ROOT,
         note: authPresent
           ? "auth input present"
-          : "PANTHEON_BFF_SMOKE_BEARER_TOKEN or test OIDC path missing",
+          : hostedNote(
+              "PANTHEON_BFF_SMOKE_BEARER_TOKEN or test OIDC path missing",
+            ),
       },
     ),
   ];
@@ -1572,7 +1575,8 @@ function checkFlow(playwright, flowId, label, matcher, options = {}) {
   }
   const noteParts = [`${matches.length} matching spec(s)`];
   if (passed.length) noteParts.push(`${passed.length} runnable passed`);
-  if (failed.length) noteParts.push(`${failed.length} unexpected or incomplete`);
+  if (failed.length)
+    noteParts.push(`${failed.length} unexpected or incomplete`);
   if (skipped.length) noteParts.push(`${skipped.length} expected skipped`);
   if (status === "warn")
     noteParts.push(`${flowId} marked by release-gate exception`);
@@ -1595,15 +1599,11 @@ function buildGate5(playwright) {
   const evidence =
     playwright.jsonFile || playwright.htmlReport || playwright.lastRunFile;
   return [
-    makeCheck(
-      "No unexpected Playwright failures.",
-      overallStatus,
-      {
-        owner: overallStatus === "pass" ? "" : GATE_OWNERS[5],
-        evidence,
-        note: `${unexpectedSpecs.length} unexpected or incomplete spec(s)`,
-      },
-    ),
+    makeCheck("No unexpected Playwright failures.", overallStatus, {
+      owner: overallStatus === "pass" ? "" : GATE_OWNERS[5],
+      evidence,
+      note: `${unexpectedSpecs.length} unexpected or incomplete spec(s)`,
+    }),
     checkFlow(
       playwright,
       "F01",
@@ -1673,12 +1673,7 @@ function buildGate5(playwright) {
       "F12 Approval Governance.",
       /\bf12\b|approval governance|12-approval/,
     ),
-    checkFlow(
-      playwright,
-      "F13",
-      "F13 Agora.",
-      /13-agora\.spec\.[jt]s/,
-    ),
+    checkFlow(playwright, "F13", "F13 Agora.", /13-agora\.spec\.[jt]s/),
     checkFlow(
       playwright,
       "F14",
