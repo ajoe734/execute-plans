@@ -105,9 +105,13 @@ describe("paired Pantheon release workflow", () => {
       "parent proof nonce/correlation binding mismatch",
     );
     expect(authorization).toContain(
-      "Hosted proof current child dispatch actor is not the authorized parent operator",
+      "Hosted proof must be the initial exact bot-dispatched child run",
     );
-    expect(authorization).toContain("childActor !== parentActor");
+    expect(authorization).toContain('childActor !== "github-actions[bot]"');
+    expect(authorization).toContain("childTriggeringActor !== childActor");
+    expect(authorization).toContain(
+      'String(process.env.GITHUB_RUN_ATTEMPT || "") !== "1"',
+    );
     expect(authorization).toContain(
       "Hosted proof current child run source is not the exact trusted dev dispatch",
     );
@@ -116,6 +120,12 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(authorization).toContain(
       "String(claim.child?.runId) === process.env.GITHUB_RUN_ID",
+    );
+    expect(authorization).toContain(
+      "String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT",
+    );
+    expect(authorization).toContain(
+      "process.env.GITHUB_TRIGGERING_ACTOR.toLowerCase()",
     );
     expect(authorization).toContain(
       "one-time child proof claim does not authorize this exact run",
@@ -143,6 +153,12 @@ describe("paired Pantheon release workflow", () => {
     expect(dispatch).toContain("proof_run_id");
     expect(dispatch).toContain("pantheon.pint-proof-child-claim.v1");
     expect(dispatch).toContain("runId: process.env.PROOF_RUN_ID");
+    expect(dispatch).toContain("runAttempt: process.env.CHILD_RUN_ATTEMPT");
+    expect(dispatch).toContain("actor: process.env.CHILD_ACTOR");
+    expect(dispatch).toContain(
+      "triggeringActor: process.env.CHILD_TRIGGERING_ACTOR",
+    );
+    expect(dispatch).toContain('child_actor" != "github-actions[bot]"');
     expect(dispatch).toContain("Upload one-time exact child proof claim");
     expect(dispatch.indexOf("proof_run_id")).toBeLessThan(
       dispatch.indexOf("Upload one-time exact child proof claim"),
@@ -152,8 +168,8 @@ describe("paired Pantheon release workflow", () => {
       integrationWorkflow.indexOf("  proof-authorization:"),
       integrationWorkflow.indexOf("  integration-gate:"),
     );
-    expect(authorization).toContain("operators.has(childActor)");
-    expect(authorization).toContain("childActor !== parentActor");
+    expect(authorization).toContain('childActor !== "github-actions[bot]"');
+    expect(authorization).toContain('String(childRun.run_attempt) !== "1"');
     expect(authorization).toContain(
       "String(claim.child?.runId) === process.env.GITHUB_RUN_ID",
     );
@@ -175,10 +191,15 @@ describe("paired Pantheon release workflow", () => {
     expect(ordinary).toContain(
       'PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "false"',
     );
-    expect(ordinary).not.toContain("secrets.PANTHEON_BFF_");
+    expect(ordinary).not.toContain("secrets.");
     expect(authorized).toContain("needs: proof-authorization");
     expect(authorized).toContain(
       "needs.proof-authorization.result == 'success'",
+    );
+    expect(authorized).toContain("github.run_attempt == 1");
+    expect(authorized).toContain("github.actor == 'github-actions[bot]'");
+    expect(authorized).toContain(
+      "github.triggering_actor == 'github-actions[bot]'",
     );
     expect(authorized).toContain("Checkout exact authorized immutable dev ref");
     expect(authorized).toContain("ref: ${{ inputs.fe_sha }}");
@@ -188,6 +209,18 @@ describe("paired Pantheon release workflow", () => {
     expect(authorized).toContain(
       "Run governed proposal with proof-only credentials",
     );
+    expect(authorized).toContain(
+      "Fresh-check active parent and one-time child claim before credentials",
+    );
+    expect(authorized).toContain(
+      "fresh child claim does not authorize this credentialed job attempt",
+    );
+    expect(authorized).toContain(
+      "Recheck active parent immediately before Persona credentials",
+    );
+    expect(
+      authorized.match(/authorized parent coordinator is no longer active/gu),
+    ).toHaveLength(2);
     expect(authorized.slice(0, authorized.indexOf("    steps:"))).not.toContain(
       "secrets.PANTHEON_BFF_",
     );
@@ -214,6 +247,32 @@ describe("paired Pantheon release workflow", () => {
         "Verify exact write-proof deployment before credentials",
       ),
     ).toBeLessThan(authorized.indexOf("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN"));
+  });
+
+  it("rejects a collaborator rerun of the credentialed leaf after parent completion", () => {
+    const authorization = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  proof-authorization:"),
+      integrationWorkflow.indexOf("  integration-gate:"),
+    );
+    const authorized = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+      integrationWorkflow.indexOf("  pr-comment:"),
+    );
+    expect(authorization).toContain(
+      'String(process.env.GITHUB_RUN_ATTEMPT || "") !== "1"',
+    );
+    expect(authorization).toContain("childTriggeringActor !== childActor");
+    expect(authorized).toContain("github.run_attempt == 1");
+    expect(authorized).toContain(
+      "github.triggering_actor == 'github-actions[bot]'",
+    );
+    expect(authorized).toContain(
+      "String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT",
+    );
+    expect(authorized).toContain(
+      "String(claim.child?.triggeringActor).toLowerCase() === process.env.GITHUB_TRIGGERING_ACTOR.toLowerCase()",
+    );
+    expect(authorized).toContain('coordinator?.status!=="in_progress"');
   });
 
   it("arms an independent watchdog before enabling writes and restores the same pair", () => {
@@ -263,6 +322,10 @@ describe("paired Pantheon release workflow", () => {
     expect(deployWorkflow).toContain(
       'authorize?.status==="completed" && authorize?.conclusion==="success"',
     );
+    expect(deployWorkflow).toContain('watch?.status==="in_progress"');
+    expect(deployWorkflow).toContain(
+      'run.status==="in_progress" && !run.conclusion',
+    );
     expect(watchdogWorkflow).toContain("needs: authorize");
     expect(watchdogWorkflow).toContain(
       "if: always() && needs.authorize.result == 'success'",
@@ -277,6 +340,10 @@ describe("paired Pantheon release workflow", () => {
     expect(watchdogWorkflow).toContain(
       "Parent proof coordinator ended while the hosted proof was active; restoring now.",
     );
+    expect(watchdogWorkflow).toContain("cancel_child_and_wait");
+    expect(watchdogWorkflow).toContain('gh run cancel "$proof_run_id"');
+    expect(watchdogWorkflow).toContain("for _ in $(seq 1 1800)");
+    expect(watch).toContain("actions: write");
     expect(
       watchdogWorkflow.match(/\$\(parent_coordinator_terminal\)/gu),
     ).toHaveLength(2);

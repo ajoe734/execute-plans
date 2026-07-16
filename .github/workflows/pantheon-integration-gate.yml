@@ -138,6 +138,7 @@ jobs:
           PARENT_PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
           BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
           BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
+          CHILD_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         with:
           script: |
             const numeric = /^[1-9][0-9]*$/;
@@ -168,8 +169,10 @@ jobs:
               return;
             }
             const childActor = String(context.actor || "").toLowerCase();
-            if (!operators.has(childActor) || childActor !== parentActor) {
-              core.setFailed("Hosted proof current child dispatch actor is not the authorized parent operator");
+            const childTriggeringActor = value("CHILD_TRIGGERING_ACTOR").toLowerCase();
+            if (childActor !== "github-actions[bot]" || childTriggeringActor !== childActor ||
+                String(process.env.GITHUB_RUN_ATTEMPT || "") !== "1") {
+              core.setFailed("Hosted proof must be the initial exact bot-dispatched child run");
               return;
             }
             if (parentRunText === String(process.env.GITHUB_RUN_ID || "")) {
@@ -202,8 +205,10 @@ jobs:
                 childRepo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
                 childRun.event !== "workflow_dispatch" || childRun.head_branch !== "dev" ||
                 childRun.status !== "in_progress" || childRun.conclusion != null ||
+                String(childRun.run_attempt) !== "1" ||
                 String(childRun.head_sha || "").toLowerCase() !== frontendSha ||
-                String(childRun.actor?.login || "").toLowerCase() !== childActor) {
+                String(childRun.actor?.login || "").toLowerCase() !== childActor ||
+                String(childRun.triggering_actor?.login || "").toLowerCase() !== childTriggeringActor) {
               core.setFailed("Hosted proof current child run source is not the exact trusted dev dispatch");
               return;
             }
@@ -364,7 +369,9 @@ jobs:
             String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
             claim.child?.workflowPath === ".github/workflows/pantheon-integration-gate.yml" &&
             String(claim.child?.runId) === process.env.GITHUB_RUN_ID &&
+            String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT &&
             String(claim.child?.actor).toLowerCase() === process.env.GITHUB_ACTOR.toLowerCase() &&
+            String(claim.child?.triggeringActor).toLowerCase() === process.env.GITHUB_TRIGGERING_ACTOR.toLowerCase() &&
             claim.child?.frontendSha === process.env.FRONTEND_SHA &&
             claim.nonce === process.env.PARENT_PROOF_NONCE &&
             claim.correlationId === process.env.PROOF_CORRELATION_ID;
@@ -400,7 +407,7 @@ jobs:
       # which env name they read. Source of truth remains PANTHEON_FE_BASE_URL.
       FRONTEND_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
-      PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
+      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"
       PANTHEON_FRONTEND_SHA: ${{ inputs.fe_sha || github.sha }}
@@ -526,7 +533,7 @@ jobs:
           repository: ajoe734/pantheon
           ref: ${{ env.PANTHEON_AGORA_CONTRACT_REF }}
           path: pantheon-contract
-          token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
+          token: ${{ github.token }}
           persist-credentials: false
 
       - name: Setup Node
@@ -1253,6 +1260,9 @@ jobs:
       ${{
         needs.proof-authorization.result == 'success' &&
         github.event_name == 'workflow_dispatch' &&
+        github.run_attempt == 1 &&
+        github.actor == 'github-actions[bot]' &&
+        github.triggering_actor == 'github-actions[bot]' &&
         inputs.pint_hosted_probe == 'true' &&
         inputs.persona_interaction_write_proof == 'true'
       }}
@@ -1324,6 +1334,84 @@ jobs:
           if (failed.length) throw new Error(`authorized write-proof manifest mismatch: ${failed.join(", ")}`);
           NODE
 
+      - name: Fresh-check active parent and one-time child claim before credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          PARENT_PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ATTEMPT" == "1" && "$GITHUB_ACTOR" == "github-actions[bot]" && \
+             "$GITHUB_TRIGGERING_ACTOR" == "github-actions[bot]" ]]
+          parent_jobs="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+          node -e '
+            const jobs=JSON.parse(process.argv[1]).jobs||[];
+            const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
+            if (coordinator?.status!=="in_progress") throw new Error("authorized parent coordinator is no longer active");
+          ' "$parent_jobs"
+          claim_name="pantheon-proof-child-claim-attempt-${PARENT_RUN_ATTEMPT}"
+          artifacts="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/artifacts?name=${claim_name}&per_page=100")"
+          claim_metadata="$(node -e '
+            const rows=(JSON.parse(process.argv[1]).artifacts||[])
+              .filter((artifact)=>artifact.name===process.argv[2] && !artifact.expired);
+            if(rows.length!==1) throw new Error("missing unique one-time child claim");
+            const artifact=rows[0];
+            if(!/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest||"").toLowerCase()))
+              throw new Error("invalid child claim digest");
+            process.stdout.write(`${artifact.id}\t${String(artifact.digest).toLowerCase()}`);
+          ' "$artifacts" "$claim_name")"
+          IFS=$'\t' read -r claim_id claim_digest <<< "$claim_metadata"
+          archive="${RUNNER_TEMP%/}/fresh-proof-child-claim.zip"
+          claim_file="${RUNNER_TEMP%/}/fresh-proof-child-claim.json"
+          rm -f "$archive" "$claim_file"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${claim_id}/zip" \
+            --output "$archive"
+          [[ "sha256:$(sha256sum "$archive" | awk '{print $1}')" == "$claim_digest" ]]
+          python3 - "$archive" "$claim_file" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-child-claim.json":
+                  raise SystemExit("child claim artifact must contain exactly proof-child-claim.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("child claim artifact entry is unsafe")
+              pathlib.Path(sys.argv[2]).write_bytes(bundle.read(entry))
+          PY
+          node --input-type=module - "$claim_file" <<'NODE'
+          import fs from "node:fs";
+          const claim = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const valid = claim.schemaVersion === "pantheon.pint-proof-child-claim.v1" &&
+            claim.repository === process.env.GITHUB_REPOSITORY &&
+            String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
+            String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
+            String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.child?.runId) === process.env.GITHUB_RUN_ID &&
+            String(claim.child?.runAttempt) === process.env.GITHUB_RUN_ATTEMPT &&
+            String(claim.child?.actor).toLowerCase() === process.env.GITHUB_ACTOR.toLowerCase() &&
+            String(claim.child?.triggeringActor).toLowerCase() === process.env.GITHUB_TRIGGERING_ACTOR.toLowerCase() &&
+            claim.child?.frontendSha === process.env.PANTHEON_FRONTEND_SHA &&
+            claim.nonce === process.env.PARENT_PROOF_NONCE &&
+            claim.correlationId === process.env.PANTHEON_PROOF_CORRELATION_ID;
+          if (!valid) throw new Error("fresh child claim does not authorize this credentialed job attempt");
+          NODE
+
       - name: Run governed proposal with proof-only credentials
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
@@ -1331,6 +1419,24 @@ jobs:
           PANTHEON_PINT_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
           PANTHEON_PINT_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: node scripts/probe-persona-governed-proposal-live.mjs
+
+      - name: Recheck active parent immediately before Persona credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ATTEMPT" == "1" && "$GITHUB_ACTOR" == "github-actions[bot]" && \
+             "$GITHUB_TRIGGERING_ACTOR" == "github-actions[bot]" ]]
+          parent_jobs="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+          node -e '
+            const jobs=JSON.parse(process.argv[1]).jobs||[];
+            const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
+            if (coordinator?.status!=="in_progress") throw new Error("authorized parent coordinator is no longer active");
+          ' "$parent_jobs"
 
       - name: Run desktop and mobile Persona proof with proof-only credentials
         env:
