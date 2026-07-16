@@ -33,6 +33,9 @@ OVERRIDE_REASON="${PANTHEON_DEPLOY_OVERRIDE_REASON:-}"
 OVERRIDE_ACTOR="${PANTHEON_DEPLOY_OVERRIDE_ACTOR:-}"
 REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"
 ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"
+DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"
+PROOF_WINDOW_ACK="${PANTHEON_DEPLOY_PROOF_WINDOW_ACK:-false}"
+EXPECTED_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PAIR_ID:-}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 ALLOW_BOOTSTRAP="${PANTHEON_DEPLOY_ALLOW_BOOTSTRAP:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
@@ -48,6 +51,9 @@ SHORT_SHA="${SHA:0:12}"
 RELEASE_INSTANCE="${PANTHEON_DEPLOY_RELEASE_INSTANCE:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}}"
 RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-gate-${GATE_RUN_ID}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
+SAFE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-read-only"
+WRITE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-write-proof"
+SAFE_FALLBACK_LOCATOR_DIR="${RELEASES_DIR}/.pantheon-safe-locators"
 DURABLE_EVIDENCE_DIR="${DURABLE_EVIDENCE_ROOT}/run-${GITHUB_RUN_ID:-local}-attempt-${GITHUB_RUN_ATTEMPT:-1}-${RELEASE_INSTANCE}"
 NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"
 ROLLBACK_LINK="${DEPLOY_ROOT}.rollback-${RELEASE_INSTANCE}"
@@ -56,9 +62,15 @@ EVIDENCE_LOG="${AUDIT_DIR}/evidence.jsonl"
 EVIDENCE_SUMMARY="${AUDIT_DIR}/evidence.json"
 
 CANDIDATE_DIR=""
+READ_ONLY_CANDIDATE_DIR=""
+WRITE_PROOF_CANDIDATE_DIR=""
 ARTIFACT_DIGEST=""
+READ_ONLY_ARTIFACT_DIGEST=""
+WRITE_PROOF_ARTIFACT_DIGEST=""
+PAIR_ID=""
 BFF_COMMIT=""
 PREVIOUS_TARGET=""
+LIVE_TARGET_AT_START=""
 PREVIOUS_COMMIT=""
 PREVIOUS_DIGEST=""
 PREVIOUS_MANIFEST_DIGEST=""
@@ -66,6 +78,8 @@ PREVIOUS_GATE_RUN_ID=""
 PREVIOUS_GITHUB_ARTIFACT_DIGEST=""
 PREVIOUS_MANIFEST_BFF_COMMIT=""
 PREVIOUS_DEPLOYMENT_STATE=""
+PREVIOUS_PROFILE=""
+PREVIOUS_PAIR_ID=""
 PREVIOUS_RELEASE_NAME=""
 RECOVERY_ATTEMPTED=false
 RECOVERY_RELEASE_NAME=""
@@ -89,6 +103,10 @@ ROLLBACK_LINK_CREATED=false
 RELEASE_CREATED=false
 DURABLE_EVIDENCE_PERSISTED=false
 PROBE_DEPENDENCIES_READY=false
+SAFE_RELEASE_CREATED=false
+SAFE_RELEASE_QUALIFIED=false
+SAFE_RESTORE_SELECTED=false
+RESTORE_SWITCH_COMPLETED=false
 
 bool_value() {
   local name="$1"
@@ -202,7 +220,12 @@ remove_candidate_release() {
   live_target="$(current_live_target)"
   if [[ -n "${RELEASE_DIR}" && "${live_target}" != "${RELEASE_DIR}" ]]; then
     case "${RELEASE_DIR}" in
-      "${RELEASES_DIR}"/*) sudo rm -rf -- "${RELEASE_DIR}" ;;
+      "${RELEASES_DIR}"/*)
+        sudo rm -rf -- "${RELEASE_DIR}"
+        if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
+          sudo rm -f -- "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
+        fi
+        ;;
     esac
   fi
 }
@@ -215,9 +238,13 @@ verify_manifest_file() {
   local expected_bff="${5:-${BFF_COMMIT}}"
   local expected_state="${6:-}"
   local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
-  if ! node --input-type=module - "${manifest_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" <<'NODE'
+  local expected_profile="${8:-}"
+  local expected_pair_id="${9:-}"
+  local expected_read_only_digest="${10:-${READ_ONLY_ARTIFACT_DIGEST}}"
+  local expected_write_proof_digest="${11:-${WRITE_PROOF_ARTIFACT_DIGEST}}"
+  if ! node --input-type=module - "${manifest_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" "${expected_profile}" "${expected_pair_id}" "${expected_read_only_digest}" "${expected_write_proof_digest}" <<'NODE'
 import fs from "node:fs";
-const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost] = process.argv.slice(2);
+const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost, expectedProfile, expectedPairId, expectedReadOnlyDigest, expectedWriteProofDigest] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
 const modernIdentity = Boolean(expectedGithubDigest);
@@ -320,10 +347,26 @@ if (expectedState && String(payload.deploymentState || "") !== expectedState) {
 if (!expectedState && payload.deploymentState && payload.deploymentState !== "accepted") {
   throw new Error("deployment manifest is not an accepted release");
 }
+if (expectedProfile) {
+  if (payload.profile !== expectedProfile || payload.deploymentProfile !== expectedProfile) {
+    throw new Error("deployment manifest profile mismatch");
+  }
+  if (!/^[0-9a-f]{64}$/u.test(expectedPairId) || payload.pairId !== expectedPairId) {
+    throw new Error("deployment manifest pair identity mismatch");
+  }
+  if (
+    payload.pair?.pairId !== expectedPairId ||
+    payload.pair?.readOnlyArtifactDigestSha256 !== expectedReadOnlyDigest ||
+    payload.pair?.writeProofArtifactDigestSha256 !== expectedWriteProofDigest
+  ) {
+    throw new Error("deployment manifest paired profile digests mismatch");
+  }
+}
 if (payload.buildMode?.VITE_BFF_MODE !== "live" || payload.buildMode?.VITE_BFF_FALLBACK !== "strict") {
   throw new Error("deployment manifest is not strict live mode");
 }
-if (payload.buildMode?.VITE_BFF_REAL_WRITES !== "false" || payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== "false") {
+const expectedWrites = expectedProfile === "write-proof" ? "true" : "false";
+if (payload.buildMode?.VITE_BFF_REAL_WRITES !== expectedWrites || payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== expectedWrites) {
   throw new Error("deployment manifest write posture is unsafe");
 }
 if (payload.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN !== "false") {
@@ -343,6 +386,8 @@ verify_public_manifest() {
   local expected_bff="${5:-${BFF_COMMIT}}"
   local expected_state="${6:-}"
   local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
+  local expected_profile="${8:-}"
+  local expected_pair_id="${9:-}"
   if ! curl --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
     "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"; then
@@ -355,7 +400,9 @@ verify_public_manifest() {
     "${expected_gate}" \
     "${expected_bff}" \
     "${expected_state}" \
-    "${expected_github_digest}"
+    "${expected_github_digest}" \
+    "${expected_profile}" \
+    "${expected_pair_id}"
 }
 
 ensure_probe_dependencies() {
@@ -500,7 +547,7 @@ verify_restored_previous() {
     return 1
   fi
   evidence_append rollback.assets passed "previousCommit=${PREVIOUS_COMMIT}"
-  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"; then
+  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${PREVIOUS_PROFILE}" "${PREVIOUS_PAIR_ID}"; then
     evidence_append rollback.manifest failed "previousCommit=${PREVIOUS_COMMIT}"
     return 1
   fi
@@ -675,6 +722,140 @@ prepare_interrupted_recovery() {
   evidence_append recovery.prepared passed "previousCommit=${RECOVERY_COMMIT}" "previousArtifactDigest=${RECOVERY_DIGEST}"
 }
 
+restore_paired_safe_release() {
+  local write_target write_manifest locator_file safe_release_name safe_target
+  local locator_mode observed_write_digest current_profile current_state current_pair
+
+  # Cancellation must not interrupt the only fail-closed local state change.
+  # Network, package installation, and hosted probes are intentionally absent
+  # until the read-only sibling has been selected by CAS.
+  trap '' INT TERM
+  write_target="$(current_live_target)"
+  case "${write_target}" in
+    "${RELEASES_DIR}"/*) ;;
+    *) echo "Read-only restore requires a managed live write-proof release." >&2; return 2 ;;
+  esac
+  write_manifest="${write_target}/deployment.json"
+  if [[ ! -f "${write_manifest}" ]]; then
+    echo "Managed live release is missing deployment identity." >&2
+    return 2
+  fi
+  read -r current_profile current_state current_pair < <(node -e '
+    const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+    process.stdout.write(`${String(p.deploymentProfile||p.profile||"")} ${String(p.deploymentState||"")} ${String(p.pairId||"")}\n`);
+  ' "${write_manifest}")
+  if [[ "${current_profile}" == "read-only" ]]; then
+    if [[ "${current_pair}" != "${PAIR_ID}" ||
+      ( "${current_state}" != "accepted" && "${current_state}" != "standby" ) ]]; then
+      echo "Already-safe live release does not match the requested pair identity." >&2
+      return 2
+    fi
+    verify_dist_digest "${write_target}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    verify_manifest_file \
+      "${write_manifest}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
+      "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
+    safe_target="${write_target}"
+    SAFE_RESTORE_SELECTED=true
+    RESTORE_SWITCH_COMPLETED=true
+    RELEASE_DIR="${safe_target}"
+    evidence_append restore.safe_already_live passed "releaseDir=${safe_target}"
+  elif [[ "${current_profile}" != "write-proof" ||
+    "${current_pair}" != "${PAIR_ID}" ||
+    ( "${current_state}" != "accepted" && "${current_state}" != "candidate" ) ]]; then
+    echo "Read-only restore refuses a write or unknown predecessor from another pair." >&2
+    return 2
+  else
+  locator_file="${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${write_target}").json"
+  if [[ ! -f "${write_manifest}" ]] ||
+    ! sudo test -f "${locator_file}" || sudo test -L "${locator_file}"; then
+    echo "Write-proof release is missing its private safe-fallback locator." >&2
+    return 2
+  fi
+  locator_mode="$(sudo stat -c '%a' "${locator_file}")"
+  if [[ "${locator_mode}" != "600" ]]; then
+    echo "Safe-fallback locator must be mode 0600." >&2
+    return 2
+  fi
+  observed_write_digest="$(verify_dist_digest "${write_target}" "${WRITE_PROOF_ARTIFACT_DIGEST}")"
+  verify_manifest_file \
+    "${write_manifest}" "${SHA}" "${observed_write_digest}" "${GATE_RUN_ID}" \
+    "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "write-proof" "${PAIR_ID}"
+  safe_release_name="$(sudo node --input-type=module - "${locator_file}" "${PAIR_ID}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+import fs from "node:fs";
+const [file, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+if (
+  payload.schemaVersion !== 1 ||
+  payload.pairId !== pairId ||
+  payload.frontendSha !== frontendSha ||
+  payload.readOnlyArtifactDigestSha256 !== readOnlyDigest ||
+  payload.writeProofArtifactDigestSha256 !== writeProofDigest ||
+  !/^[A-Za-z0-9._-]+$/u.test(String(payload.safeReleaseName || ""))
+) throw new Error("private safe-fallback locator identity mismatch");
+process.stdout.write(payload.safeReleaseName);
+NODE
+)"
+  safe_target="$(readlink -f "${RELEASES_DIR}/${safe_release_name}" 2>/dev/null || true)"
+  if [[ "${safe_target}" != "${RELEASES_DIR}/${safe_release_name}" || ! -d "${safe_target}" ]]; then
+    echo "Private locator does not resolve to an immutable safe sibling." >&2
+    return 2
+  fi
+  verify_dist_digest "${safe_target}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+  verify_manifest_file \
+    "${safe_target}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
+    "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
+
+  sudo ln -s -- "${safe_target}" "${ROLLBACK_LINK}"
+  ROLLBACK_LINK_CREATED=true
+  SWITCH_ATTEMPTED=true
+  if ! sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
+    --live-link "${DEPLOY_ROOT}" \
+    --staged-link "${ROLLBACK_LINK}" \
+    --expected-live-target "${write_target}" \
+    --expected-staged-target "${safe_target}" >/dev/null; then
+    sudo rm -f -- "${ROLLBACK_LINK}"
+    ROLLBACK_LINK_CREATED=false
+    echo "Read-only restore CAS rejected a changed live target." >&2
+    return 2
+  fi
+  ROLLBACK_LINK_CREATED=false
+  SAFE_RESTORE_SELECTED=true
+  RESTORE_SWITCH_COMPLETED=true
+  RELEASE_DIR="${safe_target}"
+  evidence_append restore.safe_switch passed "releaseDir=${safe_target}"
+  fi
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  # The local safe switch above is the first external-state mutation. Hosted
+  # identity and network-dependent probes may now run without any path that
+  # rolls back to the write-proof predecessor.
+  ensure_probe_dependencies
+  verify_bff_identity restore_after_safe_switch
+  verify_public_manifest \
+    "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
+    "${AUDIT_DIR}/restore-standby-deployment.json" "${BFF_COMMIT}" "standby" \
+    "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
+  run_release_probe restore_after_safe_switch "" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
+  node --input-type=module - "${safe_target}/deployment.json" "${TMP_DIR}/restored-deployment.json" <<'NODE'
+import fs from "node:fs";
+const [source, output] = process.argv.slice(2);
+const manifest = JSON.parse(fs.readFileSync(source, "utf8"));
+manifest.deploymentState = "accepted";
+manifest.acceptedAt = new Date().toISOString();
+manifest.probes = { ...(manifest.probes || {}), safeRestore: "passed", rollbackRequired: false };
+fs.writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+NODE
+  publish_manifest_atomically "${TMP_DIR}/restored-deployment.json" "${safe_target}" restored
+  verify_public_manifest \
+    "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
+    "${AUDIT_DIR}/restored-deployment.json" "${BFF_COMMIT}" "accepted" \
+    "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
+  evidence_append restore.completed passed "releaseDir=${safe_target}"
+  accept_deployment
+  echo "OK: restored paired read-only release ${SHA} (${PAIR_ID}) before hosted verification."
+}
+
 cleanup() {
   local status=$?
   local outcome=accepted
@@ -698,7 +879,14 @@ cleanup() {
     exit "${status}"
   fi
 
-  if [[ "${status}" -ne 0 && "${RECOVERY_ATTEMPTED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
+  if [[ "${status}" -ne 0 && "${SAFE_RESTORE_SELECTED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
+    # A restore never reselects its write-proof predecessor. The safe sibling
+    # remains live even when later network-dependent verification is cancelled
+    # or fails.
+    outcome=rollback_probe_failed
+    ROLLBACK_RESTORED=true
+    evidence_append restore.safe_preserved passed "releaseDir=$(current_live_target)"
+  elif [[ "${status}" -ne 0 && "${RECOVERY_ATTEMPTED}" == "true" && "${DEPLOY_ACCEPTED}" != "true" ]]; then
     if restore_interrupted_release; then
       outcome=recovery_rolled_back
     elif [[ "${ROLLBACK_RESTORED}" == "true" ]]; then
@@ -768,14 +956,44 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for boolean_name in EMERGENCY_OVERRIDE ROLLBACK_DRILL REAL_WRITES ALLOW_DEV_STUB_WRITES SKIP_PROBE ALLOW_BOOTSTRAP; do
+for boolean_name in EMERGENCY_OVERRIDE ROLLBACK_DRILL REAL_WRITES ALLOW_DEV_STUB_WRITES PROOF_WINDOW_ACK SKIP_PROBE ALLOW_BOOTSTRAP; do
   bool_value "${boolean_name}"
 done
 
-if [[ "${REAL_WRITES}" != "false" || "${ALLOW_DEV_STUB_WRITES}" != "false" ]]; then
-  echo "Automated dev deployment is read-only; real and dev-stub writes must remain false." >&2
-  exit 2
-fi
+case "${DEPLOY_PROFILE}" in
+  read-only)
+    if [[ "${REAL_WRITES}" != "false" || "${ALLOW_DEV_STUB_WRITES}" != "false" || "${PROOF_WINDOW_ACK}" != "false" ]]; then
+      echo "Read-only deployment requires false write flags and no proof-window acknowledgement." >&2
+      exit 2
+    fi
+    ;;
+  write-proof)
+    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+      "${PROOF_WINDOW_ACK}" != "true" ||
+      "${REAL_WRITES}" != "true" ||
+      "${ALLOW_DEV_STUB_WRITES}" != "true" ||
+      "${EMERGENCY_OVERRIDE}" != "false" ||
+      "${ROLLBACK_DRILL}" != "false" ]]; then
+      echo "Write-proof deployment requires a manual acknowledged proof window, both write flags true, and no emergency or rollback mode." >&2
+      exit 2
+    fi
+    ;;
+  read-only-restore)
+    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+      "${PROOF_WINDOW_ACK}" != "false" ||
+      "${REAL_WRITES}" != "false" ||
+      "${ALLOW_DEV_STUB_WRITES}" != "false" ||
+      "${EMERGENCY_OVERRIDE}" != "false" ||
+      "${ROLLBACK_DRILL}" != "false" ]]; then
+      echo "Read-only restore requires a manual dispatch, false write flags, and no emergency or rollback mode." >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "PANTHEON_DEPLOY_PROFILE must be read-only, write-proof, or read-only-restore." >&2
+    exit 2
+    ;;
+esac
 if [[ "${SKIP_PROBE}" != "false" ]]; then
   echo "Candidate, auth, post-switch, and rollback probes cannot be skipped." >&2
   exit 2
@@ -797,6 +1015,7 @@ done < <(compgen -e)
 
 assert_scoped_path "Deploy root" "${DEPLOY_ROOT}" "${STRICT_DIR_PREFIX}"
 assert_scoped_path "Release store" "${RELEASES_DIR}" "${STRICT_RELEASES_PREFIX}"
+assert_scoped_path "Safe-fallback locator store" "${SAFE_FALLBACK_LOCATOR_DIR}" "${RELEASES_DIR}"
 assert_scoped_path "Deployment lock" "${LOCK_FILE}" "${STRICT_LOCK_PREFIX}"
 assert_scoped_path "Durable evidence root" "${DURABLE_EVIDENCE_ROOT}" "${STRICT_DURABLE_EVIDENCE_PREFIX}"
 assert_scoped_path "Durable evidence run" "${DURABLE_EVIDENCE_DIR}" "${DURABLE_EVIDENCE_ROOT}"
@@ -851,7 +1070,7 @@ if [[ ! -f "${SYMLINK_CAS_HELPER}" || ! -f "${ATOMIC_MANIFEST_HELPER}" ]]; then
   exit 2
 fi
 
-for command_name in npm node python3 rsync sudo curl flock git readlink; do
+for command_name in npm node python3 rsync sudo curl flock git readlink stat; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "Missing required command: ${command_name}" >&2
     exit 2
@@ -864,21 +1083,63 @@ if [[ "${CANDIDATE_INPUT}" == /* ]]; then
 else
   CANDIDATE_DIR="${ROOT_DIR}/${CANDIDATE_INPUT}"
 fi
-if [[ ! -d "${CANDIDATE_DIR}/dist" || ! -f "${CANDIDATE_DIR}/candidate.json" ]]; then
-  echo "Downloaded release candidate is incomplete." >&2
+if [[ ! -d "${CANDIDATE_DIR}/dist" || ! -f "${CANDIDATE_DIR}/candidate.json" ||
+  ! -d "${CANDIDATE_DIR}/write-proof/dist" ||
+  ! -f "${CANDIDATE_DIR}/write-proof/candidate.json" ||
+  ! -f "${CANDIDATE_DIR}/pair.json" ]]; then
+  echo "Downloaded paired release candidate is incomplete." >&2
   exit 2
 fi
 
-ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify \
-  --candidate-dir "${CANDIDATE_DIR}" \
-  --expected-frontend-sha "${SHA}" \
-  --expected-gate-run-id "${GATE_RUN_ID}" \
-  --expected-bff-base-url "${BFF_HOST}")"
-if [[ ! "${ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "Candidate verifier did not return one exact artifact digest." >&2
+READ_ONLY_CANDIDATE_DIR="${CANDIDATE_DIR}"
+WRITE_PROOF_CANDIDATE_DIR="${CANDIDATE_DIR}/write-proof"
+pair_verify_args=(
+  --candidate-dir "${CANDIDATE_DIR}"
+  --expected-frontend-sha "${SHA}"
+  --expected-gate-run-id "${GATE_RUN_ID}"
+  --expected-bff-base-url "${BFF_HOST}"
+)
+if [[ -n "${EXPECTED_PAIR_ID}" ]]; then
+  pair_verify_args+=(--expected-pair-id "${EXPECTED_PAIR_ID}")
+fi
+READ_ONLY_ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify-pair \
+  "${pair_verify_args[@]}" --profile read-only)"
+WRITE_PROOF_ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify-pair \
+  "${pair_verify_args[@]}" --profile write-proof)"
+if [[ ! "${READ_ONLY_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ||
+  ! "${WRITE_PROOF_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Pair verifier did not return both exact artifact digests." >&2
   exit 2
 fi
-BFF_COMMIT="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.bffSha||p.bffCommit||"").toLowerCase();if(!/^[0-9a-f]{40}$/.test(s))process.exit(1);process.stdout.write(s)' "${CANDIDATE_DIR}/candidate.json")"
+read -r PAIR_ID BFF_COMMIT < <(node -e '
+  const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  const pair=String(p.pairId||"").toLowerCase(),bff=String(p.bffSha||"").toLowerCase();
+  if(!/^[0-9a-f]{64}$/.test(pair)||!/^[0-9a-f]{40}$/.test(bff))process.exit(1);
+  process.stdout.write(`${pair} ${bff}\n`);
+' "${CANDIDATE_DIR}/pair.json")
+if [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
+  ! "${EXPECTED_PAIR_ID}" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Write-proof and restore dispatches require the exact expected pair ID." >&2
+  exit 2
+fi
+if [[ -n "${EXPECTED_PAIR_ID}" && "${EXPECTED_PAIR_ID,,}" != "${PAIR_ID}" ]]; then
+  echo "Paired candidate ID differs from the expected pair ID." >&2
+  exit 2
+fi
+case "${DEPLOY_PROFILE}" in
+  write-proof)
+    ARTIFACT_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}"
+    CANDIDATE_DIR="${WRITE_PROOF_CANDIDATE_DIR}"
+    RELEASE_DIR="${WRITE_RELEASE_DIR}"
+    ;;
+  read-only|read-only-restore)
+    ARTIFACT_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
+    CANDIDATE_DIR="${READ_ONLY_CANDIDATE_DIR}"
+    if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+      RELEASE_DIR="${SAFE_RELEASE_DIR}"
+    fi
+    ;;
+esac
 
 OVERRIDE_REASON_SHA256=""
 if [[ -n "${OVERRIDE_REASON}" ]]; then
@@ -906,6 +1167,11 @@ if ! flock -n 9; then
 fi
 LOCK_ACQUIRED=true
 evidence_append deployment.lock passed "lockFile=${LOCK_FILE}"
+
+if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+  restore_paired_safe_release
+  exit 0
+fi
 
 REMOTE_DEV_SHA="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
 if [[ ! "${REMOTE_DEV_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
@@ -949,12 +1215,16 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
     const commit=String(p.commit||"").toLowerCase();
     const manifestBff=String(p.bffCommit||"").toLowerCase();
     const state=String(p.deploymentState||"");
+    const profile=String(p.deploymentProfile||p.profile||"");
+    const writes=profile==="write-proof"?"true":"false";
     const safe=p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
       p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
-      p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&
-      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
+      p.buildMode?.VITE_BFF_REAL_WRITES===writes&&
+      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES===writes&&
       p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&
       /^[0-9a-f]{40}$/.test(manifestBff)&&p.bffCommitEvidence===true&&
+      ["","read-only","write-proof"].includes(profile)&&
+      (!profile||/^[0-9a-f]{64}$/.test(String(p.pairId||"")))&&
       ["","accepted","candidate"].includes(state);
     if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
     process.stdout.write(commit);
@@ -964,6 +1234,8 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_DEPLOYMENT_STATE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(p.deploymentState||""))' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_PROFILE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.deploymentProfile||p.profile||"");if(!["","read-only","write-proof"].includes(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_PAIR_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.pairId||"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_DIGEST="$(verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_MANIFEST_DIGEST}")"
   evidence_append previous_release qualified \
     "previousCommit=${PREVIOUS_COMMIT}" \
@@ -978,8 +1250,14 @@ else
   echo "Deploy root must be a managed symlink; manual legacy conversion is required." >&2
   exit 2
 fi
+LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
+  if [[ "${PREVIOUS_PROFILE}" == "write-proof" ]]; then
+    echo "A live write-proof release may only transition through read-only-restore." >&2
+    evidence_append candidate.write_predecessor_rejected failed "previousCommit=${PREVIOUS_COMMIT}"
+    exit 2
+  fi
   if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" != "${SHA}" ]]; then
     prepare_interrupted_recovery
     ensure_probe_dependencies
@@ -988,11 +1266,14 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
     exit 2
   fi
   if [[ "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
-    if [[ -z "${PREVIOUS_DIGEST}" || "${PREVIOUS_DIGEST}" != "${ARTIFACT_DIGEST}" ]]; then
-      echo "Same-SHA artifact replacement rejected because the served digest differs or is unproven." >&2
+    if [[ "${PREVIOUS_PROFILE:-read-only}" == "${DEPLOY_PROFILE}" &&
+      ( -z "${PREVIOUS_DIGEST}" || "${PREVIOUS_DIGEST}" != "${ARTIFACT_DIGEST}" ) ]]; then
+      echo "Same-SHA/profile artifact replacement rejected because the served digest differs or is unproven." >&2
       evidence_append candidate.reproducibility failed "previousCommit=${PREVIOUS_COMMIT}"
       exit 2
     elif [[ "${PREVIOUS_MANIFEST_BFF_COMMIT}" == "${BFF_COMMIT}" &&
+      "${PREVIOUS_PROFILE}" == "${DEPLOY_PROFILE}" &&
+      "${PREVIOUS_PAIR_ID}" == "${PAIR_ID}" &&
       "${PREVIOUS_MANIFEST_DIGEST}" == "${ARTIFACT_DIGEST}" &&
       "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ &&
       "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
@@ -1058,13 +1339,74 @@ elif [[ -n "${PREVIOUS_TARGET}" && "${NOOP_DEPLOY}" != "true" ]]; then
     "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
 fi
 
+if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
+  echo "=== install and qualify paired read-only safe sibling ==="
+  if [[ -e "${SAFE_RELEASE_DIR}" || -L "${SAFE_RELEASE_DIR}" ]]; then
+    echo "Immutable safe sibling already exists: ${SAFE_RELEASE_DIR}" >&2
+    exit 2
+  fi
+  mkdir -p "${TMP_DIR}/safe-release"
+  rsync -a --delete "${READ_ONLY_CANDIDATE_DIR}/dist/" "${TMP_DIR}/safe-release/"
+  PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/safe-release/deployment.json" \
+  PANTHEON_RUNTIME_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")" \
+  PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+  PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+    node --input-type=module <<'NODE'
+import fs from "node:fs";
+const file = process.env.PANTHEON_RUNTIME_MANIFEST;
+const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+manifest.profile = "read-only";
+manifest.deploymentProfile = "read-only";
+manifest.pairId = process.env.PANTHEON_RUNTIME_PAIR_ID;
+manifest.pair = {
+  pairId: process.env.PANTHEON_RUNTIME_PAIR_ID,
+  readOnlyArtifactDigestSha256: process.env.PANTHEON_RUNTIME_READ_ONLY_DIGEST,
+  writeProofArtifactDigestSha256: process.env.PANTHEON_RUNTIME_WRITE_PROOF_DIGEST,
+};
+manifest.deploymentState = "standby";
+manifest.releaseName = process.env.PANTHEON_RUNTIME_RELEASE_NAME;
+manifest.githubArtifactDigest = process.env.PANTHEON_RUNTIME_GITHUB_DIGEST;
+fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+NODE
+  verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+  sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
+  SAFE_RELEASE_CREATED=true
+  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
+    "${TMP_DIR}/safe-release/" "${SAFE_RELEASE_DIR}/"
+  verify_dist_digest "${SAFE_RELEASE_DIR}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+  verify_manifest_file \
+    "${SAFE_RELEASE_DIR}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" \
+    "${GATE_RUN_ID}" "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" \
+    "read-only" "${PAIR_ID}"
+  run_release_probe safe_sibling_pre_switch "${SAFE_RELEASE_DIR}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
+  SAFE_RELEASE_QUALIFIED=true
+  evidence_append safe_sibling.qualified passed \
+    "artifactDigestSha256=${READ_ONLY_ARTIFACT_DIGEST}"
+
+  # A failed write switch must restore the qualified safe sibling, never the
+  # live predecessor (which may be stale or may later become write-capable).
+  PREVIOUS_TARGET="${SAFE_RELEASE_DIR}"
+  PREVIOUS_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")"
+  PREVIOUS_COMMIT="${SHA}"
+  PREVIOUS_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
+  PREVIOUS_MANIFEST_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
+  PREVIOUS_GATE_RUN_ID="${GATE_RUN_ID}"
+  PREVIOUS_GITHUB_ARTIFACT_DIGEST="${GITHUB_ARTIFACT_DIGEST}"
+  PREVIOUS_MANIFEST_BFF_COMMIT="${BFF_COMMIT}"
+  PREVIOUS_DEPLOYMENT_STATE="standby"
+  PREVIOUS_PROFILE="read-only"
+  PREVIOUS_PAIR_ID="${PAIR_ID}"
+fi
+
 if [[ "${NOOP_DEPLOY}" == "true" ]]; then
   echo "=== exact live candidate no-op revalidation ==="
   verify_dist_digest "${PREVIOUS_TARGET}" "${ARTIFACT_DIGEST}" >/dev/null
   if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" candidate "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" candidate "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
   else
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
   fi
   run_release_probe noop "" "${SHA}" "${ARTIFACT_DIGEST}" true
   verify_bff_identity noop_final
@@ -1088,7 +1430,7 @@ NODE
       "${TMP_DIR}/recovered-deployment.json" \
       "${PREVIOUS_TARGET}" \
       recovered
-    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}"
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
   fi
   evidence_append candidate.noop passed \
@@ -1104,12 +1446,14 @@ NODE
 - verified_at: ${TIMESTAMP}
 - commit: ${SHA}
 - artifact_digest_sha256: ${ARTIFACT_DIGEST}
+- pair_id: ${PAIR_ID}
+- deployment_profile: ${DEPLOY_PROFILE}
 - github_artifact_digest: ${GITHUB_ARTIFACT_DIGEST}
 - integration_gate_run_id: ${GATE_RUN_ID}
 - bff_commit: ${BFF_COMMIT}
 - release_dir: ${PREVIOUS_TARGET}
-- real_writes: false
-- allow_dev_stub_writes: false
+- real_writes: ${REAL_WRITES}
+- allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
 - embedded_bearer_token: false
 - live_manifest_probe: passed
 - browser_auth_probe: passed
@@ -1139,6 +1483,10 @@ PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
 PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
 PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
 PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
+PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
+PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
   node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
@@ -1150,6 +1498,14 @@ manifest.previousCommit = process.env.PANTHEON_RUNTIME_PREVIOUS_COMMIT || null;
 manifest.previousArtifactDigest = process.env.PANTHEON_RUNTIME_PREVIOUS_DIGEST || null;
 manifest.previousReleaseName = process.env.PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME || null;
 manifest.githubArtifactDigest = process.env.PANTHEON_RUNTIME_GITHUB_DIGEST;
+manifest.profile = process.env.PANTHEON_RUNTIME_PROFILE;
+manifest.deploymentProfile = process.env.PANTHEON_RUNTIME_PROFILE;
+manifest.pairId = process.env.PANTHEON_RUNTIME_PAIR_ID;
+manifest.pair = {
+  pairId: process.env.PANTHEON_RUNTIME_PAIR_ID,
+  readOnlyArtifactDigestSha256: process.env.PANTHEON_RUNTIME_READ_ONLY_DIGEST,
+  writeProofArtifactDigestSha256: process.env.PANTHEON_RUNTIME_WRITE_PROOF_DIGEST,
+};
 manifest.emergencyOverride = {
   enabled: process.env.PANTHEON_RUNTIME_EMERGENCY_OVERRIDE === "true",
   actor: process.env.PANTHEON_RUNTIME_OVERRIDE_ACTOR || null,
@@ -1165,6 +1521,39 @@ sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw
   "${TMP_DIR}/release/" "${RELEASE_DIR}/"
 verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
 evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+
+if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
+  if [[ "${SAFE_RELEASE_QUALIFIED}" != "true" ]]; then
+    echo "Write-proof release cannot proceed without a qualified safe sibling." >&2
+    exit 2
+  fi
+  node --input-type=module - \
+    "${TMP_DIR}/safe-fallback-locator.json" \
+    "$(basename -- "${SAFE_RELEASE_DIR}")" \
+    "${PAIR_ID}" "${SHA}" \
+    "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+import fs from "node:fs";
+const [file, safeReleaseName, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
+const payload = {
+  schemaVersion: 1,
+  safeReleaseName,
+  pairId,
+  frontendSha,
+  readOnlyArtifactDigestSha256: readOnlyDigest,
+  writeProofArtifactDigestSha256: writeProofDigest,
+};
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+NODE
+  sudo install -d -o root -g root -m 700 "${SAFE_FALLBACK_LOCATOR_DIR}"
+  sudo install -o root -g root -m 600 \
+    "${TMP_DIR}/safe-fallback-locator.json" \
+    "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
+  if [[ "$(sudo stat -c '%a' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")" != "600" ]]; then
+    echo "Private safe-fallback locator did not retain mode 0600." >&2
+    exit 2
+  fi
+  evidence_append safe_sibling.locator passed "releaseDir=${RELEASE_DIR}"
+fi
 
 echo "=== candidate pre-switch browser/auth probe ==="
 run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
@@ -1187,7 +1576,7 @@ if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
 else
   evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
 fi
-if [[ -n "${PREVIOUS_TARGET}" && "$(current_live_target)" != "${PREVIOUS_TARGET}" ]]; then
+if [[ -n "${LIVE_TARGET_AT_START}" && "$(current_live_target)" != "${LIVE_TARGET_AT_START}" ]]; then
   echo "Live release changed during candidate probe; refusing to overwrite it." >&2
   evidence_append switch.cas failed "observedTarget=$(current_live_target)"
   exit 2
@@ -1197,11 +1586,11 @@ echo "=== atomic live switch ==="
 sudo ln -s -- "${RELEASE_DIR}" "${NEXT_LINK}"
 NEXT_LINK_CREATED=true
 SWITCH_ATTEMPTED=true
-if [[ -n "${PREVIOUS_TARGET}" ]]; then
+if [[ -n "${LIVE_TARGET_AT_START}" ]]; then
   if ! sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
     --live-link "${DEPLOY_ROOT}" \
     --staged-link "${NEXT_LINK}" \
-    --expected-live-target "${PREVIOUS_TARGET}" \
+    --expected-live-target "${LIVE_TARGET_AT_START}" \
     --expected-staged-target "${RELEASE_DIR}" >/dev/null; then
     echo "Atomic switch rejected: the exchanged live predecessor did not match." >&2
     evidence_append switch.cas failed "observedTarget=$(current_live_target)"
@@ -1226,7 +1615,7 @@ fi
 evidence_append switch.commit passed "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
 
 echo "=== post-switch manifest, BFF, and browser/auth probe ==="
-verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/post-switch-deployment.json" "${BFF_COMMIT}" candidate
+verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/post-switch-deployment.json" "${BFF_COMMIT}" candidate "${GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
 verify_bff_identity post_switch
 run_release_probe post_switch "" "${SHA}" "${ARTIFACT_DIGEST}" true
 verify_bff_identity accepted_final
@@ -1256,7 +1645,7 @@ publish_manifest_atomically \
   "${TMP_DIR}/release/deployment.json" \
   "${RELEASE_DIR}" \
   accepted
-verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted
+verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted "${GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
 evidence_append release.accepted passed "releaseDir=${RELEASE_DIR}" "previousCommit=${PREVIOUS_COMMIT:-bootstrap}"
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
@@ -1266,6 +1655,10 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - deployed_at: ${TIMESTAMP}
 - commit: ${SHA}
 - artifact_digest_sha256: ${ARTIFACT_DIGEST}
+- read_only_artifact_digest_sha256: ${READ_ONLY_ARTIFACT_DIGEST}
+- write_proof_artifact_digest_sha256: ${WRITE_PROOF_ARTIFACT_DIGEST}
+- pair_id: ${PAIR_ID}
+- deployment_profile: ${DEPLOY_PROFILE}
 - github_artifact_digest: ${GITHUB_ARTIFACT_DIGEST}
 - integration_gate_run_id: ${GATE_RUN_ID}
 - bff_commit: ${BFF_COMMIT}
@@ -1274,8 +1667,8 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - release_dir: ${RELEASE_DIR}
 - previous_commit: ${PREVIOUS_COMMIT:-bootstrap}
 - emergency_override: ${EMERGENCY_OVERRIDE}
-- real_writes: false
-- allow_dev_stub_writes: false
+- real_writes: ${REAL_WRITES}
+- allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
 - embedded_bearer_token: false
 - candidate_pre_switch_probe: passed
 - post_switch_probe: passed
@@ -1287,7 +1680,8 @@ accept_deployment
 
 if [[ "${KEEP_RELEASES}" =~ ^[0-9]+$ && "${KEEP_RELEASES}" -gt 1 ]]; then
   mapfile -d '' release_entries < <(
-    sudo find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\0' | sort -z -n || true
+    sudo find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -type d \
+      ! -name '.pantheon-safe-locators' -printf '%T@ %p\0' | sort -z -n || true
   )
   remove_count=$((${#release_entries[@]} - KEEP_RELEASES))
   if [[ "${remove_count}" -gt 0 ]]; then
