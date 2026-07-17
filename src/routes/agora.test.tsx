@@ -202,7 +202,7 @@ describe("AgoraStrategyWorkshopRoute", () => {
 
   it("preserves canonical Persona interaction deep-link context", () => {
     render(
-      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?mode=consult&participants=persona-a%2Cpersona-b&picker=named&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+A"]}>
+      <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-9?mode=compare&participants=persona-a%2Cpersona-b&picker=recommended&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+A&source_kind=persona&source_id=persona-a&source_version=v4&target_strategy_id=strategy-a&target_strategy_version=spec-v3&advice_environment=research&evidence_cutoff=2026-07-17T00%3A00%3A00Z"]}>
         <Routes>
           <Route path="/agora/strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
         </Routes>
@@ -211,11 +211,15 @@ describe("AgoraStrategyWorkshopRoute", () => {
 
     expect(routeMocks.strategyWorkshopPage).toHaveBeenCalledWith(expect.objectContaining({
       entry: {
-        mode: "consult",
+        mode: "compare",
         participantIds: ["persona-a", "persona-b"],
-        picker: "named",
+        picker: "recommended",
         returnTo: "/management/personas/persona-a",
         returnLabel: "Persona A",
+        source: { kind: "persona", id: "persona-a", version: "v4" },
+        targetStrategy: { id: "strategy-a", version: "spec-v3" },
+        environment: "research",
+        evidenceCutoff: "2026-07-17T00:00:00Z",
       },
       workshopId: "ws-9",
     }));

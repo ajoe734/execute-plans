@@ -105,14 +105,37 @@ export function AgoraStrategyWorkshopRoute() {
   const [searchParams] = useSearchParams();
   const mode = searchParams.get("mode");
   const picker = searchParams.get("picker");
-  const allowedModes = new Set<WorkshopInteractionMode>(["ask", "challenge", "consult", "propose_action", "reflect"]);
+  const allowedModes = new Set<WorkshopInteractionMode>(["ask", "challenge", "compare", "propose_action", "reflect"]);
   const allowedPickers = new Set<WorkshopParticipantPicker>(["named", "recommended", "eligible-one", "eligible-two", "eligible-three"]);
+  const sourceKind = searchParams.get("source_kind");
+  const sourceId = searchParams.get("source_id")?.trim();
+  const targetStrategyId = searchParams.get("target_strategy_id")?.trim();
+  const targetStrategyVersion = searchParams.get("target_strategy_version")?.trim();
+  const adviceEnvironment = searchParams.get("advice_environment")?.trim();
+  const allowedEnvironments = new Set<NonNullable<WorkshopInteractionEntry["environment"]>>(["research", "shadow", "paper", "canary", "live"]);
+  const allowedSourceKinds = new Set<NonNullable<WorkshopInteractionEntry["source"]>["kind"]>([
+    "persona", "strategy", "decision_event", "journal_entry", "position", "human_inbox_item", "workshop",
+  ]);
   const entry: WorkshopInteractionEntry = {
     mode: allowedModes.has(mode as WorkshopInteractionMode) ? mode as WorkshopInteractionMode : undefined,
     participantIds: searchParams.get("participants")?.split(",").map((item) => item.trim()).filter(Boolean),
     picker: allowedPickers.has(picker as WorkshopParticipantPicker) ? picker as WorkshopParticipantPicker : undefined,
     returnTo: safeWorkshopReturnPath(searchParams.get("return_to")),
     returnLabel: searchParams.get("return_label") ?? undefined,
+    source: sourceId && allowedSourceKinds.has(sourceKind as NonNullable<WorkshopInteractionEntry["source"]>["kind"])
+      ? {
+          kind: sourceKind as NonNullable<WorkshopInteractionEntry["source"]>["kind"],
+          id: sourceId,
+          version: searchParams.get("source_version")?.trim() || undefined,
+        }
+      : undefined,
+    targetStrategy: targetStrategyId && targetStrategyVersion
+      ? { id: targetStrategyId, version: targetStrategyVersion }
+      : undefined,
+    environment: allowedEnvironments.has(adviceEnvironment as NonNullable<WorkshopInteractionEntry["environment"]>)
+      ? adviceEnvironment as NonNullable<WorkshopInteractionEntry["environment"]>
+      : undefined,
+    evidenceCutoff: searchParams.get("evidence_cutoff")?.trim() || undefined,
   };
   const governedProposalId = searchParams.get("governedProposalId")?.trim() || undefined;
 

@@ -82,7 +82,7 @@ describe("PersonaTradeJournalTab Component Tests", () => {
   const mockEpisode = {
     trade_episode_id: "ep-1",
     persona_id: "per_quant",
-    environment: "paper",
+    environment: "live",
     instrument_id: "AAPL",
     side: "long",
     status: "reflected",
@@ -127,16 +127,21 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     });
   });
 
-  it("uses the first canonical eligible challenge Persona without inferring a role from id or name", async () => {
+  it("opens a typed Challenge from the selected journal episode without direct interaction submission", async () => {
     mockResolveContext.mockResolvedValue({
-      data: { workshop_id: "wksp-123", context_refs: [] },
+      data: {
+        workshop_id: "wksp-123",
+        context_refs: [{ type: "journal_entry", id: "ep-1" }],
+        environment: "paper",
+        resolved_at: "2026-07-17T02:03:04Z",
+      },
     });
     mockParticipants.mockResolvedValue({
       data: {
         included: [
           {
-            persona_id: "persona-neutral-first",
-            display_name: "Neutral First Candidate",
+            persona_id: "per_quant",
+            display_name: "Quant Architect",
             eligible: true,
             reasons: [],
             recommended: true,
@@ -158,7 +163,11 @@ describe("PersonaTradeJournalTab Component Tests", () => {
       fireEvent.click(row);
     });
 
-    // Check that eligibility endpoints are called
+    const challengeButton = await screen.findByRole("button", { name: "Challenge Personas about trade ep-1" });
+    expect(challengeButton).not.toBeDisabled();
+
+    fireEvent.click(challengeButton);
+
     await waitFor(() => {
       expect(mockResolveContext).toHaveBeenCalledWith({
         context_refs: [{ type: "journal_entry", id: "ep-1" }],
@@ -169,31 +178,21 @@ describe("PersonaTradeJournalTab Component Tests", () => {
         mode: "challenge",
         environment: "paper",
       });
+      expect(mockNavigate).toHaveBeenCalled();
     });
-
-    const challengeButton = await screen.findByRole("button", { name: "Challenge Persona Review" });
-    expect(challengeButton).not.toBeDisabled();
-
-    fireEvent.click(challengeButton);
-
-    // Verify submission and navigation
-    await waitFor(() => {
-      expect(mockSubmitInteraction).toHaveBeenCalledWith({
-        workshop_id: "wksp-123",
-        mode: "challenge",
-        environment: "paper",
-        topic: "Reflection and review for episode ep-1 by Persona persona-neutral-first",
-        participant_persona_ids: ["persona-neutral-first"],
-        context_refs: [
-          { type: "journal_entry", id: "ep-1" },
-          { type: "persona", id: "persona-neutral-first" },
-        ],
-      });
-      expect(mockNavigate).toHaveBeenCalledWith("/agora/strategy-workshop/wksp-123");
-    });
+    expect(mockSubmitInteraction).not.toHaveBeenCalled();
+    const destination = mockNavigate.mock.calls.at(-1)?.[0] as string;
+    const parsed = new URL(destination, "https://example.test");
+    expect(parsed.pathname).toBe("/agora/strategy-workshop/wksp-123");
+    expect(parsed.searchParams.get("mode")).toBe("challenge");
+    expect(parsed.searchParams.get("participants")).toBe("per_quant");
+    expect(parsed.searchParams.get("source_kind")).toBe("journal_entry");
+    expect(parsed.searchParams.get("source_id")).toBe("ep-1");
+    expect(parsed.searchParams.get("advice_environment")).toBe("paper");
+    expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T02:03:04Z");
   });
 
-  it("surfaces unavailable state when no challenge Persona is eligible", async () => {
+  it("exposes all five actions and fails closed if the selected Persona is ineligible", async () => {
     mockResolveContext.mockResolvedValue({
       data: { workshop_id: "wksp-456", context_refs: [] },
     });
@@ -224,13 +223,14 @@ describe("PersonaTradeJournalTab Component Tests", () => {
       fireEvent.click(row);
     });
 
-    // Wait for button to be updated to unavailable
-    const unavailableBtn = await screen.findByRole("button", { name: "Challenge Persona (Unavailable)" });
-    expect(unavailableBtn).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ask Personas about trade ep-1" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Challenge Personas about trade ep-1" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Compare Personas about trade ep-1" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Propose Personas about trade ep-1" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Reflect Personas about trade ep-1" })).toBeDefined();
 
-    // Verify reason surfaced
-    expect(screen.getByTestId("challenge-persona-unavailable").textContent).toContain(
-      "Unavailable: environment_ceiling_exceeded"
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Challenge Personas about trade ep-1" }));
+    await waitFor(() => expect(mockNavigate).not.toHaveBeenCalled());
+    expect(mockSubmitInteraction).not.toHaveBeenCalled();
   });
 });

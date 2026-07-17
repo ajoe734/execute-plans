@@ -279,6 +279,16 @@ export const paths = {
   agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,
   agoraInteractionsEligible: () => `${BASE}/agora/interactions/participants:eligible`,
   agoraInteractionsSubmit: () => `${BASE}/agora/interactions`,
+  agoraDailyInteractions: () => `${BASE}/agora/interactions`,
+  agoraDailyInteraction: (id: string) => `${BASE}/agora/interactions/${enc(id)}`,
+  agoraInteractionMeasureCandidates: (interactionId: string, measureId: string) =>
+    `${BASE}/agora/interactions/${enc(interactionId)}/recommended-measures/${enc(measureId)}/candidates`,
+  agoraCandidateDecisions: (proposalId: string) =>
+    `${BASE}/agora/proposals/${enc(proposalId)}/candidate-decisions`,
+  agoraCandidateValidations: (proposalId: string) =>
+    `${BASE}/agora/proposals/${enc(proposalId)}/validations`,
+  agoraCandidateValidation: (proposalId: string, receiptId: string) =>
+    `${BASE}/agora/proposals/${enc(proposalId)}/validations/${enc(receiptId)}`,
 
   // ---- 2026-07-12 OODA Packets & Evolution Reviews ----
   oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,

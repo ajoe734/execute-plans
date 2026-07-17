@@ -6,6 +6,7 @@ import { makeBffError } from "../errors";
 import { paths } from "../paths";
 import { liveWriteGated } from "../writeGate";
 import type { GovernedProposal } from "./governance";
+import type { ParticipantSnapshot } from "./dailyInteractions";
 
 async function requireInteractionWrite(): Promise<void> {
   if (await liveWriteGated()) return;
@@ -51,6 +52,8 @@ export interface PersonaEligibility {
   reasons: string[];
   recommended: boolean;
   capability_snapshot_id?: string;
+  /** v1.9 runtime-owned immutable snapshot. The frontend must not fabricate it. */
+  participant_snapshot?: ParticipantSnapshot;
 }
 
 export interface EligibilityResponse {

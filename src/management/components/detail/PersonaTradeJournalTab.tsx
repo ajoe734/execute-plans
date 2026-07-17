@@ -60,12 +60,6 @@ const ago = (hours: number): string => {
   return d.toISOString();
 };
 
-interface ChallengeCandidate {
-  persona_id: string;
-  display_name: string;
-  reasons: string[];
-}
-
 interface PersonaSummary {
   persona_id: string;
   display_name?: string;
@@ -109,10 +103,6 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [allPersonas, setAllPersonas] = useState<PersonaSummary[]>([]);
   const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
   const [varianceAttribution, setVarianceAttribution] = useState<string>("");
-  const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
-  const [challengeEligiblePersona, setChallengeEligiblePersona] = useState<ChallengeCandidate | null>(null);
-  const [checkingChallengeEligibility, setCheckingChallengeEligibility] = useState<boolean>(false);
-  const [challengeUnavailableReason, setChallengeUnavailableReason] = useState<string>("");
 
   useEffect(() => {
     setBffMode(bffV1.detectMode());
@@ -123,61 +113,6 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       })
       .catch(() => undefined);
   }, []);
-
-  // Resolve canonical challenge eligibility for the selected episode. The
-  // contract does not expose adversarial/style metadata, so selection follows
-  // the backend's included order and never infers a role from an id or name.
-  useEffect(() => {
-    if (!selectedEpisode || !writeAccess.interactionAllowed) {
-      setResolvedWorkshopId(null);
-      setChallengeEligiblePersona(null);
-      setChallengeUnavailableReason(selectedEpisode ? (writeAccess.interactionDisabledReason ?? "Interaction is not permitted") : "");
-      return;
-    }
-
-    let cancelled = false;
-    const checkEligibility = async () => {
-      setCheckingChallengeEligibility(true);
-      setChallengeUnavailableReason("");
-      try {
-        const environment = selectedEpisode.environment || "paper";
-        const resolveRes = await interaction.resolveContext({
-          context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
-          environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
-        });
-
-        if (cancelled) return;
-        const workshopId = resolveRes.data.workshop_id;
-        setResolvedWorkshopId(workshopId);
-
-        const eligibleRes = await interaction.participants({
-          workshop_id: workshopId,
-          mode: "challenge",
-          environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
-        });
-
-        if (cancelled) return;
-        const challengePersona = eligibleRes.data.included[0];
-        setChallengeEligiblePersona(challengePersona ?? null);
-
-        if (!challengePersona) {
-          const exclusionReasons = Array.from(new Set(
-            eligibleRes.data.excluded.flatMap((persona) => persona.reasons),
-          ));
-          setChallengeUnavailableReason(exclusionReasons.join(", ") || "No canonical eligible challenge Persona");
-        }
-      } catch (err: unknown) {
-        setChallengeUnavailableReason(errorMessage(err, "Failed to fetch participants"));
-      } finally {
-        if (!cancelled) setCheckingChallengeEligibility(false);
-      }
-    };
-
-    checkEligibility();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedEpisode, writeAccess.interactionAllowed, writeAccess.interactionDisabledReason]);
 
   const loadData = async () => {
     setLoading(true);
@@ -271,49 +206,57 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
     }
   };
 
-  // PINT-008 — hand a trade episode off to the Strategy Workshop for persona
-  // review (original persona, an alternate persona, or a canonical challenge).
-  const handleReflect = async (type: "original" | "alternate" | "challenge", targetPersonaId: string) => {
+  const handleJournalInteraction = async (
+    mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect",
+    participantIds: string[],
+  ) => {
     if (!selectedEpisode) return;
     if (!writeAccess.interactionAllowed) {
       toast.error(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted");
       return;
     }
-    if (!targetPersonaId) {
-      toast.error("Please select a persona to review");
+    if (participantIds.length === 0 || participantIds.some((id) => !id)) {
+      toast.error("Select every Persona required for this interaction");
       return;
     }
 
     setSubmittingCommand(true);
     try {
-      const mode = type === "challenge" ? "challenge" : "reflect";
-      const environment = selectedEpisode.environment || "paper";
+      // The journal entry keeps the source environment in its canonical BFF
+      // projection; Persona advice itself is advisory-only and capped at paper.
+      const adviceEnvironment = "paper" as const;
 
-      const workshopId =
-        resolvedWorkshopId ||
-        (
-          await interaction.resolveContext({
-            context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
-            environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
-          })
-        ).data.workshop_id;
-
-      // Submit the interaction to initialize the opinion/debate thread.
-      await interaction.submit({
+      const resolved = await interaction.resolveContext({
+          context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
+          environment: adviceEnvironment,
+        });
+      const workshopId = resolved.data.workshop_id;
+      const eligibility = await interaction.participants({
         workshop_id: workshopId,
-        mode,
-        environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
-        topic: `Reflection and review for episode ${selectedEpisode.trade_episode_id} by Persona ${targetPersonaId}`,
-        participant_persona_ids: [targetPersonaId],
-        context_refs: [
-          { type: "journal_entry", id: selectedEpisode.trade_episode_id },
-          { type: "persona", id: targetPersonaId },
-        ],
+        mode: mode === "compare" ? "consult" : mode,
+        environment: adviceEnvironment,
       });
-
-      toast.success("Workshop resolved successfully, redirecting...");
+      const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+      if (!participantIds.every((id) => eligibleIds.has(id))) {
+        throw new Error("One or more selected Personas are not eligible for this journal context.");
+      }
+      const cutoff = Object.values(selectedEpisode.coverage ?? {})
+        .map((item) => item?.as_of)
+        .filter((value): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value)))
+        .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+      const params = new URLSearchParams({
+        mode,
+        participants: participantIds.join(","),
+        picker: "named",
+        return_to: `/management/personas/${encodeURIComponent(personaId)}?tab=tradeJournal`,
+        return_label: `Trade Journal ${selectedEpisode.trade_episode_id}`,
+        source_kind: "journal_entry",
+        source_id: selectedEpisode.trade_episode_id,
+        advice_environment: adviceEnvironment,
+      });
+      params.set("evidence_cutoff", cutoff ?? resolved.data.resolved_at);
       setSelectedEpisode(null); // Close the sheet
-      navigate(`/agora/strategy-workshop/${workshopId}`);
+      navigate(`/agora/strategy-workshop/${encodeURIComponent(workshopId)}?${params.toString()}`);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Failed to resolve workshop context"));
     } finally {
@@ -809,47 +752,41 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 )}
               </div>
 
-              {/* Contextual Workshop Reflection & Review Actions (PINT-008) */}
+              {/* Canonical contextual Persona Workshop actions (PINT-015). */}
               <div className="space-y-3 pt-3 border-t">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Reflect with Personas (Strategy Workshop)</h3>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Ask Personas about this trade</h3>
                 <div className="flex flex-col gap-3.5 bg-slate-50/50 p-3 rounded-lg border">
-
-                  {/* Original & canonical Challenge review row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs font-semibold"
-                      onClick={() => handleReflect("original", selectedEpisode.persona_id)}
-                      disabled={submittingCommand || !writeAccess.interactionAllowed}
-                      title={writeAccess.interactionDisabledReason ?? undefined}
-                    >
-                      Original Persona Review
-                    </Button>
-
-                    <div className="flex flex-col gap-1 w-full">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="group" aria-label="Trade journal Persona actions">
+                    {([
+                      ["ask", "Ask"],
+                      ["challenge", "Challenge"],
+                      ["compare", "Compare"],
+                      ["propose_action", "Propose"],
+                      ["reflect", "Reflect"],
+                    ] as const).map(([mode, label]) => (
                       <Button
+                        aria-label={`${label} Personas about trade ${selectedEpisode.trade_episode_id}`}
+                        className="text-xs font-semibold"
+                        disabled={submittingCommand || !writeAccess.interactionAllowed || (mode === "compare" && !selectedAltPersona)}
+                        key={mode}
+                        onClick={() => void handleJournalInteraction(
+                          mode,
+                          mode === "compare" ? [selectedEpisode.persona_id, selectedAltPersona] : [selectedEpisode.persona_id],
+                        )}
                         size="sm"
+                        title={mode === "compare" && !selectedAltPersona ? "Select a comparison Persona below." : writeAccess.interactionDisabledReason ?? undefined}
                         variant="outline"
-                        className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
-                        onClick={() => handleReflect("challenge", challengeEligiblePersona?.persona_id ?? "")}
-                        disabled={submittingCommand || checkingChallengeEligibility || !challengeEligiblePersona || !writeAccess.interactionAllowed}
-                        title={writeAccess.interactionDisabledReason ?? undefined}
                       >
-                        {checkingChallengeEligibility ? "Checking..." : challengeEligiblePersona ? "Challenge Persona Review" : "Challenge Persona (Unavailable)"}
+                        {label}
                       </Button>
-                      {!checkingChallengeEligibility && !challengeEligiblePersona && (
-                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="challenge-persona-unavailable">
-                          {challengeUnavailableReason ? `Unavailable: ${challengeUnavailableReason}` : "Unavailable in this environment"}
-                        </span>
-                      )}
-                    </div>
+                    ))}
                   </div>
 
-                  {/* Alternate Persona Review Row */}
+                  {/* Comparison Persona selection is preserved in the canonical deep link. */}
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground shrink-0">Alternate Reviewer:</span>
+                    <label className="text-muted-foreground shrink-0" htmlFor="journal-comparison-persona">Comparison Persona:</label>
                     <select
+                      id="journal-comparison-persona"
                       value={selectedAltPersona}
                       onChange={(e) => setSelectedAltPersona(e.target.value)}
                       className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background"
@@ -864,15 +801,6 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                           </option>
                         ))}
                     </select>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
-                      onClick={() => handleReflect("alternate", selectedAltPersona)}
-                      disabled={!selectedAltPersona || submittingCommand || !writeAccess.interactionAllowed}
-                      title={writeAccess.interactionDisabledReason ?? undefined}
-                    >
-                      Review
-                    </Button>
                   </div>
                   {writeAccess.interactionDisabledReason ? (
                     <p className="text-[11px] font-semibold text-amber-700" data-testid="trade-journal-interaction-disabled-reason">

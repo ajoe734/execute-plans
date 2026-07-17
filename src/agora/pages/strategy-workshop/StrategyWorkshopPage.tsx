@@ -18,8 +18,17 @@ import {
   type ContextRef,
   type PersonaEligibility,
 } from "@/lib/bff-v1/agora/interaction";
+import {
+  DailyInteractionUnsupportedError,
+  listDailyInteractions,
+  submitDailyInteraction,
+  type DailyInteraction,
+  type DailyInteractionMode,
+  type ParticipantSnapshot,
+} from "@/lib/bff-v1/agora/dailyInteractions";
+import { getAuthProvider } from "@/lib/bff-v1/headers";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
-import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
+import { DailyInteractionTimeline, type DailyRuntimeState } from "@/agora/components/DailyInteractionTimeline";
 import { ConnectedGovernedProposalCard } from "@/agora/components/ConnectedGovernedProposalCard";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
 import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
@@ -302,26 +311,44 @@ interface SessionViewProps {
   entry?: WorkshopInteractionEntry;
 }
 
-export type WorkshopInteractionMode = "ask" | "challenge" | "consult" | "propose_action" | "reflect";
+export type WorkshopInteractionMode = DailyInteractionMode;
 export interface WorkshopInteractionEntry {
   mode?: WorkshopInteractionMode;
   participantIds?: string[];
   picker?: WorkshopParticipantPicker;
   returnTo?: string;
   returnLabel?: string;
+  source?: {
+    kind: "persona" | "strategy" | "decision_event" | "journal_entry" | "position" | "human_inbox_item" | "workshop";
+    id: string;
+    version?: string;
+  };
+  targetStrategy?: { id: string; version: string };
+  environment?: "research" | "shadow" | "paper" | "canary" | "live";
+  evidenceCutoff?: string;
 }
 
-function normalizedEnvironment(workshop: StrategyWorkshop | null): "research" | "shadow" | "paper" | "canary" | "live" {
-  const value = String(recordFrom(workshop?.metadata).environment ?? "paper");
+function normalizedEnvironment(workshop: StrategyWorkshop | null, entry?: WorkshopInteractionEntry): "research" | "shadow" | "paper" | "canary" | "live" {
+  const value = String(entry?.environment ?? recordFrom(workshop?.metadata).environment ?? "paper");
   return ["research", "shadow", "paper", "canary", "live"].includes(value)
     ? value as "research" | "shadow" | "paper" | "canary" | "live"
     : "paper";
 }
 
-function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[]): ContextRef[] {
+function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[], entry?: WorkshopInteractionEntry): ContextRef[] {
   const metadata = recordFrom(workshop.metadata);
   const session = recordFrom(workshop);
   const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
+  if (entry?.source && ["persona", "strategy", "decision_event", "journal_entry", "position"].includes(entry.source.kind)) {
+    refs.unshift({
+      type: entry.source.kind as ContextRef["type"],
+      id: entry.source.id,
+      version_id: entry.source.version,
+    });
+  }
+  if (entry?.targetStrategy) {
+    refs.unshift({ type: "strategy", id: entry.targetStrategy.id, version_id: entry.targetStrategy.version });
+  }
   const strategyId = String(
     metadata.strategy_id
       ?? session.strategy_id
@@ -344,6 +371,38 @@ function interactionContextRefs(workshop: StrategyWorkshop, participantIds: stri
   return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
 }
 
+function eligibilityMode(mode: WorkshopInteractionMode): "ask" | "challenge" | "consult" | "propose_action" | "reflect" {
+  return mode === "compare" ? "consult" : mode;
+}
+
+function participantSnapshot(item: PersonaEligibility): ParticipantSnapshot | null {
+  const snapshot = item.participant_snapshot;
+  if (!snapshot) return null;
+  if (!snapshot.persona_id || !snapshot.persona_version || !snapshot.session_persona_id
+    || !snapshot.provider_agent_id || !snapshot.workspace_id || !snapshot.captured_at
+    || !Array.isArray(snapshot.capability_snapshot) || snapshot.capability_snapshot.length === 0) return null;
+  return snapshot;
+}
+
+function sourceContext(workshop: StrategyWorkshop | null, entry?: WorkshopInteractionEntry) {
+  const metadata = recordFrom(workshop?.metadata);
+  const source = entry?.source ?? {
+    kind: "workshop" as const,
+    id: workshop?.workshop_id ?? "",
+  };
+  const evidenceCutoff = entry?.evidenceCutoff
+    ?? (typeof metadata.evidence_cutoff === "string" ? metadata.evidence_cutoff : undefined)
+    ?? (typeof metadata.data_cutoff === "string" ? metadata.data_cutoff : undefined);
+  return { source, evidenceCutoff };
+}
+
+async function sha256(value: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("Secure request digest support is unavailable in this browser.");
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
   const writeAccess = useAgoraWriteAccess();
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
@@ -351,6 +410,9 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
   const [workshopEvents, setWorkshopEvents] = useState<WorkshopStreamEvent[]>([]);
   const [composerValue, setComposerValue] = useState("");
+  const [dailyInteractions, setDailyInteractions] = useState<DailyInteraction[]>([]);
+  const [dailyRuntimeState, setDailyRuntimeState] = useState<DailyRuntimeState>("loading");
+  const [dailyRuntimeMessage, setDailyRuntimeMessage] = useState<string | null>(null);
 
   // Custom states for PINT-005
   const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
@@ -360,13 +422,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [excludedParticipants, setExcludedParticipants] = useState<PersonaEligibility[]>([]);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
-  const [focusedRef, setFocusedRef] = useState<string | null>(null);
   
-  // Warning/Banner simulator states
-  const [isStale, setIsStale] = useState(false);
-  const [isDegraded, setIsDegraded] = useState(false);
-  const [isDenied, setIsDenied] = useState(false);
-
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
     lastEventId: null,
@@ -377,6 +433,24 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [sessionLoading, setSessionLoading] = useState(false);
   const [mobilePane, setMobilePane] = useState<"conversation" | "readiness">("conversation");
   const [mobileComposerOptionsOpen, setMobileComposerOptionsOpen] = useState(false);
+
+  const refreshDailyInteractions = useCallback(async () => {
+    try {
+      const items = await listDailyInteractions(workshopId);
+      setDailyInteractions(items);
+      setDailyRuntimeState("ready");
+      setDailyRuntimeMessage(null);
+    } catch (error) {
+      setDailyInteractions([]);
+      if (error instanceof DailyInteractionUnsupportedError) {
+        setDailyRuntimeState("unsupported");
+        setDailyRuntimeMessage(error.message);
+      } else {
+        setDailyRuntimeState("error");
+        setDailyRuntimeMessage(error instanceof Error ? error.message : "Authoritative daily interaction readback failed.");
+      }
+    }
+  }, [workshopId]);
 
   // Initial data load
   useEffect(() => {
@@ -410,6 +484,17 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     };
   }, [workshopId]);
 
+  useEffect(() => {
+    setDailyRuntimeState("loading");
+    void refreshDailyInteractions();
+  }, [refreshDailyInteractions]);
+
+  useEffect(() => {
+    if (!dailyInteractions.some((item) => item.status === "queued" || item.status === "running")) return;
+    const timer = window.setInterval(() => void refreshDailyInteractions(), 3000);
+    return () => window.clearInterval(timer);
+  }, [dailyInteractions, refreshDailyInteractions]);
+
   const refreshEligibility = useCallback(async (
     mode: WorkshopInteractionMode,
     preferred: string[] = selectedParticipants,
@@ -421,13 +506,16 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     try {
       const result = await interaction.participants({
         workshop_id: workshopId,
-        mode,
-        environment: normalizedEnvironment(workshop),
+        mode: eligibilityMode(mode),
+        environment: normalizedEnvironment(workshop, entry),
         required_capability: "persona_opinion",
       });
       setEligibleParticipants(result.data.included);
       setExcludedParticipants(result.data.excluded);
-      setSelectedParticipants(pickerParticipants(picker, result.data.included, preferred));
+      const picked = pickerParticipants(picker, result.data.included, preferred);
+      // Compare is deliberately pairwise even when the recommended picker can
+      // otherwise form a three-Persona panel.
+      setSelectedParticipants(mode === "compare" ? picked.slice(0, 2) : picked);
     } catch (error) {
       setEligibleParticipants([]);
       setExcludedParticipants([]);
@@ -436,7 +524,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     } finally {
       setEligibilityLoading(false);
     }
-  }, [pickerSelectionType, selectedParticipants, workshop, workshopId]);
+  }, [entry, pickerSelectionType, selectedParticipants, workshop, workshopId]);
 
   useEffect(() => {
     if (!workshop) return;
@@ -474,7 +562,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   useEffect(() => {
     const teardown = openWorkshopStream(workshopId, (event: WorkshopStreamEvent) => {
       dispatch({ type: "SET_LAST_EVENT_ID", id: event.event_id });
-      switch (event.event_type) {
+      switch (String(event.event_type)) {
         case "workshop.completeness.updated":
           refreshCompleteness();
           refreshCards();
@@ -498,18 +586,29 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           refreshCards();
           refreshEvents();
           break;
+        case "interaction.queued":
+        case "interaction.running":
+        case "interaction.completed":
+        case "interaction.degraded":
+        case "interaction.failed":
+        case "candidate.decision.recorded":
+        case "candidate.validation.updated":
+          void refreshDailyInteractions();
+          refreshEvents();
+          break;
         case "workshop.snapshot":
           refreshCards();
           refreshCompleteness();
           refreshReadiness();
           refreshEvents();
+          void refreshDailyInteractions();
           break;
         default:
           break;
       }
     });
     return teardown;
-  }, [workshopId, refreshCards, refreshCompleteness, refreshEvents, refreshReadiness]);
+  }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness]);
 
   // Derive the most recent next_question card for the rail
   const nextQuestion =
@@ -527,58 +626,91 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     return typeof question === "string" && question.trim() ? question.trim() : null;
   })();
 
-  const handleContinueDiscussion = useCallback((cardId: string) => {
-    setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} - `));
-    setFocusedRef(cardId);
-  }, []);
-
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !workshop || !content || isDenied || sendLoading || !writeAccess.interactionAllowed) return;
+      if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed || dailyRuntimeState !== "ready") return;
       setSendLoading(true);
       setSendError(null);
       try {
         if (selectedParticipants.length === 0) {
           throw new Error("Choose at least one eligible Persona before submitting.");
         }
-        const contextRefs = interactionContextRefs(workshop, selectedParticipants);
+        const contextRefs = interactionContextRefs(workshop, selectedParticipants, entry);
         const resolved = await interaction.resolveContext({
           workshop_id: workshopId,
           context_refs: contextRefs,
-          environment: normalizedEnvironment(workshop),
+          environment: normalizedEnvironment(workshop, entry),
         });
         if (!resolved.data.verified || resolved.data.workshop_id !== workshopId) {
           throw new Error("The canonical Workshop context could not be verified.");
         }
         const eligibility = await interaction.participants({
           workshop_id: workshopId,
-          mode: selectedMode,
-          environment: normalizedEnvironment(workshop),
+          mode: eligibilityMode(selectedMode),
+          environment: normalizedEnvironment(workshop, entry),
           required_capability: "persona_opinion",
         });
         const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
         if (!selectedParticipants.every((id) => eligibleIds.has(id))) {
           throw new Error("One or more selected Personas are no longer eligible. Refresh the participant list.");
         }
-        const result = await interaction.submit({
-          workshop_id: workshopId,
-          mode: selectedMode,
-          environment: normalizedEnvironment(workshop),
-          required_capability: "persona_opinion",
-          topic: content,
-          participant_persona_ids: selectedParticipants,
-          context_refs: resolved.data.context_refs,
+        const selectedSnapshots = selectedParticipants.map((id) => {
+          const eligible = eligibility.data.included.find((item) => item.persona_id === id);
+          return eligible ? participantSnapshot(eligible) : null;
         });
-        if (result.data.execution_authority !== "none") {
-          throw new Error("The interaction response violated the no-execution authority boundary.");
+        if (selectedSnapshots.some((snapshot) => !snapshot)) {
+          throw new Error("The BFF eligibility response did not include v1.9 immutable Persona snapshots. PINT-012 runtime support is required.");
         }
+        const { source, evidenceCutoff } = sourceContext(workshop, entry);
+        if (!evidenceCutoff || Number.isNaN(Date.parse(evidenceCutoff))) {
+          throw new Error("The authoritative source context did not provide an evidence cutoff. Submission is blocked rather than inventing one.");
+        }
+        const operatorId = writeAccess.actorId?.trim();
+        const tenantId = getAuthProvider().getTenantId()?.trim();
+        if (!operatorId || !tenantId) {
+          throw new Error("The authenticated BFF operator and tenant are required for an immutable v1.9 request.");
+        }
+        if (!globalThis.crypto?.randomUUID) {
+          throw new Error("Secure request identity support is unavailable in this browser.");
+        }
+        const submittedAt = new Date().toISOString();
+        const requestId = globalThis.crypto.randomUUID();
+        const metadata = recordFrom(workshop.metadata);
+        const strategyRef = resolved.data.context_refs.find((ref) => ref.type === "strategy");
+        const positionRefs = Array.isArray(metadata.position_risk_snapshot_refs)
+          ? metadata.position_risk_snapshot_refs.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+          : [];
+        await submitDailyInteraction({
+          workshop_id: workshopId,
+          human_request: {
+            request_id: requestId,
+            operator_id: operatorId,
+            mode: selectedMode,
+            request_text: content,
+            submitted_at: submittedAt,
+            request_sha256: await sha256(content),
+          },
+          context_snapshot: {
+            tenant_id: tenantId,
+            source_route: entry?.returnTo ?? `/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            focused_object: source,
+            context_refs: resolved.data.context_refs.map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
+            strategy_ref: strategyRef?.version_id ? { strategy_id: strategyRef.id, version_id: strategyRef.version_id } : null,
+            decision_ref: resolved.data.context_refs.find((ref) => ref.type === "decision_event")?.id ?? null,
+            journal_ref: resolved.data.context_refs.find((ref) => ref.type === "journal_entry")?.id ?? null,
+            position_risk_snapshot_refs: positionRefs,
+            evidence_cutoff: evidenceCutoff,
+            selected_persona_ids: selectedParticipants,
+            initial_mode: selectedMode,
+            return_route: entry?.returnTo ?? `/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            captured_at: submittedAt,
+          },
+          participants: selectedSnapshots as ParticipantSnapshot[],
+        });
         setComposerValue("");
-        setFocusedRef(null);
-        refreshCards();
         refreshEvents();
-        refreshCompleteness();
-        refreshReadiness();
+        void refreshDailyInteractions();
       } catch (err) {
         setSendError(err instanceof Error ? err.message : "Failed to send message");
       } finally {
@@ -590,21 +722,21 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       workshop,
       selectedMode,
       selectedParticipants,
-      isDenied,
       sendLoading,
       writeAccess.interactionAllowed,
-      refreshCards,
-      refreshCompleteness,
+      writeAccess.actorId,
+      dailyRuntimeState,
+      entry,
+      refreshDailyInteractions,
       refreshEvents,
-      refreshReadiness,
     ],
   );
 
   const composerInputDisabled = !workshop
     || sessionLoading
     || sendLoading
-    || isDenied
     || !writeAccess.interactionAllowed
+    || dailyRuntimeState !== "ready"
     || workshop.status === "concluded";
   const canSubmitInteraction = !composerInputDisabled
     && !eligibilityLoading
@@ -738,25 +870,19 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           </div>
         )}
 
-        {/* Warning messages if stale/degraded/denied */}
-        {(isStale || isDegraded || isDenied || workshop?.status === "concluded") && (
+        {/* Lifecycle warnings come only from authoritative v1.9 readback. */}
+        {(dailyInteractions.some((item) => item.status === "degraded" || item.status === "failed") || !writeAccess.interactionAllowed || workshop?.status === "concluded") && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex flex-col gap-1.5 text-xs text-amber-800 shrink-0">
-            {isStale && (
-              <div className="flex items-center gap-1.5" data-testid="warning-stale">
-                <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <span><strong>Context Stale:</strong> The underlying strategy or evidence has changed. Reassessment recommended.</span>
-              </div>
-            )}
-            {isDegraded && (
+            {dailyInteractions.some((item) => item.status === "degraded" || item.status === "failed") && (
               <div className="flex items-center gap-1.5" data-testid="warning-degraded">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <span><strong>Degraded Mode:</strong> LLM provider latency is high. Cached fallback models are active.</span>
+                <span><strong>Provider degradation:</strong> One or more selected Personas failed. Successful independent opinions remain visible; no fallback opinion was fabricated.</span>
               </div>
             )}
-            {isDenied && (
+            {!writeAccess.interactionAllowed && (
               <div className="flex items-center gap-1.5 text-red-800 bg-red-50 p-1.5 rounded border border-red-100" data-testid="warning-denied">
                 <ShieldAlert className="h-3.5 w-3.5 text-red-600 shrink-0" />
-                <span><strong>Access Restricted:</strong> Write actions and live consultations are blocked for this user.</span>
+                <span><strong>Access restricted:</strong> {writeAccess.interactionDisabledReason ?? "The authenticated BFF session does not permit Persona interaction writes."}</span>
               </div>
             )}
             {workshop?.status === "concluded" && (
@@ -783,32 +909,22 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           data-testid="workshop-conversation"
           className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-slate-50/50"
         >
-          {sessionLoading && (
+          {sessionLoading && dailyRuntimeState === "loading" && (
             <div data-testid="workshop-session-loading" className="flex items-center justify-center py-20 text-slate-400 gap-2">
               <span className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
               Loading session cards…
             </div>
           )}
-          {!sessionLoading && cardState.cards.length === 0 && !governedProposalId && (
-            <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400 gap-2">
-              <Bot className="h-10 w-10 text-slate-300" />
-              <p className="text-sm font-semibold">No activity cards found</p>
-              <p className="text-xs">Submit a prompt below to start the conversation with the Servant.</p>
-            </div>
-          )}
+          <DailyInteractionTimeline
+            interactions={dailyInteractions}
+            onRefresh={refreshDailyInteractions}
+            runtimeMessage={dailyRuntimeMessage}
+            runtimeState={dailyRuntimeState}
+            writeAllowed={writeAccess.interactionAllowed}
+          />
           {!sessionLoading && governedProposalId ? (
             <ConnectedGovernedProposalCard key={governedProposalId} proposalId={governedProposalId} />
           ) : null}
-          {!sessionLoading && cardState.cards
-            .slice()
-            .sort((a, b) => a.sequence_no - b.sequence_no)
-            .map((card) => (
-              <WorkshopCardRenderer
-                key={card.card_id}
-                card={card}
-                onContinueDiscussion={handleContinueDiscussion}
-              />
-            ))}
         </div>
 
         {/* Composer section */}
@@ -839,57 +955,19 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               </span>
               <span className="text-slate-300">•</span>
               <span>
-                <strong>Strategy Spec:</strong> v1.0
+                <strong>Strategy version:</strong> {metadataString(workshop, "strategy_version") ?? metadataString(workshop, "strategy_spec_registry_id") ?? entry?.source?.version ?? "not supplied"}
               </span>
               <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                 <strong>Environment:</strong> {((workshop?.metadata?.environment) as string) ?? "paper"}
               </span>
-              {focusedRef && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
-                    Focused: #{focusedRef}
-                    <button 
-                      onClick={() => setFocusedRef(null)}
-                      className="text-indigo-400 hover:text-indigo-600 ml-1 font-bold"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </>
-              )}
             </div>
             <div className="flex items-center gap-3 text-slate-400">
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
-                Latest Cutoff: 2026-07-12
+                Evidence cutoff: {sourceContext(workshop, entry).evidenceCutoff ?? "not supplied"}
               </span>
-              <span className="text-slate-300">|</span>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setIsStale(!isStale)} 
-                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isStale ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-white text-slate-400 border-slate-200")}
-                  data-testid="toggle-stale-btn"
-                >
-                  Stale
-                </button>
-                <button 
-                  onClick={() => setIsDegraded(!isDegraded)} 
-                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isDegraded ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-white text-slate-400 border-slate-200")}
-                  data-testid="toggle-degraded-btn"
-                >
-                  Degrade
-                </button>
-                <button 
-                  onClick={() => setIsDenied(!isDenied)} 
-                  className={cn("px-1.5 py-0.5 rounded border text-[9px] font-medium transition-colors", isDenied ? "bg-red-100 text-red-800 border-red-200" : "bg-white text-slate-400 border-slate-200")}
-                  data-testid="toggle-denied-btn"
-                >
-                  Deny
-                </button>
-              </div>
             </div>
           </div>
 
@@ -913,7 +991,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                   <SelectContent className="bg-white border-slate-200">
                     <SelectItem value="ask" className="text-xs">Ask (Explain & Analyse)</SelectItem>
                     <SelectItem value="challenge" className="text-xs">Challenge (Attack assumptions)</SelectItem>
-                    <SelectItem value="consult" className="text-xs">Consult (Multiple Views)</SelectItem>
+                    <SelectItem value="compare" className="text-xs">Compare (Independent Views)</SelectItem>
                     <SelectItem value="propose_action" className="text-xs">Propose (Candidate Measure)</SelectItem>
                     <SelectItem value="reflect" className="text-xs">Reflect (Thesis vs Outcome)</SelectItem>
                   </SelectContent>
@@ -967,6 +1045,18 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               })()}
             </div>
           </div>
+          {selectedParticipants.length > 0 && (
+            <div className="flex flex-wrap gap-2" aria-label="Selected Persona participants">
+              {selectedParticipants.map((id) => (
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-800" key={id}>
+                  {eligibleParticipants.find((persona) => persona.persona_id === id)?.display_name ?? id}
+                </span>
+              ))}
+              {pickerSelectionType !== "named" && (
+                <span className="self-center text-[11px] text-slate-500">Choose Named Personas above to adjust this panel.</span>
+              )}
+            </div>
+          )}
 
           {/* Named Persona check boxes when Named is selected */}
           {pickerSelectionType === "named" && (
@@ -999,7 +1089,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
               disabled={composerInputDisabled}
-              placeholder={isDenied || !writeAccess.interactionAllowed ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
+              placeholder={!writeAccess.interactionAllowed ? "Access restricted..." : dailyRuntimeState !== "ready" ? "Daily Persona runtime unavailable" : "描述你的問題，Persona 將獨立回覆… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
