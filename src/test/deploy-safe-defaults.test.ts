@@ -640,6 +640,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "node scripts/release-candidate.mjs verify-pair",
     );
     expect(deployScript).toContain("--profile read-only");
+    expect(deployScript).toContain("--profile operator-live");
     expect(deployScript).toContain("--profile write-proof");
     expect(deployScript).toContain("safe_sibling.qualified");
     expect(deployScript).toContain("safe_sibling.locator");
@@ -647,7 +648,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain("restore.safe_switch");
     expect(deployScript).toContain("restore.safe_preserved");
     expect(deployScript).toContain(
-      '"PANTHEON_PROBE_EXPECTED_PROFILE=write-proof"',
+      '"PANTHEON_PROBE_EXPECTED_PROFILE=${DEPLOY_PROFILE}"',
     );
     expect(deployScript).toContain(
       '"PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"',
@@ -673,5 +674,27 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(safeSwitch).toBeGreaterThan(-1);
     expect(dependencyInstall).toBeGreaterThan(safeSwitch);
     expect(bffProbe).toBeGreaterThan(safeSwitch);
+  });
+
+  it("defines persistent operator-live as strict true/false without watchdog restore", () => {
+    expect(releaseCandidate).toContain('OPERATOR_LIVE: "operator-live"');
+    expect(releaseCandidate).toContain(
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"',
+    );
+    expect(deployScript).toContain('operator-live)');
+    expect(deployScript).toContain(
+      "Operator-live deployment requires a manual strict session profile",
+    );
+    expect(deployScript).toContain(
+      'authMode !== "strict" || authStub !== false',
+    );
+    expect(deployScript).toContain('${BFF_HOST%/}/readyz');
+    expect(deployScript).toContain('${BFF_HOST%/}/bff/me');
+    expect(deployWorkflow).toContain(
+      "needs.deploy.outputs.deployment_profile == 'write-proof'",
+    );
+    expect(deployWorkflow).not.toContain(
+      "needs.deploy.outputs.deployment_profile == 'operator-live'",
+    );
   });
 });

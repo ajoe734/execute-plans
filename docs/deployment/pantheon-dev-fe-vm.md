@@ -20,11 +20,12 @@ under `/var/www/pantheon-dev-fe-releases`.
 
 1. Feature and repair work merges to `dev` through PR.
 2. `Pantheon FE-BFF Integration Gate` runs on the `dev` push.
-3. The gate builds once with `VITE_BFF_MODE=live`, the exact dev BFF URL,
-   `VITE_BFF_FALLBACK=strict`, both write flags `false`, and no browser token.
-   It packages `dist/` plus an exact FE SHA, BFF SHA, gate run id, file manifest,
-   and canonical asset digest as the immutable
-   `pantheon-fe-release-candidate` artifact.
+3. The gate builds three immutable profiles against the exact dev BFF URL:
+   `read-only` (`REAL_WRITES=false`, stub writes false), persistent
+   `operator-live` (`REAL_WRITES=true`, stub writes false), and bounded
+   `write-proof` (both write flags true). All use live/strict transport and no
+   embedded browser token. One authenticated candidate-set identity binds the
+   exact FE SHA, BFF SHA, gate run, three distinct asset digests, and files.
 4. `Pantheon Dev FE Deploy` is triggered by `workflow_run` only when that exact
    `dev` push gate succeeds. The job rejects missing, duplicated, expired, or
    mismatched artifacts and authenticates the downloaded archive against the
@@ -44,11 +45,19 @@ under `/var/www/pantheon-dev-fe-releases`.
    and the absence of browser credentials or write enablement. Only then does it
    change `deploymentState` from `candidate` to `accepted`.
 
-Automated deployment is always read-only:
-`VITE_BFF_REAL_WRITES=false`, `VITE_BFF_ALLOW_DEV_STUB_WRITES=false`, and
-`VITE_BFF_EMBEDDED_BEARER_TOKEN=false`. Neither normal nor emergency deployment
-can skip integrity, auth, browser, or rollback probes. Governed write tests are
-separate manual test workflows and are not release acceptance probes.
+Workflow-run deployment remains read-only. A repository-authorized operator
+may manually select the persistent `operator-live` sibling from the exact same
+accepted candidate set. That path requires the exact current gated SHA and an
+exact healthy BFF whose `/bff/version` reports the paired commit,
+`auth_mode=strict`, and `auth_stub=false`; `/readyz` must be 200 and anonymous
+`/bff/me` must be 401. It deploys with `VITE_BFF_REAL_WRITES=true`,
+`VITE_BFF_ALLOW_DEV_STUB_WRITES=false`, and no embedded bearer. It does not
+dispatch the bounded-proof watchdog and is not automatically restored.
+
+`write-proof` remains a separate, manually acknowledged permissive-stub test
+profile. It alone arms the independent watchdog and automatically restores the
+exact paired read-only sibling. Neither persistent nor proof deployment can
+skip integrity, auth, browser, BFF identity, or rollback probes.
 
 The legacy Supabase login provider still needs two public browser values:
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. The integration gate
@@ -66,6 +75,13 @@ an audited reason of at least 20 characters, and membership in the
 comma-separated repository variable `PANTHEON_DEV_FE_DEPLOY_OPERATORS`. The override relaxes ordering
 only; it cannot relax candidate integrity, BFF identity, read-only posture, or
 probes.
+
+To install the daily strict operator profile, dispatch once with the exact
+current `candidate_sha` and successful `gate_run_id`, set
+`deployment_profile=operator-live`, leave `proof_window_ack=false`, and leave
+all override/drill inputs false. The actor must be listed in
+`PANTHEON_DEV_FE_DEPLOY_OPERATORS`. No proof coordinator, proof watchdog, or
+read-only auto-restore is started for this profile.
 
 ## Controller Validation
 
@@ -90,8 +106,8 @@ Do not say "published to dev" unless all of these are true:
 - `Pantheon Dev FE Deploy` passed for that SHA;
 - `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
   reports that SHA, its canonical asset digest, exact gate run id, exact BFF
-  commit, `deploymentState=accepted`, strict live mode, safe write flags, and no
-  embedded browser bearer;
+  commit, `deploymentState=accepted`, strict live mode, the selected profile's
+  exact write flags, all three paired digests, and no embedded browser bearer;
 - the deployed-host browser/BFF probe passed against `/management/persona-fleet`
   at desktop 1440 and mobile 390 widths with axe, keyboard focus,
   reduced-motion, strict performance, console, resource, and page-error checks;
@@ -111,7 +127,7 @@ errors, or unexpected console/resource failures fail closed.
 ## Rollback And Drill
 
 Any failure after a switch triggers a compare-and-swap rollback to the exact
-qualified predecessor. The controller re-hashes that predecessor before and
+qualified previously accepted `operator-live` or `read-only` predecessor. The controller re-hashes that predecessor before and
 after the switch, verifies public `deployment.json` and BFF identity, and reruns
 the browser/auth probe. A concurrent external live-target change is preserved
 and reported instead of being overwritten. A rollback or rollback re-probe

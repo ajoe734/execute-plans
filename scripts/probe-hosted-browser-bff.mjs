@@ -46,6 +46,9 @@ const EXPECTED_PAIR_ID = String(
 const EXPECTED_READ_ONLY_DIGEST = String(
   process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "",
 ).trim();
+const EXPECTED_OPERATOR_LIVE_DIGEST = String(
+  process.env.PANTHEON_PROBE_EXPECTED_OPERATOR_LIVE_DIGEST || "",
+).trim();
 const EXPECTED_WRITE_PROOF_DIGEST = String(
   process.env.PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST || "",
 ).trim();
@@ -428,6 +431,7 @@ export function inspectDeploymentMetadata(
     expectedProfile = "",
     expectedPairId = "",
     expectedReadOnlyDigest = "",
+    expectedOperatorLiveDigest = "",
     expectedWriteProofDigest = "",
   } = {},
 ) {
@@ -447,6 +451,7 @@ export function inspectDeploymentMetadata(
     .toLowerCase();
   const expectedPair = canonicalizeSha256(expectedPairId);
   const expectedReadOnly = canonicalizeSha256(expectedReadOnlyDigest);
+  const expectedOperatorLive = canonicalizeSha256(expectedOperatorLiveDigest);
   const expectedWriteProof = canonicalizeSha256(expectedWriteProofDigest);
   const observedProfile = String(
     payload.deploymentProfile || payload.profile || "",
@@ -463,19 +468,25 @@ export function inspectDeploymentMetadata(
   const observedPairReadOnly = canonicalizeSha256(
     observedPair.readOnlyArtifactDigestSha256,
   );
+  const observedPairOperatorLive = canonicalizeSha256(
+    observedPair.operatorLiveArtifactDigestSha256,
+  );
   const observedPairWriteProof = canonicalizeSha256(
     observedPair.writeProofArtifactDigestSha256,
   );
-  const pairedProfileExpected = ["read-only", "write-proof"].includes(
+  const pairedProfileExpected = ["read-only", "operator-live", "write-proof"].includes(
     normalizedExpectedProfile,
   );
   const pairedExpectationComplete =
     pairedProfileExpected &&
     Boolean(expectedPair) &&
     Boolean(expectedReadOnly) &&
+    Boolean(expectedOperatorLive) &&
     Boolean(expectedWriteProof) &&
-    expectedReadOnly !== expectedWriteProof;
+    new Set([expectedReadOnly, expectedOperatorLive, expectedWriteProof]).size === 3;
   const expectedWriteValue =
+    normalizedExpectedProfile === "read-only" ? "false" : "true";
+  const expectedStubWriteValue =
     normalizedExpectedProfile === "write-proof" ? "true" : "false";
   const buildMode =
     payload.buildMode &&
@@ -527,6 +538,7 @@ export function inspectDeploymentMetadata(
         observedPairId === expectedPair &&
         canonicalizeSha256(observedPair.pairId) === expectedPair &&
         observedPairReadOnly === expectedReadOnly &&
+        observedPairOperatorLive === expectedOperatorLive &&
         observedPairWriteProof === expectedWriteProof),
     selectedProfileDigestMatchesPair:
       !normalizedExpectedProfile ||
@@ -534,7 +546,17 @@ export function inspectDeploymentMetadata(
         observedDigest ===
           (normalizedExpectedProfile === "write-proof"
             ? expectedWriteProof
-            : expectedReadOnly)),
+            : normalizedExpectedProfile === "operator-live"
+              ? expectedOperatorLive
+              : expectedReadOnly)),
+    operatorLiveExpectationAuthenticated:
+      normalizedExpectedProfile !== "operator-live" ||
+      (pairedExpectationComplete &&
+        payload.profile === "operator-live" &&
+        payload.deploymentProfile === "operator-live" &&
+        observedPairId === expectedPair &&
+        observedPairOperatorLive === expectedOperatorLive &&
+        observedDigest === expectedOperatorLive),
     writeProofExpectationAuthenticated:
       normalizedExpectedProfile !== "write-proof" ||
       (pairedExpectationComplete &&
@@ -543,10 +565,12 @@ export function inspectDeploymentMetadata(
         observedPairId === expectedPair &&
         canonicalizeSha256(observedPair.pairId) === expectedPair &&
         observedPairReadOnly === expectedReadOnly &&
+        observedPairOperatorLive === expectedOperatorLive &&
         observedPairWriteProof === expectedWriteProof &&
         observedDigest === expectedWriteProof),
     realWritesDisabled:
       normalizedExpectedProfile === "write-proof" ||
+      normalizedExpectedProfile === "operator-live" ||
       booleanString(buildMode.VITE_BFF_REAL_WRITES) === "false",
     stubWritesDisabled:
       normalizedExpectedProfile === "write-proof" ||
@@ -559,7 +583,15 @@ export function inspectDeploymentMetadata(
       normalizedExpectedProfile !== "write-proof" ||
       (pairedExpectationComplete &&
         booleanString(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES) ===
-          expectedWriteValue),
+          expectedStubWriteValue),
+    operatorLiveRealWritesEnabled:
+      normalizedExpectedProfile !== "operator-live" ||
+      (pairedExpectationComplete &&
+        booleanString(buildMode.VITE_BFF_REAL_WRITES) === expectedWriteValue),
+    operatorLiveStubWritesDisabled:
+      normalizedExpectedProfile !== "operator-live" ||
+      (pairedExpectationComplete &&
+        booleanString(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES) === "false"),
     embeddedBearerDisabled:
       booleanString(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN) === "false",
   };
@@ -583,6 +615,7 @@ export function inspectDeploymentMetadata(
       pairId: observedPairId,
       pair: {
         readOnlyArtifactDigestSha256: observedPairReadOnly,
+        operatorLiveArtifactDigestSha256: observedPairOperatorLive,
         writeProofArtifactDigestSha256: observedPairWriteProof,
       },
       bffCommit: canonicalizeCommitSha(payload.bffCommit),
@@ -2174,6 +2207,7 @@ async function runProbe() {
         expectedProfile: EXPECTED_RELEASE_PROFILE,
         expectedPairId: EXPECTED_PAIR_ID,
         expectedReadOnlyDigest: EXPECTED_READ_ONLY_DIGEST,
+        expectedOperatorLiveDigest: EXPECTED_OPERATOR_LIVE_DIGEST,
         expectedWriteProofDigest: EXPECTED_WRITE_PROOF_DIGEST,
       })
     : {
@@ -2563,6 +2597,9 @@ async function runProbe() {
         profile: EXPECTED_RELEASE_PROFILE,
         pairId: canonicalizeSha256(EXPECTED_PAIR_ID),
         readOnlyArtifactDigest: canonicalizeSha256(EXPECTED_READ_ONLY_DIGEST),
+        operatorLiveArtifactDigest: canonicalizeSha256(
+          EXPECTED_OPERATOR_LIVE_DIGEST,
+        ),
         writeProofArtifactDigest: canonicalizeSha256(
           EXPECTED_WRITE_PROOF_DIGEST,
         ),

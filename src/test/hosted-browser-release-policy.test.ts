@@ -180,6 +180,7 @@ describe("hosted browser strict release policy", () => {
     const frontendSha = "a".repeat(40);
     const backendSha = "b".repeat(40);
     const readOnlyDigest = "c".repeat(64);
+    const operatorLiveDigest = "f".repeat(64);
     const writeProofDigest = "d".repeat(64);
     const pairId = "e".repeat(64);
     const manifest = {
@@ -197,6 +198,7 @@ describe("hosted browser strict release policy", () => {
       pair: {
         pairId,
         readOnlyArtifactDigestSha256: readOnlyDigest,
+        operatorLiveArtifactDigestSha256: operatorLiveDigest,
         writeProofArtifactDigestSha256: writeProofDigest,
       },
       buildMode: {
@@ -223,6 +225,7 @@ describe("hosted browser strict release policy", () => {
       expectedProfile: "write-proof",
       expectedPairId: pairId,
       expectedReadOnlyDigest: readOnlyDigest,
+      expectedOperatorLiveDigest: operatorLiveDigest,
       expectedWriteProofDigest: writeProofDigest,
     });
     expect(authenticated.pass).toBe(true);
@@ -253,6 +256,7 @@ describe("hosted browser strict release policy", () => {
       expectedProfile: "write-proof",
       expectedPairId: pairId,
       expectedReadOnlyDigest: writeProofDigest,
+      expectedOperatorLiveDigest: operatorLiveDigest,
       expectedWriteProofDigest: writeProofDigest,
     });
     expect(collapsedProfiles.pass).toBe(false);
@@ -262,8 +266,9 @@ describe("hosted browser strict release policy", () => {
       expectedSha: frontendSha,
       expectedArtifactDigest: writeProofDigest,
       expectedProfile: "write-proof",
-      expectedPairId: "f".repeat(64),
+      expectedPairId: "9".repeat(64),
       expectedReadOnlyDigest: readOnlyDigest,
+      expectedOperatorLiveDigest: operatorLiveDigest,
       expectedWriteProofDigest: writeProofDigest,
     });
     expect(wrongPair.pass).toBe(false);
@@ -284,6 +289,7 @@ describe("hosted browser strict release policy", () => {
         expectedProfile: "write-proof",
         expectedPairId: pairId,
         expectedReadOnlyDigest: readOnlyDigest,
+        expectedOperatorLiveDigest: operatorLiveDigest,
         expectedWriteProofDigest: writeProofDigest,
       },
     );
@@ -294,6 +300,73 @@ describe("hosted browser strict release policy", () => {
         "writeProofStubWritesEnabled",
       ]),
     );
+  });
+
+  it("admits true/false writes only for an exact authenticated operator-live expectation", () => {
+    const frontendSha = "1".repeat(40);
+    const backendSha = "2".repeat(40);
+    const readOnlyDigest = "3".repeat(64);
+    const operatorLiveDigest = "4".repeat(64);
+    const writeProofDigest = "5".repeat(64);
+    const pairId = "6".repeat(64);
+    const manifest = {
+      app: "execute-plans",
+      environment: "pantheon-dev-fe",
+      commit: frontendSha,
+      artifactDigest: operatorLiveDigest,
+      artifactDigestSha256: operatorLiveDigest,
+      integrationGateRunId: 29328923604,
+      bffCommit: backendSha,
+      bffCommitEvidence: true,
+      profile: "operator-live",
+      deploymentProfile: "operator-live",
+      pairId,
+      pair: {
+        pairId,
+        readOnlyArtifactDigestSha256: readOnlyDigest,
+        operatorLiveArtifactDigestSha256: operatorLiveDigest,
+        writeProofArtifactDigestSha256: writeProofDigest,
+      },
+      buildMode: {
+        VITE_BFF_MODE: "live",
+        VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: "true",
+        VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+      },
+    };
+    const policy = inspectDeploymentMetadata(manifest, {
+      expectedSha: frontendSha,
+      expectedArtifactDigest: operatorLiveDigest,
+      expectedProfile: "operator-live",
+      expectedPairId: pairId,
+      expectedReadOnlyDigest: readOnlyDigest,
+      expectedOperatorLiveDigest: operatorLiveDigest,
+      expectedWriteProofDigest: writeProofDigest,
+    });
+    expect(policy.pass).toBe(true);
+    expect(policy.deployment?.profile).toBe("operator-live");
+
+    const permissiveStub = inspectDeploymentMetadata(
+      {
+        ...manifest,
+        buildMode: {
+          ...manifest.buildMode,
+          VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
+        },
+      },
+      {
+        expectedSha: frontendSha,
+        expectedArtifactDigest: operatorLiveDigest,
+        expectedProfile: "operator-live",
+        expectedPairId: pairId,
+        expectedReadOnlyDigest: readOnlyDigest,
+        expectedOperatorLiveDigest: operatorLiveDigest,
+        expectedWriteProofDigest: writeProofDigest,
+      },
+    );
+    expect(permissiveStub.pass).toBe(false);
+    expect(permissiveStub.failures).toContain("operatorLiveStubWritesDisabled");
   });
 
   it("fails closed on identity drift, unsafe writes, or missing gate evidence", () => {

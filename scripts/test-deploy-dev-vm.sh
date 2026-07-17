@@ -193,10 +193,12 @@ case "${url}" in
       known_index=$((${#known_sequence[@]} - 1))
     fi
     printf 'curl:bff-version\n' >> "${MOCK_CALL_LOG:?}"
-    printf '{"source_commit_known":%s,"source_commit_sha":"%s","commit":"%s"}\n' \
+    printf '{"source_commit_known":%s,"source_commit_sha":"%s","commit":"%s","auth_mode":"%s","auth_stub":%s}\n' \
       "${known_sequence[${known_index}]}" \
       "${sha_sequence[${sequence_index}]}" \
-      "${commit_sequence[${commit_index}]}"
+      "${commit_sequence[${commit_index}]}" \
+      "${MOCK_BFF_AUTH_MODE:-strict}" \
+      "${MOCK_BFF_AUTH_STUB:-false}"
     ;;
   */deployment.json*)
     printf 'curl:deployment\n' >> "${MOCK_CALL_LOG:?}"
@@ -220,6 +222,22 @@ case "${url}" in
       ' "${manifest}"
     fi
     cat "${manifest}"
+    ;;
+  */readyz*)
+    output=""
+    for ((i=1; i<=$#; i++)); do
+      if [[ "${!i}" == "--output" ]]; then j=$((i+1)); output="${!j}"; fi
+    done
+    [[ -z "${output}" ]] || printf '{"status":"ready"}\n' > "${output}"
+    printf '200'
+    ;;
+  */bff/me*)
+    output=""
+    for ((i=1; i<=$#; i++)); do
+      if [[ "${!i}" == "--output" ]]; then j=$((i+1)); output="${!j}"; fi
+    done
+    [[ -z "${output}" ]] || printf '{"code":"AUTH_REQUIRED"}\n' > "${output}"
+    printf '401'
     ;;
   *)
     echo "unexpected mock curl URL" >&2
@@ -283,6 +301,11 @@ fs.appendFileSync(
 fs.appendFileSync(
   log,
   `probe-read-only-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "unset"}\n`,
+  "utf8",
+);
+fs.appendFileSync(
+  log,
+  `probe-operator-live-digest:${phase}:${process.env.PANTHEON_PROBE_EXPECTED_OPERATOR_LIVE_DIGEST || "unset"}\n`,
   "utf8",
 );
 fs.appendFileSync(
@@ -443,13 +466,14 @@ setup_case() {
   CASE_CALL_LOG="${CASE_DIR}/calls.log"
   PREVIOUS_TARGET="${CASE_RELEASES}/previous"
   CANDIDATE_DIST="${CASE_DIR}/candidate-dist-read-only"
+  OPERATOR_LIVE_DIST="${CASE_DIR}/candidate-dist-operator-live"
   WRITE_PROOF_DIST="${CASE_DIR}/candidate-dist-write-proof"
   CANDIDATE_DIR="${CASE_DIR}/candidate"
   RUN_OUTPUT="${CASE_DIR}/deploy.out"
   RUN_STATUS=255
 
   mkdir -p "${CASE_DIR}" "${CASE_HOME}" "${CASE_TMP}" "${CASE_RELEASES}" \
-    "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets" "${WRITE_PROOF_DIST}/assets"
+    "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets" "${OPERATOR_LIVE_DIST}/assets" "${WRITE_PROOF_DIST}/assets"
   cp -a "${BASE_ORIGIN}" "${CASE_ORIGIN}"
   git clone -q --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
   git -C "${CASE_REPO}" config user.name "deploy-contract-test"
@@ -466,11 +490,14 @@ setup_case() {
 
   printf '<!doctype html><html><body>candidate</body></html>\n' > "${CANDIDATE_DIST}/index.html"
   printf 'globalThis.__candidate = true;\n' > "${CANDIDATE_DIST}/assets/app-abcdef12.js"
+  printf '<!doctype html><html><body>operator live candidate</body></html>\n' > "${OPERATOR_LIVE_DIST}/index.html"
+  printf 'globalThis.__operatorLive = true;\n' > "${OPERATOR_LIVE_DIST}/assets/app-abcdef12.js"
   printf '<!doctype html><html><body>write proof candidate</body></html>\n' > "${WRITE_PROOF_DIST}/index.html"
   printf 'globalThis.__candidateWrites = true;\n' > "${WRITE_PROOF_DIST}/assets/app-abcdef12.js"
   PAIR_ID="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
     "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" prepare-pair \
       --read-only-dist-dir "${CANDIDATE_DIST}" \
+      --operator-live-dist-dir "${OPERATOR_LIVE_DIST}" \
       --write-proof-dist-dir "${WRITE_PROOF_DIST}" \
       --output-dir "${CANDIDATE_DIR}" \
       --frontend-sha "${CANDIDATE_SHA}" \
@@ -480,8 +507,9 @@ setup_case() {
       --bff-base-url "https://bff.test")"
   [[ "${PAIR_ID}" =~ ^[0-9a-f]{64}$ ]] || die "fixture pair ID is invalid"
   CANDIDATE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.readOnly.artifactDigestSha256)"
+  OPERATOR_LIVE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.operatorLive.artifactDigestSha256)"
   WRITE_PROOF_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.writeProof.artifactDigestSha256)"
-  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
+  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${OPERATOR_LIVE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
     die "fixture profile digest is invalid"
   : > "${CASE_CALL_LOG}"
 }
@@ -502,7 +530,8 @@ select_interrupted_candidate() {
     payload.pair = {
       pairId: payload.pairId,
       readOnlyArtifactDigestSha256: process.argv[5],
-      writeProofArtifactDigestSha256: process.argv[6],
+      operatorLiveArtifactDigestSha256: process.argv[6],
+      writeProofArtifactDigestSha256: process.argv[7],
     };
     payload.releaseName = "interrupted-candidate";
     payload.previousReleaseName = "previous";
@@ -511,7 +540,7 @@ select_interrupted_candidate() {
     payload.commit = process.argv[4];
     payload.githubArtifactDigest = `sha256:${process.argv[5]}`;
     fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
   ln -sfn "${INTERRUPTED_TARGET}" "${CASE_LIVE}.interrupted"
   mv -Tf "${CASE_LIVE}.interrupted" "${CASE_LIVE}"
 }
@@ -530,6 +559,8 @@ run_deploy() {
       MOCK_BFF_SHA_SEQUENCE="" \
       MOCK_BFF_COMMIT_SEQUENCE="" \
       MOCK_BFF_KNOWN_SEQUENCE="" \
+      MOCK_BFF_AUTH_MODE="strict" \
+      MOCK_BFF_AUTH_STUB="false" \
       MOCK_EXTERNAL_SWITCH_TARGET="" \
       MOCK_CALL_LOG="${CASE_CALL_LOG}" \
       MOCK_FAIL_PROBE_PHASES="" \
@@ -586,6 +617,16 @@ run_write_deploy() {
     PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
     PANTHEON_DEPLOY_REAL_WRITES=true \
     PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
+    "$@"
+}
+
+run_operator_live_deploy() {
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_PROFILE=operator-live \
+    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+    PANTHEON_DEPLOY_REAL_WRITES=true \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
     "$@"
 }
 
@@ -684,13 +725,16 @@ assert_probe_pair_context() {
   local expected_profile="$2"
   local expected_pair="$3"
   local expected_read_only_digest="$4"
-  local expected_write_proof_digest="$5"
+  local expected_operator_live_digest="$5"
+  local expected_write_proof_digest="$6"
   grep -Fxq "probe-profile:${phase}:${expected_profile}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} profile context ${expected_profile}"
   grep -Fxq "probe-pair:${phase}:${expected_pair}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} pair context ${expected_pair}"
   grep -Fxq "probe-read-only-digest:${phase}:${expected_read_only_digest}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} read-only digest context"
+  grep -Fxq "probe-operator-live-digest:${phase}:${expected_operator_live_digest}" "${CASE_CALL_LOG}" || \
+    show_deploy_failure "expected probe phase ${phase} operator-live digest context"
   grep -Fxq "probe-write-proof-digest:${phase}:${expected_write_proof_digest}" "${CASE_CALL_LOG}" || \
     show_deploy_failure "expected probe phase ${phase} write-proof digest context"
 }
@@ -1201,11 +1245,12 @@ test_exact_candidate_noop_revalidates_live_release() {
     value.pair={
       pairId:value.pairId,
       readOnlyArtifactDigestSha256:value.artifactDigestSha256,
-      writeProofArtifactDigestSha256:process.argv[2],
+      operatorLiveArtifactDigestSha256:process.argv[2],
+      writeProofArtifactDigestSha256:process.argv[3],
     };
     value.deploymentState="accepted";
     fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`);
-  ' "${PREVIOUS_TARGET}/deployment.json" "${WRITE_PROOF_DIGEST}"
+  ' "${PREVIOUS_TARGET}/deployment.json" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
 
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "exact live candidate no-op should pass revalidation"
@@ -1340,6 +1385,39 @@ test_write_token_and_skip_flags_fail_closed() {
   fi
 }
 
+test_operator_live_persists_with_strict_bff() {
+  local accepted_operator_target
+  setup_case operator-live-success "${CANDIDATE_SHA}" auto
+  run_operator_live_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "operator-live deploy should succeed against an exact healthy strict BFF"
+  assert_live_profile operator-live accepted
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_probe_pair_context \
+    candidate_pre_switch operator-live "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  [[ ! -d "${CASE_RELEASES}/.pantheon-safe-locators" ]] || \
+    show_deploy_failure "operator-live unexpectedly created proof restore state"
+  grep -Fq '"operatorLiveArtifactDigestSha256"' "$(readlink -f "${CASE_LIVE}")/deployment.json" || \
+    show_deploy_failure "operator-live manifest omitted the three-profile identity"
+  accepted_operator_target="$(readlink -f "${CASE_LIVE}")"
+  CASE_AUDIT="${CASE_DIR}/audit-read-only-rollback"
+  run_deploy PANTHEON_DEPLOY_RELEASE_INSTANCE=operator-live-read-only-failure \
+    MOCK_FAIL_PROBE_PHASES=post_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "failed read-only successor unexpectedly replaced operator-live"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${accepted_operator_target}" ]] || \
+    show_deploy_failure "rollback did not select the exact accepted operator-live predecessor"
+  assert_live_profile operator-live accepted
+
+  setup_case operator-live-permissive-bff "${CANDIDATE_SHA}" auto
+  run_operator_live_deploy MOCK_BFF_AUTH_MODE=permissive MOCK_BFF_AUTH_STUB=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "operator-live accepted a permissive/stub BFF"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "operator-live requires BFF auth_mode=strict and auth_stub=false" "${RUN_OUTPUT}" || \
+    show_deploy_failure "operator-live strict BFF rejection was not explicit"
+}
+
 test_paired_write_installs_safe_sibling_and_private_locator() {
   local live locator safe_name safe_target
   setup_case paired-write-success "${CANDIDATE_SHA}" auto
@@ -1349,13 +1427,13 @@ test_paired_write_installs_safe_sibling_and_private_locator() {
   assert_probe_called safe_sibling_pre_switch
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
-  assert_probe_pair_context safe_sibling_pre_switch unset unset unset unset
+  assert_probe_pair_context safe_sibling_pre_switch unset unset unset unset unset
   assert_probe_pair_context \
     candidate_pre_switch write-proof "${PAIR_ID}" \
-    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+    "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
   assert_probe_pair_context \
     post_switch write-proof "${PAIR_ID}" \
-    "${CANDIDATE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+    "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
   if grep -Eq '^npm-command:.*(^|[[:space:]])run[[:space:]]+build([[:space:]]|$)' "${CASE_CALL_LOG}"; then
     show_deploy_failure "deploy controller rebuilt browser assets on the VM"
   fi
@@ -1385,7 +1463,7 @@ test_write_failure_restores_paired_safe_sibling() {
     show_deploy_failure "write failure rolled back to the old predecessor instead of paired safe"
   assert_live_profile read-only standby
   assert_probe_called rollback
-  assert_probe_pair_context rollback unset unset unset unset
+  assert_probe_pair_context rollback unset unset unset unset unset
   grep -Fq 'atomic-cas:exchange' "${CASE_CALL_LOG}" || \
     show_deploy_failure "write failure did not use CAS for safe restore"
   assert_summary_outcome rolled_back
@@ -1494,6 +1572,7 @@ run_test "exact same SHA and digest revalidates the live release" test_exact_can
 run_test "interrupted candidate rolls forward or restores its exact predecessor" test_interrupted_candidate_recovers_or_rolls_back
 run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_guards
 run_test "write, bearer, and skip-probe inputs fail closed" test_write_token_and_skip_flags_fail_closed
+run_test "operator-live persists only through the strict BFF path" test_operator_live_persists_with_strict_bff
 run_test "paired write installs a qualified safe sibling and private locator" test_paired_write_installs_safe_sibling_and_private_locator
 run_test "write failure restores the paired safe sibling" test_write_failure_restores_paired_safe_sibling
 run_test "explicit restore switches safe before network and never rolls back to write" test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write

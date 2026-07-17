@@ -53,6 +53,7 @@ RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-gate-${GATE_RUN_ID}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
 SAFE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-read-only"
 WRITE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-write-proof"
+OPERATOR_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-operator-live"
 SAFE_FALLBACK_LOCATOR_DIR="${RELEASES_DIR}/.pantheon-safe-locators"
 DURABLE_EVIDENCE_DIR="${DURABLE_EVIDENCE_ROOT}/run-${GITHUB_RUN_ID:-local}-attempt-${GITHUB_RUN_ATTEMPT:-1}-${RELEASE_INSTANCE}"
 NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"
@@ -63,9 +64,11 @@ EVIDENCE_SUMMARY="${AUDIT_DIR}/evidence.json"
 
 CANDIDATE_DIR=""
 READ_ONLY_CANDIDATE_DIR=""
+OPERATOR_LIVE_CANDIDATE_DIR=""
 WRITE_PROOF_CANDIDATE_DIR=""
 ARTIFACT_DIGEST=""
 READ_ONLY_ARTIFACT_DIGEST=""
+OPERATOR_LIVE_ARTIFACT_DIGEST=""
 WRITE_PROOF_ARTIFACT_DIGEST=""
 PAIR_ID=""
 BFF_COMMIT=""
@@ -80,6 +83,9 @@ PREVIOUS_MANIFEST_BFF_COMMIT=""
 PREVIOUS_DEPLOYMENT_STATE=""
 PREVIOUS_PROFILE=""
 PREVIOUS_PAIR_ID=""
+PREVIOUS_READ_ONLY_ARTIFACT_DIGEST=""
+PREVIOUS_OPERATOR_LIVE_ARTIFACT_DIGEST=""
+PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST=""
 PREVIOUS_RELEASE_NAME=""
 RECOVERY_ATTEMPTED=false
 RECOVERY_RELEASE_NAME=""
@@ -241,10 +247,11 @@ verify_manifest_file() {
   local expected_profile="${8:-}"
   local expected_pair_id="${9:-}"
   local expected_read_only_digest="${10:-${READ_ONLY_ARTIFACT_DIGEST}}"
-  local expected_write_proof_digest="${11:-${WRITE_PROOF_ARTIFACT_DIGEST}}"
-  if ! node --input-type=module - "${manifest_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" "${expected_profile}" "${expected_pair_id}" "${expected_read_only_digest}" "${expected_write_proof_digest}" <<'NODE'
+  local expected_operator_live_digest="${11:-${OPERATOR_LIVE_ARTIFACT_DIGEST}}"
+  local expected_write_proof_digest="${12:-${WRITE_PROOF_ARTIFACT_DIGEST}}"
+  if ! node --input-type=module - "${manifest_file}" "${expected_sha}" "${expected_digest}" "${expected_gate}" "${expected_bff}" "${expected_state}" "${expected_github_digest}" "${BFF_HOST}" "${expected_profile}" "${expected_pair_id}" "${expected_read_only_digest}" "${expected_operator_live_digest}" "${expected_write_proof_digest}" <<'NODE'
 import fs from "node:fs";
-const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost, expectedProfile, expectedPairId, expectedReadOnlyDigest, expectedWriteProofDigest] = process.argv.slice(2);
+const [file, expectedSha, expectedDigest, expectedGate, expectedBff, expectedState, expectedGithubDigest, expectedBffHost, expectedProfile, expectedPairId, expectedReadOnlyDigest, expectedOperatorLiveDigest, expectedWriteProofDigest] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const digest = String(payload.artifactDigestSha256 || payload.artifactDigest || "").replace(/^sha256:/i, "").toLowerCase();
 const modernIdentity = Boolean(expectedGithubDigest);
@@ -357,6 +364,7 @@ if (expectedProfile) {
   if (
     payload.pair?.pairId !== expectedPairId ||
     payload.pair?.readOnlyArtifactDigestSha256 !== expectedReadOnlyDigest ||
+    payload.pair?.operatorLiveArtifactDigestSha256 !== expectedOperatorLiveDigest ||
     payload.pair?.writeProofArtifactDigestSha256 !== expectedWriteProofDigest
   ) {
     throw new Error("deployment manifest paired profile digests mismatch");
@@ -365,8 +373,13 @@ if (expectedProfile) {
 if (payload.buildMode?.VITE_BFF_MODE !== "live" || payload.buildMode?.VITE_BFF_FALLBACK !== "strict") {
   throw new Error("deployment manifest is not strict live mode");
 }
-const expectedWrites = expectedProfile === "write-proof" ? "true" : "false";
-if (payload.buildMode?.VITE_BFF_REAL_WRITES !== expectedWrites || payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== expectedWrites) {
+const observedProfile = expectedProfile || String(payload.deploymentProfile || payload.profile || "read-only");
+if (!["read-only", "operator-live", "write-proof"].includes(observedProfile)) {
+  throw new Error("deployment manifest profile is unknown");
+}
+const expectedWrites = observedProfile === "read-only" ? "false" : "true";
+const expectedStubWrites = observedProfile === "write-proof" ? "true" : "false";
+if (payload.buildMode?.VITE_BFF_REAL_WRITES !== expectedWrites || payload.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES !== expectedStubWrites) {
   throw new Error("deployment manifest write posture is unsafe");
 }
 if (payload.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN !== "false") {
@@ -435,9 +448,9 @@ verify_bff_identity() {
     evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
     return 1
   fi
-  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" <<'NODE'
+  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" <<'NODE'
 import fs from "node:fs";
-const [file, expected] = process.argv.slice(2);
+const [file, expected, profile] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const source = String(payload.source_commit_sha || "").toLowerCase();
 const alias = String(payload.commit || source).toLowerCase();
@@ -447,10 +460,30 @@ if (payload.source_commit_known !== true || !/^[0-9a-f]{40}$/u.test(source)) {
 if (source !== alias || source !== expected.toLowerCase()) {
   throw new Error("live BFF identity differs from gated candidate identity");
 }
+if (profile === "operator-live") {
+  const posture = payload.config_posture || payload.posture || payload.auth || payload;
+  const authMode = String(posture.auth_mode ?? posture.authMode ?? posture.mode ?? "").toLowerCase();
+  const authStub = posture.auth_stub ?? posture.authStub;
+  if (authMode !== "strict" || authStub !== false) {
+    throw new Error("operator-live requires BFF auth_mode=strict and auth_stub=false");
+  }
+}
 NODE
   then
     evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
     return 1
+  fi
+  if [[ "${DEPLOY_PROFILE}" == "operator-live" ]]; then
+    local ready_status me_status
+    ready_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-ready-${stage}.json" \
+      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/readyz" || true)"
+    me_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-me-anonymous-${stage}.json" \
+      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/bff/me" || true)"
+    if [[ "${ready_status}" != "200" || "${me_status}" != "401" ]]; then
+      evidence_append "bff.strict_health.${stage}" failed "probeStatus=failed"
+      return 1
+    fi
+    evidence_append "bff.strict_health.${stage}" passed "probeStatus=passed"
   fi
   evidence_append "bff.identity.${stage}" passed "bffCommit=${BFF_COMMIT}"
 }
@@ -474,13 +507,23 @@ run_release_probe() {
   if [[ "${strict}" == "true" || "${strict}" == "1" ]]; then
     strict_env="1"
   fi
-  if [[ "${DEPLOY_PROFILE}" == "write-proof" &&
+  if [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "operator-live" ) &&
     ( "${phase}" == "candidate_pre_switch" || "${phase}" == "post_switch" ) ]]; then
     probe_profile_env+=(
-      "PANTHEON_PROBE_EXPECTED_PROFILE=write-proof"
+      "PANTHEON_PROBE_EXPECTED_PROFILE=${DEPLOY_PROFILE}"
       "PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"
       "PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST=${READ_ONLY_ARTIFACT_DIGEST}"
+      "PANTHEON_PROBE_EXPECTED_OPERATOR_LIVE_DIGEST=${OPERATOR_LIVE_ARTIFACT_DIGEST}"
       "PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST=${WRITE_PROOF_ARTIFACT_DIGEST}"
+    )
+  elif [[ ( "${phase}" == "previous_target_pre_switch" || "${phase}" == "rollback" ) &&
+    "${PREVIOUS_PROFILE}" == "operator-live" ]]; then
+    probe_profile_env+=(
+      "PANTHEON_PROBE_EXPECTED_PROFILE=operator-live"
+      "PANTHEON_PROBE_EXPECTED_PAIR_ID=${PREVIOUS_PAIR_ID}"
+      "PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST=${PREVIOUS_READ_ONLY_ARTIFACT_DIGEST}"
+      "PANTHEON_PROBE_EXPECTED_OPERATOR_LIVE_DIGEST=${PREVIOUS_OPERATOR_LIVE_ARTIFACT_DIGEST}"
+      "PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST=${PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST}"
     )
   fi
   if ! env "${probe_profile_env[@]}" \
@@ -716,7 +759,9 @@ prepare_interrupted_recovery() {
     const digest=String(p.artifactDigestSha256||p.artifactDigest||"").replace(/^sha256:/i,"").toLowerCase();
     const safe=String(p.commit||"").toLowerCase()===expectedCommit&&p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
       p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
-      p.buildMode?.VITE_BFF_REAL_WRITES==="false"&&p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
+      ["", "read-only", "operator-live"].includes(String(p.deploymentProfile||p.profile||""))&&
+      p.buildMode?.VITE_BFF_REAL_WRITES===(String(p.deploymentProfile||p.profile||"")==="operator-live"?"true":"false")&&
+      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES==="false"&&
       p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&/^[0-9a-f]{40}$/.test(manifestBff)&&
       p.bffCommitEvidence===true&&["","accepted"].includes(String(p.deploymentState||""));
     if(!safe||(digest&&!/^[0-9a-f]{64}$/.test(digest)))process.exit(1);process.stdout.write(digest);
@@ -989,6 +1034,17 @@ case "${DEPLOY_PROFILE}" in
       exit 2
     fi
     ;;
+  operator-live)
+    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+      "${PROOF_WINDOW_ACK}" != "false" ||
+      "${REAL_WRITES}" != "true" ||
+      "${ALLOW_DEV_STUB_WRITES}" != "false" ||
+      "${EMERGENCY_OVERRIDE}" != "false" ||
+      "${ROLLBACK_DRILL}" != "false" ]]; then
+      echo "Operator-live deployment requires a manual strict session profile, real writes true, stub writes false, and no proof/emergency/rollback mode." >&2
+      exit 2
+    fi
+    ;;
   read-only-restore)
     if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
       "${PROOF_WINDOW_ACK}" != "false" ||
@@ -1001,7 +1057,7 @@ case "${DEPLOY_PROFILE}" in
     fi
     ;;
   *)
-    echo "PANTHEON_DEPLOY_PROFILE must be read-only, write-proof, or read-only-restore." >&2
+    echo "PANTHEON_DEPLOY_PROFILE must be read-only, operator-live, write-proof, or read-only-restore." >&2
     exit 2
     ;;
 esac
@@ -1097,12 +1153,15 @@ fi
 if [[ ! -d "${CANDIDATE_DIR}/dist" || ! -f "${CANDIDATE_DIR}/candidate.json" ||
   ! -d "${CANDIDATE_DIR}/write-proof/dist" ||
   ! -f "${CANDIDATE_DIR}/write-proof/candidate.json" ||
+  ! -d "${CANDIDATE_DIR}/operator-live/dist" ||
+  ! -f "${CANDIDATE_DIR}/operator-live/candidate.json" ||
   ! -f "${CANDIDATE_DIR}/pair.json" ]]; then
   echo "Downloaded paired release candidate is incomplete." >&2
   exit 2
 fi
 
 READ_ONLY_CANDIDATE_DIR="${CANDIDATE_DIR}"
+OPERATOR_LIVE_CANDIDATE_DIR="${CANDIDATE_DIR}/operator-live"
 WRITE_PROOF_CANDIDATE_DIR="${CANDIDATE_DIR}/write-proof"
 pair_verify_args=(
   --candidate-dir "${CANDIDATE_DIR}"
@@ -1117,9 +1176,12 @@ READ_ONLY_ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify-pair \
   "${pair_verify_args[@]}" --profile read-only)"
 WRITE_PROOF_ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify-pair \
   "${pair_verify_args[@]}" --profile write-proof)"
+OPERATOR_LIVE_ARTIFACT_DIGEST="$(node scripts/release-candidate.mjs verify-pair \
+  "${pair_verify_args[@]}" --profile operator-live)"
 if [[ ! "${READ_ONLY_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ||
+  ! "${OPERATOR_LIVE_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ||
   ! "${WRITE_PROOF_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "Pair verifier did not return both exact artifact digests." >&2
+  echo "Pair verifier did not return all three exact artifact digests." >&2
   exit 2
 fi
 read -r PAIR_ID BFF_COMMIT < <(node -e '
@@ -1128,9 +1190,9 @@ read -r PAIR_ID BFF_COMMIT < <(node -e '
   if(!/^[0-9a-f]{64}$/.test(pair)||!/^[0-9a-f]{40}$/.test(bff))process.exit(1);
   process.stdout.write(`${pair} ${bff}\n`);
 ' "${CANDIDATE_DIR}/pair.json")
-if [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
+if [[ ( "${DEPLOY_PROFILE}" == "operator-live" || "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
   ! "${EXPECTED_PAIR_ID}" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "Write-proof and restore dispatches require the exact expected pair ID." >&2
+  echo "Operator-live, write-proof, and restore dispatches require the exact expected pair ID." >&2
   exit 2
 fi
 if [[ -n "${EXPECTED_PAIR_ID}" && "${EXPECTED_PAIR_ID,,}" != "${PAIR_ID}" ]]; then
@@ -1138,6 +1200,11 @@ if [[ -n "${EXPECTED_PAIR_ID}" && "${EXPECTED_PAIR_ID,,}" != "${PAIR_ID}" ]]; th
   exit 2
 fi
 case "${DEPLOY_PROFILE}" in
+  operator-live)
+    ARTIFACT_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}"
+    CANDIDATE_DIR="${OPERATOR_LIVE_CANDIDATE_DIR}"
+    RELEASE_DIR="${OPERATOR_RELEASE_DIR}"
+    ;;
   write-proof)
     ARTIFACT_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${WRITE_PROOF_CANDIDATE_DIR}"
@@ -1227,14 +1294,15 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
     const manifestBff=String(p.bffCommit||"").toLowerCase();
     const state=String(p.deploymentState||"");
     const profile=String(p.deploymentProfile||p.profile||"");
-    const writes=profile==="write-proof"?"true":"false";
+    const writes=profile==="read-only"||profile===""?"false":"true";
+    const stubWrites=profile==="write-proof"?"true":"false";
     const safe=p.app==="execute-plans"&&p.environment==="pantheon-dev-fe"&&
       p.buildMode?.VITE_BFF_MODE==="live"&&p.buildMode?.VITE_BFF_FALLBACK==="strict"&&
       p.buildMode?.VITE_BFF_REAL_WRITES===writes&&
-      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES===writes&&
+      p.buildMode?.VITE_BFF_ALLOW_DEV_STUB_WRITES===stubWrites&&
       p.buildMode?.VITE_BFF_EMBEDDED_BEARER_TOKEN==="false"&&
       /^[0-9a-f]{40}$/.test(manifestBff)&&p.bffCommitEvidence===true&&
-      ["","read-only","write-proof"].includes(profile)&&
+      ["","read-only","operator-live","write-proof"].includes(profile)&&
       (!profile||/^[0-9a-f]{64}$/.test(String(p.pairId||"")))&&
       ["","accepted","candidate"].includes(state);
     if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
@@ -1245,8 +1313,19 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_GATE_RUN_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.integrationGateRunId||"");if(s&&!/^[1-9][0-9]*$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_GITHUB_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.githubArtifactDigest||"").toLowerCase();if(s&&!/^sha256:[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_DEPLOYMENT_STATE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(p.deploymentState||""))' "${PREVIOUS_TARGET}/deployment.json")"
-  PREVIOUS_PROFILE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.deploymentProfile||p.profile||"");if(!["","read-only","write-proof"].includes(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_PROFILE="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.deploymentProfile||p.profile||"");if(!["","read-only","operator-live","write-proof"].includes(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
   PREVIOUS_PAIR_ID="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.pairId||"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_READ_ONLY_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.pair?.readOnlyArtifactDigestSha256||"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_OPERATOR_LIVE_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.pair?.operatorLiveArtifactDigestSha256||"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST="$(node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const s=String(p.pair?.writeProofArtifactDigestSha256||"").toLowerCase();if(s&&!/^[0-9a-f]{64}$/.test(s))process.exit(1);process.stdout.write(s)' "${PREVIOUS_TARGET}/deployment.json")"
+  if [[ "${PREVIOUS_PROFILE}" == "operator-live" &&
+    ( ! "${PREVIOUS_PAIR_ID}" =~ ^[0-9a-f]{64}$ ||
+      ! "${PREVIOUS_READ_ONLY_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ||
+      ! "${PREVIOUS_OPERATOR_LIVE_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ||
+      ! "${PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ) ]]; then
+    echo "Accepted operator-live rollback target has incomplete paired identity." >&2
+    exit 2
+  fi
   PREVIOUS_DIGEST="$(verify_dist_digest "${PREVIOUS_TARGET}" "${PREVIOUS_MANIFEST_DIGEST}")"
   evidence_append previous_release qualified \
     "previousCommit=${PREVIOUS_COMMIT}" \
@@ -1363,6 +1442,7 @@ if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
   PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
   PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
   PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
   PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
     node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -1374,6 +1454,7 @@ manifest.pairId = process.env.PANTHEON_RUNTIME_PAIR_ID;
 manifest.pair = {
   pairId: process.env.PANTHEON_RUNTIME_PAIR_ID,
   readOnlyArtifactDigestSha256: process.env.PANTHEON_RUNTIME_READ_ONLY_DIGEST,
+  operatorLiveArtifactDigestSha256: process.env.PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST,
   writeProofArtifactDigestSha256: process.env.PANTHEON_RUNTIME_WRITE_PROOF_DIGEST,
 };
 manifest.deploymentState = "standby";
@@ -1497,6 +1578,7 @@ PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
 PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
 PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
 PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
 PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
   node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -1515,6 +1597,7 @@ manifest.pairId = process.env.PANTHEON_RUNTIME_PAIR_ID;
 manifest.pair = {
   pairId: process.env.PANTHEON_RUNTIME_PAIR_ID,
   readOnlyArtifactDigestSha256: process.env.PANTHEON_RUNTIME_READ_ONLY_DIGEST,
+  operatorLiveArtifactDigestSha256: process.env.PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST,
   writeProofArtifactDigestSha256: process.env.PANTHEON_RUNTIME_WRITE_PROOF_DIGEST,
 };
 manifest.emergencyOverride = {
@@ -1667,6 +1750,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - commit: ${SHA}
 - artifact_digest_sha256: ${ARTIFACT_DIGEST}
 - read_only_artifact_digest_sha256: ${READ_ONLY_ARTIFACT_DIGEST}
+- operator_live_artifact_digest_sha256: ${OPERATOR_LIVE_ARTIFACT_DIGEST}
 - write_proof_artifact_digest_sha256: ${WRITE_PROOF_ARTIFACT_DIGEST}
 - pair_id: ${PAIR_ID}
 - deployment_profile: ${DEPLOY_PROFILE}

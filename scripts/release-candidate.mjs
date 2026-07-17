@@ -41,15 +41,22 @@ export const WRITE_PROOF_BUILD_MODE = Object.freeze({
   VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
 });
 
+export const OPERATOR_LIVE_BUILD_MODE = Object.freeze({
+  ...SAFE_BUILD_MODE,
+  VITE_BFF_REAL_WRITES: "true",
+  VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+});
+
 export const RELEASE_PROFILES = Object.freeze({
   READ_ONLY: "read-only",
+  OPERATOR_LIVE: "operator-live",
   WRITE_PROOF: "write-proof",
 });
 
 function normalizeProfile(value, label = "release profile") {
   const normalized = requiredString(value, label);
   if (!Object.values(RELEASE_PROFILES).includes(normalized)) {
-    throw new Error(`${label} must be read-only or write-proof`);
+    throw new Error(`${label} must be read-only, operator-live, or write-proof`);
   }
   return normalized;
 }
@@ -117,7 +124,9 @@ function normalizeBuildMode(
   const expectedMode =
     normalizedProfile === RELEASE_PROFILES.WRITE_PROOF
       ? WRITE_PROOF_BUILD_MODE
-      : SAFE_BUILD_MODE;
+      : normalizedProfile === RELEASE_PROFILES.OPERATOR_LIVE
+        ? OPERATOR_LIVE_BUILD_MODE
+        : SAFE_BUILD_MODE;
   const keys = Object.keys(buildMode || {}).sort();
   const expectedKeys = Object.keys(expectedMode).sort();
   if (keys.join(",") !== expectedKeys.join(",")) {
@@ -723,12 +732,12 @@ export function verifyReleaseCandidate({
   });
   const envelopeNames = envelopeEntries.map((entry) => entry.name).sort();
   const expectedEnvelope = allowPairEnvelope
-    ? "candidate.json,dist,pair.json,write-proof"
+    ? "candidate.json,dist,operator-live,pair.json,write-proof"
     : "candidate.json,dist";
   if (envelopeNames.join(",") !== expectedEnvelope) {
     throw new Error(
       allowPairEnvelope
-        ? "paired candidate directory must contain exactly candidate.json, dist, pair.json, and write-proof"
+        ? "paired candidate directory must contain exactly candidate.json, dist, operator-live, pair.json, and write-proof"
         : "candidate directory must contain exactly candidate.json and dist",
     );
   }
@@ -916,6 +925,7 @@ function pairIdentity({
   gateRunId,
   gateRunUrl,
   readOnlyDigest,
+  operatorLiveDigest,
   writeProofDigest,
 }) {
   return {
@@ -934,6 +944,11 @@ function pairIdentity({
         profile: RELEASE_PROFILES.READ_ONLY,
         relativePath: ".",
         artifactDigestSha256: readOnlyDigest,
+      },
+      operatorLive: {
+        profile: RELEASE_PROFILES.OPERATOR_LIVE,
+        relativePath: "operator-live",
+        artifactDigestSha256: operatorLiveDigest,
       },
       writeProof: {
         profile: RELEASE_PROFILES.WRITE_PROOF,
@@ -1010,15 +1025,20 @@ function validatePairManifest(pair, expectations) {
     throw new Error("pair gate has unexpected fields");
   }
   const readOnly = pair.profiles?.readOnly;
+  const operatorLive = pair.profiles?.operatorLive;
   const writeProof = pair.profiles?.writeProof;
   const validProfiles =
     readOnly?.profile === RELEASE_PROFILES.READ_ONLY &&
     readOnly?.relativePath === "." &&
+    operatorLive?.profile === RELEASE_PROFILES.OPERATOR_LIVE &&
+    operatorLive?.relativePath === "operator-live" &&
     writeProof?.profile === RELEASE_PROFILES.WRITE_PROOF &&
     writeProof?.relativePath === "write-proof" &&
     Object.keys(pair.profiles || {}).sort().join(",") ===
-      "readOnly,writeProof" &&
+      "operatorLive,readOnly,writeProof" &&
     Object.keys(readOnly || {}).sort().join(",") ===
+      "artifactDigestSha256,profile,relativePath" &&
+    Object.keys(operatorLive || {}).sort().join(",") ===
       "artifactDigestSha256,profile,relativePath" &&
     Object.keys(writeProof || {}).sort().join(",") ===
       "artifactDigestSha256,profile,relativePath";
@@ -1027,12 +1047,16 @@ function validatePairManifest(pair, expectations) {
     readOnly.artifactDigestSha256,
     "pair read-only artifact digest",
   );
+  const operatorLiveDigest = normalizeDigest(
+    operatorLive.artifactDigestSha256,
+    "pair operator-live artifact digest",
+  );
   const writeProofDigest = normalizeDigest(
     writeProof.artifactDigestSha256,
     "pair write-proof artifact digest",
   );
-  if (readOnlyDigest === writeProofDigest) {
-    throw new Error("paired profiles must have distinct artifact digests");
+  if (new Set([readOnlyDigest, operatorLiveDigest, writeProofDigest]).size !== 3) {
+    throw new Error("paired profiles must have three distinct artifact digests");
   }
   const identity = pairIdentity({
     frontendSha,
@@ -1041,6 +1065,7 @@ function validatePairManifest(pair, expectations) {
     gateRunId,
     gateRunUrl,
     readOnlyDigest,
+    operatorLiveDigest,
     writeProofDigest,
   });
   const pairId = normalizeDigest(pair.pairId, "pair ID");
@@ -1079,6 +1104,7 @@ function validatePairManifest(pair, expectations) {
     ...identity,
     pairId,
     readOnlyDigest,
+    operatorLiveDigest,
     writeProofDigest,
   };
 }
@@ -1139,6 +1165,12 @@ export function verifyPairedReleaseCandidate({
     expectedProfile: RELEASE_PROFILES.READ_ONLY,
     allowPairEnvelope: true,
   });
+  const operatorLive = verifyReleaseCandidate({
+    candidateDir: path.join(candidateRoot, "operator-live"),
+    ...common,
+    expectedArtifactDigest: normalized.operatorLiveDigest,
+    expectedProfile: RELEASE_PROFILES.OPERATOR_LIVE,
+  });
   const writeProof = verifyReleaseCandidate({
     candidateDir: path.join(candidateRoot, "write-proof"),
     ...common,
@@ -1149,7 +1181,9 @@ export function verifyPairedReleaseCandidate({
   const selectedArtifactDigest =
     selectedProfile === RELEASE_PROFILES.WRITE_PROOF
       ? writeProof.artifactDigestSha256
-      : readOnly.artifactDigestSha256;
+      : selectedProfile === RELEASE_PROFILES.OPERATOR_LIVE
+        ? operatorLive.artifactDigestSha256
+        : readOnly.artifactDigestSha256;
   if (
     expectedArtifactDigest &&
     selectedArtifactDigest !==
@@ -1163,6 +1197,7 @@ export function verifyPairedReleaseCandidate({
     pair,
     pairId: normalized.pairId,
     readOnly,
+    operatorLive,
     writeProof,
     selectedProfile,
     artifactDigestSha256: selectedArtifactDigest,
@@ -1171,6 +1206,7 @@ export function verifyPairedReleaseCandidate({
 
 export function preparePairedReleaseCandidate({
   readOnlyDistDir,
+  operatorLiveDistDir,
   writeProofDistDir,
   outputDir = ".release-candidate",
   frontendSha,
@@ -1186,16 +1222,19 @@ export function preparePairedReleaseCandidate({
   const writeProofRoot = path.resolve(
     requiredString(writeProofDistDir, "write-proof dist directory"),
   );
+  const operatorLiveRoot = path.resolve(
+    requiredString(operatorLiveDistDir, "operator-live dist directory"),
+  );
   const outputRoot = path.resolve(requiredString(outputDir, "output directory"));
   assertDirectoryRoot(readOnlyRoot, "read-only dist directory");
+  assertDirectoryRoot(operatorLiveRoot, "operator-live dist directory");
   assertDirectoryRoot(writeProofRoot, "write-proof dist directory");
-  if (
-    readOnlyRoot === writeProofRoot ||
-    fs.realpathSync(readOnlyRoot) === fs.realpathSync(writeProofRoot)
-  ) {
-    throw new Error("read-only and write-proof dist directories must be distinct");
+  const profileRoots = [readOnlyRoot, operatorLiveRoot, writeProofRoot];
+  if (new Set(profileRoots).size !== 3 || new Set(profileRoots.map((root) => fs.realpathSync(root))).size !== 3) {
+    throw new Error("read-only, operator-live, and write-proof dist directories must be distinct");
   }
   assertSafeOutputPath(readOnlyRoot, outputRoot);
+  assertSafeOutputPath(operatorLiveRoot, outputRoot);
   assertSafeOutputPath(writeProofRoot, outputRoot);
 
   const normalizedFrontendSha = normalizeSha(frontendSha, "frontend SHA");
@@ -1210,13 +1249,19 @@ export function preparePairedReleaseCandidate({
     secretSentinels: normalizedSentinels,
     excludeDeployment: true,
   });
+  const operatorLiveRecords = collectFiles(operatorLiveRoot, {
+    secretSentinels: normalizedSentinels,
+    excludeDeployment: true,
+  });
   const writeProofRecords = collectFiles(writeProofRoot, {
     secretSentinels: normalizedSentinels,
     excludeDeployment: true,
   });
   const readOnlyFiles = publicFileRecords(readOnlyRecords);
+  const operatorLiveFiles = publicFileRecords(operatorLiveRecords);
   const writeProofFiles = publicFileRecords(writeProofRecords);
   const readOnlyDigest = sha256(canonicalAssetManifestBytes(readOnlyFiles));
+  const operatorLiveDigest = sha256(canonicalAssetManifestBytes(operatorLiveFiles));
   const writeProofDigest = sha256(canonicalAssetManifestBytes(writeProofFiles));
   const identity = pairIdentity({
     frontendSha: normalizedFrontendSha,
@@ -1225,6 +1270,7 @@ export function preparePairedReleaseCandidate({
     gateRunId: normalizedGateRunId,
     gateRunUrl: normalizedGateRunUrl,
     readOnlyDigest,
+    operatorLiveDigest,
     writeProofDigest,
   });
   const pairId = pairIdFor(identity);
@@ -1244,6 +1290,13 @@ export function preparePairedReleaseCandidate({
     files: readOnlyFiles,
     artifactDigest: readOnlyDigest,
   });
+  const operatorLiveCandidate = makeCandidate({
+    ...commonCandidate,
+    profile: RELEASE_PROFILES.OPERATOR_LIVE,
+    buildMode: OPERATOR_LIVE_BUILD_MODE,
+    files: operatorLiveFiles,
+    artifactDigest: operatorLiveDigest,
+  });
   const writeProofCandidate = makeCandidate({
     ...commonCandidate,
     profile: RELEASE_PROFILES.WRITE_PROOF,
@@ -1254,6 +1307,11 @@ export function preparePairedReleaseCandidate({
   const temporaryRoot = `${outputRoot}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
   try {
     copyCandidateDist(readOnlyRecords, temporaryRoot, readOnlyCandidate);
+    copyCandidateDist(
+      operatorLiveRecords,
+      path.join(temporaryRoot, "operator-live"),
+      operatorLiveCandidate,
+    );
     copyCandidateDist(
       writeProofRecords,
       path.join(temporaryRoot, "write-proof"),
@@ -1270,6 +1328,7 @@ export function preparePairedReleaseCandidate({
       secretSentinels: normalizedSentinels,
     });
     assertSafeOutputPath(readOnlyRoot, outputRoot);
+    assertSafeOutputPath(operatorLiveRoot, outputRoot);
     assertSafeOutputPath(writeProofRoot, outputRoot);
     if (fs.existsSync(outputRoot)) {
       fs.rmSync(outputRoot, { recursive: true, force: true });
@@ -1285,6 +1344,10 @@ export function preparePairedReleaseCandidate({
     readOnly: {
       candidate: readOnlyCandidate,
       artifactDigestSha256: readOnlyDigest,
+    },
+    operatorLive: {
+      candidate: operatorLiveCandidate,
+      artifactDigestSha256: operatorLiveDigest,
     },
     writeProof: {
       candidate: writeProofCandidate,
@@ -1406,6 +1469,7 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
       rawOptions,
       new Set([
         "--read-only-dist-dir",
+        "--operator-live-dist-dir",
         "--write-proof-dist-dir",
         "--output-dir",
         "--out",
@@ -1426,6 +1490,7 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
     );
     const result = preparePairedReleaseCandidate({
       readOnlyDistDir: options.get("--read-only-dist-dir"),
+      operatorLiveDistDir: options.get("--operator-live-dist-dir"),
       writeProofDistDir: options.get("--write-proof-dist-dir"),
       outputDir: options.get("--output-dir", "--out") || ".release-candidate",
       frontendSha: options.get("--frontend-sha"),
