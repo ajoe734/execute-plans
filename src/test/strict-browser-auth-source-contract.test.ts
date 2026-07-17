@@ -29,6 +29,16 @@ describe("strict browser auth source contract", () => {
     expect(storage).not.toContain("pantheon_operator_token");
   });
 
+  it("keeps loopback E2E auth on Supabase storage and removes legacy BFF keys", () => {
+    const helper = readFileSync(resolve(process.cwd(), "e2e/helpers/auth.ts"), "utf8");
+    expect(helper).toContain("sb-${projectRef}-auth-token");
+    expect(helper).toContain('page.route("**/bff/me"');
+    expect(helper).toContain('page.route("**/bff/auth/readiness"');
+    expect(helper).not.toContain("pantheon.bff.bearerToken");
+    expect(helper).not.toContain("pantheon_operator_token");
+    expect(helper).not.toContain("window.localStorage.setItem");
+  });
+
   it("keeps privileged secrets out of the browser auth bridge", () => {
     const combined = [
       source("lib/auth/AuthProvider.tsx"),
@@ -41,9 +51,10 @@ describe("strict browser auth source contract", () => {
     expect(combined).not.toMatch(/private[_-]?key/i);
   });
 
-  it("mounts both Persona management and Agora shells behind ProtectedRoute", () => {
+  it("mounts Persona Detail and Agora interaction entry behind ProtectedRoute", () => {
     const app = source("App.tsx");
-    expect(app).toContain("<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>");
+    expect(app).toContain('path="personas/:id" element={<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>}');
     expect(app).toContain("<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>");
+    expect(app).toContain("<Route element={<PlatformShellRoute />}");
   });
 });

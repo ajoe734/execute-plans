@@ -194,7 +194,7 @@ const App = () => (
             <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
             <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
             <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
-            <Route element={<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>}>
+            <Route element={<PlatformShellRoute />}>
               <Route path="/management" element={<ManagementLayoutRoute />}>
                 <Route index element={<Navigate to="/management/cockpit" replace />} />
                 <Route path="cockpit" element={<CockpitRoute />} />
@@ -255,7 +255,7 @@ const App = () => (
                 <Route path="strategies" element={<StrategiesListRoute />} />
                 <Route path="strategies/:id" element={<StrategyDetailRoute />} />
                 <Route path="personas" element={<PersonasListRoute />} />
-                <Route path="personas/:id" element={<PersonaDetailRoute />} />
+                <Route path="personas/:id" element={<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>} />
                 <Route path="personas/:id/onboarding" element={<PersonaOnboardingRoute />} />
                 <Route path="capital" element={<ManagementCanonicalRedirect />} />
                 <Route path="capital/:id" element={<CapitalPoolDetailRoute />} />
