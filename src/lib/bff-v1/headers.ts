@@ -7,8 +7,9 @@
 //   - X-Correlation-Id              — auto-minted root chain (or caller-supplied)
 //   - Idempotency-Key               — mutations only (unchanged)
 // Providers default to no-op so mock mode and tests continue to pass without
-// real credentials. Live deployments register real providers via
-// `setAuthProvider({ getToken, getTenantId })`.
+// real credentials. Live deployments register the current short-lived token
+// in memory via `setAuthProvider({ getToken, getTenantId })`. Persistent browser
+// storage is deliberately not an authentication source.
 
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -62,44 +63,7 @@ const noopProvider: AuthProvider = {
   getTenantId: () => null,
 };
 
-export const BFF_AUTH_STORAGE_KEYS = {
-  bearerToken: "pantheon.bff.bearerToken",
-  legacyBearerToken: "pantheon_operator_token",
-  tenantId: "pantheon.bff.tenantId",
-  legacyTenantId: "pantheon_tenant_id",
-} as const;
-
-function browserStorageGet(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const fromSession = window.sessionStorage?.getItem(key);
-    if (fromSession) return fromSession;
-    return window.localStorage?.getItem(key) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function readBrowserAuthStorage(): {
-  token: string | null;
-  tenantId: string | null;
-} {
-  return {
-    token:
-      browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ??
-      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
-    tenantId:
-      browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ??
-      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
-  };
-}
-
-const browserProvider: AuthProvider = {
-  getToken: () => readBrowserAuthStorage().token,
-  getTenantId: () => readBrowserAuthStorage().tenantId,
-};
-
-let authProvider: AuthProvider = browserProvider;
+let authProvider: AuthProvider = noopProvider;
 
 export function setAuthProvider(p: Partial<AuthProvider>): void {
   authProvider = {
@@ -110,6 +74,11 @@ export function setAuthProvider(p: Partial<AuthProvider>): void {
 
 export function getAuthProvider(): AuthProvider {
   return authProvider;
+}
+
+/** Clear the in-memory token/tenant bridge on logout or auth failure. */
+export function clearAuthProvider(): void {
+  authProvider = noopProvider;
 }
 
 export interface BuildHeadersInput {
