@@ -1,4 +1,4 @@
-import React, { useEffect, useReducer, useCallback, useState } from "react";
+import React, { useEffect, useReducer, useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   listWorkshops,
@@ -542,6 +542,15 @@ async function sha256(value: string): Promise<string> {
 
 function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
   const writeAccess = useAgoraWriteAccess();
+  const contextResolutionSessionRef = useRef<string | null>(null);
+  const contextResolutionSessionId = useCallback((): string => {
+    if (contextResolutionSessionRef.current) return contextResolutionSessionRef.current;
+    if (!globalThis.crypto?.randomUUID) {
+      throw new Error("Secure context resolution session identity support is unavailable in this browser.");
+    }
+    contextResolutionSessionRef.current = globalThis.crypto.randomUUID();
+    return contextResolutionSessionRef.current;
+  }, []);
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
   const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
   const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
@@ -691,7 +700,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     setContextResolving(true);
     setContextError(null);
     setResolvedContext(null);
-    interaction.resolveContext(request)
+    let resolutionSessionId: string;
+    try {
+      resolutionSessionId = contextResolutionSessionId();
+    } catch (error) {
+      setContextResolving(false);
+      setContextError(error instanceof Error ? error.message : "Secure context resolution session identity is unavailable.");
+      return;
+    }
+    interaction.resolveContext(request, { resolutionSessionId })
       .then((response) => {
         if (cancelled) return;
         setResolvedContext(resolvedInteractionContext({
@@ -705,7 +722,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       })
       .finally(() => { if (!cancelled) setContextResolving(false); });
     return () => { cancelled = true; };
-  }, [entry, selectedMode, selectedParticipants, workshop, workshopId]);
+  }, [contextResolutionSessionId, entry, selectedMode, selectedParticipants, workshop, workshopId]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -819,7 +836,9 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           throw new Error("Compare requires exactly two distinct eligible Personas and must retain the originally selected Persona.");
         }
         const request = interactionResolveRequest(workshop, workshopId, selectedParticipants, selectedMode, entry);
-        const resolved = await interaction.resolveContext(request);
+        const resolved = await interaction.resolveContext(request, {
+          resolutionSessionId: contextResolutionSessionId(),
+        });
         const truth = resolvedInteractionContext({
           workshopId, request, entry, response: resolved.data,
         });
@@ -921,6 +940,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       dailyRuntimeState,
       entry,
       contextError,
+      contextResolutionSessionId,
       resolvedContext,
       refreshDailyInteractions,
       refreshEvents,

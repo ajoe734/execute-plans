@@ -507,13 +507,16 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
     await waitFor(() => {
-      expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
-        workshop_id: "ws-abc",
-        context_refs: expect.arrayContaining([
-          { type: "workshop", id: "ws-abc" },
-          { type: "persona", id: "per_quant" },
-        ]),
-      }));
+      expect(interaction.resolveContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workshop_id: "ws-abc",
+          context_refs: expect.arrayContaining([
+            { type: "workshop", id: "ws-abc" },
+            { type: "persona", id: "per_quant" },
+          ]),
+        }),
+        expect.objectContaining({ resolutionSessionId: expect.stringMatching(/^[A-Za-z0-9._:-]+$/) }),
+      );
       expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ workshop_id: "ws-abc", mode: "ask" }));
       expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
         workshop_id: "ws-abc",
@@ -521,6 +524,11 @@ describe("StrategyWorkshopPage", () => {
         context_snapshot: expect.objectContaining({ selected_persona_ids: ["per_quant", "per_macro", "per_risk"] }),
       }));
     });
+    const resolutionSessions = vi.mocked(interaction.resolveContext).mock.calls
+      .filter(([request]) => request.workshop_id === "ws-abc")
+      .map(([, options]) => options?.resolutionSessionId);
+    expect(resolutionSessions.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(resolutionSessions).size).toBe(1);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
   });
 
@@ -567,10 +575,13 @@ describe("StrategyWorkshopPage", () => {
       mode: eligibilityMode,
     }));
     if (mode === "propose_action") {
-      expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
-        context_refs: expect.arrayContaining([{ type: "strategy", id: "strategy-a", version_id: "spec-v3" }]),
-        environment: "research",
-      }));
+      expect(interaction.resolveContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context_refs: expect.arrayContaining([{ type: "strategy", id: "strategy-a", version_id: "spec-v3" }]),
+          environment: "research",
+        }),
+        expect.objectContaining({ resolutionSessionId: expect.any(String) }),
+      );
     }
   });
 
@@ -628,14 +639,17 @@ describe("StrategyWorkshopPage", () => {
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
-    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
-      workshop_id: "ws-abc",
-      context_refs: expect.arrayContaining([{
-        type: "strategy",
-        id: "strategy-stable-9",
-        version_id: "strategy-registry-9",
-      }]),
-    })));
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workshop_id: "ws-abc",
+        context_refs: expect.arrayContaining([{
+          type: "strategy",
+          id: "strategy-stable-9",
+          version_id: "strategy-registry-9",
+        }]),
+      }),
+      expect.objectContaining({ resolutionSessionId: expect.any(String) }),
+    ));
   });
 
   it("fails closed instead of treating a Registry version as a stable strategy id", async () => {

@@ -47,10 +47,11 @@ describe("Agora Interactions client tests", () => {
       context_refs: request.context_refs,
       workshop_id: request.workshop_id,
     };
-    const first = await resolveContextIdempotencyKey(request);
-    await expect(resolveContextIdempotencyKey(reordered)).resolves.toBe(first);
+    const first = await resolveContextIdempotencyKey(request, "visit-session-1");
+    await expect(resolveContextIdempotencyKey(reordered, "visit-session-1")).resolves.toBe(first);
     expect(first).toMatch(/^pint15-context-[a-f0-9]{64}$/);
-    await expect(resolveContextIdempotencyKey({ ...request, initial_mode: "challenge" })).resolves.not.toBe(first);
+    await expect(resolveContextIdempotencyKey({ ...request, initial_mode: "challenge" }, "visit-session-1")).resolves.not.toBe(first);
+    await expect(resolveContextIdempotencyKey(request, "visit-session-2")).resolves.not.toBe(first);
   });
 
   it("replays an identical live resolve request with one server receipt", async () => {
@@ -94,14 +95,16 @@ describe("Agora Interactions client tests", () => {
       environment: "paper",
     };
 
-    const mountReceipt = await interaction.resolveContext(request);
-    const preSubmitReceipt = await interaction.resolveContext(request);
+    const mountReceipt = await interaction.resolveContext(request, { resolutionSessionId: "visit-session-1" });
+    const preSubmitReceipt = await interaction.resolveContext(request, { resolutionSessionId: "visit-session-1" });
+    await interaction.resolveContext(request, { resolutionSessionId: "visit-session-2" });
 
     expect(preSubmitReceipt).toEqual(mountReceipt);
-    expect(resolveKeys).toHaveLength(2);
+    expect(resolveKeys).toHaveLength(3);
     expect(resolveKeys[0]).toBe(resolveKeys[1]);
+    expect(resolveKeys[2]).not.toBe(resolveKeys[0]);
     expect(resolveKeys[0]).toMatch(/^pint15-context-[a-f0-9]{64}$/);
-    expect(mintedReceipts).toBe(1);
+    expect(mintedReceipts).toBe(2);
   });
 
   it("mock participants returns included and excluded list", async () => {

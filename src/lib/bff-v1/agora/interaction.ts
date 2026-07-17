@@ -144,15 +144,38 @@ function canonicalRequestJson(value: unknown): string {
 }
 
 /**
- * The resolver receipt is idempotent for the complete canonical request.
- * Mount and pre-submit resolution must replay the same receipt rather than
- * minting a new server cutoff/digest for identical context.
+ * The resolver receipt is idempotent for the complete canonical request
+ * within one page-resolution session. Mount and pre-submit resolution replay
+ * the same receipt, while a fresh visit receives a fresh authoritative cutoff.
  */
-export async function resolveContextIdempotencyKey(body: ResolveContextRequest): Promise<string> {
+export interface ResolveContextOptions {
+  resolutionSessionId?: string;
+}
+
+function resolutionSessionId(options?: ResolveContextOptions): string {
+  if (options?.resolutionSessionId) {
+    if (!/^[A-Za-z0-9._:-]+$/.test(options.resolutionSessionId)) {
+      throw new Error("Context resolution session identity must be ASCII-safe.");
+    }
+    return options.resolutionSessionId;
+  }
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error("Secure context resolution session identity support is unavailable in this browser.");
+  }
+  return globalThis.crypto.randomUUID();
+}
+
+export async function resolveContextIdempotencyKey(body: ResolveContextRequest, sessionId: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error("Secure context receipt identity support is unavailable in this browser.");
   }
-  const bytes = new TextEncoder().encode(canonicalRequestJson(body));
+  if (!/^[A-Za-z0-9._:-]+$/.test(sessionId)) {
+    throw new Error("Context resolution session identity must be ASCII-safe.");
+  }
+  const bytes = new TextEncoder().encode(canonicalRequestJson({
+    request: body,
+    resolution_session_id: sessionId,
+  }));
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   return `pint15-context-${hex}`;
@@ -161,9 +184,9 @@ export async function resolveContextIdempotencyKey(body: ResolveContextRequest):
 const mockContextReceipts = new Map<string, ResolveContextEnvelope>();
 
 export const interaction = {
-  resolveContext: async (body: ResolveContextRequest): Promise<ResolveContextEnvelope> => {
+  resolveContext: async (body: ResolveContextRequest, options?: ResolveContextOptions): Promise<ResolveContextEnvelope> => {
     await requireInteractionWrite();
-    const idempotencyKey = await resolveContextIdempotencyKey(body);
+    const idempotencyKey = await resolveContextIdempotencyKey(body, resolutionSessionId(options));
     const mockFn = async (): Promise<ResolveContextEnvelope> => {
       const replay = mockContextReceipts.get(idempotencyKey);
       if (replay) return replay;
