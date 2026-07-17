@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
+  createCandidateFromMeasure,
+  decideCandidate,
+  getCandidate,
+  requestAuthoritativeValidation,
   retryDailyInteraction,
+  type CandidateDecisionAction,
+  type CandidateReadback,
   type DailyInteraction,
+  type RecommendedMeasure,
+  type TypedPersonaOpinion,
 } from "@/lib/bff-v1/agora/dailyInteractions";
 
 export type DailyRuntimeState = "loading" | "ready" | "unsupported" | "error";
@@ -91,51 +99,282 @@ function ProviderRetry({ interactionId, writeAllowed, onRefresh }: {
   );
 }
 
-function CandidateActions({ interaction }: {
+function legalAttemptKey(prefix: string): string | null {
+  return globalThis.crypto?.randomUUID ? `${prefix}-${globalThis.crypto.randomUUID()}` : null;
+}
+
+type CandidateLink = DailyInteraction["candidate_proposal_links"][number];
+
+function GovernedCandidateMeasure({
+  interactionId,
+  opinion,
+  measure,
+  linked,
+  writeAllowed,
+  onRefresh,
+}: {
+  interactionId: string;
+  opinion: TypedPersonaOpinion;
+  measure: RecommendedMeasure;
+  linked?: CandidateLink;
+  writeAllowed: boolean;
+  onRefresh: Props["onRefresh"];
+}) {
+  const [readback, setReadback] = useState<CandidateReadback | null>(null);
+  const [loading, setLoading] = useState(Boolean(linked));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [proposedValue, setProposedValue] = useState("");
+  const [attemptKey, setAttemptKey] = useState<string | null>(null);
+
+  const proposalId = readback?.candidate.proposal_id ?? linked?.proposal_id ?? null;
+  const load = async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await getCandidate(id);
+      setReadback(next);
+      setProposedValue(safeJson(next.candidate.proposed_value));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Candidate readback failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (linked?.proposal_id) void load(linked.proposal_id);
+    // The proposal identity is the authoritative reload key; revisions are fetched by detail.
+  }, [linked?.proposal_id]);
+
+  const create = async () => {
+    if (!/^[a-f0-9]{64}$/.test(measure.measure_sha256)) {
+      setError("The persisted Persona measure omitted its server-authored digest.");
+      return;
+    }
+    const key = attemptKey ?? legalAttemptKey("pint15-candidate");
+    if (!key) {
+      setError("Secure candidate identity support is unavailable in this browser.");
+      return;
+    }
+    setAttemptKey(key);
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const next = await createCandidateFromMeasure({
+        interactionId,
+        opinionId: opinion.opinion_id,
+        measureId: measure.measure_id,
+        idempotencyKey: key,
+      });
+      setReadback(next);
+      setProposedValue(safeJson(next.candidate.proposed_value));
+      setAttemptKey(null);
+      setStatus("Governed candidate created from the persisted Persona measure.");
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Candidate creation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const decide = async (action: CandidateDecisionAction) => {
+    if (!readback || !reason.trim()) {
+      setError("A decision reason is required.");
+      return;
+    }
+    let parsedValue: unknown;
+    if (action === "modify") {
+      try {
+        parsedValue = JSON.parse(proposedValue);
+      } catch {
+        setError("Proposed value must be valid JSON.");
+        return;
+      }
+    }
+    const key = attemptKey ?? legalAttemptKey(`pint15-${action}`);
+    if (!key) {
+      setError("Secure candidate decision identity support is unavailable in this browser.");
+      return;
+    }
+    setAttemptKey(key);
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const next = await decideCandidate({
+        proposalId: readback.candidate.proposal_id,
+        action,
+        reason: reason.trim(),
+        revision: readback.candidate.revision,
+        proposalDigest: readback.candidate.proposal_digest,
+        proposalEtag: readback.etag,
+        idempotencyKey: key,
+        ...(action === "modify" ? { proposedValue: parsedValue } : {}),
+      });
+      setReadback(next);
+      setProposedValue(safeJson(next.candidate.proposed_value));
+      setReason("");
+      setAttemptKey(null);
+      setStatus(action === "accept_for_review"
+        ? "Candidate accepted for independent review; this is not formal approval."
+        : `Candidate ${action} decision recorded.`);
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Candidate decision failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const validate = async () => {
+    if (!readback) return;
+    const key = attemptKey ?? legalAttemptKey("pint15-validation");
+    if (!key) {
+      setError("Secure candidate validation identity support is unavailable in this browser.");
+      return;
+    }
+    setAttemptKey(key);
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const next = await requestAuthoritativeValidation({
+        proposalId: readback.candidate.proposal_id,
+        revision: readback.candidate.revision,
+        proposalDigest: readback.candidate.proposal_digest,
+        proposalEtag: readback.etag,
+        idempotencyKey: key,
+      });
+      setReadback(next);
+      setAttemptKey(null);
+      setStatus("Authoritative server validation completed.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authoritative validation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const allowed = (action: CandidateDecisionAction) => Boolean(
+    writeAllowed && readback?.readiness.candidate.ready
+    && readback.readiness.candidate.allowed_actions.includes(action),
+  );
+  const acceptReady = allowed("accept_for_review")
+    && Boolean(readback?.readiness.validation.adapter_ready)
+    && Boolean(readback?.readiness.reviewer.store_ready);
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid={`recommended-measure-${measure.measure_id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">{measure.measure_type}</div>
+          <div className="text-xs text-slate-600">{measure.target.kind} · {measure.target.id} · {measure.target.version}</div>
+        </div>
+        <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">authority: none</span>
+      </div>
+      <p className="mt-2 text-sm text-slate-700">{measure.rationale}</p>
+      <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 text-[11px] text-slate-100">{safeJson(measure.proposed_value)}</pre>
+      <div className="mt-1 break-all text-[10px] text-slate-500">Server measure SHA-256: {measure.measure_sha256}</div>
+
+      {!proposalId ? (
+        <div className="mt-2 space-y-2">
+          <Button disabled={!writeAllowed || busy || !/^[a-f0-9]{64}$/.test(measure.measure_sha256)} onClick={() => void create()} size="sm" variant="outline">
+            {busy ? "Creating…" : "Create governed candidate"}
+          </Button>
+        </div>
+      ) : loading && !readback ? (
+        <p className="mt-3 text-xs text-slate-500" role="status">Loading authoritative candidate readback…</p>
+      ) : readback ? (
+        <div className="mt-3 space-y-3" data-testid={`candidate-${readback.candidate.proposal_id}`}>
+          <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
+            <div className="font-semibold">Proposal {readback.candidate.proposal_id} · revision {readback.candidate.revision} · {readback.candidate.state}</div>
+            <div className="mt-1 break-all">Current ETag: {readback.etag}</div>
+            <div className="break-all">Proposal digest: {readback.candidate.proposal_digest}</div>
+          </div>
+          <label className="block text-xs font-medium text-slate-700">
+            Decision reason for {readback.candidate.proposal_id}
+            <input
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+              maxLength={1000}
+              onChange={(event) => { setReason(event.target.value); setAttemptKey(null); setStatus(null); }}
+              value={reason}
+            />
+          </label>
+          <label className="block text-xs font-medium text-slate-700">
+            Proposed value (JSON) for {readback.candidate.proposal_id}
+            <textarea
+              className="mt-1 min-h-24 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
+              onChange={(event) => { setProposedValue(event.target.value); setAttemptKey(null); setStatus(null); }}
+              value={proposedValue}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={`Candidate ${readback.candidate.proposal_id} decisions`}>
+            <Button disabled={busy || !allowed("modify")} onClick={() => void decide("modify")} size="sm" variant="outline">Modify</Button>
+            <Button disabled={busy || !acceptReady} onClick={() => void decide("accept_for_review")} size="sm" variant="outline">Accept for review</Button>
+            <Button disabled={busy || !allowed("reject")} onClick={() => void decide("reject")} size="sm" variant="outline">Reject</Button>
+            <Button disabled={busy || !allowed("defer")} onClick={() => void decide("defer")} size="sm" variant="outline">Defer</Button>
+            <Button disabled={busy || !writeAllowed || !readback.readiness.validation.can_run} onClick={() => void validate()} size="sm" variant="outline">Run authoritative validation</Button>
+            <Button disabled={busy} onClick={() => void load(readback.candidate.proposal_id)} size="sm" variant="ghost">Reload candidate</Button>
+          </div>
+          <div className="rounded border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-950" data-testid={`candidate-readiness-${readback.candidate.proposal_id}`}>
+            Validator: {readback.readiness.validation.adapter_ready ? "ready" : `blocked (${readback.readiness.validation.reason ?? "unknown"})`};
+            reviewer store: {readback.readiness.reviewer.store_ready ? "ready" : `blocked (${readback.readiness.reviewer.reason ?? "unknown"})`};
+            formal approval: {readback.readiness.reviewer.current_formal_approval_id ?? "none"}. Accept for review is never approval.
+          </div>
+          <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-600" data-testid={`candidate-history-${readback.candidate.proposal_id}`}>
+            Durable history: {readback.revisions.length} revision(s), {readback.decisions.length} operator decision(s), {readback.validation_receipts.length} validation receipt(s), {readback.formal_approval_receipts.length} formal approval receipt(s).
+            {readback.decisions.length ? (
+              <ul className="mt-2 space-y-1" aria-label={`Candidate ${readback.candidate.proposal_id} audit history`}>
+                {readback.decisions.map((decision) => (
+                  <li key={decision.decision_id}>
+                    r{decision.revision} · {decision.action} · {decision.actor_id} · {decision.reason} · {decision.audit_ref}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {error ? <p className="mt-2 text-xs text-red-700" role="alert">{error}</p> : null}
+      {status ? <p aria-live="polite" className="mt-2 text-xs text-emerald-700" role="status">{status}</p> : null}
+    </div>
+  );
+}
+
+function CandidateActions({ interaction, writeAllowed, onRefresh }: {
   interaction: DailyInteraction;
+  writeAllowed: boolean;
+  onRefresh: Props["onRefresh"];
 }) {
   const measures = interaction.opinions.flatMap((opinion) => opinion.recommended_measures);
-  const unavailable = "Candidate actions are unavailable until PINT-014 returns an authoritative measure SHA-256, current candidate ETag, and capability readiness.";
 
   return (
     <section aria-label="Governed candidate measures" className="space-y-3 border-t border-slate-200 pt-3">
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Candidate measures</h4>
       {measures.length === 0 ? <p className="text-xs text-slate-500">No Persona recommended measure was returned.</p> : null}
-      {measures.map((measure) => {
-        const linked = interaction.candidate_proposal_links.find((item) => item.measure_id === measure.measure_id);
-        return (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid={`recommended-measure-${measure.measure_id}`} key={measure.measure_id}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">{measure.measure_type}</div>
-                <div className="text-xs text-slate-600">{measure.target.kind} · {measure.target.id} · {measure.target.version}</div>
-              </div>
-              <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">authority: none</span>
-            </div>
-            <p className="mt-2 text-sm text-slate-700">{measure.rationale}</p>
-            <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 text-[11px] text-slate-100">{safeJson(measure.proposed_value)}</pre>
-            {!linked ? (
-              <div className="mt-2 space-y-2">
-                <p className="text-xs text-amber-800">{unavailable}</p>
-                <Button disabled size="sm" title={unavailable} variant="outline">Create governed candidate unavailable</Button>
-              </div>
-            ) : (
-              <div className="mt-3 space-y-2" data-testid={`candidate-${linked.proposal_id}`}>
-                <div className="text-xs font-semibold text-slate-700">Proposal {linked.proposal_id} · revision {linked.revision}</div>
-                <div className="rounded border border-amber-200 bg-amber-50 p-2" data-testid={`candidate-actions-unavailable-${linked.proposal_id}`}>
-                  <p className="text-xs text-amber-900">{unavailable}</p>
-                  <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={`Candidate ${linked.proposal_id} unavailable actions`}>
-                    <Button disabled size="sm" title={unavailable} variant="outline">Modify unavailable</Button>
-                    <Button disabled size="sm" title={unavailable} variant="outline">Accept for review unavailable</Button>
-                    <Button disabled size="sm" title={unavailable} variant="outline">Reject unavailable</Button>
-                    <Button disabled size="sm" title={unavailable} variant="outline">Defer unavailable</Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+      {interaction.opinions.flatMap((opinion) => opinion.recommended_measures.map((measure) => {
+        const linked = interaction.candidate_proposal_links.find((item) =>
+          item.opinion_id === opinion.opinion_id
+          && item.measure_id === measure.measure_id
+          && item.measure_sha256 === measure.measure_sha256,
         );
-      })}
+        return (
+          <GovernedCandidateMeasure
+            interactionId={interaction.interaction_id}
+            key={`${opinion.opinion_id}:${measure.measure_id}`}
+            linked={linked}
+            measure={measure}
+            onRefresh={onRefresh}
+            opinion={opinion}
+            writeAllowed={writeAllowed}
+          />
+        );
+      }))}
     </section>
   );
 }
@@ -243,7 +482,7 @@ export function DailyInteractionTimeline({ interactions, runtimeState, runtimeMe
             <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800" role="alert">Completed interaction omitted its authoritative synthesis.</p>
           ) : null}
 
-          <CandidateActions interaction={item} />
+          <CandidateActions interaction={item} onRefresh={onRefresh} writeAllowed={writeAllowed} />
           <footer className="mt-3 text-[11px] text-slate-500">Audit: {item.audit_refs.join(", ") || "pending"} · execution authority: none</footer>
         </article>
       ))}

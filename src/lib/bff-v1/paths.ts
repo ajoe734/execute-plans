@@ -286,6 +286,10 @@ export const paths = {
     `${BASE}/agora/interactions/${enc(interactionId)}/recommended-measures/${enc(measureId)}/candidates`,
   agoraCandidateDecisions: (proposalId: string) =>
     `${BASE}/agora/proposals/${enc(proposalId)}/candidate-decisions`,
+  agoraCandidate: (proposalId: string) =>
+    `${BASE}/agora/proposals/${enc(proposalId)}/candidate`,
+  agoraCandidateReviewReadiness: (proposalId: string) =>
+    `${BASE}/agora/proposals/${enc(proposalId)}/review-readiness`,
   agoraCandidateValidations: (proposalId: string) =>
     `${BASE}/agora/proposals/${enc(proposalId)}/validations`,
   agoraCandidateValidation: (proposalId: string, receiptId: string) =>

@@ -493,6 +493,136 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     );
   });
 
+  test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload", async ({ page, request }) => {
+    test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
+    test.setTimeout(360_000);
+    const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
+    await installOidcDevLogin(page, {
+      goto: false,
+      pageBaseUrl: FE_BASE,
+      roles: operatorRoles,
+      tenantId: TENANT_ID,
+      token: OPERATOR_TOKEN,
+    });
+    await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
+    await openPersonaDetail(page, persona);
+    await page.getByRole("button", { name: "Talk to" }).click();
+    await expect(page).toHaveURL(/\/agora\/strategy-workshop\//);
+
+    await revealWorkshopComposerOptions(page);
+    await page.getByTestId("mode-selector").click();
+    await page.getByRole("option", { name: /Propose \(Candidate Measure\)/i }).click();
+    await page.getByTestId("servant-composer-input").fill(
+      "Recommend one bounded paper-only risk_limit_recommendation. Use validator pantheon_candidate_validation_v1 with supported checks source_binding, target_version, authority_boundary, and rollback_plan. Include fresh canonical evidence and a reversible rollback.",
+    );
+    const submitResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/bff/agora/interactions"
+      && response.request().method() === "POST",
+    );
+    await page.getByTestId("servant-composer-submit").click();
+    const submittedHttp = await submitResponse;
+    expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
+    const interactionId = String(record(data(await submittedHttp.json())).interaction_id ?? "");
+    expect(interactionId).not.toBe("");
+
+    let measureId = "";
+    let measureSha = "";
+    await expect.poll(async () => {
+      const response = await request.get(`${BFF_BASE}/bff/agora/interactions/${encodeURIComponent(interactionId)}`, {
+        headers: headers(OPERATOR_TOKEN),
+      });
+      if (!response.ok()) return false;
+      const interaction = record(data(await response.json()));
+      const opinions = Array.isArray(interaction.opinions) ? interaction.opinions.map(record) : [];
+      const measures = opinions.flatMap((opinion) =>
+        Array.isArray(opinion.recommended_measures) ? opinion.recommended_measures.map(record) : [],
+      );
+      const measure = measures.find((item) => /^[a-f0-9]{64}$/.test(String(item.measure_sha256 ?? "")));
+      measureId = String(measure?.measure_id ?? "");
+      measureSha = String(measure?.measure_sha256 ?? "");
+      return Boolean(measureId && measureSha);
+    }, { timeout: 120_000 }).toBe(true);
+
+    await page.reload();
+    const measureCard = page.getByTestId(`recommended-measure-${measureId}`);
+    await expect(measureCard).toContainText(measureSha, { timeout: 60_000 });
+    const createResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith(`/recommended-measures/${encodeURIComponent(measureId)}/candidates`)
+      && response.request().method() === "POST",
+    );
+    await measureCard.getByRole("button", { name: "Create governed candidate" }).click();
+    const createdHttp = await createResponse;
+    expect(createdHttp.ok(), await createdHttp.text()).toBe(true);
+    let detail = record(data(await createdHttp.json()));
+    let candidate = record(detail.candidate);
+    const proposalId = String(candidate.proposal_id ?? "");
+    expect(proposalId).not.toBe("");
+    expect(candidate.measure_sha256).toBe(measureSha);
+    expect(candidate.execution_authority).toBe("none");
+    expect(String(detail.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+    expect(createdHttp.headers().etag).toBe(detail.etag);
+    const candidateCard = page.getByTestId(`candidate-${proposalId}`);
+    await expect(candidateCard).toBeVisible();
+
+    const decide = async (action: "modify" | "defer" | "accept_for_review" | "reject", button: string, proposed?: JsonRecord) => {
+      await candidateCard.getByLabel(new RegExp(`Decision reason for ${proposalId}`)).fill(`Hosted ${action} proof`);
+      if (proposed) {
+        await candidateCard.getByLabel(new RegExp(`Proposed value \\(JSON\\) for ${proposalId}`)).fill(JSON.stringify(proposed));
+      }
+      const responsePromise = page.waitForResponse((response) => {
+        if (new URL(response.url()).pathname !== `/bff/agora/proposals/${proposalId}/candidate-decisions`) return false;
+        if (response.request().method() !== "POST") return false;
+        return record(response.request().postDataJSON()).action === action;
+      });
+      await candidateCard.getByRole("button", { name: button, exact: true }).click();
+      const response = await responsePromise;
+      expect(response.ok(), await response.text()).toBe(true);
+      const requestBody = record(response.request().postDataJSON());
+      expect(requestBody.validation_result).toBeUndefined();
+      expect(response.request().headers()["if-match"]).toBe(detail.etag);
+      detail = record(data(await response.json()));
+      candidate = record(detail.candidate);
+      expect(candidate.execution_authority).toBe("none");
+      expect(String(detail.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+    };
+
+    await decide("modify", "Modify", { ...record(candidate.proposed_value), hosted_bounded_risk: 0.015 });
+    await decide("defer", "Defer");
+    await decide("accept_for_review", "Accept for review");
+    expect(candidate.state).toBe("review_requested");
+    expect(record(detail.readiness).execution_authority).toBe("none");
+    expect(items({ data: { items: detail.formal_approval_receipts } })).toHaveLength(0);
+
+    const validationResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/bff/agora/proposals/${proposalId}/validations`
+      && response.request().method() === "POST",
+    );
+    await candidateCard.getByRole("button", { name: "Run authoritative validation" }).click();
+    const validatedHttp = await validationResponse;
+    expect(validatedHttp.ok(), await validatedHttp.text()).toBe(true);
+    detail = record(data(await validatedHttp.json()));
+    const validationReceipts = Array.isArray(detail.validation_receipts) ? detail.validation_receipts.map(record) : [];
+    expect(validationReceipts.length).toBeGreaterThan(0);
+    expect(validationReceipts.at(-1)?.authority).toBe("canonical_validation_service");
+
+    const readinessHttp = await request.get(`${BFF_BASE}/bff/agora/proposals/${proposalId}/review-readiness`, {
+      headers: headers(OPERATOR_TOKEN),
+    });
+    expect(readinessHttp.ok(), await readinessHttp.text()).toBe(true);
+    const readiness = record(data(await readinessHttp.json()));
+    expect(readiness.execution_authority).toBe("none");
+    expect(String(readiness.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+
+    await decide("reject", "Reject");
+    expect(candidate.state).toBe("rejected");
+    await page.reload();
+    const reloaded = page.getByTestId(`candidate-${proposalId}`);
+    await expect(reloaded).toContainText("rejected", { timeout: 60_000 });
+    await expect(reloaded.getByTestId(`candidate-history-${proposalId}`)).toContainText("4 operator decision(s)");
+    await expect(reloaded).toContainText("formal approval: none");
+  });
+
   test("viewer sees a disabled reason and cannot produce an interaction POST", async ({ page, request }) => {
     test.skip(!VIEWER_TOKEN, "requires an explicit or RBAC-matrix viewer token");
     test.setTimeout(120_000);

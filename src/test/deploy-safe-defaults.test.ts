@@ -437,7 +437,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    expect(authorizedProof).toContain("expected !== 6");
+    expect(authorizedProof).toContain("expected !== 8");
     expect(authorizedProof).toContain("skipped !== 0");
     expect(authorizedProof).toContain("unexpected !== 0");
     expect(authorizedProof).toContain("flaky !== 0");
@@ -529,7 +529,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "expect(deniedEnsure.status()).toBe(403)",
     );
     expect(hostedPersonaInteractionSpec.match(/^\s*test\("/gmu)).toHaveLength(
-      3,
+      4,
     );
     expect(hostedPersonaInteractionSpec).toContain(
       "expect(denied.status()).toBe(403)",

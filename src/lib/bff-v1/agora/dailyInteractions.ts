@@ -142,9 +142,16 @@ export interface DailyInteraction {
   degraded_participant_ids: string[];
   candidate_proposal_links: Array<{
     proposal_id: string;
+    interaction_id: string;
+    opinion_id: string;
+    opinion_sha256: string;
     revision: number;
     proposal_digest: string;
     measure_id: string;
+    measure_sha256: string;
+    state: CandidateState;
+    created_at: string;
+    execution_authority: "none";
   }>;
   audit_refs: string[];
   created_at: string;
@@ -181,6 +188,73 @@ export interface CandidateDecisionRecord {
   formal_approval: false;
   execution_authority: "none";
   audit_ref: string;
+}
+
+export type CandidateState = "draft" | "review_requested" | "deferred" | "rejected" | "cancelled" | "approved";
+
+export interface CandidateRecord {
+  proposal_id: string;
+  revision: number;
+  state: CandidateState;
+  proposer_id: string;
+  interaction_id: string;
+  opinion_id: string;
+  measure_id: string;
+  measure_sha256: string;
+  proposal_digest: string;
+  proposal_type: string;
+  target_kind: string;
+  target_id: string;
+  target_version: string;
+  target_path?: string | null;
+  current_value?: unknown;
+  proposed_value: unknown;
+  rationale: string;
+  evidence_refs: EvidenceRef[];
+  environment_ceiling: "analysis" | "research" | "shadow" | "paper";
+  validation_plan: { validator: string; required_checks: string[] };
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  execution_authority: "none";
+  authority: AuthorityBoundary;
+  audit: Array<Record<string, unknown>>;
+}
+
+export interface CandidateReadiness {
+  candidate: {
+    ready: boolean;
+    reason?: string | null;
+    allowed_actions: CandidateDecisionAction[];
+  };
+  validation: {
+    adapter_ready: boolean;
+    reason?: string | null;
+    adapter_id: string;
+    can_run: boolean;
+    current_passed: boolean;
+    current_receipt_id?: string | null;
+  };
+  reviewer: {
+    store_ready: boolean;
+    reason?: string | null;
+    can_request_decision: boolean;
+    can_link_formal_approval: boolean;
+    current_formal_approval_id?: string | null;
+  };
+  execution_authority: "none";
+}
+
+export interface CandidateReadback {
+  candidate: CandidateRecord;
+  revisions: CandidateRecord[];
+  decisions: CandidateDecisionRecord[];
+  validation_receipts: ValidationReceipt[];
+  formal_approval_receipts: FormalApprovalReceipt[];
+  /** Exact full-record ETag supplied by the authoritative candidate store. */
+  etag: string;
+  readiness: CandidateReadiness;
+  execution_authority: "none";
 }
 
 export interface ValidationReceipt {
@@ -269,13 +343,55 @@ function assertInteraction(resource: DailyInteraction): void {
     }
     opinionIds.add(opinion.opinion_id);
     opinionPersonas.add(opinion.participant.persona_id);
-    opinion.recommended_measures.forEach((measure) => assertAuthorityBoundary(measure.authority));
+    opinion.recommended_measures.forEach((measure) => {
+      assertAuthorityBoundary(measure.authority);
+      if (!/^[a-f0-9]{64}$/.test(measure.measure_sha256)) {
+        throw makeBffError({ code: "VALIDATION_FAILED", message: "Persona measure omitted its server-authored digest." });
+      }
+    });
   }
   if (resource.synthesis) {
     assertAuthorityBoundary(resource.synthesis.authority);
     if (!resource.synthesis.opinion_ids.every((id) => opinionIds.has(id))) {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Synthesis referenced an opinion outside authoritative readback." });
     }
+  }
+  for (const link of resource.candidate_proposal_links) {
+    if (link.interaction_id !== resource.interaction_id || !opinionIds.has(link.opinion_id)
+      || !/^[a-f0-9]{64}$/.test(link.opinion_sha256)
+      || !/^[a-f0-9]{64}$/.test(link.measure_sha256)
+      || !/^[a-f0-9]{64}$/.test(link.proposal_digest)
+      || link.execution_authority !== "none") {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate link omitted its exact persisted interaction binding." });
+    }
+    const opinion = resource.opinions.find((item) => item.opinion_id === link.opinion_id);
+    const measure = opinion?.recommended_measures.find((item) => item.measure_id === link.measure_id);
+    if (!measure || measure.measure_sha256 !== link.measure_sha256) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate link crossed its persisted Persona measure binding." });
+    }
+  }
+}
+
+function assertCandidateReadback(resource: CandidateReadback): void {
+  const candidate = resource?.candidate;
+  if (!candidate || candidate.execution_authority !== "none" || resource.execution_authority !== "none") {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate readback crossed the non-execution boundary." });
+  }
+  assertAuthorityBoundary(candidate.authority);
+  if (!/^[a-f0-9]{64}$/.test(candidate.measure_sha256)
+    || !/^[a-f0-9]{64}$/.test(candidate.proposal_digest)
+    || !/^"[a-f0-9]{64}"$/.test(resource.etag)) {
+    throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate readback omitted its server digest or current ETag." });
+  }
+  if (!Array.isArray(resource.revisions) || !Array.isArray(resource.decisions)
+    || !Array.isArray(resource.validation_receipts) || !Array.isArray(resource.formal_approval_receipts)
+    || !Array.isArray(resource.readiness?.candidate?.allowed_actions)) {
+    throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate readback omitted durable history or readiness." });
+  }
+  if (resource.readiness.execution_authority !== "none"
+    || resource.decisions.some((item) => item.formal_approval !== false || item.execution_authority !== "none")
+    || resource.formal_approval_receipts.some((item) => item.self_approval !== false || item.execution_authority !== "none")) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate lifecycle readback claimed forbidden authority." });
   }
 }
 
@@ -366,13 +482,13 @@ export async function retryDailyInteraction(input: {
 
 export async function createCandidateFromMeasure(input: {
   interactionId: string; opinionId: string; measureId: string; idempotencyKey: string;
-}): Promise<unknown> {
+}): Promise<CandidateReadback> {
   await requireWrite();
   if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
     throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate idempotency identity must be ASCII-safe." });
   }
   try {
-    return await bffFetch({
+    const readback = dataOf<CandidateReadback>(await bffFetch({
       method: "POST",
       path: paths.agoraInteractionMeasureCandidates(input.interactionId, input.measureId),
       idempotencyKey: input.idempotencyKey,
@@ -381,7 +497,30 @@ export async function createCandidateFromMeasure(input: {
         opinion_id: input.opinionId,
         measure_id: input.measureId,
       },
-    });
+    }));
+    assertCandidateReadback(readback);
+    if (readback.candidate.interaction_id !== input.interactionId
+      || readback.candidate.opinion_id !== input.opinionId
+      || readback.candidate.measure_id !== input.measureId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Created candidate did not match the persisted Persona measure binding." });
+    }
+    return readback;
+  } catch (error) {
+    return unsupported(error);
+  }
+}
+
+export async function getCandidate(proposalId: string): Promise<CandidateReadback> {
+  try {
+    const readback = dataOf<CandidateReadback>(await bffFetch({
+      method: "GET",
+      path: paths.agoraCandidate(proposalId),
+    }));
+    assertCandidateReadback(readback);
+    if (readback.candidate.proposal_id !== proposalId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate detail crossed the requested proposal binding." });
+    }
+    return readback;
   } catch (error) {
     return unsupported(error);
   }
@@ -389,66 +528,59 @@ export async function createCandidateFromMeasure(input: {
 
 export async function decideCandidate(input: {
   proposalId: string; action: CandidateDecisionAction; reason: string; revision: number; proposalDigest: string;
-  proposalEtag: string; proposedValue?: unknown;
-}): Promise<CandidateDecisionRecord> {
+  proposalEtag: string; idempotencyKey: string; proposedValue?: unknown; evidenceRefs?: string[];
+}): Promise<CandidateReadback> {
   await requireWrite();
+  if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate decision idempotency identity must be ASCII-safe." });
+  }
   try {
-    const decision = dataOf<CandidateDecisionRecord>(await bffFetch({
+    const readback = dataOf<CandidateReadback>(await bffFetch({
       method: "POST", path: paths.agoraCandidateDecisions(input.proposalId),
       headers: { "If-Match": input.proposalEtag },
+      idempotencyKey: input.idempotencyKey,
       body: {
         action: input.action,
         reason: input.reason,
         expected_revision: input.revision,
         expected_proposal_digest: input.proposalDigest,
         ...(input.action === "modify" ? { proposed_value: input.proposedValue } : {}),
+        ...(input.evidenceRefs?.length ? { evidence_refs: input.evidenceRefs } : {}),
       },
     }));
-    if (decision.formal_approval !== false || decision.execution_authority !== "none") {
-      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate decision was incorrectly represented as approval or execution." });
+    assertCandidateReadback(readback);
+    if (readback.candidate.proposal_id !== input.proposalId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate decision readback crossed the requested proposal binding." });
     }
-    return decision;
+    return readback;
   } catch (error) {
     return unsupported(error);
   }
 }
 
 export async function listCandidateDecisions(proposalId: string): Promise<CandidateDecisionRecord[]> {
-  try {
-    const items = dataOf<CandidateDecisionRecord[]>(await bffFetch({
-      method: "GET", path: paths.agoraCandidateDecisions(proposalId),
-    }));
-    if (!Array.isArray(items)) {
-      throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate decision list data was not an array." });
-    }
-    if (!items.every((item) => item.formal_approval === false && item.execution_authority === "none")) {
-      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate decision readback crossed the non-execution boundary." });
-    }
-    return items;
-  } catch (error) {
-    return unsupported(error);
-  }
+  return (await getCandidate(proposalId)).decisions;
 }
 
 export async function requestAuthoritativeValidation(input: {
-  proposalId: string; revision: number; proposalDigest: string; proposalEtag: string; validationPlanRef: string;
-}): Promise<ValidationReceipt> {
+  proposalId: string; revision: number; proposalDigest: string; proposalEtag: string; idempotencyKey: string;
+}): Promise<CandidateReadback> {
   await requireWrite();
+  if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate validation idempotency identity must be ASCII-safe." });
+  }
   try {
-    const receipt = dataOf<ValidationReceipt>(await bffFetch({
+    const readback = dataOf<CandidateReadback>(await bffFetch({
       method: "POST", path: paths.agoraCandidateValidations(input.proposalId),
       headers: { "If-Match": input.proposalEtag },
+      idempotencyKey: input.idempotencyKey,
       body: {
-        proposal_id: input.proposalId,
-        revision: input.revision,
-        proposal_digest: input.proposalDigest,
-        validation_plan_ref: input.validationPlanRef,
+        expected_revision: input.revision,
+        expected_proposal_digest: input.proposalDigest,
       },
     }));
-    if (receipt.authority !== "canonical_validation_service") {
-      throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation receipt did not come from the canonical authority." });
-    }
-    return receipt;
+    assertCandidateReadback(readback);
+    return readback;
   } catch (error) {
     return unsupported(error);
   }
@@ -466,6 +598,29 @@ export async function getAuthoritativeValidation(input: {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation readback did not match the canonical proposal authority." });
     }
     return receipt;
+  } catch (error) {
+    return unsupported(error);
+  }
+}
+
+export async function getCandidateReviewReadiness(proposalId: string): Promise<{
+  proposal_id: string;
+  readiness: CandidateReadiness;
+  etag: string;
+  execution_authority: "none";
+}> {
+  try {
+    const value = dataOf<{
+      proposal_id: string;
+      readiness: CandidateReadiness;
+      etag: string;
+      execution_authority: "none";
+    }>(await bffFetch({ method: "GET", path: paths.agoraCandidateReviewReadiness(proposalId) }));
+    if (value.proposal_id !== proposalId || value.execution_authority !== "none"
+      || value.readiness?.execution_authority !== "none" || !/^"[a-f0-9]{64}"$/.test(value.etag)) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate review readiness crossed its authoritative binding." });
+    }
+    return value;
   } catch (error) {
     return unsupported(error);
   }
