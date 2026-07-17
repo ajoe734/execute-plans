@@ -1,12 +1,20 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/bff-v1/agora/dailyInteractions", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/bff-v1/agora/dailyInteractions")>();
-  return { ...original, decideCandidate: vi.fn() };
+  return {
+    ...original,
+    createCandidateFromMeasure: vi.fn().mockResolvedValue({ data: { proposal_id: "proposal-1" } }),
+    decideCandidate: vi.fn(),
+    listCandidateDecisions: vi.fn().mockResolvedValue([]),
+    getAuthoritativeValidation: vi.fn(),
+    retryDailyInteraction: vi.fn().mockResolvedValue({}),
+  };
 });
 
 import { DailyInteractionTimeline } from "./DailyInteractionTimeline";
+import { createCandidateFromMeasure, decideCandidate, getAuthoritativeValidation, listCandidateDecisions, retryDailyInteraction } from "@/lib/bff-v1/agora/dailyInteractions";
 import type { AuthorityBoundary, DailyInteraction, ParticipantSnapshot } from "@/lib/bff-v1/agora/dailyInteractions";
 
 const authority: AuthorityBoundary = {
@@ -71,5 +79,66 @@ describe("DailyInteractionTimeline", () => {
     render(<DailyInteractionTimeline interactions={[item]} onRefresh={onRefresh} runtimeState="ready" writeAllowed />);
     fireEvent.click(screen.getByRole("button", { name: "Refresh Persona interaction readback" }));
     expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
+  it("reloads durable candidate decisions and canonical validation readback", async () => {
+    const decision = {
+      decision_id: "decision-1", proposal_id: "proposal-1", interaction_id: "int-1", measure_id: "measure-1",
+      action: "accepted_for_review" as const, actor_id: "operator-7", reason: "Independent review required",
+      revision: 4, proposal_digest: "b".repeat(64), review_request_id: "review-9",
+      decided_at: "2026-07-17T00:00:00Z", formal_approval: false as const,
+      execution_authority: "none" as const, audit_ref: "audit-decision-1",
+    };
+    vi.mocked(listCandidateDecisions).mockResolvedValue([decision]);
+    vi.mocked(getAuthoritativeValidation).mockResolvedValue({
+      validation_receipt_id: "validation-1", authority: "canonical_validation_service", tenant_id: "tenant-1",
+      proposal_id: "proposal-1", revision: 4, proposal_digest: "b".repeat(64), outcome: "passed",
+      evidence_refs: ["evidence-1"], validated_at: "2026-07-17T00:00:00Z", expires_at: "2026-07-18T00:00:00Z",
+      receipt_sha256: "c".repeat(64),
+    });
+    const candidateItem: DailyInteraction = {
+      ...item,
+      opinions: [{
+        ...item.opinions[0],
+        recommended_measures: [{
+          measure_id: "measure-1", measure_type: "risk_limit", target: { kind: "strategy", id: "strategy-1", version: "spec-v4" },
+          proposed_value: { max_risk: 0.02 }, rationale: "Bound risk", expected_benefit: "Reduce drawdown", adverse_scenarios: [],
+          confidence: 0.8, evidence_refs: [], environment_ceiling: "paper", validation_plan: { validator: "risk", required_checks: ["drawdown"] },
+          rollback_trigger: "loss", rollback_action: "restore", authority,
+        }],
+      }],
+      candidate_proposal_links: [{ proposal_id: "proposal-1", revision: 4, proposal_digest: "b".repeat(64), measure_id: "measure-1" }],
+    };
+
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<DailyInteractionTimeline interactions={[{ ...candidateItem, candidate_proposal_links: [] }]} onRefresh={onRefresh} runtimeState="ready" writeAllowed />);
+    fireEvent.click(screen.getByRole("button", { name: "Create governed candidate" }));
+    await waitFor(() => expect(createCandidateFromMeasure).toHaveBeenCalledWith(expect.objectContaining({
+      interactionId: "int-1",
+      opinionId: "op-a",
+      measureId: "measure-1",
+      measureSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })));
+    expect(onRefresh).toHaveBeenCalled();
+
+    rerender(<DailyInteractionTimeline interactions={[candidateItem]} onRefresh={onRefresh} runtimeState="ready" writeAllowed />);
+    expect(await screen.findByTestId("candidate-decision-decision-1")).toHaveTextContent("accepted_for_review by operator-7 · revision 4");
+    expect(screen.getByTestId("candidate-decision-decision-1")).toHaveTextContent("Audit: audit-decision-1");
+    expect(listCandidateDecisions).toHaveBeenCalledWith("proposal-1");
+
+    fireEvent.change(screen.getByLabelText("Decision rationale"), { target: { value: "Send to independent review" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept for review" }));
+    await waitFor(() => expect(decideCandidate).toHaveBeenCalledWith(expect.objectContaining({
+      proposalId: "proposal-1", action: "accept_for_review", reason: "Send to independent review", revision: 4,
+    })));
+    await waitFor(() => expect(vi.mocked(listCandidateDecisions).mock.calls.filter(([id]) => id === "proposal-1").length).toBeGreaterThanOrEqual(2));
+
+    fireEvent.change(screen.getByLabelText("Authoritative validation receipt id"), { target: { value: "validation-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load validation" }));
+    expect(await screen.findByTestId("validation-receipt-validation-1")).toHaveTextContent("canonical_validation_service · passed · revision 4");
+    expect(getAuthoritativeValidation).toHaveBeenCalledWith({ proposalId: "proposal-1", validationReceiptId: "validation-1" });
+    fireEvent.change(screen.getByLabelText("Provider retry reason"), { target: { value: "Retry transient provider outage" } });
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed providers" }));
+    await waitFor(() => expect(retryDailyInteraction).toHaveBeenCalledWith({ interactionId: "int-1", reason: "Retry transient provider outage" }));
   });
 });

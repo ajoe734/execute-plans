@@ -78,6 +78,39 @@ const mockResolveContext = interaction.resolveContext as ReturnType<typeof vi.fn
 const mockParticipants = interaction.participants as ReturnType<typeof vi.fn>;
 const mockSubmitInteraction = interaction.submit as ReturnType<typeof vi.fn>;
 
+function journalContextFixture(input: {
+  workshopId?: string;
+  strategy?: { id: string; version: string };
+  refs?: Array<{ kind: string; id: string; version?: string | null }>;
+} = {}) {
+  const workshopId = input.workshopId ?? "wksp-123";
+  const refs = input.refs ?? [
+    { kind: "journal_entry", id: "ep-1" },
+    ...(input.strategy ? [{ kind: "strategy", id: input.strategy.id, version: input.strategy.version }] : []),
+  ];
+  return {
+    data: {
+      workshop_id: workshopId,
+      context_refs: refs.map((ref) => ({ type: ref.kind, id: ref.id, version_id: ref.version ?? undefined })),
+      context_digest: "server-digest",
+      environment: "paper",
+      verified: true,
+      resolved_at: "2026-07-17T03:04:05Z",
+      context_binding: {
+        binding_id: `binding-${workshopId}`, workshop_id: workshopId, tenant_id: "tenant-1",
+        source_route: "/management/personas/per_quant?tab=tradeJournal",
+        focused_object: { kind: "journal_entry", id: "ep-1" }, context_refs: refs,
+        strategy_ref: input.strategy ? { strategy_id: input.strategy.id, version_id: input.strategy.version } : null,
+        decision_ref: null, journal_ref: "ep-1", position_risk_snapshot_refs: [],
+        evidence_cutoff: "2026-07-17T03:04:05Z", selected_persona_ids: ["per_quant"],
+        initial_mode: input.strategy ? "propose_action" : "challenge",
+        return_route: "/management/personas/per_quant?tab=tradeJournal", advice_environment: "paper",
+        context_digest: "server-digest", resolved_at: "2026-07-17T03:04:05Z",
+      },
+    },
+  };
+}
+
 describe("PersonaTradeJournalTab Component Tests", () => {
   const mockEpisode = {
     trade_episode_id: "ep-1",
@@ -128,14 +161,7 @@ describe("PersonaTradeJournalTab Component Tests", () => {
   });
 
   it("opens a typed Challenge from the selected journal episode without direct interaction submission", async () => {
-    mockResolveContext.mockResolvedValue({
-      data: {
-        workshop_id: "wksp-123",
-        context_refs: [{ type: "journal_entry", id: "ep-1" }],
-        environment: "paper",
-        resolved_at: "2026-07-17T02:03:04Z",
-      },
-    });
+    mockResolveContext.mockResolvedValue(journalContextFixture());
     mockParticipants.mockResolvedValue({
       data: {
         included: [
@@ -169,10 +195,11 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     fireEvent.click(challengeButton);
 
     await waitFor(() => {
-      expect(mockResolveContext).toHaveBeenCalledWith({
+      expect(mockResolveContext).toHaveBeenCalledWith(expect.objectContaining({
         context_refs: [{ type: "journal_entry", id: "ep-1" }],
         environment: "paper",
-      });
+        focused_object: { kind: "journal_entry", id: "ep-1" },
+      }));
       expect(mockParticipants).toHaveBeenCalledWith({
         workshop_id: "wksp-123",
         mode: "challenge",
@@ -189,7 +216,63 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     expect(parsed.searchParams.get("source_kind")).toBe("journal_entry");
     expect(parsed.searchParams.get("source_id")).toBe("ep-1");
     expect(parsed.searchParams.get("advice_environment")).toBe("paper");
-    expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T02:03:04Z");
+    expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T03:04:05Z");
+  });
+
+  it("carries a resolver-verified immutable strategy into Trade Journal Propose", async () => {
+    const proposalEpisode = { ...mockEpisode, strategy_id: "strategy-a", artifact_version: "spec-v9" };
+    mockListEpisodes.mockResolvedValue({
+      data: [proposalEpisode], page_info: { has_more: false }, meta: { coverage_state: "complete" },
+    });
+    mockResolveContext.mockResolvedValue(journalContextFixture({ workshopId: "wksp-propose", strategy: { id: "strategy-a", version: "spec-v9" } }));
+    mockParticipants.mockResolvedValue({
+      data: {
+        included: [{ persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true }],
+        excluded: [],
+      },
+    });
+
+    render(<MemoryRouter><PersonaTradeJournalTab personaId="per_quant" /></MemoryRouter>);
+    await waitFor(() => fireEvent.click(screen.getByText("AAPL")));
+    fireEvent.click(await screen.findByRole("button", { name: "Propose Personas about trade ep-1" }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    expect(mockResolveContext).toHaveBeenCalledWith(expect.objectContaining({
+      context_refs: [
+        { type: "journal_entry", id: "ep-1" },
+        { type: "strategy", id: "strategy-a", version_id: "spec-v9" },
+      ],
+      environment: "paper",
+    }));
+    const parsed = new URL(mockNavigate.mock.calls.at(-1)?.[0] as string, "https://example.test");
+    expect(parsed.searchParams.get("mode")).toBe("propose_action");
+    expect(parsed.searchParams.get("target_strategy_id")).toBe("strategy-a");
+    expect(parsed.searchParams.get("target_strategy_version")).toBe("spec-v9");
+    expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T03:04:05Z");
+  });
+
+  it("fails closed when the resolver changes or ambiguously expands the journal strategy", async () => {
+    const proposalEpisode = { ...mockEpisode, strategy_id: "strategy-a", artifact_version: "spec-v9" };
+    mockListEpisodes.mockResolvedValue({
+      data: [proposalEpisode], page_info: { has_more: false }, meta: { coverage_state: "complete" },
+    });
+    mockResolveContext.mockResolvedValue(journalContextFixture({
+      workshopId: "wksp-tampered",
+      strategy: { id: "strategy-b", version: "spec-v9" },
+      refs: [
+        { kind: "journal_entry", id: "ep-1" },
+        { kind: "strategy", id: "strategy-b", version: "spec-v9" },
+        { kind: "strategy", id: "strategy-a", version: "spec-v10" },
+      ],
+    }));
+
+    render(<MemoryRouter><PersonaTradeJournalTab personaId="per_quant" /></MemoryRouter>);
+    await waitFor(() => fireEvent.click(screen.getByText("AAPL")));
+    fireEvent.click(await screen.findByRole("button", { name: "Propose Personas about trade ep-1" }));
+
+    await waitFor(() => expect(mockResolveContext).toHaveBeenCalled());
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockParticipants).not.toHaveBeenCalled();
   });
 
   it("exposes all five actions and fails closed if the selected Persona is ineligible", async () => {

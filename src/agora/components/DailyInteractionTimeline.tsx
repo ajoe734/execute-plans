@@ -1,11 +1,17 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
+  createCandidateFromMeasure,
   decideCandidate,
+  getAuthoritativeValidation,
+  listCandidateDecisions,
+  retryDailyInteraction,
+  type CandidateDecisionRecord,
   type CandidateDecisionAction,
   type DailyInteraction,
+  type ValidationReceipt,
 } from "@/lib/bff-v1/agora/dailyInteractions";
 
 export type DailyRuntimeState = "loading" | "ready" | "unsupported" | "error";
@@ -34,6 +40,59 @@ function safeJson(value: unknown): string {
   }
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+    .join(",")}}`;
+}
+
+async function sha256Canonical(value: unknown): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("Secure measure digest support is unavailable.");
+  const bytes = new TextEncoder().encode(canonicalJson(value));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function ProviderRetry({ interactionId, writeAllowed, onRefresh }: {
+  interactionId: string;
+  writeAllowed: boolean;
+  onRefresh: Props["onRefresh"];
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const retry = async () => {
+    if (!reason.trim()) {
+      setError("A retry reason is required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await retryDailyInteraction({ interactionId, reason });
+      setReason("");
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Provider retry failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 space-y-2 rounded border border-amber-200 bg-amber-50 p-2" data-testid={`provider-retry-${interactionId}`}>
+      <label className="block text-xs font-medium text-amber-950">
+        Provider retry reason
+        <input className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs" onChange={(event) => setReason(event.target.value)} value={reason} />
+      </label>
+      <Button disabled={!writeAllowed || busy} onClick={() => void retry()} size="sm" variant="outline">{busy ? "Retrying…" : "Retry failed providers"}</Button>
+      {error ? <p className="text-xs text-red-700" role="alert">{error}</p> : null}
+    </div>
+  );
+}
+
 function CandidateActions({ interaction, writeAllowed, onRefresh }: {
   interaction: DailyInteraction;
   writeAllowed: boolean;
@@ -43,8 +102,38 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [proposedValue, setProposedValue] = useState("");
+  const [decisions, setDecisions] = useState<Record<string, CandidateDecisionRecord[]>>({});
+  const [decisionErrors, setDecisionErrors] = useState<Record<string, string>>({});
+  const [decisionLoading, setDecisionLoading] = useState<Record<string, boolean>>({});
+  const [validationReceiptIds, setValidationReceiptIds] = useState<Record<string, string>>({});
+  const [validationReceipts, setValidationReceipts] = useState<Record<string, ValidationReceipt>>({});
 
   const measures = useMemo(() => interaction.opinions.flatMap((opinion) => opinion.recommended_measures), [interaction.opinions]);
+  const proposalIds = useMemo(
+    () => Array.from(new Set(interaction.candidate_proposal_links.map((link) => link.proposal_id))),
+    [interaction.candidate_proposal_links],
+  );
+  const proposalKey = proposalIds.join("\u0000");
+
+  const loadDecisions = useCallback(async (proposalId: string) => {
+    setDecisionLoading((current) => ({ ...current, [proposalId]: true }));
+    setDecisionErrors((current) => ({ ...current, [proposalId]: "" }));
+    try {
+      const records = await listCandidateDecisions(proposalId);
+      setDecisions((current) => ({ ...current, [proposalId]: records }));
+    } catch (caught) {
+      setDecisionErrors((current) => ({
+        ...current,
+        [proposalId]: caught instanceof Error ? caught.message : "Candidate decision readback failed.",
+      }));
+    } finally {
+      setDecisionLoading((current) => ({ ...current, [proposalId]: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    proposalKey.split("\u0000").filter(Boolean).forEach((proposalId) => void loadDecisions(proposalId));
+  }, [loadDecisions, proposalKey]);
 
   const decide = async (proposal: DailyInteraction["candidate_proposal_links"][number], action: CandidateDecisionAction) => {
     if (!reason.trim()) {
@@ -73,9 +162,49 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
       });
       setReason("");
       setProposedValue("");
+      await loadDecisions(proposal.proposal_id);
       await onRefresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Candidate decision failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const loadValidation = async (proposalId: string) => {
+    const validationReceiptId = validationReceiptIds[proposalId]?.trim();
+    if (!validationReceiptId) {
+      setDecisionErrors((current) => ({ ...current, [proposalId]: "Enter an authoritative validation receipt id." }));
+      return;
+    }
+    setBusy(`validation:${proposalId}`);
+    try {
+      const receipt = await getAuthoritativeValidation({ proposalId, validationReceiptId });
+      setValidationReceipts((current) => ({ ...current, [proposalId]: receipt }));
+      setDecisionErrors((current) => ({ ...current, [proposalId]: "" }));
+    } catch (caught) {
+      setDecisionErrors((current) => ({
+        ...current,
+        [proposalId]: caught instanceof Error ? caught.message : "Validation readback failed.",
+      }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const createCandidate = async (opinionId: string, measure: DailyInteraction["opinions"][number]["recommended_measures"][number]) => {
+    setBusy(`create:${measure.measure_id}`);
+    setError(null);
+    try {
+      await createCandidateFromMeasure({
+        interactionId: interaction.interaction_id,
+        opinionId,
+        measureId: measure.measure_id,
+        measureSha256: await sha256Canonical(measure),
+      });
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Candidate creation failed.");
     } finally {
       setBusy(null);
     }
@@ -86,6 +215,7 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Candidate measures</h4>
       {measures.length === 0 ? <p className="text-xs text-slate-500">No Persona recommended measure was returned.</p> : null}
       {measures.map((measure) => {
+        const opinion = interaction.opinions.find((item) => item.recommended_measures.some((candidate) => candidate.measure_id === measure.measure_id));
         const linked = interaction.candidate_proposal_links.find((item) => item.measure_id === measure.measure_id);
         return (
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid={`recommended-measure-${measure.measure_id}`} key={measure.measure_id}>
@@ -99,7 +229,10 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
             <p className="mt-2 text-sm text-slate-700">{measure.rationale}</p>
             <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 text-[11px] text-slate-100">{safeJson(measure.proposed_value)}</pre>
             {!linked ? (
-              <p className="mt-2 text-xs text-amber-800">The BFF has not linked a governed candidate. The v1.9 opinion contract does not expose the canonical measure digest required to create one from the browser, so this UI will not invent it.</p>
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-slate-600">No governed candidate is linked yet. Creation binds the exact persisted provider measure through its deterministic canonical SHA-256.</p>
+                <Button disabled={!writeAllowed || busy !== null || !opinion} onClick={() => opinion && void createCandidate(opinion.opinion_id, measure)} size="sm" variant="outline">Create governed candidate</Button>
+              </div>
             ) : (
               <div className="mt-3 space-y-2" data-testid={`candidate-${linked.proposal_id}`}>
                 <div className="text-xs font-semibold text-slate-700">Proposal {linked.proposal_id} · revision {linked.revision}</div>
@@ -119,7 +252,40 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
                   ))}
                 </div>
                 <p className="text-[11px] text-slate-500">Accept for review is not formal approval and cannot execute or bind this proposal.</p>
-                <p className="text-[11px] text-amber-800">Authoritative validation and formal reviewer controls remain unavailable until readback exposes their canonical plan/receipt references; the UI will not accept browser-supplied validation results.</p>
+                <div className="space-y-2 rounded border border-slate-200 bg-white p-2" data-testid={`candidate-decisions-${linked.proposal_id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-700">Durable decision history</span>
+                    <Button disabled={decisionLoading[linked.proposal_id]} onClick={() => void loadDecisions(linked.proposal_id)} size="sm" variant="ghost">Reload</Button>
+                  </div>
+                  {decisionLoading[linked.proposal_id] ? <p className="text-xs text-slate-500">Loading decisions…</p> : null}
+                  {(decisions[linked.proposal_id] ?? []).map((decision) => (
+                    <div className="rounded border border-slate-100 bg-slate-50 p-2 text-[11px] text-slate-700" data-testid={`candidate-decision-${decision.decision_id}`} key={decision.decision_id}>
+                      <div><strong>{decision.action}</strong> by {decision.actor_id} · revision {decision.revision}</div>
+                      <div>Reason: {decision.reason}</div>
+                      <div>Audit: {decision.audit_ref}</div>
+                      {decision.review_request_id ? <div>Reviewer queue: {decision.review_request_id}</div> : null}
+                    </div>
+                  ))}
+                  {!decisionLoading[linked.proposal_id] && (decisions[linked.proposal_id] ?? []).length === 0 ? <p className="text-xs text-slate-500">No durable decisions yet.</p> : null}
+                </div>
+                <div className="space-y-2 rounded border border-slate-200 bg-white p-2" data-testid={`candidate-validation-${linked.proposal_id}`}>
+                  <label className="block text-xs font-medium text-slate-700">
+                    Authoritative validation receipt id
+                    <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs" onChange={(event) => setValidationReceiptIds((current) => ({ ...current, [linked.proposal_id]: event.target.value }))} value={validationReceiptIds[linked.proposal_id] ?? ""} />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={busy !== null} onClick={() => void loadValidation(linked.proposal_id)} size="sm" variant="outline">Load validation</Button>
+                    <Button disabled size="sm" title="The candidate link does not yet expose the canonical validation_plan_ref required by v1.9." variant="outline">Request / retry validation unavailable</Button>
+                    <Button disabled size="sm" title="PINT-014 has not exposed a formal ApprovalDecision readback route in the v1.9 OpenAPI." variant="outline">Reviewer decision unavailable</Button>
+                  </div>
+                  {validationReceipts[linked.proposal_id] ? (
+                    <div className="text-[11px] text-slate-700" data-testid={`validation-receipt-${validationReceipts[linked.proposal_id].validation_receipt_id}`}>
+                      {validationReceipts[linked.proposal_id].authority} · {validationReceipts[linked.proposal_id].outcome} · revision {validationReceipts[linked.proposal_id].revision} · expires {validationReceipts[linked.proposal_id].expires_at}
+                    </div>
+                  ) : null}
+                  <p className="text-[11px] text-amber-800">The browser sends only immutable receipt references. Validation outcomes and reviewer approval are never browser-authored.</p>
+                </div>
+                {decisionErrors[linked.proposal_id] ? <p className="text-xs text-red-700" role="alert">{decisionErrors[linked.proposal_id]}</p> : null}
               </div>
             )}
           </div>
@@ -185,6 +351,9 @@ export function DailyInteractionTimeline({ interactions, runtimeState, runtimeMe
               );
             })}
           </div>
+          {item.provider_invocations.some((invocation) => invocation.error?.retryable) ? (
+            <ProviderRetry interactionId={item.interaction_id} onRefresh={onRefresh} writeAllowed={writeAllowed} />
+          ) : null}
 
           {item.missing_participant_ids.length || item.degraded_participant_ids.length ? (
             <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" data-testid={`interaction-partial-${item.interaction_id}`}>

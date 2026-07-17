@@ -226,35 +226,86 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       // projection; Persona advice itself is advisory-only and capped at paper.
       const adviceEnvironment = "paper" as const;
 
+      const requestedContextRefs = [
+        { type: "journal_entry" as const, id: selectedEpisode.trade_episode_id },
+        ...(selectedEpisode.strategy_id && selectedEpisode.artifact_version
+          ? [{ type: "strategy" as const, id: selectedEpisode.strategy_id, version_id: selectedEpisode.artifact_version }]
+          : []),
+      ];
+
+      const sourceRoute = `/management/personas/${encodeURIComponent(personaId)}?tab=tradeJournal`;
+      const cutoffHint = Object.values(selectedEpisode.coverage ?? {})
+        .map((item) => item.as_of)
+        .filter((value) => Boolean(value) && !Number.isNaN(Date.parse(value)))
+        .sort((left, right) => Date.parse(right) - Date.parse(left))[0]
+        ?? selectedEpisode.closed_at
+        ?? selectedEpisode.opened_at;
+
       const resolved = await interaction.resolveContext({
-          context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
-          environment: adviceEnvironment,
-        });
-      const workshopId = resolved.data.workshop_id;
+        context_refs: requestedContextRefs,
+        environment: adviceEnvironment,
+        source_route: sourceRoute,
+        focused_object: { kind: "journal_entry", id: selectedEpisode.trade_episode_id },
+        evidence_cutoff: cutoffHint,
+        selected_persona_ids: participantIds,
+        initial_mode: mode,
+        return_route: sourceRoute,
+      });
+      const binding = resolved.data.context_binding;
+      if (!resolved.data.verified || !binding) {
+        throw new Error("The BFF did not verify the canonical paper advice context.");
+      }
+      if (binding.focused_object.kind !== "journal_entry"
+        || binding.focused_object.id !== selectedEpisode.trade_episode_id
+        || binding.journal_ref !== selectedEpisode.trade_episode_id
+        || !binding.context_refs.some((ref) => ref.kind === "journal_entry" && ref.id === selectedEpisode.trade_episode_id)) {
+        throw new Error("The BFF resolved a different journal entry than the selected trade.");
+      }
+      if (!binding.evidence_cutoff || Number.isNaN(Date.parse(binding.evidence_cutoff))) {
+        throw new Error("The BFF did not return an authoritative context cutoff.");
+      }
+      const requestedStrategy = requestedContextRefs.find((ref) => ref.type === "strategy");
+      const resolvedStrategies = binding.context_refs.filter((ref) => ref.kind === "strategy" && ref.version);
+      if (requestedStrategy && (resolvedStrategies.length !== 1
+        || resolvedStrategies[0].id !== requestedStrategy.id
+        || resolvedStrategies[0].version !== requestedStrategy.version_id
+        || binding.strategy_ref?.strategy_id !== requestedStrategy.id
+        || binding.strategy_ref.version_id !== requestedStrategy.version_id)) {
+        throw new Error("The resolver changed or ambiguously expanded the journal strategy id/version.");
+      }
+      const strategyRef = resolvedStrategies.length === 1 ? resolvedStrategies[0] : undefined;
+      if (mode === "propose_action" && !strategyRef?.version) {
+        throw new Error("Propose requires a resolver-verified immutable strategy id and version for this journal entry.");
+      }
+      if (binding.selected_persona_ids.length !== participantIds.length
+        || binding.selected_persona_ids.some((id, index) => id !== participantIds[index])) {
+        throw new Error("The resolver changed the selected Persona binding for this journal interaction.");
+      }
+      const workshopId = binding.workshop_id;
       const eligibility = await interaction.participants({
         workshop_id: workshopId,
         mode: mode === "compare" ? "consult" : mode,
-        environment: adviceEnvironment,
+        environment: binding.advice_environment,
       });
       const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
       if (!participantIds.every((id) => eligibleIds.has(id))) {
         throw new Error("One or more selected Personas are not eligible for this journal context.");
       }
-      const cutoff = Object.values(selectedEpisode.coverage ?? {})
-        .map((item) => item?.as_of)
-        .filter((value): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value)))
-        .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
       const params = new URLSearchParams({
         mode,
         participants: participantIds.join(","),
         picker: "named",
-        return_to: `/management/personas/${encodeURIComponent(personaId)}?tab=tradeJournal`,
+        return_to: binding.return_route,
         return_label: `Trade Journal ${selectedEpisode.trade_episode_id}`,
         source_kind: "journal_entry",
-        source_id: selectedEpisode.trade_episode_id,
-        advice_environment: adviceEnvironment,
+        source_id: binding.focused_object.id,
+        advice_environment: binding.advice_environment,
       });
-      params.set("evidence_cutoff", cutoff ?? resolved.data.resolved_at);
+      params.set("evidence_cutoff", binding.evidence_cutoff);
+      if (strategyRef?.version) {
+        params.set("target_strategy_id", strategyRef.id);
+        params.set("target_strategy_version", strategyRef.version);
+      }
       setSelectedEpisode(null); // Close the sheet
       navigate(`/agora/strategy-workshop/${encodeURIComponent(workshopId)}?${params.toString()}`);
     } catch (err: unknown) {

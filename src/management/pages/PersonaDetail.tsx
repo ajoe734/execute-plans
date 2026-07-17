@@ -196,12 +196,25 @@ export const PersonaDetail = () => {
         { type: "persona" as const, id: p.id },
         ...(targetStrategy ? [{ type: "strategy" as const, id: targetStrategy.id, version_id: targetStrategy.version }] : []),
       ];
-      const resolved = await interaction.resolveContext({ context_refs: contextRefs, environment: "research" });
-      if (!resolved.data.verified) throw new Error("The canonical Workshop context was not verified.");
-      const eligibility = await interaction.participants({
-        workshop_id: resolved.data.workshop_id,
-        mode: mode === "compare" ? "consult" : mode,
+      const returnTo = `${location.pathname}${location.search}`;
+      const resolved = await interaction.resolveContext({
+        context_refs: contextRefs,
         environment: "research",
+        source_route: returnTo,
+        focused_object: { kind: "persona", id: p.id },
+        evidence_cutoff: p.updatedAt,
+        selected_persona_ids: [p.id],
+        initial_mode: mode,
+        return_route: returnTo,
+      });
+      const initialBinding = resolved.data.context_binding;
+      if (!resolved.data.verified || !initialBinding || initialBinding.workshop_id !== resolved.data.workshop_id) {
+        throw new Error("The canonical Workshop context was not verified.");
+      }
+      const eligibility = await interaction.participants({
+        workshop_id: initialBinding.workshop_id,
+        mode: mode === "compare" ? "consult" : mode,
+        environment: initialBinding.advice_environment,
         required_capability: "persona_opinion",
       });
       const participantIds = selectPersonaEntryParticipants(p.id, eligibility.data, mode === "compare");
@@ -213,24 +226,48 @@ export const PersonaDetail = () => {
             ? "No second eligible Persona is available for comparison."
             : "This Persona is not available in the canonical eligibility snapshot.");
       }
-      if (resolved.data.environment !== "research" && resolved.data.environment !== "paper") {
-        throw new Error(`The BFF resolved an unsupported Persona advice environment: ${resolved.data.environment}.`);
+      const rebound = await interaction.resolveContext({
+        workshop_id: initialBinding.workshop_id,
+        context_refs: contextRefs,
+        environment: initialBinding.advice_environment,
+        source_route: initialBinding.source_route,
+        focused_object: initialBinding.focused_object,
+        evidence_cutoff: initialBinding.evidence_cutoff,
+        selected_persona_ids: participantIds,
+        initial_mode: mode,
+        return_route: initialBinding.return_route,
+      });
+      const binding = rebound.data.context_binding;
+      if (!rebound.data.verified || !binding
+        || binding.focused_object.kind !== "persona" || binding.focused_object.id !== p.id
+        || binding.selected_persona_ids.length !== participantIds.length
+        || binding.selected_persona_ids.some((id, index) => id !== participantIds[index])) {
+        throw new Error("The resolver changed the Persona interaction binding.");
       }
-      if (!resolved.data.resolved_at || Number.isNaN(Date.parse(resolved.data.resolved_at))) {
+      if (binding.advice_environment !== "research" && binding.advice_environment !== "paper") {
+        throw new Error(`The BFF resolved an unsupported Persona advice environment: ${binding.advice_environment}.`);
+      }
+      if (!binding.evidence_cutoff || Number.isNaN(Date.parse(binding.evidence_cutoff))) {
         throw new Error("The BFF did not return an authoritative context resolution cutoff.");
       }
-      const returnTo = `${location.pathname}${location.search}`;
+      if (targetStrategy && (binding.strategy_ref?.strategy_id !== targetStrategy.id
+        || binding.strategy_ref.version_id !== targetStrategy.version
+        || binding.context_refs.filter((ref) => ref.kind === "strategy").length !== 1)) {
+        throw new Error("The resolver changed or ambiguously expanded the selected strategy id/version.");
+      }
       navigate(personaWorkshopEntryUrl({
-        workshopId: resolved.data.workshop_id,
+        workshopId: binding.workshop_id,
         mode,
         participantIds,
         picker: mode === "compare" ? "recommended" : "named",
-        returnTo,
+        returnTo: binding.return_route,
         returnLabel: `Persona ${p.name}`,
-        source: { kind: "persona", id: p.id },
-        targetStrategy,
-        environment: resolved.data.environment,
-        evidenceCutoff: resolved.data.resolved_at,
+        source: { kind: "persona", id: binding.focused_object.id, version: binding.focused_object.version ?? undefined },
+        targetStrategy: binding.strategy_ref
+          ? { id: binding.strategy_ref.strategy_id, version: binding.strategy_ref.version_id }
+          : undefined,
+        environment: binding.advice_environment,
+        evidenceCutoff: binding.evidence_cutoff,
       }));
     } catch (error) {
       setInteractionError(error instanceof Error ? error.message : "Unable to open the canonical Workshop.");

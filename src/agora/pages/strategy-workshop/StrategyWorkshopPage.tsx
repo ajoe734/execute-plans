@@ -15,8 +15,10 @@ import {
 } from "@/lib/bff-v1/agora/workshops";
 import {
   interaction,
+  type ContextBinding,
   type ContextRef,
   type PersonaEligibility,
+  type ResolveContextRequest,
 } from "@/lib/bff-v1/agora/interaction";
 import {
   DailyInteractionUnsupportedError,
@@ -335,11 +337,127 @@ function normalizedEnvironment(workshop: StrategyWorkshop | null, entry?: Worksh
     : "paper";
 }
 
-function interactionContextRefs(workshop: StrategyWorkshop, participantIds: string[], entry?: WorkshopInteractionEntry): ContextRef[] {
+interface ResolvedInteractionContext {
+  bindingId: string;
+  workshopId: string;
+  tenantId: string;
+  sourceRoute: string;
+  contextRefs: ContextBinding["context_refs"];
+  contextDigest: string;
+  environment: "research" | "shadow" | "paper" | "canary" | "live";
+  evidenceCutoff: string;
+  focusedObject: ContextBinding["focused_object"];
+  strategyRef: ContextBinding["strategy_ref"];
+  decisionRef: ContextBinding["decision_ref"];
+  journalRef: ContextBinding["journal_ref"];
+  positionRiskSnapshotRefs: string[];
+  selectedPersonaIds: string[];
+  initialMode: DailyInteractionMode;
+  returnRoute: string;
+}
+
+function sameContextRef(expected: ContextRef, actual: ContextBinding["context_refs"][number]): boolean {
+  return expected.type === actual.kind
+    && expected.id === actual.id
+    && (expected.version_id ?? null) === (actual.version ?? null);
+}
+
+export function resolvedInteractionContext(input: {
+  workshopId: string;
+  request: ResolveContextRequest;
+  entry?: WorkshopInteractionEntry;
+  response: Awaited<ReturnType<typeof interaction.resolveContext>>["data"];
+}): ResolvedInteractionContext {
+  const { response } = input;
+  const binding = response.context_binding;
+  if (!response.verified || response.workshop_id !== input.workshopId
+    || !binding || binding.workshop_id !== input.workshopId) {
+    throw new Error("The canonical Workshop context could not be verified.");
+  }
+  if (!binding.binding_id || !binding.tenant_id || !binding.context_digest
+    || !binding.source_route || !binding.return_route) {
+    throw new Error("The resolver omitted required durable context binding fields.");
+  }
+  if (response.context_digest !== binding.context_digest
+    || response.environment !== binding.advice_environment) {
+    throw new Error("The resolver returned internally inconsistent context truth.");
+  }
+  if (response.context_refs.length !== binding.context_refs.length
+    || response.context_refs.some((ref) => !binding.context_refs.some((actual) => sameContextRef(ref, actual)))) {
+    throw new Error("The resolver returned inconsistent canonical context references.");
+  }
+  if (!binding.resolved_at || Number.isNaN(Date.parse(binding.resolved_at))
+    || !binding.evidence_cutoff || Number.isNaN(Date.parse(binding.evidence_cutoff))) {
+    throw new Error("The resolver omitted its authoritative context cutoff.");
+  }
+  for (const requested of input.request.context_refs) {
+    if (!binding.context_refs.some((actual) => sameContextRef(requested, actual))) {
+      throw new Error(`Resolved context omitted or changed ${requested.type}:${requested.id}:${requested.version_id ?? "unversioned"}.`);
+    }
+  }
+  if (binding.selected_persona_ids.length !== (input.request.selected_persona_ids?.length ?? 0)
+    || binding.selected_persona_ids.some((id, index) => id !== input.request.selected_persona_ids?.[index])) {
+    throw new Error("The resolver changed the selected Persona binding.");
+  }
+  if (binding.initial_mode !== input.request.initial_mode) {
+    throw new Error("The resolver changed the interaction mode binding.");
+  }
+  if (input.entry?.targetStrategy) {
+    const strategyRefs = binding.context_refs.filter((ref) => ref.kind === "strategy");
+    if (strategyRefs.length !== 1
+      || strategyRefs[0].id !== input.entry.targetStrategy.id
+      || strategyRefs[0].version !== input.entry.targetStrategy.version
+      || binding.strategy_ref?.strategy_id !== input.entry.targetStrategy.id
+      || binding.strategy_ref.version_id !== input.entry.targetStrategy.version) {
+      throw new Error("Resolved strategy target is missing, changed, or ambiguous.");
+    }
+  }
+  return {
+    bindingId: binding.binding_id,
+    workshopId: binding.workshop_id,
+    tenantId: binding.tenant_id,
+    sourceRoute: binding.source_route,
+    contextRefs: binding.context_refs,
+    contextDigest: binding.context_digest,
+    environment: binding.advice_environment,
+    evidenceCutoff: binding.evidence_cutoff,
+    focusedObject: binding.focused_object,
+    strategyRef: binding.strategy_ref,
+    decisionRef: binding.decision_ref,
+    journalRef: binding.journal_ref,
+    positionRiskSnapshotRefs: binding.position_risk_snapshot_refs ?? [],
+    selectedPersonaIds: binding.selected_persona_ids,
+    initialMode: binding.initial_mode,
+    returnRoute: binding.return_route,
+  };
+}
+
+export function selectCompareParticipants(
+  included: PersonaEligibility[],
+  preferred: string[],
+  requiredOriginal?: string,
+): string[] {
+  const eligible = new Set(included.map((item) => item.persona_id));
+  const original = requiredOriginal ?? preferred[0];
+  if (!original || !eligible.has(original)) {
+    throw new Error("The originally selected Persona is no longer eligible for comparison.");
+  }
+  const candidates = [
+    ...preferred.slice(1),
+    ...included.filter((item) => item.recommended).map((item) => item.persona_id),
+    ...included.map((item) => item.persona_id),
+  ];
+  const second = candidates.find((id) => id !== original && eligible.has(id));
+  if (!second) throw new Error("Compare requires exactly one additional eligible Persona.");
+  return [original, second];
+}
+
+function interactionContextRefs(workshop: StrategyWorkshop, workshopId: string, participantIds: string[], entry?: WorkshopInteractionEntry): ContextRef[] {
   const metadata = recordFrom(workshop.metadata);
   const session = recordFrom(workshop);
   const refs: ContextRef[] = participantIds.map((id) => ({ type: "persona", id }));
-  if (entry?.source && ["persona", "strategy", "decision_event", "journal_entry", "position"].includes(entry.source.kind)) {
+  if (!entry?.source) refs.unshift({ type: "workshop", id: workshopId });
+  if (entry?.source && ["persona", "strategy", "decision_event", "journal_entry", "position", "human_inbox_item", "workshop"].includes(entry.source.kind)) {
     refs.unshift({
       type: entry.source.kind as ContextRef["type"],
       id: entry.source.id,
@@ -371,6 +489,37 @@ function interactionContextRefs(workshop: StrategyWorkshop, participantIds: stri
   return Array.from(new Map(refs.map((ref) => [`${ref.type}:${ref.id}:${ref.version_id ?? ""}`, ref])).values());
 }
 
+function interactionResolveRequest(
+  workshop: StrategyWorkshop,
+  workshopId: string,
+  participantIds: string[],
+  mode: WorkshopInteractionMode,
+  entry?: WorkshopInteractionEntry,
+): ResolveContextRequest {
+  const route = entry?.returnTo ?? `/agora/strategy-workshop/${encodeURIComponent(workshopId)}`;
+  const focusedObject = entry?.source
+    ? { kind: entry.source.kind, id: entry.source.id, version: entry.source.version ?? null }
+    : { kind: "workshop", id: workshopId };
+  const cutoffHint = String(entry?.evidenceCutoff
+    ?? recordFrom(workshop.metadata).evidence_cutoff
+    ?? workshop.created_at
+    ?? "").trim();
+  if (!cutoffHint || Number.isNaN(Date.parse(cutoffHint))) {
+    throw new Error("The canonical Workshop projection omitted an evidence cutoff.");
+  }
+  return {
+    workshop_id: workshopId,
+    context_refs: interactionContextRefs(workshop, workshopId, participantIds, entry),
+    environment: normalizedEnvironment(workshop, entry),
+    source_route: route,
+    focused_object: focusedObject,
+    evidence_cutoff: cutoffHint,
+    selected_persona_ids: participantIds,
+    initial_mode: mode,
+    return_route: route,
+  };
+}
+
 function eligibilityMode(mode: WorkshopInteractionMode): "ask" | "challenge" | "consult" | "propose_action" | "reflect" {
   return mode === "compare" ? "consult" : mode;
 }
@@ -382,18 +531,6 @@ function participantSnapshot(item: PersonaEligibility): ParticipantSnapshot | nu
     || !snapshot.provider_agent_id || !snapshot.workspace_id || !snapshot.captured_at
     || !Array.isArray(snapshot.capability_snapshot) || snapshot.capability_snapshot.length === 0) return null;
   return snapshot;
-}
-
-function sourceContext(workshop: StrategyWorkshop | null, entry?: WorkshopInteractionEntry) {
-  const metadata = recordFrom(workshop?.metadata);
-  const source = entry?.source ?? {
-    kind: "workshop" as const,
-    id: workshop?.workshop_id ?? "",
-  };
-  const evidenceCutoff = entry?.evidenceCutoff
-    ?? (typeof metadata.evidence_cutoff === "string" ? metadata.evidence_cutoff : undefined)
-    ?? (typeof metadata.data_cutoff === "string" ? metadata.data_cutoff : undefined);
-  return { source, evidenceCutoff };
 }
 
 async function sha256(value: string): Promise<string> {
@@ -422,6 +559,9 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [excludedParticipants, setExcludedParticipants] = useState<PersonaEligibility[]>([]);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const [resolvedContext, setResolvedContext] = useState<ResolvedInteractionContext | null>(null);
+  const [contextResolving, setContextResolving] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
   
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
@@ -512,10 +652,10 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       });
       setEligibleParticipants(result.data.included);
       setExcludedParticipants(result.data.excluded);
-      const picked = pickerParticipants(picker, result.data.included, preferred);
-      // Compare is deliberately pairwise even when the recommended picker can
-      // otherwise form a three-Persona panel.
-      setSelectedParticipants(mode === "compare" ? picked.slice(0, 2) : picked);
+      const picked = mode === "compare"
+        ? selectCompareParticipants(result.data.included, preferred, entry?.mode === "compare" ? entry.participantIds?.[0] : undefined)
+        : pickerParticipants(picker, result.data.included, preferred);
+      setSelectedParticipants(picked);
     } catch (error) {
       setEligibleParticipants([]);
       setExcludedParticipants([]);
@@ -533,6 +673,39 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     // Subsequent picker/mode changes call refreshEligibility from their controls.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workshop, workshopId]);
+
+  useEffect(() => {
+    if (!workshop || selectedParticipants.length === 0) {
+      setResolvedContext(null);
+      return;
+    }
+    let cancelled = false;
+    let request: ResolveContextRequest;
+    try {
+      request = interactionResolveRequest(workshop, workshopId, selectedParticipants, selectedMode, entry);
+    } catch (error) {
+      setResolvedContext(null);
+      setContextError(error instanceof Error ? error.message : "Authoritative context request could not be built.");
+      return;
+    }
+    setContextResolving(true);
+    setContextError(null);
+    setResolvedContext(null);
+    interaction.resolveContext(request)
+      .then((response) => {
+        if (cancelled) return;
+        setResolvedContext(resolvedInteractionContext({
+          workshopId, request, entry, response: response.data,
+        }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setResolvedContext(null);
+        setContextError(error instanceof Error ? error.message : "Authoritative context resolution failed.");
+      })
+      .finally(() => { if (!cancelled) setContextResolving(false); });
+    return () => { cancelled = true; };
+  }, [entry, selectedMode, selectedParticipants, workshop, workshopId]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -636,19 +809,42 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         if (selectedParticipants.length === 0) {
           throw new Error("Choose at least one eligible Persona before submitting.");
         }
-        const contextRefs = interactionContextRefs(workshop, selectedParticipants, entry);
-        const resolved = await interaction.resolveContext({
-          workshop_id: workshopId,
-          context_refs: contextRefs,
-          environment: normalizedEnvironment(workshop, entry),
+        if (!resolvedContext) {
+          throw new Error(contextError ?? "Wait for authoritative context resolution before submitting.");
+        }
+        const requiredOriginal = entry?.mode === "compare" ? entry.participantIds?.[0] : undefined;
+        if (selectedMode === "compare" && (selectedParticipants.length !== 2
+          || new Set(selectedParticipants).size !== 2
+          || (requiredOriginal && !selectedParticipants.includes(requiredOriginal)))) {
+          throw new Error("Compare requires exactly two distinct eligible Personas and must retain the originally selected Persona.");
+        }
+        const request = interactionResolveRequest(workshop, workshopId, selectedParticipants, selectedMode, entry);
+        const resolved = await interaction.resolveContext(request);
+        const truth = resolvedInteractionContext({
+          workshopId, request, entry, response: resolved.data,
         });
-        if (!resolved.data.verified || resolved.data.workshop_id !== workshopId) {
-          throw new Error("The canonical Workshop context could not be verified.");
+        if (truth.contextDigest !== resolvedContext.contextDigest
+          || truth.environment !== resolvedContext.environment
+          || truth.evidenceCutoff !== resolvedContext.evidenceCutoff
+          || truth.sourceRoute !== resolvedContext.sourceRoute
+          || truth.returnRoute !== resolvedContext.returnRoute
+          || truth.tenantId !== resolvedContext.tenantId
+          || truth.initialMode !== resolvedContext.initialMode
+          || JSON.stringify(truth.contextRefs) !== JSON.stringify(resolvedContext.contextRefs)
+          || JSON.stringify(truth.strategyRef ?? null) !== JSON.stringify(resolvedContext.strategyRef ?? null)
+          || truth.decisionRef !== resolvedContext.decisionRef
+          || truth.journalRef !== resolvedContext.journalRef
+          || JSON.stringify(truth.positionRiskSnapshotRefs) !== JSON.stringify(resolvedContext.positionRiskSnapshotRefs)
+          || JSON.stringify(truth.selectedPersonaIds) !== JSON.stringify(resolvedContext.selectedPersonaIds)
+          || truth.focusedObject.kind !== resolvedContext.focusedObject.kind
+          || truth.focusedObject.id !== resolvedContext.focusedObject.id
+          || (truth.focusedObject.version ?? null) !== (resolvedContext.focusedObject.version ?? null)) {
+          throw new Error("Authoritative context changed after the page resolved it. Refresh before submitting.");
         }
         const eligibility = await interaction.participants({
           workshop_id: workshopId,
           mode: eligibilityMode(selectedMode),
-          environment: normalizedEnvironment(workshop, entry),
+          environment: truth.environment,
           required_capability: "persona_opinion",
         });
         const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
@@ -662,25 +858,22 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         if (selectedSnapshots.some((snapshot) => !snapshot)) {
           throw new Error("The BFF eligibility response did not include v1.9 immutable Persona snapshots. PINT-012 runtime support is required.");
         }
-        const { source, evidenceCutoff } = sourceContext(workshop, entry);
-        if (!evidenceCutoff || Number.isNaN(Date.parse(evidenceCutoff))) {
-          throw new Error("The authoritative source context did not provide an evidence cutoff. Submission is blocked rather than inventing one.");
-        }
         const operatorId = writeAccess.actorId?.trim();
         const tenantId = getAuthProvider().getTenantId()?.trim();
         if (!operatorId || !tenantId) {
           throw new Error("The authenticated BFF operator and tenant are required for an immutable v1.9 request.");
+        }
+        if (tenantId !== truth.tenantId) {
+          throw new Error("The resolver tenant binding does not match the authenticated tenant.");
         }
         if (!globalThis.crypto?.randomUUID) {
           throw new Error("Secure request identity support is unavailable in this browser.");
         }
         const submittedAt = new Date().toISOString();
         const requestId = globalThis.crypto.randomUUID();
-        const metadata = recordFrom(workshop.metadata);
-        const strategyRef = resolved.data.context_refs.find((ref) => ref.type === "strategy");
-        const positionRefs = Array.isArray(metadata.position_risk_snapshot_refs)
-          ? metadata.position_risk_snapshot_refs.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
-          : [];
+        if (selectedMode === "propose_action" && !truth.strategyRef?.version_id) {
+          throw new Error("Propose requires a resolver-verified immutable strategy id and version.");
+        }
         await submitDailyInteraction({
           workshop_id: workshopId,
           human_request: {
@@ -692,18 +885,18 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             request_sha256: await sha256(content),
           },
           context_snapshot: {
-            tenant_id: tenantId,
-            source_route: entry?.returnTo ?? `/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
-            focused_object: source,
-            context_refs: resolved.data.context_refs.map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
-            strategy_ref: strategyRef?.version_id ? { strategy_id: strategyRef.id, version_id: strategyRef.version_id } : null,
-            decision_ref: resolved.data.context_refs.find((ref) => ref.type === "decision_event")?.id ?? null,
-            journal_ref: resolved.data.context_refs.find((ref) => ref.type === "journal_entry")?.id ?? null,
-            position_risk_snapshot_refs: positionRefs,
-            evidence_cutoff: evidenceCutoff,
-            selected_persona_ids: selectedParticipants,
-            initial_mode: selectedMode,
-            return_route: entry?.returnTo ?? `/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            tenant_id: truth.tenantId,
+            source_route: truth.sourceRoute,
+            focused_object: truth.focusedObject,
+            context_refs: truth.contextRefs,
+            strategy_ref: truth.strategyRef,
+            decision_ref: truth.decisionRef,
+            journal_ref: truth.journalRef,
+            position_risk_snapshot_refs: truth.positionRiskSnapshotRefs,
+            evidence_cutoff: truth.evidenceCutoff,
+            selected_persona_ids: truth.selectedPersonaIds,
+            initial_mode: truth.initialMode,
+            return_route: truth.returnRoute,
             captured_at: submittedAt,
           },
           participants: selectedSnapshots as ParticipantSnapshot[],
@@ -727,6 +920,8 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       writeAccess.actorId,
       dailyRuntimeState,
       entry,
+      contextError,
+      resolvedContext,
       refreshDailyInteractions,
       refreshEvents,
     ],
@@ -735,13 +930,17 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const composerInputDisabled = !workshop
     || sessionLoading
     || sendLoading
+    || contextResolving
+    || !resolvedContext
+    || Boolean(contextError)
     || !writeAccess.interactionAllowed
     || dailyRuntimeState !== "ready"
     || workshop.status === "concluded";
   const canSubmitInteraction = !composerInputDisabled
     && !eligibilityLoading
     && Boolean(composerValue.trim())
-    && selectedParticipants.length > 0;
+    && selectedParticipants.length > 0
+    && (selectedMode !== "compare" || (selectedParticipants.length === 2 && new Set(selectedParticipants).size === 2));
 
   return (
     <div
@@ -951,25 +1150,26 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5 text-slate-400" />
-                <strong>Subject:</strong> {workshop?.subject?.kind ?? "none"} ({workshop?.subject?.ref ?? "none"})
+                <strong>Focused object:</strong> {resolvedContext ? `${resolvedContext.focusedObject.kind}:${resolvedContext.focusedObject.id}` : "resolving"}
               </span>
               <span className="text-slate-300">•</span>
               <span>
-                <strong>Strategy version:</strong> {metadataString(workshop, "strategy_version") ?? metadataString(workshop, "strategy_spec_registry_id") ?? entry?.source?.version ?? "not supplied"}
+                <strong>Strategy version:</strong> {resolvedContext?.strategyRef?.version_id ?? "not supplied"}
               </span>
               <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                <strong>Environment:</strong> {((workshop?.metadata?.environment) as string) ?? "paper"}
+                <strong>Environment:</strong> {resolvedContext?.environment ?? "resolving"}
               </span>
             </div>
             <div className="flex items-center gap-3 text-slate-400">
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
-                Evidence cutoff: {sourceContext(workshop, entry).evidenceCutoff ?? "not supplied"}
+                Evidence cutoff: {resolvedContext?.evidenceCutoff ?? "resolving"}
               </span>
             </div>
           </div>
+          {contextError ? <p className="rounded border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-700" data-testid="context-resolution-error" role="alert">{contextError}</p> : null}
 
           {/* Mode Selector & Participant Picker Row */}
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
@@ -1006,7 +1206,14 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                   onValueChange={(val: string) => {
                     const picker = val as WorkshopParticipantPicker;
                     setPickerSelectionType(picker);
-                    setSelectedParticipants(pickerParticipants(picker, eligibleParticipants, selectedParticipants));
+                    try {
+                      setEligibilityError(null);
+                      setSelectedParticipants(selectedMode === "compare"
+                        ? selectCompareParticipants(eligibleParticipants, selectedParticipants, entry?.mode === "compare" ? entry.participantIds?.[0] : undefined)
+                        : pickerParticipants(picker, eligibleParticipants, selectedParticipants));
+                    } catch (error) {
+                      setEligibilityError(error instanceof Error ? error.message : "Unable to select comparison Personas.");
+                    }
                   }}
                 >
                   <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker">
@@ -1066,9 +1273,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                   <input
                     type="checkbox"
                     checked={selectedParticipants.includes(persona.persona_id)}
-                    onChange={(event) => setSelectedParticipants((current) => event.target.checked
-                      ? Array.from(new Set([...current, persona.persona_id]))
-                      : current.filter((id) => id !== persona.persona_id))}
+                    disabled={selectedMode === "compare" && entry?.mode === "compare" && persona.persona_id === entry.participantIds?.[0]}
+                    onChange={(event) => setSelectedParticipants((current) => {
+                      if (selectedMode !== "compare") {
+                        return event.target.checked ? Array.from(new Set([...current, persona.persona_id])) : current.filter((id) => id !== persona.persona_id);
+                      }
+                      const original = entry?.mode === "compare" ? entry.participantIds?.[0] : current[0];
+                      if (!original || persona.persona_id === original) return current;
+                      return event.target.checked ? [original, persona.persona_id] : current.filter((id) => id !== persona.persona_id);
+                    })}
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   <span title={`Capability snapshot: ${persona.capability_snapshot_id ?? "verified"}`}>{persona.display_name}</span>

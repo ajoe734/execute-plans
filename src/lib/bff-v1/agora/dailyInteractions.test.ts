@@ -8,7 +8,9 @@ import { liveWriteGated } from "../writeGate";
 import {
   DailyInteractionUnsupportedError,
   decideCandidate,
+  listCandidateDecisions,
   listDailyInteractions,
+  retryDailyInteraction,
   type AuthorityBoundary,
   type DailyInteraction,
 } from "./dailyInteractions";
@@ -50,7 +52,16 @@ beforeEach(() => {
 
 describe("daily Persona interaction v1.9 adapter", () => {
   it("filters authoritative list readback by Workshop without fabricating data", async () => {
-    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [interaction("i1", "w1"), interaction("i2", "w2")] } });
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: [interaction("i1", "w1"), interaction("i2", "w2")],
+      meta: {
+        capability: "agora.persona.interaction.daily.v1",
+        audience: "tenant:t1:user:operator-1",
+        snapshot_at: "2026-07-17T00:00:00Z",
+        authoritative_store: "agora_interaction_postgres",
+        next_page_token: null,
+      },
+    });
     await expect(listDailyInteractions("w2")).resolves.toEqual([expect.objectContaining({ interaction_id: "i2" })]);
     expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", path: "/bff/agora/interactions" }));
   });
@@ -63,7 +74,7 @@ describe("daily Persona interaction v1.9 adapter", () => {
   it("rejects readback that claims any execution authority", async () => {
     const unsafe = interaction("i1", "w1");
     unsafe.authority = { ...authority, order_submitted: true as false };
-    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [unsafe] } });
+    vi.mocked(bffFetch).mockResolvedValue({ data: [unsafe], meta: {} });
     await expect(listDailyInteractions()).rejects.toThrow("advisory-only authority boundary");
   });
 
@@ -86,5 +97,30 @@ describe("daily Persona interaction v1.9 adapter", () => {
       },
     }));
     expect(JSON.stringify(vi.mocked(bffFetch).mock.calls[0][0])).not.toContain("validation_result");
+  });
+
+  it("reads candidate decisions from the OpenAPI data array envelope", async () => {
+    const decision = {
+      decision_id: "decision-1", proposal_id: "p1", interaction_id: "i1", measure_id: "m1",
+      action: "accepted_for_review" as const, actor_id: "operator-1", reason: "Ready for independent review",
+      revision: 3, proposal_digest: "b".repeat(64), review_request_id: "review-1",
+      decided_at: "2026-07-17T00:00:00Z", formal_approval: false as const,
+      execution_authority: "none" as const, audit_ref: "audit-1",
+    };
+    vi.mocked(bffFetch).mockResolvedValue({ data: [decision], meta: {} });
+
+    await expect(listCandidateDecisions("p1")).resolves.toEqual([decision]);
+    expect(bffFetch).toHaveBeenCalledWith({ method: "GET", path: "/bff/agora/proposals/p1/candidate-decisions" });
+  });
+
+  it("retries failed providers through the durable interaction retry command", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: interaction("i1", "w1") });
+    await retryDailyInteraction({ interactionId: "i1", reason: "Transient provider outage" });
+    expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      path: "/bff/agora/interactions/i1:retry",
+      body: { reason: "Transient provider outage" },
+      idempotencyKey: expect.stringContaining("pint15-retry-i1"),
+    }));
   });
 });

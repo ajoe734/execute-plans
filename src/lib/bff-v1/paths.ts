@@ -281,6 +281,7 @@ export const paths = {
   agoraInteractionsSubmit: () => `${BASE}/agora/interactions`,
   agoraDailyInteractions: () => `${BASE}/agora/interactions`,
   agoraDailyInteraction: (id: string) => `${BASE}/agora/interactions/${enc(id)}`,
+  agoraDailyInteractionRetry: (id: string) => `${BASE}/agora/interactions/${enc(id)}:retry`,
   agoraInteractionMeasureCandidates: (interactionId: string, measureId: string) =>
     `${BASE}/agora/interactions/${enc(interactionId)}/recommended-measures/${enc(measureId)}/candidates`,
   agoraCandidateDecisions: (proposalId: string) =>

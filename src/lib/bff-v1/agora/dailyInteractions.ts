@@ -190,6 +190,26 @@ export interface ValidationReceipt {
   receipt_sha256: string;
 }
 
+/** Formal approval readback is intentionally distinct from accept-for-review. */
+export interface FormalApprovalReceipt {
+  approval_decision_id: string;
+  authority: "canonical_approval_decision_store";
+  tenant_id: string;
+  proposal_id: string;
+  revision: number;
+  proposal_digest: string;
+  validation_receipt_id: string;
+  validation_receipt_sha256: string;
+  proposer_id: string;
+  reviewer_id: string;
+  outcome: "approved" | "rejected" | "revision_requested";
+  self_approval: false;
+  decided_at: string;
+  expires_at: string;
+  receipt_sha256: string;
+  execution_authority: "none";
+}
+
 export class DailyInteractionUnsupportedError extends Error {
   constructor(message = "The daily Persona interaction runtime is not available on this BFF version.") {
     super(message);
@@ -255,10 +275,10 @@ function assertInteraction(resource: DailyInteraction): void {
 export async function listDailyInteractions(workshopId?: string): Promise<DailyInteraction[]> {
   try {
     const raw = await bffFetch<unknown>({ method: "GET", path: paths.agoraDailyInteractions(), query: { page_size: 100 } });
-    const data = dataOf<{ items: DailyInteraction[] }>(raw);
-    if (!Array.isArray(data.items)) throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Daily interaction list omitted items." });
-    data.items.forEach(assertInteraction);
-    return workshopId ? data.items.filter((item) => item.workshop_id === workshopId) : data.items;
+    const data = dataOf<DailyInteraction[]>(raw);
+    if (!Array.isArray(data)) throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Daily interaction list data was not an array." });
+    data.forEach(assertInteraction);
+    return workshopId ? data.filter((item) => item.workshop_id === workshopId) : data;
   } catch (error) {
     return unsupported(error);
   }
@@ -285,6 +305,26 @@ export async function submitDailyInteraction(body: DailyInteractionSubmitRequest
     const value = dataOf<DailyInteraction>(await bffFetch<unknown>({
       method: "POST", path: paths.agoraDailyInteractions(), body,
       idempotencyKey: `pint15-submit-${body.human_request.request_id}`,
+    }));
+    assertInteraction(value);
+    return value;
+  } catch (error) {
+    return unsupported(error);
+  }
+}
+
+export async function retryDailyInteraction(input: { interactionId: string; reason: string }): Promise<DailyInteraction> {
+  await requireWrite();
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "A retry reason is required." });
+  }
+  try {
+    const value = dataOf<DailyInteraction>(await bffFetch<unknown>({
+      method: "POST",
+      path: paths.agoraDailyInteractionRetry(input.interactionId),
+      body: { reason },
+      idempotencyKey: `pint15-retry-${input.interactionId}-${reason}`,
     }));
     assertInteraction(value);
     return value;
@@ -342,9 +382,12 @@ export async function decideCandidate(input: {
 
 export async function listCandidateDecisions(proposalId: string): Promise<CandidateDecisionRecord[]> {
   try {
-    const items = dataOf<{ items: CandidateDecisionRecord[] }>(await bffFetch({
+    const items = dataOf<CandidateDecisionRecord[]>(await bffFetch({
       method: "GET", path: paths.agoraCandidateDecisions(proposalId),
-    })).items;
+    }));
+    if (!Array.isArray(items)) {
+      throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate decision list data was not an array." });
+    }
     if (!items.every((item) => item.formal_approval === false && item.execution_authority === "none")) {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate decision readback crossed the non-execution boundary." });
     }
@@ -371,6 +414,23 @@ export async function requestAuthoritativeValidation(input: {
     }));
     if (receipt.authority !== "canonical_validation_service") {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation receipt did not come from the canonical authority." });
+    }
+    return receipt;
+  } catch (error) {
+    return unsupported(error);
+  }
+}
+
+export async function getAuthoritativeValidation(input: {
+  proposalId: string; validationReceiptId: string;
+}): Promise<ValidationReceipt> {
+  try {
+    const receipt = dataOf<ValidationReceipt>(await bffFetch({
+      method: "GET",
+      path: paths.agoraCandidateValidation(input.proposalId, input.validationReceiptId),
+    }));
+    if (receipt.authority !== "canonical_validation_service" || receipt.proposal_id !== input.proposalId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation readback did not match the canonical proposal authority." });
     }
     return receipt;
   } catch (error) {

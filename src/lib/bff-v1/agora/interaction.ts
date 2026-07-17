@@ -18,7 +18,7 @@ async function requireInteractionWrite(): Promise<void> {
 }
 
 export interface ContextRef {
-  type: "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window";
+  type: "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window" | "workshop" | "human_inbox_item";
   id: string;
   version_id?: string;
 }
@@ -27,6 +27,32 @@ export interface ResolveContextRequest {
   context_refs: ContextRef[];
   workshop_id?: string;
   environment?: "research" | "shadow" | "paper" | "canary" | "live";
+  source_route?: string;
+  focused_object?: { kind: string; id: string; version?: string | null };
+  evidence_cutoff?: string;
+  selected_persona_ids?: string[];
+  initial_mode?: "ask" | "challenge" | "compare" | "propose_action" | "reflect";
+  return_route?: string;
+}
+
+export interface ContextBinding {
+  binding_id: string;
+  workshop_id: string;
+  tenant_id: string;
+  source_route: string;
+  focused_object: { kind: string; id: string; version?: string | null };
+  context_refs: Array<{ kind: string; id: string; version?: string | null }>;
+  strategy_ref?: { strategy_id: string; version_id: string } | null;
+  decision_ref?: string | null;
+  journal_ref?: string | null;
+  position_risk_snapshot_refs?: string[];
+  evidence_cutoff: string;
+  selected_persona_ids: string[];
+  initial_mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect";
+  return_route: string;
+  advice_environment: "research" | "shadow" | "paper" | "canary" | "live";
+  context_digest: string;
+  resolved_at: string;
 }
 
 export interface ResolveContextResponse {
@@ -36,6 +62,7 @@ export interface ResolveContextResponse {
   environment: string;
   verified: boolean;
   resolved_at: string;
+  context_binding: ContextBinding;
 }
 
 export interface EligibilityRequest {
@@ -106,14 +133,42 @@ export const interaction = {
     await requireInteractionWrite();
     const mockFn = async (): Promise<ResolveContextEnvelope> => {
       const wid = body.workshop_id || `wksp-mock-${Math.random().toString(36).substr(2, 9)}`;
+      const resolvedAt = new Date().toISOString();
+      const sourceRoute = body.source_route ?? `/agora/strategy-workshop/${encodeURIComponent(wid)}`;
+      const focusedObject = body.focused_object ?? { kind: "workshop", id: wid };
+      const evidenceCutoff = body.evidence_cutoff ?? resolvedAt;
+      const selectedPersonaIds = body.selected_persona_ids ?? body.context_refs.filter((ref) => ref.type === "persona").map((ref) => ref.id);
+      const initialMode = body.initial_mode ?? "ask";
+      const returnRoute = body.return_route ?? sourceRoute;
+      const strategy = body.context_refs.find((ref) => ref.type === "strategy" && ref.version_id);
+      const contextDigest = "mock-digest-sha256";
       return {
         data: {
           workshop_id: wid,
           context_refs: body.context_refs,
-          context_digest: "mock-digest-sha256",
+          context_digest: contextDigest,
           environment: body.environment || "research",
           verified: true,
-          resolved_at: new Date().toISOString(),
+          resolved_at: resolvedAt,
+          context_binding: {
+            binding_id: `binding-${wid}`,
+            workshop_id: wid,
+            tenant_id: "tenant-mock",
+            source_route: sourceRoute,
+            focused_object: focusedObject,
+            context_refs: body.context_refs.map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
+            strategy_ref: strategy?.version_id ? { strategy_id: strategy.id, version_id: strategy.version_id } : null,
+            decision_ref: body.context_refs.find((ref) => ref.type === "decision_event")?.id ?? null,
+            journal_ref: body.context_refs.find((ref) => ref.type === "journal_entry")?.id ?? null,
+            position_risk_snapshot_refs: body.context_refs.filter((ref) => ref.type === "position").map((ref) => ref.id),
+            evidence_cutoff: evidenceCutoff,
+            selected_persona_ids: selectedPersonaIds,
+            initial_mode: initialMode,
+            return_route: returnRoute,
+            advice_environment: body.environment ?? "research",
+            context_digest: contextDigest,
+            resolved_at: resolvedAt,
+          },
         },
       };
     };

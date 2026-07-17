@@ -2,6 +2,7 @@ import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrategyWorkshop, WorkshopCard } from "@/lib/bff-v1/agora/types";
+import type { ResolveContextRequest } from "@/lib/bff-v1/agora/interaction";
 import type {
   WorkshopCard as WorkshopCardSchema,
   WorkshopCompletenessSnapshot,
@@ -26,7 +27,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 
 vi.mock("@/lib/bff-v1/agora/interaction", () => ({
   interaction: {
-    resolveContext: vi.fn().mockResolvedValue({ data: { workshop_id: "ws-abc", context_refs: [{ type: "persona", id: "per_quant" }], verified: true } }),
+    resolveContext: vi.fn(),
     participants: vi.fn().mockResolvedValue({
       data: {
         included: [
@@ -95,6 +96,45 @@ const MOCK_WORKSHOP = {
   created_at: "2026-06-01T00:00:00Z",
   metadata: { evidence_cutoff: "2026-07-17T00:00:00Z" },
 } satisfies StrategyWorkshop;
+
+function resolvedContextFixture(body: ResolveContextRequest) {
+  const workshopId = body.workshop_id ?? "ws-abc";
+  const contextRefs = body.context_refs ?? [];
+  const bindingRefs = contextRefs.map((ref: Record<string, unknown>) => ({
+    kind: ref.type, id: ref.id, version: ref.version_id ?? null,
+  }));
+  const strategy = bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "strategy" && ref.version);
+  const resolvedAt = "2026-07-17T00:00:00Z";
+  return Promise.resolve({
+    data: {
+      workshop_id: workshopId,
+      context_refs: contextRefs,
+      context_digest: "server-context-digest",
+      environment: body.environment ?? "paper",
+      verified: true,
+      resolved_at: resolvedAt,
+      context_binding: {
+        binding_id: `binding-${workshopId}`,
+        workshop_id: workshopId,
+        tenant_id: "tenant-1",
+        source_route: body.source_route ?? `/agora/strategy-workshop/${workshopId}`,
+        focused_object: body.focused_object ?? { kind: "workshop", id: workshopId },
+        context_refs: bindingRefs,
+        strategy_ref: strategy ? { strategy_id: strategy.id, version_id: strategy.version } : null,
+        decision_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "decision_event")?.id ?? null,
+        journal_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "journal_entry")?.id ?? null,
+        position_risk_snapshot_refs: [],
+        evidence_cutoff: body.evidence_cutoff ?? resolvedAt,
+        selected_persona_ids: body.selected_persona_ids ?? [],
+        initial_mode: body.initial_mode ?? "ask",
+        return_route: body.return_route ?? `/agora/strategy-workshop/${workshopId}`,
+        advice_environment: body.environment ?? "paper",
+        context_digest: "server-context-digest",
+        resolved_at: resolvedAt,
+      },
+    },
+  });
+}
 
 const TRADING_ROOM_READY = {
   assessment_id: "ready-001",
@@ -178,6 +218,19 @@ describe("StrategyWorkshopPage", () => {
   });
 
   beforeEach(() => {
+    vi.mocked(interaction.resolveContext).mockImplementation(resolvedContextFixture);
+    vi.mocked(interaction.participants).mockResolvedValue({
+      data: {
+        included: [
+          { persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_quant", persona_version: "1", session_persona_id: "session-quant", display_name: "Quant Architect", provider_agent_id: "agent-quant", workspace_id: "workspace-quant", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_macro", display_name: "Macro Strategist", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_macro", persona_version: "1", session_persona_id: "session-macro", display_name: "Macro Strategist", provider_agent_id: "agent-macro", workspace_id: "workspace-macro", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_risk", display_name: "Risk Officer", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_risk", persona_version: "1", session_persona_id: "session-risk", display_name: "Risk Officer", provider_agent_id: "agent-risk", workspace_id: "workspace-risk", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_red", display_name: "Red Team", eligible: true, reasons: [], recommended: false, participant_snapshot: { persona_id: "per_red", persona_version: "1", session_persona_id: "session-red", display_name: "Red Team", provider_agent_id: "agent-red", workspace_id: "workspace-red", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+        ],
+        excluded: [],
+      },
+    });
+    vi.mocked(submitDailyInteraction).mockResolvedValue({ interaction_id: "int-1", workshop_id: "ws-abc", status: "queued" } as never);
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
@@ -456,7 +509,10 @@ describe("StrategyWorkshopPage", () => {
     await waitFor(() => {
       expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
         workshop_id: "ws-abc",
-        context_refs: expect.arrayContaining([{ type: "persona", id: "per_quant" }]),
+        context_refs: expect.arrayContaining([
+          { type: "workshop", id: "ws-abc" },
+          { type: "persona", id: "per_quant" },
+        ]),
       }));
       expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ workshop_id: "ws-abc", mode: "ask" }));
       expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
@@ -479,17 +535,6 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
-    vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
-      data: {
-        workshop_id: "ws-abc",
-        context_refs: body.context_refs,
-        context_digest: "server-digest",
-        environment: body.environment ?? "research",
-        verified: true,
-        resolved_at: "2026-07-17T01:02:03Z",
-      },
-    }));
-
     render(<StrategyWorkshopPage
       entry={{
         mode,
@@ -577,14 +622,6 @@ describe("StrategyWorkshopPage", () => {
       selected_version_id: "workshop-version-link-4",
     } as StrategyWorkshop;
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(liveSession);
-    vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
-      data: {
-        workshop_id: "ws-abc",
-        context_refs: body.context_refs,
-        verified: true,
-      },
-    } as Awaited<ReturnType<typeof interaction.resolveContext>>));
-
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     fireEvent.change(await screen.findByTestId("servant-composer-input"), {
       target: { value: "Propose a bounded candidate measure" },
@@ -766,7 +803,7 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage workshopId="ws-legacy" />);
 
     const contextBar = await screen.findByTestId("context-bar");
-    expect(contextBar.textContent).toContain("Subject: none (none)");
+    expect(contextBar.textContent).toContain("Focused object: workshop:ws-legacy");
     expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
   });
 
@@ -942,6 +979,6 @@ describe("StrategyWorkshopPage", () => {
     const header = await screen.findByTestId("strategy-workshop-runtime-header");
     expect(header).toBeDefined();
     const contextBar = screen.getByTestId("context-bar");
-    expect(contextBar.textContent).toContain("Subject: none");
+    expect(contextBar.textContent).toContain("Focused object: workshop:ws-no-subject");
   });
 });
