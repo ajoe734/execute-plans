@@ -786,6 +786,9 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("mode-selector")).toBeDefined();
     expect(screen.getByTestId("participant-picker")).toBeDefined();
     expect(screen.getByTestId("eligibility-explanation")).toBeDefined();
+    expect(screen.getByLabelText("Interaction Mode")).toBe(screen.getByTestId("mode-selector"));
+    expect(screen.getByLabelText("Participants")).toBe(screen.getByTestId("participant-picker"));
+    expect(screen.getByLabelText("Persona interaction request")).toBe(screen.getByTestId("servant-composer-input"));
   });
 
   it("keeps the live session renderable when a legacy workshop omits its subject", async () => {

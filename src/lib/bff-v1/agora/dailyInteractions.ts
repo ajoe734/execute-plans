@@ -158,6 +158,11 @@ export interface DailyInteractionSubmitRequest {
   participants: ParticipantSnapshot[];
 }
 
+interface DailyInteractionListEnvelope {
+  data: DailyInteraction[];
+  meta?: { next_page_token?: string | null } & Record<string, unknown>;
+}
+
 export type CandidateDecisionAction = "modify" | "accept_for_review" | "reject" | "defer" | "cancel";
 export interface CandidateDecisionRecord {
   decision_id: string;
@@ -274,11 +279,28 @@ function assertInteraction(resource: DailyInteraction): void {
 
 export async function listDailyInteractions(workshopId?: string): Promise<DailyInteraction[]> {
   try {
-    const raw = await bffFetch<unknown>({ method: "GET", path: paths.agoraDailyInteractions(), query: { page_size: 100 } });
-    const data = dataOf<DailyInteraction[]>(raw);
-    if (!Array.isArray(data)) throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Daily interaction list data was not an array." });
-    data.forEach(assertInteraction);
-    return workshopId ? data.filter((item) => item.workshop_id === workshopId) : data;
+    const items: DailyInteraction[] = [];
+    const seenTokens = new Set<string>();
+    let pageToken: string | undefined;
+    do {
+      const raw = await bffFetch<DailyInteractionListEnvelope>({
+        method: "GET",
+        path: paths.agoraDailyInteractions(),
+        query: { page_size: 100, page_token: pageToken, workshop_id: workshopId },
+      });
+      if (!raw || !Array.isArray(raw.data)) {
+        throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Daily interaction list data was not an array." });
+      }
+      raw.data.forEach(assertInteraction);
+      items.push(...raw.data);
+      const next = raw.meta?.next_page_token?.trim() || undefined;
+      if (next && seenTokens.has(next)) {
+        throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Daily interaction pagination repeated a page token." });
+      }
+      if (next) seenTokens.add(next);
+      pageToken = next;
+    } while (pageToken);
+    return workshopId ? items.filter((item) => item.workshop_id === workshopId) : items;
   } catch (error) {
     return unsupported(error);
   }
@@ -313,18 +335,25 @@ export async function submitDailyInteraction(body: DailyInteractionSubmitRequest
   }
 }
 
-export async function retryDailyInteraction(input: { interactionId: string; reason: string }): Promise<DailyInteraction> {
+export async function retryDailyInteraction(input: {
+  interactionId: string;
+  reason: string;
+  idempotencyKey: string;
+}): Promise<DailyInteraction> {
   await requireWrite();
   const reason = input.reason.trim();
   if (!reason) {
     throw makeBffError({ code: "VALIDATION_FAILED", message: "A retry reason is required." });
+  }
+  if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Retry idempotency identity must be ASCII-safe." });
   }
   try {
     const value = dataOf<DailyInteraction>(await bffFetch<unknown>({
       method: "POST",
       path: paths.agoraDailyInteractionRetry(input.interactionId),
       body: { reason },
-      idempotencyKey: `pint15-retry-${input.interactionId}-${reason}`,
+      idempotencyKey: input.idempotencyKey,
     }));
     assertInteraction(value);
     return value;
@@ -356,13 +385,13 @@ export async function createCandidateFromMeasure(input: {
 
 export async function decideCandidate(input: {
   proposalId: string; action: CandidateDecisionAction; reason: string; revision: number; proposalDigest: string;
-  proposedValue?: unknown;
+  proposalEtag: string; proposedValue?: unknown;
 }): Promise<CandidateDecisionRecord> {
   await requireWrite();
   try {
     const decision = dataOf<CandidateDecisionRecord>(await bffFetch({
       method: "POST", path: paths.agoraCandidateDecisions(input.proposalId),
-      ifMatchVersion: input.proposalDigest,
+      headers: { "If-Match": input.proposalEtag },
       body: {
         action: input.action,
         reason: input.reason,
@@ -398,13 +427,13 @@ export async function listCandidateDecisions(proposalId: string): Promise<Candid
 }
 
 export async function requestAuthoritativeValidation(input: {
-  proposalId: string; revision: number; proposalDigest: string; validationPlanRef: string;
+  proposalId: string; revision: number; proposalDigest: string; proposalEtag: string; validationPlanRef: string;
 }): Promise<ValidationReceipt> {
   await requireWrite();
   try {
     const receipt = dataOf<ValidationReceipt>(await bffFetch({
       method: "POST", path: paths.agoraCandidateValidations(input.proposalId),
-      ifMatchVersion: input.proposalDigest,
+      headers: { "If-Match": input.proposalEtag },
       body: {
         proposal_id: input.proposalId,
         revision: input.revision,

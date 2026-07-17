@@ -128,11 +128,46 @@ export interface SubmitInteractionEnvelope {
   meta?: Record<string, unknown>;
 }
 
+function canonicalRequestJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new Error("Context resolve request contains an unsupported value.");
+    return encoded;
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalRequestJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalRequestJson(record[key])}`)
+    .join(",")}}`;
+}
+
+/**
+ * The resolver receipt is idempotent for the complete canonical request.
+ * Mount and pre-submit resolution must replay the same receipt rather than
+ * minting a new server cutoff/digest for identical context.
+ */
+export async function resolveContextIdempotencyKey(body: ResolveContextRequest): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure context receipt identity support is unavailable in this browser.");
+  }
+  const bytes = new TextEncoder().encode(canonicalRequestJson(body));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `pint15-context-${hex}`;
+}
+
+const mockContextReceipts = new Map<string, ResolveContextEnvelope>();
+
 export const interaction = {
   resolveContext: async (body: ResolveContextRequest): Promise<ResolveContextEnvelope> => {
     await requireInteractionWrite();
+    const idempotencyKey = await resolveContextIdempotencyKey(body);
     const mockFn = async (): Promise<ResolveContextEnvelope> => {
-      const wid = body.workshop_id || `wksp-mock-${Math.random().toString(36).substr(2, 9)}`;
+      const replay = mockContextReceipts.get(idempotencyKey);
+      if (replay) return replay;
+      const wid = body.workshop_id || `wksp-mock-${idempotencyKey.slice(-9)}`;
       const resolvedAt = new Date().toISOString();
       const sourceRoute = body.source_route ?? `/agora/strategy-workshop/${encodeURIComponent(wid)}`;
       const focusedObject = body.focused_object ?? { kind: "workshop", id: wid };
@@ -142,7 +177,7 @@ export const interaction = {
       const returnRoute = body.return_route ?? sourceRoute;
       const strategy = body.context_refs.find((ref) => ref.type === "strategy" && ref.version_id);
       const contextDigest = "mock-digest-sha256";
-      return {
+      const receipt: ResolveContextEnvelope = {
         data: {
           workshop_id: wid,
           context_refs: body.context_refs,
@@ -171,6 +206,8 @@ export const interaction = {
           },
         },
       };
+      mockContextReceipts.set(idempotencyKey, receipt);
+      return receipt;
     };
 
     return withLiveOrMock<ResolveContextEnvelope>(
@@ -178,7 +215,7 @@ export const interaction = {
         method: "POST",
         path: paths.agoraInteractionsResolve(),
         body,
-        idempotencyKey: `idem-resolve-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        idempotencyKey,
       },
       mockFn,
     );

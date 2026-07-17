@@ -63,7 +63,28 @@ describe("daily Persona interaction v1.9 adapter", () => {
       },
     });
     await expect(listDailyInteractions("w2")).resolves.toEqual([expect.objectContaining({ interaction_id: "i2" })]);
-    expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", path: "/bff/agora/interactions" }));
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "GET",
+      path: "/bff/agora/interactions",
+      query: { page_size: 100, page_token: undefined, workshop_id: "w2" },
+    });
+  });
+
+  it("passes the Workshop filter to the server and drains every authoritative page", async () => {
+    vi.mocked(bffFetch)
+      .mockResolvedValueOnce({ data: [interaction("i1", "w1")], meta: { next_page_token: "page-2" } })
+      .mockResolvedValueOnce({ data: [interaction("i2", "w1")], meta: { next_page_token: null } });
+
+    await expect(listDailyInteractions("w1")).resolves.toEqual([
+      expect.objectContaining({ interaction_id: "i1" }),
+      expect.objectContaining({ interaction_id: "i2" }),
+    ]);
+    expect(bffFetch).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      query: { page_size: 100, page_token: undefined, workshop_id: "w1" },
+    }));
+    expect(bffFetch).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      query: { page_size: 100, page_token: "page-2", workshop_id: "w1" },
+    }));
   });
 
   it("feature-detects an undeployed contract instead of falling back to a fake success", async () => {
@@ -85,10 +106,18 @@ describe("daily Persona interaction v1.9 adapter", () => {
       revision: 3, proposal_digest: "b".repeat(64), review_request_id: "review-1",
       decided_at: "2026-07-17T00:00:00Z", formal_approval: false, execution_authority: "none", audit_ref: "audit-1",
     } });
-    await decideCandidate({ proposalId: "p1", action: "accept_for_review", reason: "Review the evidence", revision: 3, proposalDigest: "b".repeat(64) });
+    await decideCandidate({
+      proposalId: "p1",
+      action: "accept_for_review",
+      reason: "Review the evidence",
+      revision: 3,
+      proposalDigest: "b".repeat(64),
+      proposalEtag: '"candidate-etag-3"',
+    });
     expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({
       method: "POST",
       path: "/bff/agora/proposals/p1/candidate-decisions",
+      headers: { "If-Match": '"candidate-etag-3"' },
       body: {
         action: "accept_for_review",
         reason: "Review the evidence",
@@ -115,12 +144,21 @@ describe("daily Persona interaction v1.9 adapter", () => {
 
   it("retries failed providers through the durable interaction retry command", async () => {
     vi.mocked(bffFetch).mockResolvedValue({ data: interaction("i1", "w1") });
-    await retryDailyInteraction({ interactionId: "i1", reason: "Transient provider outage" });
+    await retryDailyInteraction({ interactionId: "i1", reason: "Transient provider outage", idempotencyKey: "pint15-retry-93f19d24" });
     expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({
       method: "POST",
       path: "/bff/agora/interactions/i1:retry",
       body: { reason: "Transient provider outage" },
-      idempotencyKey: expect.stringContaining("pint15-retry-i1"),
+      idempotencyKey: "pint15-retry-93f19d24",
     }));
+  });
+
+  it("rejects a retry idempotency key derived from free-form reason text", async () => {
+    await expect(retryDailyInteraction({
+      interactionId: "i1",
+      reason: "Provider outage",
+      idempotencyKey: "pint15-retry-原因",
+    })).rejects.toThrow("ASCII-safe");
+    expect(bffFetch).not.toHaveBeenCalled();
   });
 });

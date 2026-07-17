@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { interaction } from "@/lib/bff-v1";
+import { resolveContextIdempotencyKey, type ResolveContextEnvelope } from "@/lib/bff-v1/agora/interaction";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 describe("Agora Interactions client tests", () => {
@@ -29,6 +30,78 @@ describe("Agora Interactions client tests", () => {
     expect(res.data.workshop_id).toBeDefined();
     expect(res.data.workshop_id).toContain("wksp-mock-");
     expect(res.data.verified).toBe(true);
+  });
+
+  it("derives one stable ASCII idempotency identity from the complete canonical request", async () => {
+    const request = {
+      workshop_id: "ws-1",
+      context_refs: [{ type: "persona" as const, id: "persona-1" }],
+      selected_persona_ids: ["persona-1"],
+      initial_mode: "reflect",
+      source_route: "/management/personas/persona-1",
+    };
+    const reordered = {
+      source_route: request.source_route,
+      initial_mode: request.initial_mode,
+      selected_persona_ids: request.selected_persona_ids,
+      context_refs: request.context_refs,
+      workshop_id: request.workshop_id,
+    };
+    const first = await resolveContextIdempotencyKey(request);
+    await expect(resolveContextIdempotencyKey(reordered)).resolves.toBe(first);
+    expect(first).toMatch(/^pint15-context-[a-f0-9]{64}$/);
+    await expect(resolveContextIdempotencyKey({ ...request, initial_mode: "challenge" })).resolves.not.toBe(first);
+  });
+
+  it("replays an identical live resolve request with one server receipt", async () => {
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+    const receipts = new Map<string, ResolveContextEnvelope>();
+    const resolveKeys: string[] = [];
+    let mintedReceipts = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return new Response(JSON.stringify({
+          data: { session: { authenticated: true, session_kind: "bearer" }, environment: { name: "dev" } },
+        }), { status: 200 });
+      }
+      const idempotencyKey = new Headers(init?.headers).get("Idempotency-Key") ?? "";
+      resolveKeys.push(idempotencyKey);
+      let receipt = receipts.get(idempotencyKey);
+      if (!receipt) {
+        mintedReceipts += 1;
+        receipt = {
+          data: {
+            workshop_id: "ws-1",
+            context_refs: [{ type: "persona", id: "persona-1" }],
+            context_digest: "server-context-digest",
+            environment: "paper",
+            verified: true,
+            resolved_at: "2026-07-17T00:00:00Z",
+          },
+        };
+        receipts.set(idempotencyKey, receipt);
+      }
+      return new Response(JSON.stringify(receipt), { status: 200 });
+    });
+    const request = {
+      workshop_id: "ws-1",
+      context_refs: [{ type: "persona" as const, id: "persona-1" }],
+      selected_persona_ids: ["persona-1"],
+      initial_mode: "reflect",
+      environment: "paper",
+    };
+
+    const mountReceipt = await interaction.resolveContext(request);
+    const preSubmitReceipt = await interaction.resolveContext(request);
+
+    expect(preSubmitReceipt).toEqual(mountReceipt);
+    expect(resolveKeys).toHaveLength(2);
+    expect(resolveKeys[0]).toBe(resolveKeys[1]);
+    expect(resolveKeys[0]).toMatch(/^pint15-context-[a-f0-9]{64}$/);
+    expect(mintedReceipts).toBe(1);
   });
 
   it("mock participants returns included and excluded list", async () => {

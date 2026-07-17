@@ -1176,7 +1176,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             <div className="flex flex-wrap items-center gap-4">
               {/* Mode Selector */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="daily-interaction-mode">Interaction Mode</label>
               <Select
                   value={selectedMode}
                   onValueChange={(val: string) => {
@@ -1185,7 +1185,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                     void refreshEligibility(mode, selectedParticipants, pickerSelectionType);
                   }}
                 >
-                  <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
+                  <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector" id="daily-interaction-mode">
                     <SelectValue placeholder="Select mode" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
@@ -1200,7 +1200,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
               {/* Participant Picker */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Participants</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="daily-interaction-participants">Participants</label>
                 <Select
                   value={pickerSelectionType}
                   onValueChange={(val: string) => {
@@ -1216,7 +1216,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                     }
                   }}
                 >
-                  <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker">
+                  <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker" id="daily-interaction-participants">
                     <SelectValue placeholder="Select panel" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
@@ -1298,10 +1298,12 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
           {/* Composer Input Area */}
           <div className="flex gap-2">
+            <label className="sr-only" htmlFor="daily-interaction-request">Persona interaction request</label>
             <textarea
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
               disabled={composerInputDisabled}
+              id="daily-interaction-request"
               placeholder={!writeAccess.interactionAllowed ? "Access restricted..." : dailyRuntimeState !== "ready" ? "Daily Persona runtime unavailable" : "描述你的問題，Persona 將獨立回覆… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
