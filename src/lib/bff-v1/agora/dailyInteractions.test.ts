@@ -7,6 +7,7 @@ import { bffFetch } from "../client";
 import { liveWriteGated } from "../writeGate";
 import {
   DailyInteractionUnsupportedError,
+  createCandidateFromMeasure,
   decideCandidate,
   listCandidateDecisions,
   listDailyInteractions,
@@ -126,6 +127,27 @@ describe("daily Persona interaction v1.9 adapter", () => {
       },
     }));
     expect(JSON.stringify(vi.mocked(bffFetch).mock.calls[0][0])).not.toContain("validation_result");
+  });
+
+  it("creates a candidate by server-persisted measure identity without a browser-authored digest", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: { execution_authority: "none" }, meta: {} });
+    await createCandidateFromMeasure({
+      interactionId: "i1",
+      opinionId: "opinion-1",
+      measureId: "measure-1",
+      idempotencyKey: "pint15-candidate-93f19d24",
+    });
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/interactions/i1/recommended-measures/measure-1/candidates",
+      idempotencyKey: "pint15-candidate-93f19d24",
+      body: {
+        interaction_id: "i1",
+        opinion_id: "opinion-1",
+        measure_id: "measure-1",
+      },
+    });
+    expect(JSON.stringify(vi.mocked(bffFetch).mock.calls[0][0])).not.toContain("expected_measure_sha256");
   });
 
   it("reads candidate decisions from the OpenAPI data array envelope", async () => {

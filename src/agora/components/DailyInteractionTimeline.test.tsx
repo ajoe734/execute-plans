@@ -83,7 +83,7 @@ describe("DailyInteractionTimeline", () => {
       opinions: [{
         ...item.opinions[0],
         recommended_measures: [{
-          measure_id: "measure-1", measure_type: "risk_limit", target: { kind: "strategy", id: "strategy-1", version: "spec-v4" },
+          measure_id: "measure-1", measure_sha256: "c".repeat(64), measure_type: "risk_limit", target: { kind: "strategy", id: "strategy-1", version: "spec-v4" },
           proposed_value: { max_risk: 0.02 }, rationale: "Bound risk", expected_benefit: "Reduce drawdown", adverse_scenarios: [],
           confidence: 0.8, evidence_refs: [], environment_ceiling: "paper", validation_plan: { validator: "risk", required_checks: ["drawdown"] },
           rollback_trigger: "loss", rollback_action: "restore", authority,

@@ -41,6 +41,8 @@ export interface ParticipantSnapshot {
 
 export interface RecommendedMeasure {
   measure_id: string;
+  /** Server-authored digest of the persisted provider measure; never computed in the browser. */
+  measure_sha256: string;
   measure_type: string;
   target: { kind: string; id: string; version: string; path?: string | null };
   current_value?: unknown;
@@ -363,19 +365,21 @@ export async function retryDailyInteraction(input: {
 }
 
 export async function createCandidateFromMeasure(input: {
-  interactionId: string; opinionId: string; measureId: string; measureSha256: string;
+  interactionId: string; opinionId: string; measureId: string; idempotencyKey: string;
 }): Promise<unknown> {
   await requireWrite();
+  if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate idempotency identity must be ASCII-safe." });
+  }
   try {
     return await bffFetch({
       method: "POST",
       path: paths.agoraInteractionMeasureCandidates(input.interactionId, input.measureId),
-      idempotencyKey: `pint15-candidate-${input.interactionId}-${input.measureId}`,
+      idempotencyKey: input.idempotencyKey,
       body: {
         interaction_id: input.interactionId,
         opinion_id: input.opinionId,
         measure_id: input.measureId,
-        expected_measure_sha256: input.measureSha256,
       },
     });
   } catch (error) {
