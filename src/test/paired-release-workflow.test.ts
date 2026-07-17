@@ -17,15 +17,21 @@ const watchdogWorkflow = readFileSync(
 );
 
 describe("paired Pantheon release workflow", () => {
-  it("builds one authenticated pair while normal gates consume read-only", () => {
+  it("builds one authenticated three-profile set while normal gates consume read-only", () => {
     expect(integrationWorkflow).toContain("Build read-only release profile");
     expect(integrationWorkflow).toContain(
       "Build bounded write-proof release profile",
     );
     expect(integrationWorkflow).toContain(
+      "Build persistent operator-live release profile",
+    );
+    expect(integrationWorkflow).toContain(
       "node scripts/release-candidate.mjs prepare-pair",
     );
     expect(integrationWorkflow).toContain("--read-only-dist-dir dist");
+    expect(integrationWorkflow).toContain(
+      "--operator-live-dist-dir dist-operator-live",
+    );
     expect(integrationWorkflow).toContain(
       "--write-proof-dist-dir dist-write-proof",
     );
@@ -50,9 +56,13 @@ describe("paired Pantheon release workflow", () => {
     expect(deployWorkflow.slice(0, deployJobStart)).toContain("actions: read");
     expect(normalDeploy).toContain("actions: read");
     expect(normalDeploy).not.toContain("actions: write");
-    expect(normalDeploy).toContain("Deploy verified read-only candidate");
-    expect(normalDeploy).toContain("PANTHEON_DEPLOY_PROFILE: read-only");
-    expect(normalDeploy).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
+    expect(normalDeploy).toContain("Deploy verified persistent candidate profile");
+    expect(normalDeploy).toContain(
+      "PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}",
+    );
+    expect(normalDeploy).toContain(
+      "steps.gate.outputs.deployment_profile == 'operator-live' && 'true' || 'false'",
+    );
     expect(normalDeploy).toContain(
       'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"',
     );
@@ -68,6 +78,30 @@ describe("paired Pantheon release workflow", () => {
     expect(proofCoordinator).toContain('PANTHEON_DEPLOY_REAL_WRITES: "true"');
     expect(proofCoordinator).toContain(
       'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true"',
+    );
+  });
+
+  it("keeps operator-live persistent and outside proof watchdog coordination", () => {
+    const deployJobStart = deployWorkflow.indexOf("  deploy:");
+    const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
+    const deployJob = deployWorkflow.slice(deployJobStart, proofJobStart);
+    const proofCoordinator = deployWorkflow.slice(proofJobStart);
+
+    expect(deployWorkflow).toContain('- "operator-live"');
+    expect(deployJob).toContain(
+      "operator-live requires the initial run of an authorized triggering operator",
+    );
+    expect(deployJob).toContain(
+      "PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: \"false\"",
+    );
+    expect(deployJob).toContain(
+      "if: steps.gate.outputs.deployment_profile != 'write-proof'",
+    );
+    expect(proofCoordinator).toContain(
+      "needs.deploy.outputs.deployment_profile == 'write-proof'",
+    );
+    expect(proofCoordinator).not.toContain(
+      "needs.deploy.outputs.deployment_profile == 'operator-live'",
     );
   });
 

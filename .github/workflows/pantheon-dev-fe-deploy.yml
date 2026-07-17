@@ -21,12 +21,13 @@ on:
         default: ""
         type: string
       deployment_profile:
-        description: "read-only for normal deploys; write-proof only for the bounded Persona proof window."
+        description: "read-only safe default; operator-live for persistent strict operator use; write-proof only for the bounded permissive proof window."
         required: true
         default: "read-only"
         type: choice
         options:
           - "read-only"
+          - "operator-live"
           - "write-proof"
       proof_window_ack:
         description: "I acknowledge this temporarily enables governed dev writes and will automatically restore the authenticated pair read-only."
@@ -84,6 +85,7 @@ jobs:
       source_artifact_digest: ${{ steps.gate.outputs.github_artifact_digest }}
       pair_id: ${{ steps.pair.outputs.pair_id }}
       read_only_digest: ${{ steps.pair.outputs.read_only_digest }}
+      operator_live_digest: ${{ steps.pair.outputs.operator_live_digest }}
       write_proof_digest: ${{ steps.pair.outputs.write_proof_digest }}
     runs-on:
       - self-hosted
@@ -158,8 +160,8 @@ jobs:
               core.setFailed("candidate_sha must be one exact 40-character commit SHA");
               return;
             }
-            if (!["read-only", "write-proof"].includes(deploymentProfile)) {
-              core.setFailed("deployment_profile must be read-only or write-proof");
+            if (!["read-only", "operator-live", "write-proof"].includes(deploymentProfile)) {
+              core.setFailed("deployment_profile must be read-only, operator-live, or write-proof");
               return;
             }
             if (eventName !== "workflow_dispatch" && deploymentProfile !== "read-only") {
@@ -181,6 +183,23 @@ jobs:
               }
               if (!authorizedOperators.has(actor)) {
                 core.setFailed("write-proof requires an authorized deploy operator");
+                return;
+              }
+            } else if (deploymentProfile === "operator-live") {
+              if (eventName !== "workflow_dispatch") {
+                core.setFailed("operator-live requires an explicit workflow_dispatch");
+                return;
+              }
+              if (emergencyOverride || rollbackDrill) {
+                core.setFailed("operator-live cannot be combined with emergency_override or rollback_drill");
+                return;
+              }
+              if (proofWindowAck) {
+                core.setFailed("proof_window_ack is valid only for deployment_profile=write-proof");
+                return;
+              }
+              if (runAttempt !== "1" || triggeringActor !== actor || !authorizedOperators.has(actor)) {
+                core.setFailed("operator-live requires the initial run of an authorized triggering operator");
                 return;
               }
             } else if (proofWindowAck) {
@@ -383,13 +402,17 @@ jobs:
 
           if [[ -f "$extract_dir/candidate.json" && -d "$extract_dir/dist" && \
                 -f "$extract_dir/pair.json" && -f "$extract_dir/write-proof/candidate.json" && \
-                -d "$extract_dir/write-proof/dist" ]]; then
+                -d "$extract_dir/write-proof/dist" && \
+                -f "$extract_dir/operator-live/candidate.json" && \
+                -d "$extract_dir/operator-live/dist" ]]; then
             mv "$extract_dir" .release-candidate
           elif [[ -f "$extract_dir/.release-candidate/candidate.json" && \
                   -d "$extract_dir/.release-candidate/dist" && \
                   -f "$extract_dir/.release-candidate/pair.json" && \
                   -f "$extract_dir/.release-candidate/write-proof/candidate.json" && \
-                  -d "$extract_dir/.release-candidate/write-proof/dist" ]]; then
+                  -d "$extract_dir/.release-candidate/write-proof/dist" && \
+                  -f "$extract_dir/.release-candidate/operator-live/candidate.json" && \
+                  -d "$extract_dir/.release-candidate/operator-live/dist" ]]; then
             mv "$extract_dir/.release-candidate" .release-candidate
             rm -rf "$extract_dir"
           else
@@ -439,9 +462,15 @@ jobs:
             --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --profile write-proof)"
-          node --input-type=module - "$read_only_digest" "$write_proof_digest" <<'NODE'
+          operator_live_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
+            --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --profile operator-live)"
+          node --input-type=module - "$read_only_digest" "$operator_live_digest" "$write_proof_digest" <<'NODE'
           import fs from "node:fs";
-          const [readOnlyDigest, writeProofDigest] = process.argv.slice(2);
+          const [readOnlyDigest, operatorLiveDigest, writeProofDigest] = process.argv.slice(2);
           const pair = JSON.parse(fs.readFileSync(".release-candidate/pair.json", "utf8"));
           const digest = (value, label) => {
             const normalized = String(value || "").replace(/^sha256:/i, "").toLowerCase();
@@ -452,10 +481,12 @@ jobs:
             pair_id: digest(pair.pairId, "pair id"),
             bff_sha: String(pair.bffSha || "").toLowerCase(),
             read_only_digest: digest(readOnlyDigest, "verified read-only digest"),
+            operator_live_digest: digest(operatorLiveDigest, "verified operator-live digest"),
             write_proof_digest: digest(writeProofDigest, "verified write-proof digest"),
           };
           if (!/^[0-9a-f]{40}$/u.test(values.bff_sha) ||
               values.read_only_digest !== digest(pair.profiles?.readOnly?.artifactDigestSha256, "pair read-only digest") ||
+              values.operator_live_digest !== digest(pair.profiles?.operatorLive?.artifactDigestSha256, "pair operator-live digest") ||
               values.write_proof_digest !== digest(pair.profiles?.writeProof?.artifactDigestSha256, "pair write-proof digest")) {
             throw new Error("verified paired candidate identity mismatch");
           }
@@ -470,9 +501,9 @@ jobs:
           set -euo pipefail
           bash scripts/test-deploy-dev-vm.sh 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/target-runner-controller-regression.log"
 
-      - name: Deploy verified read-only candidate
+      - name: Deploy verified persistent candidate profile
         id: deploy
-        if: steps.gate.outputs.deployment_profile == 'read-only'
+        if: steps.gate.outputs.deployment_profile != 'write-proof'
         timeout-minutes: 25
         env:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
@@ -485,10 +516,10 @@ jobs:
           PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
           PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
           PANTHEON_DEPLOY_OVERRIDE_ACTOR: ${{ steps.gate.outputs.override_actor }}
-          PANTHEON_DEPLOY_PROFILE: read-only
+          PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
           PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
-          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_REAL_WRITES: ${{ steps.gate.outputs.deployment_profile == 'operator-live' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
         run: bash scripts/deploy-dev-vm.sh
 
@@ -515,6 +546,7 @@ jobs:
           DEPLOYMENT_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
           PAIR_ID: ${{ steps.pair.outputs.pair_id }}
           READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
+          OPERATOR_LIVE_DIGEST: ${{ steps.pair.outputs.operator_live_digest }}
           WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
         run: |
           set -euo pipefail
@@ -548,6 +580,7 @@ jobs:
               "pairId": os.environ.get("PAIR_ID", ""),
               "pair": {
                   "readOnlyArtifactDigestSha256": os.environ.get("READ_ONLY_DIGEST", ""),
+                  "operatorLiveArtifactDigestSha256": os.environ.get("OPERATOR_LIVE_DIGEST", ""),
                   "writeProofArtifactDigestSha256": os.environ.get("WRITE_PROOF_DIGEST", ""),
               },
               "emergencyOverride": os.environ.get("EMERGENCY_OVERRIDE", "") == "true",
@@ -688,6 +721,7 @@ jobs:
           DEPLOYMENT_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
           PAIR_ID: ${{ steps.pair.outputs.pair_id }}
           READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
+          OPERATOR_LIVE_DIGEST: ${{ steps.pair.outputs.operator_live_digest }}
           WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
         run: |
           {
@@ -702,6 +736,7 @@ jobs:
             echo "- deployment profile: \`${DEPLOYMENT_PROFILE}\`"
             echo "- pair id: \`${PAIR_ID}\`"
             echo "- read-only digest: \`${READ_ONLY_DIGEST}\`"
+            echo "- operator-live digest: \`${OPERATOR_LIVE_DIGEST}\`"
             echo "- write-proof digest: \`${WRITE_PROOF_DIGEST}\`"
             echo "- target-runner controller regression: \`${{ steps.controller_regression.outcome || 'not-attempted' }}\`"
             echo "- deployment outcome: \`${{ steps.deploy.outcome || 'not-attempted' }}\`"

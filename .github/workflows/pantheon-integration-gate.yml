@@ -734,12 +734,29 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY="$PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
           npm run build -- --outDir dist-write-proof 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build-write-proof.log"
 
-      - name: Prepare authenticated immutable candidate pair
+      - name: Build persistent operator-live release profile
+        id: build_operator_live
+        continue-on-error: true
+        env:
+          VITE_BFF_MODE: live
+          VITE_BFF_BASE_URL: ${{ env.PANTHEON_BFF_BASE_URL }}
+          VITE_BFF_FALLBACK: strict
+          VITE_BFF_REAL_WRITES: "true"
+          VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"
+          VITE_BFF_DEV_BEARER_TOKEN: ""
+        run: |
+          set -o pipefail
+          VITE_SUPABASE_URL="$PANTHEON_PUBLIC_SUPABASE_URL" \
+          VITE_SUPABASE_PUBLISHABLE_KEY="$PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+          npm run build -- --outDir dist-operator-live 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build-operator-live.log"
+
+      - name: Prepare authenticated immutable three-profile candidate set
         id: candidate
-        if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_write_proof.outcome == 'success'
+        if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_operator_live.outcome == 'success' && steps.build_write_proof.outcome == 'success'
         run: |
           node scripts/release-candidate.mjs prepare-pair \
             --read-only-dist-dir dist \
+            --operator-live-dist-dir dist-operator-live \
             --write-proof-dist-dir dist-write-proof \
             --output-dir .release-candidate \
             --frontend-sha "$PANTHEON_FRONTEND_SHA" \
@@ -758,6 +775,7 @@ jobs:
           const lines = [
             `PANTHEON_CANDIDATE_PAIR_ID=${digest(pair.pairId, "pair id")}`,
             `PANTHEON_EXPECTED_ARTIFACT_DIGEST=${digest(pair.profiles?.readOnly?.artifactDigestSha256, "read-only digest")}`,
+            `PANTHEON_EXPECTED_OPERATOR_LIVE_DIGEST=${digest(pair.profiles?.operatorLive?.artifactDigestSha256, "operator-live digest")}`,
             `PANTHEON_EXPECTED_WRITE_PROOF_DIGEST=${digest(pair.profiles?.writeProof?.artifactDigestSha256, "write-proof digest")}`,
           ];
           fs.appendFileSync(process.env.GITHUB_ENV, `${lines.join("\n")}\n`, "utf8");
@@ -1154,14 +1172,24 @@ jobs:
             --expected-gate-run-id "$GITHUB_RUN_ID" \
             --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
             --profile write-proof)"
+          verified_operator_live_digest="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate \
+            --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
+            --expected-bff-sha "$PANTHEON_BFF_SHA" \
+            --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$GITHUB_RUN_ID" \
+            --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
+            --profile operator-live)"
           if [[ "$verified_read_only_digest" != "$PANTHEON_EXPECTED_ARTIFACT_DIGEST" || \
+                "$verified_operator_live_digest" != "$PANTHEON_EXPECTED_OPERATOR_LIVE_DIGEST" || \
                 "$verified_write_proof_digest" != "$PANTHEON_EXPECTED_WRITE_PROOF_DIGEST" ]]; then
             echo "Final paired candidate digest mismatch." >&2
             exit 1
           fi
-          printf 'pairId=%s\nreadOnlyArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
+          printf 'pairId=%s\nreadOnlyArtifactDigestSha256=%s\noperatorLiveArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
             "$PANTHEON_CANDIDATE_PAIR_ID" \
             "$verified_read_only_digest" \
+            "$verified_operator_live_digest" \
             "$verified_write_proof_digest" \
             > "$PANTHEON_AUDIT_OUT_DIR/final-candidate-pair.txt"
 
@@ -1178,6 +1206,7 @@ jobs:
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "deploy_controller": { "outcome": "${{ steps.deploy_controller.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deploy-controller-regression.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
+            "build_operator_live": { "outcome": "${{ steps.build_operator_live.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build-operator-live.log" },
             "build_write_proof": { "outcome": "${{ steps.build_write_proof.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build-write-proof.log" },
             "candidate": { "outcome": "${{ steps.candidate.outcome }}", "evidence": ".release-candidate/candidate.json" },
             "candidate_final": { "outcome": "${{ steps.candidate_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/final-candidate-pair.txt" },
@@ -1240,6 +1269,7 @@ jobs:
             echo "- gate attempt: \`${GITHUB_RUN_ATTEMPT}\`"
             echo "- pair id: \`${PANTHEON_CANDIDATE_PAIR_ID}\`"
             echo "- read-only digest: \`${PANTHEON_EXPECTED_ARTIFACT_DIGEST}\`"
+            echo "- operator-live digest: \`${PANTHEON_EXPECTED_OPERATOR_LIVE_DIGEST}\`"
             echo "- write-proof digest: \`${PANTHEON_EXPECTED_WRITE_PROOF_DIGEST}\`"
             echo "- artifact: \`pantheon-fe-release-candidate-attempt-${GITHUB_RUN_ATTEMPT}\`"
             echo "- GitHub artifact digest: \`${{ steps.candidate_upload.outputs.artifact-digest }}\`"

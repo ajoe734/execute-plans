@@ -8,6 +8,7 @@ import {
   digestReleaseDist,
   preparePairedReleaseCandidate,
   prepareReleaseCandidate,
+  OPERATOR_LIVE_BUILD_MODE,
   RELEASE_PROFILES,
   SAFE_BUILD_MODE,
   verifyPairedReleaseCandidate,
@@ -105,9 +106,16 @@ function preparePair(root: string, overrides: Record<string, unknown> = {}) {
         "assets/profile.json": `${JSON.stringify({ profile: "write-proof" })}\n`,
       }),
   );
+  const operatorLiveDistDir = String(
+    overrides.operatorLiveDistDir ||
+      makeDist(path.join(root, "operator-live"), {
+        "assets/profile.json": `${JSON.stringify({ profile: "operator-live" })}\n`,
+      }),
+  );
   const outputDir = String(overrides.outputDir || path.join(root, "candidate"));
   return preparePairedReleaseCandidate({
     readOnlyDistDir,
+    operatorLiveDistDir,
     writeProofDistDir,
     outputDir,
     frontendSha: FRONTEND_SHA,
@@ -575,21 +583,26 @@ describe("release candidate preparation and verification", () => {
 });
 
 describe("paired release candidate preparation and verification", () => {
-  it("creates one deterministic, profile-bound read-only/write-proof pair", () => {
+  it("creates one deterministic, profile-bound read-only/operator-live/write-proof set", () => {
     const root = temporaryRoot();
     const readOnlyDistDir = makeDist(path.join(root, "read-only"));
     const writeProofDistDir = makeDist(path.join(root, "write-proof"), {
       "assets/profile.json": `${JSON.stringify({ profile: "write-proof" })}\n`,
     });
+    const operatorLiveDistDir = makeDist(path.join(root, "operator-live"), {
+      "assets/profile.json": `${JSON.stringify({ profile: "operator-live" })}\n`,
+    });
     const firstDir = path.join(root, "candidate-a");
     const secondDir = path.join(root, "candidate-b");
     const first = preparePair(root, {
       readOnlyDistDir,
+      operatorLiveDistDir,
       writeProofDistDir,
       outputDir: firstDir,
     });
     const second = preparePair(root, {
       readOnlyDistDir,
+      operatorLiveDistDir,
       writeProofDistDir,
       outputDir: secondDir,
     });
@@ -599,10 +612,15 @@ describe("paired release candidate preparation and verification", () => {
     expect(fs.readdirSync(firstDir).sort()).toEqual([
       "candidate.json",
       "dist",
+      "operator-live",
       "pair.json",
       "write-proof",
     ]);
     expect(fs.readdirSync(path.join(firstDir, "write-proof")).sort()).toEqual([
+      "candidate.json",
+      "dist",
+    ]);
+    expect(fs.readdirSync(path.join(firstDir, "operator-live")).sort()).toEqual([
       "candidate.json",
       "dist",
     ]);
@@ -617,6 +635,12 @@ describe("paired release candidate preparation and verification", () => {
         "utf8",
       ),
     );
+    const operatorLive = JSON.parse(
+      fs.readFileSync(
+        path.join(firstDir, "operator-live", "candidate.json"),
+        "utf8",
+      ),
+    );
     expect(pair.pairId).toBe(first.pairId);
     expect(pair.frontendSha).toBe(FRONTEND_SHA);
     expect(pair.bffSha).toBe(BFF_SHA);
@@ -626,6 +650,9 @@ describe("paired release candidate preparation and verification", () => {
     );
     expect(pair.profiles.writeProof.artifactDigestSha256).toBe(
       first.writeProof.artifactDigestSha256,
+    );
+    expect(pair.profiles.operatorLive.artifactDigestSha256).toBe(
+      first.operatorLive.artifactDigestSha256,
     );
     expect(readOnly).toMatchObject({
       profile: RELEASE_PROFILES.READ_ONLY,
@@ -637,8 +664,20 @@ describe("paired release candidate preparation and verification", () => {
       pairId: first.pairId,
       buildMode: WRITE_PROOF_BUILD_MODE,
     });
+    expect(operatorLive).toMatchObject({
+      profile: RELEASE_PROFILES.OPERATOR_LIVE,
+      pairId: first.pairId,
+      buildMode: OPERATOR_LIVE_BUILD_MODE,
+    });
     expect(readOnly.buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
     expect(writeProof.buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+    expect(operatorLive.buildMode).toEqual({
+      VITE_BFF_MODE: "live",
+      VITE_BFF_FALLBACK: "strict",
+      VITE_BFF_REAL_WRITES: "true",
+      VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+      VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+    });
 
     const verified = verifyPair(firstDir);
     expect(verified.pairId).toBe(first.pairId);
@@ -648,6 +687,9 @@ describe("paired release candidate preparation and verification", () => {
     expect(verified.writeProof.artifactDigestSha256).toBe(
       first.writeProof.artifactDigestSha256,
     );
+    expect(verified.operatorLive.artifactDigestSha256).toBe(
+      first.operatorLive.artifactDigestSha256,
+    );
   });
 
   it("supports prepare-pair and profile-selected verify-pair through the CLI", () => {
@@ -656,11 +698,16 @@ describe("paired release candidate preparation and verification", () => {
     const writeProofDistDir = makeDist(path.join(root, "write-proof"), {
       "assets/profile.json": "{\"profile\":\"write-proof\"}\n",
     });
+    const operatorLiveDistDir = makeDist(path.join(root, "operator-live"), {
+      "assets/profile.json": "{\"profile\":\"operator-live\"}\n",
+    });
     const candidateDir = path.join(root, "candidate");
     const prepared = cli([
       "prepare-pair",
       "--read-only-dist-dir",
       readOnlyDistDir,
+      "--operator-live-dist-dir",
+      operatorLiveDistDir,
       "--write-proof-dist-dir",
       writeProofDistDir,
       "--output-dir",
@@ -695,15 +742,15 @@ describe("paired release candidate preparation and verification", () => {
       "--expected-pair-id",
       pairId,
       "--profile",
-      "write-proof",
+      "operator-live",
       "--expected-artifact-digest",
       JSON.parse(fs.readFileSync(path.join(candidateDir, "pair.json"), "utf8"))
-        .profiles.writeProof.artifactDigestSha256,
+        .profiles.operatorLive.artifactDigestSha256,
     ]);
     expect(verified.status, verified.stderr).toBe(0);
     const pair = JSON.parse(fs.readFileSync(path.join(candidateDir, "pair.json"), "utf8"));
     expect(verified.stdout.trim()).toBe(
-      pair.profiles.writeProof.artifactDigestSha256,
+      pair.profiles.operatorLive.artifactDigestSha256,
     );
   });
 
@@ -776,7 +823,7 @@ describe("paired release candidate preparation and verification", () => {
       verifyPair(candidateDir, { expectedPairId: "f".repeat(64) }),
     ).toThrow(/expected pair/u);
     expect(() => verifyPair(candidateDir, { profile: "read-only-restore" })).toThrow(
-      /must be read-only or write-proof/u,
+      /must be read-only, operator-live, or write-proof/u,
     );
     expect(() =>
       verifyPair(candidateDir, { expectedArtifactDigest: "f".repeat(64) }),
@@ -785,12 +832,16 @@ describe("paired release candidate preparation and verification", () => {
     const duplicateRoot = temporaryRoot();
     const duplicateReadOnly = makeDist(path.join(duplicateRoot, "read-only"));
     const duplicateWriteProof = makeDist(path.join(duplicateRoot, "write-proof"));
+    const distinctOperatorLive = makeDist(path.join(duplicateRoot, "operator-live"), {
+      "assets/profile.json": "operator-live\n",
+    });
     expect(() =>
       preparePair(duplicateRoot, {
         readOnlyDistDir: duplicateReadOnly,
+        operatorLiveDistDir: distinctOperatorLive,
         writeProofDistDir: duplicateWriteProof,
       }),
-    ).toThrow(/distinct artifact digests/u);
+    ).toThrow(/three distinct artifact digests/u);
 
     const aliasRoot = temporaryRoot();
     const realParent = path.join(aliasRoot, "real");
@@ -800,6 +851,9 @@ describe("paired release candidate preparation and verification", () => {
     expect(() =>
       preparePair(aliasRoot, {
         readOnlyDistDir: aliasedDist,
+        operatorLiveDistDir: makeDist(path.join(aliasRoot, "operator-live"), {
+          "assets/profile.json": "operator-live\n",
+        }),
         writeProofDistDir: path.join(parentAlias, "dist"),
       }),
     ).toThrow(/must be distinct/u);
@@ -808,12 +862,16 @@ describe("paired release candidate preparation and verification", () => {
     const secret = "paired-release-secret-never-ship";
     const readOnlyDistDir = makeDist(path.join(secretRoot, "read-only"));
     const writeProofDistDir = makeDist(path.join(secretRoot, "write-proof"), {
-      "assets/leak.js": `globalThis.proofValue = '${secret}';\n`,
+      "assets/profile.json": "write-proof\n",
+    });
+    const operatorLiveDistDir = makeDist(path.join(secretRoot, "operator-live"), {
+      "assets/leak.js": `globalThis.operatorValue = '${secret}';\n`,
     });
     let message = "";
     try {
       preparePair(secretRoot, {
         readOnlyDistDir,
+        operatorLiveDistDir,
         writeProofDistDir,
         secretSentinels: [secret],
       });
