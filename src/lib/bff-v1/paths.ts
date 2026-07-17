@@ -23,6 +23,7 @@ export const paths = {
   // ---- Session (canonical) ----
   me: () => `${BASE}/me`,
   meLocale: () => `${BASE}/me/locale`,
+  authReadiness: () => `${BASE}/auth/readiness`,
   authRefresh: () => `${BASE}/auth/refresh`,
   logout: () => `${BASE}/logout`,
   /** @deprecated Alias of `me()` retained for legacy callers. */

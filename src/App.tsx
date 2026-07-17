@@ -7,6 +7,7 @@ import "@/i18n";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { lazyNamedRoute, lazyRoute } from "@/routes/lazyRoute";
 import { LegacyPromotionAllocationRedirect } from "@/routes/management/legacyPromotionAllocationRedirect";
 import { ManagementCanonicalRedirect } from "@/routes/management/managementCanonicalRedirect";
@@ -193,7 +194,7 @@ const App = () => (
             <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
             <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
             <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
-            <Route element={<PlatformShellRoute />}>
+            <Route element={<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>}>
               <Route path="/management" element={<ManagementLayoutRoute />}>
                 <Route index element={<Navigate to="/management/cockpit" replace />} />
                 <Route path="cockpit" element={<CockpitRoute />} />
@@ -331,7 +332,7 @@ const App = () => (
               concerns. AgoraLayoutRoute preserves live/auth status through
               the shared LiveStatusBanner + useLiveSseConnection substrate.
             */}
-            <Route path="/agora" element={<AgoraLayoutRoute />}>
+            <Route path="/agora" element={<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>}>
               <Route index element={<Navigate to="/agora/trading-room" replace />} />
               <Route path="trading-room" element={<AgoraTradingRoomRoute />} />
               <Route path="trading-room/:strategyId" element={<AgoraTradingRoomRoute />} />
