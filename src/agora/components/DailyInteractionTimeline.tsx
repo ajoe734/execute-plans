@@ -127,7 +127,14 @@ function GovernedCandidateMeasure({
   const [status, setStatus] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [proposedValue, setProposedValue] = useState("");
-  const [attemptKey, setAttemptKey] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState<{ fingerprint: string; key: string } | null>(null);
+
+  const keyForAttempt = (prefix: string, fingerprint: string): string | null => {
+    if (attempt?.fingerprint === fingerprint) return attempt.key;
+    const key = legalAttemptKey(prefix);
+    if (key) setAttempt({ fingerprint, key });
+    return key;
+  };
 
   const proposalId = readback?.candidate.proposal_id ?? linked?.proposal_id ?? null;
   const load = async (id: string) => {
@@ -137,6 +144,7 @@ function GovernedCandidateMeasure({
       const next = await getCandidate(id);
       setReadback(next);
       setProposedValue(safeJson(next.candidate.proposed_value));
+      setAttempt(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Candidate readback failed.");
     } finally {
@@ -154,12 +162,15 @@ function GovernedCandidateMeasure({
       setError("The persisted Persona measure omitted its server-authored digest.");
       return;
     }
-    const key = attemptKey ?? legalAttemptKey("pint15-candidate");
+    const fingerprint = JSON.stringify({
+      operation: "create", interactionId, opinionId: opinion.opinion_id,
+      measureId: measure.measure_id, measureSha256: measure.measure_sha256,
+    });
+    const key = keyForAttempt("pint15-candidate", fingerprint);
     if (!key) {
       setError("Secure candidate identity support is unavailable in this browser.");
       return;
     }
-    setAttemptKey(key);
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -168,11 +179,12 @@ function GovernedCandidateMeasure({
         interactionId,
         opinionId: opinion.opinion_id,
         measureId: measure.measure_id,
+        measureSha256: measure.measure_sha256,
         idempotencyKey: key,
       });
       setReadback(next);
       setProposedValue(safeJson(next.candidate.proposed_value));
-      setAttemptKey(null);
+      setAttempt(null);
       setStatus("Governed candidate created from the persisted Persona measure.");
       await onRefresh();
     } catch (caught) {
@@ -196,12 +208,21 @@ function GovernedCandidateMeasure({
         return;
       }
     }
-    const key = attemptKey ?? legalAttemptKey(`pint15-${action}`);
+    const fingerprint = JSON.stringify({
+      operation: "decision",
+      proposalId: readback.candidate.proposal_id,
+      action,
+      reason: reason.trim(),
+      revision: readback.candidate.revision,
+      proposalDigest: readback.candidate.proposal_digest,
+      proposalEtag: readback.etag,
+      ...(action === "modify" ? { proposedValue: parsedValue } : {}),
+    });
+    const key = keyForAttempt(`pint15-${action}`, fingerprint);
     if (!key) {
       setError("Secure candidate decision identity support is unavailable in this browser.");
       return;
     }
-    setAttemptKey(key);
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -219,7 +240,7 @@ function GovernedCandidateMeasure({
       setReadback(next);
       setProposedValue(safeJson(next.candidate.proposed_value));
       setReason("");
-      setAttemptKey(null);
+      setAttempt(null);
       setStatus(action === "accept_for_review"
         ? "Candidate accepted for independent review; this is not formal approval."
         : `Candidate ${action} decision recorded.`);
@@ -233,12 +254,18 @@ function GovernedCandidateMeasure({
 
   const validate = async () => {
     if (!readback) return;
-    const key = attemptKey ?? legalAttemptKey("pint15-validation");
+    const fingerprint = JSON.stringify({
+      operation: "validation",
+      proposalId: readback.candidate.proposal_id,
+      revision: readback.candidate.revision,
+      proposalDigest: readback.candidate.proposal_digest,
+      proposalEtag: readback.etag,
+    });
+    const key = keyForAttempt("pint15-validation", fingerprint);
     if (!key) {
       setError("Secure candidate validation identity support is unavailable in this browser.");
       return;
     }
-    setAttemptKey(key);
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -251,7 +278,7 @@ function GovernedCandidateMeasure({
         idempotencyKey: key,
       });
       setReadback(next);
-      setAttemptKey(null);
+      setAttempt(null);
       setStatus("Authoritative server validation completed.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authoritative validation failed.");
@@ -261,12 +288,12 @@ function GovernedCandidateMeasure({
   };
 
   const allowed = (action: CandidateDecisionAction) => Boolean(
-    writeAllowed && readback?.readiness.candidate.ready
+    writeAllowed && readback?.readiness.candidate.ready === true
     && readback.readiness.candidate.allowed_actions.includes(action),
   );
   const acceptReady = allowed("accept_for_review")
-    && Boolean(readback?.readiness.validation.adapter_ready)
-    && Boolean(readback?.readiness.reviewer.store_ready);
+    && readback?.readiness.validation.adapter_ready === true
+    && readback?.readiness.reviewer.store_ready === true;
 
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid={`recommended-measure-${measure.measure_id}`}>
@@ -301,7 +328,7 @@ function GovernedCandidateMeasure({
             <input
               className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
               maxLength={1000}
-              onChange={(event) => { setReason(event.target.value); setAttemptKey(null); setStatus(null); }}
+              onChange={(event) => { setReason(event.target.value); setAttempt(null); setStatus(null); }}
               value={reason}
             />
           </label>
@@ -309,7 +336,7 @@ function GovernedCandidateMeasure({
             Proposed value (JSON) for {readback.candidate.proposal_id}
             <textarea
               className="mt-1 min-h-24 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
-              onChange={(event) => { setProposedValue(event.target.value); setAttemptKey(null); setStatus(null); }}
+              onChange={(event) => { setProposedValue(event.target.value); setAttempt(null); setStatus(null); }}
               value={proposedValue}
             />
           </label>
@@ -318,12 +345,12 @@ function GovernedCandidateMeasure({
             <Button disabled={busy || !acceptReady} onClick={() => void decide("accept_for_review")} size="sm" variant="outline">Accept for review</Button>
             <Button disabled={busy || !allowed("reject")} onClick={() => void decide("reject")} size="sm" variant="outline">Reject</Button>
             <Button disabled={busy || !allowed("defer")} onClick={() => void decide("defer")} size="sm" variant="outline">Defer</Button>
-            <Button disabled={busy || !writeAllowed || !readback.readiness.validation.can_run} onClick={() => void validate()} size="sm" variant="outline">Run authoritative validation</Button>
+            <Button disabled={busy || !writeAllowed || readback.readiness.validation.can_run !== true} onClick={() => void validate()} size="sm" variant="outline">Run authoritative validation</Button>
             <Button disabled={busy} onClick={() => void load(readback.candidate.proposal_id)} size="sm" variant="ghost">Reload candidate</Button>
           </div>
           <div className="rounded border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-950" data-testid={`candidate-readiness-${readback.candidate.proposal_id}`}>
-            Validator: {readback.readiness.validation.adapter_ready ? "ready" : `blocked (${readback.readiness.validation.reason ?? "unknown"})`};
-            reviewer store: {readback.readiness.reviewer.store_ready ? "ready" : `blocked (${readback.readiness.reviewer.reason ?? "unknown"})`};
+            Validator: {readback.readiness.validation.adapter_ready === true ? "ready" : `blocked (${readback.readiness.validation.reason ?? "unknown"})`};
+            reviewer store: {readback.readiness.reviewer.store_ready === true ? "ready" : `blocked (${readback.readiness.reviewer.reason ?? "unknown"})`};
             formal approval: {readback.readiness.reviewer.current_formal_approval_id ?? "none"}. Accept for review is never approval.
           </div>
           <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-600" data-testid={`candidate-history-${readback.candidate.proposal_id}`}>

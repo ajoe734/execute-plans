@@ -177,7 +177,10 @@ export interface CandidateDecisionRecord {
   decision_id: string;
   proposal_id: string;
   interaction_id: string;
+  opinion_id: string;
+  opinion_sha256: string;
   measure_id: string;
+  measure_sha256: string;
   action: "modified" | "accepted_for_review" | "rejected" | "deferred" | "cancelled";
   actor_id: string;
   reason: string;
@@ -199,6 +202,7 @@ export interface CandidateRecord {
   proposer_id: string;
   interaction_id: string;
   opinion_id: string;
+  opinion_sha256: string;
   measure_id: string;
   measure_sha256: string;
   proposal_digest: string;
@@ -372,26 +376,75 @@ function assertInteraction(resource: DailyInteraction): void {
   }
 }
 
+function assertCandidateReadiness(readiness: CandidateReadiness | null | undefined): void {
+  const booleans = [
+    readiness?.candidate?.ready,
+    readiness?.validation?.adapter_ready,
+    readiness?.validation?.can_run,
+    readiness?.validation?.current_passed,
+    readiness?.reviewer?.store_ready,
+    readiness?.reviewer?.can_request_decision,
+    readiness?.reviewer?.can_link_formal_approval,
+  ];
+  if (readiness?.execution_authority !== "none"
+    || !Array.isArray(readiness?.candidate?.allowed_actions)
+    || booleans.some((value) => typeof value !== "boolean")) {
+    throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate readiness was malformed and has been denied." });
+  }
+}
+
 function assertCandidateReadback(resource: CandidateReadback): void {
   const candidate = resource?.candidate;
   if (!candidate || candidate.execution_authority !== "none" || resource.execution_authority !== "none") {
     throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate readback crossed the non-execution boundary." });
   }
   assertAuthorityBoundary(candidate.authority);
-  if (!/^[a-f0-9]{64}$/.test(candidate.measure_sha256)
+  if (!/^[a-f0-9]{64}$/.test(candidate.opinion_sha256)
+    || !/^[a-f0-9]{64}$/.test(candidate.measure_sha256)
     || !/^[a-f0-9]{64}$/.test(candidate.proposal_digest)
     || !/^"[a-f0-9]{64}"$/.test(resource.etag)) {
     throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate readback omitted its server digest or current ETag." });
   }
   if (!Array.isArray(resource.revisions) || !Array.isArray(resource.decisions)
-    || !Array.isArray(resource.validation_receipts) || !Array.isArray(resource.formal_approval_receipts)
-    || !Array.isArray(resource.readiness?.candidate?.allowed_actions)) {
+    || !Array.isArray(resource.validation_receipts) || !Array.isArray(resource.formal_approval_receipts)) {
     throw makeBffError({ code: "BACKEND_UNAVAILABLE", message: "Candidate readback omitted durable history or readiness." });
   }
-  if (resource.readiness.execution_authority !== "none"
-    || resource.decisions.some((item) => item.formal_approval !== false || item.execution_authority !== "none")
-    || resource.formal_approval_receipts.some((item) => item.self_approval !== false || item.execution_authority !== "none")) {
-    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate lifecycle readback claimed forbidden authority." });
+  assertCandidateReadiness(resource.readiness);
+  const sourceMatches = (item: {
+    proposal_id: string; interaction_id: string; opinion_id: string; opinion_sha256: string;
+    measure_id: string; measure_sha256: string;
+  }) => item.proposal_id === candidate.proposal_id
+    && item.interaction_id === candidate.interaction_id
+    && item.opinion_id === candidate.opinion_id
+    && item.opinion_sha256 === candidate.opinion_sha256
+    && item.measure_id === candidate.measure_id
+    && item.measure_sha256 === candidate.measure_sha256;
+  const revisionsValid = resource.revisions.length > 0 && resource.revisions.every((item) => {
+    assertAuthorityBoundary(item.authority);
+    return sourceMatches(item) && item.execution_authority === "none"
+      && Number.isInteger(item.revision) && item.revision >= 1
+      && /^[a-f0-9]{64}$/.test(item.proposal_digest);
+  });
+  const revisionMatches = (revision: number, digest: string) => resource.revisions.some(
+    (item) => item.revision === revision && item.proposal_digest === digest,
+  );
+  const decisionsValid = resource.decisions.every((item) => sourceMatches(item)
+    && item.formal_approval === false && item.execution_authority === "none"
+    && revisionMatches(item.revision, item.proposal_digest));
+  const validationsValid = resource.validation_receipts.every((item) => item.authority === "canonical_validation_service"
+    && item.proposal_id === candidate.proposal_id && /^[a-f0-9]{64}$/.test(item.receipt_sha256)
+    && revisionMatches(item.revision, item.proposal_digest));
+  const approvalsValid = resource.formal_approval_receipts.every((item) => item.authority === "canonical_approval_decision_store"
+    && item.proposal_id === candidate.proposal_id && item.self_approval === false
+    && item.proposer_id !== item.reviewer_id && item.execution_authority === "none"
+    && /^[a-f0-9]{64}$/.test(item.receipt_sha256)
+    && /^[a-f0-9]{64}$/.test(item.validation_receipt_sha256)
+    && revisionMatches(item.revision, item.proposal_digest)
+    && resource.validation_receipts.some((receipt) => receipt.validation_receipt_id === item.validation_receipt_id
+      && receipt.receipt_sha256 === item.validation_receipt_sha256));
+  if (!revisionsValid || !revisionMatches(candidate.revision, candidate.proposal_digest)
+    || !decisionsValid || !validationsValid || !approvalsValid) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate lifecycle readback crossed its durable source, revision, receipt, or authority binding." });
   }
 }
 
@@ -481,11 +534,14 @@ export async function retryDailyInteraction(input: {
 }
 
 export async function createCandidateFromMeasure(input: {
-  interactionId: string; opinionId: string; measureId: string; idempotencyKey: string;
+  interactionId: string; opinionId: string; measureId: string; measureSha256: string; idempotencyKey: string;
 }): Promise<CandidateReadback> {
   await requireWrite();
   if (!/^[A-Za-z0-9._:-]+$/.test(input.idempotencyKey)) {
     throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate idempotency identity must be ASCII-safe." });
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.measureSha256)) {
+    throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate source measure digest must be server-authored." });
   }
   try {
     const readback = dataOf<CandidateReadback>(await bffFetch({
@@ -501,7 +557,8 @@ export async function createCandidateFromMeasure(input: {
     assertCandidateReadback(readback);
     if (readback.candidate.interaction_id !== input.interactionId
       || readback.candidate.opinion_id !== input.opinionId
-      || readback.candidate.measure_id !== input.measureId) {
+      || readback.candidate.measure_id !== input.measureId
+      || readback.candidate.measure_sha256 !== input.measureSha256) {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Created candidate did not match the persisted Persona measure binding." });
     }
     return readback;
@@ -616,8 +673,9 @@ export async function getCandidateReviewReadiness(proposalId: string): Promise<{
       etag: string;
       execution_authority: "none";
     }>(await bffFetch({ method: "GET", path: paths.agoraCandidateReviewReadiness(proposalId) }));
+    assertCandidateReadiness(value.readiness);
     if (value.proposal_id !== proposalId || value.execution_authority !== "none"
-      || value.readiness?.execution_authority !== "none" || !/^"[a-f0-9]{64}"$/.test(value.etag)) {
+      || !/^"[a-f0-9]{64}"$/.test(value.etag)) {
       throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate review readiness crossed its authoritative binding." });
     }
     return value;

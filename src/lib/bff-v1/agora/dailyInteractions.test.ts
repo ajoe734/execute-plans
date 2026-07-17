@@ -52,7 +52,7 @@ function interaction(id: string, workshopId: string): DailyInteraction {
 function candidateReadback(decisions: CandidateDecisionRecord[] = []): CandidateReadback {
   const candidate: CandidateReadback["candidate"] = {
     proposal_id: "p1", revision: 3, state: "review_requested", proposer_id: "operator-1",
-    interaction_id: "i1", opinion_id: "opinion-1", measure_id: "m1",
+    interaction_id: "i1", opinion_id: "opinion-1", opinion_sha256: "c".repeat(64), measure_id: "m1",
     measure_sha256: "a".repeat(64), proposal_digest: "b".repeat(64), proposal_type: "risk_limit_recommendation",
     target_kind: "strategy", target_id: "strategy-1", target_version: "spec-v4",
     proposed_value: { max_risk: 0.02 }, rationale: "Bound risk", evidence_refs: [], environment_ceiling: "paper",
@@ -131,6 +131,7 @@ describe("daily Persona interaction v1.9 adapter", () => {
   it("sends only exact candidate revision/digest and operator decision data", async () => {
     const decision: CandidateDecisionRecord = {
       decision_id: "d1", proposal_id: "p1", interaction_id: "i1", measure_id: "m1",
+      opinion_id: "opinion-1", opinion_sha256: "c".repeat(64), measure_sha256: "a".repeat(64),
       action: "accepted_for_review", actor_id: "operator-1", reason: "Review the evidence",
       revision: 3, proposal_digest: "b".repeat(64), review_request_id: "review-1",
       decided_at: "2026-07-17T00:00:00Z", formal_approval: false, execution_authority: "none", audit_ref: "audit-1",
@@ -166,6 +167,7 @@ describe("daily Persona interaction v1.9 adapter", () => {
       interactionId: "i1",
       opinionId: "opinion-1",
       measureId: "m1",
+      measureSha256: "a".repeat(64),
       idempotencyKey: "pint15-candidate-93f19d24",
     });
     expect(bffFetch).toHaveBeenCalledWith({
@@ -181,9 +183,39 @@ describe("daily Persona interaction v1.9 adapter", () => {
     expect(JSON.stringify(vi.mocked(bffFetch).mock.calls[0][0])).not.toContain("expected_measure_sha256");
   });
 
+  it("fails closed when candidate creation crosses the selected server measure digest", async () => {
+    const crossed = candidateReadback();
+    crossed.candidate.measure_sha256 = "d".repeat(64);
+    vi.mocked(bffFetch).mockResolvedValue({ data: crossed, meta: {} });
+
+    await expect(createCandidateFromMeasure({
+      interactionId: "i1", opinionId: "opinion-1", measureId: "m1",
+      measureSha256: "a".repeat(64), idempotencyKey: "pint15-candidate-digest-cross",
+    })).rejects.toThrow("persisted Persona measure binding");
+    expect(JSON.stringify(vi.mocked(bffFetch).mock.calls[0][0])).not.toContain("measureSha256");
+  });
+
+  it("rejects truthy non-boolean readiness and cross-candidate durable audit rows", async () => {
+    const malformed = candidateReadback();
+    malformed.readiness.validation.adapter_ready = "false" as unknown as boolean;
+    vi.mocked(bffFetch).mockResolvedValueOnce({ data: malformed, meta: {} });
+    await expect(listCandidateDecisions("p1")).rejects.toThrow("readiness was malformed");
+
+    const crossedDecision: CandidateDecisionRecord = {
+      decision_id: "crossed", proposal_id: "p1", interaction_id: "other-interaction",
+      opinion_id: "opinion-1", opinion_sha256: "c".repeat(64), measure_id: "m1",
+      measure_sha256: "a".repeat(64), action: "deferred", actor_id: "operator-1",
+      reason: "Wait", revision: 3, proposal_digest: "b".repeat(64), decided_at: "2026-07-17T00:00:00Z",
+      formal_approval: false, execution_authority: "none", audit_ref: "audit-crossed",
+    };
+    vi.mocked(bffFetch).mockResolvedValueOnce({ data: candidateReadback([crossedDecision]), meta: {} });
+    await expect(listCandidateDecisions("p1")).rejects.toThrow("durable source");
+  });
+
   it("reads candidate decisions from the reload-safe candidate detail envelope", async () => {
     const decision = {
       decision_id: "decision-1", proposal_id: "p1", interaction_id: "i1", measure_id: "m1",
+      opinion_id: "opinion-1", opinion_sha256: "c".repeat(64), measure_sha256: "a".repeat(64),
       action: "accepted_for_review" as const, actor_id: "operator-1", reason: "Ready for independent review",
       revision: 3, proposal_digest: "b".repeat(64), review_request_id: "review-1",
       decided_at: "2026-07-17T00:00:00Z", formal_approval: false as const,

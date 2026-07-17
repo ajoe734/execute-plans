@@ -1505,7 +1505,7 @@ jobs:
           const unexpected = Number(stats.unexpected || 0);
           const flaky = Number(stats.flaky || 0);
           if (expected !== 8 || skipped !== 0 || unexpected !== 0 || flaky !== 0) {
-            throw new Error(`Persona hosted proof requires exactly 6 passed, 0 skipped/unexpected/flaky; got ${JSON.stringify({ expected, skipped, unexpected, flaky })}`);
+            throw new Error(`Persona hosted proof requires exactly 8 passed, 0 skipped/unexpected/flaky; got ${JSON.stringify({ expected, skipped, unexpected, flaky })}`);
           }
           NODE
 
