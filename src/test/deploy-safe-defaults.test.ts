@@ -32,6 +32,10 @@ const hostedPersonaServantPreflight = readFileSync(
   resolve(root, "scripts/ensure-persona-hosted-proof-servant.mjs"),
   "utf8",
 );
+const hostedPersonaCredentialValidator = readFileSync(
+  resolve(root, "scripts/validate-persona-hosted-proof-env.mjs"),
+  "utf8",
+);
 const hostedBrowserProbe = readFileSync(
   resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
   "utf8",
@@ -441,6 +445,16 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
     expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
     expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
+    expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
+    expect(hostedPersonaCredentialValidator).toContain(
+      "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      'parts.length !== 3',
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "operatorSubject === viewerSubject",
+    );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
     expect(authorizedProof).toContain("desktop.expected !== 3");
     expect(authorizedProof).toContain("mobile.expected !== 1");
@@ -458,6 +472,24 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(hostedPersonaServantPreflight.indexOf("/bff/version")).toBeLessThan(
       hostedPersonaServantPreflight.indexOf("/bff/me"),
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/auth/readiness"),
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_stub !== false',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_mode !== "strict"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'sessionKind !== "bearer"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readiness.authReady !== true",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readinessAuth.interactionCapabilityReady !== true",
     );
     expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
       hostedPersonaServantPreflight.indexOf("/bff/agora/servant/ensure"),

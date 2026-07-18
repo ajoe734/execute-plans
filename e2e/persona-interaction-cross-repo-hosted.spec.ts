@@ -140,6 +140,7 @@ async function installVerifiedHostedProofSession(
     roles: string[];
     sessionKind: "bearer";
     token: string;
+    minimumTtlSeconds: number;
   },
 ): Promise<void> {
   expect(WRITE_PROOF, "hosted session bootstrap is proof-only").toBe(true);
@@ -154,7 +155,8 @@ async function installVerifiedHostedProofSession(
   const claims = hostedBearerClaims(input.token);
   expect(input.sessionKind).toBe("bearer");
   expect(String(claims.sub ?? "")).toBe(input.operatorId);
-  expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + 60);
+  expect(input.minimumTtlSeconds).toBeGreaterThanOrEqual(240);
+  expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + input.minimumTtlSeconds);
 
   const expiresAt = Number(claims.exp);
   const projectRef = supabase.hostname.split(".")[0];
@@ -340,6 +342,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await installVerifiedHostedProofSession(page, {
       ...operatorSession,
       token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 300,
     });
     await page.addInitScript(() => {
       // runtimeEnv accepts this only on the allowlisted Pantheon dev host.
@@ -421,6 +424,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await installVerifiedHostedProofSession(page, {
       ...operatorSession,
       token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 480,
     });
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
     await page.goto(`${FE_BASE}/agora/strategy-workshop/${encodeURIComponent(target.workshopId)}`);
@@ -571,6 +575,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await installVerifiedHostedProofSession(page, {
       ...viewerSession,
       token: VIEWER_TOKEN,
+      minimumTtlSeconds: 240,
     });
     await openPersonaDetail(page, persona);
     await expect(page.getByRole("button", { name: /^Talk with / })).toBeDisabled();
@@ -600,6 +605,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await installVerifiedHostedProofSession(page, {
       ...operatorSession,
       token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 240,
     });
     await openPersonaDetail(page, persona);
     await expect(page.getByRole("button", { name: /^Talk with / })).toBeVisible();

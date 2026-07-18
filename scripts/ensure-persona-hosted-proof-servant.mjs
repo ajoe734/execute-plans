@@ -134,8 +134,8 @@ const posture = record(version.config_posture);
 if (
   String(version.source_commit_sha ?? "").toLowerCase() !== expectedBffSha ||
   version.environment !== "dev" ||
-  posture.auth_stub !== true ||
-  posture.auth_mode !== "permissive"
+  posture.auth_stub !== false ||
+  posture.auth_mode !== "strict"
 ) {
   throw new Error(
     "Servant proof preflight rejected the BFF identity or write-proof auth posture.",
@@ -153,6 +153,10 @@ const roles = Array.isArray(me.roles)
   ? me.roles.map((role) => String(role).trim().toLowerCase())
   : [];
 const operatorId = String(me.operator_id ?? me.operatorId ?? "").trim();
+const session = record(me.session);
+const sessionKind = String(
+  session.session_kind ?? session.sessionKind ?? me.session_kind ?? me.sessionKind ?? "",
+).trim().toLowerCase();
 const boundIdentityIds = [me.user, me.current_user, me.currentUser]
   .map(record)
   .map((identity) =>
@@ -164,12 +168,37 @@ const boundIdentityIds = [me.user, me.current_user, me.currentUser]
 if (
   !operatorId ||
   !roles.includes("operator") ||
-  record(me.session).authenticated !== true ||
+  session.authenticated !== true ||
+  sessionKind !== "bearer" ||
   boundIdentityIds.length === 0 ||
   boundIdentityIds.some((identityId) => identityId !== operatorId)
 ) {
   throw new Error(
     "Servant proof preflight requires an authenticated operator session.",
+  );
+}
+
+const readinessRequestId = randomUUID();
+const readinessResponse = await fetch(`${bffBase}/bff/auth/readiness`, {
+  headers: proofHeaders(readinessRequestId),
+});
+const readiness = record(
+  data(await responseJson(readinessResponse, "Operator readiness preflight")),
+);
+const readinessAuth = record(readiness.auth);
+const readinessIdentity = record(readiness.identity);
+if (
+  String(readiness.sourceCommitSha ?? readiness.source_commit_sha ?? "").toLowerCase() !== expectedBffSha ||
+  readiness.authReady !== true ||
+  readinessAuth.strict !== true ||
+  readinessAuth.stub !== false ||
+  String(readinessAuth.sessionKind ?? readinessAuth.session_kind ?? "").toLowerCase() !== "bearer" ||
+  readinessAuth.operatorRoleReady !== true ||
+  readinessAuth.interactionCapabilityReady !== true ||
+  String(readinessIdentity.operatorId ?? readinessIdentity.operator_id ?? "").trim() !== operatorId
+) {
+  throw new Error(
+    "Servant proof preflight rejected strict operator readiness for the exact BFF release.",
   );
 }
 
@@ -222,11 +251,14 @@ await writeFile(
       requestId,
       versionRequestId,
       meRequestId,
+      readinessRequestId,
       correlationId,
       expectedBffSha,
       idempotencyKey,
       tenantId,
       personaId,
+      sessionKind,
+      authReady: readiness.authReady,
       personaClass: profile.persona_class,
       ownerScope: profile.owner_scope,
       memoryScope: profile.memory_scope,
