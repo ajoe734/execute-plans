@@ -15,6 +15,7 @@ import {
   refreshAndVerifyBffBrowserSession,
   registerBffBrowserSession,
   verifyBffBrowserSession,
+  getDevLoginCredentials,
   type VerifiedBffBrowserSession,
 } from "./bffBrowserSession";
 
@@ -53,15 +54,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBffError(null);
 
     if (!next) {
+      const { clientId, clientSecVal } = getDevLoginCredentials();
+      if (!clientId || !clientSecVal) {
+        clearBffBrowserSession();
+        setLoading(false);
+        return;
+      }
       clearBffBrowserSession();
-      setLoading(false);
-      return;
+    } else {
+      // Install the new bearer synchronously before any BFF request can run.
+      registerBffBrowserSession(next);
     }
 
-    // Install the new bearer synchronously before any BFF request can run.
-    registerBffBrowserSession(next);
     setLoading(true);
-    const verification = event === "TOKEN_REFRESHED"
+    const verification = event === "TOKEN_REFRESHED" && next
       ? refreshAndVerifyBffBrowserSession()
       : verifyBffBrowserSession();
 
