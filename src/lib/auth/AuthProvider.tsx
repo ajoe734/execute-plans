@@ -15,9 +15,9 @@ import {
   refreshAndVerifyBffBrowserSession,
   registerBffBrowserSession,
   verifyBffBrowserSession,
-  getDevLoginCredentials,
   type VerifiedBffBrowserSession,
 } from "./bffBrowserSession";
+import { hasDevLoginCredentials } from "./devLoginHelper";
 
 export interface AuthContextValue {
   session: Session | null;
@@ -54,8 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBffError(null);
 
     if (!next) {
-      const { clientId, clientSecVal } = getDevLoginCredentials();
-      if (!clientId || !clientSecVal) {
+      if (!hasDevLoginCredentials()) {
         clearBffBrowserSession();
         setLoading(false);
         return;

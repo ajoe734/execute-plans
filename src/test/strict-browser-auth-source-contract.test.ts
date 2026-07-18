@@ -15,6 +15,11 @@ describe("strict browser auth source contract", () => {
     const bffBridge = [headers, authProvider, browserSession].join("\n");
 
     expect(bffBridge).not.toMatch(/localStorage|sessionStorage/);
+    expect(bffBridge).not.toMatch(/local\s*storage|session\s*storage/i);
+    expect(bffBridge).not.toMatch(/window\s*\[\s*['"`](local|session)Storage['"`]\s*\]/i);
+    expect(bffBridge).not.toMatch(/(local|session)\s*\+\s*storage/i);
+    expect(bffBridge).not.toMatch(/['"`]sess['"`]\s*,\s*['"`]ion['"`]\s*,\s*['"`]Storage['"`]/i);
+    expect(bffBridge).not.toMatch(/join\(\s*['"`]\.?['"`]\s*\)/i);
     expect(bffBridge).not.toContain("pantheon.bff.bearerToken");
     expect(bffBridge).not.toContain("pantheon_operator_token");
     expect(bffBridge).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
@@ -49,6 +54,9 @@ describe("strict browser auth source contract", () => {
     expect(combined).not.toMatch(/service[_-]?role/i);
     expect(combined).not.toMatch(/client[_-]?secret/i);
     expect(combined).not.toMatch(/private[_-]?key/i);
+    expect(combined).not.toMatch(/client\s*\+\s*secret/i);
+    expect(combined).not.toMatch(/['"`]client['"`]\s*,\s*['"`]secret['"`]/i);
+    expect(combined).not.toMatch(/secSuffix|secretKeys/);
   });
 
   it("mounts Persona Detail and Agora interaction entry behind ProtectedRoute", () => {
