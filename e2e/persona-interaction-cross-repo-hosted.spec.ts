@@ -279,7 +279,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       new URL(response.url()).pathname === "/bff/agora/interactions/participants:eligible"
       && response.request().method() === "POST",
     );
-    const talkButton = page.getByRole("button", { name: "Talk to" });
+    const talkButton = page.getByRole("button", { name: /^Talk with / });
     await expect(talkButton).toBeEnabled();
     await talkButton.click();
 
@@ -501,7 +501,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       token: VIEWER_TOKEN,
     });
     await openPersonaDetail(page, persona);
-    await expect(page.getByRole("button", { name: "Talk to" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Talk with / })).toBeDisabled();
     await expect(page.getByTestId("persona-interaction-disabled-reason")).toContainText(/requires|disabled|eligible/i);
     expect(browserInteractionPosts).toEqual([]);
 
@@ -533,7 +533,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       token: OPERATOR_TOKEN,
     });
     await openPersonaDetail(page, persona);
-    await expect(page.getByRole("button", { name: "Talk to" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Talk with / })).toBeVisible();
     await expect(page.getByRole("tab", { name: /trade journal/i })).toBeVisible();
     expect(browserInteractionPosts).toEqual([]);
   });
