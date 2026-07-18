@@ -568,6 +568,123 @@ describe("StrategyWorkshopPage", () => {
     expect(interaction.resolveContext).toHaveBeenCalledTimes(2);
   });
 
+  it("normalizes a PostgreSQL Workshop cutoff and recovers the exact hosted 422 on retry", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      strategy_id: "strategy-a",
+      active_strategy_spec_registry_id: "spec-v3",
+      created_at: "2026-07-18 08:36:47+00",
+      metadata: {},
+    });
+    let rejectedPropose = false;
+    vi.mocked(interaction.resolveContext).mockImplementation((body) => {
+      if (body.initial_mode === "propose_action" && !rejectedPropose) {
+        rejectedPropose = true;
+        return Promise.reject(new Error(
+          "VALIDATION_FAILED: REQUEST_VALIDATION_ERROR at body.evidence_cutoff",
+        ));
+      }
+      return resolvedContextFixture(body);
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "Preserve the bounded measure draft" } });
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ initial_mode: "ask" }),
+      expect.objectContaining({ resolutionSessionId: expect.any(String) }),
+    ));
+
+    fireEvent.keyDown(screen.getByTestId("mode-selector"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: /Propose \(Candidate Measure\)/i }));
+
+    const reason = await screen.findByTestId("servant-composer-submit-disabled-reason");
+    await waitFor(() => expect(reason).toHaveAttribute("data-reason-code", "context_error"));
+    const failedRequest = vi.mocked(interaction.resolveContext).mock.calls
+      .map(([request]) => request)
+      .find((request) => request.initial_mode === "propose_action");
+    expect(failedRequest).toEqual(expect.objectContaining({
+      evidence_cutoff: "2026-07-18T08:36:47.000Z",
+      initial_mode: "propose_action",
+    }));
+    expect(input).toHaveValue("Preserve the bounded measure draft");
+
+    fireEvent.click(screen.getByTestId("servant-composer-context-retry"));
+
+    await waitFor(() => expect(screen.getByTestId("servant-composer-submit")).toBeEnabled());
+    expect(vi.mocked(interaction.resolveContext).mock.calls.filter(
+      ([request]) => request.initial_mode === "propose_action",
+    )).toHaveLength(2);
+  });
+
+  it("waits for current Propose eligibility before resolving the same ordered participant IDs", async () => {
+    const sameParticipants = {
+      data: {
+        included: [{
+          persona_id: "per_quant",
+          display_name: "Quant Architect",
+          eligible: true,
+          reasons: [],
+          recommended: true,
+          participant_snapshot: {
+            persona_id: "per_quant",
+            persona_version: "1",
+            session_persona_id: "session-quant",
+            display_name: "Quant Architect",
+            provider_agent_id: "agent-quant",
+            workspace_id: "workspace-quant",
+            environment_ceiling: "paper" as const,
+            capability_snapshot: ["persona_opinion"],
+            captured_at: "2026-07-17T00:00:00Z",
+          },
+        }],
+        excluded: [],
+      },
+    };
+    let resolveProposeEligibility!: (value: typeof sameParticipants) => void;
+    const proposeEligibility = new Promise<typeof sameParticipants>((resolve) => {
+      resolveProposeEligibility = resolve;
+    });
+    let eligibilityCall = 0;
+    vi.mocked(interaction.participants).mockImplementation(() => {
+      eligibilityCall += 1;
+      return eligibilityCall === 1 ? Promise.resolve(sameParticipants) : proposeEligibility;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      strategy_id: "strategy-a",
+      active_strategy_spec_registry_id: "spec-v3",
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "Propose only after current eligibility" } });
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({ initial_mode: "ask", selected_persona_ids: ["per_quant"] }),
+      expect.any(Object),
+    ));
+
+    fireEvent.keyDown(screen.getByTestId("mode-selector"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: /Propose \(Candidate Measure\)/i }));
+    await waitFor(() => expect(interaction.participants).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(interaction.resolveContext).mock.calls.some(
+      ([request]) => request.initial_mode === "propose_action",
+    )).toBe(false);
+    await waitFor(() => expect(screen.getByTestId("servant-composer-submit-disabled-reason"))
+      .toHaveAttribute("data-reason-code", "eligibility_loading"));
+
+    await act(async () => resolveProposeEligibility(sameParticipants));
+
+    await waitFor(() => expect(screen.getByTestId("servant-composer-submit")).toBeEnabled());
+    expect(vi.mocked(interaction.resolveContext).mock.calls.filter(
+      ([request]) => request.initial_mode === "propose_action",
+    )).toHaveLength(1);
+    expect(input).toHaveValue("Propose only after current eligibility");
+  });
+
   it("ignores stale ask eligibility after Propose wins and submits the exact strategy version without losing the draft", async () => {
     let resolveAsk!: (value: Awaited<ReturnType<typeof interaction.participants>>) => void;
     let resolvePropose!: (value: Awaited<ReturnType<typeof interaction.participants>>) => void;
@@ -671,7 +788,7 @@ describe("StrategyWorkshopPage", () => {
     await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
       human_request: expect.objectContaining({ mode }),
       context_snapshot: expect.objectContaining({
-        evidence_cutoff: "2026-07-17T01:02:03Z",
+        evidence_cutoff: "2026-07-17T01:02:03.000Z",
         return_route: "/management/personas/per_quant",
         selected_persona_ids: mode === "compare" ? ["per_quant", "per_macro"] : ["per_quant"],
       }),

@@ -504,7 +504,8 @@ function interactionResolveRequest(
     ?? recordFrom(workshop.metadata).evidence_cutoff
     ?? workshop.created_at
     ?? "").trim();
-  if (!cutoffHint || Number.isNaN(Date.parse(cutoffHint))) {
+  const cutoffTime = Date.parse(cutoffHint);
+  if (!cutoffHint || Number.isNaN(cutoffTime)) {
     throw new Error("The canonical Workshop projection omitted an evidence cutoff.");
   }
   return {
@@ -513,7 +514,7 @@ function interactionResolveRequest(
     environment: normalizedEnvironment(workshop, entry),
     source_route: route,
     focused_object: focusedObject,
-    evidence_cutoff: cutoffHint,
+    evidence_cutoff: new Date(cutoffTime).toISOString(),
     selected_persona_ids: participantIds,
     initial_mode: mode,
     return_route: route,
@@ -531,6 +532,10 @@ function participantSnapshot(item: PersonaEligibility): ParticipantSnapshot | nu
     || !snapshot.provider_agent_id || !snapshot.workspace_id || !snapshot.captured_at
     || !Array.isArray(snapshot.capability_snapshot) || snapshot.capability_snapshot.length === 0) return null;
   return snapshot;
+}
+
+function sameOrderedIds(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
 async function sha256(value: string): Promise<string> {
@@ -569,10 +574,12 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const eligibilityGenerationRef = useRef(0);
+  const [eligibilityResolvedMode, setEligibilityResolvedMode] = useState<WorkshopInteractionMode | null>(null);
   const [resolvedContext, setResolvedContext] = useState<ResolvedInteractionContext | null>(null);
   const [contextResolving, setContextResolving] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
   const [contextRetryGeneration, setContextRetryGeneration] = useState(0);
+  const contextGenerationRef = useRef(0);
   
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
@@ -655,6 +662,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     const generation = ++eligibilityGenerationRef.current;
     setEligibilityLoading(true);
     setEligibilityError(null);
+    setEligibilityResolvedMode(null);
     try {
       const result = await interaction.participants({
         workshop_id: workshopId,
@@ -668,13 +676,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       const picked = mode === "compare"
         ? selectCompareParticipants(result.data.included, preferred, entry?.mode === "compare" ? entry.participantIds?.[0] : undefined)
         : pickerParticipants(picker, result.data.included, preferred);
-      setSelectedParticipants(picked);
+      setSelectedParticipants((current) => sameOrderedIds(current, picked) ? current : picked);
+      setEligibilityResolvedMode(mode);
     } catch (error) {
       if (generation !== eligibilityGenerationRef.current) return;
       setEligibleParticipants([]);
       setExcludedParticipants([]);
-      setSelectedParticipants([]);
+      setSelectedParticipants((current) => current.length === 0 ? current : []);
       setEligibilityError(error instanceof Error ? error.message : "Participant eligibility is unavailable.");
+      setEligibilityResolvedMode(mode);
     } finally {
       if (generation === eligibilityGenerationRef.current) setEligibilityLoading(false);
     }
@@ -689,18 +699,27 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   }, [workshop, workshopId]);
 
   useEffect(() => {
-    if (!workshop || selectedParticipants.length === 0) {
-      setResolvedContext(null);
-      return;
-    }
+    const generation = ++contextGenerationRef.current;
     let cancelled = false;
+    const isCurrent = () => !cancelled && generation === contextGenerationRef.current;
+
+    if (!workshop
+      || eligibilityLoading
+      || eligibilityResolvedMode !== selectedMode
+      || selectedParticipants.length === 0) {
+      setResolvedContext(null);
+      setContextResolving(false);
+      setContextError(null);
+      return () => { cancelled = true; };
+    }
     let request: ResolveContextRequest;
     try {
       request = interactionResolveRequest(workshop, workshopId, selectedParticipants, selectedMode, entry);
     } catch (error) {
       setResolvedContext(null);
+      setContextResolving(false);
       setContextError(error instanceof Error ? error.message : "Authoritative context request could not be built.");
-      return;
+      return () => { cancelled = true; };
     }
     setContextResolving(true);
     setContextError(null);
@@ -715,19 +734,29 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     }
     interaction.resolveContext(request, { resolutionSessionId })
       .then((response) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         setResolvedContext(resolvedInteractionContext({
           workshopId, request, entry, response: response.data,
         }));
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         setResolvedContext(null);
         setContextError(error instanceof Error ? error.message : "Authoritative context resolution failed.");
       })
-      .finally(() => { if (!cancelled) setContextResolving(false); });
+      .finally(() => { if (isCurrent()) setContextResolving(false); });
     return () => { cancelled = true; };
-  }, [contextResolutionSessionId, contextRetryGeneration, entry, selectedMode, selectedParticipants, workshop, workshopId]);
+  }, [
+    contextResolutionSessionId,
+    contextRetryGeneration,
+    eligibilityLoading,
+    eligibilityResolvedMode,
+    entry,
+    selectedMode,
+    selectedParticipants,
+    workshop,
+    workshopId,
+  ]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -1216,6 +1245,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                   onValueChange={(val: string) => {
                     const mode = val as WorkshopInteractionMode;
                     setSelectedMode(mode);
+                    setEligibilityResolvedMode(null);
                     void refreshEligibility(mode, selectedParticipants, pickerSelectionType);
                   }}
                 >
