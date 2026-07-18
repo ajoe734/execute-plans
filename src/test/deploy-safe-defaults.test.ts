@@ -435,6 +435,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(authorizedProof).toContain(
       "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
     );
+    expect(authorizedProof).toContain(
+      "PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+    );
+    expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
+    expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
+    expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
     expect(authorizedProof).toContain("desktop.expected !== 3");
     expect(authorizedProof).toContain("mobile.expected !== 1");

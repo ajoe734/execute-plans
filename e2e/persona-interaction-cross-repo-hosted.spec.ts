@@ -8,7 +8,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
+import { roleTokenFromEnv } from "./helpers/auth";
 
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/$/, "");
@@ -18,7 +18,9 @@ const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_V
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
+const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -60,19 +62,29 @@ function identityId(value: unknown): string {
   return String(identity.operator_id ?? identity.operatorId ?? identity.id ?? "").trim();
 }
 
-function stubTokenActor(token: string): string {
-  return token.replace(/^Bearer\s+/i, "").trim().split(":", 1)[0]?.trim() ?? "";
-}
-
 async function assertOperatorSession(request: APIRequestContext, token: string): Promise<{
   operatorId: string;
   roles: string[];
+  sessionKind: "bearer";
 }> {
   const meResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(token) });
   expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
   const me = record(data(await meResponse.json()));
   const roles = rolesFromMe(me);
   expect(roles).toContain("operator");
+  return assertHostedBearerSession(request, token, me, roles);
+}
+
+async function assertHostedBearerSession(
+  request: APIRequestContext,
+  token: string,
+  me: JsonRecord,
+  roles = rolesFromMe(me),
+): Promise<{
+  operatorId: string;
+  roles: string[];
+  sessionKind: "bearer";
+}> {
   const operatorId = String(me.operator_id ?? me.operatorId ?? "").trim();
   expect(operatorId).not.toBe("");
   const boundIdentities = [me.user, me.current_user, me.currentUser]
@@ -83,19 +95,13 @@ async function assertOperatorSession(request: APIRequestContext, token: string):
   const session = record(me.session);
   expect(session.authenticated).toBe(true);
   const sessionKind = String(session.session_kind ?? session.sessionKind ?? me.session_kind ?? me.sessionKind).toLowerCase();
-  if (["bearer", "cookie"].includes(sessionKind)) return { operatorId, roles };
-
-  // Stub auth is accepted only for the exact, release-bound Pantheon dev posture.
-  // Never print or attach the token: only compare its normalized actor segment.
-  expect(sessionKind).toBe("stub");
+  expect(sessionKind).toBe("bearer");
   expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
   expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
-  expect(stubTokenActor(token)).toBe(operatorId);
-  expect(String(session.id ?? "")).toBe(`bff-session-${operatorId}`);
   const meEnvironment = record(me.environment);
   expect(meEnvironment.name).toBe("dev");
   expect(meEnvironment.deployment_stage).toBe("dev");
-  expect(meEnvironment.auth_mode).toBe("stub");
+  expect(meEnvironment.auth_mode).toBe("strict");
 
   const versionResponse = await request.get(`${BFF_BASE}/bff/version`, { headers: headers(token) });
   expect(versionResponse.ok(), `/bff/version returned ${versionResponse.status()}`).toBe(true);
@@ -103,9 +109,82 @@ async function assertOperatorSession(request: APIRequestContext, token: string):
   expect(String(version.source_commit_sha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
   expect(version.environment).toBe("dev");
   const posture = record(version.config_posture);
-  expect(posture.auth_stub).toBe(true);
-  expect(posture.auth_mode).toBe("permissive");
-  return { operatorId, roles };
+  expect(posture.auth_stub).toBe(false);
+  expect(posture.auth_mode).toBe("strict");
+
+  const readinessResponse = await request.get(`${BFF_BASE}/bff/auth/readiness`, { headers: headers(token) });
+  expect(readinessResponse.ok(), `/bff/auth/readiness returned ${readinessResponse.status()}`).toBe(true);
+  const readiness = record(data(await readinessResponse.json()));
+  const auth = record(readiness.auth);
+  expect(auth.strict).toBe(true);
+  expect(auth.stub).toBe(false);
+  expect(String(auth.sessionKind ?? auth.session_kind ?? "")).toBe("bearer");
+  expect(String(readiness.sourceCommitSha ?? readiness.source_commit_sha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  return { operatorId, roles, sessionKind: "bearer" };
+}
+
+function hostedBearerClaims(token: string): JsonRecord {
+  const parts = token.split(".");
+  if (parts.length !== 3) return {};
+  try {
+    return record(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
+  } catch {
+    return {};
+  }
+}
+
+async function installVerifiedHostedProofSession(
+  page: Page,
+  input: {
+    operatorId: string;
+    roles: string[];
+    sessionKind: "bearer";
+    token: string;
+  },
+): Promise<void> {
+  expect(WRITE_PROOF, "hosted session bootstrap is proof-only").toBe(true);
+  expect(new URL(FE_BASE).hostname).toBe(DEV_FE_HOST);
+  expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
+  expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
+  const supabase = new URL(PUBLIC_SUPABASE_URL);
+  expect(supabase.protocol).toBe("https:");
+  expect(supabase.hostname.endsWith(".supabase.co")).toBe(true);
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const claims = hostedBearerClaims(input.token);
+  expect(input.sessionKind).toBe("bearer");
+  expect(String(claims.sub ?? "")).toBe(input.operatorId);
+  expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + 60);
+
+  const expiresAt = Number(claims.exp);
+  const projectRef = supabase.hostname.split(".")[0];
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const storedSession = {
+    access_token: input.token,
+    refresh_token: "hosted-proof-no-refresh",
+    expires_in: Math.max(60, expiresAt - nowSeconds),
+    expires_at: expiresAt,
+    token_type: "bearer",
+    user: {
+      id: input.operatorId,
+      aud: String(claims.aud ?? "authenticated"),
+      role: String(claims.role ?? "authenticated"),
+      email: typeof claims.email === "string" ? claims.email : undefined,
+      app_metadata: record(claims.app_metadata),
+      user_metadata: record(claims.user_metadata),
+      created_at: new Date(nowSeconds * 1000).toISOString(),
+    },
+  };
+  await page.addInitScript(
+    ({ key, session }) => {
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(session));
+      } catch {
+        // The init script is retried for the hosted origin during navigation.
+      }
+    },
+    { key: storageKey, session: storedSession },
+  );
 }
 
 function personaId(row: JsonRecord): string {
@@ -256,13 +335,10 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
-    const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: operatorRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
       token: OPERATOR_TOKEN,
     });
     await page.addInitScript(() => {
@@ -338,14 +414,12 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(360_000);
-    const { operatorId, roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const { operatorId } = operatorSession;
     await discoverEligiblePersona(request, OPERATOR_TOKEN);
     const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: operatorRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
       token: OPERATOR_TOKEN,
     });
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
@@ -480,6 +554,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(viewerRoles).toContain("viewer");
     expect(viewerRoles).not.toContain("operator");
     expect(viewerRoles).not.toContain("admin");
+    const viewerSession = await assertHostedBearerSession(request, VIEWER_TOKEN, viewerMe, viewerRoles);
     const deniedEnsure = await request.post(`${BFF_BASE}/bff/agora/servant/ensure`, {
       headers: headers(VIEWER_TOKEN, { "Idempotency-Key": randomUUID() }),
       data: { display_name: "Viewer must not ensure a Persona", locale: "en-US", timezone: "UTC" },
@@ -493,11 +568,8 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
         browserInteractionPosts.push(path);
       }
     });
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: viewerRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...viewerSession,
       token: VIEWER_TOKEN,
     });
     await openPersonaDetail(page, persona);
@@ -516,7 +588,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("mobile Persona detail remains usable without producing writes @mobile-basic", async ({ page, request }) => {
     test.skip(!OPERATOR_TOKEN, "requires an operator token for hosted readback");
     test.setTimeout(120_000);
-    const { roles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await matchEnsuredPersonaFromFleet(request, OPERATOR_TOKEN);
     const browserInteractionPosts: string[] = [];
     page.on("request", (browserRequest) => {
@@ -525,11 +597,8 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
         browserInteractionPosts.push(path);
       }
     });
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
       token: OPERATOR_TOKEN,
     });
     await openPersonaDetail(page, persona);
