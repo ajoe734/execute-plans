@@ -1500,14 +1500,18 @@ jobs:
           node scripts/probe-persona-governed-proposal-live.mjs
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-desktop-results.json"
           mobile_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-mobile-results.json"
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$desktop_results" \
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
+            PLAYWRIGHT_JSON_OUTPUT_FILE="$desktop_results" \
             npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
               --project=chromium --grep '@desktop-full' \
-              --retries=0 --reporter=list,json
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$mobile_results" \
+              --retries=0 --reporter=list,json \
+              --trace=off
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
+            PLAYWRIGHT_JSON_OUTPUT_FILE="$mobile_results" \
             npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
               --project=mobile-chromium --grep '@mobile-basic' \
-              --retries=0 --reporter=list,json
+              --retries=0 --reporter=list,json \
+              --trace=off
           node --input-type=module - "$desktop_results" "$mobile_results" <<'NODE'
           import fs from "node:fs";
           const summaries = process.argv.slice(2).map((path) => {
@@ -1562,8 +1566,6 @@ jobs:
           include-hidden-files: true
           path: |
             .lovable/audits/authorized-write-proof
-            playwright-report
-            test-results
 
   pr-comment:
     name: Publish PR-only release gate comment

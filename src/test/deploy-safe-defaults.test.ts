@@ -20,6 +20,10 @@ const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
+const playwrightConfig = readFileSync(
+  resolve(root, "playwright.config.ts"),
+  "utf8",
+);
 const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
@@ -456,6 +460,28 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "operatorSubject === viewerSubject",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(2);
+    expect(
+      authorizedProof.match(/PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu),
+    ).toHaveLength(2);
+    expect(playwrightConfig).toContain(
+      'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
+    );
+    expect(playwrightConfig).toContain(
+      'trace: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'screenshot: credentialedProofNoArtifacts ? "off" : "only-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'video: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    const authorizedArtifact = authorizedProof.slice(
+      authorizedProof.indexOf("- name: Upload authorized proof evidence"),
+    );
+    expect(authorizedArtifact).toContain(".lovable/audits/authorized-write-proof");
+    expect(authorizedArtifact).not.toContain("playwright-report");
+    expect(authorizedArtifact).not.toContain("test-results");
     expect(authorizedProof).toContain("desktop.expected !== 3");
     expect(authorizedProof).toContain("mobile.expected !== 1");
     expect(authorizedProof).toContain("skipped !== 0");
